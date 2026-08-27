@@ -104,6 +104,46 @@ function setsMetadataPk(scope, orgId) {
   return `${scopePrefix(scope, orgId)}SETS`;
 }
 
+/**
+ * The partition holding a scope's AI PROMPT rows (SK = `AIPROMPT#<id>`).
+ *
+ * Same trick as `setsMetadataPk`, and it works for the same reason: platform's
+ * prefix is the empty string, so `AIPROMPTS` — the bare key every existing row
+ * already uses — IS the platform partition. Zero migration.
+ *
+ * ONLY PROMPTS MOVE. The bare `AIPROMPTS` partition also holds `PERSONA#<id>`
+ * rows and the `GAMETYPE#…#CATEGORY#…` default-pointer rows, and those stay
+ * platform-only DELIBERATELY:
+ *
+ *   - A persona is a VOICE — a small curated cast Engage maintains. Nothing in
+ *     the request for org-authored prompts asks for a customer-authored voice,
+ *     and inventing one here would be a second feature nobody asked for.
+ *   - The default pointer answers "what does Engage use when a set names
+ *     nothing", which is a house decision by definition. An org's prompt is
+ *     chosen EXPLICITLY by a set or it is not used, so there is no org-level
+ *     default — which is also why `create-ai-prompt.js`'s isDefault sweep and
+ *     `get-ai-summary.js`'s Scan keep working untouched. A per-scope default
+ *     would break both, and buy nothing.
+ *
+ * See `personasPk` below, which says the same thing in code so that the
+ * decision is not merely a comment.
+ */
+function promptsMetadataPk(scope, orgId) {
+  return `${scopePrefix(scope, orgId)}AIPROMPTS`;
+}
+
+/**
+ * Personas are PLATFORM-ONLY, stated rather than derived.
+ *
+ * It would be one character cheaper to route these through `promptsMetadataPk`
+ * and let a caller pass platform. Writing it as a function that ignores its
+ * arguments is the point: the next person to add an org persona has to delete
+ * this and read why it was here, instead of passing a scope that silently works.
+ */
+function personasPk() {
+  return 'AIPROMPTS';
+}
+
 /** The partition holding a scope's set CONTENT (categories and questions). */
 function setContentPk(scope, orgId, setId, version) {
   const id = clean(setId);
@@ -330,7 +370,7 @@ function tenantStamp(event) {
 module.exports = {
   PLATFORM, ORG, PUBLIC, SCOPES, ORG_ROLES,
   GAMES_RESERVATION_PK, ORGS_INDEX_PK,
-  scopePrefix, setsMetadataPk, setContentPk, gamesIndexPk, orgPk, userPk,
+  scopePrefix, setsMetadataPk, setContentPk, promptsMetadataPk, personasPk, gamesIndexPk, orgPk, userPk,
   callerOrgId, callerOrgRole, callerOrgIds, callerGroups, isPlatformAdmin,
   roleAtLeast, readableScopes, canManageScope,
   callerMayDriveSession,
