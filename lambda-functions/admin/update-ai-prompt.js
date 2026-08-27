@@ -662,7 +662,16 @@ exports.handler = async (event) => {
           console.error('⚠️ Error managing default prompt lookup:', error);
           // Continue anyway - the prompt was still updated successfully
         }
-      } else if (isDefault === false && currentPrompt.isDefault === true) {
+      // UNLIKE THE `true` BRANCH ABOVE, SCOPE IS NOT ALREADY GUARANTEED HERE.
+      // `isDefault: false` always goes through the refusal above (it only
+      // blocks turning a default ON) — so an org row that somehow carries
+      // `isDefault: true` (a restored fixture, a hand-written row, a future
+      // relaxation of that refusal) could otherwise have its owner delete the
+      // PLATFORM default pointer, shared by every tenant, just by sending
+      // `{isDefault: false}`. This check is load-bearing, not redundant like
+      // its sibling above.
+      } else if (isDefault === false && currentPrompt.isDefault === true
+        && ref.scope === tenant.PLATFORM) {
         // If we're unsetting a default, remove the default lookup (no default for this category)
         console.log(`🗑️ Removing default status from ${currentPrompt.gameType}/${updatedContent.category}`);
         

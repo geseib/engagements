@@ -651,6 +651,101 @@ const rowAt = (pk, sk) => store.get(key(pk, sk));
     assert.ok(delLog.includes(ORG_A), `expected the orgId in the log: ${delLog}`);
   });
 
+  say('\n12. isDefault:false on an org row must never delete the PLATFORM default pointer');
+
+  /*
+    Section 6 refuses turning a default ON for a non-platform Workie, both at
+    creation (create-ai-prompt.js) and on this edit route — but that refusal,
+    by its own design, only ever fires for `isDefault: true`. `isDefault:
+    false` always goes through unchecked by scope (see the comment on the
+    isDefault block in update-ai-prompt.js). The `false` branch there then
+    deleted `GAMETYPE#<gameType>#CATEGORY#<category>` at the bare 'AIPROMPTS'
+    partition — Engage's default-Workie pointer, shared by every tenant —
+    gated solely on `currentPrompt.isDefault === true`, with nothing checking
+    that the row asking to be unset is the platform row that pointer actually
+    describes.
+
+    No route today can produce an org row carrying `isDefault: true` (create
+    refuses it, section 6 refuses it on edit too), so the fixture below is
+    written directly into the store — standing in for a restored fixture, a
+    hand-written row, or a future relaxation of either refusal.
+  */
+  reset();
+  await mintOrg(ORG_A);
+
+  // Engage's real default for this game type/category, set through the front
+  // door exactly as an Engage admin would.
+  const houseDefault12 = parse(await post(PLATFORM_ADMIN, { name: 'House Default' }));
+  const setDefault12 = await put(PLATFORM_ADMIN, houseDefault12.promptId, { isDefault: true });
+  await check('fixture setup: the house default is actually set (200)', () =>
+    assert.strictEqual(setDefault12.statusCode, 200, setDefault12.body));
+  const pointerKey12 = { PK: 'AIPROMPTS', SK: `GAMETYPE#${BODY.gameType}#CATEGORY#${BODY.category}` };
+  const pointerBefore12 = rowAt(pointerKey12.PK, pointerKey12.SK);
+  await check('fixture setup: the platform pointer row actually exists', () =>
+    assert.ok(pointerBefore12, 'no GAMETYPE# pointer was written by the fixture setup'));
+
+  // An org row that SOMEHOW carries isDefault:true, for the same gameType and
+  // category as the house default above — written directly, because no
+  // handler will produce this shape through the front door.
+  const orgDefaultId12 = 'org-row-claiming-default';
+  store.set(key(`ORG#${ORG_A}#AIPROMPTS`, `AIPROMPT#${orgDefaultId12}`), {
+    PK: `ORG#${ORG_A}#AIPROMPTS`, SK: `AIPROMPT#${orgDefaultId12}`,
+    promptId: orgDefaultId12, scope: 'org', orgId: ORG_A, createdBy: 'sub-amara',
+    gameType: BODY.gameType, category: BODY.category,
+    name: 'Org Workie somehow carrying isDefault:true', isDefault: true, status: 'active',
+  });
+
+  const orgOwner12 = orgAdmin(ORG_A, 'sub-amara', 'amara');
+  const unsetAttempt12 = await put(orgOwner12, orgDefaultId12, { isDefault: false });
+  await check('the org caller\'s own edit still succeeds (200)', () =>
+    assert.strictEqual(unsetAttempt12.statusCode, 200, unsetAttempt12.body));
+  await check('…the org row itself is actually unset', () =>
+    assert.strictEqual(rowAt(`ORG#${ORG_A}#AIPROMPTS`, `AIPROMPT#${orgDefaultId12}`).isDefault, false));
+  await check('…and the PLATFORM default pointer survives, byte-identical', () => {
+    const pointerAfter = rowAt(pointerKey12.PK, pointerKey12.SK);
+    assert.ok(pointerAfter, 'the platform default pointer was deleted by an org-scoped edit');
+    assert.deepStrictEqual(pointerAfter, pointerBefore12, `pointer changed: ${JSON.stringify(pointerAfter)}`);
+  });
+
+  say('\n13. a caller with no requestContext at all is refused, not silently admitted');
+
+  /*
+    tests/ai-prompt-lifecycle.js, tests/ai-prompt-status-update.js and
+    tests/prompt-variable-gates.js all used to call PUT and DELETE with no
+    requestContext at all, until the tenancy fix on update-ai-prompt.js gave
+    their helpers an `admins` caller so they would pass the authorisation
+    `canManagePrompt` already applies inside both handlers. That was the
+    right fix for those suites — production's own authorizer never lets a
+    groupless caller reach either route to begin with, admin/* being
+    admins-only (auth/authorizer.js) — but it removed the only calls anywhere
+    that exercised a groupless one, and nothing was left asserting what
+    happens to it. This section pins that.
+  */
+  reset();
+  const houseWorkie13 = parse(await post(PLATFORM_ADMIN, {
+    name: 'Untouched by a groupless caller', description: 'still here after',
+  }));
+  const rowBefore13 = rowAt('AIPROMPTS', `AIPROMPT#${houseWorkie13.promptId}`);
+  const groupless13 = {};
+
+  const grouplessPut13 = await put(groupless13, houseWorkie13.promptId, { name: 'should not land' });
+  await check('PUT with no requestContext at all is refused (403)', () =>
+    assert.strictEqual(grouplessPut13.statusCode, 403, grouplessPut13.body));
+  await check('…and the row is still there, byte-for-byte what it was before the attempt', () => {
+    const row = rowAt('AIPROMPTS', `AIPROMPT#${houseWorkie13.promptId}`);
+    assert.ok(row, 'the platform row vanished after a refused PUT');
+    assert.deepStrictEqual(row, rowBefore13, `row changed: ${JSON.stringify(row)}`);
+  });
+
+  const grouplessDel13 = await del(groupless13, houseWorkie13.promptId, { hardDelete: 'true' });
+  await check('DELETE with no requestContext at all is refused (403)', () =>
+    assert.strictEqual(grouplessDel13.statusCode, 403, grouplessDel13.body));
+  await check('…and the row still exists, unchanged, afterward', () => {
+    const row = rowAt('AIPROMPTS', `AIPROMPT#${houseWorkie13.promptId}`);
+    assert.ok(row, 'the platform row was deleted by a refused DELETE');
+    assert.deepStrictEqual(row, rowBefore13, `row changed: ${JSON.stringify(row)}`);
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
