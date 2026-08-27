@@ -245,8 +245,8 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
     nothing in the product can honour.
 
     The house rule for that is written in this very handler, at
-    create-ai-prompt.js:99-101: reject at the door rather than storing something
-    that will be silently ignored at runtime.
+    create-ai-prompt.js:103-105: reject at the door rather than storing
+    something that will be silently ignored at runtime.
   */
   // rejects: silently ignoring isDefault, which is "I set it and nothing
   // changed" — the exact complaint this area exists to fix.
@@ -281,19 +281,30 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
     things keep an org row out of it, and this asserts the second: no org row
     can carry isDefault: true, because the request is refused.
   */
-  // rejects: storing isDefault: true on an org row "harmlessly".
+  // rejects: storing isDefault: true on an org row "harmlessly", AND the sweep
+  // running for an org request at all. Fix round 1, finding 3: the seed used to
+  // stop at `{ isDefault: false }`, so the GAMETYPE# filter below was provably
+  // `[]` — with or without the guard — and its forEach body never ran. This
+  // seeds an actual `{ isDefault: true }` attempt from an org caller too, so
+  // the guard (400, nothing written) is what keeps the pointer count at zero,
+  // not the absence of anything that could have produced one. Pre-fix, this
+  // same attempt returns 201 and DOES write a GAMETYPE# pointer — at the
+  // hardcoded bare-partition literal, crediting the org's own promptId as the
+  // house default.
   store.clear(); s3Store.clear(); s3Meta.clear();
   await post(HOST, {});
   await post(HOST, { isDefault: false });
+  await post(HOST, { isDefault: true });
   await check('no org prompt row anywhere carries isDefault: true', () =>
     [...store.values()]
       .filter((i) => String(i.PK).startsWith('ORG#'))
       .forEach((i) => assert.notStrictEqual(i.isDefault, true,
         `${i.PK}/${i.SK} claims a default the resolver can never honour`)));
-  await check('no GAMETYPE# pointer was written outside the bare partition', () =>
-    [...store.values()]
-      .filter((i) => String(i.SK).startsWith('GAMETYPE#'))
-      .forEach((i) => assert.strictEqual(i.PK, 'AIPROMPTS', `pointer at ${i.PK}`)));
+  await check('no GAMETYPE# pointer was written outside the bare partition', () => {
+    const pointers = [...store.values()].filter((i) => String(i.SK).startsWith('GAMETYPE#'));
+    assert.strictEqual(pointers.length, 0,
+      `an org isDefault attempt produced a pointer: ${JSON.stringify(pointers)}`);
+  });
 
   say('\n4. the body is in S3, which the partition does not reach');
 
@@ -307,18 +318,24 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
   // hard-coded — the collision, and an org's text in the platform namespace.
   store.clear(); s3Store.clear(); s3Meta.clear();
   const bodyOrg = parse(await post(HOST, {}));
+  // THE INDEPENDENT GROUND TRUTH — built once, from nothing the handler
+  // returned, and reused by every check below. Comparing the response's s3Key
+  // against the S3 store's own key, or against the row's own s3Key field, only
+  // proves the handler agrees with itself: all three are copies of the same
+  // local `s3Key` variable in one invocation, so a wrong-but-consistent value
+  // (e.g. the old unscoped path) would pass every one of those comparisons.
+  // Fix round 1, finding 1+2.
+  const expectedOrgBodyKey = `prompts/org/${ORG}/call-and-answer/${bodyOrg.promptId}/v1.json`;
   await check('an org body is written under prompts/org/<orgId>/', () =>
-    assert.strictEqual(bodyOrg.s3Key,
-      `prompts/org/${ORG}/call-and-answer/${bodyOrg.promptId}/v1.json`,
-      `s3Key was ${bodyOrg.s3Key}`));
+    assert.strictEqual(bodyOrg.s3Key, expectedOrgBodyKey, `s3Key was ${bodyOrg.s3Key}`));
   await check('…and that is the object that actually exists', () =>
-    assert.ok(s3Store.has(bodyOrg.s3Key),
+    assert.ok(s3Store.has(expectedOrgBodyKey),
       `objects present: ${[...s3Store.keys()].join(' | ')}`));
   // rejects: storing the platform key on an org row, which would make
   // update-ai-prompt.js (which reads the stored key) rewrite the wrong object.
   await check('…and the ROW stores the scoped key, not a rebuilt one', () => {
     const row = store.get(`ORG#${ORG}#AIPROMPTS|AIPROMPT#${bodyOrg.promptId}`);
-    assert.strictEqual(row.s3Key, bodyOrg.s3Key);
+    assert.strictEqual(row && row.s3Key, expectedOrgBodyKey, `row.s3Key was ${row && row.s3Key}`);
   });
 
   // rejects: changing the platform key shape, which would orphan every body
