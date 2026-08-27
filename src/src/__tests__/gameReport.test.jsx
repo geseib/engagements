@@ -424,6 +424,40 @@ describe('comments in the session report', () => {
     expect(authors).toEqual(['Lee Chen', 'Dana']);
   });
 
+  test('each carries the excerpt of what it is about, not just the label', () => {
+    /*
+      The label says WHICH section; the excerpt says WHAT it said. Once the raw
+      ANSWER rows are gone (day 8, create-report.js:143 rebuilds `answers` from
+      those rows) the label and the excerpt are the only surviving record — a
+      session report opened after expiry has no other way to show what
+      "Response 1 — Ada" actually was.
+    */
+    const { container } = render(<ReportDocument reportData={withComments} />);
+    const block = container.querySelector('.report-comments');
+    expect(block.textContent).toContain('Freeze discounting.');
+    expect(block.textContent).toContain('The room wants to defend price');
+  });
+
+  test('a comment written before this field existed renders with no empty quote', () => {
+    // `anchorExcerpt: ''` is the shape of every comment stored before this
+    // feature. It must not render as a blank quoted line.
+    const noExcerpt = {
+      ...withComments,
+      questions: [{
+        ...withComments.questions[0],
+        comments: [{
+          commentId: 'c3', anchorKind: 'results', anchorRef: '',
+          anchorLabel: 'Results', anchorExcerpt: '',
+          text: 'A comment from before excerpts were stored.',
+          playerName: 'Ada', submittedAt: '2026-08-27T10:02:00.000Z',
+        }],
+      }],
+    };
+    const { container } = render(<ReportDocument reportData={noExcerpt} />);
+    expect(screen.getByText('A comment from before excerpts were stored.')).toBeInTheDocument();
+    expect(container.querySelector('.comment-excerpt')).toBeNull();
+  });
+
   test('a round with no comments renders no comment block at all', () => {
     // An empty "Comments" heading in a printed report is a heading over a blank
     // space, which reads as a printing fault.

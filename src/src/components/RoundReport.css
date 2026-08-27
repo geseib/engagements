@@ -107,6 +107,25 @@
   overflow-wrap: anywhere;
 }
 
+/*
+  THE EXCERPT — quoted context, not the comment. `--rr-c-muted` reuses the same
+  pairing `.rr-c__anchor` and `.rr-c__who` already clear AA on (measured in
+  roundReportPalette.test.js against the real composited wash), so this needs
+  no new contrast case. NOT clamped or truncated further: `excerptOf`
+  (config/comments.js) already caps this at 140 characters with its own
+  ellipsis before it ever reaches here, so a second cut on top would reduce an
+  already-short string with no recovery — unlike the composer's
+  `.fbr__on-excerpt`, which can clamp because the full section it quotes is
+  still on screen above it; here, once the answer rows this excerpt was cut
+  from have expired, this string is the only surviving copy.
+*/
+.rr-c__excerpt {
+  font-size: var(--rr-c-t-floor);
+  line-height: 1.45;
+  color: var(--rr-c-muted);
+  overflow-wrap: anywhere;
+}
+
 .rr-c__text {
   font-size: var(--rr-c-t-body);
   line-height: 1.5;

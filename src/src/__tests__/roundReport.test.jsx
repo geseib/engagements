@@ -276,5 +276,18 @@ describe('showing the comments', () => {
     render(<RoundReport round={aRound({ answers: [] })} comments={[COMMENTS[1]]} />);
     expect(screen.getByText(/This is the only one that touches/)).toBeInTheDocument();
     expect(screen.getByText(/Response 2 — Sam Ortiz/)).toBeInTheDocument();
+    // The excerpt is what makes the label mean something once the response
+    // itself is gone — without it "Response 2 — Sam Ortiz" names a response
+    // the reader cannot see, on a round with no responses on the page at all.
+    expect(screen.getByText(/Re-price the onboarding package/)).toBeInTheDocument();
+  });
+
+  test('the excerpt is absent, gracefully, on a comment stored before this feature carried one', () => {
+    // COMMENTS[2] carries anchorLabel but anchorExcerpt: '' — the shape of a
+    // comment written before excerpts existed. It must still render (the label
+    // and text alone are a complete comment), just with no excerpt node.
+    const { container } = render(<RoundReport round={aRound()} comments={[COMMENTS[2]]} />);
+    expect(screen.getByText('Two of these are the same move.')).toBeInTheDocument();
+    expect(container.querySelector('.rr-c__excerpt')).toBeNull();
   });
 });

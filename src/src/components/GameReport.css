@@ -567,6 +567,32 @@
   overflow-wrap: anywhere;
 }
 
+/*
+  THE EXCERPT — quoted material the comment is about, styled the same way
+  `.answer-text` above already quotes a response: `quotes` + generated
+  open/close marks, so a reader tells at a glance which prose is the room's
+  ORIGINAL material and which is commentary on it (`.comment-text` carries
+  neither quote marks nor `--muted`, on purpose — it is the primary content of
+  this block, not the quoted context for it).
+
+  Not truncated, and not `-webkit-line-clamp`'d the way the composer's own
+  `.fbr__on-excerpt` is: `excerptOf` (config/comments.js) already caps this at
+  140 characters with its own ellipsis before it is ever stored, so a second
+  cut here would reduce an already-short string with nothing left to recover
+  it — unlike the composer, where the full section is still on screen above.
+*/
+.report-paper .comment-excerpt {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  quotes: "\201C" "\201D";
+}
+
+.report-paper .comment-excerpt::before { content: open-quote; }
+.report-paper .comment-excerpt::after  { content: close-quote; }
+
 .report-paper .comment-text {
   margin: 0 0 6px;
   overflow-wrap: anywhere;

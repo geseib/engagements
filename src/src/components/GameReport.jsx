@@ -602,6 +602,21 @@ function ReportDocument({ reportData }) {
                       {comment.anchorLabel && (
                         <div className="comment-on">On {comment.anchorLabel}</div>
                       )}
+                      {/*
+                        THE EXCERPT — quoted material the comment is about, not
+                        the comment itself. In THIS report it is not optional
+                        polish: the label alone names a section ("Response 1 —
+                        Ada") that this document has no other way to show once
+                        the 7-day answer rows behind it have expired, and a
+                        session report is read further from the round it
+                        belongs to than the round report ever is. Absent on a
+                        comment stored before this field existed — `''`, never
+                        undefined, so this renders nothing rather than an empty
+                        quote.
+                      */}
+                      {comment.anchorExcerpt && (
+                        <div className="comment-excerpt">{comment.anchorExcerpt}</div>
+                      )}
                       <blockquote className="comment-text">{comment.text}</blockquote>
                       <div className="comment-meta">
                         {/* `playerName` is ABSENT, never null, on a round the

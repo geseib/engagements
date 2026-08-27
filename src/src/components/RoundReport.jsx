@@ -92,6 +92,21 @@ function CommentList({ comments, showAnchor = false }) {
             {showAnchor && comment.anchorLabel && (
               <span className="rr-c__anchor">{comment.anchorLabel}</span>
             )}
+            {/*
+              THE EXCERPT — quoted material the comment is ABOUT, never the
+              comment itself, so it sits between the anchor and the comment text
+              the same way the composer orders "Commenting on" / anchor /
+              excerpt above its own textarea (FeedbackRoundPanel.jsx). Gated on
+              its own presence, independent of `showAnchor`: a summary comment
+              survives its own section's regeneration the same way a response
+              comment survives the 7-day answer expiry, and an older comment
+              written before this field existed has none — `excerptOf` never
+              returns undefined, so `''` is the only other value here, and this
+              renders nothing for it rather than an empty quote.
+            */}
+            {comment.anchorExcerpt && (
+              <span className="rr-c__excerpt">{comment.anchorExcerpt}</span>
+            )}
             <span className="rr-c__text">{comment.text}</span>
             {/*
               `playerName` is ABSENT, never null, on a round the server
