@@ -27,6 +27,27 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import RoundReport from '../components/RoundReport';
 
+/** Comments as `create-report.js` emits them, and as GET /comments returns them. */
+const COMMENTS = [
+  {
+    commentId: 'c1', anchorKind: 'summary', anchorRef: '',
+    anchorLabel: 'AI summary', anchorExcerpt: 'The room wants to defend price',
+    text: 'It misses that nobody proposed telling a customer why.',
+    playerName: 'Dana Whitfield', submittedAt: '2026-08-27T10:00:00.000Z',
+  },
+  {
+    commentId: 'c2', anchorKind: 'response', anchorRef: '1',
+    anchorLabel: 'Response 2 — Sam Ortiz', anchorExcerpt: 'Re-price the onboarding package',
+    text: 'This is the only one that touches the customer conversation.',
+    playerName: 'Lee Chen', submittedAt: '2026-08-27T10:01:00.000Z',
+  },
+  {
+    commentId: 'c3', anchorKind: 'results', anchorRef: '',
+    anchorLabel: 'Results', anchorExcerpt: '', text: 'Two of these are the same move.',
+    playerName: 'Dana Whitfield', submittedAt: '2026-08-27T10:02:00.000Z',
+  },
+];
+
 /** A round in the shape `config/sessionHistory.js` normalises to. */
 function aRound(over = {}) {
   return {
@@ -128,5 +149,132 @@ describe('opening one response', () => {
   test('names the author in the accessible name, which the badge cannot', () => {
     render(<RoundReport round={aRound()} />);
     expect(screen.getByRole('button', { name: 'Read response 2 in full, by Sam Ortiz' })).toBeInTheDocument();
+  });
+});
+
+describe('commenting on a section', () => {
+  test('nothing is commentable without a handler', () => {
+    // The host's review dialog is read-only. An affordance that did nothing
+    // would be the control people reach for first.
+    render(<RoundReport round={aRound()} comments={COMMENTS} />);
+    expect(screen.queryByRole('button', { name: /Comment on/ })).toBeNull();
+  });
+
+  test('the three sections the owner named become commentable', () => {
+    render(<RoundReport round={aRound()} onComment={jest.fn()} />);
+    expect(screen.getByRole('button', { name: 'Comment on the AI summary' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comment on the results' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comment on response 1' })).toBeInTheDocument();
+  });
+
+  test('the question is not commentable', () => {
+    /*
+      The owner named three sections: "the summary, the results, a specific user
+      response". The question is the prompt the room was GIVEN, not something
+      the room heard, and it is left out on purpose rather than by oversight.
+    */
+    render(<RoundReport round={aRound()} onComment={jest.fn()} />);
+    expect(screen.queryByRole('button', { name: /Comment on the question/ })).toBeNull();
+  });
+
+  test('a summary anchor carries no position', () => {
+    const onComment = jest.fn();
+    render(<RoundReport round={aRound()} onComment={onComment} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    expect(onComment).toHaveBeenCalledWith(expect.objectContaining({
+      anchorKind: 'summary', anchorRef: '', anchorLabel: 'AI summary',
+    }));
+  });
+
+  /*
+    THE TIE AGAIN. Rows 1 and 2 both carry rank 1, so both badges print "1". An
+    anchor derived from the badge files every comment on the second response
+    against the first — silently, and only on ties.
+  */
+  test('a response anchor is the row position, never the printed rank', () => {
+    const onComment = jest.fn();
+    render(<RoundReport round={aRound()} onComment={onComment} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on response 2' }));
+    expect(onComment).toHaveBeenCalledWith(expect.objectContaining({
+      anchorKind: 'response',
+      anchorRef: '1',
+      anchorLabel: 'Response 2 — Sam Ortiz',
+    }));
+  });
+
+  test('the anchor carries an excerpt of what is being commented on', () => {
+    /*
+      Stored on the comment row at write time. From day 8 the raw ANSWER rows
+      have expired and create-report rebuilds `answers` empty, so this excerpt
+      is the only surviving copy of what the room was discussing — and in the
+      session report it is what makes a comment readable at all, because the
+      round is not on screen beside it.
+    */
+    const onComment = jest.fn();
+    render(<RoundReport round={aRound()} onComment={onComment} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on response 1' }));
+    const anchor = onComment.mock.calls[0][0];
+    expect(anchor.anchorExcerpt).toContain('Freeze all discretionary discounting');
+    expect(anchor.anchorExcerpt.length).toBeLessThanOrEqual(141);
+  });
+});
+
+describe('showing the comments', () => {
+  test('each renders under the section it is about', () => {
+    const { container } = render(<RoundReport round={aRound()} comments={COMMENTS} />);
+    const summary = container.querySelector('.past-round__summary');
+    const results = container.querySelector('.past-round__results');
+    expect(summary.textContent).toContain('nobody proposed telling a customer why');
+    expect(results.textContent).toContain('This is the only one that touches');
+    expect(results.textContent).toContain('Two of these are the same move.');
+    // And not the other way round.
+    expect(summary.textContent).not.toContain('Two of these are the same move.');
+  });
+
+  test('they are labelled as comments, so nobody reads one as a response', () => {
+    // The owner: "clearly called out as comments".
+    render(<RoundReport round={aRound()} comments={COMMENTS} />);
+    expect(screen.getAllByText('Comments').length).toBeGreaterThan(0);
+  });
+
+  test('each is attributed to whoever wrote it', () => {
+    // Scoped to the comment block: "Lee Chen" is also a RESPONSE author in this
+    // fixture, and that ambiguity is the point — a comment's byline and a
+    // response's byline must be separately addressable, or a reader cannot tell
+    // which of the two they are looking at either.
+    const { container } = render(<RoundReport round={aRound()} comments={COMMENTS} />);
+    const bylines = [...container.querySelectorAll('.rr-c__who')].map((n) => n.textContent);
+    expect(bylines).toContain('Lee Chen');
+    expect(bylines).toContain('Dana Whitfield');
+  });
+
+  test('a comment from a redacted round is labelled by position, not blank', () => {
+    /*
+      `playerName` is ABSENT, never null, on a round the server redacted. A
+      renderer that prints `{c.playerName}` shows nothing at all there, which
+      reads as a bug rather than as anonymity.
+    */
+    render(<RoundReport round={aRound()} comments={[
+      { commentId: 'x', anchorKind: 'summary', anchorRef: '', text: 'Said anonymously' },
+    ]} />);
+    expect(screen.getByText('Comment 1')).toBeInTheDocument();
+  });
+
+  test('a section with no comments says nothing at all', () => {
+    // No empty "Comments" heading over nothing — that is a section that looks
+    // like it failed to load.
+    render(<RoundReport round={aRound()} comments={[]} />);
+    expect(screen.queryByText('Comments')).toBeNull();
+  });
+
+  test('a comment on a response that no longer exists is still readable', () => {
+    /*
+      From day 8 the report's `answers` array rebuilds empty. The comment must
+      not vanish with it, and must not render against nothing: the stored anchor
+      label and excerpt are what carry it.
+    */
+    render(<RoundReport round={aRound({ answers: [] })} comments={[COMMENTS[1]]} />);
+    expect(screen.getByText(/This is the only one that touches/)).toBeInTheDocument();
+    expect(screen.getByText(/Response 2 — Sam Ortiz/)).toBeInTheDocument();
   });
 });

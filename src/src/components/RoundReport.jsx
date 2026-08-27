@@ -1,10 +1,13 @@
 import React from 'react';
+import Icon from './Icon';
 import AnswerSpotlight from './AnswerSpotlight';
 import MarkdownRenderer from './MarkdownRenderer';
 import {
   hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
+import { anchorLabelFor, excerptOf } from '../config/comments';
+import './RoundReport.css';
 
 /**
  * ONE ROUND'S REPORT — the question, what the room said, and what the AI made
@@ -56,6 +59,64 @@ import { displayLabelFor } from '../config/anonymity';
  * `authorsRevealed` flag, which relabelled three long-finished rounds
  * "Response 1, 2, 3" while round four sat in ASK.
  */
+/**
+ * THE COMMENTS ON ONE SECTION, drawn the way this file already draws responses.
+ *
+ * The owner asked for two things about how these read, and they pull in
+ * opposite directions: *"just like we show the responses in the previous
+ * rounds"* and *"clearly called out as comments"*. So the SHAPE is the response
+ * row — an ordered list, the speaker beside the text — and the LABEL is
+ * unmistakable: a "Comments" heading, its own scope class, and the anchor
+ * printed on every comment that needs one. Nobody should be able to mistake a
+ * comment for something the round itself collected.
+ *
+ * Renders NOTHING when there are none. An empty "Comments" heading over nothing
+ * reads as a section that failed to load.
+ */
+function CommentList({ comments, showAnchor = false }) {
+  if (!comments.length) return null;
+  return (
+    <div className="rr-c">
+      <h5 className="rr-c__head">Comments</h5>
+      <ol className="rr-c__list">
+        {comments.map((comment, i) => (
+          <li key={comment.commentId || i} className="rr-c__item">
+            {/*
+              THE ANCHOR, printed only where the comment is not already sitting
+              under the thing it is about. In the responses section the comments
+              on several different responses share one list, so each has to say
+              which — and it says it from the STORED label, never by looking the
+              position up again, so a comment on a response that has since
+              expired out of the report still reads correctly.
+            */}
+            {showAnchor && comment.anchorLabel && (
+              <span className="rr-c__anchor">{comment.anchorLabel}</span>
+            )}
+            <span className="rr-c__text">{comment.text}</span>
+            {/*
+              `playerName` is ABSENT, never null, on a round the server
+              redacted. Printing it raw would leave a blank where a name goes,
+              which reads as a bug rather than as anonymity — so the fallback is
+              a position, exactly as `displayLabelFor` does for responses.
+            */}
+            <span className="rr-c__who">{comment.playerName || comment.name || `Comment ${i + 1}`}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** The affordance that opens the composer for one section. */
+function CommentButton({ label, onClick }) {
+  return (
+    <button type="button" className="rr-c__add" onClick={onClick} aria-label={`Comment on ${label}`}>
+      <Icon name="ChatCircleText" size={16} />
+      <span>Comment</span>
+    </button>
+  );
+}
+
 export default function RoundReport({
   round,
   /** Which response is open on top of this, or null. Owned by the container. */
@@ -73,6 +134,21 @@ export default function RoundReport({
   onRegenerate,
   /** True while this round's summary is being regenerated. */
   regenerating = false,
+  /**
+   * Comments already on this round, in writing order, as `create-report.js`
+   * emits them and `GET /comments` returns them.
+   */
+  comments = [],
+  /**
+   * Open the composer for one section. Given a fully-formed anchor —
+   * `{anchorKind, anchorRef, anchorLabel, anchorExcerpt}` — so the caller never
+   * has to re-derive which response was clicked.
+   *
+   * Optional, and its absence is the READ-ONLY case: the host's review dialog
+   * shows comments and offers no way to add one, because the host is reading a
+   * finished round rather than taking part in a feedback round.
+   */
+  onComment,
 }) {
   if (!round) return null;
 
@@ -81,6 +157,25 @@ export default function RoundReport({
   const podium = podiumAnswers(round);
   const answers = Array.isArray(round.answers) ? round.answers : [];
   const options = Array.isArray(round.options) ? round.options : [];
+
+  /*
+    Grouped by ANCHOR KIND, not by position. Comments on the results as a whole
+    and comments on individual responses share the responses section — that is
+    what the owner asked for, one place where "what the room said about what the
+    room said" can be read straight through — and each row states its own anchor
+    so the two never blur together.
+  */
+  const all = Array.isArray(comments) ? comments : [];
+  const summaryComments = all.filter((c) => c && c.anchorKind === 'summary');
+  const resultsComments = all.filter((c) => c && (c.anchorKind === 'results' || c.anchorKind === 'response'));
+
+  /** Build the anchor for one section, once, where the facts are to hand. */
+  const anchorFor = (anchorKind, anchorRef, excerptSource) => ({
+    anchorKind,
+    anchorRef,
+    anchorLabel: anchorLabelFor({ anchorKind, anchorRef }, { answers }),
+    anchorExcerpt: excerptOf(excerptSource),
+  });
 
   return (
     <div className="past-round__body">
@@ -110,7 +205,15 @@ export default function RoundReport({
 
       {/* WHAT THE ROOM SAID. */}
       <section className="past-round__results">
-        <h4>Responses</h4>
+        <div className="rr-c__section-head">
+          <h4>Responses</h4>
+          {onComment && (
+            <CommentButton
+              label="the results"
+              onClick={() => onComment(anchorFor('results', '', round.title))}
+            />
+          )}
+        </div>
         {answers.length === 0 ? (
           /* A round with no responses is a real outcome and has to read as one.
              Rendering an empty list instead looks like a load that failed,
@@ -156,11 +259,26 @@ export default function RoundReport({
                   </button>
                   <span className="past-round__answer">{snippetOf(answer.answer)}</span>
                   <span className="past-round__who">{who}</span>
+                  {/*
+                    THE ANCHOR IS THE ROW'S POSITION `i`, never the rank printed
+                    on the badge beside it. Equal scores get equal ranks
+                    (1, 1, 3), so two rows can both read "1" and an anchor taken
+                    from the badge files every comment on the second against the
+                    first — silently, and only on ties.
+                  */}
+                  {onComment && (
+                    <CommentButton
+                      label={`response ${i + 1}`}
+                      onClick={() => onComment(anchorFor('response', String(i), answer.answer))}
+                    />
+                  )}
                 </li>
               );
             })}
           </ol>
         )}
+
+        <CommentList comments={resultsComments} showAnchor />
 
         {/*
           THE FULL RESPONSE, reusing the dialog the RESULTS stage already uses
@@ -196,7 +314,18 @@ export default function RoundReport({
         wrote a whole document, and the structured fields when it did not.
       */}
       <section className="past-round__summary">
-        <h4>AI summary</h4>
+        <div className="rr-c__section-head">
+          <h4>AI summary</h4>
+          {onComment && (
+            <CommentButton
+              label="the AI summary"
+              onClick={() => onComment(anchorFor(
+                'summary', '',
+                summary.markdownResponse || summary.summaryText || '',
+              ))}
+            />
+          )}
+        </div>
         {showSummary ? (
           <>
             {summary.markdownResponse ? (
@@ -245,6 +374,8 @@ export default function RoundReport({
           an empty panel invites the reasonable question of what is being
           regenerated.
         */}
+        <CommentList comments={summaryComments} />
+
         {onRegenerate && (
           <button
             type="button"
