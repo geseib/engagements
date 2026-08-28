@@ -157,6 +157,30 @@ describe('the two beats', () => {
     const { container } = render(<WavelengthConvergence analysis={landedRound} />);
     expect(container.textContent).not.toContain('exact wording only');
   });
+
+  /*
+    'skipped' USED TO MEAN TWO THINGS, and the silent one was wrong.
+
+    The server sets 'skipped' when there was genuinely nothing to cluster (one
+    submitter, or one distinct idea) AND — until 2026-08-28 — when the model
+    pass could not be dispatched at all. This file says nothing for 'skipped'
+    on purpose: announcing a loss that did not happen is its own kind of lie.
+    So a full room whose clustering never ran got an exact-match-only result
+    presented as final, with no note. 'unavailable' is now that second case and
+    it announces itself, exactly as 'failed' does.
+  */
+  test('an unavailable clustering pass announces itself like a failed one', () => {
+    const unavailable = { ...landedRound, matching: 'exact', clustering: 'unavailable' };
+    const { container } = render(<WavelengthConvergence analysis={unavailable} />);
+    expect(container.querySelector('.terms')).not.toBeNull();
+    expect(container.textContent).toContain('Matched on exact wording only');
+  });
+
+  test('but a round with nothing to cluster still says nothing', () => {
+    const nothingToDo = { ...landedRound, matching: 'exact', clustering: 'skipped' };
+    const { container } = render(<WavelengthConvergence analysis={nothingToDo} />);
+    expect(container.textContent).not.toContain('exact wording only');
+  });
 });
 
 describe('normalisation — legacy stored rounds (7-day TTL) still render honestly', () => {
@@ -173,6 +197,22 @@ describe('normalisation — legacy stored rounds (7-day TTL) still render honest
     expect(legacy.landed.map((w) => w.word)).toEqual(['ridge']);
     expect(legacy.clustering).toBe('legacy');
     expect(wavelengthMatchingNote(legacy)).toContain('exact wording only');
+  });
+
+  /* A convergence-shaped round with no `clustering` field at all defaulted to
+     'skipped' — the one status this file deliberately keeps quiet about — so a
+     round stored before the field existed read as a complete clustered result.
+     'legacy' is what that actually is, and it is already annotated. */
+  test('a round with no clustering field reads as legacy, not as complete', () => {
+    const undated = normalizeWavelengthAnalysis({
+      submitterCount: 2,
+      totalWordsSubmitted: 4,
+      totalUniqueWords: 3,
+      words: [{ word: 'summit', count: 2 }, { word: 'ridge', count: 1 }],
+      commonWords: [{ word: 'summit', count: 2 }],
+    });
+    expect(undated.clustering).toBe('legacy');
+    expect(wavelengthMatchingNote(undated)).toContain('exact wording only');
   });
 
   test('an unrecognisable payload renders nothing rather than something wrong', () => {

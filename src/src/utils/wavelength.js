@@ -34,7 +34,12 @@ export function normalizeWavelengthAnalysis(raw) {
       landed: raw.commonWords || [],
       nearMiss: raw.nearMiss || [],
       matching: raw.matching || 'exact',
-      clustering: raw.clustering || 'skipped',
+      /* NOT 'skipped'. A convergence-shaped round with no `clustering` field is
+         one stored before the field existed — 'legacy' is what that is, and it
+         is annotated. Defaulting to 'skipped' made it read as a complete
+         clustered result, because 'skipped' is the one status this file
+         deliberately keeps quiet about. */
+      clustering: raw.clustering || 'legacy',
     };
   }
 
@@ -113,15 +118,30 @@ export const wavelengthMetaLine = (analysis) => {
 };
 
 /**
- * The degraded-matching announcement. 'failed' is the model not running;
- * 'legacy' is a round stored before clustering existed. 'skipped' is a round
- * with nothing to cluster (one submitter / one idea) — exact matching is the
- * complete result there and announcing it would imply a loss that did not
- * happen. Null means say nothing.
+ * The degraded-matching announcement.
+ *
+ *   'failed'       the model ran and threw
+ *   'unavailable'  the pass could not be dispatched at all
+ *   'legacy'       a round stored before clustering existed
+ *   'skipped'      nothing to cluster — one submitter, or one distinct idea
+ *
+ * The first three are announced; 'skipped' is not, because exact matching IS
+ * the complete result for a round with nothing to merge and announcing it would
+ * imply a loss that did not happen.
+ *
+ * 'unavailable' exists because it used to be spelled 'skipped' too, and so
+ * inherited that silence — a full room whose clustering never dispatched got an
+ * exact-match result presented as final, with nothing on screen to say so. See
+ * get-results.js, where the three-way split is made.
+ *
+ * Null means say nothing.
  */
 export function wavelengthMatchingNote(analysis) {
-  if (analysis.matching === 'exact'
-    && (analysis.clustering === 'failed' || analysis.clustering === 'legacy')) {
+  if (analysis.matching === 'exact' && (
+    analysis.clustering === 'failed'
+    || analysis.clustering === 'unavailable'
+    || analysis.clustering === 'legacy'
+  )) {
     return 'Matched on exact wording only — spelling variants were not combined this round.';
   }
   return null;

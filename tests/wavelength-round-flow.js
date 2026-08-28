@@ -20,7 +20,23 @@ const REPO = path.join(__dirname, '..');
 const Module = require('module');
 const loaderStubs = new Map();
 const realLoad = Module._load;
+/*
+  THE DEPLOYED SHAPE THIS REPRODUCES. get-results.js requires
+  '@aws-sdk/client-lambda' in a try/catch, because the pipeline installs NO
+  backend dependencies at all — buildspec-dev.yml runs `npm ci` in src/ only,
+  and `sam build` targets CodeUri lambda-functions/game/, which has no
+  package.json. Every @aws-sdk require in the deployed function therefore
+  resolves from the Lambda runtime, and any client the runtime does not carry
+  is simply absent. Set this and the require throws, which is exactly what a
+  missing client looks like from inside the handler.
+*/
+let lambdaClientMissing = false;
 Module._load = function (request, parent, isMain) {
+  if (request === '@aws-sdk/client-lambda' && lambdaClientMissing) {
+    const e = new Error("Cannot find module '@aws-sdk/client-lambda'");
+    e.code = 'MODULE_NOT_FOUND';
+    throw e;
+  }
   if (loaderStubs.has(request)) return loaderStubs.get(request);
   return realLoad.call(this, request, parent, isMain);
 };
@@ -322,6 +338,71 @@ const runWorker = (gameId) => handler({
     assert.deepStrictEqual(nm.nearMiss.map((w) => w.word).sort(), ['ridge', 'summit']);
     assert.ok(nm.nearMiss.every((w) => w.count === 2));
   });
+
+  /*
+    9. THE DISPATCHER THAT WAS NEVER THERE — and the round that said nothing.
+
+    Reported after a live session: "wavelength did not refine the list for
+    mispellings or like words … sore was likely score". The clustering pass is
+    built to catch exactly that, so the question was why it had not run.
+
+    `clusteringPlanned` was three conditions collapsed into one status:
+
+        Boolean(lambda) && submitterCount >= 2 && totalUniqueWords >= 2
+
+    and every falsy path stored clustering:'skipped'. Two of the three really
+    are "nothing to cluster" — section 7 above — and the stage says nothing for
+    them ON PURPOSE (utils/wavelength.js: announcing a loss that did not happen
+    is its own kind of lie). The third is a room of twelve with thirty distinct
+    words whose model pass never even dispatched, and it was wearing the same
+    silent status: an exact-match-only result presented as the final answer,
+    which is the one outcome both the worker and the stage say must never
+    happen — "a degraded claim about agreement that does not announce itself is
+    worse than no claim".
+
+    // rejects: a missing dispatcher hiding behind the status that means
+    //          "there was nothing to do".
+  */
+  console.log('\n9. the dispatcher is missing — that is not "nothing to cluster"');
+  {
+    // A SECOND instance of the handler, loaded with the require throwing. The
+    // client is resolved once at module load, so the flag has to be set before
+    // the re-require and the cache entry dropped.
+    lambdaClientMissing = true;
+    delete require.cache[require.resolve(path.join(REPO, 'lambda-functions/game/get-results.js'))];
+    const { handler: noDispatcher } = require(path.join(REPO, 'lambda-functions/game/get-results.js'));
+    lambdaClientMissing = false;
+
+    seedGame('2007', [
+      answer('2007', 'Ada', ['score', 'better']),
+      answer('2007', 'Grace', ['sore', 'betterment']),
+      answer('2007', 'Lin', ['score', 'ridge']),
+    ]);
+    const undispatchable = await noDispatcher({
+      requestContext: { routeKey: 'POST /games/{gameId}/close-round' },
+      pathParameters: { gameId: '2007' },
+      body: JSON.stringify({ questionNumber: 1 }),
+    });
+    const wa = JSON.parse(undispatchable.body).wordAnalysis;
+
+    check('a full room with no dispatcher does not report "skipped"', () =>
+      assert.notStrictEqual(wa.clustering, 'skipped',
+        'the stage says nothing for skipped, so this round claims to be final'));
+    check('it reports the dispatcher as unavailable', () =>
+      assert.strictEqual(wa.clustering, 'unavailable'));
+    check('and the stored round agrees', () =>
+      assert.strictEqual(resultsRow('2007').wordAnalysis.clustering, 'unavailable'));
+    check('nothing was dispatched, and the exact result still stands', () => {
+      assert.strictEqual(invocations.length, 0);
+      assert.strictEqual(wa.matching, 'exact');
+      assert.ok(wa.words.length > 0, 'the round lost its analysis as well');
+    });
+
+    // The handler the rest of this file uses is the stubbed-client one; put it
+    // back so nothing after here inherits the broken instance.
+    delete require.cache[require.resolve(path.join(REPO, 'lambda-functions/game/get-results.js'))];
+    require(path.join(REPO, 'lambda-functions/game/get-results.js'));
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

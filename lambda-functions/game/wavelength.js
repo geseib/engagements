@@ -18,7 +18,8 @@
  *   1. DETERMINISTIC here: case, surrounding punctuation, whitespace and
  *      hyphenation/spacing variants ("data base" / "data-base" / "database")
  *      collapse to one key. Same submissions, same clusters, every time.
- *   2. AI merges (plurals, misspellings, abbreviations) arrive as merge GROUPS
+ *   2. AI merges (one root in different forms: plurals, inflections, other
+ *      derivations, misspellings, abbreviations) arrive as merge GROUPS
  *      proposed by a model and are applied by applyMerges() — which VALIDATES
  *      rather than trusts: a merge may only regroup keys that actually exist.
  *      The model can fail to merge; it cannot invent agreement.
@@ -203,12 +204,33 @@ const analyzeWavelength = (submissions, options = {}) => {
  * The clustering prompt. Stated as a contract because there is no host review
  * step behind it — the tie-break line is the entire safety mechanism, so it is
  * written down rather than left to temperature.
+ *
+ * THE LINE IS THE ROOT, widened 2026-08-28 on the owner's call. It used to read
+ * "plurals and inflections of one term", which is INFLECTION only — so a model
+ * following it to the letter was right to keep `better` and `betterment` apart,
+ * and a live session counted them as two answers. Reported as: "wavelength did
+ * not refine the list for mispellings or like words". One root is now one
+ * answer whatever suffix it is wearing.
+ *
+ * TWO GUARDS SURVIVE THE WIDENING, and both are load-bearing:
+ *
+ *   A SHARED MEANING IS NOT A SHARED ROOT. cloud/AWS and database/storage stay
+ *   two answers. Without this line "same idea" is what a model will hear, and
+ *   the merge rule stops being a rule.
+ *
+ *   ANTONYMS ARE EXEMPT FROM THE ROOT RULE. possible/impossible and do/undo
+ *   share a root and are opposite answers — the widening would otherwise have
+ *   collapsed the one pair the game must never collapse. This exception did not
+ *   need saying while the rule was inflection-only; it does now.
+ *
+ * None of this is trusted: applyMerges validates every group against keys that
+ * actually exist, so a wrong merge can only regroup words the room really said.
  */
 const buildMergePrompt = (labels) => `You are matching words submitted by a team in a word-association game. A word only counts when everyone said it, so your job is to recognise when two entries are THE SAME TERM in different clothes.
 
-MERGE only: plurals and inflections of one term; obvious misspellings and transpositions; abbreviations and their expansion of the SAME term (db, dbs, DBMS, database).
+MERGE entries that share a ROOT and mean the same thing: plurals and inflections (cost, costs; run, running); other word forms built from that same root (better, betterment; safe, safety; decide, decision); obvious misspellings and transpositions (sore for score); abbreviations and their expansion (db, dbs, DBMS, database).
 
-NEVER merge terms that are merely related, however closely: cloud/AWS, database/storage, fast/performance. Never merge broader and narrower categories, and never antonyms. If a reasonable person in the room would defend the two as different answers, they are different answers.
+NEVER merge two DIFFERENT ROOTS, however closely related in meaning: cloud/AWS, database/storage, fast/performance. A shared meaning is not a shared root. Never merge broader and narrower categories. Never merge antonyms EVEN WHEN THEY SHARE A ROOT — possible/impossible and do/undo are opposite answers, not one answer. If a reasonable person in the room would defend the two as different answers, they are different answers.
 
 WHEN IN DOUBT, DO NOT MERGE. A missed merge costs one word off a count; a wrong merge manufactures agreement that did not happen, which is the one thing this game must never do.
 
