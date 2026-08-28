@@ -19,6 +19,32 @@
  * carries the Cognito authorizer, because it moves what the whole room is
  * looking at.
  *
+ * ── THAT SENTENCE IS LOAD-BEARING, AND IT WAS ONCE FALSE ───────────────────
+ *
+ * "Carries the Cognito authorizer" was true and not sufficient. Until
+ * 2026-08-27 `stage-beat` checked only that the caller was *a* host, never that
+ * they were THIS session's host — so a host in any organisation, holding one of
+ * the 9,000 four-digit ids, could open a feedback round on a room they had
+ * nothing to do with, and the write gate below would then admit anyone with the
+ * code. The resulting comments are encrypted under the VICTIM org's key and
+ * flow into their round report and session report; the beat undoes, they do
+ * not.
+ *
+ * So THIS ROUTE'S safety is borrowed, not owned: it holds exactly as long as
+ * `stage-beat` refuses a caller from another organisation
+ * (`tenant.callerMayDriveSession`, asserted end-to-end by
+ * `tests/session-beat-org-scope.js`). Anything that widens who may write the
+ * `feedback` beat widens who may write here, silently. Do not weaken that route
+ * without reading this one.
+ *
+ * WHAT IS DELIBERATELY *NOT* ADDED HERE. Not an identity check — participants
+ * have no identity, and requiring one ends the participant journey. Not a
+ * roster check on `playerName` either: it is unverified, exactly as it is in
+ * `submit-vote.js`, and singling out comments would leave the same trust in
+ * every other participant write while implying it had been dealt with. If that
+ * posture should change it is one deliberate piece of work across all of them,
+ * not a patch here.
+ *
  * THE READ ADDITIONALLY REQUIRES A ROUND, which is stricter than the key
  * format allows: `commentPrefix({})` (comment-keys.js) happily returns the
  * bare `COMMENT#` session-wide prefix, because `create-report.js` wants
