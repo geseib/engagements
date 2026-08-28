@@ -4,7 +4,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { resolveSetPartition } = require('./set-version');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
-const { ORG } = require('./tenant');
+const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
@@ -308,6 +308,46 @@ exports.handler = async (event) => {
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
     }));
+
+    /*
+      WHOSE ROOM IS THIS? The authorizer on the close-round route says the
+      caller is *a* host; until this line, nothing said they were THIS
+      session's host. The boundary was "any `hosts` account plus one of the
+      9,000 four-digit ids", and this is the route where that cost the most.
+
+      THE REVEAL HAD TWO DOORS AND ONLY ONE WAS SHUT. /reveal-authors was
+      scoped first, because it answers with the names. This route flips the
+      SAME `AuthorsRevealed` flag on its way past — so every attributed answer
+      in the round went on the stage, for anyone holding four digits, by asking
+      for the results instead of asking for the reveal. It also awards the
+      scores, and unlike the state move that does not undo: the score row
+      carries `afterRound`, so a second close of the same round is skipped as
+      already scored. A rival did not merely move the room, they spent it.
+
+      GATED ON THE ROUTE, NOT MERELY ON THE CALLER, and the read route is the
+      reason. `POST /games/get-results` is public and must stay that way —
+      PlayerPage calls it with a plain fetch the moment the room enters RESULTS
+      — so a participant arrives here with no organisation at all.
+      `callerMayDriveSession` already lets an anonymous caller through, so
+      testing it on both routes would be harmless; asking only on the
+      transition keeps the participant path honest about what it is doing, and
+      is where the answer can actually change.
+
+      NO EXTRA READ. The established pattern (start-game.js, stage-beat.js)
+      pays one GetItem on METADATA with `ProjectionExpression: 'orgId'`. This
+      handler has already read the whole row two lines up for the game type, so
+      a second read would buy nothing.
+
+      404 rather than 403: see tenant.callerMayDriveSession.
+    */
+    if (isHostTransitionRoute(event) && !callerMayDriveSession(event, gameMetadata.Item || {})) {
+      console.log(`🔒 Refusing close-round on ${gameId}: the caller's organisation does not own it`);
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
 
     const gameType = gameMetadata.Item?.GameType || 'call-and-answer';
     console.log(`🎮 Game type: ${gameType}`);

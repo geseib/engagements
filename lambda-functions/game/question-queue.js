@@ -62,6 +62,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 
 const { resolveSetPartition } = require('./set-version');
 const { QUEUE_OPS, applyQueueOp, normaliseQueue } = require('./queue-order');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -188,6 +189,33 @@ exports.handler = async (event) => {
   if (!gameId) return respond(400, { error: 'gameId is required' });
 
   try {
+    /*
+      WHOSE ROOM IS THIS? Both events on this function carry the Cognito
+      authorizer, which says the caller is *a* host; until this read, nothing
+      said they were THIS session's host, so the boundary was "any `hosts`
+      account plus one of the 9,000 four-digit ids".
+
+      ONCE, ABOVE THE METHOD SPLIT, because both halves need it and for
+      different reasons — the same argument the header makes for keeping the
+      read and the write in one function. GET names the questions the room has
+      NOT been asked yet, which is the spoiler the template gates this route
+      for; POST decides what it is asked next.
+
+      A dedicated read rather than reusing `resolveGameSet`: that helper runs
+      only on the POST path and returns the set, not the owner, so leaning on
+      it would leave GET unguarded and put the check after the enum validation
+      on POST. One GetItem, the shape start-game.js and stage-beat.js use.
+      404 rather than 403: see tenant.callerMayDriveSession.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return respond(404, { error: 'Game not found' });
+    }
+
     if (method === 'GET') {
       const current = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,

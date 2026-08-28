@@ -42,6 +42,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 
 const { planAhead, seedFor } = require('./question-plan');
+const { callerMayDriveSession } = require('./tenant');
 const { resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
@@ -153,6 +154,27 @@ exports.handler = async (event) => {
     ]);
 
     if (!metaRes.Item) return respond(404, { error: 'Game not found' });
+
+    /*
+      WHOSE ROOM IS THIS? The Cognito authorizer on this route says the caller
+      is *a* host, and until this line nothing said they were THIS session's
+      host — so the boundary was "any `hosts` account plus one of the 9,000
+      four-digit ids".
+
+      This route is the reason that mattered even though it writes nothing.
+      The template's own note says it: the response ENUMERATES QUESTIONS THAT
+      HAVE NOT BEEN ASKED YET, and on a trivia round knowing the next three
+      questions is most of the way to knowing the next three answers. A
+      read-only hole is still a hole when what it reads is the thing being kept
+      back.
+
+      NO EXTRA READ: the METADATA row is already in hand from the Promise.all
+      above, so unlike stage-focus.js this costs nothing. Deliberately AFTER
+      the 404 for a missing game, so both refusals look identical from outside.
+    */
+    if (!callerMayDriveSession(event, metaRes.Item)) {
+      return respond(404, { error: 'Game not found' });
+    }
 
     const resolved = await resolveSetPartition(
       db, process.env.TABLE_NAME, metaRes.Item.QuestionSetId, undefined

@@ -91,6 +91,16 @@ for (const rel of [
   'lambda-functions/game/next-question.js',
   'lambda-functions/game/update-game.js',
   'lambda-functions/game/start-game.js',
+  // The rest of the host controls. Every one of these carries the Cognito
+  // authorizer and drives, reads or resolves a live room — see
+  // session-control-org-scope.js, which proves the write never lands.
+  'lambda-functions/game/get-results.js',
+  'lambda-functions/game/up-next.js',
+  'lambda-functions/game/stage-focus.js',
+  'lambda-functions/game/question-queue.js',
+  'lambda-functions/game/question-exclusions.js',
+  'lambda-functions/websocket/start-question.js',
+  'lambda-functions/websocket/start-vote.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
