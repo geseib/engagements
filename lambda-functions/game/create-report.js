@@ -1,19 +1,31 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition, setMetadataKey } = require('./set-version');
-const { ORG } = require('./tenant');
+const { ORG, callerMayDriveSession } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 
 /**
- * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
+ * WHOSE SESSION IS THIS? — off the row, though the route is no longer public.
  *
- * `POST /games/{gameId}/report` takes a four-digit id and no identity (see the
- * anonymity note below, which exists for exactly that reason), so the caller's
- * org is '' and a blank orgId THROWS in tenant-crypto rather than defaulting.
- * The session's METADATA row is the authority.
+ * `POST /games/{gameId}/report` WAS public: a four-digit id and no identity at
+ * all, on the route that assembles every participant's name against their
+ * answer. It carries the Cognito authorizer as of 2026-08-28, and the handler
+ * asks `callerMayDriveSession` below — the two had to arrive together, because
+ * that guard passes every caller holding no groups (the participant journey is
+ * never gated) and on an open route that is everyone. template-clean.yaml's
+ * comment on CreateReportEvent has the whole account.
+ *
+ * THE ORG STILL COMES OFF THE ROW, and that does not change with the
+ * authorizer. This report is about the SESSION, so the key it decrypts under is
+ * the session's; the caller's own org is a fact about the caller. With the
+ * guard in place the two agree whenever the session has an owner, and where
+ * they cannot — a pre-tenancy or orgless session, which the guard deliberately
+ * lets through — the row is the only answer there is. A blank orgId THROWS in
+ * tenant-crypto rather than defaulting, which is why every call below is
+ * guarded on `reportOrgId` rather than passing whatever the caller had.
  */
 const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
 
@@ -45,6 +57,34 @@ exports.handler = async (event) => {
     }));
 
     if (!gameMetadata.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /*
+      WHOSE SESSION IS THIS? The Cognito authorizer says the caller is *a* host;
+      nothing here said they were THIS session's host, and the same four-digit
+      code opens every one of them. 404 rather than 403, for the reason
+      tenant.callerMayDriveSession gives: a 403 confirms that a guessed code
+      names a real session belonging to somebody else.
+
+      COSTS NOTHING. The owning org lives on METADATA and METADATA has just been
+      read — this is the one route that was already holding the row the other
+      handlers pay a second GetItem for. It also sits ABOVE the four queries
+      below, so a refused caller does not read a single player, answer, vote or
+      comment out of a partition that is not theirs.
+
+      THIS ROUTE ANSWERS WITH THE WHOLE ROOM, which is what makes it the widest
+      of the set: every participant's name against their answer, decrypted, plus
+      the AI summaries and the round comments. `isHidden` a few dozen lines down
+      decides what a report is allowed to attribute — a promise made to
+      participants — and until this guard existed that judgement was being made
+      on behalf of a caller nobody had identified.
+    */
+    if (!callerMayDriveSession(event, gameMetadata.Item)) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),
@@ -85,12 +125,17 @@ exports.handler = async (event) => {
 
     // All question-related data is retrieved in the single query above
 
-    // ANONYMITY. POST /games/{id}/report is a PUBLIC route, and the rounds it
-    // reports on are not all finished: questionNumbers below is built from
-    // votes ∪ results ∪ AI summaries, so a round still in VOTE joins the list
-    // the moment the first ballot lands. Without this, anyone holding the
-    // four-digit game id could ask the report for the names the ballot itself
-    // is withholding, mid-vote, from the projector in the room.
+    // ANONYMITY. The rounds this reports on are not all finished:
+    // questionNumbers below is built from votes ∪ results ∪ AI summaries, so a
+    // round still in VOTE joins the list the moment the first ballot lands.
+    // Without this, the report would hand back the names the ballot itself is
+    // withholding, mid-vote, from the projector in the room.
+    //
+    // This stands whether or not the route is public, and it is no longer
+    // public — the guard above narrowed the caller from "anyone with the code"
+    // to "this session's organisation". That closes the stranger and not the
+    // promise: withholding names mid-vote is owed to the ROOM, and the host is
+    // the person standing in front of it.
     //
     // Per round, from the same ROUND# records the rest of the feature reads,
     // through the same isHidden() gate — so the report cannot drift from what

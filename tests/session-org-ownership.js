@@ -99,6 +99,17 @@ for (const rel of [
   // `session-beat-org-scope.js` drives both handlers and proves that chain.
   'lambda-functions/game/stage-beat.js',
   'lambda-functions/game/reveal-authors.js',
+  // The READ, and the widest one in the product: `create-report` assembles the
+  // whole session — every name against every answer, decrypted, plus the round
+  // comments. Unlike the two above it carried NO AUTHORIZER AT ALL until
+  // 2026-08-28, which is why its header documented a public posture and took
+  // the org off the METADATA row: there was no caller identity to take it from.
+  // The authorizer landed in the same change as this line, and it had to —
+  // `callerMayDriveSession` passes a caller with no groups, so on the open
+  // route it would have been inert. Closing the route alone would have narrowed
+  // "anyone with the code" only to "any `hosts` account with the code", which is
+  // the boundary `reveal-authors` above records as not enough.
+  'lambda-functions/game/create-report.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
