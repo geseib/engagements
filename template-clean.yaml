@@ -1972,7 +1972,26 @@ Resources:
       CodeUri: lambda-functions/game/
       Handler: get-results.handler
       Runtime: nodejs22.x
-      Timeout: 30
+      # A WORKER'S TIMEOUT, NOT A REQUEST'S — this function has two entry points.
+      #
+      # The wavelength clustering worker is a second entry into this same
+      # handler (`__wavelengthClusterWorker`), fired as an InvocationType:'Event'
+      # self-invoke so the Bedrock call runs off the API Gateway ceiling. The
+      # comment on that dispatch names `get-ai-summary` as the pattern it
+      # copies — and get-ai-summary is a 300s function, because that is what a
+      # model call needs. This one inherited 30s from its request half.
+      #
+      # A HARD TIMEOUT IS THE ONE FAILURE THE WORKER CANNOT REPORT. Every other
+      # way it can fail runs its catch: the round is marked clustering:'failed'
+      # and the same frame still goes out, so the stage resolves and the room
+      # sees the exact-match result. Being killed at the timeout skips all of
+      # that — no status write, no broadcast — so the row says 'pending'
+      # forever and the stage waits out its watchdog for a frame that will
+      # never come. Observed on dev 2026-08-29 doing exactly that.
+      #
+      # The request half is unaffected: API Gateway still cuts a synchronous
+      # caller off at its own 29s regardless of what is set here.
+      Timeout: 300
       Policies:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with

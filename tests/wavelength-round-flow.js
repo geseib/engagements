@@ -404,6 +404,55 @@ const runWorker = (gameId) => handler({
     require(path.join(REPO, 'lambda-functions/game/get-results.js'));
   }
 
+  /*
+    10. THE WORKER NEEDS LONGER THAN THE ROUND-CLOSE DOES.
+
+    The self-invoke exists to get the Bedrock call off the API Gateway ceiling —
+    the comment on it says so, and names `get-ai-summary` as the pattern it
+    copies. get-ai-summary is a 300s function. The clustering worker is NOT a
+    separate function: it is a second entry point into get-results, so it
+    inherits get-results' timeout, and that was 30s.
+
+    WHY A HARD TIMEOUT IS THE WORST FAILURE OF THE THREE. Every other way this
+    can fail runs the catch below — the row is marked 'failed' and the SAME
+    frame goes out, so the stage resolves beat one and the room sees the exact
+    result. A hard timeout KILLS THE PROCESS: no catch, no status write, no
+    broadcast. The row is left saying 'pending' forever, and the stage waits out
+    its watchdog with nothing ever arriving.
+
+    Observed on dev 2026-08-29: a four-player round sat on beat one for the full
+    watchdog and never resolved, which is the signature of exactly this.
+
+    // rejects: the worker inheriting a request-path timeout again.
+  */
+  console.log('\n10. the clustering worker gets a worker-sized timeout');
+  {
+    const template = require('fs').readFileSync(path.join(REPO, 'template-clean.yaml'), 'utf8');
+    // The Timeout belonging to one function: from its FunctionName line to the
+    // next resource at the same indent.
+    const timeoutOf = (fnName) => {
+      const at = template.indexOf(`\${StackName}-${fnName}'`);
+      if (at === -1) return null;
+      const rest = template.slice(at, at + 4000);
+      const stop = rest.search(/\n  [A-Z]\w+:\n/);
+      const block = stop === -1 ? rest : rest.slice(0, stop);
+      const m = /\n\s+Timeout:\s*(\d+)/.exec(block);
+      return m ? Number(m[1]) : null;
+    };
+
+    const getResults = timeoutOf('get-results');
+    const aiSummary = timeoutOf('get-ai-summary');
+
+    check('the template scanner found both timeouts (guards this check)', () => {
+      assert.ok(Number.isInteger(getResults), `get-results Timeout not found (${getResults})`);
+      assert.ok(Number.isInteger(aiSummary), `get-ai-summary Timeout not found (${aiSummary})`);
+    });
+    check('get-results has at least the worker budget get-ai-summary has', () =>
+      assert.ok(getResults >= aiSummary,
+        `get-results is ${getResults}s and get-ai-summary is ${aiSummary}s — the clustering `
+        + 'worker runs inside get-results and dies mid-Bedrock without marking or broadcasting'));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
 })();
