@@ -212,6 +212,90 @@ describe('the two beats', () => {
   });
 });
 
+/*
+  BEAT ONE HAS TO SAY "MORE IS COMING", AND A SENTENCE ALONE DID NOT.
+
+  Reported after a live session: "when the results first come up it only has the
+  overview … i just want to make them aware of something coming so they dont
+  think thats all they get." The sentence WAS on screen — confirmed — and still
+  did not land, because prose describes what is happening while the room is
+  reading the shape of the wall. Nothing occupied the place the words go, so the
+  counts read as the whole result.
+
+  The placeholder reserves that place and moves in it. It carries no text: the
+  one thing worse than an empty wall is a wall of shapes somebody mistakes for
+  the answer.
+*/
+describe('beat one reserves the space the words will fill', () => {
+  test('a placeholder stands where the terms will be', () => {
+    const pending = { ...landedRound, matching: 'exact', clustering: 'pending' };
+    const { container } = render(<WavelengthConvergence analysis={pending} />);
+    expect(container.querySelector('.wl-skeleton')).not.toBeNull();
+    expect(container.querySelector('.terms')).toBeNull();
+  });
+
+  test('it carries no text of its own — nobody may read it as a result', () => {
+    const pending = { ...landedRound, matching: 'exact', clustering: 'pending' };
+    const { container } = render(<WavelengthConvergence analysis={pending} />);
+    const skeleton = container.querySelector('.wl-skeleton');
+    expect(skeleton.textContent.trim()).toBe('');
+    expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  test('and it is gone the moment there are real words', () => {
+    const { container } = render(<WavelengthConvergence analysis={landedRound} />);
+    expect(container.querySelector('.wl-skeleton')).toBeNull();
+    expect(container.querySelector('.terms')).not.toBeNull();
+  });
+
+  test('the watchdog replaces it with the words, not with more waiting', () => {
+    jest.useFakeTimers();
+    try {
+      const pending = { ...landedRound, matching: 'exact', clustering: 'pending' };
+      const { container } = render(<WavelengthConvergence analysis={pending} />);
+      expect(container.querySelector('.wl-skeleton')).not.toBeNull();
+      const { act } = require('@testing-library/react');
+      act(() => { jest.advanceTimersByTime(21000); });
+      expect(container.querySelector('.wl-skeleton')).toBeNull();
+      expect(container.querySelector('.terms')).not.toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+/* The CSS contract, read as text. jsdom loads no stylesheet and resolves no
+   custom property, so every rendered assertion about size or motion here would
+   pass against a deleted rule. */
+describe('the placeholder obeys the stage contract', () => {
+  const css = fs.readFileSync(src('styles', 'stage.css'), 'utf8');
+  const block = css.slice(css.indexOf('.wl-skeleton'), css.indexOf('.wl-skeleton') + 1800);
+
+  test('it is declared at all (guards every check below)', () => {
+    expect(css).toContain('.wl-skeleton');
+    expect(css).toContain('.wl-sk');
+  });
+
+  test('its bars are sized off the stage ladder, so all four profiles scale', () => {
+    // --t-* resolve to the per-profile --L-* ladder. A px height here would be
+    // one size for a 90in projection and a laptop both.
+    expect(block).toMatch(/--t-(hero|primary|secondary|body|meta)/);
+    expect(block).not.toMatch(/height:\s*\d+px/);
+  });
+
+  test('colour is tokens only — no hex escapes into the stage sheet', () => {
+    expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(block).toMatch(/var\(--surface-2\)/);
+  });
+
+  test('motion is dropped for anyone who asked for less of it', () => {
+    expect(css).toMatch(/prefers-reduced-motion/);
+    const reduced = css.slice(css.indexOf('prefers-reduced-motion'));
+    expect(reduced).toMatch(/\.wl-sk/);
+    expect(reduced).toMatch(/animation:\s*none/);
+  });
+});
+
 describe('normalisation — legacy stored rounds (7-day TTL) still render honestly', () => {
   test('a pre-spec round is re-read under the unanimity rule, never the count>1 claim', () => {
     const legacy = normalizeWavelengthAnalysis({

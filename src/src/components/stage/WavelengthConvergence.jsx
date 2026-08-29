@@ -33,6 +33,11 @@ import {
  */
 const CLUSTERING_WATCHDOG_MS = 20000;
 
+/* The placeholder's tiers, mirroring .terms' ranked flow: one headline word,
+   then the tail getting smaller. Seven is enough to read as "a list" and few
+   enough not to fill the wall with something that is not the answer. */
+const SKELETON_TIERS = [1, 2, 2, 3, 3, 4, 5];
+
 const WavelengthConvergence = ({ analysis: rawAnalysis }) => {
   const analysis = normalizeWavelengthAnalysis(rawAnalysis);
   const pending = isWavelengthPending(analysis);
@@ -57,6 +62,29 @@ const WavelengthConvergence = ({ analysis: rawAnalysis }) => {
           Every list is in. Matching the room&rsquo;s words&thinsp;&mdash; plurals,
           spellings and abbreviations count together&hellip;
         </p>
+        {/*
+          WHERE the words will be, not just that they are coming.
+
+          Reported from a live session: the counts came up, the sentence came up,
+          and the room still read it as the whole result — "i just want to make
+          them aware of something coming so they dont think thats all they get".
+          Prose says what is happening; nothing was holding the place the answer
+          appears, so the wall looked finished.
+
+          NO TEXT IN IT, and aria-hidden. A wall of shapes somebody reads as
+          words is worse than an empty one, and a screen reader announcing seven
+          meaningless bars is worse still — the sentence above already says what
+          is happening, which is the accessible answer to the same question.
+
+          The tiers mirror the ranked flow the real terms use (one big, then
+          progressively smaller), so the space reserved is the shape of what
+          lands in it.
+        */}
+        <div className="wl-skeleton" aria-hidden="true">
+          {SKELETON_TIERS.map((tier, i) => (
+            <span key={i} className={`wl-sk wl-sk-${tier}`} />
+          ))}
+        </div>
       </div>
     );
   }

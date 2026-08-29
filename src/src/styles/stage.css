@@ -892,6 +892,50 @@ body{
    when the model never ran. Meta-tier, muted — present, not shouting. */
 .wl-note{font-size:var(--t-meta);color:var(--muted);font-weight:600;
   letter-spacing:.04em;margin:0}
+/* BEAT ONE'S PLACEHOLDER — where the answer will be, not just that it is coming.
+
+   The sentence above says WHAT is happening and a live session proved that is
+   not enough: the counts and the sentence both showed, and the room still read
+   it as the finished result, because nothing was holding the place the words
+   appear. Reserved space is the part prose cannot do.
+
+   It is deliberately NOT a spinner — the reason .wl-wait gives still stands. A
+   throbber says "wait"; this says "a list goes here", which is the thing that
+   was actually missing.
+
+   Sized off --t-*, which resolve to the per-profile --L-* ladder, so one rule
+   covers Room, TV, Call and Table. A px height here would be one size for a
+   90in projection and a laptop alike. Widths are multiples of each bar's own
+   height so the proportions hold at every profile. */
+.wl-skeleton{display:flex;flex-wrap:wrap;align-items:center;
+  gap:calc(.6vh + 4px) calc(.9vw + 10px);min-width:0}
+.wl-sk{display:block;position:relative;overflow:hidden;
+  border-radius:calc(.35vh + 3px);background:var(--surface-2)}
+.wl-sk-1{height:calc(var(--t-hero) * .62);      width:calc(var(--t-hero) * 4.4)}
+.wl-sk-2{height:calc(var(--t-primary) * .62);   width:calc(var(--t-primary) * 5.2)}
+.wl-sk-3{height:calc(var(--t-secondary) * .62); width:calc(var(--t-secondary) * 4.1)}
+.wl-sk-4{height:calc(var(--t-body) * .62);      width:calc(var(--t-body) * 5.6)}
+.wl-sk-5{height:calc(var(--t-meta) * .62);      width:calc(var(--t-meta) * 4.8)}
+/* One sheen crossing the row, staggered so it reads as a wave rather than a
+   flash. --muted is the same grey .terms .w5 already sits on, at low alpha, so
+   it stays a hint of movement and never competes with the sentence. */
+.wl-sk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,var(--muted),transparent);
+  opacity:.20;animation:wl-sheen 1.9s ease-in-out infinite}
+.wl-sk:nth-child(2)::after{animation-delay:.10s}
+.wl-sk:nth-child(3)::after{animation-delay:.20s}
+.wl-sk:nth-child(4)::after{animation-delay:.30s}
+.wl-sk:nth-child(5)::after{animation-delay:.40s}
+.wl-sk:nth-child(6)::after{animation-delay:.50s}
+.wl-sk:nth-child(7)::after{animation-delay:.60s}
+@keyframes wl-sheen{to{transform:translateX(100%)}}
+/* Reduced motion keeps the RESERVED SPACE, which is most of the signal, and
+   drops only the movement. Removing the bars as well would put the room back in
+   front of a wall that looks finished. */
+@media (prefers-reduced-motion: reduce){
+  .wl-sk::after{animation:none;transform:none;opacity:.10}
+}
+
 /* The offered tier dims by colour, not by dropping below the profile floor —
    .w4/.w5 already sit on the ladder's bottom rungs. */
 .terms .t.wl-dim{color:var(--muted)}
