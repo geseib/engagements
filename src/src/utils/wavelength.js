@@ -135,6 +135,10 @@ export const wavelengthMetaLine = (analysis) => {
  * get-results.js, where the three-way split is made.
  *
  * Null means say nothing.
+ *
+ * 'pending' is NOT in the list, and that is the point: a round still waiting on
+ * its worker has no reported outcome, so nothing here can honestly describe it.
+ * The stage prints WAVELENGTH_STILL_MATCHING instead once its watchdog fires.
  */
 export function wavelengthMatchingNote(analysis) {
   if (analysis.matching === 'exact' && (
@@ -146,6 +150,22 @@ export function wavelengthMatchingNote(analysis) {
   }
   return null;
 }
+
+/**
+ * What the wall says when the watchdog fired and the worker has still not
+ * reported. The room stops waiting — a host is standing in front of people —
+ * but the claim has to stay true to what is known: these are the exact-wording
+ * counts, and the matched ones may still be coming.
+ *
+ * The stage used to relabel the round 'failed' at this moment and print
+ * "spelling variants were not combined this round", which asserts an outcome
+ * nothing had reported. The worker's own budget is minutes (template-clean.yaml
+ * gives get-results a worker-sized timeout), so a frame arriving after twenty
+ * seconds is ordinary — and it re-flows the words underneath a sentence that
+ * had already called the run a failure.
+ */
+export const WAVELENGTH_STILL_MATCHING =
+  'Showing exact wording for now — still matching the room\'s words.';
 
 /** How many terms the wall shows before deferring the tail to the report. */
 export const WAVELENGTH_STAGE_TERM_CAP = 24;

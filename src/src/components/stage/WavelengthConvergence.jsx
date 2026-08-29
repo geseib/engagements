@@ -6,6 +6,7 @@ import {
   wavelengthMetaLine,
   wavelengthMatchingNote,
   wavelengthTerms,
+  WAVELENGTH_STILL_MATCHING,
 } from '../../utils/wavelength';
 
 /**
@@ -60,16 +61,20 @@ const WavelengthConvergence = ({ analysis: rawAnalysis }) => {
     );
   }
 
-  // Waited out: the frame never came, so what is on hand is the exact-match
-  // analysis — present it as exactly that.
-  const effective = pending ? { ...analysis, clustering: 'failed' } : analysis;
-  const headline = wavelengthHeadline(effective);
-  const note = wavelengthMatchingNote(effective);
-  const { terms, reduction } = wavelengthTerms(effective);
+  /* Waited out: the frame is LATE, which is not the same as failed and must not
+     be described as it. This used to rewrite the round to clustering:'failed'
+     locally, so the wall asserted "spelling variants were not combined this
+     round" about a run nothing had reported on — and the worker's budget is
+     minutes, so a frame landing after this re-flows the words underneath a
+     sentence that already called it a failure. The round is passed through as
+     it is; only the SENTENCE changes. */
+  const headline = wavelengthHeadline(analysis);
+  const note = pending ? WAVELENGTH_STILL_MATCHING : wavelengthMatchingNote(analysis);
+  const { terms, reduction } = wavelengthTerms(analysis);
 
   return (
     <div className="wl-conv">
-      <div className="kicker">{wavelengthMetaLine(effective)}</div>
+      <div className="kicker">{wavelengthMetaLine(analysis)}</div>
       <p className="wl-headline">
         {headline.figure !== null
           ? (<><b>{headline.figure}</b> {headline.label}</>)

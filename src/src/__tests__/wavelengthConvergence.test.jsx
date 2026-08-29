@@ -131,7 +131,7 @@ describe('the two beats', () => {
     expect(container.querySelector('.terms')).toBeNull();
   });
 
-  test('the watchdog resolves beat one to the exact result, announced as exact', () => {
+  test('the watchdog resolves beat one to the exact result', () => {
     jest.useFakeTimers();
     try {
       const pending = { ...landedRound, matching: 'exact', clustering: 'pending' };
@@ -140,7 +140,36 @@ describe('the two beats', () => {
       const { act } = require('@testing-library/react');
       act(() => { jest.advanceTimersByTime(21000); });
       expect(container.querySelector('.terms')).not.toBeNull();
-      expect(container.textContent).toContain('Matched on exact wording only');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  /*
+    THE WATCHDOG KNOWS THE FRAME IS LATE. IT DOES NOT KNOW IT FAILED.
+
+    Waiting out the watchdog used to rewrite the round to clustering:'failed'
+    locally and print "spelling variants were not combined this round" — a
+    statement about a run whose outcome had not been reported. The worker can
+    still be going (its own budget is minutes, not the twenty seconds the room
+    is asked to wait), and when its frame lands the words re-flow and the claim
+    is contradicted in front of everybody.
+
+    The room still stops waiting at twenty seconds — that part was right, a host
+    is standing in front of people. It is the CLAIM that has to be true: showing
+    exact wording FOR NOW is honest about both what is on screen and what is
+    still running.
+  */
+  test('a late frame is described as late, not as failed', () => {
+    jest.useFakeTimers();
+    try {
+      const pending = { ...landedRound, matching: 'exact', clustering: 'pending' };
+      const { container } = render(<WavelengthConvergence analysis={pending} />);
+      const { act } = require('@testing-library/react');
+      act(() => { jest.advanceTimersByTime(21000); });
+      expect(container.querySelector('.terms')).not.toBeNull();
+      expect(container.textContent).not.toContain('were not combined');
+      expect(container.textContent).toMatch(/still matching/i);
     } finally {
       jest.useRealTimers();
     }
