@@ -91,6 +91,25 @@ for (const rel of [
   'lambda-functions/game/next-question.js',
   'lambda-functions/game/update-game.js',
   'lambda-functions/game/start-game.js',
+  // Added late, and they had been unscoped since before tenancy: both carry the
+  // Cognito authorizer, so the boundary was "any `hosts` account plus one of
+  // 9,000 codes". `stage-beat` is the sharper one — the `feedback` beat it
+  // writes is half of the gate the PUBLIC comment route trusts, so leaving it
+  // unscoped handed a stranger a write path into a rival's round report.
+  // `session-beat-org-scope.js` drives both handlers and proves that chain.
+  'lambda-functions/game/stage-beat.js',
+  'lambda-functions/game/reveal-authors.js',
+  // The READ, and the widest one in the product: `create-report` assembles the
+  // whole session — every name against every answer, decrypted, plus the round
+  // comments. Unlike the two above it carried NO AUTHORIZER AT ALL until
+  // 2026-08-28, which is why its header documented a public posture and took
+  // the org off the METADATA row: there was no caller identity to take it from.
+  // The authorizer landed in the same change as this line, and it had to —
+  // `callerMayDriveSession` passes a caller with no groups, so on the open
+  // route it would have been inert. Closing the route alone would have narrowed
+  // "anyone with the code" only to "any `hosts` account with the code", which is
+  // the boundary `reveal-authors` above records as not enough.
+  'lambda-functions/game/create-report.js',
   // The rest of the host controls. Every one of these carries the Cognito
   // authorizer and drives, reads or resolves a live room — see
   // session-control-org-scope.js, which proves the write never lands.

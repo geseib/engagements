@@ -1111,11 +1111,32 @@ async function handleWavelengthResults(event, gameId, questionId) {
     const analysis = analyzeWavelength(submissions);
     console.log(`🤝 ${analysis.commonWords.length} of ${analysis.totalUniqueWords} words on every list (all ${analysis.submitterCount} who answered)`);
 
-    // Nothing to cluster below two submitters or two distinct ideas — the
-    // exact result is already the final result there.
-    const clusteringPlanned = Boolean(lambda)
-      && analysis.submitterCount >= 2
-      && analysis.totalUniqueWords >= 2;
+    /*
+      THREE OUTCOMES, NOT TWO — and the difference is what the room is told.
+
+      Nothing to cluster below two submitters or two distinct ideas: the exact
+      result is already the final result, and the stage says nothing about it on
+      purpose (utils/wavelength.js) because announcing a loss that did not
+      happen is its own kind of lie.
+
+      A MISSING DISPATCHER IS NOT THAT. `lambda` is null when the
+      '@aws-sdk/client-lambda' require fails, and that is a live possibility
+      rather than a defensive nicety: the pipeline installs no backend
+      dependencies at all — buildspec-dev.yml runs `npm ci` in src/ only, and
+      `sam build` targets CodeUri lambda-functions/game/, which carries no
+      package.json — so every @aws-sdk client resolves from the Lambda runtime
+      and any the runtime lacks is simply absent.
+
+      Both used to store 'skipped'. So a room of twelve with thirty distinct
+      words, whose model pass never even dispatched, produced an exact-match
+      result wearing the status the stage stays quiet about — presented as the
+      final answer. That is the outcome the worker below and the stage both say
+      must never happen: a degraded claim about agreement that does not announce
+      itself is worse than no claim. Reported from a live session as words that
+      should have merged and did not, with nothing on screen to explain it.
+    */
+    const nothingToCluster = analysis.submitterCount < 2 || analysis.totalUniqueWords < 2;
+    const clusteringPlanned = Boolean(lambda) && !nothingToCluster;
 
     const wordAnalysis = {
       totalAnswers: allAnswers.length,
@@ -1129,7 +1150,12 @@ async function handleWavelengthResults(event, gameId, questionId) {
       nearMiss: analysis.nearMiss,
       words: analysis.words,
       matching: 'exact',
-      clustering: clusteringPlanned ? 'pending' : 'skipped'
+      // 'skipped' keeps its honest meaning — there was nothing to do.
+      // 'unavailable' is a pass that could not be attempted, and it is
+      // annotated on the stage exactly as 'failed' is.
+      clustering: clusteringPlanned
+        ? 'pending'
+        : (nothingToCluster ? 'skipped' : 'unavailable')
     };
 
     const resultsData = {

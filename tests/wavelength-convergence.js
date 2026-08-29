@@ -276,6 +276,36 @@ check('the prompt states the tie-break and lists every entry', () => {
   assert.ok(prompt.includes('- database') && prompt.includes('- cloud'));
 });
 
+/*
+  SAME ROOT, DIFFERENT FORM — widened 2026-08-28 on the owner's call, after a
+  session where `better` and `betterment` were counted as two answers:
+  "wavelength did not refine the list for mispellings or like words".
+
+  The original contract said "plurals and inflections of one term", which reads
+  as INFLECTION only — betterment is a DERIVATION, so a model following the
+  letter of that prompt was right to leave the pair alone. The line moves to the
+  root: one root, one answer, whatever suffix it is wearing.
+
+  This is the loosest the merge rule has ever been, so the never-merge half is
+  asserted alongside it rather than assumed. Two different roots stay two
+  answers however closely related they are, and that is what stops the widening
+  from becoming "merge anything that looks similar".
+*/
+check('the prompt merges different forms built from one root', () => {
+  const prompt = buildMergePrompt(['better', 'betterment']);
+  assert.ok(/root/i.test(prompt),
+    'the merge rule is still stated as inflection-only — betterment stays split');
+});
+
+// rejects: a widening that also collapses distinct roots. The spec's one
+// unbreakable rule is that a merge must never manufacture agreement.
+check('and still refuses two different roots, however related', () => {
+  const prompt = buildMergePrompt(['cloud', 'AWS']);
+  assert.ok(/NEVER merge/.test(prompt));
+  assert.ok(/different roots?/i.test(prompt),
+    'nothing in the prompt tells the model that a shared meaning is not a shared root');
+});
+
 console.log('\n9. parseMergeReply — strict about shape, tolerant about wrapping');
 
 check('fenced JSON parses', () =>

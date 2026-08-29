@@ -19,10 +19,14 @@
  * Every field this feature needs was already on the wire and read by nothing
  * but the end-of-session report.
  *
- * It is also the route that already gets ANONYMITY right for this data — it is
- * public, so it redacts, and reimplementing that judgement in a second place is
- * the specific mistake that hid the names and the podium for a whole session
- * earlier this week.
+ * It is also the route that already gets ANONYMITY right for this data, and
+ * reimplementing that judgement in a second place is the specific mistake that
+ * hid the names and the podium for a whole session earlier this week. That
+ * sentence used to read "it is public, so it redacts", which was the right
+ * behaviour resting on the wrong reason: the route is NOT public any more (it
+ * took the Cognito authorizer on 2026-08-28) and it redacts exactly as it did
+ * before. Withholding names mid-vote is owed to the ROOM, not to whoever is
+ * calling — and the caller here is the host standing in front of it.
  *
  * WHAT IT COSTS: create-report writes a `REPORT` snapshot row as its last act.
  * Opening the tab therefore refreshes that snapshot. It is a single fixed key

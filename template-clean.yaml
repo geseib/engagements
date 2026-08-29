@@ -2061,6 +2061,46 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/report
             Method: POST
+            # HOST/ADMIN ONLY. This route was PUBLIC, and it is the READ that
+            # the seven above are the writes of.
+            #
+            # It does not drive a room; it assembles one and hands it back.
+            # create-report.js queries every PLAYER row, every RESULTS row, the
+            # votes, the AI summaries and each round's comments, calls
+            # `decryptItems` on the way past, and answers with participant names
+            # against participant answers in plaintext. It also calls `isHidden`,
+            # which means the anonymity promise made to a room was being decided
+            # inside a handler that had no idea who was asking. The boundary was
+            # one of 9,000 four-digit ids — a number printed on a projector.
+            #
+            # WHY IT WAS NOT IN e930c022. That change scoped the seven Cognito
+            # routes with `callerMayDriveSession`, and adding that guard here
+            # would have been INERT: it passes any caller holding no groups, so
+            # that the participant journey is never gated, and on a route with no
+            # authorizer that is every caller. The route would have read as
+            # scoped and been exactly as open. The authorizer had to come first;
+            # the guard is in the handler now that it can mean something.
+            #
+            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO, for the
+            # reason recorded on StartQuestionFunction above. Every caller is a
+            # signed-in host surface — GameHostPage and HostRemote are both
+            # behind ProtectedRoute — but three of the four used plain `fetch`.
+            # `loadRounds` is the sharp one: it fires from a useEffect when the
+            # host opens the Setup panel, so a 401 there empties the Rounds tab
+            # and the empty copy says "no rounds yet" about a session with six of
+            # them. GameHostPage's two plain-fetch sites and
+            # components/RemoteSessionPanel.jsx moved to authFetch here;
+            # `requestFeedbackRound` was already on it, and
+            # tests/session-control-routes-authorization.js counts all four
+            # rather than the three that moved, so a new caller cannot be added
+            # on plain `fetch` without failing.
+            #
+            # GET /games/{gameId}/report is a DIFFERENT route and STAYS PUBLIC.
+            # It reads the already-saved `SK: 'REPORT'` row and rebuilds
+            # nothing, so it cannot be walked for a session that never generated
+            # one — and closing it would be closing a participant route.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with

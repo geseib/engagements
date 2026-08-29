@@ -365,7 +365,14 @@ function GameHostPage() {
     if (!gameId) return;
     setHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE}games/${gameId}/report`, {
+      // authFetch: POST /report carries the Cognito authorizer, like
+      // /close-round and /stage-beat. It assembles the whole session —
+      // decrypted names against answers, and the round comments — so it is a
+      // host route, and a plain fetch here 401s the host out of their own
+      // Rounds tab. The empty state below would then report "no rounds yet"
+      // for a session with six of them, which reads as data loss rather than
+      // as a permission error.
+      const res = await authFetch(`${API_BASE}games/${gameId}/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -4433,8 +4440,11 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`📊 Generating report for game ${targetGameId}...`);
 
-      // Use the backend create-report endpoint instead of frontend logic
-      const reportRes = await fetch(`${API_BASE}games/${targetGameId}/report`, {
+      // Use the backend create-report endpoint instead of frontend logic.
+      // authFetch, and the org header it carries is load-bearing here in a way
+      // it is not at the other two sites: this one reports on `targetGameId`,
+      // which comes from the history LIST and is not the session on screen.
+      const reportRes = await authFetch(`${API_BASE}games/${targetGameId}/report`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
