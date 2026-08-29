@@ -1025,7 +1025,27 @@ async function handleWavelengthResults(event, gameId, questionId) {
       // Still idempotently (re-)announce the transition when the HOST asked;
       // enterResultsState declines on the public route by itself.
       await enterResultsState(event, gameId, paddedQuestionId);
-      const { PK, SK, ttl, ...resultsData } = storedRound.Item;
+      /*
+        UNWRAP IT. `wordAnalysis`, `answers` and `question` are all on
+        tenant-crypto's `results` boundary — the wavelength branch stores each
+        participant's literal submission inside the tally — so the stored row
+        holds envelopes, not words. This path used to spread the item straight
+        into the response, and a caller got `{v, iv, ct, tag}` where the round
+        should be.
+        It hid because the CLOSE response is computed in memory and returned
+        before any of it is stored: the host who closes the round sees the real
+        thing, and only the second reader sees the envelope. That second reader
+        is every participant (PlayerPage fetches this once the state says
+        RESULTS) and any host who refreshes — which is the contract the comment
+        above states and this broke.
+      */
+      // `sessionOrgId` rather than the caller's org: this route is public, so
+      // there is no caller org to use — the same reason the helper exists.
+      const storedOrgId = await sessionOrgId(gameId);
+      const round = storedOrgId
+        ? await decryptItem(storedOrgId, 'results', storedRound.Item)
+        : storedRound.Item;
+      const { PK, SK, ttl, ...resultsData } = round;
       console.log(`🌊 Returning stored wavelength analysis (${resultsData.wordAnalysis.matching})`);
       return {
         statusCode: 200,

@@ -141,6 +141,29 @@ loaderStubs.set('@aws-sdk/client-bedrock-runtime', {
   InvokeModelCommand,
 });
 
+/*
+  A FAKE TENANT-CRYPTO, so a round can be stored the way a real tenant's round
+  is stored. `{__enc: json}` stands in for the `{v, iv, ct, tag}` envelope
+  tenant-crypto really writes; what matters is that the stored value is NOT the
+  value a caller should receive, so a read path that forgets to unwrap is
+  visible instead of being a no-op. Every other section in this file seeds rows
+  with no orgId, where both real and fake crypto are pass-through.
+*/
+const unwrap = (v) => {
+  if (Array.isArray(v)) return v.map(unwrap);
+  if (v && typeof v === 'object') {
+    if (typeof v.__enc === 'string') return JSON.parse(v.__enc);
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, unwrap(x)]));
+  }
+  return v;
+};
+const SEALED = (value) => ({ __enc: JSON.stringify(value) });
+loaderStubs.set('./tenant-crypto', {
+  encryptItem: async (_org, _entity, item) => item,
+  decryptItem: async (_org, _entity, item) => unwrap(item),
+  decryptItems: async (_org, _entity, items) => (items || []).map(unwrap),
+});
+
 process.env.TABLE_NAME = 'test-table';
 process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
 process.env.AWS_LAMBDA_FUNCTION_NAME = 'engagetest-get-results';
@@ -451,6 +474,72 @@ const runWorker = (gameId) => handler({
       assert.ok(getResults >= aiSummary,
         `get-results is ${getResults}s and get-ai-summary is ${aiSummary}s — the clustering `
         + 'worker runs inside get-results and dies mid-Bedrock without marking or broadcasting'));
+  }
+
+  /*
+    11. A RE-READ HANDS BACK THE ROUND, NOT ITS CIPHERTEXT.
+
+    The stored RESULTS row is encrypted per organisation — `wordAnalysis`,
+    `answers` and `question` are all on tenant-crypto's `results` boundary,
+    because the wavelength branch stores each participant's literal submission
+    inside the tally. Every other read path in this handler unwraps before
+    answering. The re-read path spread the stored item straight into the
+    response:
+
+        const { PK, SK, ttl, ...resultsData } = storedRound.Item;
+
+    so a player fetching results after the round closed, or a host refreshing,
+    received `{v, iv, ct, tag}` where the words should be. Confirmed against dev
+    2026-08-29 by reading a closed round over the public route.
+
+    It hid because the round-close response is computed IN MEMORY and returned
+    before any of it is stored — so the host who closes the round sees the real
+    thing, and only the second reader sees the envelope. The block's own comment
+    states the contract it was breaking: "the same round asked twice has to give
+    the same answer, or a host who refreshes gets a different result than the
+    room saw."
+
+    // rejects: a read path that answers with the envelope.
+  */
+  console.log('\n11. a re-read of an encrypted round is decrypted');
+  {
+    seedGame('2008');
+    // A tenant's session, and a round already stored the way one is stored.
+    put({ PK: 'GAME#2008', SK: 'METADATA', GameType: 'wavelength', Title: 'Tenant session', orgId: 'org_9xK4Fq7Pz2mNbVc8dQwLxR' });
+    // The room is ON this round — the public read reports only the resolved one
+    // (it refuses to close a round on a participant's behalf), so a seed left at
+    // ASK#001 tests the refusal rather than the decrypt.
+    put({ PK: 'GAME#2008', SK: 'STATE', State: 'RESULTS#001', LessonNumber: 1, CurrentQuestionId: '001' });
+    put({
+      PK: 'GAME#2008',
+      SK: 'QUESTION#001#RESULTS',
+      gameId: '2008',
+      questionId: '001',
+      gameType: 'wavelength',
+      teamScore: 1,
+      question: SEALED({ title: 'Where does time go?' }),
+      answers: SEALED([{ playerName: 'Ada', answer: 'summit,ridge', words: ['summit', 'ridge'] }]),
+      wordAnalysis: SEALED({
+        submitterCount: 2, totalWordsSubmitted: 4, totalUniqueWords: 3,
+        commonWords: [{ word: 'summit', count: 2, members: ['summit'] }],
+        nearMiss: [], words: [{ word: 'summit', count: 2, members: ['summit'] }],
+        matching: 'clustered', clustering: 'done',
+      }),
+    });
+
+    const reread = JSON.parse((await publicRead('2008')).body);
+
+    check('wordAnalysis comes back as the analysis, not the envelope', () => {
+      assert.ok(!reread.wordAnalysis || !('__enc' in reread.wordAnalysis),
+        'the caller received ciphertext where the words should be');
+      assert.strictEqual(reread.wordAnalysis.clustering, 'done');
+      assert.deepStrictEqual(reread.wordAnalysis.commonWords.map((w) => w.word), ['summit']);
+    });
+    check('so do the answers and the question', () => {
+      assert.ok(Array.isArray(reread.answers), `answers came back as ${typeof reread.answers}`);
+      assert.strictEqual(reread.answers[0].playerName, 'Ada');
+      assert.strictEqual(reread.question.title, 'Where does time go?');
+    });
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
