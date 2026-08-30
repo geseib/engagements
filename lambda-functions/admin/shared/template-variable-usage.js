@@ -180,6 +180,82 @@ function assertReceivesResponses(texts) {
   );
 }
 
+/**
+ * THE RULES AN AUTHOR MUST FOLLOW — stated here because this is where the gates
+ * that enforce them live.
+ *
+ * The wand (ai-generate-prompt.js) writes prompts and this module refuses them.
+ * It knew exactly ONE of these rules — "only catalogued variables", which it
+ * learned from the incident recorded above — and nothing about the rest, while
+ * telling the model to "add relevant template variables" with no word on where
+ * a variable may stand or how often. So it produced, reliably, prompts its own
+ * product would not save: bracketed fill-in-the-blank output formats (blocking),
+ * variables named inside sentences, the same variable twice, and the ones the
+ * catalogue itself warns are not what they sound like. The owner met all of
+ * that at the Save button, on a prompt the product had just written for them.
+ *
+ * `gate` names the export that REJECTS a prompt breaking the rule, or null for
+ * a rule that is advice rather than a wall. tests/prompt-variable-gates.js
+ * asserts every `assert*` export is named by some rule, so a new gate fails the
+ * suite until the wand has been taught it — this drifted once and the test is
+ * the thing that stops it drifting again.
+ */
+const AUTHORING_RULES = Object.freeze([
+  Object.freeze({
+    id: 'only-catalogued-variables',
+    gate: 'assertTemplateVariablesExist',
+    text: 'Use ONLY the variables listed above. A {token} that is not on that list is '
+      + 'substituted by nothing and reaches a projector as literal braces. Never invent one '
+      + 'and never borrow a name from another game type.',
+  }),
+  Object.freeze({
+    id: 'no-square-brackets',
+    gate: 'assertNoBracketDirections',
+    text: 'NEVER write square brackets. Nothing substitutes them, so "[Historical Period]" '
+      + 'arrives at the model as literal text and the model answers it — that is how "the '
+      + '[Summary of the response] placeholder is empty" reached a projector. Where data '
+      + 'belongs, use a {variable}. Where you meant an instruction ("[2-3 paragraphs]"), '
+      + 'write it as a sentence.',
+  }),
+  Object.freeze({
+    id: 'receives-the-responses',
+    gate: 'assertReceivesResponses',
+    text: 'An analysis prompt must actually receive what the room said: name {responsesText} '
+      + '({triviaResponses} for trivia, {uniqueAnswers} for a poll) somewhere, or the prompt '
+      + 'runs, costs a model call, and replies to whoever wrote it instead of to the room.',
+  }),
+  Object.freeze({
+    id: 'variables-stand-alone',
+    gate: null,
+    text: 'Put each {variable} on its own, after a label — "**The Responses:**\n{responsesText}" '
+      + '— never inside a sentence. Substitution is a blind global replace, so a variable named '
+      + 'mid-rule has its whole value inlined into that rule: "Review {playerResponses}" becomes '
+      + 'two thousand characters of answers where the instruction used to be. To TALK about a '
+      + 'field, use its English label, not its token.',
+  }),
+  Object.freeze({
+    id: 'name-each-variable-once',
+    gate: null,
+    text: 'Name each variable at most ONCE in the whole prompt. Every occurrence is substituted '
+      + 'separately, so a second mention is a second full copy of the data — it does not '
+      + 'reinforce anything, it competes with your instructions for the model\'s attention.',
+  }),
+  Object.freeze({
+    id: 'avoid-misleading-variables',
+    gate: null,
+    text: 'Prefer {responseCount} over {totalParticipants} (which counts this round\'s answers, '
+      + 'not the room), {voteCount} over {activeParticipants} (which silently becomes the answer '
+      + 'count when nobody voted), {voteTally} over {topVotedAnswers} (which carries no answer '
+      + 'text outside trivia), and {consensusLevel} over {votingPattern} (which compares vote '
+      + 'points against a count of people).',
+  }),
+]);
+
+/** The rules as a numbered block, for interpolation into a model prompt. */
+function describeAuthoringRules() {
+  return AUTHORING_RULES.map((r, i) => `${i + 1}. ${r.text}`).join('\n\n');
+}
+
 module.exports = {
   variablesToOffer,
   describeVariablesForPrompt,
@@ -187,4 +263,6 @@ module.exports = {
   ANSWER_TOKENS,
   assertNoBracketDirections,
   assertReceivesResponses,
+  AUTHORING_RULES,
+  describeAuthoringRules,
 };

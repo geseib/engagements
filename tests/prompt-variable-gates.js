@@ -109,13 +109,19 @@ stub('@aws-sdk/client-s3', {
 // whatever the current case needs.
 let bedrockCalls = [];
 let bedrockReply = '{"instructions":"i","outputFormat":"o"}';
+/* A scripted sequence of replies, for the cases where a handler is expected to
+   call the model MORE THAN ONCE and the second answer has to differ from the
+   first. Empty means "answer every call with bedrockReply", which is what every
+   case above this one wants. */
+let bedrockQueue = [];
 stub('@aws-sdk/client-bedrock-runtime', {
   BedrockRuntimeClient: class {
     async send(cmd) {
       const body = JSON.parse(cmd.input.body);
       const content = body.messages[0].content;
       bedrockCalls.push(typeof content === 'string' ? content : content[0].text);
-      return { body: new TextEncoder().encode(JSON.stringify({ content: [{ text: bedrockReply }] })) };
+      const text = bedrockQueue.length ? bedrockQueue.shift() : bedrockReply;
+      return { body: new TextEncoder().encode(JSON.stringify({ content: [{ text }] })) };
     }
   },
   InvokeModelCommand: class { constructor(i) { this.input = i; } },
@@ -482,6 +488,147 @@ const putUpdate = async (promptId, body) => {
     assert(!runtimePrompt.includes('{responsesText}'),
       'a real variable must still be substituted');
   });
+
+  /*
+    GATE 3: THE WAND IS TOLD EVERY RULE THE SAVE GATE ENFORCES.
+
+    Reported by the owner after generating a prompt and pressing Save: three
+    blocking findings and sixteen warnings, on a prompt the product's own wand
+    had just written. The wand encoded exactly ONE of the gates — "never invent
+    a variable", the one gate 0 above exists for — and knew nothing about the
+    rest, while telling the model to "add relevant template variables" with no
+    word on WHERE a variable may stand or how often.
+
+    So it produced, reliably:
+      - `outputFormat: [Historical Period/Event]`  — three of these, all BLOCKING
+      - `Review {playerResponses} and {uniqueAnswers} to ...` — ten variables
+        named inside sentences, each inlining its whole value into the rule
+      - {scoreChanges} twice, {totalParticipants} and {votingPattern} — variables
+        the catalogue itself warns are not what they sound like
+
+    A wand whose output its own save gate refuses is worse than no wand: the
+    admin does the work of reading a generated prompt and is then told it cannot
+    be kept.
+
+    // rejects: a gate the save path enforces and the wand has never heard of.
+  */
+  realLog('\nGATE 3: the wand is told every rule the save gate enforces');
+  {
+    const usage = require(path.join(REPO, 'lambda-functions/admin/shared/template-variable-usage.js'));
+
+    check('the authoring rules are exported at all (guards every check below)', () => {
+      assert(Array.isArray(usage.AUTHORING_RULES), 'AUTHORING_RULES is not exported');
+      assert(usage.AUTHORING_RULES.length >= 4,
+        `only ${(usage.AUTHORING_RULES || []).length} rules — the save gate enforces more than that`);
+      assert(typeof usage.describeAuthoringRules === 'function',
+        'describeAuthoringRules() is what the wand interpolates');
+    });
+
+    /* THE ANTI-DRIFT CHECK. The wand drifted from the gate once already (gate 0
+       above is that incident). Every `assert*` the module exports is a rule the
+       save path enforces, so every one of them has to be named by a rule the
+       wand is given — adding a sixth gate fails here until the wand learns it. */
+    check('every gate the save path enforces is named by an authoring rule', () => {
+      const gates = Object.keys(usage).filter((k) => /^assert[A-Z]/.test(k));
+      assert(gates.length >= 3, `found only ${gates.length} gates — the scanner has rotted`);
+      const covered = new Set((usage.AUTHORING_RULES || []).map((r) => r.gate).filter(Boolean));
+      const orphans = gates.filter((g) => !covered.has(g));
+      assert.deepStrictEqual(orphans, [],
+        `these gates reject a prompt the wand was never told about: ${orphans.join(', ')}`);
+    });
+
+    const generated = await wand({
+      gameType: 'call-and-answer',
+      category: 'lessons-learned',
+      promptName: 'Historian',
+      description: 'Connect the room to a historical moment',
+    });
+
+    check('the wand hands the model the rules, not just the variable list', () => {
+      for (const rule of usage.AUTHORING_RULES) {
+        assert(generated.prompt.includes(rule.text),
+          `the model is never told: ${rule.id}`);
+      }
+    });
+
+    check('square brackets are forbidden in so many words', () => {
+      assert(/square bracket/i.test(generated.prompt),
+        'the one BLOCKING gate, and the model is not warned about it');
+    });
+
+    check('and it is shown a good outputFormat rather than left to invent one', () => {
+      // The model falls back on `**Label:** [Description]` when the only
+      // example it has is the JSON envelope — which is the blocking failure.
+      assert(/EXAMPLE|example of a good/i.test(generated.prompt),
+        'no worked example, so the model invents the fill-in-the-blank form');
+    });
+  }
+
+  /*
+    GATE 4: A BRACKETED REPLY NEVER REACHES THE ADMIN.
+
+    Instructions are probabilistic; the save gate is not. The wand already
+    imports assertNoBracketDirections — it is the same module its variable list
+    comes from — so the cheapest guarantee is to run the gate on the way OUT and
+    not hand back a prompt that cannot be kept.
+  */
+  realLog('\nGATE 4: a reply full of brackets is caught before the admin sees it');
+  {
+    const GOOD = JSON.stringify({
+      instructions: 'Read the responses and name the two ideas that recur.',
+      outputFormat: '**The Responses:**\\n{responsesText}',
+    });
+    const BRACKETED = JSON.stringify({
+      instructions: 'Summarise the room.',
+      outputFormat: '**Historical Parallel:** [Brief connection to a historical period]',
+    });
+    const ask = () => generatePrompt.handler({ body: JSON.stringify({
+      gameType: 'call-and-answer', category: 'lessons-learned', promptName: 'Historian',
+    }) });
+
+    // Fails once, then complies. The admin gets the good one and never learns
+    // there was a retry.
+    bedrockCalls = [];
+    bedrockQueue = [BRACKETED, GOOD];
+    quiet();
+    const recovered = await ask();
+    loud();
+    bedrockQueue = [];
+
+    await acheck('a bracketed reply is retried rather than returned', async () => {
+      assert.strictEqual(bedrockCalls.length, 2,
+        `the wand called the model ${bedrockCalls.length} time(s) — a bracketed reply was returned as-is`);
+      assert(/square bracket/i.test(bedrockCalls[1] || ''),
+        'the retry does not tell the model what it got wrong');
+    });
+    await acheck('the retry quotes the offending span back', async () => {
+      assert(/Brief connection to a historical period/i.test(bedrockCalls[1] || ''),
+        'the retry is a generic scolding rather than the actual violation');
+    });
+    await acheck('and the admin receives the clean second answer', async () => {
+      assert.strictEqual(recovered.statusCode, 200, `got ${recovered.statusCode}`);
+      assert(!/\[/.test(JSON.parse(recovered.body).outputFormat || ''),
+        'brackets survived into what the admin was handed');
+    });
+
+    // Never complies: the admin is told, rather than handed something the save
+    // gate will refuse a moment later.
+    bedrockCalls = [];
+    bedrockQueue = [BRACKETED, BRACKETED];
+    quiet();
+    const stubborn = await ask();
+    loud();
+    bedrockQueue = [];
+
+    check('a model that will not comply produces an error, not an unsaveable prompt', () => {
+      assert(stubborn.statusCode >= 400,
+        `got ${stubborn.statusCode} — the admin was handed a prompt the save gate will refuse`);
+      assert(/bracket/i.test(stubborn.body || ''), 'the error does not say what went wrong');
+    });
+    check('and it does not keep asking forever', () =>
+      assert.strictEqual(bedrockCalls.length, 2,
+        `${bedrockCalls.length} model calls — one retry is the budget`));
+  }
 
   realLog(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
