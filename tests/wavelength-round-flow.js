@@ -158,8 +158,17 @@ const unwrap = (v) => {
   return v;
 };
 const SEALED = (value) => ({ __enc: JSON.stringify(value) });
+/* The `results` boundary, from tenant-crypto's ENCRYPTED_FIELDS. Sealing the
+   real fields rather than passing through is what makes a handler that reads a
+   tenant's row without unwrapping FAIL here instead of quietly working. */
+const RESULTS_FIELDS = ['Winners', 'answers', 'question', 'wordAnalysis'];
 loaderStubs.set('./tenant-crypto', {
-  encryptItem: async (_org, _entity, item) => item,
+  encryptItem: async (_org, entity, item) => {
+    if (entity !== 'results') return item;
+    const out = { ...item };
+    for (const f of RESULTS_FIELDS) if (f in out) out[f] = SEALED(out[f]);
+    return out;
+  },
   decryptItem: async (_org, _entity, item) => unwrap(item),
   decryptItems: async (_org, _entity, items) => (items || []).map(unwrap),
 });
@@ -539,6 +548,110 @@ const runWorker = (gameId) => handler({
       assert.ok(Array.isArray(reread.answers), `answers came back as ${typeof reread.answers}`);
       assert.strictEqual(reread.answers[0].playerName, 'Ada');
       assert.strictEqual(reread.question.title, 'Where does time go?');
+    });
+  }
+
+  /*
+    12. A TENANT'S ROUND ACTUALLY GETS CLUSTERED.
+
+    Every seed above this point has no orgId, so tenant-crypto is a pass-through
+    and the worker reads plaintext. That fixture choice hid the bug entirely.
+
+    On a real session the stored row is sealed, and the worker fetched it with a
+    raw GetCommand and never unwrapped it:
+
+        if (!stored.Item || !stored.Item.wordAnalysis) ...   // an envelope is truthy
+        if (round.wordAnalysis.clustering !== 'pending') {   // an envelope has no .clustering
+          return { statusCode: 200 };                        // undefined !== 'pending'
+        }
+
+    So the worker's own IDEMPOTENCY GUARD fired on every tenant round, and it
+    returned immediately having logged "clustering already undefined — leaving
+    it alone" at info level. No Bedrock call, no status write, no broadcast, and
+    nothing anywhere that reads as an error. The row said 'pending' forever and
+    the stage waited out its watchdog.
+
+    Observed twice on dev: sessions 3083 and 5578, both stuck at 'pending', the
+    second still pending two minutes after the round closed.
+
+    TWO TRAPS IN THE FIX, both asserted below. Decrypting on the way in and
+    writing the result back as-is would put a tenant's words in the table IN THE
+    CLEAR. And markWavelengthClustering's `SET wordAnalysis.clustering` is a
+    document path into what is, on a tenant row, a {v,iv,ct,tag} envelope — it
+    does not update a status, it bolts a stray key onto the ciphertext, which is
+    why a failing worker never recorded its failure either.
+
+    // rejects: a worker that reads a tenant's round without unwrapping it, and
+    //          one that writes the answer back in the clear.
+  */
+  console.log('\n12. a tenant round is clustered, and stays encrypted at rest');
+  {
+    const ORG = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+    const tenantRound = (gameId) => {
+      seedGame(gameId, [
+        answer(gameId, 'Ada', ['summit', 'ridge']),
+        answer(gameId, 'Grace', ['summit', 'ridges']),
+      ]);
+      put({ PK: `GAME#${gameId}`, SK: 'METADATA', GameType: 'wavelength', Title: 'Tenant', orgId: ORG });
+    };
+
+    tenantRound('2009');
+    await closeRound('2009');
+
+    check('the round is stored sealed, and says pending inside', () => {
+      const row = resultsRow('2009');
+      assert.ok(row.wordAnalysis && typeof row.wordAnalysis.__enc === 'string',
+        'the stored round is not encrypted — this test proves nothing');
+      assert.strictEqual(unwrap(row).wordAnalysis.clustering, 'pending');
+    });
+
+    bedrockReply = '[["ridge","ridges"]]';
+    await runWorker('2009');
+
+    check('the worker read it, so it clustered instead of bailing out', () => {
+      const wa = unwrap(resultsRow('2009')).wordAnalysis;
+      assert.strictEqual(wa.clustering, 'done',
+        `clustering is "${wa.clustering}" — the worker bailed on its own idempotency guard`);
+      assert.strictEqual(wa.matching, 'clustered');
+    });
+
+    // rejects: THE LEAK. Unwrapping to work on it and writing the result back
+    // as-is puts a tenant's words in the table in the clear.
+    check('and wrote it back still sealed', () => {
+      const row = resultsRow('2009');
+      assert.ok(row.wordAnalysis && typeof row.wordAnalysis.__enc === 'string',
+        'the worker wrote the analysis back in the CLEAR — a tenant\'s words are now readable at rest');
+    });
+
+    check('the merge actually landed — ridge and ridges are one word', () => {
+      const wa = unwrap(resultsRow('2009')).wordAnalysis;
+      assert.deepStrictEqual(wa.commonWords.map((w) => w.word).sort(), ['ridge', 'summit']);
+    });
+
+    check('the room is told, in plaintext — clients hold no key', () => {
+      const frames = sent.filter((x) => x.message.type === 'wavelengthAnalysisReady');
+      assert.ok(frames.length > 0, 'no frame went out, so the stage waits out its watchdog');
+      const wa = frames[frames.length - 1].message.wordAnalysis;
+      assert.ok(!wa.__enc, 'the frame carries ciphertext, which no client can render');
+      assert.strictEqual(wa.clustering, 'done');
+    });
+
+    // The failure path, which never recorded anything on a tenant round.
+    tenantRound('2010');
+    await closeRound('2010');
+    bedrockFails = true;
+    await runWorker('2010');
+    bedrockFails = false;
+
+    check('a failing worker records the failure where it can be read back', () => {
+      const wa = unwrap(resultsRow('2010')).wordAnalysis;
+      assert.strictEqual(wa.clustering, 'failed',
+        `clustering reads "${wa.clustering}" — the status was written into the ciphertext envelope`);
+    });
+    check('and did not break the seal doing it', () => {
+      const row = resultsRow('2010');
+      assert.ok(row.wordAnalysis && typeof row.wordAnalysis.__enc === 'string',
+        'the failure path left the round in the clear');
     });
   }
 

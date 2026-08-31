@@ -1277,14 +1277,41 @@ const dispatchWavelengthClustering = async (gameId, questionId) => {
   }
 };
 
-/** Stamp the clustering status on the stored round. Best-effort. */
+/**
+ * Stamp the clustering status on the stored round. Best-effort.
+ *
+ * READ-MODIFY-WRITE, not a document path. This was
+ *
+ *     UpdateExpression: 'SET wordAnalysis.clustering = :status'
+ *
+ * which is correct only while `wordAnalysis` is a plain map. On a tenant's
+ * session it is a {v,iv,ct,tag} envelope, so that expression did not update a
+ * status — it bolted a stray `clustering` key onto the ciphertext, where no
+ * reader would ever look for it. That is why a worker that failed on a tenant
+ * round never recorded having failed: the stage sat on 'pending' whether the
+ * model threw or not.
+ *
+ * The extra GetItem is affordable — this runs once, on a path that has already
+ * decided something went wrong.
+ */
 const markWavelengthClustering = async (gameId, questionId, status) => {
   try {
+    const key = { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` };
+    const orgId = await sessionOrgId(gameId);
+    const stored = await db.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: key }));
+    if (!stored.Item || !stored.Item.wordAnalysis) return;
+
+    const round = orgId ? await decryptItem(orgId, 'results', stored.Item) : stored.Item;
+    const wordAnalysis = { ...round.wordAnalysis, clustering: status };
+    const next = orgId
+      ? (await encryptItem(orgId, 'results', { wordAnalysis })).wordAnalysis
+      : wordAnalysis;
+
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` },
-      UpdateExpression: 'SET wordAnalysis.clustering = :status',
-      ExpressionAttributeValues: { ':status': status }
+      Key: key,
+      UpdateExpression: 'SET wordAnalysis = :wa',
+      ExpressionAttributeValues: { ':wa': next }
     }));
   } catch (error) {
     console.error(`❌ WAVELENGTH: could not mark clustering ${status}:`, error.message);
@@ -1335,7 +1362,27 @@ async function runWavelengthClusterWorker(event) {
     console.error('❌ WAVELENGTH WORKER: no stored round to cluster');
     return { statusCode: 404 };
   }
-  const round = stored.Item;
+  /*
+    UNWRAP BEFORE READING ANYTHING OFF IT.
+
+    On a tenant's session the stored row is sealed, so `wordAnalysis` is a
+    {v,iv,ct,tag} envelope. It is TRUTHY, so the guard above passes — and then
+    `round.wordAnalysis.clustering` is `undefined`, which is not 'pending', so
+    the idempotency guard below fired and this worker returned 200 having done
+    nothing. No Bedrock call, no status write, no broadcast, and an info-level
+    log line as the only trace. The round said 'pending' forever and the stage
+    waited out its watchdog for a frame that was never going to come.
+
+    Every wavelength round on every tenant session, since tenancy shipped.
+    Sessions 3083 and 5578 on dev are both still sitting in that state.
+
+    `round.answers` is sealed for the same reason, so the submissions this
+    re-analysis is built from were never readable either.
+  */
+  const workerOrgId = await sessionOrgId(gameId);
+  const round = workerOrgId
+    ? await decryptItem(workerOrgId, 'results', stored.Item)
+    : stored.Item;
   if (round.wordAnalysis.clustering !== 'pending') {
     console.log(`ℹ️ WAVELENGTH WORKER: clustering already ${round.wordAnalysis.clustering} — leaving it alone`);
     return { statusCode: 200 };
@@ -1364,11 +1411,20 @@ async function runWavelengthClusterWorker(event) {
       clustering: 'done'
     };
 
+    /*
+      SEALED ON THE WAY BACK IN. The analysis quotes the room's words — the
+      whole reason `results` is on the encryption boundary — so writing the
+      upgraded copy back as-is would put a tenant's submissions in the table in
+      the clear. `teamScore` is not on the boundary and stays plain.
+    */
+    const sealedAnalysis = workerOrgId
+      ? (await encryptItem(workerOrgId, 'results', { wordAnalysis })).wordAnalysis
+      : wordAnalysis;
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: resultsKey,
       UpdateExpression: 'SET wordAnalysis = :wa, teamScore = :ts',
-      ExpressionAttributeValues: { ':wa': wordAnalysis, ':ts': analysis.teamScore }
+      ExpressionAttributeValues: { ':wa': sealedAnalysis, ':ts': analysis.teamScore }
     }));
 
     // WRITE BEFORE BROADCAST (the aiSummaryReady lesson): a lost frame costs a
