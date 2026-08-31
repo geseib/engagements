@@ -1379,10 +1379,54 @@ async function runWavelengthClusterWorker(event) {
     `round.answers` is sealed for the same reason, so the submissions this
     re-analysis is built from were never readable either.
   */
-  const workerOrgId = await sessionOrgId(gameId);
-  const round = workerOrgId
-    ? await decryptItem(workerOrgId, 'results', stored.Item)
-    : stored.Item;
+  /*
+    EVERYTHING FROM HERE IS INSIDE THE TRY, and that is not tidiness.
+
+    The decrypt sat above it in the first version of this fix, so a KMS refusal,
+    a key-policy change or a malformed envelope killed the worker with nothing
+    caught — no 'failed' marking, no broadcast, and a round left saying
+    'pending'. That is the exact signature of the bug this decrypt was ADDED to
+    fix, which made the two impossible to tell apart from outside, and it is the
+    same shape as the hard timeout: a failure the worker cannot report is worse
+    than the failure itself, because the stage waits on it forever.
+
+    The rule for this handler: there is no path out of it that leaves the round
+    on 'pending'.
+  */
+  let workerOrgId = '';
+  let round = stored.Item;
+  try {
+    workerOrgId = await sessionOrgId(gameId);
+    round = workerOrgId
+      ? await decryptItem(workerOrgId, 'results', stored.Item)
+      : stored.Item;
+  } catch (error) {
+    /*
+      NOT marked 'failed', deliberately. The status lives INSIDE the ciphertext
+      it describes, so recording it means decrypting the round — the thing that
+      just failed. Leaving it 'pending' is also the better answer: a KMS refusal
+      is usually transient, 'pending' means "not settled", and the round stays
+      eligible for a later pass instead of being mislabelled on a guess.
+
+      What must not happen is the room waiting on it, so the frame still goes
+      out and the stage resolves to the exact-match result it already has.
+
+      (This is the argument for hoisting `clustering` and `matching` out of the
+      encrypted blob: they are status, not tenant content, and a status that
+      cannot be written without a working key cannot be relied on.)
+    */
+    console.error('❌ WAVELENGTH WORKER: could not read the stored round:', error);
+    await broadcastToGame(gameId, {
+      type: 'wavelengthAnalysisReady',
+      gameId,
+      questionId,
+      wordAnalysis: { matching: 'exact', clustering: 'failed' },
+      teamScore: stored.Item.teamScore || 0,
+      timestamp: new Date().toISOString()
+    }, 'WAVELENGTH BROADCAST');
+    return { statusCode: 500 };
+  }
+
   if (round.wordAnalysis.clustering !== 'pending') {
     console.log(`ℹ️ WAVELENGTH WORKER: clustering already ${round.wordAnalysis.clustering} — leaving it alone`);
     return { statusCode: 200 };

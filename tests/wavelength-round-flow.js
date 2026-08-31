@@ -162,6 +162,7 @@ const SEALED = (value) => ({ __enc: JSON.stringify(value) });
    real fields rather than passing through is what makes a handler that reads a
    tenant's row without unwrapping FAIL here instead of quietly working. */
 const RESULTS_FIELDS = ['Winners', 'answers', 'question', 'wordAnalysis'];
+let decryptFails = false;
 loaderStubs.set('./tenant-crypto', {
   encryptItem: async (_org, entity, item) => {
     if (entity !== 'results') return item;
@@ -169,7 +170,10 @@ loaderStubs.set('./tenant-crypto', {
     for (const f of RESULTS_FIELDS) if (f in out) out[f] = SEALED(out[f]);
     return out;
   },
-  decryptItem: async (_org, _entity, item) => unwrap(item),
+  decryptItem: async (_org, _entity, item) => {
+    if (decryptFails) { const e = new Error('KMS said no'); e.name = 'AccessDeniedException'; throw e; }
+    return unwrap(item);
+  },
   decryptItems: async (_org, _entity, items) => (items || []).map(unwrap),
 });
 
@@ -652,6 +656,67 @@ const runWorker = (gameId) => handler({
       const row = resultsRow('2010');
       assert.ok(row.wordAnalysis && typeof row.wordAnalysis.__enc === 'string',
         'the failure path left the round in the clear');
+    });
+  }
+
+  /*
+    13. AN UNREADABLE ROUND IS REPORTED, NOT SWALLOWED.
+
+    The fix in section 12 put the decrypt at the top of the worker, ABOVE the
+    try — so a decrypt that throws (a denied KMS call, a key policy change, a
+    malformed envelope) killed the worker with nothing caught: no 'failed'
+    marking, no broadcast, and a row left saying 'pending'. That is the exact
+    signature of the bug section 12 exists to fix, which makes the two
+    indistinguishable from the outside, and it is the same "one failure the
+    worker cannot report" the timeout change was about.
+
+    // rejects: any path out of this worker that leaves the round on 'pending'.
+  */
+  console.log('\n13. a round the worker cannot read is reported as failed');
+  {
+    const ORG = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+    seedGame('2011', [
+      answer('2011', 'Ada', ['summit', 'ridge']),
+      answer('2011', 'Grace', ['summit', 'ridges']),
+    ]);
+    put({ PK: 'GAME#2011', SK: 'METADATA', GameType: 'wavelength', Title: 'Tenant', orgId: ORG });
+    await closeRound('2011');
+
+    sent = [];
+    decryptFails = true;
+    let threw = null;
+    try { await runWorker('2011'); } catch (e) { threw = e; }
+    decryptFails = false;
+
+    check('the worker does not die on an unreadable round', () =>
+      assert.strictEqual(threw, null,
+        `it threw out of the handler (${threw && threw.message}) — nothing marked, nothing sent`));
+    /*
+      THE ROW STAYS 'pending', AND THAT IS THE HONEST OUTCOME HERE.
+
+      Writing 'failed' INTO wordAnalysis means decrypting wordAnalysis first,
+      which is the thing that just failed — the status lives inside the
+      ciphertext it describes. So there is nothing to record it in.
+
+      Leaving it pending is also the better answer: a KMS refusal is often
+      transient, and 'pending' means "not settled", so the round stays eligible
+      for a later pass. What must NOT happen is the room waiting on it, and the
+      check below is the one that matters.
+
+      This is the concrete argument for hoisting `clustering` and `matching` out
+      of the encrypted blob — they are status, not tenant content, and a status
+      you cannot write without a working key is a status you cannot rely on.
+      That needs a migration for existing rows, so it is its own piece of work.
+    */
+    check('the round stays eligible for a later pass rather than being mislabelled', () => {
+      const wa = unwrap(resultsRow('2011')).wordAnalysis;
+      assert.strictEqual(wa.clustering, 'pending',
+        'a status written without a readable round would be a guess');
+    });
+    check('and the stage is released rather than left waiting', () => {
+      const frames = sent.filter((x) => x.message.type === 'wavelengthAnalysisReady');
+      assert.ok(frames.length > 0,
+        'no frame went out, so the room waits out the watchdog for nothing');
     });
   }
 
