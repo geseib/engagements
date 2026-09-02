@@ -59,15 +59,19 @@ const unwrap = (v) => {
   }
   return v;
 };
+const PROMPT_FIELDS = ['name', 'description', 'outputFormat', 'template', 'instructions'];
+const SEAL_FIELDS = { results: RESULTS_FIELDS, prompt: PROMPT_FIELDS };
 stubs.set('./tenant-crypto', {
   encryptItem: async (_org, entity, item) => {
-    if (entity !== 'results') return item;
+    const fields = SEAL_FIELDS[entity];
+    if (!fields) return item;
     const out = { ...item };
-    for (const f of RESULTS_FIELDS) if (f in out) out[f] = SEALED(out[f]);
+    for (const f of fields) if (f in out) out[f] = SEALED(out[f]);
     return out;
   },
   decryptItem: async (_org, _entity, item) => unwrap(item),
   decryptItems: async (_org, _entity, items) => (items || []).map(unwrap),
+  decryptValue: async (_org, value) => unwrap(value),
 });
 
 class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
@@ -614,6 +618,77 @@ say('\n6. the narration uses the round the room actually saw');
     const wa = storedSummary('w-org').DebugInfo.templateVariables.wordAnalysis;
     assert.ok(/\b5 of 6\b/.test(wa),
       `the {wordAnalysis} prose describes a different round than the wall did: ${wa}`);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 7. AN ORGANISATION'S OWN WORKIE IS ACTUALLY USED
+// ---------------------------------------------------------------------------
+/*
+  create-ai-prompt.js writes an org's prompt to PK=ORG#<id>#AIPROMPTS and seals
+  the row (`encryptItem(ref.orgId, 'prompt', …)`), which is correct.
+  get-ai-summary.js reads `PK: 'AIPROMPTS'` by literal, in both the primary
+  lookup and the DynamoDB fallback, and decrypts nothing.
+
+  So an organisation could author a Workie, attach it to its own question set,
+  and never hear it: the row is invisible, `fetchPromptFromS3` returns null, and
+  resolvePromptTemplate reports `recoveryReason: 'missing'` and quietly uses
+  Engage's house default instead. The team's own voice was accepted, stored, and
+  ignored.
+
+  admin/shared/prompt-access.js has had the right answer since the public
+  library work — "Org before platform before public, so a team's own Workie wins
+  a name it shares with Engage's" — and the summary engine never called it. It
+  cannot import it (different CodeUri bundle), so the ORDER is what has to be
+  reproduced here, not the module.
+
+  // rejects: a summary engine that can only see Engage's library.
+*/
+say('\n7. an organisation\'s own Workie is used, not silently replaced');
+{
+  const ORG = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+  store.clear();
+  // Engage's house default for this game type — what the bug fell back to.
+  put({
+    PK: 'AIPROMPTS', SK: 'AIPROMPT#house', isDefault: true, gameType: 'wavelength',
+    status: 'active', s3Key: 'fake-key', template: 'HOUSE: {responsesText}',
+  });
+  // The organisation's own, sealed exactly as create-ai-prompt.js writes it.
+  put({
+    PK: `ORG#${ORG}#AIPROMPTS`, SK: 'AIPROMPT#ours', gameType: 'wavelength',
+    status: 'active', s3Key: 'fake-key',
+    name: SEALED('Our Workie'), template: SEALED('OURS: {responsesText}'),
+  });
+
+  const resolved = await resolvePromptTemplate('ours', 'wavelength', ORG);
+
+  await check('the org\'s own prompt is found in its own library', () => {
+    assert.ok(resolved, 'nothing resolved at all');
+    assert.strictEqual(resolved.promptId, 'ours',
+      `resolved to "${resolved.promptId}" — the org's Workie was invisible and Engage's default took over`);
+    assert.strictEqual(resolved.recoveredFrom, undefined,
+      `it fell back, reporting "${resolved.recoveryReason}"`);
+  });
+
+  await check('and its text is decrypted, not handed over as an envelope', () => {
+    const t = resolved.promptData.template;
+    assert.strictEqual(typeof t, 'string', `template came back as ${typeof t}`);
+    assert.ok(t.startsWith('OURS:'), `got ${JSON.stringify(t).slice(0, 60)}`);
+  });
+
+  // rejects: reading the org library for a session that has no org, which would
+  // be a cross-tenant read rather than a fix.
+  await check('a session with no organisation still gets the house prompt', async () => {
+    const platform = await resolvePromptTemplate('house', 'wavelength', '');
+    assert.strictEqual(platform.promptId, 'house');
+    assert.strictEqual(platform.promptData.template, 'HOUSE: {responsesText}');
+  });
+
+  // rejects: the org library SHADOWING the platform one for an id it does not
+  // have — an org that authored nothing must still hear Engage's default.
+  await check('an org with no prompt of that name falls through to Engage\'s', async () => {
+    const fell = await resolvePromptTemplate('house', 'wavelength', ORG);
+    assert.strictEqual(fell.promptId, 'house');
   });
 }
 
