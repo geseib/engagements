@@ -289,9 +289,15 @@ const runWorker = (gameId) => handler({
     assert.strictEqual(bedrockCalls.length, 1);
     assert.ok(bedrockCalls[0].includes('- summit') && bedrockCalls[0].includes('- sumit'));
   });
-  check('the misspelling merge lands the word', () => {
+  check('the misspelling merge lands the word, spelled correctly', () => {
     const row = resultsRow('2002');
-    assert.deepStrictEqual(row.wordAnalysis.commonWords.map((w) => w.word), ['sumit']);
+    /* 'summit', not 'sumit'. This line read ['sumit'] until 2026-09-02 — the
+       old label rule was most-frequent then SHORTEST, and the typo is a
+       character shorter, so the assertion was pinning a misspelling onto the
+       wall as the room's shared word. The model now nominates the canonical
+       form by putting it first in its group (["summit", "sumit"] above), and
+       canonicalLabel takes it when a submitter really wrote it. */
+    assert.deepStrictEqual(row.wordAnalysis.commonWords.map((w) => w.word), ['summit']);
     assert.strictEqual(row.teamScore, 1);
     assert.strictEqual(row.wordAnalysis.matching, 'clustered');
     assert.strictEqual(row.wordAnalysis.clustering, 'done');
