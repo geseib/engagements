@@ -859,7 +859,27 @@ exports.handler = async (event) => {
       }
     }));
     
-    const storedResults = storedResultsQuery.Item || null;
+    /*
+      UNWRAP IT, with the org already in hand from the votes and answers above.
+
+      This row was read raw, and on a tenant session `wordAnalysis` is a
+      {v,iv,ct,tag} envelope. The envelope has no `commonWords`, so the "use the
+      stored results" branch below was false and the handler fell through to
+      RE-RUNNING analyzeWavelength() over the raw answers — without the model's
+      merges, which only exist in the stored round. That branch can only ever
+      produce the exact-match result, so on every tenant session the narration
+      described the pre-clustering round no matter what the room was shown.
+
+      Reported from a live session: the wall said five words the whole room
+      shared and the narration said "the room converged hard on just two words
+      … and scattered everywhere else", listing as separate the very words the
+      round had merged. The comment on that branch says the stored round "must
+      not be second-guessed here"; the fallback was doing exactly that, in
+      silence.
+    */
+    const storedResults = storedResultsQuery.Item && summaryOrgId
+      ? await decryptItem(summaryOrgId, 'results', storedResultsQuery.Item)
+      : (storedResultsQuery.Item || null);
     console.log(`📊 Found ${answers.length} answers, ${votes.length} votes, stored results: ${storedResults ? 'YES' : 'NO'} for question ${paddedQuestionNumber}`);
     
     if (answers.length === 0) {
@@ -2077,7 +2097,25 @@ async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, 
       });
 
     } else {
-      console.log('⚠️ No stored results found, calculating wavelength data from scratch');
+      /*
+        A ROUND WITH A STORED ROW SHOULD NEVER REACH HERE, so say so loudly.
+
+        This branch is legitimate for a round whose results were never stored.
+        Reaching it while `storedResults` EXISTS means the row could not be read
+        — and this recompute cannot see the model's merges, so it will quietly
+        describe a different round than the one the room was shown. That is the
+        failure that shipped: the stored row was an unread envelope, this branch
+        took over, and the narration contradicted the wall with nothing logged.
+      */
+      if (storedResults) {
+        console.error(
+          '❌ WAVELENGTH SUMMARY: a stored round exists but carries no commonWords — '
+          + 'recomputing WITHOUT the model\'s merges. The narration will describe a '
+          + 'different round than the room was shown. Keys on the stored row: '
+          + `${Object.keys(storedResults).join(', ')}`);
+      } else {
+        console.log('⚠️ No stored results found, calculating wavelength data from scratch');
+      }
 
       // Fallback: exact-match unanimity via the SAME engine the results
       // handler uses (lambda-functions/game/wavelength.js), so the two paths

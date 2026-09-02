@@ -42,6 +42,34 @@ Module._load = function (request, parent, isMain) {
   return realLoad.call(this, request, parent, isMain);
 };
 
+/*
+  A FAKE TENANT-CRYPTO, so a round can be seeded the way a real tenant's round
+  is stored. `{__enc: json}` stands in for the {v,iv,ct,tag} envelope, and the
+  point is that the stored value is NOT the value a reader should act on — a
+  handler that forgets to unwrap fails here instead of silently taking a
+  different branch, which is exactly what get-ai-summary was doing.
+*/
+const RESULTS_FIELDS = ['Winners', 'answers', 'question', 'wordAnalysis'];
+const SEALED = (value) => ({ __enc: JSON.stringify(value) });
+const unwrap = (v) => {
+  if (Array.isArray(v)) return v.map(unwrap);
+  if (v && typeof v === 'object') {
+    if (typeof v.__enc === 'string') return JSON.parse(v.__enc);
+    return Object.fromEntries(Object.entries(v).map(([k2, x]) => [k2, unwrap(x)]));
+  }
+  return v;
+};
+stubs.set('./tenant-crypto', {
+  encryptItem: async (_org, entity, item) => {
+    if (entity !== 'results') return item;
+    const out = { ...item };
+    for (const f of RESULTS_FIELDS) if (f in out) out[f] = SEALED(out[f]);
+    return out;
+  },
+  decryptItem: async (_org, _entity, item) => unwrap(item),
+  decryptItems: async (_org, _entity, items) => (items || []).map(unwrap),
+});
+
 class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class PutCommand { constructor(i) { this.input = i; this.type = 'put'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
@@ -248,7 +276,7 @@ const WAVE_TEMPLATE =
  * the pre-fix ReferenceError surfaces here as a rejected promise rather than
  * being flattened into a 500 body.
  */
-function seedWavelength(gameId, { storedWordAnalysis = null } = {}) {
+function seedWavelength(gameId, { storedWordAnalysis = null, orgId = '' } = {}) {
   store.clear();
   put({ PK: 'AIPROMPTS', SK: 'AIPROMPT#wave-prompt', s3Key: 'fake-key', template: WAVE_TEMPLATE });
   put({
@@ -265,7 +293,16 @@ function seedWavelength(gameId, { storedWordAnalysis = null } = {}) {
   put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#ANSWER#Ada', PlayerName: 'Ada', Answer: 'ocean,blue' });
   put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#ANSWER#Grace', PlayerName: 'Grace', Answer: 'ocean,tide' });
   if (storedWordAnalysis) {
-    put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#RESULTS', wordAnalysis: storedWordAnalysis });
+    put({
+      PK: `GAME#${gameId}`, SK: 'QUESTION#001#RESULTS',
+      // Sealed when the session belongs to an organisation, exactly as
+      // get-results stores it.
+      wordAnalysis: orgId ? SEALED(storedWordAnalysis) : storedWordAnalysis,
+    });
+  }
+  if (orgId) {
+    const meta = store.get(k(`GAME#${gameId}`, 'METADATA'));
+    meta.orgId = orgId;
   }
 }
 
@@ -504,6 +541,81 @@ await check('non-wavelength rounds do not sprout the field', () => {
   assert.ok(rounds.every((q) => q.wordAnalysis === undefined),
     'a call-and-answer round is carrying wordAnalysis');
 });
+
+// ---------------------------------------------------------------------------
+// 6. WHAT THE ROOM HEARS IS WHAT THE ROOM SEES
+// ---------------------------------------------------------------------------
+/*
+  Reported from a live session. The wall said five words the whole room shared;
+  the narration said "the room converged hard on just two words — summit and
+  followup — and scattered everywhere else", put the overlap at 6%, and listed
+  better/betterment/bettering and safe/safety/safest as separate ideas after the
+  round had merged each of them into one.
+
+  Not a race. get-ai-summary computes summaryOrgId and uses it to decrypt the
+  votes and the answers, and then reads the stored RESULTS row RAW. On a tenant
+  session wordAnalysis is a {v,iv,ct,tag} envelope, so
+
+      if (storedResults && storedResults.wordAnalysis && storedResults.wordAnalysis.commonWords)
+
+  is false — the envelope has no commonWords — and the handler falls through to
+  re-running analyzeWavelength() over the raw answers, WITHOUT the model's
+  merges. That branch can only ever produce the exact-match result, so on every
+  tenant session the narration has described the pre-clustering round no matter
+  what the projector showed.
+
+  The comment above that branch says the stored round "must not be
+  second-guessed here". The fallback second-guesses it, silently.
+
+  // rejects: a summary computed from anything but the round the room saw.
+*/
+say('\n6. the narration uses the round the room actually saw');
+{
+  const ORG = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+  // A CLUSTERED round: five landed words, of which only two would survive
+  // exact matching. If the handler recomputes, it cannot reach five.
+  const CLUSTERED = {
+    submitterCount: 2,
+    totalWordsSubmitted: 4,
+    totalUniqueWords: 6,
+    commonWords: [
+      { word: 'ocean', count: 2, members: ['ocean'] },
+      { word: 'tide', count: 2, members: ['tide', 'tides'] },
+      { word: 'blue', count: 2, members: ['blue', 'bluer'] },
+      { word: 'cost', count: 2, members: ['cost', 'costs'] },
+      { word: 'safe', count: 2, members: ['safe', 'safety'] },
+    ],
+    nearMiss: [],
+    words: [{ word: 'ocean', count: 2, members: ['ocean'] }],
+    matching: 'clustered',
+    clustering: 'done',
+  };
+
+  seedWavelength('w-org', { storedWordAnalysis: CLUSTERED, orgId: ORG });
+  let orgErr = null;
+  try { await runWorker('w-org'); } catch (e) { orgErr = e; }
+
+  await check('a tenant round summarises without throwing', () =>
+    assert.strictEqual(orgErr, null, `it threw: ${orgErr && orgErr.message}`));
+
+  /* The team score IS the landed count, and it reaches the model through the
+     prompt — which is the artefact that matters, since the prompt is what the
+     room ends up hearing. Five landed words in the stored round; a recompute
+     over these two answers can only ever reach one. */
+  await check('the summary is built from the CLUSTERED round, not a recompute', () => {
+    const row = storedSummary('w-org');
+    assert.ok(row, 'nothing was persisted');
+    const tally = row.DebugInfo.templateVariables.voteTally;
+    assert.ok(/\b5 vote points\b/.test(tally),
+      `expected the stored round's five landed words to carry through, got: ${tally}`);
+  });
+
+  await check('and the prose the model is handed says five, not one', () => {
+    const wa = storedSummary('w-org').DebugInfo.templateVariables.wordAnalysis;
+    assert.ok(/\b5 of 6\b/.test(wa),
+      `the {wordAnalysis} prose describes a different round than the wall did: ${wa}`);
+  });
+}
 
 say(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
