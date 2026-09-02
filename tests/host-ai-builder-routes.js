@@ -108,5 +108,50 @@ check('…nor reach the advisor or the prompt generator', () => {
   assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-generate-prompt'), ['admins']);
 });
 
+/*
+  5. A HOST CAN READ THE PERSONA LIBRARY THEY ARE ALREADY ALLOWED TO CHOOSE FROM.
+
+  `PUT /games/{gameId}/persona` is hosts+admins — a host may set the voice that
+  narrates their own room. `GET /admin/personas` fell to the generic
+  `path.startsWith('admin')` rule and was admins-only, so a host could set a
+  persona and never see one.
+
+  It failed silently, which is why it lasted. Both callers swallow the 403 into
+  an empty list (GameHostPage.jsx, AdminPage.jsx), so a non-admin host saw only
+  "Adapt to the session" and read it as the whole library — and a question set
+  that HAS a persona rendered as "<id> (unknown — Workie will adapt instead)",
+  which reads as a broken set rather than a missing permission.
+
+  The read is safe to open for the reason the partition comment gives: personas
+  are platform-global CONFIGURATION — id, name, tagline, icon, voice, gameTypes.
+  No tenant content, nothing per-organisation, and it is a read.
+
+  // rejects: opening the persona WRITE side, which there isn't one of, and must
+  //          not be added here by reflex if one appears.
+*/
+console.log('\n5. a host can read the persona library');
+
+check('GET admin/personas is open to hosts', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('GET', 'admin/personas'), ['hosts', 'admins']));
+
+check('a host who can SET a voice can also LIST the voices', () => {
+  // The incoherence this closes, asserted as the pair it is.
+  assert.deepStrictEqual(requiredGroupsForRoute('PUT', 'games/1234/persona'), ['hosts', 'admins']);
+  assert.deepStrictEqual(requiredGroupsForRoute('GET', 'admin/personas'), ['hosts', 'admins']);
+});
+
+/* And the clincher: a host may already READ the AI PROMPT library
+   (`GET admin/ai-prompts` is hosts+admins) — the thing that decides what the AI
+   is told to do. Being trusted with that and refused the list of VOICES is not
+   a policy, it is an oversight. Asserted as the pair so the argument survives in
+   the suite rather than only in a commit message. */
+check('hosts can already read the prompt library, which is the wider of the two', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('GET', 'admin/ai-prompts'), ['hosts', 'admins']));
+
+check('but WRITING what the AI does for everybody stays Engage\'s', () => {
+  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-prompt-advisor'), ['admins']);
+  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-generate-prompt'), ['admins']);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
