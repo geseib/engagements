@@ -1523,6 +1523,10 @@ async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, 
     questionSetAiContext,
     gameAiContext,
     templateInstructions: promptData.instructions,
+    // The house voice for this game type, below everything a person chose or
+    // wrote and above inference. Without this the rung never fires and the
+    // wavelength default is unreachable in production.
+    gameType,
     loadPersona: async (personaId) => {
       const res = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
