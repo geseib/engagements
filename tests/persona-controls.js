@@ -295,11 +295,12 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
 
   console.log('\nmid-game switch (PUT /games/{gameId}/persona)\n');
 
-  const putPersona = async (gameId, personaId) => {
+  const putPersona = async (gameId, personaId, caller = null) => {
     quiet();
     const res = await updatePersonaHandler({
       pathParameters: { gameId },
       body: JSON.stringify(personaId === undefined ? {} : { personaId }),
+      ...(caller ? { requestContext: { authorizer: { lambda: caller } } } : {}),
     });
     loud();
     return { status: res.statusCode, body: JSON.parse(res.body) };
@@ -684,6 +685,79 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
   await acheck('the worker draws one move per generation', async () => {
     assert(/const openingMove = pickOpeningMove\(\)/.test(summarySrc));
   });
+
+  /*
+    WHOSE ROOM'S VOICE IS THIS?
+
+    This route carries the Cognito authorizer and never asked whose session it
+    was. Eleven other session routes have been scoped to the owning organisation
+    — next-question, update-game, start-game, stage-beat, reveal-authors,
+    create-report, close-round, up-next, stage-focus, the queue and the
+    exclusions — and this one was missed every time, including by the sweep that
+    named itself "the REST of the host controls".
+
+    So the boundary was "any `hosts` account plus one of 9,000 four-digit ids":
+    an account in any organisation could change the voice narrating a rival's
+    live session, and the change is invisible until the next summary reads back
+    in a register nobody in that room chose.
+
+    update-game.js writes the SAME attribute through PUT /games/{gameId} and does
+    check (callerMayDriveSession), so the two writers of PersonaId disagreed
+    about whether the caller has any business writing it.
+
+    404 rather than 403, like every route before it: a 403 confirms that a
+    guessed code names a real session belonging to somebody else.
+
+    // rejects: a second writer of a session attribute that skips the guard the
+    //          first writer applies.
+  */
+  console.log('\nwhose room is this? (PUT /games/{gameId}/persona)\n');
+  {
+    const ORG_A = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';   // owns the room
+    const ORG_B = 'org_Tb2VnQ8sLxK4WmC7gRdYpF';   // the rival, holding the code
+    const host = (orgId) => ({ userId: 'u', groups: 'hosts', orgId });
+
+    /* A game of this section's own. Reusing an earlier fixture made both the
+       refusal and the success 404 — its METADATA had already been removed by a
+       previous case — so the refusal passed for the wrong reason. */
+    /* And a voice of its own. The harness seeds personas one at a time, so a
+       real seed id is still absent from the store — naming one made BOTH the
+       refusal and the success 404 on "Unknown persona", which is a passing
+       assertion that proves nothing. */
+    const VOICE = 'x-test-voice';
+    store.set(key('AIPROMPTS', `PERSONA#${VOICE}`), {
+      PK: 'AIPROMPTS', SK: `PERSONA#${VOICE}`,
+      personaId: VOICE, name: 'Test Voice', voice: 'plain and level', status: 'active',
+    });
+
+    const owned = '7431';
+    store.set(key(`GAME#${owned}`, 'METADATA'), {
+      PK: `GAME#${owned}`, SK: 'METADATA',
+      GameType: 'trivia', Title: 'Owned session',
+      PersonaId: 'comedian', orgId: ORG_A,
+    });
+    const before = metadataOf(owned).PersonaId;
+
+    const rival = await putPersona(owned, VOICE, host(ORG_B));
+    await acheck('another organisation cannot change the voice', async () =>
+      assert.strictEqual(rival.status, 404,
+        `got ${rival.status} — a host in another org just renarrated this room`));
+    await acheck('and the session keeps the voice its own host chose', async () =>
+      assert.strictEqual(metadataOf(owned).PersonaId, before,
+        'the write landed despite the refusal'));
+
+    const owner = await putPersona(owned, VOICE, host(ORG_A));
+    await acheck('the owning organisation still can', async () =>
+      assert.strictEqual(owner.status, 200, `got ${owner.status}`));
+
+    /* A session with no orgId predates tenancy or was made by an orgless host;
+       refusing those would break running rooms to close a hole they are not part
+       of. Same carve-out every other scoped route makes. */
+    delete store.get(key(`GAME#${owned}`, 'METADATA')).orgId;
+    const legacy = await putPersona(owned, VOICE, host(ORG_B));
+    await acheck('a session with no owning org is left alone', async () =>
+      assert.strictEqual(legacy.status, 200, `got ${legacy.status}`));
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

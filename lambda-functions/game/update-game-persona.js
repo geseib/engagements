@@ -14,6 +14,7 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -31,6 +32,32 @@ exports.handler = async (event) => {
     const body = JSON.parse(event.body || '{}');
 
     if (!gameId) return reply(400, { error: 'gameId is required' });
+
+    /*
+      WHOSE ROOM'S VOICE IS THIS? The Cognito authorizer says the caller is *a*
+      host; nothing here said they were THIS session's host, and the same
+      four-digit code opens every one of them. So an account in any organisation
+      could change the voice narrating a rival's live session — invisible until
+      the next summary reads back in a register nobody in that room chose.
+
+      update-game.js writes this SAME attribute through PUT /games/{gameId} and
+      has asked since 2026-08-27, so the two writers of PersonaId disagreed about
+      whether the caller has any business writing it. Eleven other session routes
+      were scoped before this one, including by a sweep that called itself "the
+      REST of the host controls"; it was missed every time.
+
+      404 rather than 403, for the reason tenant.callerMayDriveSession gives: a
+      403 confirms that a guessed code names a real session belonging to somebody
+      else.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return reply(404, { error: 'Game not found', gameId });
+    }
 
     // '' / null / omitted all mean "go back to the default", which is the
     // adaptive inferred voice — not "leave it as it was". The set's own

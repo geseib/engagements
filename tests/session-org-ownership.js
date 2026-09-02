@@ -120,6 +120,12 @@ for (const rel of [
   'lambda-functions/game/question-exclusions.js',
   'lambda-functions/websocket/start-question.js',
   'lambda-functions/websocket/start-vote.js',
+  // The SECOND writer of PersonaId. update-game.js has asked since 2026-08-27;
+  // this route writes the same attribute through PUT /games/{gameId}/persona and
+  // never asked at all, so the voice narrating a room could be changed by any
+  // `hosts` account holding one of 9,000 codes. Missed by every sweep before it,
+  // including the one that called itself "the REST of the host controls".
+  'lambda-functions/game/update-game-persona.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
