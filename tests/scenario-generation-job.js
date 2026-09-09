@@ -421,6 +421,41 @@ async function runJob(body, workerCtx = ctx()) {
       'silently using the generic fallback is how this went unnoticed for so long');
   });
 
+  /*
+    WHICH PROMPT RAN, RECORDED ON THE JOB.
+
+    The owner, on being shown that generation prompts exist and are bound by a
+    naming convention rather than a picker: "im not sure how you select them
+    when you click generate questions."
+
+    The fallback warning above tells you when NO curated prompt matched. Nothing
+    tells you which one DID — so after editing a generation prompt there is no
+    way to know whether the edit was used, which is exactly how "I changed it
+    and nothing happened" starts. A warning is the wrong channel for that: it is
+    not a problem, it is provenance, and it belongs on the job whether the run
+    went well or badly.
+
+    // rejects: a generation run that cannot say which prompt produced it.
+  */
+  await test('the job records WHICH curated prompt was used', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(makeItems(2, 'curated'));
+    const { job } = await runJob({ scenarioType: 'custom', engagementType: 'call-and-answer', count: 2 });
+    assert.ok(job.promptSource, 'the job cannot say which prompt it ran');
+    assert.strictEqual(job.promptSource.kind, 'curated');
+    assert.match(String(job.promptSource.key), /gen-call-and-answer-custom/,
+      `recorded "${job.promptSource.key}"`);
+  });
+
+  await test('and records the fallback as a source rather than only a warning', async () => {
+    reset({ seedCurated: false });
+    bedrockHandler = () => toolResponse(makeItems(2, 'fallback'));
+    const { job } = await runJob({ scenarioType: 'custom', engagementType: 'call-and-answer', count: 2 });
+    assert.ok(job.promptSource, 'no provenance on a fallback run');
+    assert.strictEqual(job.promptSource.kind, 'fallback');
+    assert.strictEqual(job.promptSource.key, null);
+  });
+
   console.log('\nlength guidance and category count');
 
   await test('the prompt carries hard length limits', async () => {

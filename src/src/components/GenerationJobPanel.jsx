@@ -101,7 +101,7 @@ export default function GenerationJobPanel({
   }
 
   const {
-    outcome, phase, items, completed, requested, warnings, error, shortfall,
+    outcome, phase, items, completed, requested, warnings, error, shortfall, promptSource,
     createdSet, setCreationError,
   } = job;
 
@@ -275,6 +275,28 @@ export default function GenerationJobPanel({
             retryable flag, so this screen can offer a retry but cannot promise it will work.
           </p>
         </>
+      )}
+
+      {/*
+        WHICH PROMPT WROTE THIS.
+
+        Generation prompts are real, editable, and bound by a NAMING CONVENTION
+        derived from the game type and the category — there is no picker. So the
+        owner's question, on being shown they exist: "im not sure how you select
+        them when you click generate questions." Without this line there is no
+        way to tell which one ran, and a mismatch fell through to a generic
+        fallback silently, which is how an edited prompt appears to do nothing.
+
+        Not in the warning list: a curated prompt running correctly is not a
+        warning. The fallback case keeps its warning as well, because that one IS
+        a problem worth flagging.
+      */}
+      {promptSource && (
+        <p className="gjp-fine" data-testid="gjp-prompt-source">
+          {promptSource.kind === 'curated'
+            ? `Written with the ${String(promptSource.key).replace(/^AIPROMPT#/, '')} generation prompt.`
+            : 'No generation prompt matched this game type and category, so the built-in fallback wrote these.'}
+        </p>
       )}
 
       <h4 className="gjp-h4">

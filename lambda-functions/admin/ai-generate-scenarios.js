@@ -266,6 +266,14 @@ async function runWorker(event, context) {
   const produced = [];
   const keptTokenSets = [];
   const warnings = [];
+  /*
+    WHICH GENERATION PROMPT RAN. The warning below covers the fallback case, and
+    only that case — so a successful run said nothing about which curated prompt
+    produced it. Editing a generation prompt and re-generating then gave no way
+    to tell whether the edit had been used. Recorded on the job either way; the
+    UI reads it off `promptSource`.
+  */
+  let promptSource = null;
   let generationError = null;
 
   // WHO ASKED, read from the JOB ROW and not from this dispatch payload. This
@@ -317,6 +325,9 @@ async function runWorker(event, context) {
     const categories = Math.min(parseInt(numberOfCategories, 10) || 3, 24, Math.max(total, 1));
 
     const { template, source } = await resolvePromptTemplate({ scenarioType, engagementType, prompt });
+    promptSource = source === 'fallback'
+      ? { kind: 'fallback', key: null }
+      : { kind: 'curated', key: source };
     if (source === 'fallback') {
       warnings.push('No curated prompt matched this type; used the generic fallback prompt.');
     }
@@ -442,7 +453,7 @@ async function runWorker(event, context) {
   if (generationError) {
     await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced });
   } else {
-    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings });
+    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, promptSource });
     console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
   }
 }
