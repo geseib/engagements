@@ -109,7 +109,9 @@ export function interpretGenerationJob(job) {
     promptSource: (() => {
       const p = payload.promptSource;
       if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
-      if (p.kind !== 'curated' && p.kind !== 'fallback') return null;
+      // 'chosen' is a prompt somebody picked; 'curated' is one derived from the
+      // game type and category; 'fallback' is the built-in.
+      if (!['chosen', 'curated', 'fallback'].includes(p.kind)) return null;
       return { kind: p.kind, key: typeof p.key === 'string' ? p.key : null };
     })(),
     /**

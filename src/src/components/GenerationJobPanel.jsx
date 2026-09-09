@@ -293,9 +293,10 @@ export default function GenerationJobPanel({
       */}
       {promptSource && (
         <p className="gjp-fine" data-testid="gjp-prompt-source">
-          {promptSource.kind === 'curated'
-            ? `Written with the ${String(promptSource.key).replace(/^AIPROMPT#/, '')} generation prompt.`
-            : 'No generation prompt matched this game type and category, so the built-in fallback wrote these.'}
+          {promptSource.kind === 'fallback'
+            ? 'No generation prompt matched this game type and category, so the built-in fallback wrote these.'
+            : `Written with the ${String(promptSource.key).replace(/^AIPROMPT#/, '')} generation prompt`
+              + `${promptSource.kind === 'chosen' ? ' you chose.' : ', matched to this game type and category.'}`}
         </p>
       )}
 

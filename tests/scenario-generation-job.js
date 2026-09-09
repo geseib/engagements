@@ -437,6 +437,52 @@ async function runJob(body, workerCtx = ctx()) {
 
     // rejects: a generation run that cannot say which prompt produced it.
   */
+  /*
+    AN EXPLICIT CHOICE BEATS THE DERIVED KEY, AND IS NEVER SILENTLY IGNORED.
+
+    Until now a generation prompt was reachable ONLY by naming it to match a key
+    built from the game type and the category. The owner's question — "im not
+    sure how you select them when you click generate questions. is there already
+    a way to pick?" — had the answer "no, and the binding is invisible".
+
+    A chosen prompt that quietly does not apply would be the same defect this
+    whole session has been closing: an authoring surface accepted at the
+    boundary and ignored at the point of use. So a choice that cannot be honored
+    falls through to the derived key AND says so.
+  */
+  await test('a chosen promptId beats the derived key', async () => {
+    reset();
+    ddb.set(rowKey('AIPROMPTS', 'AIPROMPT#gen-chosen-one'), {
+      PK: 'AIPROMPTS', SK: 'AIPROMPT#gen-chosen-one',
+      basePrompt: 'CHOSEN-BASE-PROMPT', promptType: 'generation',
+    });
+    bedrockHandler = () => toolResponse(makeItems(2, 'chosen'));
+    const { job } = await runJob({
+      scenarioType: 'custom', engagementType: 'call-and-answer', count: 2,
+      promptId: 'gen-chosen-one',
+    });
+    assert.match(bedrockCalls[0].prompt, /CHOSEN-BASE-PROMPT/,
+      'the derived key won over the explicit choice');
+    assert.strictEqual(job.promptSource.kind, 'chosen');
+    assert.match(String(job.promptSource.key), /gen-chosen-one/);
+  });
+
+  // rejects: an explicit choice vanishing without a word — the exact shape of
+  // every silent-ignore defect this session has been closing.
+  await test('a chosen prompt that does not exist falls back AND says so', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(makeItems(2, 'curated'));
+    const { job } = await runJob({
+      scenarioType: 'custom', engagementType: 'call-and-answer', count: 2,
+      promptId: 'gen-does-not-exist',
+    });
+    assert.match(bedrockCalls[0].prompt, /CURATED-BASE-PROMPT/,
+      'it should still generate, using the derived key');
+    assert.strictEqual(job.promptSource.kind, 'curated');
+    assert.ok(job.warnings.some((w) => /gen-does-not-exist/.test(w)),
+      'the chosen prompt was dropped with no explanation');
+  });
+
   await test('the job records WHICH curated prompt was used', async () => {
     reset();
     bedrockHandler = () => toolResponse(makeItems(2, 'curated'));

@@ -99,9 +99,39 @@ const buildFallbackTemplate = (engagementType, prompt) => {
  * other) lookups silently empty. The legacy `AIPROMPT#GENERATION#…` key is still
  * probed last because dev has been re-keyed and the other stacks may not be.
  */
-async function resolvePromptTemplate({ scenarioType, engagementType, prompt }) {
+async function resolvePromptTemplate({ scenarioType, engagementType, prompt, promptId }) {
   const gameType = normalizeGameType(engagementType);
   const type = String(scenarioType || '').trim().toLowerCase();
+
+  /*
+    AN EXPLICIT CHOICE FIRST, AND NEVER SILENTLY DROPPED.
+
+    Everything below reaches a prompt only by NAME — keys derived from the game
+    type and the category — which is why the owner asked "im not sure how you
+    select them when you click generate questions". A picker sends `promptId`,
+    and it outranks the derived keys because somebody said so on purpose.
+
+    A choice that cannot be honored returns `chosenMissing` rather than being
+    dropped. The caller turns that into a warning: an explicit selection that
+    quietly does not apply is the same defect as an org's Workie being stored
+    and ignored, and it must not be reintroduced here.
+  */
+  const chosen = String(promptId || '').trim();
+  if (chosen) {
+    try {
+      const res = await dynamodb.send(new GetCommand({
+        TableName: tableName, Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${chosen}` },
+      }));
+      if (res.Item && res.Item.basePrompt) {
+        console.log('✅ Using the chosen prompt template:', chosen);
+        return { template: res.Item, source: `AIPROMPT#${chosen}`, chosenMissing: null };
+      }
+      console.warn(`⚠️ Chosen prompt ${chosen} is missing or has no basePrompt — deriving instead`);
+    } catch (error) {
+      console.error(`❌ Error reading chosen prompt ${chosen}:`, error.message);
+    }
+  }
+
   const candidates = [];
   if (type) {
     for (const spelling of gameTypeSpellings(gameType)) {
@@ -117,7 +147,7 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt }) {
       const res = await dynamodb.send(new GetCommand({ TableName: tableName, Key: { PK: 'AIPROMPTS', SK } }));
       if (res.Item && res.Item.basePrompt) {
         console.log('✅ Using curated prompt template:', SK);
-        return { template: res.Item, source: SK };
+        return { template: res.Item, source: SK, chosenMissing: chosen || null };
       }
     } catch (error) {
       console.error(`❌ Error reading prompt template ${SK}:`, error.message);
@@ -125,7 +155,11 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt }) {
   }
 
   console.warn(`⚠️ No curated prompt for ${type}/${gameType} (tried ${candidates.length} keys), using fallback`);
-  return { template: buildFallbackTemplate(engagementType, prompt), source: 'fallback' };
+  return {
+    template: buildFallbackTemplate(engagementType, prompt),
+    source: 'fallback',
+    chosenMissing: chosen || null,
+  };
 }
 
 // ------------------------------------------------------------------ prompts
@@ -296,7 +330,7 @@ async function runWorker(event, context) {
 
   try {
     const {
-      scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty,
+      scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty, promptId,
       context: brief, audience, customPrompt, numberOfCategories, mustHaveCategories,
       roundKindBrief,
     } = payload;
@@ -324,12 +358,21 @@ async function runWorker(event, context) {
     // the TOTAL, which is the number that was always meant.
     const categories = Math.min(parseInt(numberOfCategories, 10) || 3, 24, Math.max(total, 1));
 
-    const { template, source } = await resolvePromptTemplate({ scenarioType, engagementType, prompt });
-    promptSource = source === 'fallback'
-      ? { kind: 'fallback', key: null }
-      : { kind: 'curated', key: source };
+    const { template, source, chosenMissing } = await resolvePromptTemplate({
+      scenarioType, engagementType, prompt, promptId,
+    });
     if (source === 'fallback') {
+      promptSource = { kind: 'fallback', key: null };
       warnings.push('No curated prompt matched this type; used the generic fallback prompt.');
+    } else if (promptId && !chosenMissing) {
+      promptSource = { kind: 'chosen', key: source };
+    } else {
+      promptSource = { kind: 'curated', key: source };
+    }
+    if (chosenMissing) {
+      warnings.push(
+        `The chosen generation prompt "${chosenMissing}" could not be used — it is missing or `
+        + 'has no base prompt. Generated with the default for this type instead.');
     }
 
     const perCall = itemsPerCall(engagementType);

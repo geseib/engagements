@@ -55,6 +55,16 @@ describe('the generation prompt is named on the result', () => {
     expect(line.textContent).not.toMatch(/AIPROMPT#/);
   });
 
+  test('a prompt somebody picked is named as their choice', () => {
+    mount(jobResponse({
+      status: 'complete', requested: 2, completed: 2, items: questions(2),
+      promptSource: { kind: 'chosen', key: 'AIPROMPT#gen-wavelength-brainstorming' },
+    }));
+    const line = screen.getByTestId('gjp-prompt-source');
+    expect(line.textContent).toMatch(/gen-wavelength-brainstorming/);
+    expect(line.textContent).toMatch(/you chose/i);
+  });
+
   test('a fallback run says so in words rather than naming nothing', () => {
     mount(jobResponse({
       status: 'complete', requested: 2, completed: 2, items: questions(2),
