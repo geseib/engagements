@@ -4,7 +4,7 @@
 - `warm-summit-design-spec.md` — the approved visual redesign spec (photo-hero direction) + current-design audit.
 - `admin-prompt-cleanup-plan.md` — the parked admin prompt/question-set cleanup plan (with DynamoDB-hygiene bugs).
 
-Also see repo `DEPLOYMENT.md` (canonical deploy guide) and `docs/AUTH.md`.
+Also see repo `DEPLOYMENT.md` (canonical deploy guide) and `docs/architecture/auth.md`.
 
 ---
 

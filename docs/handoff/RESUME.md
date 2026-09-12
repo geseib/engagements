@@ -318,7 +318,7 @@ The five failing frontend suites are `AdminPage`, `App`, `GameHostPage`, `Player
 
 **The AI prompt split is a two-store contract and nothing reconciles it.** A pointer in DynamoDB, a body in S3. A pointer with a missing body is not a loud failure — the summary lambda falls to `buildFallback()` and the round makes no Bedrock call, silently. Use `scripts/install-ai-prompt.js`, which verifies both halves.
 
-**`ttl` is for SESSION data only** — see `docs/02-data-model.md`. TTL is table-wide, so the attribute is the only thing between a record and deletion. Prompt writers used to stamp `now+365d`, and DynamoDB was silently deleting prompts and personas a year later. Verified clear on both tables 2026-08-10.
+**`ttl` is for SESSION data only** — see `docs/architecture/data-model.md`. TTL is table-wide, so the attribute is the only thing between a record and deletion. Prompt writers used to stamp `now+365d`, and DynamoDB was silently deleting prompts and personas a year later. Verified clear on both tables 2026-08-10.
 
 **`.gitignore`'s `*token*` / `*secret*` / `*credentials*` are unanchored** and were eating source files — a test named `adminShellTokens.test.js` ran, passed locally and was invisible to git. Source extensions are now exempted; data files are still caught. Check `git check-ignore -v <path>` if a file mysteriously will not stage.
 

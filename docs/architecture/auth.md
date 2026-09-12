@@ -17,10 +17,10 @@ How auth works in Engage2 after the UserPoolV2 migration (completed 2026-07).
  Player ─────────────────► │  HTTP API (RestApi)                      │
  (no account, no token)    │                                          │
                            │  /games/*  (player + host game flow)     │
-                           │     └─ PUBLIC — no authorizer            │
+                           │     └─ SPLIT: host actions authenticated │
                            │  /admin/create-github-issue (feedback)   │
                            │     └─ PUBLIC — player IssueFab uses it  │
-                           │  /admin/*  (everything else, 29 routes)  │
+                           │  /admin/*  (everything else)             │
                            │     └─ CognitoAuthorizer (Lambda)        │
                            │        validates JWT ┼ checks groups     │
                            └──────────────────────────────────────────┘
@@ -60,13 +60,15 @@ How auth works in Engage2 after the UserPoolV2 migration (completed 2026-07).
 - **Route opt-in** — the authorizer is attached per-route in
   `template-clean.yaml` (`Auth: Authorizer: CognitoAuthorizer` on each admin
   event). There is deliberately **no DefaultAuthorizer**: player and host
-  game-flow routes (`/games/*`, `/question-sets*`) are public.
+  game-flow routes were once wholly public. They are not: 86 of 105 routes
+  now carry the authorizer. See "/games is split" below.
 - **Frontend** — `ProtectedRoute` gates pages (UX only, not security);
   `authFetch` supplies tokens for the protected APIs.
 
 ### Currently public by design (follow-ups)
 
-- **All `/games/*` routes** — players are anonymous by design; the host UI
+- **The PLAYER routes under `/games/*`** — players are anonymous by design.
+  Host actions on the same prefix ARE authenticated; the host UI
   also calls these without tokens today. Protecting host game-management
   routes (create/start/next-question…) means routing those fetches through
   `authFetch` first — planned as the next auth increment.
@@ -111,3 +113,31 @@ when the old pool is deleted.
 
 ---
 *Supersedes `docs/AUTHENTICATION_RECOVERY.md` (2025-08-14).*
+
+## /games is split, not public
+
+This file used to say every `/games/*` route was public. That stopped being true
+with the org-scoping work of 2026-08-26 to 08-28. Of 105 routes in the API,
+**86 carry `CognitoAuthorizer` and 19 are public** — and the split runs straight
+through `/games`:
+
+- **Host actions are authenticated**: creating and listing sessions, `start`,
+  `next-question`, `start-question`, `start-vote`, `close-round`, `stage-beat`,
+  `stage-focus`, `reveal-authors`, `report`, `queue`, `exclusions`, `up-next`,
+  `persona`, `handover`, `remove`, and `PUT /games/{gameId}`.
+- **The participant journey stays public** by design: joining, answering,
+  voting and reading a resolved result carry no token, because a player has no
+  account. Those routes are gated in the handler instead.
+
+Being authenticated is not the same as being authorized. The authorizer only
+proves the caller is *a* host; `callerMayDriveSession` in
+`lambda-functions/game/tenant.js` is what proves they are *this session's* host,
+and it answers 404 rather than 403 so a guessed four-digit code cannot be used
+to discover that a session exists.
+
+`docs/architecture/api.md` is generated from the template and lists every route
+with its authorizer. Trust that over any prose, including this file.
+
+`X-Engage-Org` is a CORS-allowed request header, not an authorizer identity —
+the caller's organisation comes from the authorizer context, never from a header
+the caller controls.

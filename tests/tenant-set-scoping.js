@@ -661,7 +661,7 @@ function seedPlatformSet() {
   });
 
   // rejects: a `ttl` creeping onto set metadata. `ttl` is for SESSION data only
-  // (docs/02-data-model.md). AI prompts once carried a 365-day ttl and silently
+  // (docs/architecture/data-model.md). AI prompts once carried a 365-day ttl and silently
   // vanished a year later; a question set doing the same would take a
   // customer's whole library with it.
   await check('nothing written here carries a ttl', () => {

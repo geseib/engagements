@@ -1,232 +1,148 @@
-# Engage2 — Deployment Guide (Canonical)
+# Engage2 — Deployment Guide
 
-> This is the single source of truth for deploying Engage2. Older deployment notes
-> (`DEPLOYMENT_COMMANDS.md`, `docs/DEPLOYMENT_TO_TEST_PROD.md`, `docs/05-cicd-setup.md`,
-> `SECURE_DEPLOYMENT_*.md`, `CLEANUP-GUIDE.md`) are superseded and kept only for history.
+**The trigger rule and who may deploy which tier live at the top of `CLAUDE.md`.**
+That file is the verified version, confirmed by the owner. This one carries the
+mechanics: what the pipelines do, where the secrets are, and how to get out of
+trouble. Nothing here restates the trigger rule — one copy, in one place, is the
+whole point. An earlier version of this file asserted the opposite of `CLAUDE.md`
+in three places.
 
-## TL;DR
+## The tiers
 
-| Task | Command |
-|---|---|
-| Full dev deploy of the **local** `engdev` stack | `./deployall` |
-| Backend only (local stacks) | `./scripts/deploy-clean.sh <stack> <domain> [hosted-zone-id]` |
-| Frontend only (local `engdev`) | `./scripts/deploy-frontend-eng.sh` |
-| Deploy a CI/CD tier | **push the branch, or push a `<tier>-v*` tag** (prod needs manual approval) |
-
-All local deploys use the `adminaccess` AWS SSO profile. If `aws` says the token expired:
-`aws sso login --profile adminaccess`.
-
-## Two different sets of environments — do not conflate them
-
-This repo deploys the same `template-clean.yaml` to **two independent families of stacks**.
-Reading a stack name off the wrong table is the single most common mistake here.
-
-### 1. `engage*` — the CI/CD tiers (canonical)
-
-Deployed only by CodePipeline. Ground truth is the CodeBuild environment variables in
-`cicd/pipeline-clean.yaml`.
-
-| Env | Stack | Domain | Hosted Zone | Pipeline | CodeBuild project | Buildspec |
-|---|---|---|---|---|---|---|
-| **dev** | `engagedev` | `engage.dev.seibtribe.us` | `ZB9TUA073B5SH` | `engagecicd-pipeline-dev` | `engagecicd-build-dev` | `buildspec-dev.yml` |
-| **test** | `engagetest` | `engage.test.seibtribe.us` | `ZB9TUA073B5SH` | `engagecicd-pipeline-test` | `engagecicd-build-test` | `buildspec-test.yml` |
-| **prod** | `engageprod` | `engage.seibtribe.us` | `ZB9TUA073B5SH` | `engagecicd-pipeline-prod` | `engagecicd-build-prod` | `buildspec-prod.yml` |
-
-`config/cicd.json`'s `engage.*` domains are **correct** for CI/CD — they are what the pipeline
-actually deploys. (An earlier revision of this document called them "stale"; that was wrong.)
-
-### 2. `eng*` — the local off-pipeline stacks
-
-Deployed only by the local scripts below. No pipeline touches them. Being retired.
-
-| Env | Stack | Domain | Hosted Zone | Deployed by |
+| Tier | Stack | Site | Hosted zone | Gate |
 |---|---|---|---|---|
-| dev | `engdev` | `eng.dev.seibtribe.us` | `ZB9TUA073B5SH` | `./deployall`, `deploy-clean.sh`, `deploy-frontend-eng.sh` |
-| test | `engtest` | `eng.test.seibtribe.us` | `ZB9TUA073B5SH` | `deploy-clean.sh` (manual only) |
-| prod | `engprod` | `eng.seibtribe.us` | `Z03473042HSYD8BUY4XSL` | `deploy-clean.sh` (manual only) |
+| dev | `engagedev` | https://engage.dev.seibtribe.us | `ZB9TUA073B5SH` | none |
+| test | `engagetest` | https://engage.test.seibtribe.us | `ZB9TUA073B5SH` | none |
+| prod | `engageprod` | https://engage.seibtribe.us | `Z03473042HSYD8BUY4XSL` | halts at `ApprovalForProd` |
 
-There is **one** infrastructure template — `template-clean.yaml` — parameterized by `StackName`,
-`Environment`, `DomainName`, `HostedZoneId`. There are no per-env `template-*.yaml` files.
+`main` has no pipeline and triggers nothing. The `eng*` / `engdev` stacks are a
+retired off-pipeline duplicate — **not** a tier; see the "dead twin" section of
+`CLAUDE.md` for the two days that confusion cost.
 
-## Local dev deployment (what `./deployall` does)
+## There is no deploy script
 
-1. **Backend** — `./scripts/deploy-clean.sh engdev eng.dev.seibtribe.us`
-   `sam build -t template-clean.yaml` → `sam deploy` (stack `engdev`). Pulls the GitHub token
-   from Secrets Manager and Google OAuth params from SSM (see Secrets below).
-2. **Frontend** — `./scripts/deploy-frontend-eng.sh`
-   Reads the stack's CloudFormation outputs (API / WebSocket / Cognito), regenerates
-   `src/public/config.js`, `npm run build`, `aws s3 sync` to the `${stack}-web` bucket,
-   then invalidates CloudFront.
+The pipeline is the deploy. `deployall`, `deploy-frontend-eng.sh`,
+`deploy-dev-full.sh` and `update-frontend-env.sh` were deleted in `0968435f`:
+every one of them targeted the retired twin.
 
-> `deploy-frontend-eng.sh` is hardcoded to the `engdev` stack. It cannot ship any CI/CD tier —
-> `engagedev` / `engagetest` / `engageprod` frontends are built and shipped by their pipelines.
+`scripts/deploy-clean.sh engagedev` survives as an escape hatch for the case
+where the pipeline itself is broken. It deploys the **backend only** and refuses
+`engagetest`, `engageprod` and every twin stack by name. Read its guard block
+before using it — in particular, it refuses to deploy when the Google OAuth
+parameters are missing, because doing so deletes the Cognito identity provider.
 
-## CI/CD — what triggers a deploy
+## What a pipeline run does
 
-Each tier has its own CodePipeline, and **exactly one thing starts it: a tag.** A branch push
-does not deploy. `main` is not a trigger for anything.
+Each tier has its own buildspec (`buildspec-dev.yml`, `-test`, `-prod`), bound to
+a CodeBuild project by `cicd/pipeline-clean.yaml`. They are self-contained and
+call no scripts:
 
-```
-push tag dev-v*    → engagecicd-pipeline-dev   → engagedev   (auto)
-push tag test-v*   → engagecicd-pipeline-test  → engagetest  (auto)
-push tag prod-v*   → engagecicd-pipeline-prod  → engageprod  (MANUAL APPROVAL)
-```
+1. `pip3 install aws-sam-cli`, then `cd src && npm ci`
+2. Resolve the GitHub PAT from Secrets Manager and the Google OAuth pair from SSM
+3. `sam build -t template-clean.yaml`
+4. `sam deploy --stack-name $STACK_NAME` with the resolved parameters
+5. Read the API, WebSocket and Cognito values back out of the stack with
+   `describe-stacks` and write `src/public/config.js` from them
+6. **`npm run lint`, then `npm test`** — the gate that did not exist; three
+   product-down bugs shipped through this pipeline in two days before it was
+   added, every one a clean webpack build
+7. `npm run build`, `aws s3 sync dist/`, CloudFront invalidation
 
-**This changed on 2026-08-10.** Each `Triggers` block also carried a `- Branches:` entry, so
-`git push origin dev` deployed on its own. Three things were wrong with that:
+`config.js` is generated at deploy time from stack outputs. The committed copy is
+only a local placeholder.
 
-- Pushing and deploying were the same act, so there was no way to share work, back it up or open
-  it for review without shipping it. Branches got held back for days to avoid deploying, which
-  then blocked every unrelated fix sitting on them.
-- Pushing a branch *and* its tag fired **two executions of the same commit**, racing into the
-  same stack.
-- A deploy now has a name. `dev-v1.3.0` is something you can point at in the execution history;
-  "whatever was on `dev` at 14:02" is not.
+## Tags
 
-So pushing a branch is now just pushing. **Nothing reaches an environment without a tag.**
-
-> `BranchName` in each pipeline's Source action is **not** a trigger. It is the revision a
-> manually-started execution ("Release change" in the console) pulls; a tag-started execution
-> carries its own commit.
-
-Source access is via the `engage-github-connection` CodeStar connection and its managed webhook.
-There are no GitHub Actions workflows and no `AWS::CodePipeline::Webhook` resources in this repo.
-
-### What is automatic and what is not — read this
-
-The older wording here ("deployments are performed by the maintainer, never automatically") was
-misleading. Precisely:
-
-- **Automatic, no human gate:** dev and test. The instant a `dev-v*` / `test-v*` tag is pushed,
-  CodeBuild runs `sam deploy` against `engagedev` / `engagetest`. Nobody approves anything.
-- **Automatic start, human gate before deploy:** prod. A `prod-v*` tag starts
-  `engagecicd-pipeline-prod`, which halts at the `ApprovalForProd` stage. Nothing reaches
-  `engageprod` until a human clicks Approve in the CodePipeline console.
-
-The maintainer-only policy is about **which tags get pushed**, not about the pipeline. Pushing a
-`*-v*` tag *is* the deploy. Treat it as a production action. Pushing a branch is not.
-
-### Tag-based releases
-
-A tag both deploys and records what shipped — an immutable `<tier>-v<semver>` pointer, unlike a
-branch head that moves.
+A tag deploys and simultaneously records what shipped — an immutable
+`<tier>-v<semver>` pointer, unlike a branch head that moves.
 
 ```bash
-# ship the current commit to a tier
 git tag dev-v1.3.0  && git push origin dev-v1.3.0
 git tag test-v1.3.0 && git push origin test-v1.3.0
 git tag prod-v1.3.0 && git push origin prod-v1.3.0   # then approve in the console
 ```
 
-Only **new** tag pushes trigger. Tags already on the remote (e.g. `pre-merge-backup-dev`) do
-nothing, and neither does creating a tag locally without pushing it.
+Only **new** tag pushes trigger. A tag already on the remote does nothing, and
+neither does creating one locally without pushing.
 
 ```bash
-# what is live in each tier, newest first
-git tag --sort=-creatordate | grep '^prod-'
-git tag --sort=-creatordate | grep '^test-'
-git tag --sort=-creatordate | grep '^dev-'
-
-# exactly what a shipped tag contains
-git show prod-v1.3.0 --stat
+git tag --sort=-creatordate | grep '^prod-'   # what is live, newest first
+git show prod-v1.3.0 --stat                   # exactly what shipped
 git log --oneline prod-v1.2.0..prod-v1.3.0
 ```
 
-⚠️ A tag deploys **the commit the tag points at**, not the tier's branch head. A `prod-v*` tag
-placed on a `dev` commit will (after approval) put that dev commit into production. Tag from the
-branch you mean to ship.
+⚠️ A tag deploys **the commit it points at**, not the tier's branch head. A
+`prod-v*` tag placed on a `dev` commit will, after approval, put that dev commit
+into production. Tag from the branch you mean to ship.
 
-### Buildspecs
+⚠️ In the remote container, pushes to `refs/tags/*` fail with HTTP 403 while
+`refs/heads/*` succeed — so from there a branch push is the only route.
 
-Each CodeBuild project pins its own buildspec; there is no shared/generic one.
+## Secrets and configuration (never in source)
 
-| Pipeline | CodeBuild project | Buildspec |
+| Secret | Where | How to set |
 |---|---|---|
-| dev  | `engagecicd-build-dev`  | `buildspec-dev.yml` |
-| test | `engagecicd-build-test` | `buildspec-test.yml` |
-| prod | `engagecicd-build-prod` | `buildspec-prod.yml` |
+| GitHub PAT (issue creation) | Secrets Manager `engage/<env>/github-token`, JSON `{"GITHUB_TOKEN":"…"}` | `AWS_PROFILE=adminaccess ./scripts/setup-secure-github-token.sh <env>` |
+| Google OAuth client id/secret | SSM Parameter Store (dev/test); **prod reads none** | see below |
 
-The unused generic `buildspec.yml` was removed (it referenced a `template-dev.yaml` that does not
-exist). The debug/duplicate variants (`buildspec-secure/simple/test-debug/test-working.yml`) were
-removed earlier.
+> ⚠️ `CodeBuildServiceRole`'s inline Secrets Manager statement in
+> `cicd/pipeline-clean.yaml` grants only `engage/test/*` and `engage/prod/*` —
+> **`engage/dev/*` is missing**. Dev reads it today only because
+> `PowerUserAccess` is also attached. If that managed policy is ever removed,
+> dev's token retrieval breaks *silently*: `buildspec-dev.yml` swallows the
+> failure (`|| echo ""`) and logs a warning instead of failing, so dev keeps
+> deploying with issue creation quietly dead. Test and prod `exit 1` instead.
 
-### Redeploying the pipeline stack itself
+**Google OAuth is wired differently per tier, and an empty secret is destructive.**
+`template-clean.yaml` gates it on `HasGoogleOAuth: !Not [!Equals [!Ref GoogleClientSecret, ""]]`,
+and `GoogleIdentityProvider` carries `Condition: HasGoogleOAuth` — so deploying
+with an empty secret **deletes the Cognito Google provider**.
+
+| Pipeline | Reads from | Passes to `sam deploy` |
+|---|---|---|
+| dev | `/$STACK_NAME/google/client-*`, falling back to `/engdev/google/client-*` | conditionally — omitted when empty, so CloudFormation keeps the stored value |
+| test | `/engtest/google/client-*` | **unconditionally, including empty strings** — an SSM miss actively sets `GoogleClientSecret=""` and deletes the provider on `engagetest` |
+| prod | nothing | neither parameter is passed — `engageprod`'s Google config exists only as the stack's stored parameter values, with no SSM copy to restore from |
+
+Issues are filed to `geseib/engagements` (the Lambda default, and `config/cicd.json`).
+
+## Redeploying the pipeline stack itself
 
 ```bash
 aws sso login --profile adminaccess
 ./scripts/deploy-cicd.sh          # updates CloudFormation stack `engagecicd`
 ```
 
-No GitHub token is prompted for — repo access is the CodeStar connection, authorized once by hand
-in the console. (An earlier version of this script passed a `GitHubToken=` parameter the template
-does not declare, which made every redeploy fail.)
+No GitHub token is prompted for — repo access is the CodeStar connection,
+authorized once by hand in the console.
 
-## Secrets & configuration (never in source)
-
-| Secret | Where | How to set |
-|---|---|---|
-| GitHub PAT (issue creation) | Secrets Manager `engage/<env>/github-token` (JSON `{"GITHUB_TOKEN":"…"}`) | `AWS_PROFILE=adminaccess ./scripts/setup-secure-github-token.sh <env>` (hidden prompt) |
-
-> ⚠️ `CodeBuildServiceRole`'s inline Secrets Manager statement in `cicd/pipeline-clean.yaml` grants
-> only `engage/test/*` and `engage/prod/*` — **`engage/dev/*` is missing**. Dev reads it today only
-> because `PowerUserAccess` is also attached to that role. If that managed policy is ever removed
-> in a security tightening, dev's token retrieval breaks *silently*: `buildspec-dev.yml` swallows
-> the failure (`|| echo ""`) and logs a WARNING instead of failing the build, so dev keeps
-> deploying with GitHub issue creation quietly dead. Test and prod `exit 1` instead.
-| Google OAuth client id/secret | SSM Parameter Store (dev/test) — **prod reads none** | see the table below |
-
-Google OAuth is wired differently per tier. `template-clean.yaml` gates it on
-`HasGoogleOAuth: !Not [!Equals [!Ref GoogleClientSecret, ""]]`, and `GoogleIdentityProvider` has
-`Condition: HasGoogleOAuth` — so an **empty** secret deletes the Cognito Google provider.
-
-| Pipeline | Reads from | Passes to `sam deploy` |
-|---|---|---|
-| dev | `/$STACK_NAME/google/client-*`, falling back to `/engdev/google/client-*` | conditionally — omitted when empty (safe: CloudFormation keeps the stack's previous value) |
-| test | `/engtest/google/client-*` | **unconditionally, including empty strings** — an SSM miss actively sets `GoogleClientSecret=""` and deletes the provider on `engagetest` |
-| prod | nothing | neither parameter is passed at all — `engageprod`'s Google config lives only in the CloudFormation stack's stored parameter values, with no SSM copy to restore from |
-
-Issues are filed to the `geseib/engagements` repo (Lambda default + `samconfig-*` + `config/cicd.json`).
-
-## Canonical scripts (everything else is deprecated/removed)
-
-```
-deployall                          # full dev deploy (backend + frontend)
-scripts/deploy-clean.sh            # backend (any env): <stack> <domain> [hosted-zone-id]
-scripts/deploy-frontend-eng.sh     # frontend (dev)
-scripts/deploy-dev-full.sh         # orchestrator: deploy-clean + update-frontend-env (dev)
-scripts/update-frontend-env.sh     # write src/.env from stack outputs
-scripts/setup-secure-github-token.sh  # store GitHub PAT in Secrets Manager
-scripts/setup-post-confirmation.sh    # wire Cognito post-confirmation trigger (post-deploy)
-scripts/deploy-archive.sh          # separate shared archive service (template-archive.yaml)
-scripts/deploy-cicd.sh             # provision/update the CI/CD pipeline stack (engagecicd)
-```
-
-Removed as stale (referenced dead templates / stacks / the retired `adfs` profile):
-`deploy-dev.sh`, `deploy-test.sh`, `deploy-prod.sh`, `deploy-frontend-dev.sh`, the duplicate
-root-level `deploy-clean.sh`, `scripts/setup-cicd.sh`, `scripts/setup-cicd-manual.sh` (both
-required a `template-cicd.yaml` that does not exist), `buildspec.yml`, and
-`cicd/pipeline-secure.yaml` (wrong owner/repo/domains, no dev pipeline, referenced a deleted
-`buildspec-secure.yml`, and collided with `pipeline-clean.yaml` on the CodeStar
-`ConnectionName: engage-github-connection`). Git history retains all of them.
-
-Still referencing those deleted files, and therefore not to be followed:
-`SECURE_DEPLOYMENT_GUIDE.md`, `SECURE_DEPLOYMENT_QUICKSTART.md`, `SAFE_TEST_DEPLOYMENT_PLAN.md`,
-`docs/05-cicd-setup.md`, `scripts/test-secure-deployment.sh`. This file supersedes all of them.
+> ⚠️ **This is the one script whose mere execution changes trigger behaviour.**
+> `cicd/pipeline-clean.yaml` as committed carries `b6929cac`'s tags-only
+> `Triggers` blocks, which have deliberately never been applied. Applying them
+> makes branch pushes inert — and since tag pushes 403 from the remote
+> container, that removes Claude's only deploy route. Do not run this to "sync
+> the pipeline" without deciding that question first.
 
 ## Troubleshooting
 
 - **`aws` token expired** → `aws sso login --profile adminaccess`.
-- **Build fails in CI** → CodeBuild logs for the branch's pipeline.
-- **Frontend loads stale config** → confirm CloudFront invalidation ran; `config.js` is
-  regenerated at deploy from stack outputs (the committed copy is only a dev placeholder).
-- **Pipeline did not start after a push** → the trigger filters live in each pipeline's `Triggers`
-  block in `cicd/pipeline-clean.yaml`. Check the branch name is exactly `dev`/`test`/`prod` and the
-  tag matches `<tier>-v*`. Also check the `engage-github-connection` is `AVAILABLE`
-  (Developer Tools → Settings → Connections); a `PENDING` connection fails at Source.
-- **Rollback prod** → re-tag the last known-good commit and push it
-  (`git tag prod-v1.2.1 <good-sha> && git push origin prod-v1.2.1`), then approve. Or revert the
-  commit and re-push `prod`. Or roll back the `engageprod` CloudFormation stack in the console.
+- **Build fails in CI** → CodeBuild logs for that tier's pipeline.
+- **Pipeline did not start after a push** → check the `engage-github-connection`
+  is `AVAILABLE` (Developer Tools → Settings → Connections); a `PENDING`
+  connection fails at Source. Then check the tier branch name or `<tier>-v*` tag.
+- **Frontend loads stale config** → confirm the CloudFront invalidation ran.
+- **Google sign-in vanished after a deploy** → the SSM parameters were missing
+  and the provider was deleted. Restore the parameters and redeploy. This is the
+  failure the guards in `deploy-clean.sh` and the warnings in the buildspecs exist
+  for.
+- **Rollback prod** → re-tag the last known-good commit
+  (`git tag prod-v1.2.1 <good-sha> && git push origin prod-v1.2.1`), then approve;
+  or roll back the `engageprod` stack in the console.
 
 ## Known follow-ups
-- Lambda runtime is `nodejs18.x` (EOL) across all functions — bump to `nodejs22.x` at the
-  `Runtime:` line in `template-clean.yaml` Globals, then redeploy + smoke-test.
+
+- `template-archive.yaml:21` still pins `nodejs18.x` (EOL). `template-clean.yaml`
+  and `template-monitoring.yaml` are on `nodejs22.x`. The archive stack is
+  hand-deployed via `scripts/deploy-archive.sh`.
+- `cicd/pipeline-clean.yaml`'s uncommitted-vs-applied drift (above) is still open
+  and is the root cause of every stale "tags only" claim this repo has carried.

@@ -302,7 +302,18 @@ Resources:
       PipelineType: V2
       Triggers:
         # ─────────────────────────────────────────────────────────────────
-        # TAGS ONLY. A BRANCH PUSH IS NOT A DEPLOY.
+        # INTENDED: TAGS ONLY. NOT APPLIED — SO NOT TRUE YET.
+        #
+        # This block is the change from b6929cac, which was committed and
+        # never applied to the running pipelines. They still carry their
+        # `- Branches:` entry, so TODAY A BRANCH PUSH DEPLOYS. Everything
+        # below describes the intent, not the live behaviour, and reading
+        # it as fact is how ten documents came to assert the opposite of
+        # CLAUDE.md. Applying it also removes Claude's only deploy route,
+        # because tag pushes 403 from the remote container.
+        # Verify with:
+        #   aws codepipeline get-pipeline --name engagecicd-pipeline-dev \
+        #     --query 'pipeline.triggers'
         #
         # This block used to carry a `- Branches: [dev]` entry beside the tag
         # one, which meant `git push origin dev` deployed on its own. That is
@@ -382,7 +393,8 @@ Resources:
           GitConfiguration:
             SourceActionName: SourceAction
             Push:
-              # TAGS ONLY — see the DevPipeline block for the full reasoning.
+              # INTENDED tags-only — see the DevPipeline block. NOT APPLIED:
+              # a branch push deploys today.
               # `git push origin test` does not deploy; `test-v*` does.
               - Tags:
                   Includes:
@@ -434,7 +446,8 @@ Resources:
           GitConfiguration:
             SourceActionName: SourceAction
             Push:
-              # TAGS ONLY — see the DevPipeline block for the full reasoning.
+              # INTENDED tags-only — see the DevPipeline block. NOT APPLIED:
+              # a branch push deploys today.
               # `git push origin prod` does not deploy; `prod-v*` does.
               #
               # A prod-v* tag starts the pipeline but still lands on the
