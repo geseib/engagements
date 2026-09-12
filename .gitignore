@@ -208,3 +208,15 @@ docs/.doctrees/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+# ── Generated per-tier config, and one rule that hid a script ──────────────
+# deploy-clean.sh writes config/<env>.json on every run, so the tracked copy
+# only ever recorded whichever stack was last deployed by hand — it carried
+# retired-twin values for a year.
+config/dev.json
+config/test.json
+config/prod.json
+
+# The unanchored *token*/*secret* rules above match a FILENAME, which left the
+# live secrets mechanism untracked: a fresh clone had no way to store the deploy
+# token. It contains no secret, only the aws CLI calls that store one.
+!scripts/setup-secure-github-token.sh

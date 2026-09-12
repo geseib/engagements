@@ -11,7 +11,7 @@
 ```bash
 # 1. Create token at https://github.com/settings/tokens
 # 2. Set environment variables and deploy
-export GITHUB_TOKEN="ghp_your_to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ken_here"
+export GITHUB_TOKEN="ghp_your_token_here"
 export GITHUB_REPO="username/repo-name"
 ./deployall
 ```
