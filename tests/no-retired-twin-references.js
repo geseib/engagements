@@ -53,8 +53,17 @@ const check = (label, fn) => {
   }
 };
 
+/* THIS FILE IS EXCLUDED FROM ITS OWN SCAN, and has to be: the TWIN and
+   FALSE_RULE lists below ARE the forbidden strings. It passed when first
+   written only because it was untracked, so `git ls-files` did not return it;
+   the commit that tracked it made it fail on its own arrays. The scan is over
+   git's view of the tree, so a new check file is invisible to itself until
+   committed — run it after `git add`, not just after writing it. */
+const SELF = path.relative(REPO, __filename);
+
 const tracked = execFileSync('git', ['ls-files'], { cwd: REPO, encoding: 'utf8' })
   .split('\n').filter(Boolean)
+  .filter((f) => f !== SELF)
   .filter((f) => !f.startsWith('docs/archive/'))
   .filter((f) => fs.existsSync(path.join(REPO, f)));
 
