@@ -70,8 +70,8 @@ const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.tri
  * sounded like the default because the set's own voice was never read.
  *
  * `create-report.js:223` already carries this exact fix and its post-mortem.
- * These two call sites were missed. tests/set-versioning-flow.js now fails on
- * any hard-coded `PK: 'SETS'` in a runtime reader, so a third cannot hide.
+ * These two call sites were missed, and so was admin/ai-draft-set-metadata.js;
+ * tests/no-global-partition-literals.js now sweeps every handler for another.
  *
  * The scope comes from the SESSION ROW, not from the caller: this route serves
  * anonymous participants, and a caller-derived scope resolves to platform for

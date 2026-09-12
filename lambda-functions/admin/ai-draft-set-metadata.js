@@ -58,11 +58,11 @@
  */
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 
 const { makeGenerationHandler, CORS } = require('./shared/generation-handler');
 const { requireAdmin } = require('./shared/require-admin');
-const { requireSetManager } = require('./shared/question-set-access');
+const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { normalizeGameType } = require('./shared/game-types');
 
 /**
@@ -301,11 +301,20 @@ const json = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), he
  *    defence-in-depth `require-admin.js` exists for: the first one lives in a
  *    different lambda and is routed by string prefix.
  *
- * 2. THE ROW. `requireSetManager` decides which SET a caller who got through
- *    may act on. Today it can never refuse an admin, so it is strictly weaker
- *    than the check above — it is here so that opening this route to hosts
- *    stays a one-line edit in authorizer.js rather than a security review, and
- *    so there is exactly ONE ownership derivation in this codebase.
+ * 2. THE ROW, FOUND IN ITS OWN LIBRARY. A set lives in one of three partitions
+ *    (shared/tenant.js), and the bare `'SETS'` is only Engage's: reading that
+ *    alone answered 404 for every set an organisation ever made.
+ *    `findSetForCaller` probes the libraries this caller may read, their own
+ *    organisation's first, and `requireSetManager` judges the row it found — so
+ *    there is exactly ONE ownership derivation in this codebase.
+ *
+ *    WHICH SETS, deliberately: the ones `edit-question-set.js` would save this
+ *    draft into, because both routes make the same lookup and the same decision
+ *    for the same setId and scope. Engage's library only while acting as Engage;
+ *    an organisation's set only for the member who made it or an admin of that
+ *    organisation; a public copy never. Another organisation's set is never
+ *    probed, so it 404s exactly like a set that does not exist — while "not
+ *    yours" stays a 403 rather than the misleading "not found" this bug gave.
  *
  * The event shape is the part that is easy to get wrong: `CognitoAuthorizer` is
  * a CUSTOM Lambda authorizer despite the name, so the context arrives at
@@ -332,13 +341,12 @@ exports.handler = async (event, context) => {
     const setId = text(payload.setId);
     if (!setId) return json(400, { error: 'setId is required' });
 
-    const existing = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'SETS', SK: `SET#${setId}` },
-    }));
-    if (!existing.Item) return json(404, { error: `Question set "${setId}" was not found.` });
+    const found = await findSetForCaller(
+      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+    );
+    if (!found) return json(404, { error: `Question set "${setId}" was not found.` });
 
-    const denied = requireSetManager(event, existing.Item, 'draft metadata for');
+    const denied = requireSetManager(event, found.item, 'draft metadata for');
     if (denied) return denied;
   }
 
