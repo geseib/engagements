@@ -21,9 +21,9 @@ const { consensusLabel } = require('./consensus');
 // or the preflight reads the sliced text's interpolations as unknown
 // brace-tokens and goes red.
 const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
-const { ORG } = require('./tenant');
+const { ORG, promptsMetadataPk } = require('./tenant');
 const { setMetadataKey } = require('./set-version');
-const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
+const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tenant-crypto');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -270,23 +270,56 @@ const parseAIResponse = (aiResponse, options = {}) => {
 // Exported for tests/ai-response-parsing.js
 exports.parseAIResponse = parseAIResponse;
 
+/**
+ * EVERY LIBRARY THIS SESSION MAY READ, MOST SPECIFIC FIRST.
+ *
+ * An organisation's own Workie lives at `ORG#<id>#AIPROMPTS` — that is what
+ * create-ai-prompt.js writes — and this engine read `PK: 'AIPROMPTS'` by
+ * literal, in both the primary lookup and the DynamoDB fallback. So a team
+ * could author a Workie, attach it to their own set, and never hear it: the row
+ * was invisible, the load returned null, and resolvePromptTemplate reported
+ * 'missing' and used Engage's house default. Accepted, stored, ignored.
+ *
+ * Org before platform, so a team's own Workie wins a name it shares with
+ * Engage's. That ordering, and that wording, is admin/shared/prompt-access.js's
+ * `readablePromptRefs` — which has been right since the public-library work and
+ * which this file cannot import, being a different CodeUri bundle. The ORDER is
+ * reproduced; the module is not.
+ *
+ * A session with no organisation reads only the platform library. Falling back
+ * the other way — platform then "some org" — would be a cross-tenant read.
+ */
+const promptLibrariesFor = (orgId) => (
+  orgId ? [promptsMetadataPk(ORG, orgId), 'AIPROMPTS'] : ['AIPROMPTS']
+);
+
 // Fetch AI prompt from S3
-const fetchPromptFromS3 = async (promptId) => {
+const fetchPromptFromS3 = async (promptId, orgId = '') => {
   try {
     console.log(`📄 Fetching prompt ${promptId} from S3...`);
-    
+
     // First get the prompt record from DynamoDB to get the correct S3 key
-    const dbResult = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` }
-    }));
-    
-    if (!dbResult.Item) {
+    let dbResult = null;
+    let foundIn = null;
+    for (const pk of promptLibrariesFor(orgId)) {
+      const hit = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: pk, SK: `AIPROMPT#${promptId}` }
+      }));
+      if (hit.Item) { dbResult = hit; foundIn = pk; break; }
+    }
+
+    if (!dbResult) {
       console.error(`❌ Prompt ${promptId} not found in DynamoDB`);
       return null;
     }
-    
-    const promptRecord = dbResult.Item;
+
+    // An org row is sealed (create-ai-prompt.js: `encryptItem(orgId, 'prompt')`).
+    // The platform library is shared by every organisation and is never sealed.
+    const isOrgRow = foundIn !== 'AIPROMPTS';
+    const promptRecord = isOrgRow
+      ? await decryptItem(orgId, 'prompt', dbResult.Item)
+      : dbResult.Item;
     const s3Key = promptRecord.s3Key;
     
     if (!s3Key) {
@@ -301,23 +334,30 @@ const fetchPromptFromS3 = async (promptId) => {
       Key: s3Key
     }));
     
-    const promptData = JSON.parse(await response.Body.transformToString());
+    const raw = JSON.parse(await response.Body.transformToString());
+    // An org's TEXT is sealed too — scoping the partition does not reach S3, so
+    // create-ai-prompt.js wraps the whole body with `encryptValue`.
+    // `decryptValue` returns a non-envelope unchanged, so this is safe on any
+    // pre-migration body.
+    const promptData = isOrgRow ? await decryptValue(orgId, raw) : raw;
     console.log(`✅ Successfully fetched prompt: ${promptData.name || 'Unknown'}`);
-    
+
     return promptData;
   } catch (error) {
     console.error(`❌ Error fetching prompt ${promptId}:`, error);
     
-    // Try to get the DynamoDB record as final fallback
+    // Try to get the DynamoDB record as final fallback — same libraries, same
+    // order, same unwrapping. This path hardcoded 'AIPROMPTS' too, so an org's
+    // Workie was invisible on the way down as well as on the way in.
     try {
-      const dbResult = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` }
-      }));
-      
-      if (dbResult.Item) {
+      for (const pk of promptLibrariesFor(orgId)) {
+        const hit = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: pk, SK: `AIPROMPT#${promptId}` }
+        }));
+        if (!hit.Item) continue;
         console.log(`✅ Using DynamoDB record as fallback for prompt ${promptId}`);
-        return dbResult.Item;
+        return pk === 'AIPROMPTS' ? hit.Item : await decryptItem(orgId, 'prompt', hit.Item);
       }
     } catch (dbError) {
       console.error(`❌ DynamoDB fallback also failed:`, dbError);
@@ -474,12 +514,12 @@ exports.findDefaultPromptId = findDefaultPromptId;
  *                it. This is the "I added an Art prompt and nothing changed"
  *                report: the fallback fired silently and looked like a no-op.
  */
-const resolvePromptTemplate = async (promptId, gameType) => {
+const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
   let recoveryReason;
   let unusableDefect;
 
   if (promptId) {
-    const promptData = await fetchPromptFromS3(promptId);
+    const promptData = await fetchPromptFromS3(promptId, orgId);
     if (isUsableSummaryPrompt(promptData)) return { promptId, promptData };
 
     if (!promptData) {
@@ -496,9 +536,12 @@ const resolvePromptTemplate = async (promptId, gameType) => {
     }
   }
 
+  // The DEFAULT is deliberately not org-scoped: `isDefault` on a non-platform
+  // row is refused at creation (create-ai-prompt.js), so Engage's house choice
+  // is the only default there is.
   const defaultId = await findDefaultPromptId(gameType);
   if (defaultId && defaultId !== promptId) {
-    const promptData = await fetchPromptFromS3(defaultId);
+    const promptData = await fetchPromptFromS3(defaultId, orgId);
     if (isUsableSummaryPrompt(promptData)) {
       return promptId
         ? { promptId: defaultId, promptData, recoveredFrom: promptId, recoveryReason, unusableDefect }
@@ -859,7 +902,27 @@ exports.handler = async (event) => {
       }
     }));
     
-    const storedResults = storedResultsQuery.Item || null;
+    /*
+      UNWRAP IT, with the org already in hand from the votes and answers above.
+
+      This row was read raw, and on a tenant session `wordAnalysis` is a
+      {v,iv,ct,tag} envelope. The envelope has no `commonWords`, so the "use the
+      stored results" branch below was false and the handler fell through to
+      RE-RUNNING analyzeWavelength() over the raw answers — without the model's
+      merges, which only exist in the stored round. That branch can only ever
+      produce the exact-match result, so on every tenant session the narration
+      described the pre-clustering round no matter what the room was shown.
+
+      Reported from a live session: the wall said five words the whole room
+      shared and the narration said "the room converged hard on just two words
+      … and scattered everywhere else", listing as separate the very words the
+      round had merged. The comment on that branch says the stored round "must
+      not be second-guessed here"; the fallback was doing exactly that, in
+      silence.
+    */
+    const storedResults = storedResultsQuery.Item && summaryOrgId
+      ? await decryptItem(summaryOrgId, 'results', storedResultsQuery.Item)
+      : (storedResultsQuery.Item || null);
     console.log(`📊 Found ${answers.length} answers, ${votes.length} votes, stored results: ${storedResults ? 'YES' : 'NO'} for question ${paddedQuestionNumber}`);
     
     if (answers.length === 0) {
@@ -1109,6 +1172,10 @@ exports.handler = async (event) => {
       // the report context and cannot derive it — it is handed `gameId` and a
       // set id, neither of which says which library.
       setKey: sessionSetKey(metadata, questionSetId),
+      // WHICH PROMPT LIBRARY. Resolved here for the same reason as setKey: the
+      // session row is in scope. Without it the summary engine reads only
+      // Engage's library and an organisation's own Workie is invisible.
+      orgId: summaryOrgId,
       eventTitle: metadata.EventTitle || metadata.Title || 'Engagement Event',
       gameType: metadata.GameType || 'call-and-answer',
       /*
@@ -1339,7 +1406,7 @@ exports.buildFallbackSummary = buildFallbackSummary;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults }) {
+async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1422,7 +1489,7 @@ async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, 
 
   // Fetch the prompt template, recovering to the game-type default if the set
   // points at a prompt that has since been deleted.
-  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer');
+  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer', orgId);
 
   if (!resolved) {
     console.warn('⚠️ Prompt template unavailable — returning data-driven fallback summary');
@@ -1456,6 +1523,10 @@ async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, 
     questionSetAiContext,
     gameAiContext,
     templateInstructions: promptData.instructions,
+    // The house voice for this game type, below everything a person chose or
+    // wrote and above inference. Without this the rung never fires and the
+    // wavelength default is unreachable in production.
+    gameType,
     loadPersona: async (personaId) => {
       const res = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
@@ -2077,7 +2148,25 @@ async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, 
       });
 
     } else {
-      console.log('⚠️ No stored results found, calculating wavelength data from scratch');
+      /*
+        A ROUND WITH A STORED ROW SHOULD NEVER REACH HERE, so say so loudly.
+
+        This branch is legitimate for a round whose results were never stored.
+        Reaching it while `storedResults` EXISTS means the row could not be read
+        — and this recompute cannot see the model's merges, so it will quietly
+        describe a different round than the one the room was shown. That is the
+        failure that shipped: the stored row was an unread envelope, this branch
+        took over, and the narration contradicted the wall with nothing logged.
+      */
+      if (storedResults) {
+        console.error(
+          '❌ WAVELENGTH SUMMARY: a stored round exists but carries no commonWords — '
+          + 'recomputing WITHOUT the model\'s merges. The narration will describe a '
+          + 'different round than the room was shown. Keys on the stored row: '
+          + `${Object.keys(storedResults).join(', ')}`);
+      } else {
+        console.log('⚠️ No stored results found, calculating wavelength data from scratch');
+      }
 
       // Fallback: exact-match unanimity via the SAME engine the results
       // handler uses (lambda-functions/game/wavelength.js), so the two paths

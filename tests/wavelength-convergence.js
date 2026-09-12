@@ -260,9 +260,13 @@ check('merge pairs merge, never-merge pairs never do', () => {
   const modelReply = 'Here you go:\n```json\n[["database", "databases", "DBMS"]]\n```';
   const a = analyzeWavelength(submissions, { merges: parseMergeReply(modelReply) });
 
-  // The merged cluster's label follows the spec's tie-break: all three surface
-  // forms appear once, so the SHORTEST one — DBMS — is the canonical form.
-  assert.deepStrictEqual(landed(a), ['DBMS']);
+  /* The label is the form the model nominated by putting it FIRST — `database`.
+     This assertion used to read ['DBMS'], because with all three surfaces at
+     count 1 the old rule fell through to "shortest wins". That rule is still
+     the fallback, but a nomination outranks it now (see 8b): an abbreviation
+     winning on length is the same defect as a misspelling winning on
+     alphabetical order, and `database` is what a room can read from the back. */
+  assert.deepStrictEqual(landed(a), ['database']);
   assert.notStrictEqual(matchKey('cloud'), matchKey('aws'));
   assert.ok(a.words.find((w) => w.word === 'cloud' && w.count === 2), 'cloud merged away');
   assert.ok(a.words.find((w) => w.word === 'AWS' && w.count === 1), 'AWS merged away');
@@ -304,6 +308,67 @@ check('and still refuses two different roots, however related', () => {
   assert.ok(/NEVER merge/.test(prompt));
   assert.ok(/different roots?/i.test(prompt),
     'nothing in the prompt tells the model that a shared meaning is not a shared root');
+});
+
+/*
+  THE LABEL IS THE SPELLING A ROOM SHOULD READ, NOT THE ONE THAT SORTED FIRST.
+
+  Observed on dev: score, scoer and scroe merged correctly and the wall printed
+  "scoer". The tie-break is most-frequent, then shortest, then alphabetical —
+  and with every surface at count 1 and length 5, alphabetical picked the typo.
+  The owner's ask: "i would like it to pick the correct spelling for the label
+  not the one mispelled".
+
+  The engine has no dictionary and cannot know. The MODEL already does — it is
+  being asked which of these words are the same term, and which spelling is the
+  real one is the same kind of judgment. So it nominates, by putting the
+  canonical form FIRST in the group, and the engine validates: a nomination that
+  is not a surface the room actually said is ignored and the deterministic rule
+  stands. The model can no more invent a label than it can invent a merge.
+
+  Frequency deliberately does NOT win here. A label is a heading, not a
+  quotation — every member is still listed in the "Counted together" tooltip —
+  so three people spelling it wrong should not put the typo on a projector.
+*/
+console.log('\n8b. the merged cluster is labelled with the spelling the model nominates');
+
+check('the nominated form becomes the label, over the alphabetical tie-break', () => {
+  const submissions = [
+    sub('Ada', 'score'),
+    sub('Grace', 'scoer'),
+    sub('Lin', 'scroe'),
+  ];
+  // All three are length 5 and count 1, so the old rule returns 'scoer'.
+  const a = analyzeWavelength(submissions, { merges: [['score', 'scoer', 'scroe']] });
+  assert.deepStrictEqual(landed(a), ['score'],
+    'the wall is still showing whichever misspelling sorted first');
+});
+
+// rejects: a nomination the room never said becoming a label the room never saw.
+check('a nomination nobody submitted is ignored, and the old rule stands', () => {
+  const submissions = [
+    sub('Ada', 'score'),
+    sub('Grace', 'scoer'),
+    sub('Lin', 'scroe'),
+  ];
+  const a = analyzeWavelength(submissions, { merges: [['SCORING', 'scoer', 'score', 'scroe']] });
+  assert.ok(['scoer', 'score', 'scroe'].includes(landed(a)[0]),
+    `the label is "${landed(a)[0]}", which nobody wrote`);
+});
+
+check('the deterministic rule is unchanged when nothing is nominated', () => {
+  const submissions = [sub('Ada', 'ridge'), sub('Grace', 'ridges')];
+  // No merges at all: two clusters, each labelled by its own single surface.
+  const a = analyzeWavelength(submissions);
+  assert.deepStrictEqual(a.words.map((w) => w.word).sort(), ['ridge', 'ridges']);
+});
+
+check('the prompt asks for the correct spelling first', () => {
+  const prompt = buildMergePrompt(['score', 'scoer']);
+  assert.ok(/first/i.test(prompt),
+    'nothing tells the model that position in the group means anything');
+  assert.ok(/spelling|canonical|correct/i.test(prompt),
+    'the model is not told WHICH form to put first');
 });
 
 console.log('\n9. parseMergeReply — strict about shape, tolerant about wrapping');

@@ -235,6 +235,19 @@ function hasPermission(groups, requiredGroups) {
 // the whole product offers), the AI generation routes (they spend Bedrock
 // budget), download-question-set, and every version route.
 const HOST_ADMIN_ROUTES = new Set([
+  // The persona library. A host may already SET the voice narrating their own
+  // room (`PUT /games/{gameId}/persona` is hosts+admins) and may already READ
+  // the AI PROMPT library, which is the wider of the two — it decides what the
+  // AI is told to do. Being refused the list of VOICES was an oversight, not a
+  // policy, and it failed silently: both callers swallow the 403 into an empty
+  // list, so a host saw only "Adapt to the session" and read that as the whole
+  // library, while a set carrying a persona rendered as "<id> (unknown)".
+  //
+  // Read-only, and personas are platform-global CONFIGURATION — id, name,
+  // tagline, icon, voice, gameTypes. No tenant content and nothing per-org.
+  // There is no persona WRITE route; if one is ever added it does not belong
+  // here by reflex.
+  'GET admin/personas',
   // The list. Authenticated, and the only projection carrying ownership, so a
   // host can see which sets are theirs.
   'GET admin/question-sets',

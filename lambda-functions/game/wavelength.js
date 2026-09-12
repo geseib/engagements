@@ -47,7 +47,28 @@ const matchKey = (surface) =>
  * ties break to the shortest, then alphabetically. Deterministic, so the same
  * submissions always produce the same word on the wall.
  */
-const canonicalLabel = (surfaceCounts) => {
+const canonicalLabel = (surfaceCounts, preferred = null) => {
+  /*
+    A NOMINATED SPELLING WINS, IF THE ROOM ACTUALLY SAID IT.
+
+    The tie-break below is most-frequent, then shortest, then alphabetical, and
+    it has no way to know which of `score`, `scoer` and `scroe` is the real
+    word — with all three at count 1 and length 5 it printed "scoer" on a wall.
+    The model that merged them does know, and nominates by putting the canonical
+    form first in its group.
+
+    Validated the same way merges are: a nomination that is not a surface form
+    somebody submitted is dropped and the deterministic rule stands, so the
+    model can no more invent a label than it can invent agreement.
+
+    Frequency deliberately does not outrank this. The label is a heading, not a
+    quotation — every member still rides along in `members` for the tooltip — so
+    three people spelling it wrong should not put the typo in front of a room.
+  */
+  if (preferred && Object.prototype.hasOwnProperty.call(surfaceCounts, preferred)) {
+    return preferred;
+  }
+
   let best = null;
   let bestCount = -1;
   for (const [surface, count] of Object.entries(surfaceCounts)) {
@@ -128,6 +149,15 @@ const applyMerges = (clusters, mergeGroups) => {
     if (keys.length < 2) continue;
 
     const target = merged.get(keys[0]);
+    /*
+      The group's FIRST member is the model's nominated label — the prompt asks
+      for the correctly-spelled form there. Recorded as the surface it actually
+      wrote rather than as a key, because the key has had its punctuation and
+      case stripped and "follow-up" must not become "followup" on the wall.
+      canonicalLabel drops it if no submitter used that exact form.
+    */
+    const [nominated] = group.filter((m) => typeof m === 'string' && matchKey(m) === keys[0]);
+    if (nominated) target.preferred = nominated;
     for (const key of keys.slice(1)) {
       const source = merged.get(key);
       for (const [surface, count] of Object.entries(source.surfaces)) {
@@ -173,7 +203,7 @@ const analyzeWavelength = (submissions, options = {}) => {
 
   const words = [...clusters.values()]
     .map((c) => ({
-      word: canonicalLabel(c.surfaces),
+      word: canonicalLabel(c.surfaces, c.preferred),
       count: c.players.size,
       members: Object.keys(c.surfaces).sort(),
     }))
@@ -236,6 +266,8 @@ WHEN IN DOUBT, DO NOT MERGE. A missed merge costs one word off a count; a wrong 
 
 Here are the entries, one per line:
 ${labels.map((l) => `- ${l}`).join('\n')}
+
+PUT THE BEST-SPELLED, MOST READABLE FORM FIRST in each group — the correct spelling over a misspelling (score, not scoer), and the written-out word over an abbreviation (database, not db). That first entry becomes the label a room reads off a wall; the rest are still counted and still shown underneath it. If the entries are simply different inflections, lead with the plainest one (cost, not costing).
 
 Reply with ONLY a JSON array of merge groups, each group an array of two or more entries copied EXACTLY from the list above. Entries you leave out stay unmerged. If nothing should merge, reply [].`;
 

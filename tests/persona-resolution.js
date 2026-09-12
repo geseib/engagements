@@ -12,7 +12,7 @@ const path = require('path');
 const assert = require('assert');
 const {
   SEED_PERSONAS, INFERRED_VOICE, buildOutputContract, buildPromptPreamble, resolvePersona,
-  normalizeOutputSections, describeOutputShape,
+  normalizeOutputSections, describeOutputShape, DEFAULT_PERSONA_BY_GAME_TYPE,
 } = require(path.join(__dirname, '..', 'lambda-functions', 'game', 'personas.js'));
 
 let pass = 0, fail = 0;
@@ -26,6 +26,10 @@ const run = async (label, fn) => {
 };
 
 const STORE = {
+  'wavelength-reader': {
+    personaId: 'wavelength-reader', name: 'The Wavelength Reader',
+    voice: 'Report where the room shared a meaning and where it did not.',
+  },
   comedian: { personaId: 'comedian', name: 'The Comedian', voice: 'Be funny about the answers.' },
   coach: { personaId: 'coach', name: 'The Coach', voice: 'Ask the better question.' },
   retired: { personaId: 'retired', name: 'Retired', voice: 'Old voice.', status: 'inactive' },
@@ -380,6 +384,75 @@ const loadPersona = async (id) => STORE[id] || null;
     for (const p of SEED_PERSONAS) {
       assert(Array.isArray(p.gameTypes) && p.gameTypes.length > 0,
         `${p.personaId} has no gameTypes — GET /admin/personas filters on it`);
+    }
+  });
+
+  console.log('\ngame-type default\n');
+
+  /*
+    WAVELENGTH GETS A VOICE THAT KNOWS WHAT THE GAME IS.
+
+    Every other rung is something a person chose. Below them sat INFERRED_VOICE,
+    which reads the session and picks a register — good, and it has never heard
+    of wavelength. So a round whose whole point is that a shared word hides
+    different meanings was narrated by a voice with no idea that nobody wins,
+    that a scattered result is a finding rather than a failure, or that the
+    outlier is half the point.
+
+    The rung sits BELOW the two context rungs deliberately. The DJ report
+    (above) wants a set whose aiContext is written AS a persona to define the
+    voice when nobody picked one; a house default for the game type must not
+    outrank something a person actually wrote.
+
+    // rejects: a game-type default that silently outranks an authored context,
+    //          and one that fires for a game type it was never meant for.
+  */
+  await run('a wavelength round with nothing chosen gets the wavelength voice', async () => {
+    const r = await resolvePersona({ gameType: 'wavelength', loadPersona });
+    assert.strictEqual(r.source, 'game_type_default');
+    assert.strictEqual(r.personaId, 'wavelength-reader');
+    assert.strictEqual(r.inferred, false);
+  });
+
+  await run('every other game type still infers', async () => {
+    for (const gameType of ['trivia', 'poll', 'call-and-answer', 'survey']) {
+      const r = await resolvePersona({ gameType, loadPersona });
+      assert.strictEqual(r.source, 'inferred', `${gameType} resolved to ${r.source}`);
+    }
+  });
+
+  await run('a chosen persona still outranks it', async () => {
+    const r = await resolvePersona({ gameType: 'wavelength', hostPersonaId: 'comedian', loadPersona });
+    assert.strictEqual(r.personaId, 'comedian');
+  });
+
+  await run('and so does a context somebody wrote', async () => {
+    const r = await resolvePersona({
+      gameType: 'wavelength', gameAiContext: 'you are a witty DJ', loadPersona,
+    });
+    assert.strictEqual(r.source, 'game_context');
+  });
+
+  // rejects: a dangling default breaking every wavelength round. The seed is a
+  // manual script run, so an environment can legitimately be missing it.
+  await run('an unseeded default falls through to inference rather than failing', async () => {
+    const r = await resolvePersona({ gameType: 'wavelength', loadPersona: async () => null });
+    assert.strictEqual(r.source, 'inferred');
+  });
+
+  check('the default persona named by the map is actually seeded', () => {
+    const ids = new Set(SEED_PERSONAS.map((p) => p.personaId));
+    for (const [gameType, id] of Object.entries(DEFAULT_PERSONA_BY_GAME_TYPE)) {
+      assert.ok(ids.has(id), `${gameType} defaults to "${id}", which is in no seed`);
+    }
+  });
+
+  check('and it is scoped to the game type it is the default for', () => {
+    for (const [gameType, id] of Object.entries(DEFAULT_PERSONA_BY_GAME_TYPE)) {
+      const p = SEED_PERSONAS.find((x) => x.personaId === id);
+      assert.ok((p.gameTypes || []).includes(gameType),
+        `${id} is the ${gameType} default but its gameTypes are ${JSON.stringify(p.gameTypes)} — `
+        + 'the picker would not offer the voice the round is already using');
     }
   });
 

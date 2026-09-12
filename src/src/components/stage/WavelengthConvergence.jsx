@@ -6,6 +6,7 @@ import {
   wavelengthMetaLine,
   wavelengthMatchingNote,
   wavelengthTerms,
+  WAVELENGTH_STILL_MATCHING,
 } from '../../utils/wavelength';
 
 /**
@@ -32,6 +33,11 @@ import {
  */
 const CLUSTERING_WATCHDOG_MS = 20000;
 
+/* The placeholder's tiers, mirroring .terms' ranked flow: one headline word,
+   then the tail getting smaller. Seven is enough to read as "a list" and few
+   enough not to fill the wall with something that is not the answer. */
+const SKELETON_TIERS = [1, 2, 2, 3, 3, 4, 5];
+
 const WavelengthConvergence = ({ analysis: rawAnalysis }) => {
   const analysis = normalizeWavelengthAnalysis(rawAnalysis);
   const pending = isWavelengthPending(analysis);
@@ -56,20 +62,47 @@ const WavelengthConvergence = ({ analysis: rawAnalysis }) => {
           Every list is in. Matching the room&rsquo;s words&thinsp;&mdash; plurals,
           spellings and abbreviations count together&hellip;
         </p>
+        {/*
+          WHERE the words will be, not just that they are coming.
+
+          Reported from a live session: the counts came up, the sentence came up,
+          and the room still read it as the whole result — "i just want to make
+          them aware of something coming so they dont think thats all they get".
+          Prose says what is happening; nothing was holding the place the answer
+          appears, so the wall looked finished.
+
+          NO TEXT IN IT, and aria-hidden. A wall of shapes somebody reads as
+          words is worse than an empty one, and a screen reader announcing seven
+          meaningless bars is worse still — the sentence above already says what
+          is happening, which is the accessible answer to the same question.
+
+          The tiers mirror the ranked flow the real terms use (one big, then
+          progressively smaller), so the space reserved is the shape of what
+          lands in it.
+        */}
+        <div className="wl-skeleton" aria-hidden="true">
+          {SKELETON_TIERS.map((tier, i) => (
+            <span key={i} className={`wl-sk wl-sk-${tier}`} />
+          ))}
+        </div>
       </div>
     );
   }
 
-  // Waited out: the frame never came, so what is on hand is the exact-match
-  // analysis — present it as exactly that.
-  const effective = pending ? { ...analysis, clustering: 'failed' } : analysis;
-  const headline = wavelengthHeadline(effective);
-  const note = wavelengthMatchingNote(effective);
-  const { terms, reduction } = wavelengthTerms(effective);
+  /* Waited out: the frame is LATE, which is not the same as failed and must not
+     be described as it. This used to rewrite the round to clustering:'failed'
+     locally, so the wall asserted "spelling variants were not combined this
+     round" about a run nothing had reported on — and the worker's budget is
+     minutes, so a frame landing after this re-flows the words underneath a
+     sentence that already called it a failure. The round is passed through as
+     it is; only the SENTENCE changes. */
+  const headline = wavelengthHeadline(analysis);
+  const note = pending ? WAVELENGTH_STILL_MATCHING : wavelengthMatchingNote(analysis);
+  const { terms, reduction } = wavelengthTerms(analysis);
 
   return (
     <div className="wl-conv">
-      <div className="kicker">{wavelengthMetaLine(effective)}</div>
+      <div className="kicker">{wavelengthMetaLine(analysis)}</div>
       <p className="wl-headline">
         {headline.figure !== null
           ? (<><b>{headline.figure}</b> {headline.label}</>)
