@@ -220,3 +220,6 @@ config/prod.json
 # live secrets mechanism untracked: a fresh clone had no way to store the deploy
 # token. It contains no secret, only the aws CLI calls that store one.
 !scripts/setup-secure-github-token.sh
+
+# Playwright run artefacts
+test-results/
