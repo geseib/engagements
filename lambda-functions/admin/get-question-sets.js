@@ -5,7 +5,7 @@ const {
   canManageSet, isSetOwner, setOwnerId, setScopeOf, setOrgOf,
 } = require('./shared/question-set-access');
 const { isAdminCaller } = require('./shared/require-admin');
-const { ORG } = require('./shared/tenant');
+const { ORG, PLATFORM, canManageScope } = require('./shared/tenant');
 const { decryptItem } = require('./shared/tenant-crypto');
 
 const client = new DynamoDBClient({});
@@ -59,7 +59,39 @@ exports.handler = async (event) => {
       }
       return decrypted;
     }));
-    const found = perScope.flat();
+    const everything = perScope.flat();
+
+    /*
+      A DEACTIVATED ENGAGE SET IS HIDDEN FROM EVERYONE WHO CANNOT MANAGE IT.
+
+      Deactivating a set in Engage's library is a decision about that library.
+      Until this filter, every other organisation kept seeing it here — greyed
+      out, unusable, and not theirs to reactivate. The session picker
+      (game/get-question-sets.js) already dropped inactive sets; this list did
+      not, and eleven screens read this list, so the rule lives here, once,
+      rather than in whichever screen someone remembers.
+
+      WHO STILL SEES IT is exactly who may manage it: canManageScope(PLATFORM),
+      which is the `admins` group AND no active organisation — the same
+      interlock that decides who may EDIT Engage's library. So an Engage admin
+      standing inside a team sees what that team sees, and acts as Engage to
+      find and reactivate it. Deliberately not "is in the admins group": being
+      staff is WHO may, having no org is that they are DOING SO.
+
+      ONLY ENGAGE'S LIBRARY. A team's own inactive set stays in that team's
+      list, because the team manages it and must be able to turn it back on.
+      Public sets are a copy made by the publish flow and are not this rule's.
+
+      `=== false`, never falsy: a platform row written before `active` existed
+      has no such attribute and IS active, as every other reader already
+      treats it (`item.active !== false`). That is most of Engage's library.
+    */
+    const managesEngageLibrary = canManageScope(event, PLATFORM);
+    const found = everything.filter(({ item, ref }) => {
+      const scope = setScopeOf(item) || ref.scope;
+      if (scope !== PLATFORM) return true;
+      return item.active !== false || managesEngageLibrary;
+    });
 
     // Hosts read this list too now — it is the only projection that carries
     // ownership, and the host surface needs it to know which rows it may offer
