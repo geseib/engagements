@@ -97,3 +97,28 @@ describe('tone carries the only distinction that changes what you can do', () =>
     expect(setOwnerIsOurs({ scope: 'public' })).toBe(false);
   });
 });
+
+describe('the order owners sort in — yours first, the shared library last', () => {
+  /*
+    "Sorted by the individual or teams vs the system wide or shared": the order
+    is the owner's own words. What you wrote, then your team's, then Engage's
+    library, then the public one. Kept beside the tag so the four values and
+    their order cannot drift apart — both panels sort by this.
+  */
+  const { setOwnerRank } = require('../utils/setOwnerTag');
+  const yours = { scope: 'org', mine: true };
+  const team = { scope: 'org', mine: false };
+  const engage = { scope: 'platform' };
+  const shared = { scope: 'public' };
+
+  // rejects: an order that buries a team's own work under Engage's library.
+  test('yours, then team, then Engage, then public', () => {
+    const ranked = [shared, engage, team, yours].sort((a, b) => setOwnerRank(a) - setOwnerRank(b));
+    expect(ranked).toEqual([yours, team, engage, shared]);
+  });
+
+  // rejects: a missing scope ranking as the reader's own (it is Engage's).
+  test('a row with no scope ranks as Engage, never as yours', () => {
+    expect(setOwnerRank({})).toBe(setOwnerRank(engage));
+  });
+});

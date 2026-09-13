@@ -84,4 +84,28 @@ export const setOwnerIsOurs = (set) => {
   return tag === YOURS || tag === TEAM;
 };
 
-export default { setOwnerTag, setOwnerLabel, setOwnerTitle, setOwnerIsOurs };
+/**
+ * WHICH OWNER COMES FIRST WHEN A LIST IS SORTED BY OWNER.
+ *
+ * The order is the owner's own words: "sorted by the individual or teams vs the
+ * system wide or shared". What you wrote, then your team's, then Engage's
+ * library, then the public one — the two you can edit before the two you can
+ * only copy, which is the same line `setOwnerIsOurs` draws.
+ *
+ * Kept HERE, beside the tag, so the four values and their order live in one
+ * file. Both the question sets panel and the prompt library sort by it; a
+ * second copy of this ordering in either would be free to disagree.
+ *
+ * Built on setOwnerTag, so a row with no recognised scope ranks as Engage —
+ * never as the reader's own. Ranking a mystery row first would imply it is
+ * theirs, which is the dangerous direction setOwnerTag already refuses.
+ */
+const RANK = { [YOURS]: 0, [TEAM]: 1, [ENGAGE]: 2, [PUBLIC]: 3 };
+export const setOwnerRank = (set) => RANK[setOwnerTag(set)];
+
+/** The owner filter's options, in rank order, labelled as the chip labels them. */
+export const OWNER_OPTIONS = [YOURS, TEAM, ENGAGE, PUBLIC].map((value) => ({
+  value, label: LABELS[value],
+}));
+
+export default { setOwnerTag, setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerRank };
