@@ -108,4 +108,31 @@ export const OWNER_OPTIONS = [YOURS, TEAM, ENGAGE, PUBLIC].map((value) => ({
   value, label: LABELS[value],
 }));
 
+/**
+ * PROMPTS HAVE THREE OWNERS, NOT FOUR — BY DECISION, NOT OMISSION.
+ *
+ * A prompt does not record its author as a user: create-ai-prompt.js stamps
+ * `createdBy: 'admin-interface'`, a literal, so there is no `mine` to read. Yours
+ * and Team therefore cannot be told apart for a prompt, and existing prompts
+ * could never qualify as Yours even if new ones did.
+ *
+ * The owner chose to offer only the owners that CAN be distinguished — Team,
+ * Engage, Public — rather than a Yours filter that would always come back empty.
+ * In individual mode an organisation is one person, so its Team prompts are
+ * theirs anyway.
+ *
+ * YOURS is folded into TEAM explicitly rather than relied on to never occur.
+ * If prompts ever do start carrying `mine`, setOwnerTag would begin answering
+ * Yours, and a filter with no Yours option would silently hide those rows. This
+ * keeps the three-way split true until someone deliberately makes it four.
+ */
+export const promptOwnerTag = (prompt) => {
+  const tag = setOwnerTag(prompt);
+  return tag === YOURS ? TEAM : tag;
+};
+export const promptOwnerRank = (prompt) => RANK[promptOwnerTag(prompt)];
+export const PROMPT_OWNER_OPTIONS = [TEAM, ENGAGE, PUBLIC].map((value) => ({
+  value, label: LABELS[value],
+}));
+
 export default { setOwnerTag, setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerRank };

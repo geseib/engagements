@@ -3,6 +3,7 @@ import Icon from './Icon';
 import { gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import { matchesListFilters } from '../config/listControls';
 import useListControls from '../hooks/useListControls';
+import { promptOwnerTag, promptOwnerRank, PROMPT_OWNER_OPTIONS } from '../utils/setOwnerTag';
 
 /**
  * THE PROMPT LIBRARY — the list half of the Prompts admin section.
@@ -135,6 +136,16 @@ function promptListConfig(categoryKey) {
         get: (prompt) => prompt.status,
         eq: (a, b) => canonicalStatus(a) === canonicalStatus(b),
       },
+      // WHOSE IT IS: Team / Engage / Public. Three, not four — prompts do not
+      // record their author, see promptOwnerTag in utils/setOwnerTag.js.
+      owner: { get: (prompt) => promptOwnerTag(prompt) },
+    },
+    // OPT-IN, with no defaultSort: applyListControls sorts only when the chosen
+    // key matches, so a page that never picks one keeps the order the prompts
+    // arrived in. Owner first, then that arrival order within an owner — the
+    // sort is stable, so nothing else is disturbed.
+    sorts: {
+      owner: (a, b) => promptOwnerRank(a) - promptOwnerRank(b),
     },
   };
 }
@@ -339,7 +350,9 @@ export default function PromptLibraryPanel({
   /** The promptId whose archive copy is in flight, so one click is one export. */
   copyingPromptId = null,
 }) {
-  const { search = '', gameType = 'all', category = 'all', status = 'all' } = filters || {};
+  const {
+    search = '', gameType = 'all', category = 'all', status = 'all', owner = 'all', sort = '',
+  } = filters || {};
 
   const catOptions = useMemo(() => (categoryOptions || []).map(asOption), [categoryOptions]);
   /* A row whose category is not in the currently offered list still has to
@@ -363,8 +376,8 @@ export default function PromptLibraryPanel({
   */
   const config = useMemo(() => promptListConfig(categoryKey), [categoryKey]);
   const filterState = useMemo(
-    () => ({ search, gameType, category, status }),
-    [search, gameType, category, status]
+    () => ({ search, gameType, category, status, owner, sort }),
+    [search, gameType, category, status, owner, sort]
   );
   const { shown, drops, activeFilterCount, set, clearAll } = useListControls(prompts, config, {
     value: filterState,
@@ -374,6 +387,7 @@ export default function PromptLibraryPanel({
       gameType: (value) => `Type: ${gameTypeLabel(value)}`,
       category: (value) => `${categoryHeading}: ${catLabel(value)}`,
       status: (value) => `Status: ${STATUS_LABEL[value] || value}`,
+      owner: (value) => `Owner: ${(PROMPT_OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
     },
   });
 
@@ -424,6 +438,28 @@ export default function PromptLibraryPanel({
             <option value="active">Active</option>
             <option value="draft">Draft</option>
             <option value="archived">Archived</option>
+          </select>
+
+          <select
+            value={owner}
+            onChange={(e) => set({ owner: e.target.value })}
+            className="filter-select"
+            aria-label="Filter by owner"
+          >
+            <option value="all">All owners</option>
+            {PROMPT_OWNER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+
+          <select
+            value={sort}
+            onChange={(e) => set({ sort: e.target.value })}
+            className="filter-select"
+            aria-label="Sort order"
+          >
+            <option value="">Default order</option>
+            <option value="owner">Owner (team first)</option>
           </select>
 
           <input
