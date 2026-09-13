@@ -176,6 +176,45 @@ async function run() {
 const ORG = 'org_nw';
 const AUG = new Date('2026-08-22T10:00:00Z');
 const SEP = new Date('2026-09-03T10:00:00Z');
+
+/*
+  THIS SUITE DESCRIBES AUGUST 2026, SO ITS CLOCK SAYS SO.
+
+  Every fixture here assumes "now" is August: `usageRow()` reads USAGE#2026-08 by
+  default, `evt()` requests period 2026-08, the mockup is "1–31 August 2026". The
+  billing calls honour that by taking `{ now: AUG }`. But set counting reaches the
+  store through `streamHandler.handler(event)` — a Lambda entry point, which takes
+  an event and nothing else — and `recordSetCount` then falls back to `new Date()`.
+
+  So the suite ran on TWO clocks: sessions pinned to August, sets on the real one.
+  That agreed for exactly as long as the real month WAS August, and on
+  2026-09-01 seven tests started reading USAGE#2026-08 for sets that had been
+  written to USAGE#2026-09. The mockup fixture read "20 sessions, no sets".
+
+  Pinning the default clock to AUG makes the suite one clock again. It does not
+  weaken any test: the cases that are ABOUT September inject `{ now: SEP }` and
+  are unaffected by the default. The alternative — threading a clock through the
+  stream handler — would change a production entry point that is right to use
+  real time, for the benefit of a test.
+*/
+{
+  const RealDate = Date;
+  const pinned = AUG.getTime();
+  global.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [pinned])); }
+    static now() { return pinned; }
+    /*
+      WITHOUT THIS THE PIN BREAKS THE TESTS IT IS MEANT TO LEAVE ALONE.
+      Replacing Date with a subclass makes every Date built BEFORE the swap —
+      AUG and SEP above — fail `x instanceof Date`. usage.js accepts an
+      injected clock only via `opts.now instanceof Date`, so `{ now: SEP }` was
+      silently discarded and fell back to the pinned August, and "the same game
+      id next month is a new charge" found no September row. Answering
+      instanceof for any real Date restores the injected clock.
+    */
+    static [Symbol.hasInstance](x) { return x instanceof RealDate; }
+  };
+}
 const reset = () => { store.clear(); calls.length = 0; updateFailure = null; };
 const usageRow = (org = ORG, period = '2026-08') => store.get(key(`ORG#${org}`, `USAGE#${period}`)) || {};
 const ledgerRows = (org = ORG) => [...store.values()].filter((i) => String(i.SK).startsWith('LEDGER#') && i.PK === `ORG#${org}`);
