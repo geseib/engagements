@@ -275,9 +275,12 @@ safely; the reverse cannot.
    everything keeps working. Ship dev → test → prod and confirm a backup and restore on each.
 2. **Phase 2 — archive stack, deployed by hand by the owner**, only after Phase 1 is live on
    every tier: `AWS_IAM` on all routes and `Runtime: nodejs22.x`, in one deploy.
-   `tests/template-validates.js:52-64` records that `nodejs18.x` fails `sam validate --lint`
-   and that its update path was blocked from 2025-11-01, so the runtime move is required,
-   not optional.
+   The runtime move is **advisable, not forced**. `tests/template-validates.js:52-64`
+   records that `nodejs18.x` fails `sam validate --lint` and that its update path would be
+   blocked from 2025-11-01 — but all six archive functions were successfully updated on
+   **2026-08-23** (verified 2026-09-14, `aws lambda list-functions`), so updates are not
+   blocked in practice. Node 18 no longer receives security patches, and the same deploy
+   is the natural place to move off it.
 3. **Rollback of Phase 2** is a redeploy of the archive stack without `AWS_IAM`. Phase 1
    keeps working against an open archive.
 
@@ -321,10 +324,18 @@ Backend suites are standalone node scripts (`node tests/<file>.js`), written tes
 - removing the `archive.seibtribe.us` CloudFront distribution
 - the unpaginated Scan in the archive stack's `list-archive.js` — noted, not required here
 
-## 8. To verify before implementation
+## 8. Verified against live AWS (2026-09-14)
 
-- **All three tiers run in one AWS account.** IAM auth on the archive and the cross-bucket
-  media copy both assume it; separate accounts would need resource policies instead.
-- **The archive bucket's policy does not deny the main-stack roles** that copy media.
-- **The archive stack's live runtime and update state**, with AWS credentials:
-  `aws lambda list-functions --query "Functions[?starts_with(FunctionName,'engage2-archive')].[FunctionName,Runtime,LastModified]"`
+Each assumption the design rests on was checked with the `adminaccess` profile, account
+`239601476690`:
+
+| Assumption | Result | Evidence |
+|---|---|---|
+| All three tiers and the archive run in one AWS account | **Holds** | `engagedev`, `engagetest`, `engageprod` and `engage2-archive-service` all resolve in `239601476690` |
+| The archive bucket's policy does not deny main-stack roles | **Holds** | `engage2-archive-content` has no bucket policy (`NoSuchBucketPolicy`); identity policies on the main-stack roles are sufficient |
+| The archive stack's runtime | **`nodejs18.x`, updatable** | all six functions on `nodejs18.x`, last modified 2026-08-23 — see §5 step 2 |
+
+One assumption remains for Phase 1 to prove rather than for inspection to settle: that
+API Gateway accepts a SigV4-signed request on a route with no authorizer. The rollout in
+§5 depends on it, and the first dev deploy of Phase 1 demonstrates it before the archive
+is locked.
