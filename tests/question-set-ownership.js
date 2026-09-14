@@ -307,7 +307,7 @@ const contentRows = (setId) => {
 };
 
 function seedSet(setId, {
-  owner, name = setId, questions = 2, createdBy, createdByName, scope = 'org',
+  owner, name = setId, questions = 2, createdBy, createdByName, scope = 'org', active = true,
 } = {}) {
   const platform = scope === 'platform';
   const metaPk = platform ? 'SETS' : ORG_SETS;
@@ -315,7 +315,7 @@ function seedSet(setId, {
   put({
     PK: metaPk, SK: `SET#${setId}`, name,
     description: 'seeded', engagementType: 'call-and-answer',
-    questionCount: questions, categoryCount: 1, active: true,
+    questionCount: questions, categoryCount: 1, active,
     createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z',
     // Platform rows carry NO scope/orgId attributes — that absence IS the
     // platform marker, which is what keeps the ~41 legacy rows shape-identical
@@ -1047,6 +1047,92 @@ function reset() { store.clear(); log.length = 0; }
       ])].sort(),
       [false, true],
       'every case agrees because every case is the same answer — section 5 proves nothing'));
+
+  // =========================================================================
+  say('\n6. INACTIVE ENGAGE SETS — hidden from everyone who cannot manage the library');
+
+  /*
+    An Engage administrator deactivating a set in Engage's own library is a
+    decision ABOUT THAT LIBRARY. Before this section existed, every other
+    organisation kept seeing the set in its question sets panel — greyed out,
+    unusable, and not theirs to reactivate, since requireSetManager refuses a
+    platform set to anyone but Engage staff acting as Engage.
+
+    The session picker (GET /question-sets) already hid inactive sets. The
+    admin list did not, and eleven screens read the admin list, so the rule is
+    applied there, on the server, once — rather than in whichever of those
+    screens someone remembers.
+
+    WHO STILL SEES IT is exactly who may manage it: canManageScope(PLATFORM),
+    i.e. the `admins` group AND no active organisation. That is the same
+    interlock that decides who may EDIT Engage's library, so an Engage admin
+    standing inside a team sees what that team sees, and must act as Engage to
+    find and reactivate it.
+  */
+  const INACTIVE_OTHER_TEAM = {
+    groups: 'hosts', userId: 'sub-kai', username: 'kai', orgId: 'org_other', orgRole: 'member',
+  };
+  // "Individual mode" is a personal organisation: an org of one. To this rule
+  // it is an org like any other, which is the point — it must not be special.
+  const INACTIVE_INDIVIDUAL = {
+    groups: 'hosts', userId: 'sub-solo', username: 'solo', orgId: 'org_personal_solo', orgRole: 'owner',
+  };
+
+  reset();
+  seedSet('retired', { name: 'Retired Engage set', scope: 'platform', active: false });
+  seedSet('live', { name: 'Live Engage set', scope: 'platform' });
+  seedSet('parked', { owner: HOST, name: 'Our parked set', active: false });
+  // A platform row written before `active` existed. Absence means ACTIVE —
+  // `item.active !== false` is the convention every reader already follows.
+  put({
+    PK: 'SETS', SK: 'SET#legacy', name: 'Legacy Engage set', description: 'seeded',
+    engagementType: 'trivia', questionCount: 1, categoryCount: 1,
+    createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z',
+  });
+
+  const inactiveHost = await listAs(HOST);
+  const inactiveOtherTeam = await listAs(INACTIVE_OTHER_TEAM);
+  const inactiveIndividual = await listAs(INACTIVE_INDIVIDUAL);
+  const inactiveAdminInTeam = await listAs(ADMIN);
+  const inactiveEngage = await listAs(ADMIN_AS_ENGAGE);
+
+  // REJECTS: THE REQUEST. A deactivated Engage set leaking into a team's list.
+  check('a team member does not see a deactivated Engage set', () =>
+    assert.strictEqual(inactiveHost.retired, undefined, 'the retired Engage set is still listed for a team'));
+  check('...nor does a host in another team', () =>
+    assert.strictEqual(inactiveOtherTeam.retired, undefined));
+  check('...nor does someone in individual mode', () =>
+    assert.strictEqual(inactiveIndividual.retired, undefined));
+
+  // REJECTS: exempting staff by GROUP rather than by what they are acting as.
+  // Inside a team they are that team; this is the rule that governs editing.
+  check('an Engage admin standing inside a team sees what that team sees', () =>
+    assert.strictEqual(inactiveAdminInTeam.retired, undefined,
+      'staff in a team were shown a set they cannot manage from there'));
+
+  // REJECTS: hiding it from the only people who can bring it back.
+  check('Engage staff acting as Engage still see it, to reactivate it', () => {
+    assert.ok(inactiveEngage.retired, 'the set vanished for the people who manage it');
+    assert.strictEqual(inactiveEngage.retired.active, false, 'and it must still read as inactive');
+  });
+
+  // REJECTS: filtering every inactive set instead of Engage's. A team's own
+  // parked set is theirs to reactivate and must stay in their list.
+  check("a team still sees its OWN deactivated set", () =>
+    assert.ok(inactiveHost.parked, 'the rule hid a set the team manages itself'));
+
+  // REJECTS: over-filtering — the rule is about inactive sets, not Engage's.
+  check('an ACTIVE Engage set is still listed for every kind of caller', () => {
+    for (const [who, seen] of [['team', inactiveHost], ['other team', inactiveOtherTeam],
+      ['individual', inactiveIndividual], ['staff in a team', inactiveAdminInTeam], ['Engage', inactiveEngage]]) {
+      assert.ok(seen.live, `${who} lost an active Engage set`);
+    }
+  });
+
+  // REJECTS: `!item.active`, which would hide every set written before the
+  // attribute existed — the bulk of Engage's library.
+  check('an Engage set with no `active` attribute counts as active', () =>
+    assert.ok(inactiveHost.legacy, 'a legacy row with no active attribute was treated as inactive'));
 
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

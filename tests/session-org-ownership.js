@@ -99,6 +99,33 @@ for (const rel of [
   // `session-beat-org-scope.js` drives both handlers and proves that chain.
   'lambda-functions/game/stage-beat.js',
   'lambda-functions/game/reveal-authors.js',
+  // The READ, and the widest one in the product: `create-report` assembles the
+  // whole session — every name against every answer, decrypted, plus the round
+  // comments. Unlike the two above it carried NO AUTHORIZER AT ALL until
+  // 2026-08-28, which is why its header documented a public posture and took
+  // the org off the METADATA row: there was no caller identity to take it from.
+  // The authorizer landed in the same change as this line, and it had to —
+  // `callerMayDriveSession` passes a caller with no groups, so on the open
+  // route it would have been inert. Closing the route alone would have narrowed
+  // "anyone with the code" only to "any `hosts` account with the code", which is
+  // the boundary `reveal-authors` above records as not enough.
+  'lambda-functions/game/create-report.js',
+  // The rest of the host controls. Every one of these carries the Cognito
+  // authorizer and drives, reads or resolves a live room — see
+  // session-control-org-scope.js, which proves the write never lands.
+  'lambda-functions/game/get-results.js',
+  'lambda-functions/game/up-next.js',
+  'lambda-functions/game/stage-focus.js',
+  'lambda-functions/game/question-queue.js',
+  'lambda-functions/game/question-exclusions.js',
+  'lambda-functions/websocket/start-question.js',
+  'lambda-functions/websocket/start-vote.js',
+  // The SECOND writer of PersonaId. update-game.js has asked since 2026-08-27;
+  // this route writes the same attribute through PUT /games/{gameId}/persona and
+  // never asked at all, so the voice narrating a room could be changed by any
+  // `hosts` account holding one of 9,000 codes. Missed by every sweep before it,
+  // including the one that called itself "the REST of the host controls".
+  'lambda-functions/game/update-game-persona.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')

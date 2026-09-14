@@ -46,8 +46,10 @@
  * close button that reflects reality.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -167,6 +169,29 @@ exports.handler = async (event) => {
   const now = new Date().toISOString();
 
   try {
+    /*
+      WHOSE ROOM IS THIS? The Cognito authorizer says the caller is *a* host;
+      until this read, nothing said they were THIS session's host, so the
+      boundary was "any `hosts` account plus one of the 9,000 four-digit ids".
+
+      The header above already says what this route does that /stage-beat does
+      not: it puts ONE NAMED PERSON'S RESPONSE full-screen on a wall. Unscoped,
+      that was a stranger reaching into a room they had never been in and
+      choosing whose answer everyone looks at.
+
+      One extra GetItem, the same one start-game.js and stage-beat.js pay: the
+      owning org lives on METADATA and this handler otherwise touches only the
+      ROUND# record. 404 rather than 403: see tenant.callerMayDriveSession.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return respond(404, { error: 'Game not found' });
+    }
+
     /*
       UPDATE, NEVER PUT. `AuthorsRevealed` and `StageBeat` live on this same
       item. A PUT here would un-reveal a round get-results had already revealed

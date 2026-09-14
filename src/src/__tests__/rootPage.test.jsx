@@ -93,7 +93,7 @@ describe('the code field', () => {
     // rejects: dropping a pasted link on the floor, or stuffing the URL into the
     // field -- both of which leave the participant retyping by hand
     render(<RootPage />);
-    paste('https://eng.dev.seibtribe.us/play?gameId=4821&name=Chris');
+    paste('https://engage.dev.seibtribe.us/play?gameId=4821&name=Chris');
     expect(codeField()).toHaveValue('4821');
     expect(screen.getByRole('status')).toHaveTextContent(/took the code out of that link/i);
   });

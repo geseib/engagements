@@ -1,7 +1,7 @@
 /**
  * ANYONE WHO KNOWS A FOUR-DIGIT CODE CAN DRIVE SOMEBODY ELSE'S LIVE SESSION.
  *
- * Seven routes carry no authorizer in template-clean.yaml:
+ * Eight routes carry no authorizer in template-clean.yaml:
  *
  *   POST /games                              create a session
  *   POST /games/{gameId}/start               open it for joining
@@ -10,6 +10,24 @@
  *   POST /games/{gameId}/next-question       advance the round
  *   POST /games/{gameId}/toggle-category     change what gets asked
  *   PUT  /games/{gameId}/persona             change the AI's voice
+ *   POST /games/{gameId}/report              READ the whole session out
+ *
+ * The last one is not like the other seven and was added later. It does not
+ * drive anything — it ASSEMBLES the session and hands it back: every
+ * participant's name against every participant's answer, the ranked responses,
+ * the AI summaries and each round's comments. `create-report.js` calls
+ * `decryptItems`, so what comes out is plaintext, and it calls `isHidden`, so
+ * the redaction promise made to participants is decided inside a route that
+ * was asking nobody who they were. Unauthenticated, one of 9,000 four-digit
+ * ids was the entire boundary on all of it.
+ *
+ * IT WAS DELIBERATELY LEFT OUT OF THE FIRST PASS (e930c022), and the reason is
+ * worth keeping: `callerMayDriveSession` returns true for a caller holding no
+ * groups, because the participant journey must never be gated. On a route with
+ * no authorizer that is EVERY caller, so adding the org guard alone would have
+ * left the route reading as scoped while changing nothing. The authorizer and
+ * the guard only work as a pair; `tests/session-org-ownership.js` §3 pins the
+ * second half, and this file pins the first.
  *
  * A four-digit code is not a secret — it is printed on a projector and typed by
  * everyone in the room. Unauthenticated, every participant, and everyone they
@@ -71,6 +89,7 @@ const MUST_BE_CLOSED = [
   ['POST', '/games/{gameId}/next-question'],
   ['POST', '/games/{gameId}/toggle-category'],
   ['PUT', '/games/{gameId}/persona'],
+  ['POST', '/games/{gameId}/report'],
 ];
 
 // The participant journey. None of these carries a token, ever.
@@ -130,7 +149,10 @@ for (const [method, p] of MUST_BE_CLOSED) {
 // so it cannot contain those words — but `start-vote` contains 'vote' in the
 // ROUTE ITSELF, and that is not hypothetical.
 console.log('\n   and start-vote is not handed to the public rule by its own name');
-for (const bare of ['games/1234/start-vote', 'games/1234/next-question', 'games/1234/toggle-category']) {
+for (const bare of [
+  'games/1234/start-vote', 'games/1234/next-question', 'games/1234/toggle-category',
+  'games/1234/report',
+]) {
   check(`POST ${bare} is not public`, () =>
     assert.notDeepStrictEqual(requiredGroupsForRoute('POST', bare), [],
       'the concrete path fell through to the public rule'));
@@ -176,6 +198,45 @@ console.log('\n   including the two dispatch sites that build their path elsewhe
   check('both use authFetch', () =>
     assert.deepStrictEqual(dispatch.filter((l) => !/authFetch\(/.test(l)), [],
       'askSpecific posts next-question with a plain fetch — the phone remote 401s'));
+}
+
+// THE SESSION REPORT, whose callers are spread over two files and one of them
+// is not on the CALLERS list above — `components/RemoteSessionPanel.jsx` is the
+// Session tab on the host's phone, rendered only by HostRemote. A per-file loop
+// would have passed vacuously for every file that does not call this route, so
+// this collects the sites instead and counts them.
+//
+// THREE OF THE FOUR WERE PLAIN `fetch`, and the one in `loadRounds` is the
+// sharp one: it runs from a `useEffect` the moment the host opens the Setup
+// panel. Attaching the authorizer without moving it would 401 the host's own
+// Rounds tab — the list would empty itself and the empty copy would say "no
+// rounds yet" about a session with six of them, which is the failure mode that
+// looks like data loss rather than like a permission error.
+console.log('\n   and the session report, whose four call sites live in two files');
+{
+  const REPORT_CALLERS = [
+    'src/src/GameHostPage.jsx',
+    'src/src/components/RemoteSessionPanel.jsx',
+  ];
+  const sites = [];
+  for (const rel of REPORT_CALLERS) {
+    const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    // `(auth)?[Ff]etch\(` for the reason the HostRemote count above gives:
+    // `\bfetch\(` does not match `authFetch(`, so counting with it alone would
+    // silently miss the authenticated site and under-report the guard.
+    for (const line of src.split('\n')) {
+      if (/\/report`/.test(line) && /(auth)?[Ff]etch\(/.test(line)) sites.push([rel, line]);
+    }
+  }
+  check('all four report call sites are found (guards this check)', () =>
+    assert.strictEqual(sites.length, 4,
+      `found ${sites.length} — expected loadRounds, requestFeedbackRound and `
+      + 'generateReportForGame on the host page, plus the phone\'s Session tab'));
+  check('every one sends a token', () =>
+    assert.deepStrictEqual(sites.filter(([, l]) => !/authFetch\(/.test(l)).map(([rel]) => rel), [],
+      'a plain fetch sends no Authorization header — this call now 401s'));
 }
 
 // The create call names no route word, so the per-route check above cannot see

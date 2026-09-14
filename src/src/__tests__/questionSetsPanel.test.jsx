@@ -321,3 +321,59 @@ describe('matchesFilters, which the list and the drop-counts share', () => {
     ).toBe(true);
   });
 });
+
+/* ------------------------------------------------------------------- owner */
+
+describe('the Owner filter and sort — yours and your team\'s vs Engage and shared', () => {
+  const OWNED = [
+    { id: 'pub', name: 'Zebra Public', scope: 'public', active: true, engagementType: 'poll', createdAt: '2026-08-04T00:00:00Z' },
+    { id: 'eng', name: 'Alpha Engage', scope: 'platform', active: true, engagementType: 'poll', createdAt: '2026-08-03T00:00:00Z' },
+    { id: 'tm', name: 'Mid Team', scope: 'org', mine: false, active: true, engagementType: 'poll', createdAt: '2026-08-02T00:00:00Z' },
+    { id: 'me', name: 'Yours Truly', scope: 'org', mine: true, active: true, engagementType: 'poll', createdAt: '2026-08-01T00:00:00Z' },
+  ];
+  const ownerFilter = () => screen.getByRole('combobox', { name: /owner/i });
+  const sortSelect = () => screen.getByRole('combobox', { name: /sort/i });
+  const names = () => rows().map((r) => within(r).getAllByRole('cell')[0].textContent);
+
+  // rejects: THE REQUEST — no way to narrow the list to whose sets they are.
+  test('there is an Owner filter offering all four owners', () => {
+    render(<QuestionSetsPanel questionSets={OWNED} />);
+    const labels = within(ownerFilter()).getAllByRole('option').map((o) => o.textContent);
+    expect(labels).toEqual(['All owners', 'Yours', 'Team', 'Engage', 'Public']);
+  });
+
+  test('choosing Engage shows only Engage\'s library', () => {
+    render(<QuestionSetsPanel questionSets={OWNED} />);
+    fireEvent.change(ownerFilter(), { target: { value: 'engage' } });
+    expect(rows()).toHaveLength(1);
+    expect(names()[0]).toMatch(/Alpha Engage/);
+  });
+
+  test('choosing Team shows the team\'s sets but not your own', () => {
+    render(<QuestionSetsPanel questionSets={OWNED} />);
+    fireEvent.change(ownerFilter(), { target: { value: 'team' } });
+    expect(rows()).toHaveLength(1);
+    expect(names()[0]).toMatch(/Mid Team/);
+  });
+
+  // rejects: THE REQUEST, second half — a sort that ignores ownership.
+  test('the Owner sort puts yours and your team\'s first, the shared library last', () => {
+    render(<QuestionSetsPanel questionSets={OWNED} />);
+    fireEvent.change(sortSelect(), { target: { value: 'owner' } });
+    // Map each rendered row back to the fixture whose name it carries, rather
+    // than parsing cell text: the cell also renders a placeholder dash and the
+    // owner chip, and a test that strips those by regex is testing the markup,
+    // not the order. (The first draft did exactly that and failed on the dash
+    // while the sort itself was already right.)
+    const order = rows().map((r) => OWNED.find((set) => r.textContent.includes(set.name)).name);
+    expect(order).toEqual(['Yours Truly', 'Mid Team', 'Alpha Engage', 'Zebra Public']);
+  });
+
+  // rejects: the filter living only in the UI, so the drop-exit counts and the
+  // list could disagree. matchesFilters is the predicate both share.
+  test('matchesFilters honours owner, the predicate the counts share', () => {
+    expect(matchesFilters(OWNED[1], { owner: 'engage' })).toBe(true);
+    expect(matchesFilters(OWNED[3], { owner: 'engage' })).toBe(false);
+    expect(matchesFilters(OWNED[3], { owner: 'yours' })).toBe(true);
+  });
+});

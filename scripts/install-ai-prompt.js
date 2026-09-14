@@ -102,7 +102,7 @@ const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   }));
   if (!rec.Item) { console.error('  VERIFY FAILED: no pointer record'); process.exit(1); }
   console.log(`  pointer  ok   s3Key=${rec.Item.s3Key}`);
-  if (rec.Item.ttl) { console.error('  VERIFY FAILED: pointer carries a ttl — see docs/02-data-model.md'); process.exit(1); }
+  if (rec.Item.ttl) { console.error('  VERIFY FAILED: pointer carries a ttl — see docs/architecture/data-model.md'); process.exit(1); }
 
   try {
     await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: rec.Item.s3Key }));

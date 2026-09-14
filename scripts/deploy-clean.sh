@@ -55,6 +55,36 @@ else
     exit 1
 fi
 
+# ── GUARDS ─────────────────────────────────────────────────────────────────
+#
+# THIS IS AN ESCAPE HATCH, NOT A DEPLOY ROUTE. The pipeline is the only
+# sanctioned way to reach a tier (CLAUDE.md); this exists for the case where the
+# pipeline itself is broken and dev needs a backend fix by hand. The refusals
+# below keep it from becoming what it was: a one-argument way to deploy anything
+# anywhere, advertised in docs, wired to three npm scripts.
+
+# TEST AND PROD GO THROUGH THEIR PIPELINE. By hand they skip the lint and test
+# gate in buildspec-*.yml and, on prod, the ApprovalForProd gate.
+case "$STACK_NAME" in
+  engagetest|engageprod)
+    print_error "$STACK_NAME must be deployed by its pipeline, not by hand."
+    print_error "A hand deploy skips the lint/test gate and, on prod, the approval gate."
+    print_error "Push the branch or the <tier>-v* tag instead - both trigger. See CLAUDE.md."
+    exit 1
+    ;;
+esac
+
+# THE RETIRED TWIN IS NOT A TARGET. eng*/engdev is the off-pipeline duplicate
+# frozen at a 2026-07-02 bundle. Deploying there reports success and changes
+# nothing anyone can see - the failure mode that cost two days once already.
+case "$STACK_NAME" in
+  engdev|engtest|engprod)
+    print_error "$STACK_NAME is the RETIRED twin stack - deploying to it changes nothing live."
+    print_error "The live dev tier is 'engagedev' (https://engage.dev.seibtribe.us)."
+    exit 1
+    ;;
+esac
+
 # Check if AWS CLI is configured (use adminaccess profile if AWS_PROFILE not set)
 if [ -z "$AWS_PROFILE" ]; then
     export AWS_PROFILE=adminaccess
@@ -97,13 +127,17 @@ if [ -n "$DOMAIN" ] && [ -n "$HOSTED_ZONE_ID" ]; then
 fi
 
 # Try to retrieve GitHub token from Secrets Manager if not set
-if [ -z "$GITHUB_TOKEN" ] && [ "$ENVIRONMENT" = "dev" ]; then
+# Per-tier secret id, and the SecretString is JSON. This used to take the raw
+# blob, so GitHubToken arrived as {"GITHUB_TOKEN":"..."} and issue creation was
+# broken on every hand deploy. buildspec-*.yml pipes through jq for this reason.
+if [ -z "$GITHUB_TOKEN" ]; then
     print_status "Attempting to retrieve GitHub token from Secrets Manager..."
     GITHUB_TOKEN=$(aws secretsmanager get-secret-value \
-        --secret-id "engage/dev/github-token" \
+        --secret-id "engage/${ENVIRONMENT}/github-token" \
         --query SecretString \
         --output text \
-        --region "$AWS_REGION" 2>/dev/null)
+        --region "$AWS_REGION" 2>/dev/null | jq -r .GITHUB_TOKEN 2>/dev/null || echo "")
+    [ "$GITHUB_TOKEN" = "null" ] && GITHUB_TOKEN=""
     
     if [ -n "$GITHUB_TOKEN" ]; then
         print_success "GitHub token retrieved from Secrets Manager"
@@ -130,19 +164,41 @@ fi
 
 # Google OAuth credentials from SSM (CloudFormation cannot resolve ssm-secure
 # in Cognito IdP properties, so the values are passed as NoEcho parameters)
-if [ "$ENVIRONMENT" = "dev" ]; then
-    print_status "Retrieving Google OAuth credentials from SSM..."
-    GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name "/engdev/google/client-id" \
-        --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null)
-    GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter --name "/engdev/google/client-secret" \
-        --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null)
+# THE GUARD THAT MATTERS. This block used to run only when ENVIRONMENT was
+# "dev", so every other target deployed with GoogleClientSecret unset - which
+# flips HasGoogleOAuth false in template-clean.yaml, rewrites
+# SupportedIdentityProviders without Google, and DELETES GoogleIdentityProvider.
+# That is the production sign-in outage buildspec-prod.yml documents.
+#
+# Path order follows buildspec-dev.yml: the stack's own parameters first, the
+# legacy /engdev/* pair as fallback.
+#
+# Unlike the buildspec, a missing secret REFUSES rather than warns. CI has no
+# one to ask, so it proceeds; a hand-run has someone at the keyboard, and
+# silently removing an identity provider is not a thing to find out afterwards.
+# Override with ALLOW_NO_GOOGLE=1 when that is genuinely what you want.
+print_status "Retrieving Google OAuth credentials from SSM..."
+GOOGLE_CLIENT_ID=$(aws ssm get-parameter --name "/$STACK_NAME/google/client-id" \
+    --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null \
+    || aws ssm get-parameter --name "/engdev/google/client-id" \
+    --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null || echo "")
+GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter --name "/$STACK_NAME/google/client-secret" \
+    --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null \
+    || aws ssm get-parameter --name "/engdev/google/client-secret" \
+    --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null || echo "")
 
-    if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-        print_success "Google OAuth credentials retrieved — Google sign-in enabled"
-        PARAMETERS="$PARAMETERS GoogleClientId=$GOOGLE_CLIENT_ID GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
-    else
-        print_warning "Google OAuth credentials not found in SSM — Google sign-in disabled"
-    fi
+if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+    print_success "Google OAuth credentials retrieved - Google sign-in enabled"
+    PARAMETERS="$PARAMETERS GoogleClientId=$GOOGLE_CLIENT_ID GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
+elif [ "$ALLOW_NO_GOOGLE" = "1" ]; then
+    print_warning "No Google params at /$STACK_NAME/google/* or /engdev/google/*."
+    print_warning "ALLOW_NO_GOOGLE=1 set - proceeding. This deploy REMOVES Google sign-in."
+else
+    print_error "No Google OAuth params at /$STACK_NAME/google/* or /engdev/google/*."
+    print_error "Deploying now would DELETE the Cognito Google identity provider and"
+    print_error "break Google sign-in on $STACK_NAME. Refusing."
+    print_error "Store them, or re-run with ALLOW_NO_GOOGLE=1 if that is intended."
+    exit 1
 fi
 
 # Mask secret values when echoing parameters
@@ -154,7 +210,7 @@ print_status "Deploying CloudFormation stack..."
 sam deploy \
     --template-file .aws-sam/build/template.yaml \
     --stack-name "$STACK_NAME" \
-    --capabilities CAPABILITY_IAM \
+    --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
     --parameter-overrides $PARAMETERS \
     --resolve-s3 \
     --tags Environment="$ENVIRONMENT" StackName="$STACK_NAME" \

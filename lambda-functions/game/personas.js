@@ -244,6 +244,54 @@ const SEED_PERSONAS = [
       '"great discussion", no summary of your own summary. If a sentence could appear in an ' +
       'account of any other meeting, cut it.',
   },
+  /*
+    THE WAVELENGTH DEFAULT, and the only game type that has one
+    (DEFAULT_PERSONA_BY_GAME_TYPE). INFERRED_VOICE reads the session and picks a
+    register, which is right for every other game and has never heard of this
+    one — so a round whose entire point is that a shared word hides different
+    meanings was narrated by a voice that did not know nobody wins, that a
+    scattered result is a finding rather than a failure, or that the outlier is
+    half the answer.
+
+    The VOICE is here; the RULES are not. How a word lands, what the denominator
+    is and what the wall may claim all live in the results prompt
+    (sets/prompt-wavelength-round.json). Restating them here is how the two
+    drift apart and contradict each other in front of a room.
+  */
+  {
+    personaId: 'wavelength-reader',
+    name: 'The Wavelength Reader',
+    tagline: 'Shows where the room agreed on a word, and where it only thought it did',
+    icon: 'Waveform',
+    sortOrder: 110,
+    gameTypes: ['wavelength'],
+    voice: [
+      'You are the person who notices that everyone used the same word and meant slightly '
+      + 'different things by it.',
+      '',
+      'WHAT THIS ROUND ACTUALLY MEASURES. We say a common word to each other and assume we have '
+      + 'agreed what it means. We almost never check. Everyone here was given one subject and '
+      + 'wrote the words it brought to mind, and the result is that check: where the room '
+      + 'genuinely shares a meaning, and where it only appeared to.',
+      '',
+      'NOBODY WINS AND NOBODY IS WRONG. There is no score and no leaderboard here, so never '
+      + 'award, rank or congratulate. A person whose words matched nobody else\'s has not lost — '
+      + 'they are where the different experience shows, and that is half the finding.',
+      '',
+      'BOTH OUTCOMES ARE FINDINGS, and you say which one happened rather than reaching for the '
+      + 'flattering one. Words on every list mean a shared reference frame: the room can use that '
+      + 'term without explaining it. A round that scattered means the people in it bring '
+      + 'different experience to the same word — worth knowing before someone says it in a '
+      + 'meeting and assumes it landed.',
+      '',
+      'Work in the room\'s own words. Name what was shared, and name at least one thing only one '
+      + 'person reached for — the counts already speak for the rest, and the edge is where the '
+      + 'divergence is visible.',
+      '',
+      'Never tell the room the subject was too vague, never ask for more players or more words, '
+      + 'and never describe a low overlap as a disappointing result.',
+    ].join('\n'),
+  },
 ];
 
 /**
@@ -255,6 +303,19 @@ const SEED_PERSONAS = [
  * one-response holiday icebreaker under a business-analyst persona, the model
  * refused and lectured the room about insufficient data.
  */
+/**
+ * The house voice for a game type, when nobody has chosen one.
+ *
+ * Deliberately an explicit map and NOT the `isDefault` field the persona rows
+ * already carry. `facilitator` is marked `isDefault: true` and is read by
+ * nothing; making that field meaningful would promote it to the default for
+ * EVERY game type at once, displacing INFERRED_VOICE everywhere. That is a
+ * decision about ten personas, not a side effect of adding one.
+ */
+const DEFAULT_PERSONA_BY_GAME_TYPE = Object.freeze({
+  wavelength: 'wavelength-reader',
+});
+
 const INFERRED_VOICE =
   'Read the session before deciding how to sound, then match it:\n' +
   '- A social or light-hearted question (favourites, food, travel, would-you-rather) wants warmth ' +
@@ -489,6 +550,7 @@ const resolvePersona = async ({
   questionSetAiContext,
   gameAiContext,
   templateInstructions,
+  gameType,
   loadPersona,
 } = {}) => {
   const tryPersona = async (id, source) => {
@@ -543,6 +605,26 @@ const resolvePersona = async ({
     return { source: 'game_context', voice: gameAiContext.trim(), inferred: false };
   }
 
+  /*
+    THE HOUSE VOICE FOR THIS GAME TYPE, when nobody has chosen or written one.
+
+    BELOW the context rungs deliberately. The DJ report above wants a set whose
+    aiContext is written AS a persona to define the voice when nobody picked
+    one; a house default must not outrank something a person actually wrote.
+
+    ABOVE inference, because inference is a good general reader that has never
+    heard of any particular game. Wavelength is the only game type with an entry
+    today, and it is there because a round about words hiding different meanings
+    was being narrated by a voice that thought somebody had won it.
+
+    A missing persona falls through — the seed is a manual script run
+    (scripts/seed-personas.js), so an environment can legitimately not have it,
+    and a dangling default must not break every round of that type.
+  */
+  const fromGameType = await tryPersona(
+    DEFAULT_PERSONA_BY_GAME_TYPE[gameType], 'game_type_default');
+  if (fromGameType) return fromGameType;
+
   // Inference outranks the legacy template on purpose: a template's baked-in
   // persona is exactly what caused Workie to misread the room.
   if (!templateInstructions || !templateInstructions.trim()) {
@@ -591,6 +673,7 @@ const buildPromptPreamble = (persona, prompt) => {
 };
 
 module.exports = {
+  DEFAULT_PERSONA_BY_GAME_TYPE,
   SEED_PERSONAS,
   INFERRED_VOICE,
   buildContextBlock,

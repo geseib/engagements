@@ -84,4 +84,55 @@ export const setOwnerIsOurs = (set) => {
   return tag === YOURS || tag === TEAM;
 };
 
-export default { setOwnerTag, setOwnerLabel, setOwnerTitle, setOwnerIsOurs };
+/**
+ * WHICH OWNER COMES FIRST WHEN A LIST IS SORTED BY OWNER.
+ *
+ * The order is the owner's own words: "sorted by the individual or teams vs the
+ * system wide or shared". What you wrote, then your team's, then Engage's
+ * library, then the public one — the two you can edit before the two you can
+ * only copy, which is the same line `setOwnerIsOurs` draws.
+ *
+ * Kept HERE, beside the tag, so the four values and their order live in one
+ * file. Both the question sets panel and the prompt library sort by it; a
+ * second copy of this ordering in either would be free to disagree.
+ *
+ * Built on setOwnerTag, so a row with no recognised scope ranks as Engage —
+ * never as the reader's own. Ranking a mystery row first would imply it is
+ * theirs, which is the dangerous direction setOwnerTag already refuses.
+ */
+const RANK = { [YOURS]: 0, [TEAM]: 1, [ENGAGE]: 2, [PUBLIC]: 3 };
+export const setOwnerRank = (set) => RANK[setOwnerTag(set)];
+
+/** The owner filter's options, in rank order, labelled as the chip labels them. */
+export const OWNER_OPTIONS = [YOURS, TEAM, ENGAGE, PUBLIC].map((value) => ({
+  value, label: LABELS[value],
+}));
+
+/**
+ * PROMPTS HAVE THREE OWNERS, NOT FOUR — BY DECISION, NOT OMISSION.
+ *
+ * A prompt does not record its author as a user: create-ai-prompt.js stamps
+ * `createdBy: 'admin-interface'`, a literal, so there is no `mine` to read. Yours
+ * and Team therefore cannot be told apart for a prompt, and existing prompts
+ * could never qualify as Yours even if new ones did.
+ *
+ * The owner chose to offer only the owners that CAN be distinguished — Team,
+ * Engage, Public — rather than a Yours filter that would always come back empty.
+ * In individual mode an organisation is one person, so its Team prompts are
+ * theirs anyway.
+ *
+ * YOURS is folded into TEAM explicitly rather than relied on to never occur.
+ * If prompts ever do start carrying `mine`, setOwnerTag would begin answering
+ * Yours, and a filter with no Yours option would silently hide those rows. This
+ * keeps the three-way split true until someone deliberately makes it four.
+ */
+export const promptOwnerTag = (prompt) => {
+  const tag = setOwnerTag(prompt);
+  return tag === YOURS ? TEAM : tag;
+};
+export const promptOwnerRank = (prompt) => RANK[promptOwnerTag(prompt)];
+export const PROMPT_OWNER_OPTIONS = [TEAM, ENGAGE, PUBLIC].map((value) => ({
+  value, label: LABELS[value],
+}));
+
+export default { setOwnerTag, setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerRank };

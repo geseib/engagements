@@ -24,11 +24,12 @@ scanning a QR code. Nobody installs anything and nobody but the host signs in.
 > ```
 >
 > Note also that `eng.dev.seibtribe.us` is **not** the dev site. It is the retired off-pipeline
-> `engdev` stack, frozen at a July 2026 bundle. See `DEPLOYMENT.md`.
+> `engdev` stack, frozen at a 2026-07-02 bundle. See `DEPLOYMENT.md`.
 
 ## 🔄 Deploying
 
-**`DEPLOYMENT.md` is the single source of truth.** It is accurate; this section is a summary and
+**`CLAUDE.md`'s first two sections are the source of truth on deploys**, and
+`DEPLOYMENT.md` carries the mechanics. This section is a summary and
 deliberately does not restate its tables, because duplicating them is how the ones above came to
 be wrong.
 
@@ -91,8 +92,14 @@ could render 2; the other 16 opened a box saying the documentation was "currentl
 development". `src/src/__tests__/helpContent.test.js` now asserts that every advertised guide
 exists, carries real prose, and only uses placeholders that exist in the template catalogue.
 
-Engineering notes are in `/docs`. `DEPLOYMENT.md` covers deployment; `DATABASE_DESIGN.md` and
-`API_DOCUMENTATION.md` cover the data and API layers.
+Engineering notes are in `/docs`. `DEPLOYMENT.md` covers deployment and
+`docs/architecture/api.md` is the API surface, generated from
+`template-clean.yaml` by `scripts/generate-api-doc.js`.
+
+`DATABASE_DESIGN.md`, `VOTING_DESIGN.md`, `API_DOCUMENTATION.md` and
+`PROJECT_INDEX.md` were deleted in the 2026-09 cleanup. All four described key
+shapes and routes the code has never used, and two of them disagreed with each
+other. `docs/architecture/data-model.md` is the data reference.
 
 ## 🧑‍💻 Getting started
 
@@ -110,4 +117,5 @@ npm run build      # production bundle
 Backend tests run from the repo root with `node tests/<file>.js`.
 
 To ship a change: work on a branch, get the suites green, then push to `dev` — which deploys it.
-Read `DEPLOYMENT.md` first; a branch push to a tier branch is not a way to share code.
+Read `CLAUDE.md`'s deploy sections first: a push to a tier branch **deploys**, so it
+is not a way to share code.

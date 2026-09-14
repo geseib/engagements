@@ -26,8 +26,11 @@ What the widened permission does **not** change:
   history is the only reliable record of what is live.
 - **Push the branch or the tag, never both at once** — both trigger, so doing both fires two
   executions of one commit into the same stack.
-- **Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`.**
-  They target the off-pipeline `engdev` stack, not the CI/CD tiers.
+- **There is no hand-deploy command.** `deployall`, `deploy-frontend-eng.sh`,
+  `deploy-dev-full.sh` and `update-frontend-env.sh` were deleted in `0968435f`;
+  they targeted the off-pipeline `engdev` twin, not the CI/CD tiers.
+  `scripts/deploy-clean.sh` survives as a guarded escape hatch for a broken
+  pipeline: backend only, and it refuses test, prod and every twin stack.
 
 ## **WHAT COUNTS AS A DEPLOY — read this before believing the template**
 
@@ -62,8 +65,9 @@ fail with **HTTP 403** while pushes to `refs/heads/*` succeed. Verified four way
 `--dry-run` tag push that succeeds where the real one does not. So from that environment a
 branch push is the only deploy route available, which — given the rule above — works.
 
-Never run `./deployall`, `./scripts/deploy-clean.sh` or `./scripts/deploy-frontend-eng.sh`. They
-target the off-pipeline `engdev` stack, not the CI/CD tiers.
+The hand-deploy scripts that targeted the `engdev` twin are gone (`0968435f`).
+`scripts/deploy-clean.sh` is the one survivor and now refuses test, prod and the
+twin stacks; it deploys the backend only.
 
 ## Project Overview
 Real-time engagement platform for strategic thinking sessions with AWS serverless architecture.
@@ -72,29 +76,30 @@ Real-time engagement platform for strategic thinking sessions with AWS serverles
 - **Frontend**: React, WebSockets, QR codes
 - **Backend**: AWS Lambda (Node.js), DynamoDB, API Gateway, WebSocket API
 - **Infrastructure**: SAM (Serverless Application Model), CloudFormation
-- **Deployment**: CodePipeline per tier, **triggered by git tags only**
+- **Deployment**: one CodePipeline per tier. **A TAG AND A BRANCH PUSH BOTH
+  DEPLOY** — see the two sections at the top of this file, which are the
+  verified version. Do not restate the trigger rule anywhere else.
 
-## Deployment Strategy
-Three CodePipelines, one per tier, each started by **one thing: a tag**. A branch push shares
-code and deploys nothing. See `DEPLOYMENT.md` for the full picture.
+## Deployment: the rest of the picture
+The trigger rule and the per-tier permissions are at the top of this file and are
+not repeated here. This section carries only what those two sections do not say.
 
-| Tier | Stack | Trigger | Gate |
-|---|---|---|---|
-| **dev** | `engagedev` | `dev-v*` tag | none — deploys immediately |
-| **test** | `engagetest` | `test-v*` tag | none — deploys immediately |
-| **prod** | `engageprod` | `prod-v*` tag | halts at `ApprovalForProd` until a human approves |
-
-- **Flow**: `dev` → `test` → `prod`
+- **Flow**: `dev` → `test` → `prod`. Never start prod for work that has not sat on test.
 - `main` triggers nothing and has no pipeline attached.
 - The `engagecicd` stack itself is **not** deployed by any pipeline — it is applied by hand with
   `aws cloudformation deploy --template-file cicd/pipeline-clean.yaml --stack-name engagecicd`.
+  Beware: `cicd/pipeline-clean.yaml` as committed carries `b6929cac`'s tags-only
+  `Triggers`, which has deliberately never been applied. Applying it would make
+  branch pushes inert and cost Claude its only deploy route (tag pushes 403 from
+  the remote container).
 - The `eng*` / `engdev` stacks are an off-pipeline duplicate being retired. Not a CI/CD tier.
+  `scripts/deploy-clean.sh` now refuses them, and refuses test and prod outright.
 
 ## Architecture Overview
 
 ### Database Design
 - Single-table DynamoDB pattern
-- Key prefixes: `GAME#`, `PLAYER#`, `GAMES`
+- Key prefixes: `GAME#`, `PLAYER#`, `ROUND#`, `GAMES`, plus the three tenancy scopes built in `lambda-functions/*/tenant.js` (`SETS`, `ORG#<org>#SETS`, `PUBLIC#SETS`). Nothing outside tenant.js may write a bare `SETS`/`GAMES` literal — `tests/no-global-partition-literals.js` fails the build if one appears.
 - TTL: **90 days from creation, for the session itself** — and nothing moves it.
 
   The line here used to read "90 days (creation), 7 days (active)", which reads
@@ -134,44 +139,52 @@ Create → Start (players join) → Questions (ASK/VOTE/RESULTS) → End
   /admin/              # Admin functions, AI generation
 /src/src/              # React frontend
   GameHostPage.jsx     # Host interface
-  GamePlayerPage.jsx   # Player interface
+  PlayerPage.jsx       # Player interface
   /components/         # Reusable UI components
 /template-clean.yaml   # SAM infrastructure
 ```
 
 ## Common Commands
 
+### Deploying
+There is no deploy command. **The pipeline is the deploy** — push the branch or
+the tag, never both. `deployall`, `deploy-frontend-eng.sh`, `deploy-dev-full.sh`
+and `update-frontend-env.sh` were deleted in `0968435f`: they only ever reached
+the retired twin.
+
+`scripts/deploy-clean.sh engagedev` survives as an escape hatch for a broken
+pipeline. It deploys the BACKEND only, refuses test and prod, and refuses the
+twin stacks. Read its guards before using it.
+
 ### Development
 ```bash
-# Deploy all (backend + frontend)
-./deployall
+cd src && npm start          # frontend dev server (proxies to engagedev)
+sam local start-api          # local API testing
 
-# Deploy backend only
-./scripts/deploy-clean.sh engdev eng.dev.seibtribe.us
-
-# Deploy frontend only
-./scripts/deploy-frontend-eng.sh
-
-# Local development
-npm start              # Frontend dev server
-sam local start-api    # Local API testing
-
-# Debugging
-sam logs -n [FunctionName] --stack-name engdev --tail
+# Logs — note the stack name is engagedev, not engdev
+sam logs -n [FunctionName] --stack-name engagedev --tail
 ```
 
 ### Testing
 ```bash
-# Create game
-curl -X POST https://api.dev.domain.com/games \
-  -H "Content-Type: application/json" \
-  -d '{"eventTitle":"Test","gameType":"trivia","questionSetId":"tech"}'
+# Backend: standalone node scripts, no jest. Judge by exit code.
+node tests/<file>.js
 
-# Get game state
-curl https://api.dev.domain.com/games/{gameId}?role=host
+# Frontend
+cd src && npm test && npm run lint && npm run build
+```
 
-# Clear games (dev only)
-curl -X DELETE https://api.dev.domain.com/admin/clear-all-games
+Baselines and the eleven undeclared packages a fresh checkout needs are recorded
+in the session memory, not here — they move too often to live in this file.
+
+### Poking the API by hand
+`api.dev.domain.com` never existed. The real dev base URL is in the environment
+table below, and `POST /games` now requires the Cognito authorizer, so an
+unauthenticated curl gets a 401 rather than a session.
+
+```bash
+# Clear games (dev only). POST, not DELETE.
+curl -X POST <dev-api-base>/admin/clear-all-games
 ```
 
 ## Environment URLs
@@ -211,9 +224,9 @@ retired — but the table above sent everyone to it anyway. It is frozen at a Ju
 **every change shipped since then is invisible there** and the site reads as "the deploy did
 nothing". Its bundle even carries the **test** pool id, baked in at build time.
 
-This is the concrete reason for the standing rule against `./deployall`,
-`./scripts/deploy-clean.sh` and `./scripts/deploy-frontend-eng.sh`: they publish to
-`engdev-web`, which is the dead twin.
+This is the concrete reason those hand-deploy scripts were deleted: they published
+to `engdev-web`, the dead twin. It is also why `scripts/deploy-clean.sh` now
+refuses a twin stack by name rather than trusting the caller to pass the right one.
 
 ### Password reset: which ACCOUNTS exist, never which pool is configured how
 
@@ -267,15 +280,21 @@ limit, so use it sparingly rather than in a loop.
 - **User Groups**: `admins`, `hosts`, `pending`
 - **Public Access**: Players can join sessions without login
 - **Protected Routes**: Host/admin features require authentication
-- **Social Providers**: Google, Facebook, Amazon, Apple (configured via Cognito Console)
+- **Social Providers**: Google only. The template defines one identity provider; Facebook/Amazon/Apple were never configured.
 
 ### Setup Authentication
-1. Deploy SAM template: `./deployall` or `./scripts/deploy-clean.sh engdev eng.dev.seibtribe.us`
-2. Update frontend environment: `./scripts/update-frontend-env.sh engdev`
-3. **Configure Social Providers (Optional)**: In AWS Cognito Console, add Google/Facebook/Amazon/Apple providers
-4. **Update UserPoolClient**: Add social providers to SupportedIdentityProviders in template-clean.yaml if configured
-5. Create admin user via Cognito Console or registration form
-6. Add user to `admins` group
+The pipeline does all of this. A deploy resolves the Google client id and secret
+from SSM, passes them as NoEcho parameters, and writes `public/config.js` from
+the stack outputs — there is no separate frontend-env step any more.
+
+1. Deploy the tier (push the branch or the tag).
+2. Google sign-in needs `/<stack>/google/client-id` and `/client-secret` in SSM.
+   **Without them a deploy DELETES the Cognito Google provider** — see the warning
+   the buildspecs print, and the refusal in `scripts/deploy-clean.sh`.
+3. Run `scripts/setup-post-confirmation.sh` once per new pool — the Cognito
+   trigger is not wired by the template.
+4. Create the admin user via the Cognito console or the registration form, then
+   add them to the `admins` group.
 
 ### User Management
 - **Admins**: Can create/manage users, access all features
@@ -284,7 +303,7 @@ limit, so use it sparingly rather than in a loop.
 - **Registration**: Users register → pending group → admin approval → hosts/admins group
 
 ## AI Integration
-- AWS Bedrock (Claude 3 Haiku) for result summaries
+- AWS Bedrock (Claude Haiku 4.5, with Sonnet 4.6 for the heavier prompts) for result summaries
 - Prompt generation and customization via admin UI
 - GitHub issue creation for feedback
 
@@ -315,15 +334,6 @@ limit, so use it sparingly rather than in a loop.
 }
 ```
 
-## Active Issues
-- Category bitmask showing zeros (debug logging added)
-- Categories flashing then deactivating
-- Player dates showing 1969 epoch time
-
-## Recent Changes
-- **Authentication System**: Upgraded to UserPoolV2 with mutable email attributes to fix Google OAuth
-- **Documentation**: See `docs/AUTHENTICATION_RECOVERY.md` for post-deployment steps
-- **Domain Change**: Cognito domain changed from `engdev-auth` to `engdev-auth-v2`
 
 ## Data Flow Pattern
 1. **Action**: Host triggers via HTTP API
@@ -338,4 +348,8 @@ limit, so use it sparingly rather than in a loop.
 - WebSocket notification batching
 
 ---
-*Last Updated: 2025-07-28*
+*This file is the agent contract. The two sections at the top (the deployment
+rule and what counts as a deploy) and the environment table are verified and
+load-bearing; treat the rest as background. Status lists used to live here and
+were removed in the 2026-09 cleanup — they were fourteen months stale and no
+reader could tell.*

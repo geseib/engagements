@@ -56,6 +56,15 @@
  * one call each, no round needed. `readFeedbackRound` below always supplies a
  * round, so nothing legitimate is narrowed by this.
  *
+ * THE OTHER READER OF THAT BARE PREFIX WAS OPEN TOO, until 2026-08-28.
+ * `create-report.js` queries the session-wide `COMMENT#` prefix directly, and
+ * `POST /games/{gameId}/report` had no authorizer — so the walk this gate
+ * refuses was available in one call on the route next door, and with the whole
+ * session's names and answers attached. It carries the authorizer now and asks
+ * `callerMayDriveSession`. Read that as a reason to keep this gate rather than
+ * as one to relax it: the two routes were the same hole and only one of them
+ * was ever guarded.
+ *
  * So the gate here is not "who are you" but "is the room actually doing this
  * right now", and it is two facts read from the table, not one:
  *

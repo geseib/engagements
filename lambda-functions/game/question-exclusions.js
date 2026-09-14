@@ -36,6 +36,7 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 
 const { normaliseQueue } = require('./queue-order');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -98,6 +99,24 @@ exports.handler = async (event) => {
   if (!gameId) return respond(400, { error: 'gameId is required' });
 
   try {
+    /*
+      WHOSE ROOM IS THIS? Both events carry the Cognito authorizer, which says
+      the caller is *a* host and not that they are THIS session's host — so the
+      boundary was "any `hosts` account plus one of the 9,000 four-digit ids".
+
+      Once, above the method split, exactly as in question-queue.js: the veto
+      list names unasked questions on the way out, and adds to them on the way
+      in. One GetItem; 404 rather than 403 — see tenant.callerMayDriveSession.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return respond(404, { error: 'Game not found' });
+    }
+
     if (method === 'GET') {
       const current = await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME, Key: rowKey(gameId),

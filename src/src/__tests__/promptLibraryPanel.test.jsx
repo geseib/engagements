@@ -613,3 +613,72 @@ describe('the row actions reach the callbacks', () => {
     expect(within(rows[1]).getByTestId('plib-copy-archive-p2')).not.toBeDisabled();
   });
 });
+
+/* ------------------------------------------------------------------- owner */
+
+describe('the Owner filter and sort — your team\'s prompts vs Engage\'s and shared', () => {
+  /*
+    Prompts do not record their author as a user (createdBy is the literal
+    'admin-interface'), so "yours" cannot be told apart from "your team's". The
+    owner decision was to offer the three owners that CAN be told apart — Team,
+    Engage, Public — rather than a Yours option that would always be empty. In
+    individual mode an organisation is one person, so Team prompts are theirs.
+  */
+  const OWNED = [
+    { promptId: 'pub', name: 'Zebra Public', scope: 'public', gameType: 'poll', category: 'x', status: 'active' },
+    { promptId: 'eng', name: 'Alpha Engage', scope: 'platform', gameType: 'poll', category: 'x', status: 'active' },
+    { promptId: 'tm', name: 'Mid Team', scope: 'org', orgId: 'org_nw', gameType: 'poll', category: 'x', status: 'active' },
+  ];
+  const base = { search: '', gameType: 'all', category: 'all', status: 'all' };
+  const show = (filters, onFilterChange = jest.fn()) => render(
+    <PromptLibraryPanel prompts={OWNED} filters={filters} onFilterChange={onFilterChange} />
+  );
+  const order = (container) => [...container.querySelectorAll('.plib-tbl tbody tr')]
+    .map((tr) => OWNED.find((p) => tr.textContent.includes(p.name)).name);
+
+  // rejects: THE REQUEST — no way to narrow prompts to whose they are.
+  test('there is an Owner filter offering Team, Engage and Public — and no empty Yours', () => {
+    show(base);
+    const select = screen.getByRole('combobox', { name: /owner/i });
+    const labels = within(select).getAllByRole('option').map((o) => o.textContent);
+    expect(labels).toEqual(['All owners', 'Team', 'Engage', 'Public']);
+  });
+
+  test('choosing an owner reports it to the page that owns the filters', () => {
+    const onFilterChange = jest.fn();
+    show(base, onFilterChange);
+    fireEvent.change(screen.getByRole('combobox', { name: /owner/i }), { target: { value: 'engage' } });
+    expect(onFilterChange).toHaveBeenCalledWith(expect.objectContaining({ owner: 'engage' }));
+  });
+
+  test('an owner filter narrows the table to that owner', () => {
+    const { container } = show({ ...base, owner: 'team' });
+    expect(order(container)).toEqual(['Mid Team']);
+  });
+
+  // rejects: THE REQUEST, second half.
+  test('the Owner sort puts the team\'s prompts first and the shared library last', () => {
+    const { container } = show({ ...base, sort: 'owner' });
+    expect(order(container)).toEqual(['Mid Team', 'Alpha Engage', 'Zebra Public']);
+  });
+
+  // rejects: silently reordering the list for everyone. The sort is opt-in.
+  test('without choosing a sort, the order the prompts arrived in is left alone', () => {
+    const { container } = show(base);
+    expect(order(container)).toEqual(['Zebra Public', 'Alpha Engage', 'Mid Team']);
+  });
+
+  // rejects: relying on prompts never carrying `mine`. If one ever does, the
+  // shared tag would call it Yours — an owner this filter does not offer — and
+  // the row would vanish under every owner choice but All.
+  test('a prompt that does carry mine still files under Team, not an unofferable Yours', () => {
+    const mine = { ...OWNED[2], promptId: 'mine', name: 'Written By Me', mine: true };
+    expect(matchesPromptFilters(mine, { ...base, owner: 'team' })).toBe(true);
+  });
+
+  // rejects: a filter that exists only in the UI, so counts and list disagree.
+  test('matchesPromptFilters honours owner', () => {
+    expect(matchesPromptFilters(OWNED[1], { ...base, owner: 'engage' })).toBe(true);
+    expect(matchesPromptFilters(OWNED[2], { ...base, owner: 'engage' })).toBe(false);
+  });
+});

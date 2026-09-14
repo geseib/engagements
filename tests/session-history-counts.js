@@ -51,7 +51,12 @@ function seedSession(gameId, { players = [], rounds = null, started = true } = {
   put({
     PK: `ORG#${ORG}#GAMES`, SK: `GAME#${gameId}`, Title: `Session ${gameId}`,
     GameType: 'call-and-answer', QuestionSetId: 'set-alpha',
-    CreatedAt: '2026-08-10T09:00:00Z', Started: started, HostName: 'Ada',
+    // RELATIVE to now, like the age-window tests in §3b below. This was the
+    // literal '2026-08-10', which was 'a recent session' until the 30-day
+    // SCORE_ROW_TTL_DAYS window in get-games-list.js passed it on 2026-09-09.
+    // After that an empty session read as EXPIRED (null) rather than EMPTY (0),
+    // which is correct behaviour for a 33-day-old session, and a false failure.
+    CreatedAt: new Date(Date.now() - 2 * 864e5).toISOString(), Started: started, HostName: 'Ada',
   });
   players.forEach((name) => seatPlayer(gameId, name));
   if (rounds !== null) {

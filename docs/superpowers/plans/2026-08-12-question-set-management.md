@@ -276,7 +276,7 @@ Using a separate partition needs no change to it at all.
 One row per source, not an array: a DynamoDB item caps at 400KB and `cleanText` allows 50,000
 characters, so one source fits comfortably and three do not.
 
-**No `ttl` attribute. Ever.** `docs/02-data-model.md` reserves `ttl` for session data, the
+**No `ttl` attribute. Ever.** `docs/architecture/data-model.md` reserves `ttl` for session data, the
 table's TTL is table-wide, and RESUME's Landmines records prompts and personas silently
 vanishing a year later from exactly this mistake.
 

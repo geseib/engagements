@@ -3,7 +3,9 @@ import Icon from './Icon';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
 import useListControls from '../hooks/useListControls';
-import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
+import {
+  setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
+} from '../utils/setOwnerTag';
 import { matchesListFilters } from '../config/listControls';
 import {
   GAME_TYPE_LIST,
@@ -57,6 +59,11 @@ const SORTS = {
   oldest: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
   name: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
   questions: (a, b) => (b.totalQuestions || 0) - (a.totalQuestions || 0),
+  // Yours, then your team's, then Engage's library, then public — the two you
+  // can edit before the two you can only copy. Newest first within an owner, so
+  // choosing this does not also scramble the order people are used to.
+  owner: (a, b) => (setOwnerRank(a) - setOwnerRank(b))
+    || (new Date(b.createdAt || 0) - new Date(a.createdAt || 0)),
 };
 
 /*
@@ -77,6 +84,9 @@ const LIST_CONFIG = {
   axes: {
     type: { get: (set) => normalizeGameType(set.engagementType) },
     status: { get: (set) => (set.active ? 'active' : 'inactive') },
+    // WHOSE IT IS — the same four values as the chip on every row, from the
+    // same function, so the filter can never disagree with what a row says.
+    owner: { get: (set) => setOwnerTag(set) },
   },
   sorts: SORTS,
   defaultSort: 'newest',
@@ -122,7 +132,7 @@ export default function QuestionSetsPanel({
     contract, on the same predicate the list itself uses.
   */
   const {
-    state: { search, type, status, sort },
+    state: { search, type, status, owner, sort },
     set,
     shown,
     drops,
@@ -133,6 +143,7 @@ export default function QuestionSetsPanel({
     labels: {
       search: (needle) => `Search “${needle}”`,
       type: (value) => `Type: ${gameTypeLabel(value)}`,
+      owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
       status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
     },
   });
@@ -254,6 +265,16 @@ export default function QuestionSetsPanel({
                 ],
               },
               {
+                key: 'owner',
+                value: owner,
+                onChange: (value) => set({ owner: value }),
+                ariaLabel: 'Filter by owner',
+                options: [
+                  { value: 'all', label: 'All owners' },
+                  ...OWNER_OPTIONS,
+                ],
+              },
+              {
                 key: 'sort',
                 value: sort,
                 onChange: (value) => set({ sort: value }),
@@ -263,6 +284,7 @@ export default function QuestionSetsPanel({
                   { value: 'oldest', label: 'Oldest first' },
                   { value: 'name', label: 'Name (A–Z)' },
                   { value: 'questions', label: 'Most questions' },
+                  { value: 'owner', label: 'Owner (yours first)' },
                 ],
               },
             ]}

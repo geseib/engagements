@@ -5,6 +5,7 @@ import RemoteQuestionBrowser from './RemoteQuestionBrowser';
 import { remotePanelTabs, rosterListing } from '../config/hostRemote';
 import { roundsFrom, roundSubtitle, hasSummary } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
+import { authFetch } from '../auth/authFetch';
 
 /**
  * THE SESSION TAB, ON A PHONE.
@@ -85,7 +86,11 @@ export default function RemoteSessionPanel({
     if (!gameId) return;
     setRoundsLoading(true);
     try {
-      const res = await fetch(`${apiBase()}games/${gameId}/report`, {
+      // authFetch, like every other call HostRemote makes: POST /report carries
+      // the Cognito authorizer. This panel only ever renders inside HostRemote,
+      // which is behind ProtectedRoute, so the token is there to send — and
+      // without it the tab would silently show the empty copy below.
+      const res = await authFetch(`${apiBase()}games/${gameId}/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

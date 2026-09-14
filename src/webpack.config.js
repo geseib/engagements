@@ -76,7 +76,11 @@ module.exports = (env, argv) => {
       proxy: [
         {
           context: ['/games', '/questions'],
-          target: envFile.REACT_APP_API_URL || 'https://h1jcmja0w1.execute-api.us-east-1.amazonaws.com/dev',
+          // Fallback is the LIVE dev tier (engagedev). It used to be
+          // h1jcmja0w1, the retired eng* twin's API, so a dev server started
+          // without REACT_APP_API_URL proxied to a stack frozen in July 2026.
+          // Verified against CLAUDE.md's environment table.
+          target: envFile.REACT_APP_API_URL || 'https://ouv6fztlig.execute-api.us-east-1.amazonaws.com/dev',
           changeOrigin: true,
           secure: true,
         }

@@ -953,7 +953,7 @@ function decorate(setId, fields) {
     const fs = require('fs');
     const readerFiles = [
       'game/next-question.js', 'game/get-question.js', 'game/get-categories.js',
-      'game/select-question.js', 'game/get-question-sets.js', 'game/get-game-state.js',
+      'game/get-question-sets.js', 'game/get-game-state.js',
       'game/get-results.js', 'game/get-ai-summary.js', 'game/create-report.js',
       'websocket/schema-compliant-manager.js', 'websocket/message.js',
       'admin/download-question-set.js', 'admin/get-question-set-questions.js',

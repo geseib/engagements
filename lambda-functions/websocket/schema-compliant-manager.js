@@ -85,7 +85,7 @@ const createGame = async (gameId, gameData) => {
     // start reading a same-named set in another.
     const pinnedScope = resolvedSet.scope || setScope;
 
-    // 1. Create GAMES list entry (for efficient game listing - DATABASE_DESIGN.md requirement)
+    // 1. Create GAMES list entry (for efficient game listing - docs/architecture/data-model.md requirement)
     //
     // THE ID RESERVATION, and it is load-bearing (issue #26). The 4-digit id
     // is drawn at random from 9,000 values with — until this line — no

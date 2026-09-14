@@ -182,7 +182,7 @@ templates, not the four game-type keys it appears to. Read it carefully.
 6. **Pasted source documents.** Where does the text live — request-only, or
    stored with the set? Storing it makes regeneration and provenance possible and
    raises retention questions. Note `ttl` is for SESSION data only
-   (`docs/02-data-model.md`); prompt writers previously stamped TTLs on records
+   (`docs/architecture/data-model.md`); prompt writers previously stamped TTLs on records
    that then silently vanished a year later.
 7. **What makes a *good* generated call-and-answer set?** This is already
    written down and tested. `sets/agentic-sdlc-call-and-answer.md` records

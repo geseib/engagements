@@ -57,7 +57,7 @@
  *
  * `sub` and not username/email. This pool is UserPoolV2 with MUTABLE email
  * attributes (that mutability is what fixed Google OAuth — see
- * docs/AUTHENTICATION_RECOVERY.md), and a Cognito username can be recreated
+ * docs/archive/2025/AUTHENTICATION_RECOVERY.md), and a Cognito username can be recreated
  * after a delete. An identifier that can change or be reissued is not an
  * identifier to hang a permission on: a host who changed their email would lose
  * their own sets, and a recycled username would silently inherit someone else's.
@@ -380,7 +380,7 @@ function requireSetManager(event, setItem, verb = 'change') {
  * as platform; keeping new rows in that same shape is what keeps ONE rule.
  *
  * No `ttl` here, and none anywhere near a set row. `ttl` is for SESSION data
- * only (docs/02-data-model.md); prompts once carried a 365-day ttl and silently
+ * only (docs/architecture/data-model.md); prompts once carried a 365-day ttl and silently
  * vanished a year later.
  *
  * Returns `{}` when the caller cannot be identified, so an unattributable write

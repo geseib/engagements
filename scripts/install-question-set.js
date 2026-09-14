@@ -269,5 +269,5 @@ function reportImport(payload, writes) {
   console.log('\nVerified on the SETS row:');
   console.log(`  active=${it.active}  quickstart=${it.quickstart}  personaId=${it.personaId}`);
   console.log(`  engagementType=${it.engagementType}  questionCount=${it.questionCount}`);
-  if (it.ttl) { console.error('  WARNING: this row carries a ttl — see docs/02-data-model.md'); }
+  if (it.ttl) { console.error('  WARNING: this row carries a ttl — see docs/architecture/data-model.md'); }
 })().catch((e) => { console.error('error:', e); process.exit(1); });

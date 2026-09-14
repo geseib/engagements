@@ -3,8 +3,9 @@
 **Status: NOT runnable yet.** Everything is authored, tested and committed. Nothing
 is installed to a live table and nothing is deployed. This is the gap, in order.
 
-Every `--apply` below writes to a live environment, and every deploy is a tag push.
-Per `CLAUDE.md` both are the owner's to run. Nothing in this repo does either for you.
+Every `--apply` below writes to a live environment. **A tag push and a branch
+push both deploy** — see `CLAUDE.md`. Since 2026-08-12 Claude may deploy dev and
+test; prod may be started and halts at the owner's approval gate.
 
 ---
 
@@ -32,8 +33,9 @@ dry run just removed — `{consensusLevel}` reporting *"No votes cast"* on every
 and `votesGiven` at 0 for everyone in the report.
 
 1. Merge `claude/handoff-doc-review-78cj8d` into `dev`.
-2. Push a `dev-v*` tag. **A tag is the deploy** — a branch push is not (see
-   `DEPLOYMENT.md`; confirm which rule is live with
+2. Push the `dev` branch, or a `dev-v*` tag. **Both deploy — do not do both**,
+   or you fire two executions of one commit (see
+   `CLAUDE.md`; confirm the live rule with
    `aws codepipeline get-pipeline --name engagecicd-pipeline-dev --query 'pipeline.triggers'`).
 
 ---

@@ -18,7 +18,8 @@
  *   1. DETERMINISTIC here: case, surrounding punctuation, whitespace and
  *      hyphenation/spacing variants ("data base" / "data-base" / "database")
  *      collapse to one key. Same submissions, same clusters, every time.
- *   2. AI merges (plurals, misspellings, abbreviations) arrive as merge GROUPS
+ *   2. AI merges (one root in different forms: plurals, inflections, other
+ *      derivations, misspellings, abbreviations) arrive as merge GROUPS
  *      proposed by a model and are applied by applyMerges() — which VALIDATES
  *      rather than trusts: a merge may only regroup keys that actually exist.
  *      The model can fail to merge; it cannot invent agreement.
@@ -46,7 +47,28 @@ const matchKey = (surface) =>
  * ties break to the shortest, then alphabetically. Deterministic, so the same
  * submissions always produce the same word on the wall.
  */
-const canonicalLabel = (surfaceCounts) => {
+const canonicalLabel = (surfaceCounts, preferred = null) => {
+  /*
+    A NOMINATED SPELLING WINS, IF THE ROOM ACTUALLY SAID IT.
+
+    The tie-break below is most-frequent, then shortest, then alphabetical, and
+    it has no way to know which of `score`, `scoer` and `scroe` is the real
+    word — with all three at count 1 and length 5 it printed "scoer" on a wall.
+    The model that merged them does know, and nominates by putting the canonical
+    form first in its group.
+
+    Validated the same way merges are: a nomination that is not a surface form
+    somebody submitted is dropped and the deterministic rule stands, so the
+    model can no more invent a label than it can invent agreement.
+
+    Frequency deliberately does not outrank this. The label is a heading, not a
+    quotation — every member still rides along in `members` for the tooltip — so
+    three people spelling it wrong should not put the typo in front of a room.
+  */
+  if (preferred && Object.prototype.hasOwnProperty.call(surfaceCounts, preferred)) {
+    return preferred;
+  }
+
   let best = null;
   let bestCount = -1;
   for (const [surface, count] of Object.entries(surfaceCounts)) {
@@ -127,6 +149,15 @@ const applyMerges = (clusters, mergeGroups) => {
     if (keys.length < 2) continue;
 
     const target = merged.get(keys[0]);
+    /*
+      The group's FIRST member is the model's nominated label — the prompt asks
+      for the correctly-spelled form there. Recorded as the surface it actually
+      wrote rather than as a key, because the key has had its punctuation and
+      case stripped and "follow-up" must not become "followup" on the wall.
+      canonicalLabel drops it if no submitter used that exact form.
+    */
+    const [nominated] = group.filter((m) => typeof m === 'string' && matchKey(m) === keys[0]);
+    if (nominated) target.preferred = nominated;
     for (const key of keys.slice(1)) {
       const source = merged.get(key);
       for (const [surface, count] of Object.entries(source.surfaces)) {
@@ -172,7 +203,7 @@ const analyzeWavelength = (submissions, options = {}) => {
 
   const words = [...clusters.values()]
     .map((c) => ({
-      word: canonicalLabel(c.surfaces),
+      word: canonicalLabel(c.surfaces, c.preferred),
       count: c.players.size,
       members: Object.keys(c.surfaces).sort(),
     }))
@@ -203,17 +234,40 @@ const analyzeWavelength = (submissions, options = {}) => {
  * The clustering prompt. Stated as a contract because there is no host review
  * step behind it — the tie-break line is the entire safety mechanism, so it is
  * written down rather than left to temperature.
+ *
+ * THE LINE IS THE ROOT, widened 2026-08-28 on the owner's call. It used to read
+ * "plurals and inflections of one term", which is INFLECTION only — so a model
+ * following it to the letter was right to keep `better` and `betterment` apart,
+ * and a live session counted them as two answers. Reported as: "wavelength did
+ * not refine the list for mispellings or like words". One root is now one
+ * answer whatever suffix it is wearing.
+ *
+ * TWO GUARDS SURVIVE THE WIDENING, and both are load-bearing:
+ *
+ *   A SHARED MEANING IS NOT A SHARED ROOT. cloud/AWS and database/storage stay
+ *   two answers. Without this line "same idea" is what a model will hear, and
+ *   the merge rule stops being a rule.
+ *
+ *   ANTONYMS ARE EXEMPT FROM THE ROOT RULE. possible/impossible and do/undo
+ *   share a root and are opposite answers — the widening would otherwise have
+ *   collapsed the one pair the game must never collapse. This exception did not
+ *   need saying while the rule was inflection-only; it does now.
+ *
+ * None of this is trusted: applyMerges validates every group against keys that
+ * actually exist, so a wrong merge can only regroup words the room really said.
  */
 const buildMergePrompt = (labels) => `You are matching words submitted by a team in a word-association game. A word only counts when everyone said it, so your job is to recognise when two entries are THE SAME TERM in different clothes.
 
-MERGE only: plurals and inflections of one term; obvious misspellings and transpositions; abbreviations and their expansion of the SAME term (db, dbs, DBMS, database).
+MERGE entries that share a ROOT and mean the same thing: plurals and inflections (cost, costs; run, running); other word forms built from that same root (better, betterment; safe, safety; decide, decision); obvious misspellings and transpositions (sore for score); abbreviations and their expansion (db, dbs, DBMS, database).
 
-NEVER merge terms that are merely related, however closely: cloud/AWS, database/storage, fast/performance. Never merge broader and narrower categories, and never antonyms. If a reasonable person in the room would defend the two as different answers, they are different answers.
+NEVER merge two DIFFERENT ROOTS, however closely related in meaning: cloud/AWS, database/storage, fast/performance. A shared meaning is not a shared root. Never merge broader and narrower categories. Never merge antonyms EVEN WHEN THEY SHARE A ROOT — possible/impossible and do/undo are opposite answers, not one answer. If a reasonable person in the room would defend the two as different answers, they are different answers.
 
 WHEN IN DOUBT, DO NOT MERGE. A missed merge costs one word off a count; a wrong merge manufactures agreement that did not happen, which is the one thing this game must never do.
 
 Here are the entries, one per line:
 ${labels.map((l) => `- ${l}`).join('\n')}
+
+PUT THE BEST-SPELLED, MOST READABLE FORM FIRST in each group — the correct spelling over a misspelling (score, not scoer), and the written-out word over an abbreviation (database, not db). That first entry becomes the label a room reads off a wall; the rest are still counted and still shown underneath it. If the entries are simply different inflections, lead with the plainest one (cost, not costing).
 
 Reply with ONLY a JSON array of merge groups, each group an array of two or more entries copied EXACTLY from the list above. Entries you leave out stay unmerged. If nothing should merge, reply [].`;
 

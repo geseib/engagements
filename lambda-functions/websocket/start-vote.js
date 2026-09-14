@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { broadcastToGame } = require('./schema-compliant-manager');
 const { isHidden, redactAnswers } = require('./anonymity');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -13,6 +14,39 @@ exports.handler = async (event) => {
   console.log(`🗳️ Starting vote for game ${gameId}, question ${questionNumber}`);
 
   try {
+    /*
+      WHOSE ROOM IS THIS? The Cognito authorizer on this route says the caller
+      is *a* host; nothing here said they were THIS session's host, so the
+      boundary was "any `hosts` account plus one of the 9,000 four-digit ids".
+
+      THIS ROUTE IS THE REVEAL BY ANOTHER DOOR, which is why the check is here
+      rather than only on the state write. /reveal-authors is gated because it
+      answers with the names. So does this: the ballot below carries
+      `playerName` against `answer` for everyone who has responded, redacted
+      only when the session is hiding authors. On a session that is not, an
+      account in any organisation could ask a stranger's room to start voting
+      and be handed the roster in the reply — without ever asking for a reveal.
+
+      BEFORE THE UPDATE, and that ordering is the point: the state write is the
+      first thing this handler does. `metaRes` forty lines below reads the same
+      row for the anonymity gate, but by then the room has already moved, so
+      this read is not a duplicate that could be folded into it.
+
+      404 rather than 403: see tenant.callerMayDriveSession.
+    */
+    const ownerRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId'
+    }));
+    if (!callerMayDriveSession(event, ownerRead.Item || {})) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Update game state to VOTE#questionNumber (using the main STATE record)
     const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
     const newState = `VOTE#${paddedQuestionNumber}`;
