@@ -1,28 +1,37 @@
 /**
- * THE ARCHIVE SCRIPTS, RUN — against a stubbed aws and curl, so their failure paths are
+ * THE ARCHIVE SCRIPTS, RUN — against a stubbed aws, curl and sam, so their failure paths are
  * exercised without touching AWS or the network.
  *
  * scripts/archive-access-check.sh and scripts/archive-drill.sh are the proof, before and after
- * the archive is locked, that no tier is cut off and no route is left open. Their happy paths
- * run live; their failure paths cannot, so this suite puts an `aws` and a `curl` of its own
- * first on PATH and drives both scripts through the failures that matter: a route left open,
- * an archive that does not answer, a simulation call that fails, a function that cannot be
- * read, an export call that fails, and a removal that cannot finish. It also runs one whole
- * drill through restore and removal, and one whose restore comes back active, because a check
- * that can never pass live looks exactly like a check that has not been reached. Each run is
- * judged by its exit status, its combined output, and the calls the stubs logged.
+ * the archive is locked, that no tier is cut off and no route is left open, and
+ * scripts/deploy-archive.sh is what locks it. Their happy paths run live; their failure paths
+ * cannot, so this suite puts an `aws`, a `curl` and a `sam` of its own first on PATH and drives
+ * all three scripts through the failures that matter: a route left open, an archive that does
+ * not answer, a simulation call that fails, a function that cannot be read, an export call that
+ * fails, a removal that cannot finish, a stack whose outputs cannot be read, and a deploy that
+ * fails. It also runs one whole drill through restore and removal, one whose restore comes back
+ * active, and every mode of the deploy script, because a check that can never pass live looks
+ * exactly like a check that has not been reached. Each run is judged by its exit status, its
+ * combined output, and the calls the stubs logged.
+ *
+ * EVERY DEPLOY-SCRIPT RUN GETS A THROWAWAY REPO: a temp directory holding copies of the two
+ * scripts, the template and config/archive-service.json, committed once. The script's git
+ * checks run there, and nothing it writes can reach the real config.
  *
  * STUB_SCENARIO (comma-separated) selects the failures a stub injects; STUB_LOG collects one
  * line per call, the program name and its arguments; STUB_STATE is a fresh directory per run
  * where the aws stub keeps the set id it was given and the markers (restored, set-removed,
  * media-removed) that let a whole drill answer in sequence. The stubs are node scripts written
- * from the two functions below, so they are real code here and self-contained there.
+ * from the three functions below, so they are real code here and self-contained there.
  *
  * // rejects: verify passing with a route that does not require AWS_IAM; a curl or simulation
  * //          failure that ends the run without a summary; an expired token reported as a
  * //          missing deploy; the drill reading a stale reply as a failed call's answer; a
  * //          removal that leaves something behind without naming it; a drill whose inactive
- * //          check cannot pass, or that calls a set removed without looking at its rows.
+ * //          check cannot pass, or that calls a set removed without looking at its rows; a
+ * //          deploy that ignores its mode, deploys uncommitted changes, writes the config from
+ * //          outputs it could not read, or leaves the operator unsure whether the archive is
+ * //          locked.
  */
 const fs = require('fs');
 const os = require('os');
@@ -50,7 +59,7 @@ const check = (label, fn) => {
 
 // ── The stubs ───────────────────────────────────────────────────────────────
 
-/** `aws`, answering exactly the calls the two scripts make. Anything else is a loud failure. */
+/** `aws`, answering exactly the calls the three scripts make. Anything else is a loud failure. */
 function awsStub() {
   const fs = require('fs');
   const path = require('path');
@@ -123,6 +132,20 @@ function awsStub() {
       } else unexpected();
       break;
     }
+    case 'cloudformation describe-stacks': {
+      // The deploy script reads one output per call: --query "Stacks[0].Outputs[?OutputKey=='<key>'].OutputValue".
+      if (has('outputs-fail')) awsError('ValidationError');
+      const key = (/OutputKey=='([A-Za-z]+)'/.exec(option('--query')) || [])[1] || '';
+      const outputs = {
+        ArchiveDomainUrl: 'https://archive.seibtribe.us',
+        ArchiveApiUrl: has('outputs-empty') ? 'None' : 'https://9gi7xpycsf.execute-api.us-east-1.amazonaws.com',
+        ArchiveTableName: 'engage2-archive',
+        ArchiveBucketName: 'engage2-archive-content',
+      };
+      if (!outputs[key]) unexpected();
+      say(outputs[key]);
+      break;
+    }
     case 'cloudformation describe-stack-resources':
       say(option('--stack-name'));
       break;
@@ -167,21 +190,55 @@ function curlStub() {
   process.stdout.write('403');
 }
 
+/**
+ * `sam`, whose build copies the template it was given into its build directory, as the real
+ * one leaves a template there, and whose deploy only logs. Anything else is a loud failure.
+ */
+function samStub() {
+  const fs = require('fs');
+  const path = require('path');
+  const argv = process.argv.slice(2);
+  if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, `sam ${argv.join(' ')}\n`);
+  const scenarios = String(process.env.STUB_SCENARIO || '').split(',').filter(Boolean);
+  const has = (scenario) => scenarios.includes(scenario);
+  const option = (flag) => { const i = argv.indexOf(flag); return i === -1 ? '' : String(argv[i + 1] || ''); };
+  switch (argv[0]) {
+    case 'build': {
+      if (has('sam-build-fails')) { process.stderr.write('Build Failed: stubbed failure\n'); process.exit(1); }
+      const dir = path.resolve(option('--build-dir'));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(path.resolve(option('-t')), path.join(dir, 'template.yaml'));
+      break;
+    }
+    case 'deploy':
+      if (has('sam-deploy-fails')) { process.stderr.write('Error: Failed to create/update the stack: stubbed failure\n'); process.exit(1); }
+      break;
+    default:
+      process.stderr.write(`unexpected sam call: ${argv.join(' ')}\n`);
+      process.exit(99);
+  }
+}
+
 const STUB_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-scripts-'));
-for (const [name, fn] of [['aws', awsStub], ['curl', curlStub]]) {
+for (const [name, fn] of [['aws', awsStub], ['curl', curlStub], ['sam', samStub]]) {
   fs.writeFileSync(path.join(STUB_DIR, name), `#!/usr/bin/env node\n'use strict';\n(${fn.toString()})();\n`, { mode: 0o755 });
 }
 
 // ── Running a script ────────────────────────────────────────────────────────
 
 let runs = 0;
-/** One run of a script with the stubs first on PATH. Returns its status, combined output and the stub log. */
-function run(script, args, scenario = '') {
+/** A fresh stub log and state directory per run, so no call or marker survives into the next. */
+function stubEnv(scenario) {
   runs += 1;
   const log = path.join(STUB_DIR, `calls-${runs}.log`);
-  const state = path.join(STUB_DIR, `state-${runs}`); // fresh per run, so no marker survives into the next
+  const state = path.join(STUB_DIR, `state-${runs}`);
   fs.mkdirSync(state);
   const env = { ...process.env, PATH: `${STUB_DIR}:${process.env.PATH || ''}`, STUB_SCENARIO: scenario, STUB_LOG: log, STUB_STATE: state };
+  return { env, log };
+}
+/** One run of a script with the stubs first on PATH. Returns its status, combined output and the stub log. */
+function run(script, args, scenario = '') {
+  const { env, log } = stubEnv(scenario);
   const r = spawnSync('bash', [path.join('scripts', script), ...args], { cwd: REPO, env, encoding: 'utf8', timeout: 60000 });
   if (r.error) throw r.error;
   return {
@@ -191,11 +248,57 @@ function run(script, args, scenario = '') {
   };
 }
 
+const CONFIG = 'config/archive-service.json';
+const DEPLOY_FILES = ['scripts/deploy-archive.sh', 'scripts/archive-access-check.sh', CONFIG, 'template-archive.yaml'];
+const REPOS = [];
+/** A throwaway repo with copies of what the deploy script reads and writes, committed once, so no run can touch the real config. */
+function deployRepo() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-deploy-'));
+  REPOS.push(dir);
+  for (const rel of DEPLOY_FILES) {
+    fs.mkdirSync(path.join(dir, path.dirname(rel)), { recursive: true });
+    fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel));
+    if (rel.endsWith('.sh')) fs.chmodSync(path.join(dir, rel), 0o755);
+  }
+  const git = (...args) => {
+    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed in the throwaway repo: ${r.stderr}`);
+  };
+  git('init', '-q');
+  git('add', '-A');
+  git('-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'fixture');
+  return dir;
+}
+/**
+ * One run of the deploy script in a fresh throwaway repo, after `prepare(repo)` has changed
+ * whatever the check needs changed. Returns the run, the repo, and whether the config is
+ * byte-identical afterwards.
+ */
+function runDeploy(args, scenario = '', prepare = () => {}) {
+  const repo = deployRepo();
+  prepare(repo);
+  const before = fs.readFileSync(path.join(repo, CONFIG));
+  const { env, log } = stubEnv(scenario);
+  const r = spawnSync('bash', [path.join(repo, 'scripts', 'deploy-archive.sh'), ...args], { cwd: repo, env, encoding: 'utf8', timeout: 60000 });
+  if (r.error) throw r.error;
+  return {
+    repo,
+    status: r.status,
+    out: `${r.stdout || ''}${r.stderr || ''}`,
+    calls: fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '',
+    configUnchanged: before.equals(fs.readFileSync(path.join(repo, CONFIG))),
+  };
+}
+
 const TIERS = ['engagedev', 'engagetest'];
 const exited = (r, status) => assert.strictEqual(r.status, status, `exited ${r.status}, not ${status}\n--- output ---\n${r.out}`);
 const contains = (r, text) => assert.ok(r.out.includes(text), `the output lacks ${JSON.stringify(text)}\n--- output ---\n${r.out}`);
 const lacks = (r, text) => assert.ok(!r.out.includes(text), `the output contains ${JSON.stringify(text)}\n--- output ---\n${r.out}`);
 const noCalls = (r) => assert.strictEqual(r.calls, '', `the stubs were called:\n${r.calls}`);
+/** The index in the stub log of the first call matching `pattern`, or -1. */
+const callIndex = (r, pattern) => r.calls.split('\n').findIndex((line) => pattern.test(line));
+/** The logged `sam deploy` call that carries `flag`, if any. */
+const deployCall = (r, flag) => r.calls.split('\n').find((line) => line.startsWith('sam deploy ') && line.includes(flag));
 
 // ── The checks ──────────────────────────────────────────────────────────────
 
@@ -296,6 +399,90 @@ check('a restore that comes back active fails the drill, and removal still runs'
   assert.ok(/^aws lambda invoke .*engagedev-admin-archive-items/m.test(r.calls), `step 5 did not run; the stubs saw:\n${r.calls}`);
 });
 
+console.log('\n6. the deploy script refuses before it touches anything, and preview leaves the stack alone');
+check('the deploy script with no mode prints usage and calls nothing', () => {
+  const r = runDeploy([]);
+  exited(r, 2);
+  contains(r, 'usage:');
+  noCalls(r);
+});
+check('preview runs the pre-flight, shows the change set, and nothing is deployed', () => {
+  const r = runDeploy(['preview']);
+  exited(r, 0);
+  const preflight = callIndex(r, /^aws lambda get-function-configuration /);
+  const build = callIndex(r, /^sam build /);
+  assert.ok(preflight !== -1 && build !== -1 && preflight < build, `the pre-flight did not run before the build; the stubs saw:\n${r.calls}`);
+  assert.ok(deployCall(r, '--no-execute-changeset'), `no sam deploy with --no-execute-changeset; the stubs saw:\n${r.calls}`);
+  assert.ok(!deployCall(r, '--no-confirm-changeset'), `preview executed a change set; the stubs saw:\n${r.calls}`);
+  contains(r, 'Nothing was deployed');
+  assert.ok(r.configUnchanged, 'preview changed the config');
+});
+check('lock refuses to deploy when a tier fails the pre-flight', () => {
+  const r = runDeploy(['lock'], 'config-error:engagetest-admin-archive-items');
+  assert.notStrictEqual(r.status, 0, `exited 0 after a failed pre-flight\n--- output ---\n${r.out}`);
+  assert.ok(!/^sam (build|deploy)/m.test(r.calls), `sam was called after a failed pre-flight; the stubs saw:\n${r.calls}`);
+});
+check('lock refuses uncommitted template changes before calling anything', () => {
+  const r = runDeploy(['lock'], '', (repo) => fs.appendFileSync(path.join(repo, 'template-archive.yaml'), '# an uncommitted edit\n'));
+  exited(r, 2);
+  contains(r, 'Refusing');
+  noCalls(r);
+});
+
+console.log('\n7. lock records the outputs, verifies, and never leaves its state unclear');
+check('lock deploys, keeps an unchanged config unchanged, verifies, and points to the drill', () => {
+  const r = runDeploy(['lock']);
+  exited(r, 0);
+  const deploy = deployCall(r, '--no-confirm-changeset');
+  assert.ok(deploy, `no executing sam deploy; the stubs saw:\n${r.calls}`);
+  assert.ok(deploy.includes('--region us-east-1'), `sam deploy does not pin its region: ${deploy}`);
+  const deployed = callIndex(r, /^sam deploy .*--no-confirm-changeset/);
+  const routes = callIndex(r, /^aws apigatewayv2 get-routes /);
+  assert.ok(routes !== -1 && routes > deployed, `verify did not run after the deploy; the stubs saw:\n${r.calls}`);
+  assert.ok(r.configUnchanged, 'an unchanged stack changed the config');
+  contains(r, 'Now run: scripts/archive-drill.sh engagedev');
+  lacks(r, 'NOTE:');
+  lacks(r, 'THE SHARED ARCHIVE IS NOW LOCKED');
+});
+check('lock never writes a config from outputs it could not read, and says the archive is locked', () => {
+  for (const scenario of ['outputs-fail', 'outputs-empty']) {
+    const r = runDeploy(['lock'], scenario);
+    exited(r, 1);
+    assert.ok(r.configUnchanged, `${scenario}: the config was written from outputs the script could not read`);
+    for (const text of ['THE SHARED ARCHIVE IS NOW LOCKED', 'was left unchanged', 'scripts/deploy-archive.sh unlock']) contains(r, text);
+    assert.ok(!/^aws apigatewayv2 get-routes/m.test(r.calls), `${scenario}: verify ran on a config that was not written; the stubs saw:\n${r.calls}`);
+  }
+});
+check('a failed verify after lock says the archive is locked and how to unlock it', () => {
+  const r = runDeploy(['lock'], 'route-open');
+  exited(r, 1);
+  for (const text of ['is not locked', 'THE SHARED ARCHIVE IS NOW LOCKED', 'scripts/deploy-archive.sh unlock']) contains(r, text);
+});
+
+console.log('\n8. unlock is the rollback, and a failed deploy says where to look');
+check('unlock deploys without the pre-flight a rejected signature would fail, and removes only the lock', () => {
+  const r = runDeploy(['unlock'], 'config-error:engagedev-admin-archive-items');
+  const deployed = callIndex(r, /^sam deploy /);
+  const preflight = callIndex(r, /^aws lambda get-function-configuration /);
+  assert.ok(deployed !== -1, `unlock did not deploy; the stubs saw:\n${r.calls}`);
+  assert.ok(preflight === -1 || deployed < preflight, `the pre-flight ran before the unlock deployed; the stubs saw:\n${r.calls}`);
+  const built = path.join(r.repo, '.aws-sam/archive-unlock-build/template.yaml');
+  assert.ok(fs.existsSync(built), 'the unlocked template was not built into .aws-sam/archive-unlock-build');
+  const text = fs.readFileSync(built, 'utf8');
+  for (const s of ['ArchiveApi:', 'Properties: {}', 'ListArchiveFunction']) assert.ok(text.includes(s), `the built template lacks ${JSON.stringify(s)}`);
+  assert.ok(!text.includes('DefaultAuthorizer: AWS_IAM'), 'the built template still carries the lock');
+  contains(r, 'THE SHARED ARCHIVE IS UNLOCKED');
+  exited(r, 1); // the pre-flight after the unlock still fails in this scenario
+});
+check('a failed deploy says where to look', () => {
+  const r = runDeploy(['lock'], 'sam-deploy-fails');
+  exited(r, 1);
+  contains(r, 'The deploy failed');
+  contains(r, 'continue-update-rollback');
+  assert.ok(!/describe-stacks/.test(r.calls), `outputs were read after a failed deploy; the stubs saw:\n${r.calls}`);
+});
+
+for (const repo of REPOS) fs.rmSync(repo, { recursive: true, force: true });
 fs.rmSync(STUB_DIR, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

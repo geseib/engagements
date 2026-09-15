@@ -9,7 +9,7 @@ own Engage library. Design: `docs/superpowers/specs/2026-09-14-archive-full-fide
 | Piece | What | Where |
 |---|---|---|
 | Stack | `engage2-archive-service`, deployed by hand | `template-archive.yaml`, `scripts/deploy-archive.sh` |
-| API | HTTP API `9gi7xpycsf`, **every route `AWS_IAM`** | `lambda-functions/archive/*.js` |
+| API | HTTP API `9gi7xpycsf`, **every route `AWS_IAM` once locked** (`deploy-archive.sh lock`) | `lambda-functions/archive/*.js` |
 | Index | DynamoDB `engage2-archive`, `PK=ARCHIVE`, `SK=ITEM#<id>`; retained; point-in-time recovery | |
 | Content | S3 `engage2-archive-content`; versioned (90-day noncurrent); retained | `archive/<type>/<id>.*`, images under `archive/media/<snapshotId>/` |
 | Callers | each tier's `admin-export-to-archive`, `admin-import-from-archive`, `admin-archive-items` | `template-clean.yaml`, `lambda-functions/admin/` |
@@ -40,15 +40,25 @@ scripts/archive-drill.sh engagedev          # back up, delete, restore and check
 
 ```bash
 aws sso login --profile adminaccess
-scripts/deploy-archive.sh
+scripts/deploy-archive.sh preview   # pre-flight, build, and show the change set; nothing is deployed
+scripts/deploy-archive.sh lock      # pre-flight, deploy, record the outputs, verify
 ```
 
-The script refuses to deploy unless `preflight` passes for all three tiers, and runs `verify`
-afterwards. To roll back the lock, deploy the template with the `ArchiveApi` `Auth:` block
-removed. The table and bucket are retained, so no rollback deletes a backup.
+`preview` and `lock` refuse to go on unless `preflight` passes for all three tiers. They also
+refuse uncommitted changes to the template or the archive functions: this stack has no pipeline
+history, so what is deployed must be a commit. Every change `preview` shows should be Modify with
+Replacement False, and nothing Remove.
 
 Straight after a deploy that changes the lock, run `scripts/archive-drill.sh engagedev` and then
 `scripts/archive-drill.sh engagetest`, with the rollback ready. Before the lock nothing can prove
 a signature, because an unlocked archive answers unsigned requests too. `verify` proves each
 tier's signed list; the drill proves a signed backup, restore and delete, and removes what it
 made.
+
+**Rollback:** `scripts/deploy-archive.sh unlock` deploys the same template with the `ArchiveApi`
+lock removed, then shows every tier reaching the archive again. It runs no pre-flight first,
+because the failure it exists for — a tier whose signature the locked archive rejects — fails the
+pre-flight too. If anything after `lock`'s deploy fails, the script says the archive is locked
+and names `unlock`. The table and bucket are retained whatever the template says, so no deploy
+here deletes a backup. If a failed deploy leaves the stack in `UPDATE_ROLLBACK_FAILED`, see
+`aws cloudformation continue-update-rollback`.

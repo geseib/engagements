@@ -144,9 +144,22 @@ check('the drill refuses production and covers the functions a restore uses', ()
 
 console.log('\n6. the archive stack itself is locked, current and retained');
 const archiveTemplate = read('template-archive.yaml');
+/** Each `Type: HttpApi` event's text, from its name to the next line at its indentation or shallower. */
+function httpApiEvents(src) {
+  const found = [];
+  for (const m of src.matchAll(/\n( +)([A-Za-z0-9]+):\n\1 {2}Type: HttpApi\n/g)) {
+    const rest = src.slice(m.index + m[0].length);
+    const end = rest.search(new RegExp(`\\n {0,${m[1].length}}[^ \\n]`));
+    found.push({ name: m[2], block: end === -1 ? rest : rest.slice(0, end) });
+  }
+  return found;
+}
 check('every function runs nodejs22.x, and nothing names nodejs18.x', () => {
   assert.match(archiveTemplate, /\nGlobals:\n {2}Function:\n[\s\S]*?\n {4}Runtime: nodejs22\.x\n/);
   assert.ok(!archiveTemplate.includes('nodejs18.x'));
+  // Exactly one Runtime line, the Globals one matched above: a function-level override would escape it.
+  const runtimes = archiveTemplate.match(/^ *Runtime:.*$/gm) || [];
+  assert.strictEqual(runtimes.length, 1, `expected one Runtime line, found: ${JSON.stringify(runtimes)}`);
 });
 check('the API requires AWS_IAM by default, no event opts out, and there is no browser CORS', () => {
   const api = resourceBlock(archiveTemplate, 'ArchiveApi');
@@ -154,6 +167,13 @@ check('the API requires AWS_IAM by default, no event opts out, and there is no b
   assert.ok(!/CorsConfiguration/.test(api), 'no browser calls the archive any more');
   assert.ok(!/Authorizer:\s*NONE/.test(archiveTemplate), 'an event opted out of IAM');
   assert.ok(!archiveTemplate.includes('CORS_ALLOWED_ORIGINS'));
+  // Every route event names the locked API. One without ApiId creates an implicit API that no lock and no verify covers.
+  const events = httpApiEvents(archiveTemplate);
+  assert.strictEqual(events.length, (archiveTemplate.match(/Type: HttpApi\n/g) || []).length, 'an HttpApi event has a shape the scanner does not read');
+  assert.ok(events.length >= 6, `found only ${events.length} HttpApi events`);
+  for (const { name, block } of events) {
+    assert.ok(/^ +ApiId: !Ref ArchiveApi$/m.test(block), `${name} names no ApiId: !Ref ArchiveApi, so it would create an implicit API outside the lock`);
+  }
 });
 check('the backups survive a template edit or a deleted stack', () => {
   for (const id of ['ArchiveTable', 'ArchiveBucket']) {
@@ -163,15 +183,24 @@ check('the backups survive a template edit or a deleted stack', () => {
   }
   assert.match(resourceBlock(archiveTemplate, 'ArchiveTable'), /PointInTimeRecoverySpecification:\s*\n\s*PointInTimeRecoveryEnabled: true/);
 });
-check('deploy-archive.sh runs the pre-flight before deploying and the verification after', () => {
+check('deploy-archive.sh has preview, lock and unlock, and pins its region', () => {
   const deploy = read('scripts/deploy-archive.sh');
+  assert.ok(deploy.includes('preview|lock|unlock)'), 'no preview|lock|unlock case');
+  assert.ok(deploy.includes('set -euo pipefail'), 'a failed pre-flight must stop the script');
+  assert.ok(deploy.includes('--build-dir'), 'build into its own directory, not over the main stack build');
+  assert.ok(deploy.includes('--region "$AWS_REGION"'), 'sam must be told the region');
+  assert.ok(deploy.includes('--no-execute-changeset'), 'preview must show a change set without executing it');
+  // The text order; the run order of every mode is proved in tests/archive-scripts.js.
   const preflight = deploy.indexOf('scripts/archive-access-check.sh preflight');
   const samDeploy = deploy.indexOf('sam deploy');
   const verify = deploy.indexOf('scripts/archive-access-check.sh verify');
   assert.ok(preflight !== -1 && samDeploy !== -1 && verify !== -1, 'a step is missing');
   assert.ok(preflight < samDeploy && samDeploy < verify, 'the order is preflight, deploy, verify');
-  assert.ok(deploy.includes('set -euo pipefail'), 'a failed pre-flight must stop the script');
-  assert.ok(deploy.includes('--build-dir'), 'build into its own directory, not over the main stack build');
+});
+check('the unlock can find the lock it removes', () => {
+  const lock = '    Properties:\n      Auth:\n        EnableIamAuthorizer: true\n        DefaultAuthorizer: AWS_IAM\n';
+  assert.strictEqual(archiveTemplate.split(lock).length - 1, 1, 'the ArchiveApi Auth block is not in the exact form deploy-archive.sh unlock removes');
+  assert.ok(read('scripts/deploy-archive.sh').includes('EnableIamAuthorizer: true\\n        DefaultAuthorizer: AWS_IAM\\n'), 'deploy-archive.sh does not name the lock it removes');
 });
 check('the presigner get-archive-item.js requires is declared, not borrowed from the runtime', () => {
   const pkg = JSON.parse(read('lambda-functions/archive/package.json'));

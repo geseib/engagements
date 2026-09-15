@@ -141,10 +141,10 @@ authorized once by hand in the console.
 
 ## Known follow-ups
 
-- The shared archive (`template-archive.yaml`) is on `nodejs22.x` and requires
-  signed AWS requests on every route. It is the one stack deployed by hand, with
-  `scripts/deploy-archive.sh`, which refuses to deploy until
-  `scripts/archive-access-check.sh preflight` passes for dev, test and prod. See
-  `docs/architecture/archive-service.md`.
+- The shared archive (`template-archive.yaml`) is deployed by hand, outside the CI/CD
+  pipelines, with `scripts/deploy-archive.sh preview|lock|unlock`. Its template is on
+  `nodejs22.x` and locks every route to signed AWS requests once `lock` has run, and `lock`
+  refuses to deploy until `scripts/archive-access-check.sh preflight` passes for dev, test
+  and prod. See `docs/architecture/archive-service.md`.
 - `cicd/pipeline-clean.yaml`'s uncommitted-vs-applied drift (above) is still open
   and is the root cause of every stale "tags only" claim this repo has carried.
