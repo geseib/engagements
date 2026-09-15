@@ -8,38 +8,63 @@ import {
   filterArchiveItems,
   tagFilterOptions,
 } from '../utils/archiveFiltering';
+import {
+  TIERS,
+  archiveTier,
+  archiveScope,
+  displayTags,
+  groupSnapshots,
+  selectionKey,
+  exportSelection,
+  describeExport,
+  describeRestore,
+} from '../utils/archiveItems';
 
-const ArchivePanel = ({ onQuestionSetImport }) => {
+/**
+ * THE ARCHIVE SCREEN — backups of Engage's library and the public library, shared by every tier.
+ *
+ * Every call goes to this tier's own routes: `admin/archive/*` (admin/archive-items.js) and the
+ * export and import routes. Nothing calls the archive service itself. The archive accepts only
+ * signed AWS requests, and who may use it is decided by the tier's own sign-in. See
+ * docs/superpowers/specs/2026-09-14-archive-full-fidelity-design.md §4.7.
+ *
+ * WHICH ENVIRONMENT IS THE FIRST QUESTION. Every tier reads every tier's backups, so each item
+ * says where it came from, the list filters by it, and an import names the environment it is
+ * about to write to before anything happens.
+ */
+const archiveRoute = (suffix) => `${window.API_BASE}admin/archive/${suffix}`;
+const readBody = (response) => response.json().catch(() => ({}));
+const libraryLabel = (scope) => (scope === 'public' ? 'Public library' : 'Engage library');
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
+const formatDate = (dateString) => new Date(dateString).toLocaleString();
+
+const ArchivePanel = ({ environment }) => {
+  const tierName = environment && environment.id && environment.id !== 'unknown' ? environment.id : 'this environment';
   const [activeTab, setActiveTab] = useState('browse');
   const [archiveItems, setArchiveItems] = useState([]);
   const [localQuestionSets, setLocalQuestionSets] = useState([]);
   const [localPrompts, setLocalPrompts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState('');
+  const [report, setReport] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
-  // Game type and tag are filtered in the browser, not by the API: the stored
-  // value spells the same type several ways and sometimes lives only in Tags,
-  // so an exact-match Category filter on the server drops matching records.
-  // See utils/archiveFiltering.js.
+  // Game type, tag and environment are filtered in the browser. See utils/archiveFiltering.js.
   const [selectedGameType, setSelectedGameType] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  
-  // Selection states for export/import
+  const [selectedTier, setSelectedTier] = useState('');
   const [selectedArchiveItems, setSelectedArchiveItems] = useState(new Set());
   const [selectedQuestionSets, setSelectedQuestionSets] = useState(new Set());
   const [selectedPrompts, setSelectedPrompts] = useState(new Set());
-  const [uploadData, setUploadData] = useState({
-    title: '',
-    description: '',
-    content: '',
-    contentType: 'questionset',
-    category: 'general',
-    tags: []
-  });
 
-  // Load archive items and local content on component mount
   useEffect(() => {
     loadArchiveItems();
     if (activeTab === 'export') {
@@ -47,54 +72,40 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
     }
   }, [selectedType, activeTab]);
 
-  // What the browse/import grids actually render.
   const visibleItems = useMemo(
-    () => filterArchiveItems(archiveItems, { gameType: selectedGameType, tag: selectedTag }),
-    [archiveItems, selectedGameType, selectedTag]
+    () => filterArchiveItems(archiveItems, { gameType: selectedGameType, tag: selectedTag, tier: selectedTier }),
+    [archiveItems, selectedGameType, selectedTag, selectedTier]
   );
+  const rows = useMemo(() => groupSnapshots(visibleItems), [visibleItems]);
+  const availableTags = useMemo(() => tagFilterOptions(archiveItems, selectedTag), [archiveItems, selectedTag]);
+  // Organisation content is encrypted per organisation and never archived, so it is not offered.
+  const exportableSets = useMemo(() => localQuestionSets.filter((qs) => (qs.scope || 'platform') !== 'org'), [localQuestionSets]);
+  // Only Engage's prompts: nothing writes public prompts, and org prompts are never archived.
+  const exportablePrompts = useMemo(() => localPrompts.filter((p) => (p.scope || 'platform') === 'platform'), [localPrompts]);
 
-  const availableTags = useMemo(
-    () => tagFilterOptions(archiveItems, selectedTag),
-    [archiveItems, selectedTag]
-  );
-
-  // An empty grid means two different things, and saying which one saves the
-  // owner from re-running a search that was never going to match.
+  // An empty grid means two different things, and saying which one saves a pointless re-search.
   const emptyMessage = archiveItems.length === 0
     ? 'No archive items found'
     : 'No archive items match the current filters';
 
+  const toggle = (setter, current, key) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    setter(next);
+  };
+
   const loadArchiveItems = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      // Use archive service directly
-      const queryParams = new URLSearchParams();
-      if (selectedType) queryParams.append('type', selectedType);
-
-      const archiveServiceUrl = 'https://archive.seibtribe.us'; // Archive service URL
-      const url = `${archiveServiceUrl}/archive/items${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      
-      console.log(`📡 Calling archive service: ${url}`);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to list archive items: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log(`📋 Archive service returned:`, data);
+      const query = selectedType ? `?type=${encodeURIComponent(selectedType)}` : '';
+      const response = await authFetch(archiveRoute(`items${query}`));
+      const data = await readBody(response);
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
       setArchiveItems(data.items || []);
     } catch (err) {
       console.error('Failed to load archive items:', err);
-      setError('Failed to load archive items. Please try again.');
+      setError(`Failed to load archive items: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -103,16 +114,12 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
   const loadLocalContent = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      // Load question sets using existing API
       const questionSetsResponse = await authFetch(`${window.API_BASE}admin/question-sets`);
       if (questionSetsResponse.ok) {
         const questionSetsData = await questionSetsResponse.json();
         setLocalQuestionSets(questionSetsData.questionSets || []);
       }
-
-      // Load AI prompts using existing API
       const promptsResponse = await authFetch(`${window.API_BASE}admin/ai-prompts`);
       if (promptsResponse.ok) {
         const promptsData = await promptsResponse.json();
@@ -131,35 +138,20 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
       loadArchiveItems();
       return;
     }
-
     setLoading(true);
     setError(null);
-    
     try {
-      const filters = {};
-      if (selectedType) filters.contentType = selectedType;
-
-      const archiveServiceUrl = 'https://archive.seibtribe.us';
-      const response = await fetch(`${archiveServiceUrl}/archive/search`, {
+      const response = await authFetch(archiveRoute('search'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          filters: filters
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery, filters: selectedType ? { contentType: selectedType } : {} }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setArchiveItems(data.items || []);
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      const data = await readBody(response);
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      setArchiveItems(data.items || []);
     } catch (err) {
       console.error('Search failed:', err);
-      setError('Search failed. Please try again.');
+      setError(`Search failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -167,250 +159,195 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
 
   const handleDownload = async (item) => {
     try {
-      const archiveServiceUrl = 'https://archive.seibtribe.us';
-      const response = await fetch(`${archiveServiceUrl}/archive/items/${item.ArchiveId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.downloadUrl) {
-          // Open download URL in new tab
-          window.open(data.downloadUrl, '_blank');
-        }
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      const response = await authFetch(archiveRoute(`items/${encodeURIComponent(item.ArchiveId)}`));
+      const data = await readBody(response);
+      if (!response.ok || !data.downloadUrl) throw new Error(data.error || `HTTP ${response.status}`);
+      window.open(data.downloadUrl, '_blank');
     } catch (err) {
       console.error('Download failed:', err);
-      alert('Failed to download item. Please try again.');
-    }
-  };
-
-  const handleImport = async (item) => {
-    if (item.ContentType !== 'questionset') {
-      alert('Only question sets can be imported');
-      return;
-    }
-
-    try {
-      const archiveServiceUrl = 'https://archive.seibtribe.us';
-      const response = await fetch(`${archiveServiceUrl}/archive/items/${item.ArchiveId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.downloadUrl) {
-          // Fetch the content from the download URL
-          const contentResponse = await fetch(data.downloadUrl);
-          const content = await contentResponse.text();
-          
-          // Pass to parent component for import
-          if (onQuestionSetImport) {
-            onQuestionSetImport({
-              content: content,
-              fileName: item.FileName,
-              title: item.Title
-            });
-          }
-        }
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
-    } catch (err) {
-      console.error('Import failed:', err);
-      alert('Failed to import question set. Please try again.');
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!uploadData.title || !uploadData.content) {
-      alert('Please provide a title and content');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const archiveServiceUrl = 'https://archive.seibtribe.us';
-      const response = await fetch(`${archiveServiceUrl}/archive/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(uploadData)
-      });
-
-      if (response.ok) {
-        alert('Item uploaded successfully!');
-        setShowUploadModal(false);
-        setUploadData({
-          title: '',
-          description: '',
-          content: '',
-          contentType: 'questionset',
-          category: 'general',
-          tags: []
-        });
-        loadArchiveItems();
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
-    } catch (err) {
-      console.error('Upload failed:', err);
-      alert('Failed to upload item. Please try again.');
-    } finally {
-      setLoading(false);
+      setError(`Download failed: ${err.message}`);
     }
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Are you sure you want to delete "${item.Title}"?`)) {
-      return;
-    }
-
+    if (!window.confirm(`Delete the backup "${item.Title}"? Every environment shares this archive.`)) return;
     try {
-      const archiveServiceUrl = 'https://archive.seibtribe.us';
-      const response = await fetch(`${archiveServiceUrl}/archive/items/${item.ArchiveId}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        alert('Item deleted successfully');
-        loadArchiveItems();
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      const response = await authFetch(archiveRoute(`items/${encodeURIComponent(item.ArchiveId)}`), { method: 'DELETE' });
+      const data = await readBody(response);
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      setNotice(`Deleted the backup "${item.Title}".`);
+      loadArchiveItems();
     } catch (err) {
       console.error('Delete failed:', err);
-      alert('Failed to delete item. Please try again.');
+      setError(`Delete failed: ${err.message}`);
     }
   };
 
   const handleExportSelected = async (exportType) => {
-    const selectedItems = exportType === 'questionsets' ? 
-      Array.from(selectedQuestionSets) : 
-      Array.from(selectedPrompts);
-
+    const selectedItems = exportType === 'questionsets'
+      ? exportSelection(selectedQuestionSets)
+      : [...selectedPrompts].map((id) => ({ scope: 'platform', id }));
     if (selectedItems.length === 0) {
-      alert('Please select items to export');
+      setError('Please select items to export');
       return;
     }
-
     setLoading(true);
+    setError(null);
+    setNotice('');
+    setReport([]);
     try {
       const response = await authFetch(`${window.API_BASE}admin/export-to-archive`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          selectedItems,
-          exportType
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedItems, exportType }),
       });
-
-      const result = await response.json();
-      
-      if (response.ok) {
-        alert(`Export completed! ${result.results.successful.length} items exported successfully.`);
-        // Clear selections
-        if (exportType === 'questionsets') {
-          setSelectedQuestionSets(new Set());
-        } else {
-          setSelectedPrompts(new Set());
-        }
-        // Refresh archive items
-        loadArchiveItems();
-      } else {
-        alert(`Export failed: ${result.error}`);
-      }
+      const result = await readBody(response);
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      setReport(describeExport(result));
+      if (exportType === 'questionsets') setSelectedQuestionSets(new Set());
+      else setSelectedPrompts(new Set());
+      loadArchiveItems();
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Export failed. Please try again.');
+      setError(`Export failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleImportSelected = async () => {
-    const selectedItems = Array.from(selectedArchiveItems);
-    
+    const selectedItems = [...selectedArchiveItems];
     if (selectedItems.length === 0) {
-      alert('Please select items to import');
+      setError('Please select items to import');
       return;
     }
-
-    // Determine import type based on selected items
-    const archiveItem = archiveItems.find(item => selectedItems.includes(item.ArchiveId));
-    const importType = archiveItem?.ContentType === 'prompt' ? 'prompts' : 'questionsets';
-
+    const count = selectedItems.length;
+    const confirmed = window.confirm(
+      `Restore ${count} backup${count === 1 ? '' : 's'} into ${tierName}? `
+      + 'A set that already exists gets a new version and switches to it; the version it replaces stays in its history. '
+      + 'An active Engage set is live for every organisation.'
+    );
+    if (!confirmed) return;
     setLoading(true);
+    setError(null);
+    setNotice('');
+    setReport([]);
     try {
       const response = await authFetch(`${window.API_BASE}admin/import-from-archive`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          selectedItems,
-          importType,
-          conflictResolution: 'rename'
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedItems }),
       });
-
-      const result = await response.json();
-      
-      if (response.ok) {
-        alert(`Import completed! ${result.results.successful.length} items imported successfully.`);
-        // Clear selections
-        setSelectedArchiveItems(new Set());
-        // Refresh local content
-        if (activeTab === 'export') {
-          loadLocalContent();
-        }
-      } else {
-        alert(`Import failed: ${result.error}`);
-      }
+      const result = await readBody(response);
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      setReport(describeRestore(result));
+      setSelectedArchiveItems(new Set());
     } catch (err) {
       console.error('Import failed:', err);
-      alert('Import failed. Please try again.');
+      setError(`Import failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const renderArchiveItem = ({ item, latest, snapshots }, selectable) => {
+    const tier = archiveTier(item);
+    const scope = archiveScope(item);
+    const tags = displayTags(item);
+    const selected = selectedArchiveItems.has(item.ArchiveId);
+    return (
+      <div key={item.ArchiveId} className="archive-item" data-testid={`archive-item-${item.ArchiveId}`}>
+        {selectable && (
+          <div className="item-checkbox">
+            <input
+              type="checkbox"
+              aria-label={`Select ${item.Title}`}
+              checked={selected}
+              onChange={() => toggle(setSelectedArchiveItems, selectedArchiveItems, item.ArchiveId)}
+            />
+          </div>
+        )}
+        <div className="item-header">
+          <h4>{item.Title}</h4>
+          <span className="item-type">{item.ContentType}</span>
+        </div>
+
+        {item.Description && <p className="item-description">{item.Description}</p>}
+
+        <div className="item-tags">
+          <span className={`tag tier tier-${tier || 'unknown'}`} data-testid="archive-item-tier">
+            {tier ? `From ${tier}` : 'Environment not recorded'}
+          </span>
+          {scope && <span className="tag scope">{libraryLabel(scope)}</span>}
+          {snapshots > 1 && (
+            <span className="tag snapshot" data-testid="archive-item-snapshot">
+              {latest ? `Latest of ${snapshots} backups` : 'Earlier backup'}
+            </span>
+          )}
+        </div>
+
+        <div className="item-meta">
+          {archiveGameType(item) && (
+            <span>
+              <Icon name="GameController" weight="bold" size={16} color="currentColor" />
+              {' '}{gameTypeLabel(archiveGameType(item))}
+            </span>
+          )}
+          <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
+          <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
+          <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>
+        </div>
+
+        {tags.length > 0 && (
+          <div className="item-tags">
+            {tags.map((tag, index) => <span key={`${tag}-${index}`} className="tag">{tag}</span>)}
+          </div>
+        )}
+
+        <div className="item-actions">
+          {selectable ? (
+            <button className="btn-primary" onClick={() => toggle(setSelectedArchiveItems, selectedArchiveItems, item.ArchiveId)}>
+              {selected ? 'Selected' : 'Select for Import'}
+            </button>
+          ) : (
+            <>
+              <button onClick={() => handleDownload(item)}>
+                <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Download
+              </button>
+              <button className="delete-btn" onClick={() => handleDelete(item)}>
+                <Icon name="Trash" weight="bold" size={16} color="currentColor" /> Delete
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
+  const renderGrid = (selectable) => (
+    loading ? (
+      <div className="loading">Loading archive items...</div>
+    ) : (
+      <div className="archive-grid">
+        {rows.length === 0
+          ? <div className="no-items">{emptyMessage}</div>
+          : rows.map((row) => renderArchiveItem(row, selectable))}
+      </div>
+    )
+  );
 
   return (
     <div className="archive-panel">
       <div className="archive-header">
         <h3><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Content Archive</h3>
         <div className="archive-tabs">
-          <button 
-            className={`tab-btn ${activeTab === 'browse' ? 'active' : ''}`}
-            onClick={() => setActiveTab('browse')}
-          >
+          <button className={`tab-btn ${activeTab === 'browse' ? 'active' : ''}`} onClick={() => setActiveTab('browse')}>
             <Icon name="MagnifyingGlass" weight="bold" size={16} color="currentColor" /> Browse Archive
           </button>
-          <button 
-            className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`}
-            onClick={() => setActiveTab('export')}
-          >
+          <button className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`} onClick={() => setActiveTab('export')}>
             <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Export to Archive
           </button>
-          <button 
-            className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`}
-            onClick={() => setActiveTab('import')}
-          >
+          <button className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`} onClick={() => setActiveTab('import')}>
             <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import from Archive
           </button>
         </div>
@@ -429,33 +366,25 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
         </div>
 
         <div className="filter-group">
-          <select
-            aria-label="Content type"
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-          >
+          <select aria-label="Environment" value={selectedTier} onChange={(e) => setSelectedTier(e.target.value)}>
+            <option value="">All environments</option>
+            {TIERS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+          </select>
+
+          <select aria-label="Content type" value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
             <option value="">All Content Types</option>
             <option value="questionset">Question Sets</option>
             <option value="prompt">Prompts</option>
           </select>
 
-          <select
-            aria-label="Game type"
-            value={selectedGameType}
-            onChange={(e) => setSelectedGameType(e.target.value)}
-          >
+          <select aria-label="Game type" value={selectedGameType} onChange={(e) => setSelectedGameType(e.target.value)}>
             <option value="">All Game Types</option>
             {GAME_TYPE_LIST.map((type) => (
               <option key={type.id} value={type.id}>{type.label}</option>
             ))}
           </select>
 
-          <select
-            aria-label="Tag"
-            value={selectedTag}
-            onChange={(e) => setSelectedTag(e.target.value)}
-            disabled={availableTags.length === 0}
-          >
+          <select aria-label="Tag" value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} disabled={availableTags.length === 0}>
             <option value="">All Tags</option>
             {availableTags.map((tag) => (
               <option key={tag} value={tag}>{tag}</option>
@@ -465,108 +394,37 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
       </div>
 
       <StatusMessage message={error} tone="error" className="error-message" />
-
-      {/* Browse Archive Tab */}
-      {activeTab === 'browse' && (
-        <>
-          <button 
-            className="btn-primary upload-btn"
-            onClick={() => setShowUploadModal(true)}
-          >
-            Upload New Item
-          </button>
-          
-          {loading ? (
-            <div className="loading">Loading archive items...</div>
-          ) : (
-            <div className="archive-grid">
-              {visibleItems.length === 0 ? (
-                <div className="no-items">{emptyMessage}</div>
-              ) : (
-                visibleItems.map((item) => (
-              <div key={item.ArchiveId} className="archive-item">
-                <div className="item-header">
-                  <h4>{item.Title}</h4>
-                  <span className="item-type">{item.ContentType}</span>
-                </div>
-
-                {item.Description && (
-                  <p className="item-description">{item.Description}</p>
-                )}
-
-                <div className="item-meta">
-                  {archiveGameType(item) && (
-                    <span>
-                      <Icon name="GameController" weight="bold" size={16} color="currentColor" />
-                      {' '}{gameTypeLabel(archiveGameType(item))}
-                    </span>
-                  )}
-                  <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
-                  <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
-                  <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>
-                </div>
-
-                {item.Tags && item.Tags.length > 0 && (
-                  <div className="item-tags">
-                    {item.Tags.map((tag, index) => (
-                      <span key={index} className="tag">{tag}</span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="item-actions">
-                  <button onClick={() => handleDownload(item)}>
-                    <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Download
-                  </button>
-                  {item.ContentType === 'questionset' && onQuestionSetImport && (
-                    <button onClick={() => handleImport(item)}>
-                      <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Import
-                    </button>
-                  )}
-                  <button 
-                    className="delete-btn"
-                    onClick={() => handleDelete(item)}
-                  >
-                    <Icon name="Trash" weight="bold" size={16} color="currentColor" /> Delete
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-        </>
+      <StatusMessage message={notice} tone="success" />
+      {report.length > 0 && (
+        <ul className="archive-report" data-testid="archive-report">
+          {report.map((line, index) => <li key={`${index}-${line}`}>{line}</li>)}
+        </ul>
       )}
 
-      {/* Export to Archive Tab */}
+      {activeTab === 'browse' && renderGrid(false)}
+
       {activeTab === 'export' && (
         <div className="export-section">
-          <h4><Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Export Local Content to Archive</h4>
-          
+          <h4><Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Back up from {tierName}</h4>
+          <p className="archive-note">
+            Engage and public content only. Organisation content is encrypted per organisation and is never archived.
+          </p>
+
           {loading ? (
             <div className="loading">Loading local content...</div>
           ) : (
             <>
-              {/* Question Sets Section */}
               <div className="export-category">
                 <div className="category-header">
-                  <h5><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Question Sets ({localQuestionSets.length})</h5>
+                  <h5><Icon name="Books" weight="duotone" size={16} color="var(--primary)" /> Question Sets ({exportableSets.length})</h5>
                   <div className="bulk-actions">
                     <button
                       className="btn-secondary btn-small"
-                      onClick={() => {
-                        const allIds = localQuestionSets.map(qs => qs.id);
-                        setSelectedQuestionSets(new Set(allIds));
-                      }}
+                      onClick={() => setSelectedQuestionSets(new Set(exportableSets.map((qs) => selectionKey(qs.scope, qs.id))))}
                     >
                       Select All
                     </button>
-                    <button
-                      className="btn-secondary btn-small"
-                      onClick={() => setSelectedQuestionSets(new Set())}
-                    >
-                      Clear
-                    </button>
+                    <button className="btn-secondary btn-small" onClick={() => setSelectedQuestionSets(new Set())}>Clear</button>
                     <button
                       className="btn-primary"
                       onClick={() => handleExportSelected('questionsets')}
@@ -576,88 +434,57 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="archive-grid">
-                  {localQuestionSets.map((qs) => (
-                    <div key={qs.id} className="archive-item">
-                      <div className="item-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedQuestionSets.has(qs.id)}
-                          onChange={(e) => {
-                            const newSet = new Set(selectedQuestionSets);
-                            if (e.target.checked) {
-                              newSet.add(qs.id);
-                            } else {
-                              newSet.delete(qs.id);
-                            }
-                            setSelectedQuestionSets(newSet);
-                          }}
-                        />
+                  {exportableSets.map((qs) => {
+                    const key = selectionKey(qs.scope, qs.id);
+                    const selected = selectedQuestionSets.has(key);
+                    return (
+                      <div key={key} className="archive-item">
+                        <div className="item-checkbox">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${qs.name}`}
+                            checked={selected}
+                            onChange={() => toggle(setSelectedQuestionSets, selectedQuestionSets, key)}
+                          />
+                        </div>
+                        <div className="item-header">
+                          <h4>{qs.name}</h4>
+                          <span className="item-type">{libraryLabel(qs.scope)}</span>
+                        </div>
+                        {qs.description && <p className="item-description">{qs.description}</p>}
+                        <div className="item-meta">
+                          <span><Icon name="GameController" weight="bold" size={16} color="currentColor" /> {qs.engagementType}</span>
+                          <span><Icon name="Question" weight="bold" size={16} color="currentColor" /> {qs.totalQuestions} questions</span>
+                          <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {qs.createdAt ? formatDate(qs.createdAt) : 'Unknown'}</span>
+                        </div>
+                        <div className="item-tags">
+                          {qs.active && <span className="tag active">Active</span>}
+                          {qs.isAIGenerated && <span className="tag ai">AI Generated</span>}
+                        </div>
+                        <div className="item-actions">
+                          <button className="btn-primary" onClick={() => toggle(setSelectedQuestionSets, selectedQuestionSets, key)}>
+                            {selected ? 'Selected' : 'Select for Export'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="item-header">
-                        <h4>{qs.name}</h4>
-                        <span className="item-type">Question Set</span>
-                      </div>
-                      
-                      {qs.description && (
-                        <p className="item-description">{qs.description}</p>
-                      )}
-                      
-                      <div className="item-meta">
-                        <span><Icon name="GameController" weight="bold" size={16} color="currentColor" /> {qs.engagementType}</span>
-                        <span><Icon name="Question" weight="bold" size={16} color="currentColor" /> {qs.totalQuestions} questions</span>
-                        <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {qs.createdAt ? formatDate(qs.createdAt) : 'Unknown'}</span>
-                      </div>
-
-                      <div className="item-tags">
-                        {qs.active && <span className="tag active">Active</span>}
-                        {qs.isAIGenerated && <span className="tag ai">AI Generated</span>}
-                      </div>
-
-                      <div className="item-actions">
-                        <button 
-                          className="btn-primary"
-                          onClick={() => {
-                            if (selectedQuestionSets.has(qs.id)) {
-                              const newSet = new Set(selectedQuestionSets);
-                              newSet.delete(qs.id);
-                              setSelectedQuestionSets(newSet);
-                            } else {
-                              const newSet = new Set(selectedQuestionSets);
-                              newSet.add(qs.id);
-                              setSelectedQuestionSets(newSet);
-                            }
-                          }}
-                        >
-                          {selectedQuestionSets.has(qs.id) ? 'Selected' : 'Select for Export'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* AI Prompts Section */}
               <div className="export-category">
                 <div className="category-header">
-                  <h5><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompts ({localPrompts.length})</h5>
+                  <h5><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI Prompts ({exportablePrompts.length})</h5>
                   <div className="bulk-actions">
                     <button
                       className="btn-secondary btn-small"
-                      onClick={() => {
-                        const allIds = localPrompts.map(p => p.promptId || p.id);
-                        setSelectedPrompts(new Set(allIds));
-                      }}
+                      onClick={() => setSelectedPrompts(new Set(exportablePrompts.map((p) => p.promptId || p.id)))}
                     >
                       Select All
                     </button>
-                    <button
-                      className="btn-secondary btn-small"
-                      onClick={() => setSelectedPrompts(new Set())}
-                    >
-                      Clear
-                    </button>
+                    <button className="btn-secondary btn-small" onClick={() => setSelectedPrompts(new Set())}>Clear</button>
                     <button
                       className="btn-primary"
                       onClick={() => handleExportSelected('prompts')}
@@ -667,67 +494,43 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="archive-grid">
-                  {localPrompts.map((prompt) => (
-                    <div key={prompt.promptId || prompt.id} className="archive-item">
-                      <div className="item-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedPrompts.has(prompt.promptId || prompt.id)}
-                          onChange={(e) => {
-                            const newSet = new Set(selectedPrompts);
-                            const id = prompt.promptId || prompt.id;
-                            if (e.target.checked) {
-                              newSet.add(id);
-                            } else {
-                              newSet.delete(id);
-                            }
-                            setSelectedPrompts(newSet);
-                          }}
-                        />
+                  {exportablePrompts.map((prompt) => {
+                    const id = prompt.promptId || prompt.id;
+                    const selected = selectedPrompts.has(id);
+                    return (
+                      <div key={id} className="archive-item">
+                        <div className="item-checkbox">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${prompt.name}`}
+                            checked={selected}
+                            onChange={() => toggle(setSelectedPrompts, selectedPrompts, id)}
+                          />
+                        </div>
+                        <div className="item-header">
+                          <h4>{prompt.name}</h4>
+                          <span className="item-type">AI Prompt</span>
+                        </div>
+                        {prompt.description && <p className="item-description">{prompt.description}</p>}
+                        <div className="item-meta">
+                          <span><Icon name="GameController" weight="bold" size={16} color="currentColor" /> {prompt.gameType}</span>
+                          <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {prompt.category}</span>
+                          <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {prompt.createdAt ? formatDate(prompt.createdAt) : 'Unknown'}</span>
+                        </div>
+                        <div className="item-tags">
+                          <span className={`tag ${prompt.status}`}>{prompt.status}</span>
+                          {prompt.isDefault && <span className="tag default">Default</span>}
+                        </div>
+                        <div className="item-actions">
+                          <button className="btn-primary" onClick={() => toggle(setSelectedPrompts, selectedPrompts, id)}>
+                            {selected ? 'Selected' : 'Select for Export'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="item-header">
-                        <h4>{prompt.name}</h4>
-                        <span className="item-type">AI Prompt</span>
-                      </div>
-                      
-                      {prompt.description && (
-                        <p className="item-description">{prompt.description}</p>
-                      )}
-                      
-                      <div className="item-meta">
-                        <span><Icon name="GameController" weight="bold" size={16} color="currentColor" /> {prompt.gameType}</span>
-                        <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {prompt.category}</span>
-                        <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {prompt.createdAt ? formatDate(prompt.createdAt) : 'Unknown'}</span>
-                      </div>
-
-                      <div className="item-tags">
-                        <span className={`tag ${prompt.status}`}>{prompt.status}</span>
-                        {prompt.isDefault && <span className="tag default">Default</span>}
-                      </div>
-
-                      <div className="item-actions">
-                        <button 
-                          className="btn-primary"
-                          onClick={() => {
-                            const id = prompt.promptId || prompt.id;
-                            if (selectedPrompts.has(id)) {
-                              const newSet = new Set(selectedPrompts);
-                              newSet.delete(id);
-                              setSelectedPrompts(newSet);
-                            } else {
-                              const newSet = new Set(selectedPrompts);
-                              newSet.add(id);
-                              setSelectedPrompts(newSet);
-                            }
-                          }}
-                        >
-                          {selectedPrompts.has(prompt.promptId || prompt.id) ? 'Selected' : 'Select for Export'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </>
@@ -735,192 +538,24 @@ const ArchivePanel = ({ onQuestionSetImport }) => {
         </div>
       )}
 
-      {/* Import from Archive Tab */}
       {activeTab === 'import' && (
         <div className="import-section">
-          <h4><Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import Content from Archive</h4>
-          
+          <h4><Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Restore into {tierName}</h4>
           <div className="import-header">
             <div className="bulk-actions">
               <button
                 className="btn-secondary btn-small"
-                onClick={() => {
-                  // Select what is on screen, not what the filters hid.
-                  const allIds = visibleItems.map(item => item.ArchiveId);
-                  setSelectedArchiveItems(new Set(allIds));
-                }}
+                onClick={() => setSelectedArchiveItems(new Set(visibleItems.map((item) => item.ArchiveId)))}
               >
                 Select All
               </button>
-              <button
-                className="btn-secondary btn-small"
-                onClick={() => setSelectedArchiveItems(new Set())}
-              >
-                Clear
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleImportSelected}
-                disabled={selectedArchiveItems.size === 0}
-              >
+              <button className="btn-secondary btn-small" onClick={() => setSelectedArchiveItems(new Set())}>Clear</button>
+              <button className="btn-primary" onClick={handleImportSelected} disabled={selectedArchiveItems.size === 0}>
                 <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import Selected ({selectedArchiveItems.size})
               </button>
             </div>
           </div>
-
-          {loading ? (
-            <div className="loading">Loading archive items...</div>
-          ) : (
-            <div className="archive-grid">
-              {visibleItems.length === 0 ? (
-                <div className="no-items">{emptyMessage}</div>
-              ) : (
-                visibleItems.map((item) => (
-                  <div key={item.ArchiveId} className="archive-item">
-                    <div className="item-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={selectedArchiveItems.has(item.ArchiveId)}
-                        onChange={(e) => {
-                          const newSet = new Set(selectedArchiveItems);
-                          if (e.target.checked) {
-                            newSet.add(item.ArchiveId);
-                          } else {
-                            newSet.delete(item.ArchiveId);
-                          }
-                          setSelectedArchiveItems(newSet);
-                        }}
-                      />
-                    </div>
-                    <div className="item-header">
-                      <h4>{item.Title}</h4>
-                      <span className="item-type">{item.ContentType}</span>
-                    </div>
-                    
-                    {item.Description && (
-                      <p className="item-description">{item.Description}</p>
-                    )}
-                    
-                    <div className="item-meta">
-                      {archiveGameType(item) && (
-                        <span>
-                          <Icon name="GameController" weight="bold" size={16} color="currentColor" />
-                          {' '}{gameTypeLabel(archiveGameType(item))}
-                        </span>
-                      )}
-                      <span><Icon name="Folder" weight="bold" size={16} color="currentColor" /> {item.Category}</span>
-                      <span><Icon name="FileText" weight="bold" size={16} color="currentColor" /> {formatFileSize(item.FileSize)}</span>
-                      <span><Icon name="CalendarBlank" weight="bold" size={16} color="currentColor" /> {formatDate(item.CreatedAt)}</span>
-                    </div>
-
-                    {item.Tags && item.Tags.length > 0 && (
-                      <div className="item-tags">
-                        {item.Tags.map((tag, index) => (
-                          <span key={index} className="tag">{tag}</span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="item-actions">
-                      <button 
-                        className="btn-primary"
-                        onClick={() => {
-                          if (selectedArchiveItems.has(item.ArchiveId)) {
-                            const newSet = new Set(selectedArchiveItems);
-                            newSet.delete(item.ArchiveId);
-                            setSelectedArchiveItems(newSet);
-                          } else {
-                            const newSet = new Set(selectedArchiveItems);
-                            newSet.add(item.ArchiveId);
-                            setSelectedArchiveItems(newSet);
-                          }
-                        }}
-                      >
-                        {selectedArchiveItems.has(item.ArchiveId) ? 'Selected' : 'Select for Import'}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="modal-backdrop" onClick={() => setShowUploadModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Upload to Archive</h3>
-            
-            <div className="form-group">
-              <label>Title*</label>
-              <input
-                type="text"
-                value={uploadData.title}
-                onChange={(e) => setUploadData({...uploadData, title: e.target.value})}
-                placeholder="Enter item title"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                value={uploadData.description}
-                onChange={(e) => setUploadData({...uploadData, description: e.target.value})}
-                placeholder="Enter description (optional)"
-                rows="3"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Type*</label>
-              <select
-                value={uploadData.contentType}
-                onChange={(e) => setUploadData({...uploadData, contentType: e.target.value})}
-              >
-                <option value="questionset">Question Set</option>
-                <option value="document">Document</option>
-                <option value="template">Template</option>
-                <option value="report">Report</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Category</label>
-              <select
-                value={uploadData.category}
-                onChange={(e) => setUploadData({...uploadData, category: e.target.value})}
-              >
-                <option value="general">General</option>
-                <option value="business">Business</option>
-                <option value="education">Education</option>
-                <option value="entertainment">Entertainment</option>
-                <option value="technology">Technology</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Content*</label>
-              <textarea
-                value={uploadData.content}
-                onChange={(e) => setUploadData({...uploadData, content: e.target.value})}
-                placeholder="Paste or type content here"
-                rows="10"
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button onClick={() => setShowUploadModal(false)}>Cancel</button>
-              <button 
-                className="btn-primary"
-                onClick={handleUpload}
-                disabled={loading}
-              >
-                {loading ? 'Uploading...' : 'Upload'}
-              </button>
-            </div>
-          </div>
+          {renderGrid(true)}
         </div>
       )}
     </div>
