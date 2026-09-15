@@ -51,7 +51,12 @@ const ArchivePanel = ({ environment }) => {
   const [archiveItems, setArchiveItems] = useState([]);
   const [localQuestionSets, setLocalQuestionSets] = useState([]);
   const [localPrompts, setLocalPrompts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // Requests in flight. A count, not a boolean: the Export tab starts two loads at once, and
+  // whichever finished first used to clear the other's loading state.
+  const [pending, setPending] = useState(0);
+  const loading = pending > 0;
+  const begin = () => setPending((count) => count + 1);
+  const end = () => setPending((count) => Math.max(0, count - 1));
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
   const [report, setReport] = useState([]);
@@ -95,7 +100,7 @@ const ArchivePanel = ({ environment }) => {
   };
 
   const loadArchiveItems = async () => {
-    setLoading(true);
+    begin();
     setError(null);
     try {
       const query = selectedType ? `?type=${encodeURIComponent(selectedType)}` : '';
@@ -107,12 +112,12 @@ const ArchivePanel = ({ environment }) => {
       console.error('Failed to load archive items:', err);
       setError(`Failed to load archive items: ${err.message}`);
     } finally {
-      setLoading(false);
+      end();
     }
   };
 
   const loadLocalContent = async () => {
-    setLoading(true);
+    begin();
     setError(null);
     try {
       const questionSetsResponse = await authFetch(`${window.API_BASE}admin/question-sets`);
@@ -129,7 +134,7 @@ const ArchivePanel = ({ environment }) => {
       console.error('Failed to load local content:', err);
       setError('Failed to load local content. Please try again.');
     } finally {
-      setLoading(false);
+      end();
     }
   };
 
@@ -138,7 +143,7 @@ const ArchivePanel = ({ environment }) => {
       loadArchiveItems();
       return;
     }
-    setLoading(true);
+    begin();
     setError(null);
     try {
       const response = await authFetch(archiveRoute('search'), {
@@ -153,7 +158,7 @@ const ArchivePanel = ({ environment }) => {
       console.error('Search failed:', err);
       setError(`Search failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      end();
     }
   };
 
@@ -191,7 +196,7 @@ const ArchivePanel = ({ environment }) => {
       setError('Please select items to export');
       return;
     }
-    setLoading(true);
+    begin();
     setError(null);
     setNotice('');
     setReport([]);
@@ -211,7 +216,7 @@ const ArchivePanel = ({ environment }) => {
       console.error('Export failed:', err);
       setError(`Export failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      end();
     }
   };
 
@@ -228,7 +233,7 @@ const ArchivePanel = ({ environment }) => {
       + 'An active Engage set is live for every organisation.'
     );
     if (!confirmed) return;
-    setLoading(true);
+    begin();
     setError(null);
     setNotice('');
     setReport([]);
@@ -246,7 +251,7 @@ const ArchivePanel = ({ environment }) => {
       console.error('Import failed:', err);
       setError(`Import failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      end();
     }
   };
 
@@ -360,7 +365,7 @@ const ArchivePanel = ({ environment }) => {
             placeholder="Search archive..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           />
           <button onClick={handleSearch}>Search</button>
         </div>
@@ -550,7 +555,7 @@ const ArchivePanel = ({ environment }) => {
                 Select All
               </button>
               <button className="btn-secondary btn-small" onClick={() => setSelectedArchiveItems(new Set())}>Clear</button>
-              <button className="btn-primary" onClick={handleImportSelected} disabled={selectedArchiveItems.size === 0}>
+              <button className="btn-primary" onClick={handleImportSelected} disabled={selectedArchiveItems.size === 0 || loading}>
                 <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Import Selected ({selectedArchiveItems.size})
               </button>
             </div>

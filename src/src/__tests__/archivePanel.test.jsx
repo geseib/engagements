@@ -7,7 +7,7 @@
  * confirmed, or whose result hides what went live.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
@@ -138,7 +138,69 @@ test('a declined confirmation sends nothing', async () => {
 });
 
 test("the tier's refusal is shown, not swallowed", async () => {
+  const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
   route([['GET', /admin\/archive\/items(\?|$)/, () => reply({ error: "The archive backs up Engage's library. Switch to Engage (no organisation selected) to use it." }, 403)]]);
   render(<ArchivePanel environment={PROD} />);
   expect(await screen.findByText(/Switch to Engage/)).toBeInTheDocument();
+  expect(logged).toHaveBeenCalledWith('Failed to load archive items:', expect.any(Error));
+  logged.mockRestore();
+});
+
+test('the export lists wait for both loads, whichever answers first', async () => {
+  let answerSets;
+  route([
+    LIST,
+    ['GET', /admin\/question-sets$/, () => new Promise((resolve) => { answerSets = resolve; })],
+    ['GET', /admin\/ai-prompts$/, () => reply({ prompts: [] })],
+  ]);
+  render(<ArchivePanel environment={PROD} />);
+  fireEvent.click(await screen.findByText('Export to Archive'));
+  await waitFor(() => expect(callsTo('GET', /admin\/question-sets$/)).toHaveLength(1));
+  // The archive list has answered by now; the question sets have not.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  expect(screen.getByText('Loading local content...')).toBeInTheDocument();
+  await act(async () => {
+    answerSets({ ok: true, status: 200, json: async () => ({ questionSets: [{ id: 'teamretro', scope: 'platform', name: 'Team Retro' }] }) });
+  });
+  expect(await screen.findByLabelText('Select Team Retro')).toBeInTheDocument();
+});
+
+test('a restore in flight cannot be sent twice', async () => {
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  route([LIST, ['POST', /admin\/import-from-archive$/, () => new Promise(() => {})]]);
+  render(<ArchivePanel environment={PROD} />);
+  fireEvent.click(await screen.findByText('Import from Archive'));
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(screen.getByText(/Import Selected \(1\)/));
+  await waitFor(() => expect(screen.getByText(/Import Selected \(1\)/).closest('button')).toBeDisabled());
+  fireEvent.click(screen.getByText(/Import Selected \(1\)/));
+  expect(callsTo('POST', /admin\/import-from-archive$/)).toHaveLength(1);
+  expect(confirm).toHaveBeenCalledTimes(1);
+  confirm.mockRestore();
+});
+
+test("a delete is confirmed first, then goes to the tier's relay", async () => {
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  route([LIST, ['DELETE', /admin\/archive\/items\/arc-2$/, () => reply({ message: 'deleted' })]]);
+  render(<ArchivePanel environment={PROD} />);
+  const card = await screen.findByTestId('archive-item-arc-2');
+  fireEvent.click(within(card).getByText('Delete'));
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Every environment shares this archive'));
+  expect(callsTo('DELETE', /admin\/archive\/items\//)).toHaveLength(0);
+  fireEvent.click(within(card).getByText('Delete'));
+  await waitFor(() => expect(callsTo('DELETE', /admin\/archive\/items\/arc-2$/)).toHaveLength(1));
+  expect(await screen.findByText('Deleted the backup "Team Retro".')).toBeInTheDocument();
+  expect(global.fetch).not.toHaveBeenCalled();
+  confirm.mockRestore();
+});
+
+test('an unknown environment is named as this environment, never guessed', async () => {
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+  route([LIST]);
+  render(<ArchivePanel environment={{ id: 'unknown', label: 'UNKNOWN', detail: '' }} />);
+  fireEvent.click(await screen.findByText('Import from Archive'));
+  fireEvent.click(within(await screen.findByTestId('archive-item-arc-2')).getByRole('checkbox'));
+  fireEvent.click(screen.getByText(/Import Selected \(1\)/));
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('into this environment'));
+  confirm.mockRestore();
 });
