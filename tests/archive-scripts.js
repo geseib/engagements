@@ -8,9 +8,10 @@
  * cannot, so this suite puts an `aws`, a `curl`, a `sam` and an `mv` of its own first on PATH
  * and drives all three scripts through the failures that matter: a route left open, an archive
  * that does not answer, a simulation call that fails, a function that cannot be read, an export
- * call that fails, a removal that cannot finish or leaves rows behind, a stack whose outputs
- * cannot be read or are not what a tier can sign for, a config that cannot be moved into place,
- * and a deploy that fails. It also runs one whole drill through restore and removal, one whose
+ * call that fails, a set that survives its deletion, a removal that cannot finish, leaves rows
+ * behind or cannot count them, a stack whose outputs cannot be read or are not what a tier can
+ * sign for, a config that cannot be moved into place, and a deploy that fails. It also runs one
+ * whole drill through restore and removal, one whose
  * restore comes back active, and every mode of the deploy script, because a check that can
  * never pass live looks exactly like a check that has not been reached. Each run is judged by
  * its exit status, its combined output, and the calls the stubs logged.
@@ -31,7 +32,9 @@
  * //          missing deploy; the drill reading a stale reply as a failed call's answer, or an
  * //          eventually consistent one as the row's state; a removal that leaves something
  * //          behind without naming it; a drill whose inactive check cannot pass, or that calls
- * //          a set removed without looking at its rows; a deploy that ignores its mode, deploys
+ * //          a set removed without looking at its rows; a deleted-set check that reads half a
+ * //          key twice and compares the two failures with each other; a row count that fails
+ * //          after the set is removed and ends the drill silently; a deploy that ignores its mode, deploys
  * //          uncommitted changes, builds a CodeUri that does not resolve, writes the config
  * //          from outputs it could not read, leaves a temporary config beside the real one,
  * //          guesses what a failed deploy did, or leaves the operator unsure whether the
@@ -155,17 +158,27 @@ function awsStub() {
     case 'cloudformation describe-stack-resources':
       say(option('--stack-name'));
       break;
-    case 'dynamodb get-item':
+    case 'dynamodb get-item': {
       // Seconds after a delete or a restore, an eventually consistent read can answer from
       // before it, so a correct drill could fail. Only a consistent read is answered here.
       if (!argv.includes('--consistent-read')) { process.stderr.write('consistent read required\n'); process.exit(99); }
+      // The key must be whole JSON naming both parts, as the real CLI requires: bash 3.2
+      // brace-expands escaped JSON inside a quoted "$(…)" argument, which once split the drill's
+      // "the set is gone" read into two calls with half a key each.
+      let key = null;
+      try { key = JSON.parse(option('--key')); } catch (e) { key = null; }
+      if (!key || !key.PK || !key.SK) { process.stderr.write(`invalid key: ${option('--key')}\n`); process.exit(99); }
       // With --query it is step 3 asking whether the set is gone; without, step 4 reading the row.
-      if (argv.includes('--query')) say('None');
+      // Under set-not-gone the deleted set's row is still there.
+      if (argv.includes('--query')) say(has('set-not-gone') ? `SET#${savedSetId()}` : 'None');
       else say(JSON.stringify({ Item: { SK: { S: `SET#${savedSetId()}` }, activeVersion: { N: '1' }, active: { BOOL: has('restored-active') } } }));
       break;
+    }
     case 'dynamodb query': {
       if (!argv.includes('COUNT')) unexpected();
       if (!argv.includes('--consistent-read')) { process.stderr.write('consistent read required\n'); process.exit(99); }
+      // Under count-fails-after-removal every count once the set is removed fails, as a throttled read would.
+      if (has('count-fails-after-removal') && marked('set-removed')) awsError('ProvisionedThroughputExceededException');
       const partition = String((JSON.parse(option('--expression-attribute-values'))[':pk'] || {}).S || '');
       // Under rows-remain the restored partition keeps its rows after the set is removed.
       say(partition.endsWith('#v1') && marked('restored') && (has('rows-remain') || !marked('set-removed')) ? '5' : '0');
@@ -415,7 +428,7 @@ console.log('\n5. a whole drill runs through restore and removal');
 check('a drill whose restore comes back whole passes, and removes what it made', () => {
   const r = run('archive-drill.sh', ['engagedev']);
   exited(r, 0);
-  for (const line of ['drill passed on engagedev', 'ok   - and inactive there', 'ok   - all five content rows are back',
+  for (const line of ['drill passed on engagedev', 'ok   - the set is gone', 'ok   - and inactive there', 'ok   - all five content rows are back',
     'ok   - no copied image is left in the archive', 'ok   - no content rows are left']) contains(r, line);
   lacks(r, 'FAIL');
   lacks(r, 'LEFT BEHIND');
@@ -429,6 +442,14 @@ check('a drill whose restore comes back whole passes, and removes what it made',
   const setRemoved = after(imageRemoved, /^aws lambda invoke .*engagedev-admin-delete-question-set/);
   assert.ok([restored, backupDeleted, imageRemoved, setRemoved].every((i) => i !== -1),
     `step 5 did not run in order (restore ${restored}, relay delete ${backupDeleted}, image rm ${imageRemoved}, set delete ${setRemoved}); the stubs saw:\n${r.calls}`);
+  // The set's row is read exactly twice, by step 3 (is it gone?) and step 4 (is it back?), and each
+  // read carries the whole key. bash 3.2 brace-expanded step 3's read into two calls with half a key
+  // each, and the check compared their two failures with each other, so it could never fail.
+  const reads = lines.filter((line) => line.startsWith('aws dynamodb get-item '));
+  assert.strictEqual(reads.length, 2, `the set's row was read ${reads.length} times, not twice (step 3 and step 4); the stubs saw:\n${r.calls}`);
+  for (const read of reads) {
+    for (const part of ['"PK":{"S":"SETS"}', '"SK":{"S":"SET#archivedrilldev']) assert.ok(read.includes(part), `a get-item read lacks ${part}: ${read}`);
+  }
 });
 check('a restore that comes back active fails the drill, and removal still runs', () => {
   const r = run('archive-drill.sh', ['engagedev'], 'restored-active');
@@ -443,6 +464,19 @@ check('content rows the removal left behind fail the drill, are never called rem
   contains(r, 'no content rows are left: expected 0+0, got 0+5');
   lacks(r, 'ok   - the set and its image are removed');
   contains(r, 'LEFT BEHIND - content rows (0+5)');
+});
+check('a set that survives its deletion fails the drill', () => {
+  const r = run('archive-drill.sh', ['engagedev'], 'set-not-gone');
+  exited(r, 1);
+  contains(r, 'the set is gone: expected None, got SET#archivedrilldev');
+  contains(r, 'drill FAILED on engagedev');
+});
+check('a row count that fails after removing the set is reported, not silent', () => {
+  const r = run('archive-drill.sh', ['engagedev'], 'count-fails-after-removal');
+  exited(r, 1);
+  contains(r, 'no content rows are left: expected 0+0, got unread+unread');
+  contains(r, 'drill FAILED on engagedev');
+  contains(r, 'LEFT BEHIND - content rows (unread+unread)');
 });
 
 console.log('\n6. the deploy script refuses before it touches anything, and preview leaves the stack alone');

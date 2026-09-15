@@ -115,7 +115,7 @@ cleanup() {
     remove_set || echo "  LEFT BEHIND - set ${SET_ID} on ${STACK} (delete it from the admin screen)"
     # delete-question-set answers 404 for a missing metadata row and never looks at the content
     # rows, so a removal that "succeeded" can still leave them. Count both partitions.
-    left="$(content_rows "SET#${SET_ID}")+$(content_rows "SET#${SET_ID}#v1")"
+    left="$(content_rows "SET#${SET_ID}" || echo unread)+$(content_rows "SET#${SET_ID}#v1" || echo unread)"
     if [ "$left" != "0+0" ]; then
       echo "  LEFT BEHIND - content rows (${left}) in SET#${SET_ID} and SET#${SET_ID}#v1 on ${STACK}"
     fi
@@ -160,7 +160,11 @@ expect "archived with its image" "$(echo "$EXPORT" | jq -r '.results.successful[
 echo "3. lose it: delete the set and its image"
 invoke admin-delete-question-set "$(delete_set_event)" >/dev/null || die "the set could not be deleted"
 aws s3 rm "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" >/dev/null || die "the image could not be deleted"
-expect "the set is gone" "$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" --consistent-read --query 'Item.SK.S' --output text)" "None"
+# Read first, then compare: bash 3.2 brace-expands escaped JSON inside a quoted "$(…)" argument,
+# which split this read into two calls with half a key each. An assignment is not brace-expanded.
+GONE=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" \
+  --consistent-read --query 'Item.SK.S' --output text) || die "the deleted set's row could not be read"
+expect "the set is gone" "$GONE" "None"
 
 echo "4. restore it"
 IMPORT=$(invoke admin-import-from-archive "$(jq -nc --arg arc "$ARCHIVE_ID" --argjson a "$ADMIN" \
@@ -194,7 +198,7 @@ remove_media || die "the backup's copied images could not be removed"
 expect "no copied image is left in the archive" "$(media_keys)" "None"
 MEDIA_MAY_EXIST=0
 remove_set || die "the restored set could not be deleted"
-LEFT="$(content_rows "SET#${SET_ID}")+$(content_rows "SET#${SET_ID}#v1")"
+LEFT="$(content_rows "SET#${SET_ID}" || echo unread)+$(content_rows "SET#${SET_ID}#v1" || echo unread)"
 expect "no content rows are left" "$LEFT" "0+0"
 aws s3 rm "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" >/dev/null || die "the restored image could not be removed"
 # Rows left behind are the set still existing: the trap counts them again and names them.
