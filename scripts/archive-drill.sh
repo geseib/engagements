@@ -99,6 +99,11 @@ remove_media() {
     aws s3 rm "s3://${ARCHIVE_BUCKET}/${key}" >/dev/null || return 1
   done
 }
+# content_rows <partition>: how many rows the partition still holds.
+content_rows() {
+  aws dynamodb query --table-name "$TABLE" --key-condition-expression 'PK = :pk' \
+    --expression-attribute-values "{\":pk\":{\"S\":\"$1\"}}" --select COUNT --query Count --output text
+}
 cleanup() {
   set +e
   if [ "$SET_MAY_EXIST" = 1 ]; then
@@ -121,7 +126,8 @@ echo "archive drill on $STACK, set $SET_ID"
 
 echo "1. create an inactive Engage set with one uploaded image"
 SET_MAY_EXIST=1
-node -e "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAMAASsJTYQAAAAASUVORK5CYII=','base64'))" > "$WORK/drill.png"
+node -e "process.stdout.write(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAMAASsJTYQAAAAASUVORK5CYII=','base64'))" > "$WORK/drill.png" \
+  || die "the test image could not be written"
 aws s3 cp "$WORK/drill.png" "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" --content-type image/png >/dev/null \
   || die "the image could not be uploaded"
 CSV=$'Category,Title,Detail,Image\nDrill One,First drill question,Detail one,drill.png\nDrill One,Second drill question,Detail two,\nDrill Two,Third drill question,Detail three,'
@@ -135,8 +141,8 @@ MEDIA_MAY_EXIST=1
 EXPORT=$(invoke admin-export-to-archive "$(jq -nc --arg id "$SET_ID" --argjson a "$ADMIN" \
   '{requestContext:{authorizer:{lambda:$a}},body:({selectedItems:[{scope:"platform",id:$id}],exportType:"questionsets"}|tojson)}')") \
   || die "the export call failed"
-ARCHIVE_ID=$(echo "$EXPORT" | jq -r '.results.successful[0].archiveId // empty')
-SNAPSHOT_ID=$(echo "$EXPORT" | jq -r '.results.successful[0].snapshotId // empty')
+ARCHIVE_ID=$(echo "$EXPORT" | jq -r '.results.successful[0].archiveId // empty') || die "the export's reply is not JSON: $EXPORT"
+SNAPSHOT_ID=$(echo "$EXPORT" | jq -r '.results.successful[0].snapshotId // empty') || die "the export's reply is not JSON: $EXPORT"
 if [ -z "$ARCHIVE_ID" ]; then die "nothing was archived: $(echo "$EXPORT" | jq -c '.results.failed')"; fi
 expect "archived with its image" "$(echo "$EXPORT" | jq -r '.results.successful[0].media.copied')" "1"
 
@@ -157,15 +163,15 @@ expect "its image came back" "$(echo "$IMPORT" | jq -r '.media.copied')" "1"
 META=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" --output json) \
   || die "the restored set's row could not be read"
 expect "listed in Engage's library again, on version 1" "$(echo "$META" | jq -r '.Item.activeVersion.N // "missing"')" "1"
-expect "and inactive there" "$(echo "$META" | jq -r '.Item.active.BOOL // "missing"')" "false"
-ROWS=$(aws dynamodb query --table-name "$TABLE" --key-condition-expression 'PK = :pk' \
-  --expression-attribute-values "{\":pk\":{\"S\":\"SET#${SET_ID}#v1\"}}" --select COUNT --query Count --output text) \
-  || die "the restored rows could not be counted"
+# Not `// "missing"`: jq's alternative operator replaces false as well as null, so it could
+# never print false. An absent flag prints null, which fails the comparison too.
+expect "and inactive there" "$(echo "$META" | jq -r '.Item.active.BOOL')" "false"
+ROWS=$(content_rows "SET#${SET_ID}#v1") || die "the restored rows could not be counted"
 expect "all five content rows are back (2 categories, 3 questions)" "$ROWS" "5"
-if aws s3api head-object --bucket "$MEDIA_BUCKET" --key "sets/${SET_ID}/drill.png" >/dev/null 2>&1; then
+if aws s3api head-object --bucket "$MEDIA_BUCKET" --key "sets/${SET_ID}/drill.png" >/dev/null; then
   echo "  ok   - the image object exists again"
 else
-  echo "  FAIL - the image object is missing"; FAILED=1
+  echo "  FAIL - the image object is missing (any AWS error is above)"; FAILED=1
 fi
 
 echo "5. remove everything the drill made, through the same routes, and check it is gone"
@@ -177,6 +183,7 @@ remove_media || die "the backup's copied images could not be removed"
 expect "no copied image is left in the archive" "$(media_keys)" "None"
 MEDIA_MAY_EXIST=0
 remove_set || die "the restored set could not be deleted"
+expect "no content rows are left" "$(content_rows "SET#${SET_ID}")+$(content_rows "SET#${SET_ID}#v1")" "0+0"
 aws s3 rm "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" >/dev/null || die "the restored image could not be removed"
 SET_MAY_EXIST=0
 echo "  ok   - the set and its image are removed"
