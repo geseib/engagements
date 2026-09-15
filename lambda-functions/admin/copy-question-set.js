@@ -16,8 +16,8 @@
  *
  * ── A COPY IS A COPY, NOT A REFERENCE ──────────────────────────────────────
  *
- * Every row is duplicated into the organisation's own partition and the two are
- * independent from that moment. This is the same conclusion
+ * Every content row is duplicated into the organisation's own partition and the
+ * two are independent from that moment. This is the same conclusion
  * `question-set-management-reimagined.md` §5.2 reached about imports: if the
  * copy shared identity with its source, an Engage admin editing the platform
  * set would silently change what a customer had already reviewed and scheduled
@@ -45,6 +45,7 @@ const {
 const tenant = require('./shared/tenant');
 const { ownerStamp } = require('./shared/question-set-access');
 const { encryptItem, decryptItem } = require('./shared/tenant-crypto');
+const { LIFECYCLE_SKS } = require('./shared/archive-snapshot');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -142,9 +143,18 @@ exports.handler = async (event) => {
 
     /* Question rows are encrypted for the destination; category rows are not,
        matching what an org's own sets look like. Anything else is copied as-is
-       so a future row type is carried rather than dropped. */
+       so a future row type is carried rather than dropped.
+
+       EXCEPT THE REVIEW AND PUBLISHED ROWS, which are not content. Each public
+       version carries its own REVIEW row. Copied into this unversioned
+       partition, that row would sit at exactly the key publish-question-set.js
+       reads for a set with no version, and the copying team could publish
+       content its own check never saw. PUBLISHED says where the SOURCE version
+       was shared. A backup leaves both out for the same reason
+       (shared/archive-snapshot.js). */
     const copies = [];
     for (const row of rows) {
+      if (LIFECYCLE_SKS.includes(String(row.SK))) continue;
       const moved = { ...row, PK: targetPk };
       copies.push(String(row.SK || '').startsWith('QUESTION#')
         ? await encryptItem(orgId, 'question', moved)

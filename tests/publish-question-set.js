@@ -274,8 +274,7 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.strictEqual(publicMeta().versions.length, 2);
   });
   // rejects: copying the source's PUBLISHED row. It records where the LAST
-  // share went, so public v2 would carry a pointer to public v1 — and
-  // copy-question-set.js copies every row it finds into the copying team's set.
+  // share went, so public v2 would carry a pointer to public v1.
   await check('a re-share leaves the PUBLISHED marker behind', async () => {
     await seed();
     await publish(owner({ version: 2 }));

@@ -20,7 +20,8 @@ const TIERS = ['dev', 'test', 'prod'];
 /**
  * Publication-lifecycle rows that share a version's content partition (set-review.js:75-78).
  * A verdict about a version in another library is not content, and restoring one beside the
- * questions would describe a review that never happened here.
+ * questions would describe a review that never happened here. copy-question-set.js skips them
+ * for the same reason.
  */
 const LIFECYCLE_SKS = ['REVIEW', 'PUBLISHED'];
 

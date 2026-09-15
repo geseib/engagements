@@ -136,9 +136,10 @@ async function share(event, source, pubRef, orgId, setId) {
   /*
     NOT THE PUBLISHED MARKER. That row says where a share put the SOURCE
     version, so a re-share would copy a pointer to the previous public version
-    into the new one — and copy-question-set.js carries every row it finds into
-    the copying team's set. The REVIEW row does come along: it is the verdict on
-    exactly these rows, and it is each public version's own review record.
+    into the new one. The REVIEW row does come along: it is the verdict on
+    exactly these rows, and it is each public version's own review record. It
+    stays with that version: copy-question-set.js leaves it behind when a team
+    copies the set out of the library.
   */
   const marker = publishedKey(source, version).SK;
 
