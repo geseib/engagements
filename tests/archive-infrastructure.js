@@ -127,9 +127,10 @@ check('...and exactly the functions that call the archive', () => {
 check('...reads the API id from config/archive-service.json, the file the mapping is pinned to', () => {
   assert.ok(accessCheck.includes('config/archive-service.json'));
 });
-check('...has both modes, and verify requires an unsigned request to be refused', () => {
+check('...has both modes, and verify requires every route locked and an unsigned request refused', () => {
   assert.ok(/preflight\|verify\)/.test(accessCheck), 'no preflight|verify case');
   assert.ok(/403/.test(accessCheck) && /curl/.test(accessCheck), 'verify must prove an unsigned request is refused');
+  assert.ok(/apigatewayv2 get-routes/.test(accessCheck) && /AWS_IAM/.test(accessCheck), 'verify must check that every route requires AWS_IAM');
 });
 check('the drill refuses production and covers the functions a restore uses', () => {
   assert.ok(/engageprod\)[^\n]*exit 2/.test(drill), 'the drill must refuse engageprod');
