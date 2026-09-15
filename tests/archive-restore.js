@@ -222,5 +222,43 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
     assert.deepStrictEqual(h.writes, []);
   });
 
+  console.log('\n8. stray rows from unfinished writes are never mixed in');
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    meta: { name: 'Live', active: true, versions: [{ version: 1 }, { version: 2 }] },
+  });
+  h.put({ PK: setPartition(platform('pulse'), 3), SK: 'QUESTION#c009#001', Title: 'stray' });
+  outcome = await restoreSetSnapshot(deps, setEnvelope({ media: [] }), ctx);
+  await check('a new version steps over a partition that already holds rows', () => {
+    assert.strictEqual(outcome.version, 4);
+    assert.strictEqual(metaRow('pulse').activeVersion, 4);
+    const restored = contentOf('pulse', 4);
+    assert.strictEqual(restored.length, 4);
+    assert.ok(!restored.some((row) => row.Title === 'stray'), 'the stray row was mixed into the restored version');
+  });
+  await check('the stray rows are left where they were, neither deleted nor overwritten', () => {
+    assert.deepStrictEqual(contentOf('pulse', 3), [{ SK: 'QUESTION#c009#001', Title: 'stray' }]);
+  });
+
+  h.reset();
+  h.put({ PK: setPartition(platform('pulse'), 1), SK: 'QUESTION#c009#001', Title: 'stray' });
+  outcome = await restoreSetSnapshot(deps, setEnvelope({ media: [] }), ctx);
+  await check('a set that does not exist is created at the first empty version, not a literal 1', () => {
+    assert.strictEqual(outcome.mode, 'created');
+    assert.strictEqual(outcome.version, 2);
+    assert.strictEqual(metaRow('pulse').activeVersion, 2);
+    assert.deepStrictEqual(metaRow('pulse').versions.map((v) => v.version), [2]);
+    assert.deepStrictEqual(contentOf('pulse', 1), [{ SK: 'QUESTION#c009#001', Title: 'stray' }]);
+    assert.deepStrictEqual(contentOf('pulse', 2), ROWS.filter((row) => row.SK !== 'REVIEW'));
+  });
+
+  h.reset();
+  const noMediaDeps = { ...deps, mediaBucket: '' };
+  await check('images are copied before any row is written, so a media fault writes nothing', async () => {
+    await assert.rejects(() => restoreSetSnapshot(noMediaDeps, setEnvelope(), ctx), /MEDIA_BUCKET/);
+    assert.deepStrictEqual(h.writes, []);
+  });
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

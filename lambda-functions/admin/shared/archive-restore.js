@@ -13,8 +13,16 @@
  *
  * A PROMPT that exists gets a new version of THAT prompt; one that does not is recreated under
  * its id. A restore never changes which prompt is a default (A9).
+ *
+ * A RESTORE NEVER WRITES INTO A VERSION PARTITION THAT ALREADY HOLDS ROWS. `nextVersion` reads
+ * only the metadata row, and the partition it names can already hold rows: a replace whose
+ * flip failed leaves them there on purpose (upload-questions.js), and a failed flip or create
+ * here does the same. A batch write only overwrites the SKs it names, so writing into such a
+ * partition and flipping to it would make live the UNION of two writes. Each content partition
+ * is therefore the first EMPTY version number at or after the predicted one, and images are
+ * copied before any row is written. Debris is stepped over, never deleted or overwritten.
  */
-const { GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, PutCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const tenant = require('./tenant');
 const {
@@ -29,6 +37,30 @@ const { copyMediaIn } = require('./archive-media');
 const snap = require('./archive-snapshot');
 
 const nowIso = (deps) => (deps.now ? deps.now() : new Date().toISOString());
+
+/** How many version numbers a restore steps over before refusing. delete-question-set.js sweeps five ahead. */
+const VERSION_PROBES = 10;
+
+/**
+ * The first version number at or after `from` whose content partition holds no rows.
+ *
+ * One Query with Limit 1 per candidate. Refuses rather than guesses when every candidate is
+ * occupied: the rows are somebody's evidence of an unfinished write, and a restore must never
+ * delete or overwrite them.
+ */
+async function firstEmptyVersion(db, tableName, ref, from) {
+  for (let n = from; n < from + VERSION_PROBES; n += 1) {
+    const res = await db.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk',
+      ExpressionAttributeValues: { ':pk': setPartition(ref, n) },
+      Limit: 1,
+    }));
+    if (((res && res.Items) || []).length === 0) return n;
+  }
+  throw new Error(`Versions ${from} to ${from + VERSION_PROBES - 1} of "${ref.setId}" all already hold rows from `
+    + 'unfinished writes, so the restore was not written. Delete the set\'s stray versions or retry.');
+}
 
 /** The prompt a restored set should name on THIS tier, or '' for none. */
 async function resolvePromptLink(deps, envelope) {
@@ -68,11 +100,17 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
   const promptId = await resolvePromptLink(deps, envelope);
   const restoredFrom = snap.provenance(envelope, ctx.archiveId);
 
+  // Images first, before any row is written. copyMediaIn never overwrites an object that is
+  // already there, so a media fault (a missing bucket, AccessDenied — deployment faults, which
+  // it rethrows) costs at most an orphaned copy, never a half-written version.
+  const media = await copyMediaIn(deps.s3, { mediaBucket: deps.mediaBucket, archiveBucket: deps.archiveBucket, media: envelope.media });
+
   // A set that has never been versioned keeps its content in the legacy partition. Snapshot it
-  // to v1 first, exactly as a replace does (upload-questions.js), so what this restore
-  // supersedes is still a version rather than a partition nothing lists.
+  // to a version first (v1, unless v1 already holds debris), exactly as a replace does
+  // (upload-questions.js), so what this restore supersedes is still a version rather than a
+  // partition nothing lists.
   let seed = [];
-  let targetVersion = 1;
+  let targetVersion;
   if (existing) {
     const versioned = toVersion(existing.activeVersion) !== null || knownVersions(existing).length > 0;
     if (versioned) {
@@ -81,9 +119,10 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
       const legacyPk = setPartition(ref, null);
       const { items: legacyRows } = await queryPartition(db, tableName, legacyPk);
       if (legacyRows.length > 0) {
-        await copyPartition(db, tableName, legacyPk, setPartition(ref, 1));
+        const legacyVersion = await firstEmptyVersion(db, tableName, ref, 1);
+        await copyPartition(db, tableName, legacyPk, setPartition(ref, legacyVersion));
         seed = [{
-          version: 1,
+          version: legacyVersion,
           createdAt: existing.createdAt || now,
           questionCount: existing.questionCount || 0,
           categoryCount: existing.categoryCount || 0,
@@ -93,7 +132,9 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
         existing = { ...existing, versions: seed };
       }
     }
-    targetVersion = nextVersion(existing);
+    targetVersion = await firstEmptyVersion(db, tableName, ref, nextVersion(existing));
+  } else {
+    targetVersion = await firstEmptyVersion(db, tableName, ref, 1);
   }
 
   const contentPk = setPartition(ref, targetVersion);
@@ -110,8 +151,6 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
       + (existing ? 'The live set is untouched.' : 'Nothing was left behind.'));
   }
 
-  const media = await copyMediaIn(deps.s3, { mediaBucket: deps.mediaBucket, archiveBucket: deps.archiveBucket, media: envelope.media });
-
   const note = `Restored from archive ${ctx.archiveId}, exported ${envelope.exportedAt} from ${from.tier}`
     + (from.version ? ` (it was v${from.version} there)` : '');
   const versionEntry = {
@@ -126,7 +165,7 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
     const item = {
       ...snap.platformMetadata(envelope.metadata, restoredFrom),
       ...setMetadataKey(ref),
-      activeVersion: 1,
+      activeVersion: targetVersion,
       versions: [versionEntry],
       questionCount: questions.length,
       categoryCount,
@@ -139,7 +178,7 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
     };
     if (promptId) item.promptId = promptId; else delete item.promptId;
     await db.send(new PutCommand({ TableName: tableName, Item: item, ConditionExpression: 'attribute_not_exists(SK)' }));
-    return { kind: 'set', id: setId, name: item.name || setId, mode: 'created', version: 1, active: item.active, wasActive: false, media };
+    return { kind: 'set', id: setId, name: item.name || setId, mode: 'created', version: targetVersion, active: item.active, wasActive: false, media };
   }
 
   // THE FLIP. One update carries the pointer, the version list, the counts and the settings,
