@@ -112,6 +112,8 @@ async function check(name, fn) {
 const ORG = 'org_acme';
 const SET = 'pricingmechanics';
 const ORG_REF = { scope: 'org', orgId: ORG, setId: SET };
+// publicSetId keeps only letters and digits of the org id, so `org_acme` -> `orgacme`.
+const PUBLIC_REF = { scope: 'public', orgId: '', setId: 'orgacme-pricingmechanics' };
 
 const owner = (body = {}) => ({
   requestContext: {
@@ -198,6 +200,26 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.strictEqual(meta.activeVersion, 1, 'the first public version is 1');
     assert.strictEqual(meta.versions.length, 1);
   });
+  // rejects: counting every row copied as a question. The version partition
+  // also holds its CATEGORY# rows and its REVIEW row, so this two-question set
+  // was listed as four — in the set list (get-question-sets.js) and the version
+  // list (get-set-versions.js) alike.
+  await check('the version entry counts questions, not rows', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const [entry] = publicMeta().versions;
+    assert.strictEqual(entry.questionCount, 2,
+      `a two-question set was listed with ${entry.questionCount} questions`);
+  });
+  // rejects: leaving the REVIEW row behind along with the other rows that are
+  // not questions. It is the verdict on exactly the rows copied, and without it
+  // every public version reads as `unreviewed` in its own version list.
+  await check('each public version carries its own review record', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const review = await R.readReview(fakeDoc, 'engage-test', PUBLIC_REF, 1);
+    assert.strictEqual(review.status, R.STATUS.PASSED, `public v1 reads as ${review.status}`);
+  });
   // rejects: leaving org ciphertext in a partition nobody can decrypt. Public
   // content is plaintext by design — encrypting it would make the shared
   // library unreadable, which is the same argument tenant-crypto.js makes.
@@ -250,6 +272,17 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
   await check('and it becomes public version 2', async () => {
     assert.strictEqual(publicMeta().activeVersion, 2);
     assert.strictEqual(publicMeta().versions.length, 2);
+  });
+  // rejects: copying the source's PUBLISHED row. It records where the LAST
+  // share went, so public v2 would carry a pointer to public v1 — and
+  // copy-question-set.js copies every row it finds into the copying team's set.
+  await check('a re-share leaves the PUBLISHED marker behind', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const markers = publicRows().filter((i) => i.SK === 'PUBLISHED').map((i) => i.PK);
+    assert.deepStrictEqual(markers, [], `a PUBLISHED row reached ${markers.join(', ')}`);
   });
 
   say('\n4. who may do it');

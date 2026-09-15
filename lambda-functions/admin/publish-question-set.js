@@ -134,6 +134,15 @@ async function share(event, source, pubRef, orgId, setId) {
   const now = new Date().toISOString();
 
   /*
+    NOT THE PUBLISHED MARKER. That row says where a share put the SOURCE
+    version, so a re-share would copy a pointer to the previous public version
+    into the new one — and copy-question-set.js carries every row it finds into
+    the copying team's set. The REVIEW row does come along: it is the verdict on
+    exactly these rows, and it is each public version's own review record.
+  */
+  const marker = publishedKey(source, version).SK;
+
+  /*
     DECRYPTED ON THE WAY OUT. The org's rows are ciphertext; the public library
     is plaintext by design, because encrypting content every organisation reads
     to one organisation's key makes it unreadable. Getting this backwards
@@ -141,6 +150,7 @@ async function share(event, source, pubRef, orgId, setId) {
   */
   const copies = [];
   for (const row of rows) {
+    if (row.SK === marker) continue;
     const plain = String(row.SK || '').startsWith('QUESTION#')
       ? await decryptItem(orgId, 'question', row)   // eslint-disable-line no-await-in-loop
       : row;
@@ -148,8 +158,11 @@ async function share(event, source, pubRef, orgId, setId) {
   }
   await batchPutItems(db, TABLE(), copies);
 
+  // QUESTIONS, not rows: the partition also holds the CATEGORY# rows and the
+  // REVIEW row, and both the set list and the version list show this number.
+  const questionCount = copies.filter((row) => String(row.SK || '').startsWith('QUESTION#')).length;
   const versions = Array.isArray(existing && existing.versions) ? [...existing.versions] : [];
-  versions.push({ version: publicVersion, createdAt: now, questionCount: copies.length });
+  versions.push({ version: publicVersion, createdAt: now, questionCount });
 
   const publicMeta = {
     // `...meta` carries the set's own Workie — promptId and personaId — which
@@ -194,6 +207,8 @@ async function share(event, source, pubRef, orgId, setId) {
     publicSetId: pubRef.setId,
     publicVersion,
     sourceVersion: version,
+    // Every row written, as copy-question-set.js reports `rowsCopied`. The
+    // question count is on the version entry.
     rowsPublished: copies.length,
   });
 }
