@@ -333,10 +333,18 @@ No migration is run. Re-exporting a platform set once produces a full-fidelity b
   stack's table while its IAM covers only `GameTable`, so every call is AccessDenied; no
   caller exists.
 - the two `PK:'ARCHIVE'` Put blocks in `export-to-archive.js`
-- `kms:Decrypt` on the import function (`template-clean.yaml:4090-4094`) — import never
-  touches org content and now refuses it
 - `DynamoDBCrudPolicy` on the export function, narrowed to `DynamoDBReadPolicy` — export
   writes nothing to the main table
+
+**Not removed, though first proposed:** `kms:Decrypt` on the import function. 
+`tests/kms-grants-match-code.js` requires the grant on every function whose require graph
+reaches `tenant-crypto.js`, because a missing grant is a production-only 500 the stubbed
+suite cannot see. Import reaches it through `upload-questions.js` (the legacy CSV path), and
+both archive functions reach it through `isEnvelope`, which the ciphertext refusal (A7)
+deliberately takes from `tenant-crypto.js` rather than a second definition of "encrypted".
+So export gains the same grant. It stays scoped to `TenantKey`, whose key policy demands an
+`orgId` encryption context, and neither handler decrypts anything: org content is refused
+before it is read.
 - an optional sweep script for the existing inert `ARCHIVE` rows, not run automatically
 
 ## 5. Rollout — the order matters
