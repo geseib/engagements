@@ -134,7 +134,11 @@ stub('@aws-sdk/client-s3', {
 });
 
 process.env.TABLE_NAME = TABLE;
-process.env.ARCHIVE_SERVICE_URL = 'https://archive.seibtribe.us';
+// The importer signs its archive calls, so it needs the execute-api host and credentials.
+const BASE = 'https://archtest01.execute-api.us-east-1.amazonaws.com';
+process.env.ARCHIVE_SERVICE_URL = BASE;
+process.env.AWS_ACCESS_KEY_ID = 'AKIDIMAGESUITE';
+process.env.AWS_SECRET_ACCESS_KEY = 'image-suite-secret';
 process.env.STACK_NAME = 'engagedev';
 
 // ---- Stub the archive service's HTTP surface via global.fetch --------------
@@ -144,11 +148,11 @@ const realFetch = global.fetch;
 function installFetchStub() {
   const fakeHeaders = () => new Map([['content-type', 'application/json']]);
   global.fetch = async (url, opts) => {
-    if (url === 'https://archive.seibtribe.us/archive/items' && opts && opts.method === 'POST') {
+    if (url === `${BASE}/archive/items` && opts && opts.method === 'POST') {
       capturedUpload = JSON.parse(opts.body);
       return { ok: true, status: 200, headers: fakeHeaders(), json: async () => ({ archiveId: ARCHIVE_ID, item: capturedUpload }) };
     }
-    if (url === `https://archive.seibtribe.us/archive/items/${ARCHIVE_ID}`) {
+    if (url === `${BASE}/archive/items/${ARCHIVE_ID}`) {
       // Mirror the real archive service (lambda-functions/archive/upload-archive.js):
       // it stores/returns the item with PascalCase keys, not the lowerCamelCase
       // body export-to-archive.js POSTed.
@@ -257,6 +261,7 @@ async function main() {
 
     const importRes = await importHandler.handler({
       httpMethod: 'POST',
+      requestContext: { authorizer: { lambda: { groups: 'admins', userId: 'staff-1' } } },
       body: JSON.stringify({ selectedItems: [ARCHIVE_ID], importType: 'questionsets', conflictResolution: 'rename' })
     });
     assert.strictEqual(importRes.statusCode, 200, `import failed: ${importRes.body}`);
@@ -264,7 +269,7 @@ async function main() {
     assert.strictEqual(importBody.results.failed.length, 0, `import reported failures: ${JSON.stringify(importBody.results.failed)}`);
     assert.strictEqual(importBody.results.successful.length, 1, 'expected exactly one imported set');
 
-    const newSetId = importBody.results.successful[0].newId;
+    const newSetId = importBody.results.successful[0].id;
     const importedQuestion = [...store.values()].find(
       (item) => item.PK === `SET#${newSetId}` && String(item.SK).startsWith('QUESTION#')
     );

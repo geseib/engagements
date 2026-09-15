@@ -132,7 +132,10 @@ stubs.set('@aws-sdk/client-s3', {
 });
 
 process.env.TABLE_NAME = TABLE;
-process.env.ARCHIVE_SERVICE_URL = 'https://archive.test.invalid';
+// The importer signs its archive calls, so it needs the execute-api host and credentials.
+process.env.ARCHIVE_SERVICE_URL = 'https://archtest01.execute-api.us-east-1.amazonaws.com';
+process.env.AWS_ACCESS_KEY_ID = 'AKIDPROMPTSUITE';
+process.env.AWS_SECRET_ACCESS_KEY = 'prompt-suite-secret';
 
 const exportHandler = require(path.join(REPO, 'lambda-functions/admin/export-to-archive.js')).handler;
 const importHandler = require(path.join(REPO, 'lambda-functions/admin/import-from-archive.js')).handler;
@@ -227,7 +230,9 @@ const reset = () => { ddb.clear(); s3.clear(); archive.clear(); nextArchiveId = 
 const exportPrompt = (id) => exportHandler({
   body: JSON.stringify({ selectedItems: [id], exportType: 'prompts' }),
 });
+// Restoring writes Engage's library, so the caller is Engage staff acting as Engage.
 const importPrompt = (archiveId) => importHandler({
+  requestContext: { authorizer: { lambda: { groups: 'admins', userId: 'staff-1' } } },
   body: JSON.stringify({ selectedItems: [archiveId], importType: 'prompts' }),
 });
 const parse = (res) => JSON.parse(res.body);
