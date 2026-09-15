@@ -5,6 +5,7 @@ import {
   tagFilterOptions,
   hasArchiveTag,
   filterArchiveItems,
+  STRUCTURED_TAG,
 } from '../utils/archiveFiltering';
 import { GAME_TYPE_LIST } from '../config/gameTypes';
 
@@ -196,5 +197,29 @@ describe('filterArchiveItems', () => {
   it('survives an empty archive', () => {
     expect(filterArchiveItems([], { gameType: 'trivia' })).toEqual([]);
     expect(filterArchiveItems(undefined, {})).toEqual([]);
+  });
+});
+
+describe('snapshot tags and the environment filter', () => {
+  const snapshotItem = {
+    ArchiveId: 'a5', Title: 'Team Retro', ContentType: 'questionset', Category: 'call-and-answer',
+    Tags: ['test', 'schema:engage.set/1', 'scope:platform', 'source:platform/teamretro', 'exportedAt:2026-09-15T12:00:00.000Z', 'questions:12'],
+  };
+
+  it('keeps structured tags out of the tag dropdown', () => {
+    const tags = collectArchiveTags([snapshotItem]);
+    expect(tags).toEqual(['questions:12', 'test']);
+    expect(STRUCTURED_TAG.test('source:platform/teamretro')).toBe(true);
+    expect(STRUCTURED_TAG.test('questions:12')).toBe(false);
+  });
+
+  it('narrows by the environment a backup came from', () => {
+    expect(filterArchiveItems([...ALL, snapshotItem], { tier: 'test' })).toEqual([snapshotItem]);
+    expect(filterArchiveItems(ALL, { tier: 'prod' })).toEqual([callAndAnswerPrompt]);
+  });
+
+  it('combines the environment with the other axes', () => {
+    expect(filterArchiveItems(ALL, { tier: 'dev', gameType: 'trivia' })).toEqual([triviaSet]);
+    expect(filterArchiveItems(ALL, { tier: 'prod', gameType: 'trivia' })).toEqual([]);
   });
 });
