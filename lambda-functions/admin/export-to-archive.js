@@ -1,99 +1,96 @@
+/**
+ * BACK UP ENGAGE AND PUBLIC CONTENT TO THE SHARED ARCHIVE — as full-fidelity snapshots.
+ *
+ * docs/superpowers/specs/2026-09-14-archive-full-fidelity-design.md §4.2. What used to be
+ * written here was a CSV with a fixed column set. Everything it had no column for (poll
+ * options, trivia E/F, images, every set setting, the active flag) was lost on every trip.
+ * Each item is now one JSON envelope (shared/archive-snapshot.js) copied wholesale from its
+ * rows, with the images those rows point at copied beside it (shared/archive-media.js).
+ *
+ * WHO: Engage staff acting as Engage, via canManageScope(event, PLATFORM), the same interlock
+ * that guards writing Engage's library. The route's `admins` gate alone lets an admin standing
+ * inside a customer team reach it.
+ *
+ * WHAT: platform and public content. Organisation content is refused BY NAME before any read,
+ * because it is encrypted per organisation and the owner decided not to archive ciphertext.
+ * Anything else carrying an encrypted value is refused too, wherever the value sits. A bare id
+ * is platform, the house rule (set-version.js setRef), which is what the prompt manager's
+ * "Copy to archive" sends.
+ *
+ * WRITES NOTHING TO THE MAIN TABLE. The `PK: 'ARCHIVE'` rows this used to write were read by
+ * nothing; the archive service's own table is the index.
+ */
+const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, QueryCommand, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { resolvePartitionFromMeta, setMetadataKey } = require('./shared/set-version');
 const tenant = require('./shared/tenant');
-const { inferPromptType } = require('./shared/prompt-shape');
+const { setRef, setMetadataKey, resolvePartitionFromMeta, queryPartition } = require('./shared/set-version');
+const { promptKey } = require('./shared/prompt-access');
 const { promptLinkTag } = require('./shared/archive-prompt-link');
+const archive = require('./shared/archive-client');
+const snap = require('./shared/archive-snapshot');
+const { copyMediaOut } = require('./shared/archive-media');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient());
 const s3Client = new S3Client({});
 
-// Archive service configuration
-const ARCHIVE_SERVICE_URL = process.env.ARCHIVE_SERVICE_URL || 'https://archive.seibtribe.us';
+/** The archive API is API Gateway in front of Lambda, whose request payload limit is 6 MB. */
+const MAX_ITEM_BYTES = 5.5 * 1024 * 1024;
+const ORG_REFUSAL = 'Organisation content is not archived: it is encrypted per organisation.';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Engage-Org',
+};
+const respond = (statusCode, body) => ({ statusCode, headers: corsHeaders, body: JSON.stringify(body) });
 
 exports.handler = async (event) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Engage-Org'
-  };
-
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: ''
-    };
+  if (event && event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: corsHeaders, body: '' };
+  if (!tenant.canManageScope(event, tenant.PLATFORM)) {
+    return respond(403, { error: "The archive backs up Engage's library. Switch to Engage (no organisation selected) to use it." });
   }
-
+  let payload;
   try {
-    const { selectedItems, exportType } = JSON.parse(event.body);
-    
-    if (!selectedItems || !Array.isArray(selectedItems) || selectedItems.length === 0) {
-      return {
-        statusCode: 400,
-        headers: corsHeaders,
-        body: JSON.stringify({
-          error: 'selectedItems array is required and must not be empty'
-        })
-      };
-    }
-
-    if (!exportType || !['questionsets', 'prompts'].includes(exportType)) {
-      return {
-        statusCode: 400,
-        headers: corsHeaders,
-        body: JSON.stringify({
-          error: 'exportType must be either "questionsets" or "prompts"'
-        })
-      };
-    }
-
-    console.log(`🚀 Starting export of ${selectedItems.length} ${exportType} items to archive`);
-
-    const results = {
-      successful: [],
-      failed: [],
-      totalRequested: selectedItems.length
-    };
-
-    // Determine current environment
-    const environment = process.env.STACK_NAME || process.env.AWS_LAMBDA_FUNCTION_NAME || 'unknown';
-    const env = environment.includes('dev') ? 'dev' : 
-                environment.includes('test') ? 'test' : 
-                environment.includes('prod') ? 'prod' : 'unknown';
-
-    if (exportType === 'questionsets') {
-      await exportQuestionSets(selectedItems, env, results);
-    } else if (exportType === 'prompts') {
-      await exportPrompts(selectedItems, env, results);
-    }
-
-    console.log(`✅ Export completed. Success: ${results.successful.length}, Failed: ${results.failed.length}`);
-
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: JSON.stringify({
-        message: `Export completed. ${results.successful.length} items exported successfully.`,
-        results: results
-      })
-    };
-
-  } catch (error) {
-    console.error('❌ Export to archive failed:', error);
-    return {
-      statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({
-        error: 'Export to archive failed',
-        details: error.message
-      })
-    };
+    payload = JSON.parse((event && event.body) || '{}');
+  } catch {
+    return respond(400, { error: 'Request body is not valid JSON.' });
   }
+  const { selectedItems, exportType } = payload;
+  if (!Array.isArray(selectedItems) || selectedItems.length === 0) {
+    return respond(400, { error: 'selectedItems array is required and must not be empty' });
+  }
+  if (!['questionsets', 'prompts'].includes(exportType)) {
+    return respond(400, { error: 'exportType must be either "questionsets" or "prompts"' });
+  }
+
+  const results = { successful: [], failed: [], totalRequested: selectedItems.length };
+  const tier = snap.currentTier();
+  for (const entry of selectedItems) {
+    const ref = selectionRef(entry);
+    try {
+      if (exportType === 'questionsets') await exportSet(ref, tier, results);
+      else await exportPrompt(ref, tier, results);
+    } catch (error) {
+      console.error(`❌ export of ${ref.scope}/${ref.id} failed:`, error);
+      results.failed.push({ id: ref.id, scope: ref.scope, error: error.message });
+    }
+  }
+  console.log(`✅ Export completed. Success: ${results.successful.length}, Failed: ${results.failed.length}`);
+  return respond(200, { message: `Export completed. ${results.successful.length} items exported successfully.`, results });
 };
+
+/** `{scope, id}` from one selection entry. A bare id, or an object with no scope, is platform. */
+function selectionRef(entry) {
+  if (typeof entry === 'string') return { scope: tenant.PLATFORM, id: entry.trim() };
+  if (entry && typeof entry === 'object') {
+    return { scope: String(entry.scope || '').trim().toLowerCase() || tenant.PLATFORM, id: String(entry.id || '').trim() };
+  }
+  return { scope: '', id: '' };
+}
+
+const refuse = (results, ref, error) => results.failed.push({ id: ref.id, scope: ref.scope, refused: true, error });
 
 /*
   NAME THE EM DASH, BECAUSE THE ARCHIVE SERVICE CANNOT.
@@ -136,538 +133,177 @@ function describeTitleHazard(title) {
     + `and the archive service needs redeploying (scripts/deploy-archive.sh) — the title itself is fine.`;
 }
 
-async function exportQuestionSets(selectedIds, environment, results) {
-  for (const setId of selectedIds) {
-    try {
-      console.log(`📤 Exporting question set: ${setId}`);
-      
-      /*
-        THE ARCHIVE IS HOUSE CONTENT ONLY, AND THIS SAYS SO RATHER THAN
-        IMPLYING IT.
-
-        The archive is one shared store behind all three tiers, reached by
-        unauthenticated routes. An organisation's set must never be exported
-        into it, and this read was already platform-only — but by ACCIDENT, from
-        a hard-coded `PK: 'SETS'`. An org set therefore failed here as "not
-        found", which is misleading: it exists, it is simply not exportable.
-
-        Stated explicitly now, through the same key builder every other reader
-        uses. This is also the seam for the refusal the handoff asks for —
-        `export-to-archive.js` takes an arbitrary `selectedItems` list and
-        should refuse anything carrying an `orgId` rather than quietly missing.
-      */
-      const setResponse = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: setMetadataKey({ scope: tenant.PLATFORM, setId }),
-      }));
-
-      if (!setResponse.Item) {
-        console.warn(`⚠️ Question set ${setId} not found`);
-        results.failed.push({ id: setId, error: 'Question set not found' });
-        continue;
-      }
-
-      const questionSet = setResponse.Item;
-
-      // Export the ACTIVE version's questions, falling back to the legacy
-      // partition for a set that has never been versioned. Exporting the bare
-      // `SET#<id>` partition after a replace would archive the superseded copy.
-      const resolvedSet = resolvePartitionFromMeta(setId, questionSet, null);
-
-      /*
-        QUERY, PAGINATED — AND IT WAS A SCAN, WHICH SILENTLY EXPORTED NOTHING.
-
-        Reported: "its wasnt in archive when you did it, and when i retryed
-        archive, it says export completed, 0 items exported."
-
-        This was a ScanCommand with `FilterExpression: 'PK = :pk AND
-        begins_with(SK, :skPrefix)'` and no pagination. A Scan reads ONE 1 MB
-        page of the whole table and applies the filter AFTER reading, so a set
-        whose QUESTION# rows fall outside that first page comes back with zero
-        items. `convertQuestionsToCSV` then returns '' (see :364-366), and the
-        archive service refuses the upload with
-
-            400 "Title, content, and contentType are required"
-
-        — an error that names three fields and points at none of the cause.
-
-        The failure is by TABLE POSITION, which is the worst shape a bug can
-        have: it is perfectly reproducible for one set, looks like corrupt data
-        for that set specifically, and moves to a different set the moment the
-        table grows. On 2026-08-15 it took out exactly one of eight demo sets
-        (`readyornot`) while a direct Query on the same partition returned all
-        twelve of its questions.
-
-        A Query on the partition key reads only that partition and needs no
-        filter at all. The pagination loop is not optional either: one Query
-        page is also capped at 1 MB, so a large set would truncate silently —
-        the same class of bug one size down.
-      */
-      const questions = [];
-      let lastKey;
-      do {
-        const page = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-          ExpressionAttributeValues: {
-            ':pk': resolvedSet.pk,
-            ':skPrefix': 'QUESTION#'
-          },
-          ExclusiveStartKey: lastKey
-        }));
-        questions.push(...(page.Items || []));
-        lastKey = page.LastEvaluatedKey;
-      } while (lastKey);
-
-      /*
-        AN EMPTY SET IS NOW A NAMED FAILURE, NOT A 400 FROM THREE HOPS AWAY.
-        The archive's own message cannot say which field was empty or why, and
-        that is what made this look like bad data rather than a bad read.
-      */
-      if (questions.length === 0) {
-        console.warn(`⚠️ ${setId}: query returned no questions; refusing to archive an empty set`);
-        results.failed.push({
-          id: setId,
-          error: `No questions found in partition ${resolvedSet.pk}. The set metadata says `
-            + `${questionSet.questionCount ?? 'an unknown number of'} questions, so this is a read `
-            + `problem, not an empty set.`
-        });
-        continue;
-      }
-      
-      // Convert questions to CSV format for import compatibility
-      const csvContent = convertQuestionsToCSV(questions, questionSet.engagementType);
-
-      /*
-        CARRY THE PROMPT LINK, BY NAME.
-
-        The set row's `promptId` names the Workie that reads its rounds back to
-        the room, and it means nothing in another tier — ids are minted per
-        environment. Nothing about the prompt was in the archive item at all, so
-        every imported set arrived unlinked and fell back to the game-type
-        default. See shared/archive-prompt-link.js for why a name and not an id.
-
-        A missing prompt row is NOT a failure. The set is still worth archiving;
-        it just travels without a link, which is what it did before this existed.
-      */
-      let promptTag = null;
-      if (questionSet.promptId) {
-        try {
-          const linked = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${questionSet.promptId}` }
-          }));
-          if (linked.Item && linked.Item.name) {
-            promptTag = promptLinkTag(linked.Item.name);
-            console.log(`🔗 ${setId} carries prompt link "${linked.Item.name}"`);
-          } else {
-            console.warn(`⚠️ ${setId}: promptId ${questionSet.promptId} names no prompt row; exporting unlinked`);
-          }
-        } catch (linkError) {
-          console.warn(`⚠️ ${setId}: could not read linked prompt: ${linkError.message}; exporting unlinked`);
-        }
-      }
-
-      // Transform to archive format
-      const archiveData = {
-        title: `${questionSet.name} (${environment})`,
-        description: `${questionSet.description || 'Question set'} - Exported from ${environment} environment`,
-        content: csvContent,
-        contentType: 'questionset',
-        category: questionSet.engagementType || 'general',
-        tags: [
-          environment,
-          questionSet.engagementType || 'call-and-answer',
-          `questions:${questions.length}`,
-          ...(questionSet.isAIGenerated ? ['ai-generated'] : []),
-          ...(promptTag ? [promptTag] : [])
-        ]
-      };
-
-      console.log(`📤 Uploading to archive service: ${ARCHIVE_SERVICE_URL}/archive/items`);
-      console.log(`📦 Archive data size: ${JSON.stringify(archiveData).length} bytes`);
-      console.log(`📊 Question set: ${questionSet.name}, Questions: ${questions.length}, Type: ${questionSet.engagementType}`);
-
-      // Upload to archive service
-      const uploadResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(archiveData)
-      });
-
-      console.log(`📡 Archive service response status: ${uploadResponse.status}`);
-      console.log(`📡 Archive service response headers:`, Object.fromEntries(uploadResponse.headers.entries()));
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`❌ Archive service error response:`, errorText);
-        console.error(`❌ Request payload summary:`, {
-          title: archiveData.title,
-          contentType: archiveData.contentType,
-          category: archiveData.category,
-          contentSize: archiveData.content.length,
-          tags: archiveData.tags
-        });
-        throw new Error(
-          `Archive upload failed for "${questionSet.name}" (${setId}): `
-          + `${uploadResponse.status} ${errorText}`
-          + describeTitleHazard(archiveData.title)
-        );
-      }
-
-      const uploadResult = await uploadResponse.json();
-      console.log(`✅ Successfully exported question set ${setId} to archive as ${uploadResult.archiveId}`);
-      
-      // Also store locally in main DynamoDB table for list-local-archive
-      const timestamp = new Date().toISOString();
-      const localArchiveItem = {
-        PK: 'ARCHIVE',
-        SK: `ITEM#${uploadResult.archiveId}`,
-        ArchiveId: uploadResult.archiveId,
-        Title: archiveData.title,
-        Description: archiveData.description,
-        ContentType: archiveData.contentType,
-        Category: archiveData.category,
-        Tags: archiveData.tags,
-        FileName: `${setId}.csv`,
-        FileSize: JSON.stringify(archiveData).length,
-        CreatedAt: timestamp,
-        UpdatedAt: timestamp,
-        SourceType: 'questionset',
-        SourceId: setId,
-        ExportedBy: 'system'
-      };
-      
-      await db.send(new PutCommand({
-        TableName: process.env.TABLE_NAME,
-        Item: localArchiveItem
-      }));
-      
-      console.log(`📝 Also stored locally in main table for list-local-archive: ${uploadResult.archiveId}`);
-      
-      results.successful.push({
-        id: setId,
-        name: questionSet.name,
-        archiveId: uploadResult.archiveId,
-        questionsCount: questions.length
-      });
-
-    } catch (error) {
-      console.error(`❌ Failed to export question set ${setId}:`, error);
-      results.failed.push({
-        id: setId,
-        error: error.message
-      });
-    }
+async function upload(item, label) {
+  const bytes = Buffer.byteLength(JSON.stringify(item), 'utf8');
+  if (bytes > MAX_ITEM_BYTES) {
+    throw new Error(`${label} is ${(bytes / 1048576).toFixed(1)} MB as a snapshot, over the archive service's `
+      + '6 MB request limit, so it was not archived.');
+  }
+  try {
+    return await archive.uploadItem(item);
+  } catch (error) {
+    throw new Error(`Archive upload failed for ${label}: ${error.message}${describeTitleHazard(item.title)}`);
   }
 }
 
-async function exportPrompts(selectedIds, environment, results) {
-  for (const promptId of selectedIds) {
-    try {
-      console.log(`📤 Exporting AI prompt: ${promptId}`);
-      
-      // Get AI prompt
-      const promptResponse = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}` }
-      }));
+async function exportSet(ref, tier, results) {
+  if (ref.scope === tenant.ORG) return refuse(results, ref, ORG_REFUSAL);
+  if (ref.scope !== tenant.PLATFORM && ref.scope !== tenant.PUBLIC) return refuse(results, ref, `Unknown library ${JSON.stringify(ref.scope)}.`);
+  if (!ref.id) return refuse(results, ref, 'No set id was given.');
 
-      if (!promptResponse.Item) {
-        console.warn(`⚠️ AI prompt ${promptId} not found`);
-        results.failed.push({ id: promptId, error: 'AI prompt not found' });
-        continue;
-      }
-
-      const prompt = promptResponse.Item;
-
-      /*
-        AN UNREADABLE BODY IS NOW A NAMED FAILURE, NOT A SUCCESSFUL EMPTY SHELL.
-
-        A prompt is a TWO-STORE record: the pointer row read above, and the body
-        itself in AI_PROMPTS_BUCKET at `s3Key`. This block used to swallow every
-        S3 error into `promptContent = {}` and carry on, so a prompt whose body
-        was missing, unreadable or not JSON was archived with instructions,
-        outputFormat, template and scenario all '' — uploaded with a 200 and
-        reported to the caller as a success.
-
-        That is the same defect as the empty-CSV bug fixed in 338af103, one
-        record type over: a read that failed, handed onward as valid empty
-        content for something downstream to misdiagnose. It is worse here,
-        because it does not even fail — the archive quietly fills with hollow
-        prompts and looks like a backup it is not. `install-ai-prompt.js` already
-        treats a pointer without a body as a hard error for exactly this reason.
-
-        Refusing on the READ, not on the fields: which fields a body carries
-        depends on its format (a generation prompt has `basePrompt`, a legacy one
-        `template`, a structured one `instructions`), so field-presence checks
-        would reject valid prompts. What is never valid is having no body at all.
-      */
-      let promptContent;
-      /*
-        THE MISCONFIGURATION THAT MADE EVERY ARCHIVED PROMPT EMPTY, NAMED.
-
-        This function had no AI_PROMPTS_BUCKET and no S3 read policy at all
-        (template-clean.yaml, both added alongside this check), so the body
-        fetch below failed on every prompt and the old catch turned that into
-        `promptContent = {}` and a 200. Nine prompts reached the shared archive
-        with instructions, outputFormat, template and scenario all '' — a
-        backup of nothing, reported as nine successes.
-
-        Checked SEPARATELY from the fetch, and before it, because the two
-        failures need different sentences: an unreadable body is a broken
-        record and the operator can go look at it, whereas an unset bucket is a
-        deployment fault that would otherwise be reported once per prompt as if
-        each prompt were individually at fault.
-      */
-      if (!process.env.AI_PROMPTS_BUCKET) {
-        console.error('❌ AI_PROMPTS_BUCKET is not set on this function; prompt bodies cannot be read');
-        results.failed.push({
-          id: promptId,
-          name: prompt.name,
-          step: 'config',
-          error: 'AI_PROMPTS_BUCKET is not set on the export function, so no prompt body can be read. '
-            + 'This is a deployment fault, not a problem with this prompt: every prompt in this run will '
-            + 'fail the same way. Redeploy with AI_PROMPTS_BUCKET and an S3 read policy on the AI prompts '
-            + 'bucket (template-clean.yaml, AdminExportToArchiveFunction).'
-        });
-        continue;
-      }
-      if (!prompt.s3Key) {
-        console.warn(`⚠️ ${promptId}: pointer row carries no s3Key; refusing to archive a bodyless prompt`);
-        results.failed.push({
-          id: promptId,
-          name: prompt.name,
-          step: 's3-read-body',
-          error: `Prompt ${promptId} ("${prompt.name}") has no s3Key on its DynamoDB row, so its body `
-            + `cannot be read. Archiving it would store an empty prompt and report success. This is a `
-            + `broken record, not an empty prompt.`
-        });
-        continue;
-      }
-      try {
-        console.log(`📥 Fetching prompt content from S3: ${prompt.s3Key}`);
-        const s3Response = await s3Client.send(new GetObjectCommand({
-          Bucket: process.env.AI_PROMPTS_BUCKET,
-          Key: prompt.s3Key
-        }));
-
-        const s3Content = await s3Response.Body.transformToString();
-        promptContent = JSON.parse(s3Content);
-        if (!promptContent || typeof promptContent !== 'object' || Object.keys(promptContent).length === 0) {
-          throw new Error(`body parsed to ${JSON.stringify(promptContent)} — no fields`);
-        }
-        console.log(`✅ Successfully fetched S3 content for prompt ${promptId} (${s3Content.length} chars)`);
-      } catch (s3Error) {
-        console.warn(`⚠️ ${promptId}: could not read body at ${prompt.s3Key}:`, s3Error.message);
-        results.failed.push({
-          id: promptId,
-          name: prompt.name,
-          step: 's3-read-body',
-          error: `Could not read the prompt body at s3://${process.env.AI_PROMPTS_BUCKET}/${prompt.s3Key} `
-            + `(${s3Error.name}: ${s3Error.message}). The DynamoDB pointer exists but its body does not, `
-            + `so this is a read problem, not an empty prompt — archiving it would have stored a hollow `
-            + `record and called it a success.`
-        });
-        continue;
-      }
-
-      // Transform to archive format
-      const archiveData = {
-        title: `${prompt.name} (${environment})`,
-        description: `${prompt.description || 'AI prompt'} - Exported from ${environment} environment`,
-        content: JSON.stringify({
-          metadata: {
-            promptId: promptId,
-            name: prompt.name,
-            description: prompt.description,
-            gameType: prompt.gameType,
-            category: prompt.category,
-            status: prompt.status,
-            isDefault: prompt.isDefault,
-            // The SHAPE, carried explicitly. `inferPromptType` reads it back
-            // from the body, but a reader of the archive file should not have
-            // to re-derive which of two incompatible kinds of prompt this is.
-            promptType: prompt.promptType || inferPromptType(promptContent),
-            version: prompt.version,
-            createdAt: prompt.createdAt,
-            updatedAt: prompt.updatedAt
-          },
-          /*
-            THE WHOLE BODY, VERBATIM — NOT FIVE HAND-PICKED FIELDS.
-
-            This used to copy exactly instructions, outputFormat, template and
-            scenario. Those are the ANALYSIS shape. A GENERATION prompt (the 22
-            `gen-*` rows, written by AIGenerationPromptEditor) keeps its text in
-            basePrompt, contextTemplate, audienceTemplate, categoryTemplate and
-            outputSections — none of which were in that list. So a generation
-            prompt archived as four empty strings and reported success, which is
-            the same data-loss shape as the dropped CSV columns fixed twice
-            before in this area.
-
-            An allow-list is the wrong tool here. The two shapes are documented
-            in shared/prompt-shape.js and a third is possible; every time a
-            field is added to create-ai-prompt.js this list would silently start
-            losing it again, with no test able to notice because the export
-            would still be a success. Copying the body wholesale cannot go stale.
-
-            The three legacy aliases stay, AFTER the spread so they can never
-            shadow a real field. Archives written before this change carry only
-            systemPrompt/userPrompt, and an importer that has not been updated
-            still reads them.
-          */
-          prompt: {
-            ...promptContent,
-            systemPrompt: promptContent.systemPrompt || promptContent.instructions || '',
-            userPrompt: promptContent.userPrompt || promptContent.outputFormat || '',
-            variables: promptContent.variables || {}
-          }
-        }, null, 2),
-        contentType: 'prompt',
-        category: prompt.gameType || 'general',
-        tags: [
-          environment,
-          prompt.gameType || 'general',
-          prompt.category || 'uncategorized',
-          prompt.status || 'active',
-          ...(prompt.isDefault ? ['default'] : [])
-        ]
-      };
-
-      console.log(`📤 Uploading prompt ${promptId} to ${ARCHIVE_SERVICE_URL}/archive/items`);
-      console.log(`📦 Archive data size: ${JSON.stringify(archiveData).length} bytes, content: ${archiveData.content.length} chars`);
-
-      // Upload to archive service
-      const uploadResponse = await fetch(`${ARCHIVE_SERVICE_URL}/archive/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(archiveData)
-      });
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`❌ Archive service rejected prompt ${promptId}:`, uploadResponse.status, errorText);
-        console.error(`❌ Request payload summary:`, {
-          title: archiveData.title,
-          contentType: archiveData.contentType,
-          category: archiveData.category,
-          contentSize: archiveData.content.length,
-          tags: archiveData.tags
-        });
-        throw new Error(
-          `Archive upload failed for "${prompt.name}" (${promptId}): `
-          + `${uploadResponse.status} ${errorText}`
-          + describeTitleHazard(archiveData.title)
-        );
-      }
-
-      const uploadResult = await uploadResponse.json();
-      console.log(`✅ Successfully exported AI prompt ${promptId} to archive as ${uploadResult.archiveId}`);
-      
-      // Also store locally in main DynamoDB table for list-local-archive
-      const timestamp = new Date().toISOString();
-      const localArchiveItem = {
-        PK: 'ARCHIVE',
-        SK: `ITEM#${uploadResult.archiveId}`,
-        ArchiveId: uploadResult.archiveId,
-        Title: archiveData.title,
-        Description: archiveData.description,
-        ContentType: archiveData.contentType,
-        Category: archiveData.category,
-        Tags: archiveData.tags,
-        FileName: `${promptId}.json`,
-        FileSize: JSON.stringify(archiveData).length,
-        CreatedAt: timestamp,
-        UpdatedAt: timestamp,
-        SourceType: 'prompt',
-        SourceId: promptId,
-        ExportedBy: 'system'
-      };
-      
-      await db.send(new PutCommand({
-        TableName: process.env.TABLE_NAME,
-        Item: localArchiveItem
-      }));
-      
-      console.log(`📝 Also stored locally in main table for list-local-archive: ${uploadResult.archiveId}`);
-      
-      results.successful.push({
-        id: promptId,
-        name: prompt.name,
-        archiveId: uploadResult.archiveId,
-        gameType: prompt.gameType
-      });
-
-    } catch (error) {
-      console.error(`❌ Failed to export AI prompt ${promptId}:`, error);
-      results.failed.push({
-        id: promptId,
-        error: error.message
-      });
-    }
+  const sref = setRef({ scope: ref.scope, setId: ref.id });
+  const found = await db.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: setMetadataKey(sref) }));
+  const meta = found && found.Item;
+  if (!meta) {
+    results.failed.push({ id: ref.id, scope: ref.scope, error: `Question set not found in the ${ref.scope} library` });
+    return undefined;
   }
+
+  const resolved = resolvePartitionFromMeta(sref, meta, null);
+  /*
+    QUERY, PAGINATED: every row of the resolved partition, following LastEvaluatedKey to the
+    end. This was once a Scan with a filter, which read one 1 MB page of the whole table and
+    silently exported nothing for a set whose rows sat outside it
+    (tests/export-to-archive-read.js). queryPartition is the shared paginated read.
+  */
+  const { items: rows } = await queryPartition(db, process.env.TABLE_NAME, resolved.pk);
+  const questionCount = rows.filter((row) => String(row.SK).startsWith('QUESTION#')).length;
+  if (questionCount === 0) {
+    results.failed.push({
+      id: ref.id,
+      scope: ref.scope,
+      error: `No questions found in partition ${resolved.pk}. The set metadata says `
+        + `${meta.questionCount ?? 'an unknown number of'} questions, so this is a read problem, not an empty set.`,
+    });
+    return undefined;
+  }
+
+  const ciphertext = snap.findCiphertext({ metadata: meta, rows });
+  if (ciphertext.length > 0) {
+    return refuse(results, ref, `This set carries encrypted values (${ciphertext.slice(0, 3).join(', ')}), `
+      + 'which cannot be read outside their organisation, so it is not archived.');
+  }
+
+  let promptName = '';
+  if (meta.promptId) {
+    const linked = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME, Key: promptKey({ scope: tenant.PLATFORM, promptId: meta.promptId }),
+    }));
+    promptName = linked && linked.Item && typeof linked.Item.name === 'string' ? linked.Item.name : '';
+  }
+
+  const snapshotId = crypto.randomUUID();
+  const { media, missing } = await copyMediaOut(s3Client, {
+    mediaBucket: process.env.MEDIA_BUCKET, archiveBucket: process.env.ARCHIVE_BUCKET, snapshotId, rows,
+  });
+  const envelope = snap.buildSetEnvelope({
+    tier, scope: ref.scope, setId: ref.id, version: resolved.version, metadata: meta, rows, media,
+    snapshotId, exportedAt: new Date().toISOString(), promptName,
+  });
+  const item = {
+    title: meta.name || ref.id,
+    description: meta.description || '',
+    content: JSON.stringify(envelope),
+    contentType: 'questionset',
+    category: meta.engagementType || 'general',
+    fileName: `${ref.id}.snapshot.json`,
+    tags: snap.envelopeTags(envelope, [
+      meta.engagementType || 'call-and-answer',
+      `questions:${questionCount}`,
+      ...(meta.isAIGenerated ? ['ai-generated'] : []),
+      ...(promptName ? [promptLinkTag(promptName)] : []),
+    ]),
+  };
+  const uploaded = await upload(item, `"${meta.name}" (${ref.id})`);
+  results.successful.push({
+    id: ref.id, scope: ref.scope, name: meta.name, archiveId: uploaded.archiveId, snapshotId,
+    questionsCount: questionCount, media: { copied: media.length, missing },
+  });
+  return undefined;
 }
 
-function convertQuestionsToCSV(questions, engagementType) {
-  if (!questions || questions.length === 0) {
-    return '';
+async function exportPrompt(ref, tier, results) {
+  if (ref.scope === tenant.ORG) return refuse(results, ref, ORG_REFUSAL);
+  if (ref.scope === tenant.PUBLIC) return refuse(results, ref, 'Public prompts are not archived: nothing in this product writes public prompts.');
+  if (ref.scope !== tenant.PLATFORM) return refuse(results, ref, `Unknown library ${JSON.stringify(ref.scope)}.`);
+  if (!ref.id) return refuse(results, ref, 'No prompt id was given.');
+  const promptId = ref.id;
+
+  const found = await db.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: promptKey({ scope: tenant.PLATFORM, promptId }) }));
+  const prompt = found && found.Item;
+  if (!prompt) {
+    results.failed.push({ id: promptId, scope: ref.scope, error: 'AI prompt not found' });
+    return undefined;
   }
 
-  // Determine CSV format based on engagement type
-  if (engagementType === 'trivia') {
-    // Trivia format: Category,Title,Detail,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,AnswerDetails,Difficulty
-    const headers = ['Category', 'Title', 'Detail', 'OptionA', 'OptionB', 'OptionC', 'OptionD', 'CorrectAnswer', 'AnswerDetails', 'Difficulty'];
-    const rows = questions.map(q => [
-      q.Category || '',
-      q.Title || q.Prompt || '',
-      q.Detail || '',
-      q.optionA || '',
-      q.optionB || '',
-      q.optionC || '',
-      q.optionD || '',
-      q.correctAnswer || '',
-      q.AnswerDetails || '',
-      q.difficulty || 'medium'
-    ]);
-    
-    return [headers, ...rows]
-      .map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-  } else {
-    // Call-and-answer format: Category,Title,Detail,CustomInstructions[,AnswerDetails][,Image]
-    //
-    // Art-title sets are call-and-answer sets that carry two extra fields: Image
-    // (the artwork key/URL) and AnswerDetails (the real title + a point of
-    // trivia, revealed only at RESULTS). The fixed four columns below used to
-    // silently drop both on every archive export, so an archived art set lost
-    // its artwork and its reveal on import — including a re-import into the
-    // SAME environment it was archived from; it just always gets noticed as a
-    // cross-environment failure because that's when someone re-imports.
-    // Emit them only when the set actually has them, so an ordinary set keeps
-    // its familiar four-column shape. This mirrors the identical fix already
-    // applied to the sibling CSV export in download-question-set.js.
-    const hasAnswerDetails = questions.some(q => (q.AnswerDetails || '').trim());
-    const hasImages = questions.some(q => (q.Image || '').trim());
-
-    const headers = ['Category', 'Title', 'Detail', 'CustomInstructions']
-      .concat(hasAnswerDetails ? ['AnswerDetails'] : [])
-      .concat(hasImages ? ['Image'] : []);
-
-    const rows = questions.map(q => [
-      q.Category || '',
-      q.Title || q.Prompt || '',
-      q.Detail || '',
-      q.CustomInstructions || ''
-    ]
-      .concat(hasAnswerDetails ? [q.AnswerDetails || ''] : [])
-      .concat(hasImages ? [q.Image || ''] : []));
-
-    return [headers, ...rows]
-      .map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
-      .join('\n');
+  /*
+    A PROMPT IS A TWO-STORE RECORD: the row, and the body in AI_PROMPTS_BUCKET at `s3Key`. An
+    unreadable body is a named failure, never an archived empty shell (338af103). The one
+    exception is a prompt whose text lives ON the row (the gen-* rows, written without an
+    s3Key). The row IS that prompt, so it is archived with `body: null`.
+  */
+  let body = null;
+  if (prompt.s3Key) {
+    if (!process.env.AI_PROMPTS_BUCKET) {
+      results.failed.push({
+        id: promptId, name: prompt.name, step: 'config',
+        error: 'AI_PROMPTS_BUCKET is not set on the export function, so no prompt body can be read. '
+          + 'This is a deployment fault, not a problem with this prompt: every prompt in this run will '
+          + 'fail the same way. Redeploy with AI_PROMPTS_BUCKET and an S3 read policy on the AI prompts '
+          + 'bucket (template-clean.yaml, AdminExportToArchiveFunction).',
+      });
+      return undefined;
+    }
+    try {
+      const response = await s3Client.send(new GetObjectCommand({ Bucket: process.env.AI_PROMPTS_BUCKET, Key: prompt.s3Key }));
+      body = JSON.parse(await response.Body.transformToString());
+      if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+        throw new Error(`body parsed to ${JSON.stringify(body)} — no fields`);
+      }
+    } catch (s3Error) {
+      results.failed.push({
+        id: promptId, name: prompt.name, step: 's3-read-body',
+        error: `Could not read the prompt body at s3://${process.env.AI_PROMPTS_BUCKET}/${prompt.s3Key} `
+          + `(${s3Error.name}: ${s3Error.message}). The DynamoDB pointer exists but its body does not, `
+          + 'so this is a read problem, not an empty prompt — archiving it would have stored a hollow '
+          + 'record and called it a success.',
+      });
+      return undefined;
+    }
+  } else if (!snap.rowCarriesPromptText(prompt)) {
+    results.failed.push({
+      id: promptId, name: prompt.name, step: 's3-read-body',
+      error: `Prompt ${promptId} ("${prompt.name}") has no s3Key on its DynamoDB row and no text on the row itself, `
+        + 'so there is nothing to archive. Archiving it would store an empty prompt and report success. '
+        + 'This is a broken record, not an empty prompt.',
+    });
+    return undefined;
   }
+
+  const ciphertext = snap.findCiphertext({ metadata: prompt, body });
+  if (ciphertext.length > 0) {
+    return refuse(results, ref, `This prompt carries encrypted values (${ciphertext.slice(0, 3).join(', ')}), `
+      + 'which cannot be read outside their organisation, so it is not archived.');
+  }
+
+  const envelope = snap.buildPromptEnvelope({
+    tier, scope: tenant.PLATFORM, promptId, metadata: prompt, body, exportedAt: new Date().toISOString(),
+  });
+  const item = {
+    title: prompt.name || promptId,
+    description: prompt.description || '',
+    content: JSON.stringify(envelope, null, 2),
+    contentType: 'prompt',
+    category: prompt.gameType || 'general',
+    fileName: `${promptId}.snapshot.json`,
+    tags: snap.envelopeTags(envelope, [
+      prompt.gameType || 'general',
+      prompt.category || 'uncategorized',
+      prompt.status || 'active',
+      ...(prompt.isDefault ? ['default'] : []),
+    ]),
+  };
+  const uploaded = await upload(item, `"${prompt.name}" (${promptId})`);
+  results.successful.push({ id: promptId, scope: tenant.PLATFORM, name: prompt.name, archiveId: uploaded.archiveId, gameType: prompt.gameType });
+  return undefined;
 }

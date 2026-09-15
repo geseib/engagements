@@ -4046,6 +4046,14 @@ Resources:
           # console reported nine successful exports.
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # Required by tests/kms-grants-match-code.js: this function's require graph reaches
+        # tenant-crypto.js, through archive-snapshot.js's use of isEnvelope for the ciphertext
+        # refusal. It decrypts nothing, since org content is refused before it is read.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         # Read-only: an export reads bodies, it never writes one.
