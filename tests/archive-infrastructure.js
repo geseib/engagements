@@ -142,5 +142,42 @@ check('the drill refuses production and covers the functions a restore uses', ()
   }
 });
 
+console.log('\n6. the archive stack itself is locked, current and retained');
+const archiveTemplate = read('template-archive.yaml');
+check('every function runs nodejs22.x, and nothing names nodejs18.x', () => {
+  assert.match(archiveTemplate, /\nGlobals:\n {2}Function:\n[\s\S]*?\n {4}Runtime: nodejs22\.x\n/);
+  assert.ok(!archiveTemplate.includes('nodejs18.x'));
+});
+check('the API requires AWS_IAM by default, no event opts out, and there is no browser CORS', () => {
+  const api = resourceBlock(archiveTemplate, 'ArchiveApi');
+  assert.match(api, /Auth:\s*\n\s*EnableIamAuthorizer: true\s*\n\s*DefaultAuthorizer: AWS_IAM/);
+  assert.ok(!/CorsConfiguration/.test(api), 'no browser calls the archive any more');
+  assert.ok(!/Authorizer:\s*NONE/.test(archiveTemplate), 'an event opted out of IAM');
+  assert.ok(!archiveTemplate.includes('CORS_ALLOWED_ORIGINS'));
+});
+check('the backups survive a template edit or a deleted stack', () => {
+  for (const id of ['ArchiveTable', 'ArchiveBucket']) {
+    const block = resourceBlock(archiveTemplate, id);
+    assert.match(block, /\n {4}DeletionPolicy: Retain\n/, `${id} is not retained on delete`);
+    assert.match(block, /\n {4}UpdateReplacePolicy: Retain\n/, `${id} is not retained on replacement`);
+  }
+  assert.match(resourceBlock(archiveTemplate, 'ArchiveTable'), /PointInTimeRecoverySpecification:\s*\n\s*PointInTimeRecoveryEnabled: true/);
+});
+check('deploy-archive.sh runs the pre-flight before deploying and the verification after', () => {
+  const deploy = read('scripts/deploy-archive.sh');
+  const preflight = deploy.indexOf('scripts/archive-access-check.sh preflight');
+  const samDeploy = deploy.indexOf('sam deploy');
+  const verify = deploy.indexOf('scripts/archive-access-check.sh verify');
+  assert.ok(preflight !== -1 && samDeploy !== -1 && verify !== -1, 'a step is missing');
+  assert.ok(preflight < samDeploy && samDeploy < verify, 'the order is preflight, deploy, verify');
+  assert.ok(deploy.includes('set -euo pipefail'), 'a failed pre-flight must stop the script');
+  assert.ok(deploy.includes('--build-dir'), 'build into its own directory, not over the main stack build');
+});
+check('the presigner get-archive-item.js requires is declared, not borrowed from the runtime', () => {
+  const pkg = JSON.parse(read('lambda-functions/archive/package.json'));
+  assert.ok(read('lambda-functions/archive/get-archive-item.js').includes('@aws-sdk/s3-request-presigner'));
+  assert.ok(pkg.dependencies['@aws-sdk/s3-request-presigner'], 'declare @aws-sdk/s3-request-presigner');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

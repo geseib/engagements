@@ -141,8 +141,10 @@ authorized once by hand in the console.
 
 ## Known follow-ups
 
-- `template-archive.yaml:21` still pins `nodejs18.x` (EOL). `template-clean.yaml`
-  and `template-monitoring.yaml` are on `nodejs22.x`. The archive stack is
-  hand-deployed via `scripts/deploy-archive.sh`.
+- The shared archive (`template-archive.yaml`) is on `nodejs22.x` and requires
+  signed AWS requests on every route. It is the one stack deployed by hand, with
+  `scripts/deploy-archive.sh`, which refuses to deploy until
+  `scripts/archive-access-check.sh preflight` passes for dev, test and prod. See
+  `docs/architecture/archive-service.md`.
 - `cicd/pipeline-clean.yaml`'s uncommitted-vs-applied drift (above) is still open
   and is the root cause of every stale "tags only" claim this repo has carried.

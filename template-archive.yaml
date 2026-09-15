@@ -18,17 +18,23 @@ Parameters:
 Globals:
   Function:
     Timeout: 30
-    Runtime: nodejs18.x
+    # Off Node 18, which receives no security patches and fails `sam validate --lint`.
+    # The same runtime as template-clean.yaml.
+    Runtime: nodejs22.x
     Environment:
       Variables:
         TABLE_NAME: !Ref ArchiveTable
         ARCHIVE_BUCKET_NAME: !Ref ArchiveBucket
-        CORS_ALLOWED_ORIGINS: "*"  # Will restrict this in production
 
 Resources:
   # DynamoDB Table for Archive Metadata
+  # THE BACKUPS ARE RETAINED. This stack was once applied from a reconstructed template and
+  # silently lost permissions (see DeleteArchiveFunction). A template edit that replaces the
+  # table, or a deleted stack, must not take every tier's backups with it.
   ArchiveTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: engage2-archive
       BillingMode: PAY_PER_REQUEST
@@ -42,6 +48,10 @@ Resources:
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
+      # A deleted or overwritten index row is recoverable for 35 days; content objects have
+      # the bucket's 90-day noncurrent versions.
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -52,6 +62,8 @@ Resources:
   # S3 Bucket for Archive Content Storage
   ArchiveBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: engage2-archive-content
       PublicAccessBlockConfiguration:
@@ -71,22 +83,16 @@ Resources:
           Value: engage2-archive
 
   # API Gateway for Archive Service
+  # EVERY ROUTE REQUIRES A SIGNED AWS REQUEST. The callers are the three tiers' archive
+  # functions (template-clean.yaml), which sign with their roles; scripts/archive-access-check.sh
+  # proves each tier can. No CORS: no browser calls this API any more, because the admin screen
+  # goes through its own tier (lambda-functions/admin/archive-items.js).
   ArchiveApi:
     Type: AWS::Serverless::HttpApi
     Properties:
-      CorsConfiguration:
-        AllowOrigins:
-          - "*"  # Will restrict this in production
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        AllowHeaders:
-          - "*"
-        ExposeHeaders:
-          - "*"
+      Auth:
+        EnableIamAuthorizer: true
+        DefaultAuthorizer: AWS_IAM
 
   # Lambda Functions
   ListArchiveFunction:
