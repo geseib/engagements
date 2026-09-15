@@ -16,12 +16,14 @@ const Module = require('module');
 const REPO = path.join(__dirname, '..');
 const objects = new Map(); // "bucket/key" -> body
 let denyNext = false;
+let noBucketNext = false;
 const command = (name) => class { constructor(input) { this.input = input; this.name = name; } };
 const failure = (name, status) => Object.assign(new Error(name), { name, $metadata: { httpStatusCode: status } });
 const s3 = {
   async send(cmd) {
     const { Bucket, Key } = cmd.input;
     if (denyNext) { denyNext = false; throw failure('AccessDenied', 403); }
+    if (noBucketNext) { noBucketNext = false; throw failure('NoSuchBucket', 404); }
     if (cmd.name === 'HeadObject') {
       if (!objects.has(`${Bucket}/${Key}`)) throw failure('NotFound', 404);
       return {};
@@ -90,6 +92,14 @@ const ROWS = [
     await assert.rejects(
       () => media.copyMediaOut(s3, { mediaBucket: MEDIA, archiveBucket: ARCHIVE, snapshotId: 's', rows: ROWS }),
       /AccessDenied/,
+    );
+  });
+  await check('a missing bucket is thrown, not reported as missing images', async () => {
+    objects.clear();
+    noBucketNext = true;
+    await assert.rejects(
+      () => media.copyMediaOut(s3, { mediaBucket: MEDIA, archiveBucket: ARCHIVE, snapshotId: 's', rows: ROWS }),
+      /NoSuchBucket/,
     );
   });
   await check('images with no bucket configured are a named deployment fault', async () => {

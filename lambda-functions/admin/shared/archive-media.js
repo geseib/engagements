@@ -32,9 +32,13 @@ function mediaKeysIn(rows) {
   return [...keys].sort();
 }
 
+/**
+ * Only a missing OBJECT: NoSuchKey from CopyObject, NotFound from HeadObject. Never the bare
+ * status, because a missing BUCKET also answers 404 (NoSuchBucket), and a mistyped or renamed
+ * bucket must be thrown, not reported as every image lost.
+ */
 function isMissing(error) {
-  const status = error && error.$metadata && error.$metadata.httpStatusCode;
-  return ['NoSuchKey', 'NotFound'].includes(error && error.name) || status === 404;
+  return ['NoSuchKey', 'NotFound'].includes(error && error.name);
 }
 
 /** CopySource is `bucket/key`, with the key URI-encoded one segment at a time. */
