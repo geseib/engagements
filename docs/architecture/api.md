@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-105 routes across 6 groups. 86 carry the Cognito authorizer; 19 are public.
+108 routes across 6 groups. 89 carry the Cognito authorizer; 19 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -114,7 +114,6 @@ on `requestContext.routeKey`.
 | GET | `/admin/download-template` | **Cognito** | `lambda-functions/admin/download-template.js` |
 | POST | `/admin/export-to-archive` | **Cognito** | `lambda-functions/admin/export-to-archive.js` |
 | POST | `/admin/import-from-archive` | **Cognito** | `lambda-functions/admin/import-from-archive.js` |
-| GET | `/admin/list-local-archive` | **Cognito** | `lambda-functions/admin/list-local-archive.js` |
 | POST | `/admin/parse-document` | **Cognito** | `lambda-functions/admin/parse-document.js` |
 | GET | `/admin/personas` | **Cognito** | `lambda-functions/admin/get-personas.js` |
 | POST | `/admin/populate-defaults` | **Cognito** | `lambda-functions/admin/populate-defaults.js` |
@@ -130,6 +129,8 @@ on `requestContext.routeKey`.
 | DELETE | `/admin/ai-prompts/{promptId}` | **Cognito** | `lambda-functions/admin/delete-ai-prompt.js` |
 | PUT | `/admin/ai-prompts/{promptId}` | **Cognito** | `lambda-functions/admin/update-ai-prompt.js` |
 | POST | `/admin/ai-prompts/save` | **Cognito** | `lambda-functions/admin/create-ai-prompt.js` |
+| GET | `/admin/archive/items` | **Cognito** | `lambda-functions/admin/archive-items.js` |
+| POST | `/admin/archive/search` | **Cognito** | `lambda-functions/admin/archive-items.js` |
 | POST | `/admin/clear-game/{gameId}` | **Cognito** | `lambda-functions/admin/delete-game.js` |
 | GET | `/admin/download-question-set/{setId}` | **Cognito** | `lambda-functions/admin/download-question-set.js` |
 | PUT | `/admin/edit-question-set/{setId}` | **Cognito** | `lambda-functions/admin/edit-question-set.js` |
@@ -137,6 +138,8 @@ on `requestContext.routeKey`.
 | POST | `/admin/toggle-question-set/{setId}` | **Cognito** | `lambda-functions/admin/toggle-question-set.js` |
 | POST | `/admin/toggle-quickstart/{setId}` | **Cognito** | `lambda-functions/admin/toggle-quickstart.js` |
 | POST | `/admin/users/list` | **Cognito** | `lambda-functions/admin/manage-users.js` |
+| DELETE | `/admin/archive/items/{archiveId}` | **Cognito** | `lambda-functions/admin/archive-items.js` |
+| GET | `/admin/archive/items/{archiveId}` | **Cognito** | `lambda-functions/admin/archive-items.js` |
 | PUT | `/admin/games/{gameId}/categories` | **Cognito** | `lambda-functions/admin/update-game-categories.js` |
 | GET | `/admin/question-sets/{setId}/media` | **Cognito** | `lambda-functions/admin/media-status.js` |
 | GET | `/admin/question-sets/{setId}/versions` | **Cognito** | `lambda-functions/admin/get-set-versions.js` |

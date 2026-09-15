@@ -97,5 +97,28 @@ const archiveCalls = () => h.fetchLog.filter((c) => c.url.startsWith(process.env
     assert.match(res.body.error, /archive could not be reached/);
   });
 
+  console.log('\n4. the routes are closed at both halves: the template and the authorizer');
+  const { routesFromTemplate, findRoute, assertScannerWorks } = require('./helpers/template-routes');
+  const { requiredGroupsForRoute } = require(path.join(REPO, 'lambda-functions/auth/authorizer.js'));
+  const routes = routesFromTemplate();
+  await check('the template scanner works', () => assertScannerWorks(routes));
+  for (const [method, routePath] of [
+    ['GET', '/admin/archive/items'],
+    ['GET', '/admin/archive/items/{archiveId}'],
+    ['POST', '/admin/archive/search'],
+    ['DELETE', '/admin/archive/items/{archiveId}'],
+  ]) {
+    // eslint-disable-next-line no-await-in-loop
+    await check(`${method} ${routePath} carries CognitoAuthorizer and requires admins`, () => {
+      const route = findRoute(routes, method, routePath);
+      assert.ok(route, 'not declared in template-clean.yaml');
+      assert.strictEqual(route.authorizer, 'CognitoAuthorizer');
+      assert.deepStrictEqual(requiredGroupsForRoute(method, routePath.slice(1)), ['admins']);
+    });
+  }
+  await check('the dead list-local-archive route is gone', () => {
+    assert.strictEqual(findRoute(routes, 'GET', '/admin/list-local-archive'), undefined);
+  });
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });
