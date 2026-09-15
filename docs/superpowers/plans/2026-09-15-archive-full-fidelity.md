@@ -6149,7 +6149,7 @@ Expected: `all checks passed`. That completes the precondition for Task 15.
 
 ### Task 14: The archive stack's lock-down, Node 22 and retention — as code
 
-This task changes files only. The archive stack is not in any pipeline, so committing and pushing these changes deploys nothing to the archive. `scripts/deploy-archive.sh` refuses to lock the archive until every tier passes the pre-flight.
+This task changes files only. The archive stack sits outside every pipeline, so no push reaches it; it changes only when `scripts/deploy-archive.sh` runs, and that script refuses to lock the archive until every tier passes the pre-flight.
 
 **Files:**
 - Modify: `template-archive.yaml`, `scripts/deploy-archive.sh` (rewrite), `lambda-functions/archive/package.json`, `tests/template-validates.js`, `DEPLOYMENT.md`
