@@ -6506,7 +6506,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 13 complete (prod `Succeeded` on the Phase 1 commit, and `preflight engageprod` passing); Task 14 committed.
-- Produces: the archive requires `AWS_IAM`, runs `nodejs22.x`, retains its data, and `verify` passes for all three tiers.
+- Produces: the archive requires `AWS_IAM`, runs `nodejs22.x`, retains its data, and `verify` and the dev and test drills pass.
 
 - [ ] **Step 1: Confirm the preconditions from live state, not memory**
 
@@ -6518,41 +6518,41 @@ git status --short && git log --oneline -1 -- template-archive.yaml
 ```
 Expected: prod `Succeeded` on a commit that contains Task 12. The pre-flight ends `all checks passed` for all three tiers. The working tree is clean, with the Task 14 commit as the last change to `template-archive.yaml`. If any of these fails, stop and report.
 
-- [ ] **Step 2: Ask the owner, and wait for an explicit yes**
-
-Say, in plain words: every tier passed the pre-flight; the deploy will require signed requests on every archive route, move the archive functions to Node 22, retain the table and bucket, and turn on point-in-time recovery; a failed verification has a one-step rollback (redeploy without the `Auth:` block) that cannot delete data. Do not run Step 3 without their yes in this conversation.
-
-- [ ] **Step 3: Deploy**
+- [ ] **Step 2: Preview the change, then ask the owner and wait for an explicit yes**
 
 ```bash
-scripts/deploy-archive.sh
+scripts/deploy-archive.sh preview
 ```
-Expected, in order: the pre-flight `all checks passed`; a successful `sam deploy`; `wrote config/archive-service.json` with no warning; and the verification `all checks passed`, including `an unsigned request is refused (403)` and a signed list from each of `engagedev`, `engagetest` and `engageprod`.
+Expected: the commit it builds, the pre-flight `all checks passed` for all three tiers, the change set, then `Nothing was deployed`. Read the change set: every change should be `* Modify` with Replacement `False`, and none should be `- Delete`. If it shows anything else, stop and report it.
 
-- [ ] **Step 4: If verification fails, roll back the lock and report**
+Then say, in plain words: every tier passed the pre-flight; the preview was read and shows only in-place changes (name them); the deploy will require signed requests on every archive route, move the archive functions to Node 22, retain the table and bucket, and turn on point-in-time recovery; and if anything after the deploy fails, `scripts/deploy-archive.sh unlock` removes only the lock and cannot delete data. Do not run Step 3 without their yes in this conversation.
 
-Only the lock is rolled back. Keep Node 22 and retention.
+- [ ] **Step 3: Lock**
 
 ```bash
-SCRATCH=$(mktemp -d)
-node -e "
-const fs=require('fs');
-const src=fs.readFileSync('template-archive.yaml','utf8');
-const out=src.replace(/\n      Auth:\n        EnableIamAuthorizer: true\n        DefaultAuthorizer: AWS_IAM\n/, '\n');
-if (out===src) { console.error('Auth block not found'); process.exit(1); }
-fs.writeFileSync(process.argv[1], out);
-" "$SCRATCH/template-archive.yaml"
-sam build -t "$SCRATCH/template-archive.yaml" --build-dir .aws-sam/archive-rollback
-sam deploy --stack-name engage2-archive-service --template-file .aws-sam/archive-rollback/template.yaml \
-  --capabilities CAPABILITY_IAM --parameter-overrides DomainName=archive.seibtribe.us HostedZoneId=ZB9TUA073B5SH \
-  --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
-scripts/archive-access-check.sh preflight
+scripts/deploy-archive.sh lock
 ```
-Expected: the pre-flight passes again with the archive open. Report exactly which verification check failed and its output.
+Expected, in order: the commit it deploys; the pre-flight `all checks passed`; a successful `sam deploy`; `wrote config/archive-service.json` with no `NOTE:`; the verification `all checks passed`, including a `requires AWS_IAM` line for every route, `an unsigned request is refused (403)`, and a relay list from each of `engagedev`, `engagetest` and `engageprod`; then the drill hint.
 
-- [ ] **Step 5: Record and report**
+- [ ] **Step 4: Prove a signed backup, restore and delete on dev and test**
 
-If `config/archive-service.json` changed, commit it together with the matching `ArchiveService` mapping change, and ship that through Task 13's steps. Otherwise, nothing needs committing. Tell the owner the archive is locked, which checks passed, and that `scripts/archive-drill.sh engagedev` can be re-run at any time as a restore drill.
+```bash
+scripts/archive-drill.sh engagedev && scripts/archive-drill.sh engagetest
+```
+Expected: `drill passed` on both, and no `LEFT BEHIND` line. Before the lock nothing could prove a signature; these drills are that proof. Never run the drill on engageprod.
+
+- [ ] **Step 5: If anything after the deploy fails, unlock first, then report**
+
+If `lock` prints `THE SHARED ARCHIVE IS NOW LOCKED, but …`, or a drill fails on a signed call:
+
+```bash
+scripts/deploy-archive.sh unlock
+```
+Expected: `THE SHARED ARCHIVE IS UNLOCKED`, and the pre-flight `all checks passed` for all three tiers. Only the lock is removed: Node 22, retention and recovery stay. Report exactly which check failed, with its output.
+
+- [ ] **Step 6: Record and report**
+
+If `config/archive-service.json` changed, commit it together with the matching `ArchiveService` mapping change, and ship that through Task 13's steps. Otherwise, nothing needs committing. Tell the owner the archive is locked, which checks and drills passed, and that `scripts/archive-drill.sh engagedev` can be re-run at any time as a restore drill.
 
 ---
 

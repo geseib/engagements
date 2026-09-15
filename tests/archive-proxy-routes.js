@@ -8,7 +8,8 @@
  *
  * // rejects: a relay a host or an org-standing admin can use; an id that can steer the path;
  * //          query parameters the archive was not asked for; a relay that rewrites the
- * //          archive's answer; CORS headers that drop X-Engage-Org.
+ * //          archive's answer; CORS headers that drop X-Engage-Org; a refusal from the
+ * //          archive, or a deletion, that leaves no trace in CloudWatch.
  */
 const h = require('./helpers/archive-harness');
 const assert = require('assert');
@@ -118,6 +119,38 @@ const archiveCalls = () => h.fetchLog.filter((c) => c.url.startsWith(process.env
   }
   await check('the dead list-local-archive route is gone', () => {
     assert.strictEqual(findRoute(routes, 'GET', '/admin/list-local-archive'), undefined);
+  });
+
+  console.log('\n5. what the archive refuses, and every deletion, reach CloudWatch');
+  // After the lock, a rejected signature or a missing grant reaches the screen as a bare
+  // "Forbidden". The relay's log is where the archive's own words are kept.
+  const logged = { warn: [], log: [] };
+  const realWarn = console.warn;
+  const realLog = console.log;
+  console.warn = (...args) => logged.warn.push(args.join(' '));
+  console.log = (...args) => logged.log.push(args.join(' '));
+  let refused;
+  let gone;
+  try {
+    global.fetch = async () => ({ ok: false, status: 403, text: async () => '{"message":"Forbidden"}', headers: { get: () => 'application/json' } });
+    refused = await call(h.adminEvent(undefined, { routeKey: 'GET /admin/archive/items' }));
+    global.fetch = realFetch;
+    gone = h.seedArchiveItem({ contentType: 'prompt', title: 'Doomed Too', tags: ['dev'], content: '{"schema":"engage.prompt/1"}' });
+    await call(h.adminEvent(undefined, { routeKey: 'DELETE /admin/archive/items/{archiveId}', pathParameters: { archiveId: gone } }));
+  } finally {
+    global.fetch = realFetch;
+    console.warn = realWarn;
+    console.log = realLog;
+  }
+  await check('an archive 403 on a list is relayed as 403 and logged with its status and the archive\'s words', () => {
+    assert.strictEqual(refused.status, 403);
+    const line = logged.warn.find((entry) => entry.includes('archive relay GET /admin/archive/items answered 403'));
+    assert.ok(line, `console.warn saw:\n${logged.warn.join('\n') || '(nothing)'}`);
+    assert.ok(line.includes('Forbidden'), `the log line lacks the archive's words: ${line}`);
+  });
+  await check('a deletion is logged with who deleted which item', () => {
+    assert.ok(!h.archive.has(gone), 'the item was not deleted');
+    assert.ok(logged.log.includes(`archive relay: staff-1 deleted archive item ${gone}`), `console.log saw:\n${logged.log.join('\n') || '(nothing)'}`);
   });
 
   finish();

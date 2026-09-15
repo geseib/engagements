@@ -46,8 +46,8 @@ scripts/deploy-archive.sh lock      # pre-flight, deploy, record the outputs, ve
 
 `preview` and `lock` refuse to go on unless `preflight` passes for all three tiers. They also
 refuse uncommitted changes to the template or the archive functions: this stack has no pipeline
-history, so what is deployed must be a commit. Every change `preview` shows should be Modify with
-Replacement False, and nothing Remove.
+history, so what is deployed must be a commit. Every change `preview` shows should be `* Modify`
+with Replacement `False`, and none should be `- Delete`.
 
 Straight after a deploy that changes the lock, run `scripts/archive-drill.sh engagedev` and then
 `scripts/archive-drill.sh engagetest`, with the rollback ready. Before the lock nothing can prove
@@ -62,3 +62,7 @@ pre-flight too. If anything after `lock`'s deploy fails, the script says the arc
 and names `unlock`. The table and bucket are retained whatever the template says, so no deploy
 here deletes a backup. If a failed deploy leaves the stack in `UPDATE_ROLLBACK_FAILED`, see
 `aws cloudformation continue-update-rollback`.
+
+The table and bucket have fixed physical names and `Retain`, so if the stack is ever deleted they
+stay behind, and a re-created stack must import them (a CloudFormation IMPORT change set) rather
+than create them.

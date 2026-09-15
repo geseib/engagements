@@ -85,6 +85,26 @@ describe('describeRestore', () => {
   test('a restore that did nothing says so rather than saying nothing', () => {
     expect(describeRestore({ results: { successful: [], failed: [] } })).toEqual(['The import reported nothing restored and no error.']);
   });
+  test('images not stored under sets/ are named as not restored, after the ones that could not be', () => {
+    const quiz = { archiveId: 'arc-1', kind: 'set', id: 'quiz', name: 'Quiz', mode: 'created', version: 1, active: false };
+    expect(describeRestore({
+      results: { successful: [quiz], failed: [] },
+      becameActive: [],
+      media: { copied: 1, kept: 0, missing: ['sets/quiz/gone.png'], skipped: ['images/legacy.png'] },
+    })).toEqual([
+      'Restored 1: Quiz (recreated).',
+      '1 image could not be restored: sets/quiz/gone.png.',
+      '1 image was not restored because it is not stored under sets/: images/legacy.png.',
+    ]);
+    expect(describeRestore({
+      results: { successful: [quiz], failed: [] },
+      becameActive: [],
+      media: { copied: 0, kept: 0, missing: [], skipped: ['images/a.png', 'images/b.png'] },
+    })).toEqual([
+      'Restored 1: Quiz (recreated).',
+      '2 images were not restored because they are not stored under sets/: images/a.png, images/b.png.',
+    ]);
+  });
 });
 
 describe('describeExport', () => {
@@ -102,5 +122,21 @@ describe('describeExport', () => {
   });
   test('an export that did nothing says so', () => {
     expect(describeExport({ results: {} })).toEqual(['The export reported no backup and no error.']);
+  });
+  test('images stored outside sets/ are named as not in the backup, after the missing ones', () => {
+    expect(describeExport({
+      results: {
+        successful: [
+          { id: 'teamretro', name: 'Team Retro', media: { copied: 1, missing: ['sets/teamretro/old.png'], skipped: ['images/legacy.png'] } },
+          { id: 'quiz', name: 'Quiz', media: { copied: 0, missing: [], skipped: ['images/a.png', 'images/b.png'] } },
+        ],
+        failed: [],
+      },
+    })).toEqual([
+      'Backed up 2: Team Retro, Quiz.',
+      'Team Retro: 1 image was already missing and is not in the backup.',
+      'Team Retro: 1 image is not stored under sets/, so it is not in the backup: images/legacy.png.',
+      'Quiz: 2 images are not stored under sets/, so they are not in the backup: images/a.png, images/b.png.',
+    ]);
   });
 });

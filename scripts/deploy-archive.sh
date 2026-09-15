@@ -84,11 +84,15 @@ sam_deploy() {
   if [ "$1" = "execute" ]; then flags+=(--no-confirm-changeset); else flags+=(--no-execute-changeset); fi
   sam deploy "${flags[@]}"
 }
+# sam deploy can exit non-zero after the change set ran (credentials expiring during the wait,
+# for one), so a failed deploy is not a rolled-back deploy, and nothing here may say it is.
 deploy_failed() {
   echo >&2
-  echo "The deploy failed. CloudFormation rolls the stack back; check where it stands with:" >&2
-  echo "  aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].StackStatus'" >&2
-  echo "If that says UPDATE_ROLLBACK_FAILED, see: aws cloudformation continue-update-rollback" >&2
+  echo "The deploy did not report success. The stack may be unchanged, updated, or rolling back, so whether the archive is locked is not known." >&2
+  echo "  aws cloudformation describe-stacks --stack-name $STACK_NAME --region $AWS_REGION --profile $AWS_PROFILE --query 'Stacks[0].StackStatus'" >&2
+  echo "UPDATE_COMPLETE means the change set ran: run scripts/archive-access-check.sh verify, and if any tier cannot reach the archive, run scripts/deploy-archive.sh unlock." >&2
+  echo "UPDATE_ROLLBACK_COMPLETE means it was undone." >&2
+  echo "UPDATE_ROLLBACK_FAILED: see aws cloudformation continue-update-rollback." >&2
   exit 1
 }
 
@@ -96,7 +100,7 @@ if [ "$MODE" = "preview" ]; then
   echo "== 3. the change set =="
   sam_deploy preview
   echo
-  echo "Nothing was deployed. Every change above should be Modify with Replacement False, and nothing Remove."
+  echo "Nothing was deployed. Every change above should be * Modify with Replacement False, and none should be - Delete."
   exit 0
 fi
 
@@ -107,15 +111,18 @@ if [ "$MODE" = "unlock" ]; then
   if scripts/archive-access-check.sh preflight; then status=0; else status=1; fi
   echo
   echo "THE SHARED ARCHIVE IS UNLOCKED: its routes accept unsigned requests again."
-  echo "Find why the lock failed, then lock it again: scripts/deploy-archive.sh preview && scripts/deploy-archive.sh lock"
+  echo "Find why the lock failed. Then run scripts/deploy-archive.sh preview, read its change set, and only then run scripts/deploy-archive.sh lock."
   exit "$status"
 fi
 
 echo "== 3. deploy ${STACK_NAME} =="
 sam_deploy execute || deploy_failed
 
-# From here the lock is live, and nothing below may leave the operator unsure of that.
+# From here the lock is live, and nothing below may leave the operator unsure of that. The
+# config is written to a temp file beside it, and this removes that file, so a failure between
+# the write and the move leaves nothing in config/.
 locked_but() {
+  rm -f "${NEW_CONFIG:-}"
   echo >&2
   echo "THE SHARED ARCHIVE IS NOW LOCKED, but $*." >&2
   echo "If any tier cannot reach it, unlock it now: scripts/deploy-archive.sh unlock" >&2
@@ -127,6 +134,7 @@ output() {
 }
 
 echo "== 4. record the stack's outputs in ${CONFIG_FILE} =="
+NEW_CONFIG=""
 UNREAD="its outputs could not be read, so ${CONFIG_FILE} was left unchanged"
 DOMAIN_URL=$(output ArchiveDomainUrl) || locked_but "$UNREAD"
 API_URL=$(output ArchiveApiUrl) || locked_but "$UNREAD"
@@ -140,8 +148,10 @@ done
 if ! [[ "$API_URL" =~ ^https://[a-z0-9]+\.execute-api\.us-east-1\.amazonaws\.com$ ]]; then
   locked_but "ArchiveApiUrl '${API_URL}' is not an execute-api URL, so ${CONFIG_FILE} was left unchanged"
 fi
-NEW_CONFIG=$(mktemp)
-cat > "$NEW_CONFIG" <<EOF
+# Written beside the config and moved into place, so the config is either the old file or the
+# whole new one, and every step that can fail says the archive is locked.
+NEW_CONFIG=$(mktemp "${CONFIG_FILE}.XXXXXX") || locked_but "no temporary file could be created, so ${CONFIG_FILE} was left unchanged"
+cat > "$NEW_CONFIG" <<EOF || locked_but "the new config could not be written, so ${CONFIG_FILE} was left unchanged"
 {
   "archiveServiceUrl": "${DOMAIN_URL}",
   "archiveApiUrl": "${API_URL}",
@@ -150,12 +160,12 @@ cat > "$NEW_CONFIG" <<EOF
   "region": "${AWS_REGION}"
 }
 EOF
-chmod 644 "$NEW_CONFIG"
-mv "$NEW_CONFIG" "$CONFIG_FILE"
+chmod 644 "$NEW_CONFIG" || locked_but "the new config's permissions could not be set, so ${CONFIG_FILE} was left unchanged"
+mv "$NEW_CONFIG" "$CONFIG_FILE" || locked_but "the new config could not be moved into place, so ${CONFIG_FILE} was left unchanged"
 echo "wrote ${CONFIG_FILE}"
 if ! git diff --quiet -- "$CONFIG_FILE"; then
   echo "NOTE: ${CONFIG_FILE} changed:" >&2
-  git --no-pager diff -- "$CONFIG_FILE" >&2
+  git --no-pager diff -- "$CONFIG_FILE" >&2 || true
   echo "If archiveApiUrl changed, update ArchiveService in template-clean.yaml, run the suites, and redeploy every tier." >&2
 fi
 

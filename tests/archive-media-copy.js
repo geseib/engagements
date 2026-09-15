@@ -5,9 +5,10 @@
  * bucket, never as bytes, so a backup that copied only rows restored every image as a
  * broken link.
  *
- * // rejects: copying remote URLs or repo assets; failing a whole backup over one lost image;
- * //          hiding an AccessDenied as a "missing" image; overwriting an image that already
- * //          exists on the tier; writing anywhere but one set's folder.
+ * // rejects: copying remote URLs or repo assets; failing a whole backup over one lost image,
+ * //          or over one stored outside sets/ that export's role may not read; hiding an
+ * //          AccessDenied as a "missing" image; overwriting an image that already exists on
+ * //          the tier; writing anywhere but one set's folder.
  */
 const assert = require('assert');
 const path = require('path');
@@ -102,6 +103,30 @@ const ROWS = [
       /NoSuchBucket/,
     );
   });
+  await check('an image stored outside sets/ is skipped with no S3 call, and the backup goes on', async () => {
+    // Export's role may read only sets/* of the media bucket, so this S3 answers AccessDenied for
+    // any other source, as the real one does. A key copyMediaIn could never write back is not
+    // worth a call that fails the whole set's backup.
+    const copies = [];
+    const strict = {
+      async send(cmd) {
+        if (cmd.name !== 'CopyObject') throw new Error(`unexpected S3 command ${cmd.name}`);
+        if (!cmd.input.CopySource.startsWith(`${MEDIA}/sets/`)) throw failure('AccessDenied', 403);
+        copies.push(cmd.input.CopySource);
+        return {};
+      },
+    };
+    const out = await media.copyMediaOut(strict, {
+      mediaBucket: MEDIA,
+      archiveBucket: ARCHIVE,
+      snapshotId: 'snap-2',
+      rows: [{ SK: 'QUESTION#c001#001', Image: 'sets/s1/a.png' }, { SK: 'QUESTION#c001#002', Image: 'images/legacy.png' }],
+    });
+    assert.deepStrictEqual(copies, [`${MEDIA}/sets/s1/a.png`]);
+    assert.deepStrictEqual(out.skipped, ['images/legacy.png']);
+    assert.deepStrictEqual(out.media, [{ key: 'sets/s1/a.png', archiveKey: 'archive/media/snap-2/sets/s1/a.png' }]);
+    assert.deepStrictEqual(out.missing, []);
+  });
   await check('images with no bucket configured are a named deployment fault', async () => {
     await assert.rejects(
       () => media.copyMediaOut(s3, { mediaBucket: '', archiveBucket: ARCHIVE, snapshotId: 's', rows: ROWS }),
@@ -112,7 +137,12 @@ const ROWS = [
     const out = await media.copyMediaOut(s3, {
       mediaBucket: '', archiveBucket: '', snapshotId: 's', rows: [{ SK: 'QUESTION#1', Image: '/assets/a.jpg' }],
     });
-    assert.deepStrictEqual(out, { media: [], missing: [] });
+    assert.deepStrictEqual(out, { media: [], missing: [], skipped: [] });
+    // Nor does a set whose only key is outside sets/: nothing would be copied, so nothing is asked of a bucket.
+    const stray = await media.copyMediaOut(s3, {
+      mediaBucket: '', archiveBucket: '', snapshotId: 's', rows: [{ SK: 'QUESTION#1', Image: 'images/legacy.png' }],
+    });
+    assert.deepStrictEqual(stray, { media: [], missing: [], skipped: ['images/legacy.png'] });
   });
 
   console.log('\n3. back onto a tier');

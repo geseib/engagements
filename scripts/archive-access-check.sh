@@ -19,7 +19,7 @@
 #
 # Every failure is reported and counted, and the run always ends with its summary. Read-only,
 # apart from one Lambda invocation per tier that LISTS the archive.
-# scripts/deploy-archive.sh runs `preflight` before deploying and `verify` after.
+# scripts/deploy-archive.sh runs `preflight` before `preview` and `lock`, `verify` after `lock` deploys, and `preflight` after `unlock` deploys.
 # tests/archive-infrastructure.js keeps TIERS and FUNCTIONS in step with the template, and
 # tests/archive-scripts.js runs this script against a stubbed aws and curl.
 set -euo pipefail

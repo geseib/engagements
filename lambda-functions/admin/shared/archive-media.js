@@ -13,6 +13,12 @@
  * A RESTORE NEVER OVERWRITES AN IMAGE THAT IS ALREADY THERE (A11). Media is per set, not per
  * version, so the live object under that key is what every other version of the set shows.
  *
+ * ONLY A KEY UNDER ONE SET'S FOLDER TRAVELS, in either direction (`sets/<setId>/<file>`,
+ * isRestorableKey). Export's role may read only `sets/*` of the media bucket, so a row whose
+ * Image is stored anywhere else would answer AccessDenied and fail the whole set's backup — for
+ * an object copyMediaIn could never write back anyway. Such a key is reported as `skipped`,
+ * with no S3 call, and the bucket names are only required when there is a key to copy.
+ *
  * Telling "missing" from "forbidden" needs s3:ListBucket, because without it S3 answers 403
  * for an absent key. template-clean.yaml grants it to both archive functions. Anything that
  * is not a missing object is re-thrown: an AccessDenied here is a deployment fault, and
@@ -49,13 +55,15 @@ const isRestorableKey = (key) => /^sets\/[^/]+\/[^/]+$/.test(String(key || '')) 
 
 async function copyMediaOut(s3, { mediaBucket, archiveBucket, snapshotId, rows }) {
   const keys = mediaKeysIn(rows);
-  if (keys.length > 0 && (!mediaBucket || !archiveBucket)) {
+  const skipped = keys.filter((key) => !isRestorableKey(key));
+  const restorable = keys.filter((key) => isRestorableKey(key));
+  if (restorable.length > 0 && (!mediaBucket || !archiveBucket)) {
     throw new Error('MEDIA_BUCKET or ARCHIVE_BUCKET is not set on this function, so the images this set uses '
       + 'cannot be backed up. This is a deployment fault (template-clean.yaml).');
   }
   const media = [];
   const missing = [];
-  for (const key of keys) {
+  for (const key of restorable) {
     const archiveKey = `${MEDIA_PREFIX}${snapshotId}/${key}`;
     try {
       await s3.send(new CopyObjectCommand({
@@ -67,7 +75,7 @@ async function copyMediaOut(s3, { mediaBucket, archiveBucket, snapshotId, rows }
       missing.push(key);
     }
   }
-  return { media, missing };
+  return { media, missing, skipped };
 }
 
 async function copyMediaIn(s3, { mediaBucket, archiveBucket, media }) {

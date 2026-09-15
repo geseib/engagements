@@ -75,6 +75,11 @@ export function describeExport(response) {
     if (missing.length) {
       lines.push(`${d.name || d.id}: ${plural(missing.length, 'image')} ${missing.length === 1 ? 'was' : 'were'} already missing and ${missing.length === 1 ? 'is' : 'are'} not in the backup.`);
     }
+    const skipped = (d.media && d.media.skipped) || [];
+    if (skipped.length) {
+      const n = skipped.length;
+      lines.push(`${d.name || d.id}: ${plural(n, 'image')} ${n === 1 ? 'is' : 'are'} not stored under sets/, so ${n === 1 ? 'it is' : 'they are'} not in the backup: ${skipped.join(', ')}.`);
+    }
   }
   for (const f of failed) lines.push(`${f.refused ? 'Not archived' : 'Failed'}: ${f.name || f.id} — ${f.error}`);
   if (!done.length && !failed.length) lines.push('The export reported no backup and no error.');
@@ -92,12 +97,17 @@ export function describeRestore(response) {
   const failed = results.failed || [];
   const live = (response && response.becameActive) || [];
   const missing = (response && response.media && response.media.missing) || [];
+  const skipped = (response && response.media && response.media.skipped) || [];
   const lines = [];
   if (live.length) lines.push(`Now live for every organisation: ${live.map((s) => s.name || s.id).join(', ')}.`);
   if (restored.length) {
     lines.push(`Restored ${restored.length}: ${restored.map((r) => `${r.name || r.id} (${restoredAs(r)})`).join('; ')}.`);
   }
   if (missing.length) lines.push(`${plural(missing.length, 'image')} could not be restored: ${missing.join(', ')}.`);
+  if (skipped.length) {
+    const n = skipped.length;
+    lines.push(`${plural(n, 'image')} ${n === 1 ? 'was' : 'were'} not restored because ${n === 1 ? 'it is' : 'they are'} not stored under sets/: ${skipped.join(', ')}.`);
+  }
   for (const f of failed) lines.push(`${f.refused ? 'Not restored' : 'Failed'}: ${f.archiveId} — ${f.error}`);
   if (!restored.length && !failed.length) lines.push('The import reported nothing restored and no error.');
   return lines;

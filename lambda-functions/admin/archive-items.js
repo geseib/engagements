@@ -10,9 +10,15 @@
  *
  * A RELAY, NOT A SECOND ARCHIVE API. Status and body come back as the archive sent them, so a
  * missing item is a 404 here too and the screen can say so.
+ *
+ * WHAT THE ARCHIVE REFUSES IS LOGGED, AND SO IS EVERY DELETION. After the lock, a rejected
+ * signature or a missing grant reaches the screen as a bare "Forbidden"; the archive's own
+ * words are kept here, in CloudWatch. A deletion is the one call that removes a backup, so
+ * who deleted which item is written down too.
  */
 const tenant = require('./shared/tenant');
 const archive = require('./shared/archive-client');
+const { callerUserId } = require('./shared/question-set-access');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -66,6 +72,12 @@ exports.handler = async (event) => {
   try {
     const response = await archive.send(...request);
     const text = await response.text();
+    if (response.status >= 300) {
+      console.warn(`archive relay ${routeKey} answered ${response.status}: ${text.slice(0, 300)}`);
+    }
+    if (routeKey === 'DELETE /admin/archive/items/{archiveId}' && response.status >= 200 && response.status < 300) {
+      console.log(`archive relay: ${callerUserId(event)} deleted archive item ${archiveIdOf(event)}`);
+    }
     return reply(response.status, text || '{}');
   } catch (error) {
     console.error(`archive relay ${routeKey} failed:`, error);

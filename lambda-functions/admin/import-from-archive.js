@@ -80,7 +80,7 @@ exports.handler = async (event) => {
   };
   const results = { successful: [], failed: [], totalRequested: selectedItems.length };
   const becameActive = [];
-  const media = { copied: 0, kept: 0, missing: [] };
+  const media = { copied: 0, kept: 0, missing: [], skipped: [] };
 
   for (const raw of selectedItems) {
     const archiveId = String(raw || '').trim();
@@ -116,6 +116,7 @@ exports.handler = async (event) => {
         media.copied += restoredMedia.copied;
         media.kept += restoredMedia.kept;
         media.missing.push(...restoredMedia.missing);
+        media.skipped.push(...restoredMedia.skipped);
       }
       if (outcome.kind === 'set' && outcome.active === true && wasActive !== true) {
         becameActive.push({ id: outcome.id, name: outcome.name });

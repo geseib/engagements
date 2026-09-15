@@ -193,7 +193,7 @@ async function exportSet(ref, tier, results) {
   }
 
   const snapshotId = crypto.randomUUID();
-  const { media, missing } = await copyMediaOut(s3Client, {
+  const { media, missing, skipped } = await copyMediaOut(s3Client, {
     mediaBucket: process.env.MEDIA_BUCKET, archiveBucket: process.env.ARCHIVE_BUCKET, snapshotId, rows,
   });
   const envelope = snap.buildSetEnvelope({
@@ -217,7 +217,7 @@ async function exportSet(ref, tier, results) {
   const uploaded = await upload(item, `"${meta.name}" (${ref.id})`);
   results.successful.push({
     id: ref.id, scope: ref.scope, name: meta.name, archiveId: uploaded.archiveId, snapshotId,
-    questionsCount: questionCount, media: { copied: media.length, missing },
+    questionsCount: questionCount, media: { copied: media.length, missing, skipped },
   });
   return undefined;
 }

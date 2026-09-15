@@ -13,7 +13,9 @@
 #
 # If the drill stops early, its exit trap removes whatever it may have made, and prints a
 # LEFT BEHIND line for anything it could not remove. The archive is shared with production,
-# so nothing may be left there silently. tests/archive-scripts.js runs it against a stub.
+# so nothing may be left there silently. Its bucket is versioned, so objects the drill deletes
+# stay as noncurrent versions for 90 days, as every deleted backup does.
+# tests/archive-scripts.js runs it against a stub.
 #
 # REFUSES engageprod. Production is restored from the admin screen, by a person.
 set -euo pipefail
@@ -99,15 +101,24 @@ remove_media() {
     aws s3 rm "s3://${ARCHIVE_BUCKET}/${key}" >/dev/null || return 1
   done
 }
-# content_rows <partition>: how many rows the partition still holds.
+# content_rows <partition>: how many rows the partition still holds. Read consistently, like
+# every read below: seconds after a delete or a restore, an eventually consistent read can
+# answer from before it, and a correct drill would fail.
 content_rows() {
   aws dynamodb query --table-name "$TABLE" --key-condition-expression 'PK = :pk' \
-    --expression-attribute-values "{\":pk\":{\"S\":\"$1\"}}" --select COUNT --query Count --output text
+    --expression-attribute-values "{\":pk\":{\"S\":\"$1\"}}" --select COUNT --consistent-read --query Count --output text
 }
 cleanup() {
   set +e
+  local left
   if [ "$SET_MAY_EXIST" = 1 ]; then
     remove_set || echo "  LEFT BEHIND - set ${SET_ID} on ${STACK} (delete it from the admin screen)"
+    # delete-question-set answers 404 for a missing metadata row and never looks at the content
+    # rows, so a removal that "succeeded" can still leave them. Count both partitions.
+    left="$(content_rows "SET#${SET_ID}")+$(content_rows "SET#${SET_ID}#v1")"
+    if [ "$left" != "0+0" ]; then
+      echo "  LEFT BEHIND - content rows (${left}) in SET#${SET_ID} and SET#${SET_ID}#v1 on ${STACK}"
+    fi
     aws s3 rm "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" >/dev/null \
       || echo "  LEFT BEHIND - s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png"
   fi
@@ -149,7 +160,7 @@ expect "archived with its image" "$(echo "$EXPORT" | jq -r '.results.successful[
 echo "3. lose it: delete the set and its image"
 invoke admin-delete-question-set "$(delete_set_event)" >/dev/null || die "the set could not be deleted"
 aws s3 rm "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" >/dev/null || die "the image could not be deleted"
-expect "the set is gone" "$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" --query 'Item.SK.S' --output text)" "None"
+expect "the set is gone" "$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" --consistent-read --query 'Item.SK.S' --output text)" "None"
 
 echo "4. restore it"
 IMPORT=$(invoke admin-import-from-archive "$(jq -nc --arg arc "$ARCHIVE_ID" --argjson a "$ADMIN" \
@@ -160,7 +171,7 @@ expect "recreated rather than versioned" "$(echo "$IMPORT" | jq -r '.results.suc
 expect "written as version 1, the partition counted below" "$(echo "$IMPORT" | jq -r '.results.successful[0].version')" "1"
 expect "still inactive" "$(echo "$IMPORT" | jq -r '.results.successful[0].active')" "false"
 expect "its image came back" "$(echo "$IMPORT" | jq -r '.media.copied')" "1"
-META=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" --output json) \
+META=$(aws dynamodb get-item --table-name "$TABLE" --key "{\"PK\":{\"S\":\"SETS\"},\"SK\":{\"S\":\"SET#${SET_ID}\"}}" --consistent-read --output json) \
   || die "the restored set's row could not be read"
 expect "listed in Engage's library again, on version 1" "$(echo "$META" | jq -r '.Item.activeVersion.N // "missing"')" "1"
 # Not `// "missing"`: jq's alternative operator replaces false as well as null, so it could
@@ -183,9 +194,13 @@ remove_media || die "the backup's copied images could not be removed"
 expect "no copied image is left in the archive" "$(media_keys)" "None"
 MEDIA_MAY_EXIST=0
 remove_set || die "the restored set could not be deleted"
-expect "no content rows are left" "$(content_rows "SET#${SET_ID}")+$(content_rows "SET#${SET_ID}#v1")" "0+0"
+LEFT="$(content_rows "SET#${SET_ID}")+$(content_rows "SET#${SET_ID}#v1")"
+expect "no content rows are left" "$LEFT" "0+0"
 aws s3 rm "s3://${MEDIA_BUCKET}/sets/${SET_ID}/drill.png" >/dev/null || die "the restored image could not be removed"
-SET_MAY_EXIST=0
-echo "  ok   - the set and its image are removed"
+# Rows left behind are the set still existing: the trap counts them again and names them.
+if [ "$LEFT" = "0+0" ]; then
+  SET_MAY_EXIST=0
+  echo "  ok   - the set and its image are removed"
+fi
 
 if [ "$FAILED" -eq 0 ]; then echo "drill passed on $STACK"; else echo "drill FAILED on $STACK"; exit 1; fi

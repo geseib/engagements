@@ -5,33 +5,37 @@
  * scripts/archive-access-check.sh and scripts/archive-drill.sh are the proof, before and after
  * the archive is locked, that no tier is cut off and no route is left open, and
  * scripts/deploy-archive.sh is what locks it. Their happy paths run live; their failure paths
- * cannot, so this suite puts an `aws`, a `curl` and a `sam` of its own first on PATH and drives
- * all three scripts through the failures that matter: a route left open, an archive that does
- * not answer, a simulation call that fails, a function that cannot be read, an export call that
- * fails, a removal that cannot finish, a stack whose outputs cannot be read, and a deploy that
- * fails. It also runs one whole drill through restore and removal, one whose restore comes back
- * active, and every mode of the deploy script, because a check that can never pass live looks
- * exactly like a check that has not been reached. Each run is judged by its exit status, its
- * combined output, and the calls the stubs logged.
+ * cannot, so this suite puts an `aws`, a `curl`, a `sam` and an `mv` of its own first on PATH
+ * and drives all three scripts through the failures that matter: a route left open, an archive
+ * that does not answer, a simulation call that fails, a function that cannot be read, an export
+ * call that fails, a removal that cannot finish or leaves rows behind, a stack whose outputs
+ * cannot be read or are not what a tier can sign for, a config that cannot be moved into place,
+ * and a deploy that fails. It also runs one whole drill through restore and removal, one whose
+ * restore comes back active, and every mode of the deploy script, because a check that can
+ * never pass live looks exactly like a check that has not been reached. Each run is judged by
+ * its exit status, its combined output, and the calls the stubs logged.
  *
  * EVERY DEPLOY-SCRIPT RUN GETS A THROWAWAY REPO: a temp directory holding copies of the two
- * scripts, the template and config/archive-service.json, committed once. The script's git
- * checks run there, and nothing it writes can reach the real config.
+ * scripts, the template, config/archive-service.json and lambda-functions/archive/ (what the
+ * template's CodeUri names, so the stubbed build resolves it as the real one would), committed
+ * once. The script's git checks run there, and nothing it writes can reach the real config.
  *
  * STUB_SCENARIO (comma-separated) selects the failures a stub injects; STUB_LOG collects one
  * line per call, the program name and its arguments; STUB_STATE is a fresh directory per run
  * where the aws stub keeps the set id it was given and the markers (restored, set-removed,
  * media-removed) that let a whole drill answer in sequence. The stubs are node scripts written
- * from the three functions below, so they are real code here and self-contained there.
+ * from the four functions below, so they are real code here and self-contained there.
  *
  * // rejects: verify passing with a route that does not require AWS_IAM; a curl or simulation
  * //          failure that ends the run without a summary; an expired token reported as a
- * //          missing deploy; the drill reading a stale reply as a failed call's answer; a
- * //          removal that leaves something behind without naming it; a drill whose inactive
- * //          check cannot pass, or that calls a set removed without looking at its rows; a
- * //          deploy that ignores its mode, deploys uncommitted changes, writes the config from
- * //          outputs it could not read, or leaves the operator unsure whether the archive is
- * //          locked.
+ * //          missing deploy; the drill reading a stale reply as a failed call's answer, or an
+ * //          eventually consistent one as the row's state; a removal that leaves something
+ * //          behind without naming it; a drill whose inactive check cannot pass, or that calls
+ * //          a set removed without looking at its rows; a deploy that ignores its mode, deploys
+ * //          uncommitted changes, builds a CodeUri that does not resolve, writes the config
+ * //          from outputs it could not read, leaves a temporary config beside the real one,
+ * //          guesses what a failed deploy did, or leaves the operator unsure whether the
+ * //          archive is locked.
  */
 const fs = require('fs');
 const os = require('os');
@@ -138,8 +142,10 @@ function awsStub() {
       const key = (/OutputKey=='([A-Za-z]+)'/.exec(option('--query')) || [])[1] || '';
       const outputs = {
         ArchiveDomainUrl: 'https://archive.seibtribe.us',
-        ArchiveApiUrl: has('outputs-empty') ? 'None' : 'https://9gi7xpycsf.execute-api.us-east-1.amazonaws.com',
-        ArchiveTableName: 'engage2-archive',
+        ArchiveApiUrl: has('outputs-empty') ? 'None'
+          : has('outputs-wrong-url') ? 'https://archive.seibtribe.us'
+            : 'https://9gi7xpycsf.execute-api.us-east-1.amazonaws.com',
+        ArchiveTableName: has('outputs-empty-table') ? 'None' : 'engage2-archive',
         ArchiveBucketName: 'engage2-archive-content',
       };
       if (!outputs[key]) unexpected();
@@ -150,14 +156,19 @@ function awsStub() {
       say(option('--stack-name'));
       break;
     case 'dynamodb get-item':
+      // Seconds after a delete or a restore, an eventually consistent read can answer from
+      // before it, so a correct drill could fail. Only a consistent read is answered here.
+      if (!argv.includes('--consistent-read')) { process.stderr.write('consistent read required\n'); process.exit(99); }
       // With --query it is step 3 asking whether the set is gone; without, step 4 reading the row.
       if (argv.includes('--query')) say('None');
       else say(JSON.stringify({ Item: { SK: { S: `SET#${savedSetId()}` }, activeVersion: { N: '1' }, active: { BOOL: has('restored-active') } } }));
       break;
     case 'dynamodb query': {
       if (!argv.includes('COUNT')) unexpected();
+      if (!argv.includes('--consistent-read')) { process.stderr.write('consistent read required\n'); process.exit(99); }
       const partition = String((JSON.parse(option('--expression-attribute-values'))[':pk'] || {}).S || '');
-      say(partition.endsWith('#v1') && marked('restored') && !marked('set-removed') ? '5' : '0');
+      // Under rows-remain the restored partition keeps its rows after the set is removed.
+      say(partition.endsWith('#v1') && marked('restored') && (has('rows-remain') || !marked('set-removed')) ? '5' : '0');
       break;
     }
     case 's3 cp':
@@ -191,8 +202,10 @@ function curlStub() {
 }
 
 /**
- * `sam`, whose build copies the template it was given into its build directory, as the real
- * one leaves a template there, and whose deploy only logs. Anything else is a loud failure.
+ * `sam`, whose build resolves every CodeUri the way the real one does — against --base-dir
+ * when given, otherwise against the template's own directory — and fails on one that is not
+ * there, then copies the template into its build directory, as the real one leaves a template
+ * there. Its deploy only logs. Anything else is a loud failure.
  */
 function samStub() {
   const fs = require('fs');
@@ -205,9 +218,18 @@ function samStub() {
   switch (argv[0]) {
     case 'build': {
       if (has('sam-build-fails')) { process.stderr.write('Build Failed: stubbed failure\n'); process.exit(1); }
+      const template = path.resolve(option('-t'));
+      const base = option('--base-dir') ? path.resolve(option('--base-dir')) : path.dirname(template);
+      for (const [, codeUri] of fs.readFileSync(template, 'utf8').matchAll(/^\s*CodeUri:\s*(\S+)/gm)) {
+        const resolved = path.resolve(base, codeUri);
+        if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+          process.stderr.write(`CodeUri not found: ${resolved}\n`);
+          process.exit(1);
+        }
+      }
       const dir = path.resolve(option('--build-dir'));
       fs.mkdirSync(dir, { recursive: true });
-      fs.copyFileSync(path.resolve(option('-t')), path.join(dir, 'template.yaml'));
+      fs.copyFileSync(template, path.join(dir, 'template.yaml'));
       break;
     }
     case 'deploy':
@@ -219,8 +241,20 @@ function samStub() {
   }
 }
 
+/** `mv`, which is /bin/mv until `mv-fails` asks it to fail, so the config's move into place can be made to fail. */
+function mvStub() {
+  const fs = require('fs');
+  const { spawnSync } = require('child_process');
+  const argv = process.argv.slice(2);
+  if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, `mv ${argv.join(' ')}\n`);
+  const scenarios = String(process.env.STUB_SCENARIO || '').split(',').filter(Boolean);
+  if (scenarios.includes('mv-fails')) { process.stderr.write('mv: stubbed failure\n'); process.exit(1); }
+  const r = spawnSync('/bin/mv', argv, { stdio: 'inherit' });
+  process.exit(r.status === null ? 1 : r.status);
+}
+
 const STUB_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-scripts-'));
-for (const [name, fn] of [['aws', awsStub], ['curl', curlStub], ['sam', samStub]]) {
+for (const [name, fn] of [['aws', awsStub], ['curl', curlStub], ['sam', samStub], ['mv', mvStub]]) {
   fs.writeFileSync(path.join(STUB_DIR, name), `#!/usr/bin/env node\n'use strict';\n(${fn.toString()})();\n`, { mode: 0o755 });
 }
 
@@ -250,6 +284,8 @@ function run(script, args, scenario = '') {
 
 const CONFIG = 'config/archive-service.json';
 const DEPLOY_FILES = ['scripts/deploy-archive.sh', 'scripts/archive-access-check.sh', CONFIG, 'template-archive.yaml'];
+/** What the template's CodeUri names: copied so the stubbed build resolves it, as a real one must. */
+const DEPLOY_DIRS = ['lambda-functions/archive'];
 const REPOS = [];
 /** A throwaway repo with copies of what the deploy script reads and writes, committed once, so no run can touch the real config. */
 function deployRepo() {
@@ -259,6 +295,9 @@ function deployRepo() {
     fs.mkdirSync(path.join(dir, path.dirname(rel)), { recursive: true });
     fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel));
     if (rel.endsWith('.sh')) fs.chmodSync(path.join(dir, rel), 0o755);
+  }
+  for (const rel of DEPLOY_DIRS) {
+    fs.cpSync(path.join(REPO, rel), path.join(dir, rel), { recursive: true, filter: (src) => !src.includes('node_modules') });
   }
   const git = (...args) => {
     const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
@@ -398,6 +437,13 @@ check('a restore that comes back active fails the drill, and removal still runs'
   contains(r, 'drill FAILED on engagedev');
   assert.ok(/^aws lambda invoke .*engagedev-admin-archive-items/m.test(r.calls), `step 5 did not run; the stubs saw:\n${r.calls}`);
 });
+check('content rows the removal left behind fail the drill, are never called removed, and are named on exit', () => {
+  const r = run('archive-drill.sh', ['engagedev'], 'rows-remain');
+  exited(r, 1);
+  contains(r, 'no content rows are left: expected 0+0, got 0+5');
+  lacks(r, 'ok   - the set and its image are removed');
+  contains(r, 'LEFT BEHIND - content rows (0+5)');
+});
 
 console.log('\n6. the deploy script refuses before it touches anything, and preview leaves the stack alone');
 check('the deploy script with no mode prints usage and calls nothing', () => {
@@ -415,6 +461,8 @@ check('preview runs the pre-flight, shows the change set, and nothing is deploye
   assert.ok(deployCall(r, '--no-execute-changeset'), `no sam deploy with --no-execute-changeset; the stubs saw:\n${r.calls}`);
   assert.ok(!deployCall(r, '--no-confirm-changeset'), `preview executed a change set; the stubs saw:\n${r.calls}`);
   contains(r, 'Nothing was deployed');
+  // SAM prints change-set actions as `+ Add`, `* Modify` and `- Delete`; the reader is told what not to see in those words.
+  contains(r, '- Delete');
   assert.ok(r.configUnchanged, 'preview changed the config');
 });
 check('lock refuses to deploy when a tier fails the pre-flight', () => {
@@ -427,6 +475,17 @@ check('lock refuses uncommitted template changes before calling anything', () =>
   exited(r, 2);
   contains(r, 'Refusing');
   noCalls(r);
+});
+check('preview refuses uncommitted changes, but unlock only warns', () => {
+  const edit = (repo) => fs.appendFileSync(path.join(repo, 'template-archive.yaml'), '# an uncommitted edit\n');
+  const preview = runDeploy(['preview'], '', edit);
+  exited(preview, 2);
+  contains(preview, 'Refusing');
+  noCalls(preview);
+  // The rollback must not be refused for the sake of a clean tree: it runs when something is already wrong.
+  const unlock = runDeploy(['unlock'], '', edit);
+  contains(unlock, 'WARNING: deploying uncommitted changes');
+  assert.ok(deployCall(unlock, '--no-confirm-changeset'), `unlock did not go on to deploy; the stubs saw:\n${unlock.calls}`);
 });
 
 console.log('\n7. lock records the outputs, verifies, and never leaves its state unclear');
@@ -453,6 +512,30 @@ check('lock never writes a config from outputs it could not read, and says the a
     assert.ok(!/^aws apigatewayv2 get-routes/m.test(r.calls), `${scenario}: verify ran on a config that was not written; the stubs saw:\n${r.calls}`);
   }
 });
+check('lock never records a missing table, bucket or domain output', () => {
+  const r = runDeploy(['lock'], 'outputs-empty-table');
+  exited(r, 1);
+  assert.ok(r.configUnchanged, 'the config was written with no table name');
+  contains(r, 'was left unchanged');
+  assert.ok(!/^aws apigatewayv2 get-routes/m.test(r.calls), `verify ran on a config that was not written; the stubs saw:\n${r.calls}`);
+});
+check('lock refuses an ArchiveApiUrl that is not an execute-api URL', () => {
+  // A request signed for the CloudFront name arrives with a Host it no longer names, so this URL locks every tier out.
+  const r = runDeploy(['lock'], 'outputs-wrong-url');
+  exited(r, 1);
+  assert.ok(r.configUnchanged, 'the config was written with a URL no tier can sign for');
+  contains(r, 'is not an execute-api URL');
+  assert.ok(!/^aws apigatewayv2 get-routes/m.test(r.calls), `verify ran on a config that was not written; the stubs saw:\n${r.calls}`);
+});
+check('a config that cannot be moved into place leaves no trace and says the archive is locked', () => {
+  const r = runDeploy(['lock'], 'mv-fails');
+  exited(r, 1);
+  assert.ok(r.configUnchanged, 'a failed move changed the config');
+  contains(r, 'THE SHARED ARCHIVE IS NOW LOCKED');
+  contains(r, 'could not be moved into place');
+  const leftovers = fs.readdirSync(path.join(r.repo, 'config')).filter((name) => name.startsWith('archive-service.json.'));
+  assert.deepStrictEqual(leftovers, [], 'a temporary config was left beside the real one');
+});
 check('a failed verify after lock says the archive is locked and how to unlock it', () => {
   const r = runDeploy(['lock'], 'route-open');
   exited(r, 1);
@@ -472,13 +555,15 @@ check('unlock deploys without the pre-flight a rejected signature would fail, an
   for (const s of ['ArchiveApi:', 'Properties: {}', 'ListArchiveFunction']) assert.ok(text.includes(s), `the built template lacks ${JSON.stringify(s)}`);
   assert.ok(!text.includes('DefaultAuthorizer: AWS_IAM'), 'the built template still carries the lock');
   contains(r, 'THE SHARED ARCHIVE IS UNLOCKED');
+  // The hint must not chain preview into lock: the change set is there to be read first.
+  lacks(r, 'preview && ');
   exited(r, 1); // the pre-flight after the unlock still fails in this scenario
 });
-check('a failed deploy says where to look', () => {
+check('a failed deploy says where to look, without guessing what the stack did', () => {
   const r = runDeploy(['lock'], 'sam-deploy-fails');
   exited(r, 1);
-  contains(r, 'The deploy failed');
-  contains(r, 'continue-update-rollback');
+  // sam deploy can exit non-zero after the change set ran, so the script may not claim a rollback.
+  for (const text of ['did not report success', '--region us-east-1', 'continue-update-rollback', 'scripts/deploy-archive.sh unlock']) contains(r, text);
   assert.ok(!/describe-stacks/.test(r.calls), `outputs were read after a failed deploy; the stubs saw:\n${r.calls}`);
 });
 
