@@ -111,5 +111,35 @@ check('AdminListLocalArchiveFunction is not declared, and its handler is deleted
   assert.ok(!fs.existsSync(path.join(REPO, 'lambda-functions/admin/list-local-archive.js')));
 });
 
+console.log('\n5. the live checks look at exactly what the template grants');
+const accessCheck = fs.existsSync(path.join(REPO, 'scripts/archive-access-check.sh')) ? read('scripts/archive-access-check.sh') : '';
+const drill = fs.existsSync(path.join(REPO, 'scripts/archive-drill.sh')) ? read('scripts/archive-drill.sh') : '';
+const bashArray = (src, name) => {
+  const m = new RegExp(`\\n${name}=\\(([^)]*)\\)`).exec(src);
+  return m ? m[1].trim().split(/\s+/) : null;
+};
+check('archive-access-check.sh checks all three tiers by default', () => {
+  assert.deepStrictEqual(bashArray(accessCheck, 'TIERS'), ['engagedev', 'engagetest', 'engageprod']);
+});
+check('...and exactly the functions that call the archive', () => {
+  assert.deepStrictEqual((bashArray(accessCheck, 'FUNCTIONS') || []).slice().sort(), ARCHIVE_CALLERS);
+});
+check('...reads the API id from config/archive-service.json, the file the mapping is pinned to', () => {
+  assert.ok(accessCheck.includes('config/archive-service.json'));
+});
+check('...has both modes, and verify requires an unsigned request to be refused', () => {
+  assert.ok(/preflight\|verify\)/.test(accessCheck), 'no preflight|verify case');
+  assert.ok(/403/.test(accessCheck) && /curl/.test(accessCheck), 'verify must prove an unsigned request is refused');
+});
+check('the drill refuses production and covers the functions a restore uses', () => {
+  assert.ok(/engageprod\)[^\n]*exit 2/.test(drill), 'the drill must refuse engageprod');
+  for (const fn of ['admin-upload-questions', 'admin-export-to-archive', 'admin-delete-question-set', 'admin-import-from-archive', 'admin-archive-items']) {
+    assert.ok(drill.includes(fn), `the drill does not use ${fn}`);
+    if (fn !== 'admin-archive-items' && fn !== 'admin-export-to-archive' && fn !== 'admin-import-from-archive') {
+      assert.ok(template.includes(`FunctionName: !Sub '\${StackName}-${fn}'`), `${fn} is not a function in the template`);
+    }
+  }
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
