@@ -281,7 +281,11 @@ stubs.set('uuid', { v4: () => 'archive-uuid-1' });
 process.env.TABLE_NAME = TABLE;
 process.env.ARCHIVE_BUCKET_NAME = 'archive-bucket';
 process.env.AI_PROMPTS_BUCKET = 'ai-prompts-bucket';
-process.env.ARCHIVE_SERVICE_URL = 'https://archive.seibtribe.us';
+// Export signs its archive calls (shared/archive-client.js), so it needs the execute-api host
+// and credentials to sign with.
+process.env.ARCHIVE_SERVICE_URL = 'https://archtest01.execute-api.us-east-1.amazonaws.com';
+process.env.AWS_ACCESS_KEY_ID = 'AKIDTITLESUITE';
+process.env.AWS_SECRET_ACCESS_KEY = 'title-suite-secret';
 process.env.STACK_NAME = 'engagedev';
 
 // Re-load both handlers so they bind the stubs rather than the real clients.
@@ -292,6 +296,12 @@ const exportToArchive = require(EXPORT_TO_ARCHIVE);
 function resetAll() {
   store.clear(); dynamoPuts = []; s3Puts = []; s3Objects = new Map();
 }
+
+/** Export is Engage staff acting as Engage; every export event below carries that caller. */
+const exportAsEngage = (body) => exportToArchive.handler({
+  requestContext: { authorizer: { lambda: { groups: 'admins', userId: 'staff-1' } } },
+  body: JSON.stringify(body),
+});
 
 async function phase2Upload() {
   await test('upload-archive sends header-safe metadata for an em-dash title, and keeps the real title', async () => {
@@ -407,7 +417,7 @@ async function phase3Export() {
     let uploaded = 0;
     stubFetch(async () => { uploaded++; return { ok: true, status: 200, json: async () => ({ archiveId: 'a1' }) }; });
     try {
-      const res = await exportToArchive.handler({ body: JSON.stringify({ selectedItems: [p.promptId], exportType: 'prompts' }) });
+      const res = await exportAsEngage({ selectedItems: [p.promptId], exportType: 'prompts' });
       const { results } = JSON.parse(res.body);
       assert.strictEqual(uploaded, 0, 'nothing may be uploaded when the body could not be read');
       assert.strictEqual(results.successful.length, 0, 'a half-record must not be reported as a success');
@@ -426,7 +436,7 @@ async function phase3Export() {
     let uploaded = 0;
     stubFetch(async () => { uploaded++; return { ok: true, status: 200, json: async () => ({ archiveId: 'a1' }) }; });
     try {
-      const res = await exportToArchive.handler({ body: JSON.stringify({ selectedItems: [p.promptId], exportType: 'prompts' }) });
+      const res = await exportAsEngage({ selectedItems: [p.promptId], exportType: 'prompts' });
       const { results } = JSON.parse(res.body);
       assert.strictEqual(uploaded, 0, 'nothing may be uploaded for a bodyless pointer');
       assert.strictEqual(results.failed.length, 1, 'a bodyless pointer must fail');
@@ -443,7 +453,7 @@ async function phase3Export() {
     let sent = null;
     stubFetch(async (url, opts) => { sent = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({ archiveId: 'a1' }) }; });
     try {
-      const res = await exportToArchive.handler({ body: JSON.stringify({ selectedItems: [p.promptId], exportType: 'prompts' }) });
+      const res = await exportAsEngage({ selectedItems: [p.promptId], exportType: 'prompts' });
       const { results } = JSON.parse(res.body);
       assert.strictEqual(results.failed.length, 0, `expected no failures, got ${JSON.stringify(results.failed)}`);
       assert.strictEqual(results.successful.length, 1);
@@ -463,7 +473,7 @@ async function phase3Export() {
     s3Objects.set(p.s3Key, GOOD_BODY);
     stubFetch(async () => ({ ok: false, status: 500, text: async () => '{"error":"Failed to upload archive item"}' }));
     try {
-      const res = await exportToArchive.handler({ body: JSON.stringify({ selectedItems: [p.promptId], exportType: 'prompts' }) });
+      const res = await exportAsEngage({ selectedItems: [p.promptId], exportType: 'prompts' });
       const { results } = JSON.parse(res.body);
       assert.strictEqual(results.failed.length, 1);
       const err = results.failed[0].error;
@@ -481,7 +491,7 @@ async function phase3Export() {
     s3Objects.set(p.s3Key, GOOD_BODY);
     stubFetch(async () => ({ ok: false, status: 503, text: async () => 'service unavailable' }));
     try {
-      const res = await exportToArchive.handler({ body: JSON.stringify({ selectedItems: [p.promptId], exportType: 'prompts' }) });
+      const res = await exportAsEngage({ selectedItems: [p.promptId], exportType: 'prompts' });
       const { results } = JSON.parse(res.body);
       assert.strictEqual(results.failed.length, 1);
       const err = results.failed[0].error;

@@ -205,7 +205,7 @@ const SECTION = {
     label: 'Archive',
     icon: 'Package',
     title: 'Archive',
-    subtitle: 'A shared, public service. The same store backs all three environments.',
+    subtitle: 'Backups of Engage and public content. Every environment reads and restores the same store.',
   },
   settings: {
     id: 'settings',

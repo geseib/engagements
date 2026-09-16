@@ -49,19 +49,14 @@ if (!hasSam) {
 }
 
 /**
- * `template-archive.yaml` is NOT enforced, and this is not laziness.
+ * ALL THREE TEMPLATES ARE ENFORCED.
  *
- * It fails on `Runtime: nodejs18.x`, which AWS deprecated on 2025-07-31 and
- * whose UPDATE path was disabled on 2025-11-01 — so that stack cannot be
- * updated at all as it stands. That is a real and pre-existing problem, and it
- * belongs to the archive work (which is a hand-deployed house tool outside the
- * CI/CD pipeline), not to tenancy. Enforcing it here would mean this check is
- * red on arrival and therefore ignored, which is worse than not having it.
- *
- * It is still RUN, and its result printed, so nobody can say it was hidden.
+ * template-archive.yaml was only reported while it pinned nodejs18.x, which fails the lint.
+ * It moved to nodejs22.x in the archive lock-down
+ * (docs/superpowers/specs/2026-09-14-archive-full-fidelity-design.md, amendment A1), so it now
+ * has to transform and lint as cleanly as the other two.
  */
-const ENFORCED = ['template-clean.yaml', 'template-monitoring.yaml'];
-const REPORTED = ['template-archive.yaml'];
+const ENFORCED = ['template-clean.yaml', 'template-monitoring.yaml', 'template-archive.yaml'];
 
 for (const tpl of ENFORCED) {
   console.log(`\n${tpl}`);
@@ -74,22 +69,6 @@ for (const tpl of ENFORCED) {
       throw new Error(out.split('\n').slice(0, 6).join('\n'));
     }
   });
-}
-
-for (const tpl of REPORTED) {
-  console.log(`\n${tpl} (reported, not enforced)`);
-  try {
-    execFileSync('sam', ['validate', '-t', path.join(REPO, tpl), '--lint'],
-      { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] });
-    console.log('  ok - transforms and lints cleanly');
-  } catch (e) {
-    const out = `${e.stdout || ''}${e.stderr || ''}`;
-    const runtime = /Runtime '([^']+)' was deprecated/.exec(out);
-    console.log(runtime
-      ? `  KNOWN - still on ${runtime[1]}, whose update path AWS disabled on 2025-11-01. `
-        + 'That stack cannot be updated until its runtime is bumped.'
-      : `  KNOWN - ${out.split('\n')[0]}`);
-  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

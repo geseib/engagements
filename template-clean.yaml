@@ -82,6 +82,21 @@ Conditions:
   # empty and is not the same as omitting the parameter.
   HasGoogleOAuth: !Not [!Equals [!Ref GoogleClientSecret, ""]]
 
+Mappings:
+  # THE SHARED ARCHIVE SERVICE'S HTTP API ID (stack engage2-archive-service, deployed by
+  # hand with scripts/deploy-archive.sh). All three tiers call the one archive, so all
+  # three read the id from here.
+  #
+  # A mapping on purpose. Not an SSM dynamic reference: that parameter would have to be
+  # created by hand before any tier could deploy. Not a template Parameter: a stack update
+  # keeps a parameter's previous value rather than re-reading a changed default. And not
+  # !ImportValue, which would pin the hand-deployed stack's export forever.
+  # tests/archive-infrastructure.js fails if this disagrees with config/archive-service.json,
+  # which deploy-archive.sh writes from the archive stack's own output.
+  ArchiveService:
+    Api:
+      Id: 9gi7xpycsf
+
 Globals:
   Function:
     # Lambda runtime for all functions. Bumped nodejs18.x (EOL) -> nodejs22.x on 2026-08-04.
@@ -4032,25 +4047,56 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
-          ARCHIVE_SERVICE_URL: 'https://archive.seibtribe.us'
-          # THE REASON EVERY ARCHIVED PROMPT WAS EMPTY.
-          #
-          # A prompt is a two-store record: the pointer row in DynamoDB, and the
-          # BODY in this bucket at `s3Key`. export-to-archive.js reads
-          # `process.env.AI_PROMPTS_BUCKET` to fetch that body — and this
-          # function had neither the variable nor the S3 read below, so the
-          # fetch failed on every prompt, every time. The old code swallowed
-          # that into `promptContent = {}` and uploaded a metadata-only shell
-          # with a 200, so nine prompts sat in the shared archive with
-          # instructions, outputFormat, template and scenario all "" while the
-          # console reported nine successful exports.
+          # THE ARCHIVE'S execute-api ENDPOINT, NOT ITS CLOUDFRONT NAME. Every archive call is
+          # SigV4-signed (shared/archive-client.js), SigV4 signs the Host header, and CloudFront
+          # rewrites Host, so a call signed through the CloudFront name is refused once the
+          # archive requires AWS_IAM.
+          ARCHIVE_SERVICE_URL: !Sub
+            - 'https://${ArchiveApiId}.execute-api.${AWS::Region}.amazonaws.com'
+            - ArchiveApiId: !FindInMap [ArchiveService, Api, Id]
+          # Where a backup's images are copied to (shared/archive-media.js).
+          ARCHIVE_BUCKET: engage2-archive-content
+          MEDIA_BUCKET: !Ref MediaBucket
+          # A prompt is a two-store record: the row, and the body in this bucket. Without the
+          # variable and the read below, every archived prompt was empty (2026-08-15).
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
-        - DynamoDBCrudPolicy:
+        # Required by tests/kms-grants-match-code.js: this function's require graph reaches
+        # tenant-crypto.js, through archive-snapshot.js's use of isEnvelope for the ciphertext
+        # refusal. It decrypts nothing, since org content is refused before it is read.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        # READ, not Crud: an export writes nothing to the main table.
+        - DynamoDBReadPolicy:
             TableName: !Ref GameTable
-        # Read-only: an export reads bodies, it never writes one.
+        # Read-only: an export reads prompt bodies and never writes one.
         - S3ReadPolicy:
             BucketName: !Ref AIPromptsBucket
+        - Statement:
+            # EVERY TIER HOLDS THIS SAME GRANT, because every tier deploys this template. That is
+            # what lets dev, test and prod all reach the one shared archive once its routes
+            # require AWS_IAM. scripts/archive-access-check.sh proves it against the live roles.
+            - Effect: Allow
+              Action: ['execute-api:Invoke']
+              Resource: !Sub
+                - 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ArchiveApiId}/*/*/archive/*'
+                - ArchiveApiId: !FindInMap [ArchiveService, Api, Id]
+            # Copy a set's images out of this tier's media bucket...
+            - Effect: Allow
+              Action: ['s3:GetObject']
+              Resource: !Sub '${MediaBucket.Arn}/sets/*'
+            # ...where ListBucket is what makes an absent image a 404 rather than a 403...
+            - Effect: Allow
+              Action: ['s3:ListBucket']
+              Resource: !GetAtt MediaBucket.Arn
+            # ...into the archive, under its media prefix and nowhere else. PutObjectTagging
+            # because CopyObject is sent with TaggingDirective REPLACE; the copy writes no tags.
+            - Effect: Allow
+              Action: ['s3:PutObject', 's3:PutObjectTagging']
+              Resource: 'arn:aws:s3:::engage2-archive-content/archive/media/*'
       Events:
         ExportToArchive:
           Type: HttpApi
@@ -4076,17 +4122,18 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
-          ARCHIVE_SERVICE_URL: 'https://archive.seibtribe.us'
-          # The mirror of the export function's variable, and needed for the
-          # same structural reason: importing a prompt means WRITING a body into
-          # this bucket and pointing the new row's `s3Key` at it. An import that
-          # only writes the DynamoDB row produces a prompt every reader treats
-          # as bodyless — which is what import-from-archive.js did.
+          # Signed calls go to the execute-api host; see AdminExportToArchiveFunction.
+          ARCHIVE_SERVICE_URL: !Sub
+            - 'https://${ArchiveApiId}.execute-api.${AWS::Region}.amazonaws.com'
+            - ArchiveApiId: !FindInMap [ArchiveService, Api, Id]
+          ARCHIVE_BUCKET: engage2-archive-content
+          MEDIA_BUCKET: !Ref MediaBucket
+          # A restored prompt's body is WRITTEN here, and the row's s3Key points at it.
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
-        # Tenant content is encrypted per organisation. This function reads or
-        # writes some, so it needs to unwrap that org's data key — and ONLY with
-        # an orgId encryption context, which the key policy makes mandatory.
+        # Required by tests/kms-grants-match-code.js: upload-questions.js (the legacy CSV path)
+        # and archive-snapshot.js both reach tenant-crypto.js. Nothing is decrypted, because
+        # every restore lands in platform and org content is refused before it is read.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -4094,14 +4141,30 @@ Resources:
               Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
-        - Version: '2012-10-17'
-          Statement:
+        - Statement:
+            # The same grant every tier holds; see AdminExportToArchiveFunction.
             - Effect: Allow
-              Action:
-                - s3:GetObject
-              Resource:
-                - 'arn:aws:s3:::engage2-archive-content/*'
-        # Crud, not Read: this one puts the body it just downloaded.
+              Action: ['execute-api:Invoke']
+              Resource: !Sub
+                - 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ArchiveApiId}/*/*/archive/*'
+                - ArchiveApiId: !FindInMap [ArchiveService, Api, Id]
+            # Read what the archive holds. ListBucket makes an absent image a 404, not a 403.
+            - Effect: Allow
+              Action: ['s3:GetObject']
+              Resource: 'arn:aws:s3:::engage2-archive-content/*'
+            - Effect: Allow
+              Action: ['s3:ListBucket']
+              Resource: 'arn:aws:s3:::engage2-archive-content'
+            # Put images back, only under sets/, and never over one that exists. The HeadObject
+            # that checks is why GetObject and ListBucket are here too. PutObjectTagging because
+            # CopyObject is sent with TaggingDirective REPLACE; the copy writes no tags.
+            - Effect: Allow
+              Action: ['s3:GetObject', 's3:PutObject', 's3:PutObjectTagging']
+              Resource: !Sub '${MediaBucket.Arn}/sets/*'
+            - Effect: Allow
+              Action: ['s3:ListBucket']
+              Resource: !GetAtt MediaBucket.Arn
+        # Crud, not Read: a restore puts the body it just downloaded.
         - S3CrudPolicy:
             BucketName: !Ref AIPromptsBucket
       Events:
@@ -4117,28 +4180,60 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
-  AdminListLocalArchiveFunction:
+  AdminArchiveItemsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${StackName}-admin-list-local-archive'
+      FunctionName: !Sub '${StackName}-admin-archive-items'
       CodeUri: lambda-functions/admin/
-      Handler: list-local-archive.handler
+      Handler: archive-items.handler
       Runtime: nodejs22.x
       Timeout: 30
-      MemorySize: 256
       Environment:
         Variables:
-          TABLE_NAME: !Ref GameTable
+          ARCHIVE_SERVICE_URL: !Sub
+            - 'https://${ArchiveApiId}.execute-api.${AWS::Region}.amazonaws.com'
+            - ArchiveApiId: !FindInMap [ArchiveService, Api, Id]
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref GameTable
+        # THE ONLY GRANT. The admin screen's list, read, search and delete come here signed in,
+        # are checked by canManageScope, and leave signed with this role. It touches no table,
+        # no bucket and no key of its own.
+        - Statement:
+            - Effect: Allow
+              Action: ['execute-api:Invoke']
+              Resource: !Sub
+                - 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ArchiveApiId}/*/*/archive/*'
+                - ArchiveApiId: !FindInMap [ArchiveService, Api, Id]
       Events:
-        ListLocalArchive:
+        ListArchiveItems:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
-            Path: /admin/list-local-archive
+            Path: /admin/archive/items
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetArchiveItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/archive/items/{archiveId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        SearchArchiveItems:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/archive/search
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        DeleteArchiveItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/archive/items/{archiveId}
+            Method: DELETE
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

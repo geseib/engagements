@@ -30,6 +30,14 @@ import { tagsMatch } from './tags';
 /** Sentinel for "don't filter on this axis" — the value of the All… option. */
 export const ANY = '';
 
+/**
+ * Tags a snapshot carries for machines, not people: its schema, library, source and export
+ * time (lambda-functions/admin/shared/archive-snapshot.js envelopeTags). Every snapshot has a
+ * unique source and time, so listing them would bury the tag dropdown. The screen shows what
+ * they mean as chips instead.
+ */
+export const STRUCTURED_TAG = /^(schema|scope|source|exportedAt):/i;
+
 /** An archived record's Tags as a plain, trimmed, non-empty string array. */
 export function archiveTags(item) {
   const raw = item && item.Tags;
@@ -75,7 +83,7 @@ export function collectArchiveTags(items) {
 
   for (const item of items || []) {
     for (const tag of archiveTags(item)) {
-      if (resolveGameType(tag)) continue;
+      if (resolveGameType(tag) || STRUCTURED_TAG.test(tag)) continue;
       const key = tag.toLowerCase();
       if (!seen.has(key)) seen.set(key, tag);
     }
@@ -113,20 +121,22 @@ export function hasArchiveTag(item, tag) {
 }
 
 /**
- * Narrow the loaded records by game type and/or tag. An empty value on either
- * axis means "all", and an unknown game-type id filters to nothing rather than
- * quietly returning everything.
+ * Narrow the loaded records by game type, tag and/or the environment a backup came from. An
+ * empty value on any axis means "all", and an unknown game-type id filters to nothing rather
+ * than quietly returning everything.
  */
-export function filterArchiveItems(items, { gameType = ANY, tag = ANY } = {}) {
+export function filterArchiveItems(items, { gameType = ANY, tag = ANY, tier = ANY } = {}) {
   const wantedType = gameType ? resolveGameType(gameType) : null;
-  // A game type the registry doesn't know matches nothing. Letting it through
-  // as `null` would make the filter mean "records with no type", which is the
-  // opposite of what a stale or mistyped selection should show.
+  // A game type the registry doesn't know matches nothing. Letting it through as `null` would
+  // make the filter mean "records with no type", which is the opposite of what a stale or
+  // mistyped selection should show.
   if (gameType && !wantedType) return [];
+  const wantedTier = String(tier || '').toLowerCase();
 
   return (items || []).filter((item) => {
     if (gameType && archiveGameType(item) !== wantedType) return false;
     if (!hasArchiveTag(item, tag)) return false;
+    if (wantedTier && !archiveTags(item).some((t) => t.toLowerCase() === wantedTier)) return false;
     return true;
   });
 }

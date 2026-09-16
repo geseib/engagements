@@ -115,6 +115,13 @@ exports.handler = async (event) => {
 
     const { fileName, fileContent, customTitle, customDescription, customInstructions, aiContextInstructions, promptId, isAIGenerated } = payload;
 
+    // A NEW SET THAT STARTS HIDDEN. The archive's legacy restore sends this, because a CSV
+    // written before snapshots does not record whether its set was live, and an active Engage
+    // set is shown to every organisation. Set-level only: the question rows stay Active, so
+    // switching the set on is all it takes. Strictly `true` — this is a publish decision, and
+    // "true" as a string is a caller bug to be seen, not a value to be guessed at.
+    const startInactive = payload.startInactive === true;
+
     // THE SET'S DIRECTION — what the room is asked to DO with each item, which
     // is a different question from what the set is ABOUT. Validated against the
     // closed enum here, on the create path, for the same reason
@@ -839,7 +846,8 @@ exports.handler = async (event) => {
       ...(sourceSetIdMeta ? { sourceSetId: sourceSetIdMeta } : {}),
       questionCount: questions.length,
       categoryCount: categoriesByKey.size,
-      active: isAIGenerated ? false : true,  // AI-generated content starts as inactive
+      // AI-generated content starts inactive, and so does a set restored from a legacy backup.
+      active: (isAIGenerated || startInactive) ? false : true,
       createdAt: new Date().toISOString(),
       // WHO MADE IT — `createdBy` (Cognito sub) plus `createdByName` for
       // display. This is the field the edit and delete rules read; without it a

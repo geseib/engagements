@@ -4120,6 +4120,30 @@ body {
   font-size: 0.8rem;
 }
 
+.archive-item .tag.tier {
+  font-weight: 600;
+}
+
+/* A production backup is the one to double-check before restoring it anywhere else. */
+.archive-item .tag.tier-prod {
+  background: var(--primary);
+  color: white;
+}
+
+.archive-panel .archive-note {
+  color: #666;
+  margin: 0 0 12px;
+}
+
+.archive-panel .archive-report {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.archive-panel .archive-report li + li {
+  margin-top: 4px;
+}
+
 .archive-item .item-actions {
   display: flex;
   gap: 10px;

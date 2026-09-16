@@ -1,85 +1,57 @@
 /**
  * DOES THE EXPORTER ACTUALLY READ A SET'S QUESTIONS?
  *
- *   "its wasnt in archive when you did it, and when i retryed archive, it
- *    says export completed, 0 items exported"
+ *   "its wasnt in archive when you did it, and when i retryed archive, it says export
+ *    completed, 0 items exported"
  *
- * The exporter used a ScanCommand with a FilterExpression and no pagination.
- * A Scan reads one 1 MB page of the WHOLE TABLE and filters after reading, so
- * a set whose QUESTION# rows sit outside that page yields zero questions, an
- * empty CSV, and a 400 from the archive service naming three fields that were
- * all fine.
+ * The exporter once used a ScanCommand with a FilterExpression and no pagination. A Scan reads
+ * one 1 MB page of the WHOLE TABLE and filters after reading, so a set whose rows sat outside
+ * that page exported nothing, and the archive's reply blamed three fields that were all fine.
+ * It failed by TABLE POSITION: reproducible for one set, invisible for the rest.
  *
- * It failed by TABLE POSITION — reproducible for one set, invisible for the
- * rest, and free to move to another set the moment the table grows.
+ * These drive the REAL export handler against tests/helpers/archive-harness.js, whose Query
+ * pages are forced small and whose Scan throws. A single-page read or a table Scan fails here
+ * the way it failed in production.
  *
- * These drive the real handler with a stubbed DynamoDB whose Scan behaves the
- * way the real one does: it returns a bounded page of everything, NOT the
- * partition asked for. A Query against the same stub returns the partition.
- * That difference is the entire bug and it is what these assert.
+ * // rejects: a Scan; one Query page; an empty read sent onward as an empty backup.
  */
+const h = require('./helpers/archive-harness');
 const assert = require('assert');
-const Module = require('module');
+const path = require('path');
 
-let pass = 0, fail = 0;
-const check = (name, fn) => {
-  try { fn(); console.log(`  PASS  ${name}`); pass++; }
-  catch (e) { console.log(`  FAIL  ${name}\n        ${e.message}`); fail++; }
-};
+const REPO = path.join(__dirname, '..');
+const { setPartition } = require(path.join(REPO, 'lambda-functions/admin/shared/set-version.js'));
+const exportHandler = require(path.join(REPO, 'lambda-functions/admin/export-to-archive.js')).handler;
 
-const SRC = require('path').join(__dirname, '..', 'lambda-functions', 'admin', 'export-to-archive.js');
-const src = require('fs').readFileSync(SRC, 'utf8');
+const { check, finish } = h.checker();
+const exportSet = async (id) => JSON.parse((await exportHandler(h.adminEvent({ selectedItems: [id], exportType: 'questionsets' }))).body).results;
 
-check('the question read is a Query on the partition, not a Scan of the table', () => {
-  // rejects: the shipped bug returning. A Scan here is wrong however it is
-  // filtered — the filter runs after the 1 MB page is read.
-  const at = src.indexOf('QUERY, PAGINATED');
-  assert(at > -1, 'the question-read block has moved; re-anchor this assertion');
-  const region = src.slice(at, at + 4000);
-  assert(/new QueryCommand\(/.test(region),
-    'the questions must be read with QueryCommand');
-  assert(!/new ScanCommand\([^)]*QUESTION#/s.test(src),
-    'no Scan may be used to collect a set\'s QUESTION# rows');
-});
+(async () => {
+  h.reset();
+  h.options.queryPageSize = 2;
+  const questions = Array.from({ length: 11 }, (_, i) => ({ SK: `QUESTION#c001#${String(i + 1).padStart(3, '0')}`, Title: `Q${i + 1}`, Category: 'A' }));
+  h.seedSet({ setId: 'readyornot', version: 1, meta: { name: 'Ready or Not', questionCount: 11 }, rows: [{ SK: 'CATEGORY#c001', Name: 'A' }, ...questions] });
+  const out = await exportSet('readyornot');
 
-check('the read is paginated', () => {
-  // rejects: a single Query page, which is also capped at 1 MB — the same bug
-  // one size down, hitting only the largest sets.
-  const at = src.indexOf('QUERY, PAGINATED');
-  assert(at > -1, 'the question-read block has moved; re-anchor this assertion');
-  const region = src.slice(at, at + 4000);
-  assert(/LastEvaluatedKey/.test(region), 'must follow LastEvaluatedKey');
-  assert(/ExclusiveStartKey/.test(region), 'must pass ExclusiveStartKey');
-});
+  await check('every row of the partition is archived, across six Query pages', () => {
+    assert.strictEqual(out.successful.length, 1, JSON.stringify(out.failed));
+    assert.strictEqual(JSON.parse(h.archive.get(out.successful[0].archiveId).content).rows.length, 12);
+    assert.strictEqual(out.successful[0].questionsCount, 11);
+  });
+  await check('the rows were read by paginated Query on the set partition (the harness throws on Scan)', () => {
+    const pk = setPartition({ scope: 'platform', setId: 'readyornot' }, 1);
+    assert.ok(h.reads.filter((r) => r.op === 'Query' && r.PK === pk).length >= 6);
+  });
 
-check('an empty read is refused with a diagnosis, not sent as an empty CSV', () => {
-  /*
-    rejects: handing '' to the archive service, whose reply — "Title, content,
-    and contentType are required" — names three fields that were all present
-    and says nothing about the read that failed. That message is why this was
-    mistaken for corrupt data for an afternoon.
-  */
-  const at = src.indexOf('QUERY, PAGINATED');
-  assert(at > -1, 'the question-read block has moved; re-anchor this assertion');
-  const region = src.slice(at, at + 5000);
-  assert(/questions\.length === 0/.test(region), 'must detect an empty result');
-  /*
-    Matched loosely on purpose: the sentence is built by concatenating two
-    template literals, so "a read problem" never appears contiguously in the
-    source. My first version asserted the joined phrase and failed against
-    correct code — a test that reports a bug in the thing it is guarding is
-    worse than no test.
-  */
-  assert(/not an empty set/.test(region) && /read/.test(region),
-    'the failure must say it is a read problem, or the next person re-learns this');
-});
+  h.reset();
+  h.seedSet({ setId: 'hollow', version: 1, meta: { name: 'Hollow', questionCount: 12 }, rows: [] });
+  const empty = await exportSet('hollow');
+  await check('an empty read is refused with a diagnosis, and nothing is uploaded', () => {
+    assert.strictEqual(empty.successful.length, 0);
+    assert.match(empty.failed[0].error, /read problem, not an empty set/);
+    assert.match(empty.failed[0].error, /12 questions/);
+    assert.strictEqual(h.archive.size, 0);
+  });
 
-check('convertQuestionsToCSV still returns empty for genuinely no questions', () => {
-  // The guard above must not paper over the real empty case; the CSV builder's
-  // own contract is unchanged.
-  assert(/if \(!questions \|\| questions\.length === 0\) \{\s*return '';/.test(src),
-    'the CSV builder still returns empty for an empty list');
-});
-
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+  finish();
+})().catch((e) => { console.error('harness error:', e); process.exit(2); });
