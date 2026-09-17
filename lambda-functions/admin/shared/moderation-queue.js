@@ -20,6 +20,7 @@ const POINTER_FIELDS = Object.freeze([
   'bands', 'uncertainQuestionIds', 'appealMessage', 'reports', 'snapshotKey', 'contentHash', 'publicSetId',
 ]);
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
+const versionOf = (version) => { const v = Number(version); return Number.isFinite(v) && v > 0 ? v : 0; };
 
 function queueSk(ref, version) {
   const scope = clean(ref && ref.scope) || 'platform';
@@ -28,8 +29,7 @@ function queueSk(ref, version) {
   if (scope === 'org') {
     const orgId = clean(ref && ref.orgId);
     if (!orgId) throw new Error('moderation-queue: scope "org" requires an orgId');
-    const v = Number(version);
-    return `${orgId}#${setId}#v${Number.isFinite(v) && v > 0 ? v : 0}`;
+    return `${orgId}#${setId}#v${versionOf(version)}`;
   }
   if (scope === 'public') return `PUBLIC#${setId}`;
   return `PLATFORM#${setId}`;
@@ -41,17 +41,20 @@ async function upsertQueueRow(db, tableName, { ref, version, reason, ...fields }
   const sk = queueSk(ref, version);
   const existing = (await db.send(new GetCommand({ TableName: tableName, Key: queueKey(sk) }))).Item;
   const at = now.toISOString();
+  const scope = clean(ref.scope) || 'platform';
   const pointer = Object.fromEntries(POINTER_FIELDS.filter((f) => f in fields).map((f) => [f, fields[f]]));
   const item = {
     ...(existing || {}),
     ...pointer,
-    ...queueKey(sk),
-    scope: clean(ref.scope) || 'platform',
+    scope,
     setId: clean(ref.setId),
-    ...(ref.scope === 'org' ? { orgId: clean(ref.orgId), version: Number(version) } : {}),
+    ...(scope === 'org' ? { orgId: clean(ref.orgId), version: versionOf(version) } : {}),
     reasons: [...new Set([...((existing && existing.reasons) || []), reason])],
     waitingSince: (existing && existing.waitingSince) || at,
     latestAt: at,
+    // The keys come LAST so nothing a caller passes — and nothing on an
+    // existing row — can move this pointer to another key.
+    ...queueKey(sk),
   };
   await db.send(new PutCommand({ TableName: tableName, Item: item }));
   return item;

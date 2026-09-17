@@ -13,6 +13,7 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     assert.strictEqual(Q.queueSk(ORG, 2), 'org_acme#pricing#v2');
     assert.strictEqual(Q.queueSk({ scope: 'platform', setId: 'lessons' }), 'PLATFORM#lessons');
     assert.strictEqual(Q.queueSk({ scope: 'public', setId: 'orgacme-pricing' }), 'PUBLIC#orgacme-pricing');
+    assert.strictEqual(Q.queueSk(ORG, 'not-a-number'), 'org_acme#pricing#v0');
   });
   await H.test('a repeat upsert bumps the row: reasons union, latestAt moves, waitingSince stays', async () => {
     H.reset();
@@ -26,13 +27,14 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     assert.strictEqual(rows[0].latestAt, t2.toISOString());
     assert.strictEqual(rows[0].title, 'Pricing', 'a bump dropped the pointer fields');
     assert.strictEqual(rows[0].appealMessage, 'It is a history set.');
+    assert.strictEqual(rows[0].version, 2);
   });
   await H.test('listQueue returns oldest-waiting first and deleteQueueRow removes one', async () => {
     H.reset();
-    await Q.upsertQueueRow(db, 'engage-test', { ref: { scope: 'org', orgId: 'org_b', setId: 'x' }, version: 1, reason: 'escalated', title: 'B' }, { now: new Date('2026-09-18T00:00:00.000Z') });
-    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'A' }, { now: new Date('2026-09-17T00:00:00.000Z') });
+    await Q.upsertQueueRow(db, 'engage-test', { ref: { scope: 'org', orgId: 'org_b', setId: 'x' }, version: 1, reason: 'escalated', title: 'B' }, { now: new Date('2026-09-17T00:00:00.000Z') });
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'A' }, { now: new Date('2026-09-18T00:00:00.000Z') });
     const list = await Q.listQueue(db, 'engage-test');
-    assert.deepStrictEqual(list.map((r) => r.title), ['A', 'B']);
+    assert.deepStrictEqual(list.map((r) => r.title), ['B', 'A']);
     await Q.deleteQueueRow(db, 'engage-test', Q.queueSk(ORG, 2));
     assert.strictEqual((await Q.listQueue(db, 'engage-test')).length, 1);
   });
