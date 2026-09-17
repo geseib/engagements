@@ -65,6 +65,16 @@ test('409 and 429 are sentences, not errors, and leave Submit available', async 
   fireEvent.click(screen.getByRole('button', { name: /submit for review/i }));
   await screen.findByText(/used today's 20 checks/i);
 });
+test('Try again clears the previous failure before showing the promise again', async () => {
+  global.fetch.mockReturnValueOnce(jsonResponse(202, { jobId: 'j5', version: 2 }));
+  pollGenerationJob.mockRejectedValueOnce(new Error('The check could not finish: boom'));
+  render(<ShareSetDialog set={SET} onClose={() => {}} onOutcome={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: /submit for review/i }));
+  await screen.findByText(/could not finish: boom/i);
+  fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+  expect(screen.queryByText(/could not finish: boom/i)).toBeNull();
+  expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
+});
 test('closing while the job runs keeps it running and still reports the outcome', async () => {
   global.fetch.mockReturnValueOnce(jsonResponse(202, { jobId: 'j4', version: 2 }));
   let finish;

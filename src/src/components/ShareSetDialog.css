@@ -1,12 +1,13 @@
 /* src/src/components/ShareSetDialog.css
    THE SHARE DIALOG — 05-share-review.html. Scoped under .pubshare, not .share --
    styles.css already declares .share-url-container. Tokens only.
-   MEASURED (asserted in __tests__/sharePalette.test.js):
-     --text  #F4EDE4 on --surface #1B2942   12.53:1
-     --muted #9BA8BE on --surface            6.06:1
-     --primary #F6A94C on --surface          7.6:1
-     --pubshare-success-text #6FD0A4 on --surface  7.9:1
-     --bg on --primary (filled Submit)       8.86:1 */
+   MEASURED (asserted in __tests__/sharePalette.test.js, in that order):
+     --text  #F4EDE4 on --surface #1B2942         12.53:1
+     --muted #9BA8BE on --surface                  6.06:1
+     --primary #F6A94C on --surface                7.42:1
+     --danger-text #EF8C86 on --surface            6.08:1
+     --pubshare-success-text #6FD0A4 on --surface  7.79:1
+     --bg on --primary (filled Submit)             8.86:1 */
 .pubshare {
   --pubshare-t-floor: 12px;
   --pubshare-t-label: 13px;

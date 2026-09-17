@@ -147,7 +147,7 @@ export default function ShareSetDialog({ set, version = null, onClose, onOutcome
           <StatusMessage message={error || 'The check did not finish. Submit it again.'} tone="error" className="pubshare-alert" />
           <footer className="pubshare-foot">
             <button type="button" className="pubshare-btn" onClick={() => onClose && onClose()}>Close</button>
-            <button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => setState('idle')}>Try again</button>
+            <button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => { setError(null); setNote(''); setState('idle'); }}>Try again</button>
           </footer>
         </div>
       )}
