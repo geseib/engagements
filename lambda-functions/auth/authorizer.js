@@ -470,9 +470,16 @@ function requiredGroupsForRoute(method, path) {
     which is the `path.includes('answer')` clause that a set id can satisfy by
     accident.
   */
-  const PUBLISH_ROUTE = /^question-sets\/[^/]+\/(publish|check)$/;
+  // Template strings AND a regex over a concrete id, for the reason the copy
+  // route gives. The poll (`check/{jobId}`) and the appeal were added with the
+  // check job (docs/superpowers/specs/2026-09-17-public-library-moderation-design.md §9);
+  // tests/authorizer-set-routes.js drives every one of these with set ids that
+  // contain `answer`, `games`, `join` and `vote`.
+  const PUBLISH_ROUTE = /^question-sets\/[^/]+\/(publish|check(\/[A-Za-z0-9_-]+)?|appeal)$/;
   if (path === 'question-sets/{setId}/publish'
     || path === 'question-sets/{setId}/check'
+    || path === 'question-sets/{setId}/check/{jobId}'
+    || path === 'question-sets/{setId}/appeal'
     || PUBLISH_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }
