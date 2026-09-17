@@ -228,5 +228,79 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
   });
 
   // Part B (the handler) is appended by Task 11 below this line.
+  console.log('\nthe check job — the handler\n');
+  const handler = require(path.join(REPO, 'lambda-functions/admin/check-question-set.js')).handler;
+  const parse = (res) => JSON.parse(res.body || '{}');
+  const post = (extra = {}) => H.orgEvent({ orgId: ORG, role: 'owner', method: 'POST', setId: SET, body: { version: 2, ...extra } });
+  const get = (jobId, orgId = ORG) => H.orgEvent({ orgId, role: 'member', method: 'GET', setId: SET, jobId });
+
+  await H.test('a plain member cannot submit', async () => {
+    await seed();
+    const res = await handler(H.orgEvent({ orgId: ORG, role: 'member', method: 'POST', setId: SET, body: { version: 2 } }), H.ctx());
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(H.state.dispatched.length, 0);
+  });
+  await H.test('an owner gets 202, a lock, a job carrying the org, a dispatch, and a checking stamp', async () => {
+    await seed();
+    const res = await handler(post(), H.ctx());
+    assert.strictEqual(res.statusCode, 202, res.body);
+    const { jobId } = parse(res);
+    assert.ok(jobId);
+    assert.strictEqual((await review()).status, R.STATUS.CHECKING);
+    assert.strictEqual((await review()).jobId, jobId);
+    const j = await J.getJob(db, T, jobId);
+    assert.strictEqual(j.callerOrgId, ORG);
+    assert.strictEqual(j.kind, 'set-check');
+    assert.deepStrictEqual(j.request, { setId: SET, version: 2, publish: true, declaredNotice: [] });
+    assert.deepStrictEqual(H.state.dispatched[0].payload, { __workerMode: true, jobId });
+    assert.strictEqual(H.state.dispatched[0].InvocationType, 'Event');
+    assert.strictEqual(stamp().status, 'checking');
+  });
+  await H.test('a second submit while one runs is refused with 409', async () => {
+    await seed();
+    await handler(post(), H.ctx());
+    const res = await handler(post(), H.ctx());
+    assert.strictEqual(res.statusCode, 409);
+    assert.strictEqual(parse(res).status, 'checking');
+    assert.strictEqual(H.state.dispatched.length, 1);
+  });
+  await H.test('the poll is tenant-scoped: another org gets 404, the same org reads the job', async () => {
+    await seed();
+    const { jobId } = parse(await handler(post(), H.ctx()));
+    assert.strictEqual((await handler(get(jobId, 'org_rival'), H.ctx())).statusCode, 404);
+    const mine = await handler(get(jobId), H.ctx());
+    assert.strictEqual(mine.statusCode, 200);
+    assert.strictEqual(parse(mine).jobId, jobId);
+    assert.strictEqual((await handler(get('nope'), H.ctx())).statusCode, 404);
+  });
+  await H.test('a dispatch failure releases the lock and fails the job with a reason', async () => {
+    await seed();
+    H.state.lambdaShouldFail = true;
+    const res = await handler(post(), H.ctx());
+    assert.strictEqual(res.statusCode, 500);
+    assert.strictEqual((await review()).status, R.STATUS.UNREVIEWED, 'the lock outlived the failed dispatch');
+    const j = await J.getJob(db, T, parse(res).jobId);
+    assert.strictEqual(j.status, 'error');
+  });
+  await H.test('the daily cap answers 429 and leaves no lock', async () => {
+    await seed();
+    process.env.CHECK_DAILY_CAP = '1';
+    await handler(post(), H.ctx());
+    await R.abandonCheck(db, T, SRC, 2, { jobId: (await review()).jobId });
+    const res = await handler(post(), H.ctx());
+    delete process.env.CHECK_DAILY_CAP;
+    assert.strictEqual(res.statusCode, 429);
+    assert.strictEqual(parse(res).cap, 1);
+    assert.strictEqual((await review()).status, R.STATUS.UNREVIEWED);
+  });
+  await H.test('worker mode runs the check end to end through the handler', async () => {
+    await seed({ promptId: '' });
+    H.state.guardrailReplies = clean(4);
+    const { jobId } = parse(await handler(post(), H.ctx()));
+    await handler({ __workerMode: true, jobId }, H.ctx());
+    assert.strictEqual((await review()).status, R.STATUS.PASSED);
+    assert.strictEqual(stamp().status, 'published');
+  });
+
   H.summary();
 })();
