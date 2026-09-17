@@ -141,7 +141,7 @@ async function evaluate(text, { categories, subject }) {
  * budget, and forty concurrent Bedrock calls per share is a throttling problem
  * bought for no benefit anybody can perceive.
  */
-async function checkQuestions(questions = []) {
+async function checkQuestions(questions = [], { onEach, budget } = {}) {
   if (!Array.isArray(questions) || questions.length === 0) {
     // An empty set is not approvable. It is also not a refusal — an import that
     // produced nothing is a person's problem, not a content violation.
@@ -156,25 +156,46 @@ async function checkQuestions(questions = []) {
   const findings = [];
   let outcome = OUTCOME.PASSED;
   let clean = 0;
+  let checked = 0;
+  let stopped = false;
 
   for (const q of questions) {
+    // A budget answers "is there time for one more call". Stopping cleanly
+    // and escalating beats being killed mid-call: the row still gets an
+    // outcome, and a person sees why. (Spec §4.2.)
+    if (typeof budget === 'function' && !budget()) {
+      stopped = true;
+      findings.push({ questionId: null, category: 'TIMEOUT', band: 'NONE' });
+      outcome = worst(outcome, OUTCOME.ESCALATED);
+      break;
+    }
     const subject = q.id || q.SK || '(unidentified)';
-    // Title AND body: a question can be innocuous in one and not the other.
-    const text = [q.title || q.Title, q.questionDetail || q.Detail, q.answerDetails]
-      .filter(Boolean).join('\n');
+    // `text` is the published surface (shared/publishable.js). The legacy
+    // three-field shape stays for callers that predate it.
+    const text = typeof q.text === 'string' && q.text
+      ? q.text
+      : [q.title || q.Title, q.questionDetail || q.Detail, q.answerDetails || q.AnswerDetails].filter(Boolean).join('\n');
     // eslint-disable-next-line no-await-in-loop
     const r = await evaluate(text, { categories: SET_CATEGORIES, subject });
+    checked += 1;
     if (r.findings.length === 0) clean += 1;
     findings.push(...r.findings);
     outcome = worst(outcome, r.outcome);
+    if (typeof onEach === 'function') onEach(checked, questions.length, r);
   }
 
-  return { outcome, findings, checked: questions.length, clean };
+  return { outcome, findings, checked, clean, stopped };
 }
 
 /** Check one Workie's text. Same bands, plus prompt attack. */
 async function checkPromptText(text, subject = '(prompt)') {
   const r = await evaluate(text, { categories: PROMPT_CATEGORIES, subject });
+  return { ...r, checked: 1, clean: r.findings.length === 0 ? 1 : 0 };
+}
+
+/** Set-level prose — name, description, instructions, category names — judged as one subject. */
+async function checkText(text, subject = '(set)') {
+  const r = await evaluate(text, { categories: SET_CATEGORIES, subject });
   return { ...r, checked: 1, clean: r.findings.length === 0 ? 1 : 0 };
 }
 
@@ -185,4 +206,5 @@ module.exports = {
   outcomeForBand,
   checkQuestions,
   checkPromptText,
+  checkText,
 };
