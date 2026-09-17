@@ -56,6 +56,10 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   const declaredNotice = Array.isArray(request.declaredNotice) ? request.declaredNotice : [];
   const reasons = [];
   let findings = []; let checked = 0; let clean = 0;
+  // Hoisted above the try: the snapshot is uploaded early and a failure any
+  // time after that must still be able to point a reviewer at it, rather
+  // than orphaning the S3 object the moment something downstream throws.
+  let snapshot = null; let snapshotKey = null;
 
   try {
     await updateJobProgress(db, tableName, jobId, { completed: 0, phase: 'Reading the set…' });
@@ -70,11 +74,11 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       if (sk.startsWith('QUESTION#')) questions.push(await decryptItem(orgId, 'question', row)); // eslint-disable-line no-await-in-loop
       else if (sk.startsWith('CATEGORY#')) categories.push(row);
     }
-    const snapshot = buildSnapshot({ source, version, meta: plainMeta, categories, questions, checkedAt });
+    snapshot = buildSnapshot({ source, version, meta: plainMeta, categories, questions, checkedAt });
     snapshot.contentHash = contentHash(snapshot);
     const promptDropped = Boolean(plainMeta.promptId) && !(await platformPromptExists(db, tableName, plainMeta.promptId));
 
-    let snapshotKey = snapshotKeyFor(source, version, checkedAt);
+    snapshotKey = snapshotKeyFor(source, version, checkedAt);
     try {
       await s3.send(new PutObjectCommand({ Bucket: bucket, Key: snapshotKey, Body: JSON.stringify(snapshot), ContentType: 'application/json' }));
     } catch (error) {
@@ -95,10 +99,14 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         },
       },
     );
-    const setResult = await checkText(setText(plainMeta, categories), '(set)');
+    // A budget already declared exhausted is not spent on one more call.
+    const setResult = result.stopped
+      ? { outcome: OUTCOME.PASSED, findings: [], checked: 0, clean: 0 }
+      : await checkText(setText(plainMeta, categories), '(set)');
     findings = [...result.findings, ...setResult.findings];
     checked = result.checked + setResult.checked;
     clean = result.clean + setResult.clean;
+    const note = `${clean}/${checked} clean`;
     if (result.stopped) reasons.push('timeout');
     if (findings.some((f) => String(f.band).toUpperCase() === 'MEDIUM')) reasons.push('guardrail');
 
@@ -108,7 +116,7 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
 
     await recordUnits(db, tableName, orgId, checked);
     await writeReview(db, tableName, source, version, {
-      status, findings, note: `${clean}/${checked} clean`, jobId,
+      status, findings, note, jobId,
       contentHash: snapshot.contentHash, snapshotKey, reasons, checkedBy: job.callerUserId || null,
       promptDropped, declaredNotice,
     });
@@ -132,7 +140,7 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       await writeShareStamp(db, tableName, source, { version, status: 'escalated', contentHash: snapshot.contentHash, reasons, jobId });
     } else if (status === STATUS.PASSED && request.publish !== false) {
       published = await publishSnapshot(db, tableName, snapshot, {
-        review: { findings, note: `${clean}/${checked} clean` }, sourceOrgName: await orgName(db, tableName, orgId), promptDropped,
+        review: { findings, note }, sourceOrgName: await orgName(db, tableName, orgId), promptDropped,
       });
       await writeShareStamp(db, tableName, source, {
         version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash,
@@ -156,12 +164,22 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   } catch (error) {
     console.error(`❌ check job ${jobId} failed:`, error);
     try {
+      // Carry the pointer, not delete the object: if the snapshot made it to
+      // S3 before this error, a reviewer must still be able to find it.
       await writeReview(db, tableName, source, version, {
         status: STATUS.ESCALATED, findings, note: error.message, jobId, reasons: ['error'], checkedBy: job.callerUserId || null,
+        contentHash: snapshot ? snapshot.contentHash : null, snapshotKey,
       });
-      await appendReviewEvent(db, tableName, source, 'checked', { version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message });
+      await appendReviewEvent(db, tableName, source, 'checked', {
+        version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message, snapshotKey,
+      });
       await upsertQueueRow(db, tableName, {
-        ref: source, version, reason: 'escalated', orgId, setId: source.setId, title: source.setId, questionCount: 0, bands: {}, orgName: await orgName(db, tableName, orgId),
+        ref: source, version, reason: 'escalated', orgId,
+        setId: source.setId,
+        title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
+        questionCount: snapshot ? snapshot.questions.length : 0,
+        bands: {}, orgName: await orgName(db, tableName, orgId),
+        snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
       });
       await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons: ['error'] });
       await writeShareStamp(db, tableName, source, { version, status: 'escalated', reasons: ['error'], jobId });

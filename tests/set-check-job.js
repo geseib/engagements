@@ -166,7 +166,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     const r = await review();
     assert.strictEqual(r.status, R.STATUS.ESCALATED);
     assert.ok(r.reasons.includes('timeout'), `reasons were ${r.reasons}`);
-    assert.ok(H.state.sentGuardrail.length < 4, 'the loop did not stop');
+    assert.strictEqual(H.state.sentGuardrail.length, 1, 'the loop did not stop after the first question');
   });
 
   await H.test('a snapshot upload failure escalates and publishes nothing', async () => {
@@ -190,6 +190,41 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     const j = await J.getJob(db, T, jobId);
     assert.strictEqual(j.status, 'error');
     assert.match(j.errorMessage, /no longer exists/);
+  });
+
+  await H.test('a failure after the upload still leaves the reviewer a pointer', async () => {
+    await seed();
+    H.state.guardrailReplies = clean(4);
+    const jobId = await job();
+    // The upload succeeds; the failure is engineered to land AFTER it, in
+    // recordUnits — the first (and only) UpdateCommand whose expression adds
+    // quota units. Everything else passes through to the real stub.
+    const realSend = db.send.bind(db);
+    let tripped = false;
+    db.send = async (cmd) => {
+      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD units')) {
+        tripped = true;
+        throw new Error('quota store down');
+      }
+      return realSend(cmd);
+    };
+    try {
+      await W.runSetCheck(deps, { jobId }, H.ctx());
+    } finally {
+      db.send = realSend;
+    }
+    const r = await review();
+    assert.strictEqual(r.status, R.STATUS.ESCALATED);
+    assert.deepStrictEqual(r.reasons, ['error']);
+    assert.ok(r.snapshotKey && /^moderation\/org_acme\/safety\/v2\//.test(r.snapshotKey), `snapshotKey was ${r.snapshotKey}`);
+    assert.match(r.contentHash, /^[0-9a-f]{64}$/);
+    const [row] = queue();
+    assert.strictEqual(row.snapshotKey, r.snapshotKey);
+    assert.strictEqual(row.title, 'Safety walkthrough');
+    assert.strictEqual(row.questionCount, 3);
+    assert.ok(H.state.s3.has(`prompts-test/${r.snapshotKey}`), 'the object is orphaned');
+    const j = await J.getJob(db, T, jobId);
+    assert.strictEqual(j.status, 'error');
   });
 
   // Part B (the handler) is appended by Task 11 below this line.
