@@ -93,22 +93,41 @@ async function readReview(db, tableName, ref, version) {
 }
 
 /**
+ * Facts a check or a decision may record beside the status. A WHITELIST, so a
+ * caller's bag cannot rename the row's keys or its version — `writeReview`'s
+ * fourth argument used to be destructured field-by-field, which had the same
+ * effect by accident; naming the list explicitly means the next fact a worker
+ * or a staff decision needs to record (spec: `snapshotKey`, `reasons`,
+ * `checkedBy`, `promptDropped`, `declaredNotice`) is one entry here, not a
+ * silent drop discovered by a review that went looking for it.
+ */
+const REVIEW_FIELDS = Object.freeze([
+  'jobId', 'note', 'findings', 'contentHash', 'snapshotKey', 'reasons', 'checkedBy', 'promptDropped', 'declaredNotice',
+]);
+
+/**
  * Record an outcome. Refuses a status the state machine does not define, rather
  * than storing it — every reader would otherwise have to defend against a value
  * that should not exist.
  */
-async function writeReview(db, tableName, ref, version, { status, jobId, findings, note } = {}) {
+async function writeReview(db, tableName, ref, version, { status, ...facts } = {}) {
   if (!WRITABLE.includes(status)) {
     throw new Error(`set-review: refusing to write status ${JSON.stringify(status)}`);
   }
+  // findings keeps its old rule — written only when it actually is an array —
+  // rather than the generic "present and not null" the rest of the whitelist uses.
+  const bag = { ...facts, findings: Array.isArray(facts.findings) ? facts.findings : undefined };
+  const kept = Object.fromEntries(
+    REVIEW_FIELDS.filter((f) => bag[f] !== undefined && bag[f] !== null).map((f) => [f, bag[f]]),
+  );
   const item = {
-    ...reviewKey(ref, version),
-    version: version === null || version === undefined ? null : version,
+    ...kept,
     status,
     checkedAt: new Date().toISOString(),
-    ...(jobId ? { jobId } : {}),
-    ...(note ? { note } : {}),
-    ...(Array.isArray(findings) ? { findings } : {}),
+    version: version === null || version === undefined ? null : version,
+    // The keys come last: nothing in the bag — a forged PK/SK/version included
+    // — may move this row or relabel which version it describes.
+    ...reviewKey(ref, version),
   };
   await db.send(new PutCommand({ TableName: tableName, Item: item }));
   return item;
@@ -233,6 +252,7 @@ const mayPublish = (review) => Boolean(review) && review.status === STATUS.PASSE
 module.exports = {
   STATUS,
   WRITABLE,
+  REVIEW_FIELDS,
   reviewKey,
   publishedKey,
   readReview,

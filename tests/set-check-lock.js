@@ -51,6 +51,33 @@ const T = 'engage-test';
     assert.strictEqual((await R.readReview(db, T, REF, 2)).status, R.STATUS.FLAGGED);
     assert.strictEqual(H.state.ddb.has('ELSEWHERE|NOTREVIEW'), false, 'a row was written under the forged key');
   });
+  await H.test('writeReview persists the whitelisted facts and drops anything else', async () => {
+    H.reset();
+    await R.writeReview(db, T, REF, 2, {
+      status: R.STATUS.PASSED,
+      contentHash: 'a'.repeat(64),
+      snapshotKey: 'k',
+      reasons: ['declared'],
+      checkedBy: 'sub-x',
+      promptDropped: true,
+      declaredNotice: ['graphic-medical'],
+      PK: 'ELSEWHERE',
+      SK: 'X',
+      version: 99,
+      rogue: 1,
+    });
+    const row = await R.readReview(db, T, REF, 2);
+    assert.strictEqual(row.contentHash, 'a'.repeat(64));
+    assert.strictEqual(row.snapshotKey, 'k');
+    assert.deepStrictEqual(row.reasons, ['declared']);
+    assert.strictEqual(row.checkedBy, 'sub-x');
+    assert.strictEqual(row.promptDropped, true);
+    assert.deepStrictEqual(row.declaredNotice, ['graphic-medical']);
+    assert.strictEqual(row.rogue, undefined, 'an unlisted field reached the row');
+    assert.deepStrictEqual({ PK: row.PK, SK: row.SK }, R.reviewKey(REF, 2), 'a bag field moved the row');
+    assert.strictEqual(row.version, 2, 'a bag field relabelled the version');
+    assert.strictEqual(H.state.ddb.has('ELSEWHERE|X'), false, 'a row was written under the forged key');
+  });
   await H.test('isUnfinished is true only for a checking row past the stale window', () => {
     const now = Date.parse('2026-09-17T10:20:00.000Z');
     assert.strictEqual(R.isUnfinished({ status: 'checking', checkedAt: '2026-09-17T10:00:00.000Z' }, now), true);

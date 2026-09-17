@@ -237,6 +237,7 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     await publish(owner({ version: 2 }));
     const review = await R.readReview(fakeDoc, 'engage-test', PUBLIC_REF, 1);
     assert.strictEqual(review.status, R.STATUS.PASSED, `public v1 reads as ${review.status}`);
+    assert.match(review.contentHash || '', /^[0-9a-f]{64}$/, 'the public review row carries no hash');
   });
   // rejects: leaving org ciphertext in a partition nobody can decrypt. Public
   // content is plaintext by design — encrypting it would make the shared
@@ -350,7 +351,11 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.strictEqual(org.share.status, 'published');
     assert.strictEqual(org.share.publicSetId, 'orgacme-pricingmechanics');
     assert.strictEqual(org.share.publicVersion, 1);
+    // Re-share: NOW the org row carries a real stamp when share() re-reads it —
+    // a freshly-seeded row has nothing to leak, so only this proves the guarantee.
+    await publish(owner({ version: 2 }));
     assert.strictEqual(publicMeta().share, undefined, 'the org stamp was copied onto the public row');
+    assert.strictEqual(publicMeta().activeVersion, 2);
   });
   await check('publishing appends to the review log', async () => {
     await seed();

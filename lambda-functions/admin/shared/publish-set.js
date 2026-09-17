@@ -69,7 +69,6 @@ async function publishSnapshot(db, tableName, snapshot, { review = {}, sourceOrg
   const { share, promptId, ...meta } = snapshot.meta || {}; // eslint-disable-line no-unused-vars
   const publicMeta = {
     ...meta,
-    ...setMetadataKey(pubRef),
     scope: tenant.PUBLIC,
     orgId: '',
     ...(promptDropped ? { promptDropped: true } : { promptId }),
@@ -89,13 +88,21 @@ async function publishSnapshot(db, tableName, snapshot, { review = {}, sourceOrg
     // Kept across re-shares; set by later stages.
     ...(existing && existing.sensitivity ? { sensitivity: existing.sensitivity } : {}),
     ...(existing && existing.reports ? { reports: existing.reports } : {}),
+    // The keys come last: nothing above this line may relocate the row.
+    ...setMetadataKey(pubRef),
   };
   if (publicMeta.promptId === undefined) delete publicMeta.promptId;
   await db.send(new PutCommand({ TableName: tableName, Item: publicMeta }));
 
   await db.send(new PutCommand({
     TableName: tableName,
-    Item: { ...publishedKey(source, version), publicSetId: pubRef.setId, publicVersion, at: now },
+    Item: {
+      publicSetId: pubRef.setId,
+      publicVersion,
+      at: now,
+      // The key comes last, same reason.
+      ...publishedKey(source, version),
+    },
   }));
 
   return { pubRef, publicSetId: pubRef.setId, publicVersion, rowsPublished: copies.length, questionCount };
