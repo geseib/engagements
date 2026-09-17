@@ -260,6 +260,12 @@
 .qsets-col-state { width: 26%; }
 .qsets-col-when  { width: 12%; }
 .qsets-col-acts  { width: 16%; }
+/* Org consoles only (showVisibility). NOT funded by shrinking the six columns
+   above: rowActionsReachable.test.js asserts they sum to exactly 100, and this
+   column is additive rather than carved out of --col-set/--col-state (see
+   task-17-report.md for why). 113% declared while shown, 100% while hidden —
+   table-layout: fixed distributes either case; only a browser can show it. */
+.qsets-col-vis   { width: 13%; }
 
 /* A SINGLE TEXT NODE with min-width:0, never a flex container with span
    children — host spec §5.1, audit A2: `text-overflow` is inert on a flex box,
@@ -285,6 +291,7 @@
 }
 .qsets-num { text-align: right; font-variant-numeric: tabular-nums; }
 .qsets-when { font-size: var(--qsets-t-label); color: var(--muted); white-space: nowrap; }
+.qsets-vis { white-space: nowrap; }
 .qsets-dimrow td { color: var(--muted); font-style: italic; font-size: var(--qsets-t-label); }
 
 .qsets-states { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
@@ -325,6 +332,17 @@
 .qsets-chip--off { color: var(--muted); border-style: dashed; }
 .qsets-chip--warn { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
 .qsets-chip--bad { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
+/* "Who can see it" (utils/shareState.js). Six values, three tones: the quiet
+   ones borrow --muted, the ones that need an action borrow --primary, the one
+   that is somebody else's turn borrows --secondary (7.0:1 on --bg, asserted). */
+.qsets-chip--vis-private { color: var(--muted); border-style: dashed; }
+.qsets-chip--vis-public { color: var(--qsets-success-text); border-color: rgba(79, 178, 134, .5); }
+.qsets-chip--vis-behind,
+.qsets-chip--vis-flagged,
+.qsets-chip--vis-unfinished { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
+.qsets-chip--vis-checking,
+.qsets-chip--vis-passed { color: var(--muted); }
+.qsets-chip--vis-waiting { color: var(--secondary); border-color: rgba(124, 167, 230, .5); }
 /* Buttons that look like chips: Active and Quickstart are toggles, not labels. */
 button.qsets-chip { cursor: pointer; min-height: 24px; }
 button.qsets-chip:hover { background: var(--qsets-row-hover); }

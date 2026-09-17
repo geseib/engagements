@@ -377,3 +377,38 @@ describe('the Owner filter and sort — yours and your team\'s vs Engage and sha
     expect(matchesFilters(OWNED[3], { owner: 'yours' })).toBe(true);
   });
 });
+
+describe('who can see it', () => {
+  const NOW = Date.parse('2026-09-17T10:20:00.000Z');
+  const VIS = [
+    { ...SETS[0], id: 'priv', name: 'Private one', canManage: true },
+    { ...SETS[0], id: 'pub', name: 'Public one', canManage: true, activeVersion: 2, share: { status: 'published', version: 2, publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+    { ...SETS[0], id: 'flag', name: 'Flagged one', canManage: true, share: { status: 'flagged', version: 2, at: '2026-09-17T09:00:00.000Z' } },
+    { ...SETS[0], id: 'engage', name: 'Engage one', canManage: false, scope: 'platform' },
+  ];
+  beforeAll(() => { jest.spyOn(Date, 'now').mockReturnValue(NOW); });
+  afterAll(() => { Date.now.mockRestore(); });
+  test('the column is absent unless the console asks for it', () => {
+    mount({ questionSets: VIS });
+    expect(screen.queryByRole('columnheader', { name: /who can see it/i })).toBeNull();
+    expect(screen.queryByText('Needs changes')).toBeNull();
+  });
+  test('each row says who can see it, from the share stamp', () => {
+    mount({ questionSets: VIS, showVisibility: true });
+    expect(screen.getByRole('columnheader', { name: /who can see it/i })).toBeInTheDocument();
+    expect(within(rowFor('Private one')).getByText('Private')).toBeInTheDocument();
+    expect(within(rowFor('Public one')).getByText('Public v2')).toBeInTheDocument();
+    expect(within(rowFor('Flagged one')).getByText('Needs changes')).toHaveAttribute('title', expect.stringMatching(/what was flagged/));
+  });
+  test('Share is offered on rows you manage, and calls back with the set', () => {
+    const onShare = jest.fn();
+    mount({ questionSets: VIS, showVisibility: true, onShare });
+    fireEvent.click(within(rowFor('Private one')).getByRole('button', { name: /^share$/i }));
+    expect(onShare).toHaveBeenCalledWith(expect.objectContaining({ id: 'priv' }));
+    expect(within(rowFor('Engage one')).queryByRole('button', { name: /^share$/i })).toBeNull();
+  });
+  test('without onShare there is no Share button, even with the column', () => {
+    mount({ questionSets: VIS, showVisibility: true });
+    expect(screen.queryByRole('button', { name: /^share$/i })).toBeNull();
+  });
+});
