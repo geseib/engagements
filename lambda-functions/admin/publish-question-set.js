@@ -46,14 +46,17 @@
  * organisation's material in front of everyone, which is not.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const {
-  setMetadataKey, setPartition, resolvePartitionFromMeta, toVersion,
-  queryPartition, batchPutItems, setRef,
+  setMetadataKey, resolvePartitionFromMeta, toVersion, queryPartition, setRef,
 } = require('./shared/set-version');
 const tenant = require('./shared/tenant');
 const { decryptItem } = require('./shared/tenant-crypto');
-const { readReview, mayPublish, publishedKey, STATUS } = require('./shared/set-review');
+const { readReview, mayPublish, STATUS } = require('./shared/set-review');
+const { buildSnapshot, contentHash } = require('./shared/publishable');
+const { publicSetIdFor, platformPromptExists, publishSnapshot, unpublishSet } = require('./shared/publish-set');
+const { writeShareStamp } = require('./shared/share-stamp');
+const { appendReviewEvent } = require('./shared/review-log');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -61,16 +64,6 @@ const TABLE = () => process.env.TABLE_NAME;
 const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
 const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stringify(body) });
 const fail = (statusCode, error) => json(statusCode, { error });
-
-/**
- * The public id for one org's set, and it is DERIVED so that it is STABLE.
- *
- * A re-share has to find the row the last share wrote. A random or
- * collision-suffixed id cannot, which is exactly the trap `freeSetId` would
- * have set. Prefixing with the org keeps two organisations' `teamretro` apart
- * inside the one public partition without either of them being renamed.
- */
-const publicSetId = (orgId, setId) => `${String(orgId).replace(/[^a-zA-Z0-9]/g, '')}-${setId}`;
 
 exports.handler = async (event) => {
   const method = String(event?.requestContext?.http?.method || 'POST').toUpperCase();
@@ -87,7 +80,7 @@ exports.handler = async (event) => {
   }
 
   const source = setRef({ scope: tenant.ORG, orgId, setId });
-  const pubRef = setRef({ scope: tenant.PUBLIC, orgId: '', setId: publicSetId(orgId, setId) });
+  const pubRef = setRef({ scope: tenant.PUBLIC, orgId: '', setId: publicSetIdFor(orgId, setId) });
 
   try {
     if (method === 'DELETE') return await unpublish(source, pubRef);
@@ -123,94 +116,38 @@ async function share(event, source, pubRef, orgId, setId) {
   }
 
   const { items: rows } = await queryPartition(db, TABLE(), resolved.pk);
-  if (!rows.length) return fail(409, 'That version has no questions to share.');
+  if (!rows.some((r) => String(r.SK || '').startsWith('QUESTION#'))) return fail(409, 'That version has no questions to share.');
 
-  // Where the public copy is now, so a re-share ADDS a version instead of
-  // overwriting one other teams may already be reading.
-  const existingRes = await db.send(new GetCommand({ TableName: TABLE(), Key: setMetadataKey(pubRef) }));
-  const existing = existingRes.Item;
-  const publicVersion = (toVersion(existing && existing.activeVersion) || 0) + 1;
-  const targetPk = setPartition(pubRef, publicVersion);
-  const now = new Date().toISOString();
-
-  /*
-    NOT THE PUBLISHED MARKER. That row says where a share put the SOURCE
-    version, so a re-share would copy a pointer to the previous public version
-    into the new one. The REVIEW row does come along: it is the verdict on
-    exactly these rows, and it is each public version's own review record. It
-    stays with that version: copy-question-set.js leaves it behind when a team
-    copies the set out of the library.
-  */
-  const marker = publishedKey(source, version).SK;
-
-  /*
-    DECRYPTED ON THE WAY OUT. The org's rows are ciphertext; the public library
-    is plaintext by design, because encrypting content every organisation reads
-    to one organisation's key makes it unreadable. Getting this backwards
-    produces a public set full of base64 that still passes a row count.
-  */
-  const copies = [];
+  const plainMeta = await decryptItem(orgId, 'set', meta);
+  const questions = [];
+  const categories = [];
   for (const row of rows) {
-    if (row.SK === marker) continue;
-    const plain = String(row.SK || '').startsWith('QUESTION#')
-      ? await decryptItem(orgId, 'question', row)   // eslint-disable-line no-await-in-loop
-      : row;
-    copies.push({ ...plain, PK: targetPk });
+    const sk = String(row.SK || '');
+    if (sk.startsWith('QUESTION#')) questions.push(await decryptItem(orgId, 'question', row)); // eslint-disable-line no-await-in-loop
+    else if (sk.startsWith('CATEGORY#')) categories.push(row);
   }
-  await batchPutItems(db, TABLE(), copies);
+  const snapshot = buildSnapshot({ source, version, meta: plainMeta, categories, questions });
+  snapshot.contentHash = contentHash(snapshot);
 
-  // QUESTIONS, not rows: the partition also holds the CATEGORY# rows and the
-  // REVIEW row, and both the set list and the version list show this number.
-  const questionCount = copies.filter((row) => String(row.SK || '').startsWith('QUESTION#')).length;
-  const versions = Array.isArray(existing && existing.versions) ? [...existing.versions] : [];
-  versions.push({ version: publicVersion, createdAt: now, questionCount });
+  const promptDropped = Boolean(plainMeta.promptId) && !(await platformPromptExists(db, TABLE(), plainMeta.promptId));
+  const orgRow = (await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: tenant.orgPk(orgId), SK: 'METADATA' } }))).Item;
+  const published = await publishSnapshot(db, TABLE(), snapshot, {
+    review, sourceOrgName: (orgRow && orgRow.name) || '', promptDropped,
+  });
+  await writeShareStamp(db, TABLE(), source, {
+    version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash,
+  });
+  await appendReviewEvent(db, TABLE(), source, 'published', {
+    version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash, promptDropped,
+  });
 
-  const publicMeta = {
-    // `...meta` carries the set's own Workie — promptId and personaId — which
-    // is what "if you copy it to public it knows about the workie" asks for.
-    // Named here as well so a later tidy-up into a whitelist cannot drop them.
-    ...meta,
-    ...setMetadataKey(pubRef),
-    scope: tenant.PUBLIC,
-    orgId: '',
-    promptId: meta.promptId,
-    personaId: meta.personaId,
-    activeVersion: publicVersion,
-    versions,
-    active: true,
-    /* Never inherited: a published set is not one of Engage's quickstarts. */
-    Quickstart: false,
-    /* WHERE IT CAME FROM. The library shows who published it, and the org can
-       be told when its public copy is behind — the cost D1 was chosen with. */
-    sourceOrgId: orgId,
-    sourceSetId: setId,
-    sourceVersion: version,
-    publishedAt: now,
-    updatedAt: now,
-    ...(existing ? { createdAt: existing.createdAt } : { createdAt: now }),
-  };
-  await db.send(new PutCommand({ TableName: TABLE(), Item: publicMeta }));
-
-  // Record on the SOURCE version where it went, so the org's version list can
-  // say "v2 · public" without searching the public library for it.
-  await db.send(new PutCommand({
-    TableName: TABLE(),
-    Item: {
-      ...publishedKey(source, version),
-      publicSetId: pubRef.setId,
-      publicVersion,
-      at: now,
-    },
-  }));
-
-  console.log(`🌍 published ${orgId}/${setId} v${version} as public ${pubRef.setId} v${publicVersion}`);
+  console.log(`🌍 published ${orgId}/${setId} v${version} as public ${published.publicSetId} v${published.publicVersion}`);
   return json(201, {
-    publicSetId: pubRef.setId,
-    publicVersion,
+    publicSetId: published.publicSetId,
+    publicVersion: published.publicVersion,
     sourceVersion: version,
-    // Every row written, as copy-question-set.js reports `rowsCopied`. The
-    // question count is on the version entry.
-    rowsPublished: copies.length,
+    rowsPublished: published.rowsPublished,
+    promptDropped,
   });
 }
 
@@ -222,23 +159,10 @@ async function share(event, source, pubRef, orgId, setId) {
  * the listing, it does not reach into anybody's team.
  */
 async function unpublish(source, pubRef) {
-  const metaRes = await db.send(new GetCommand({ TableName: TABLE(), Key: setMetadataKey(pubRef) }));
-  const meta = metaRes.Item;
-  if (!meta) return json(200, { removed: 0, note: 'That set is not in the public library.' });
-
-  const versions = Array.isArray(meta.versions) ? meta.versions : [];
-  let removed = 0;
-  for (const entry of versions) {
-    const pk = setPartition(pubRef, entry.version);
-    const { items } = await queryPartition(db, TABLE(), pk);  // eslint-disable-line no-await-in-loop
-    for (const row of items) {
-      // eslint-disable-next-line no-await-in-loop
-      await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: row.PK, SK: row.SK } }));
-      removed += 1;
-    }
-  }
-  await db.send(new DeleteCommand({ TableName: TABLE(), Key: setMetadataKey(pubRef) }));
-
-  console.log(`🌍 unpublished ${pubRef.setId} (${removed} rows)`);
-  return json(200, { removed });
+  const { removed } = await unpublishSet(db, TABLE(), source, pubRef);
+  if (removed === 0) return json(200, { removed: 0, note: 'That set is not in the public library.' });
+  await writeShareStamp(db, TABLE(), source, { version: null, status: 'unpublished' });
+  await appendReviewEvent(db, TABLE(), source, 'unpublished', { publicSetId: pubRef.setId, removed });
+  console.log(`🌍 unpublished ${pubRef.setId}: ${removed} row(s) removed`);
+  return json(200, { removed, publicSetId: pubRef.setId });
 }

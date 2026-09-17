@@ -35,12 +35,14 @@ const REPO = path.join(__dirname, '..');
 
 const store = new Map();
 const key = (pk, sk) => `${pk}|${sk}`;
+let batchWrites = 0;
 
 class PutCommand { constructor(i) { this.input = i; this.type = 'put'; } }
 class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class BatchWriteCommand { constructor(i) { this.input = i; this.type = 'batchWrite'; } }
+class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -53,6 +55,7 @@ const fakeDoc = {
       }
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
       case 'batchWrite': {
+        batchWrites += 1;
         for (const reqs of Object.values(inp.RequestItems || {})) {
           for (const r of reqs) {
             if (r.PutRequest) {
@@ -65,9 +68,24 @@ const fakeDoc = {
         }
         return { UnprocessedItems: {} };
       }
+      case 'update': {
+        const k = key(inp.Key.PK, inp.Key.SK);
+        const item = store.get(k) || { ...inp.Key };
+        const names = inp.ExpressionAttributeNames || {};
+        const values = inp.ExpressionAttributeValues || {};
+        for (const part of String(inp.UpdateExpression).replace(/^SET\s+/i, '').split(/,\s*/)) {
+          const [lhs, rhs] = part.split(/\s*=\s*/);
+          item[names[lhs] || lhs] = values[rhs];
+        }
+        store.set(k, item);
+        return {};
+      }
       case 'query': {
         const v = inp.ExpressionAttributeValues || {};
-        const pk = v[':pk'];
+        // ddb-delete.js's collectPartitionKeys names its placeholder `:setpk`,
+        // not `:pk` — accept either so a helper that queries a whole partition
+        // for deletion works against this same fake.
+        const pk = v[':setpk'] !== undefined ? v[':setpk'] : v[':pk'];
         const prefix = v[':sk'] || '';
         const items = [...store.values()]
           .filter((i) => i.PK === pk && String(i.SK).startsWith(String(prefix)));
@@ -85,7 +103,7 @@ const stubs = new Map([
   ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
   ['@aws-sdk/lib-dynamodb', {
     DynamoDBDocumentClient: { from: () => fakeDoc },
-    PutCommand, GetCommand, QueryCommand, DeleteCommand, BatchWriteCommand,
+    PutCommand, GetCommand, QueryCommand, DeleteCommand, BatchWriteCommand, UpdateCommand,
   }],
   ['@aws-sdk/client-kms', kmsStub.exports],
 ]);
@@ -231,13 +249,24 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.strictEqual(q.Title, 'WHAT DID WE CHARGE',
       'the public copy is unreadable — it kept the org ciphertext');
   });
-  // rejects: losing the Workie on the way out. The owner asked for exactly
-  // this: "if you copy it to public it knows about the workie".
-  await check('the Workie comes with it', async () => {
+  // rejects: losing the Workie on the way out, when it is one every organisation
+  // may read. The owner asked for exactly this: "if you copy it to public it
+  // knows about the workie".
+  await check('a PLATFORM Workie comes with it', async () => {
     await seed();
+    store.set(key('AIPROMPTS', 'AIPROMPT#p-pricing'), { PK: 'AIPROMPTS', SK: 'AIPROMPT#p-pricing', name: 'Pricing coach' });
     await publish(owner({ version: 2 }));
     assert.strictEqual(publicMeta().promptId, 'p-pricing');
     assert.strictEqual(publicMeta().personaId, 'coach');
+    assert.notStrictEqual(publicMeta().promptDropped, true);
+  });
+  // rejects: shipping a public set that points at a Workie only one
+  // organisation can read — every copy would hold a dangling reference (D5).
+  await check('an ORG Workie is dropped from the public copy, and the drop is recorded', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    assert.strictEqual(publicMeta().promptId, undefined, 'an org Workie reached the public copy');
+    assert.strictEqual(publicMeta().promptDropped, true);
   });
   // rejects: a public row with no way back to who published it.
   await check('provenance records the source org, set and version', async () => {
@@ -306,6 +335,30 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.deepStrictEqual(publicRows(), []);
   });
 
+  say('\n4b. what the copy records');
+  await check('the public row names the source organisation, so 07 needs no extra read', async () => {
+    await seed();
+    store.set(key(`ORG#${ORG}`, 'METADATA'), { ...store.get(key(`ORG#${ORG}`, 'METADATA')), name: 'Acme Learning' });
+    await publish(owner({ version: 2 }));
+    assert.strictEqual(publicMeta().sourceOrgName, 'Acme Learning');
+    assert.match(publicMeta().contentHash || '', /^[0-9a-f]{64}$/, 'no content hash on the public row');
+  });
+  await check('the org row gets a share stamp and never leaks it into the public row', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const org = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    assert.strictEqual(org.share.status, 'published');
+    assert.strictEqual(org.share.publicSetId, 'orgacme-pricingmechanics');
+    assert.strictEqual(org.share.publicVersion, 1);
+    assert.strictEqual(publicMeta().share, undefined, 'the org stamp was copied onto the public row');
+  });
+  await check('publishing appends to the review log', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const log = [...store.values()].filter((i) => i.PK === `REVIEWLOG#org#${ORG}#${SET}`);
+    assert.ok(log.some((e) => e.event === 'published' && e.publicVersion === 1), 'no published event');
+  });
+
   say('\n5. unpublishing');
   // rejects: an unpublish that leaves the questions behind, readable by
   // everyone, while the library stops listing them.
@@ -318,6 +371,18 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     const res = await publish(ev);
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.deepStrictEqual(publicRows(), [], 'public rows survived the unpublish');
+  });
+  await check('unpublishing deletes in batches, stamps the org row, and removes the PUBLISHED markers', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    await publish(owner({ version: 2 }));   // two public versions
+    batchWrites = 0;
+    const res = await publish({ ...owner(), requestContext: { ...owner().requestContext, http: { method: 'DELETE' } } });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(publicRows(), []);
+    assert.ok(batchWrites > 0, 'rows were deleted one DeleteCommand at a time');
+    assert.strictEqual(store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`)).share.status, 'unpublished');
+    assert.strictEqual(store.has(key(`ORG#${ORG}#SET#${SET}#v2`, 'PUBLISHED')), false, 'the PUBLISHED marker outlived the listing');
   });
   // rejects: an unpublish that reaches into the copies other teams made. The
   // copy handler already promises independence; this must not break it.
