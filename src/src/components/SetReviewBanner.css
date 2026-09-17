@@ -1,0 +1,46 @@
+/* src/src/components/SetReviewBanner.css
+   THE NEEDS-CHANGES STATE — 06-share-rejected.html. Scoped under .srev.
+   THEME-AGNOSTIC: no data-theme, tokens only, so it renders correctly inside the
+   part-paper editor and on dusk alike. The tint is --danger at --srev-tint-alpha
+   over whatever ground it lands on; both composites are asserted in
+   __tests__/srevPalette.test.js. --danger-text (#EF8C86) is a dusk ink and fails
+   on paper, so the flagged ink is swapped under [data-theme="light"]. */
+.srev {
+  --srev-t-floor: 12px;
+  --srev-t-label: 13px;
+  --srev-t-body: 15px;
+  --srev-t-head: 17px;
+  --srev-tint-alpha: 0.10;
+  --srev-rule: rgba(155, 168, 190, .28);
+  --srev-flag-ink: var(--danger-text);
+  --srev-flag-ink-paper: #9B2C27;
+  /* The filled button's ink: on paper --bg is near-white, so a fill of
+     var(--bg) would carry white at ~2:1 (the CountField incident). A scoped
+     token, never a literal in the rule below, so this sheet stays token-only. */
+  --srev-on-primary: #0F1A2E;
+  display: block; margin: 0 0 16px; padding: 14px 16px; border-radius: 8px;
+  background: rgba(229, 100, 94, var(--srev-tint-alpha));
+  border: 1px solid var(--srev-rule);
+  color: var(--text);
+  font: 400 var(--srev-t-body)/1.5 var(--font-ui);
+}
+[data-theme="light"] .srev { --srev-flag-ink: var(--srev-flag-ink-paper); }
+.srev--waiting { display: flex; align-items: center; gap: 10px; background: transparent; }
+.srev p { margin: 0; }
+.srev-lead { display: flex; gap: 10px; align-items: flex-start; }
+.srev-h { margin: 14px 0 6px; font-size: var(--srev-t-head); font-weight: 700; }
+.srev-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.srev-item { padding: 10px 12px; border: 1px solid var(--srev-rule); border-radius: 6px; }
+.srev-item--ok { color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.srev-item-head { display: flex; align-items: center; gap: 10px; }
+.srev-item-head strong { color: var(--srev-flag-ink); }
+.srev-item-head .srev-btn { margin-left: auto; }
+.srev-why { color: var(--muted); font-size: var(--srev-t-label); margin-top: 4px; }
+.srev-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.srev-appeal { flex: 1 1 100%; padding-top: 10px; border-top: 1px solid var(--srev-rule); }
+.srev-appeal label { display: block; font-size: var(--srev-t-label); color: var(--muted); margin: 0 0 4px; }
+.srev-msg { width: 100%; box-sizing: border-box; font: inherit; color: var(--text); background: transparent; border: 1px solid var(--srev-rule); border-radius: 6px; padding: 8px; }
+.srev-btn { height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--srev-rule); background: transparent; color: var(--text); font: 600 var(--srev-t-body)/1 var(--font-ui); cursor: pointer; }
+.srev-btn--sm { height: 28px; font-size: var(--srev-t-label); }
+.srev-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--srev-on-primary); }
+.srev-btn:disabled { opacity: .6; cursor: default; }

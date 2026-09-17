@@ -58,6 +58,7 @@ const SURFACES = [
   ['UsageMeter', 'usg'],
   ['ArchivePanel', 'arch'],
   ['ShareSetDialog', 'pubshare'],
+  ['SetReviewBanner', 'srev'],
 ];
 
 /** Class names appearing in string literals and template literals in the JSX. */
