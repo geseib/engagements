@@ -20,6 +20,7 @@ import Icon from './components/Icon';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import QuestionSetsPanel from './components/QuestionSetsPanel';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
+import ShareSetDialog from './components/ShareSetDialog';
 import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
 import AdminShell from './components/AdminShell';
 import OrgSwitcher from './components/OrgSwitcher';
@@ -191,6 +192,9 @@ function AdminPage() {
 
   // The set whose delete dialog is open, or null.
   const [deletingSet, setDeletingSet] = useState(null);
+  // The set (and, when resubmitting a specific past version, its version
+  // number) whose share dialog is open, or null.
+  const [sharing, setSharing] = useState(null);
   // Whether the creation panel under the list is open.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -416,6 +420,19 @@ function AdminPage() {
     } catch (err) {
       setNotice({ tone: 'error', text: err.message || 'Could not copy that set.' });
     }
+  };
+
+  /** "Ask for a human review" — POST the appeal, then re-read the list so the row says Waiting. */
+  const handleAppeal = async (version, message) => {
+    if (!editingSet) return;
+    const res = await authFetch(adminApiUrl(`question-sets/${encodeURIComponent(editingSet.id)}/appeal`), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version, message }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setNotice({ tone: 'error', text: body.error || `Could not send that for review (${res.status}).` });
+    }
+    await fetchQuestionSets();
   };
 
   const handleSwitchOrg = (orgId) => {
@@ -1428,10 +1445,16 @@ function AdminPage() {
           ...group,
           items: group.items.map((item) =>
             (item.id === 'questionsets'
-              // No count until there is one to state. A "0" beside Question
-              // sets while the list is still loading is an empty state that
-              // lies, and this console has three of those already.
-              ? { ...item, count: questionSets.length || undefined }
+              ? {
+                ...item,
+                // No count until there is one to state. A "0" beside Question
+                // sets while the list is still loading is an empty state that
+                // lies, and this console has three of those already.
+                count: questionSets.length || undefined,
+                // The one number in this console that decays if nobody looks:
+                // sets the check sent back. Absent when zero (spec §10.3).
+                badge: questionSets.filter((s) => s.share && s.share.status === 'flagged').length || undefined,
+              }
               : item)),
         }))}
         footNavItems={FOOT_SECTIONS.length ? FOOT_SECTIONS : ADMIN_FOOT_SECTIONS}
@@ -1510,6 +1533,12 @@ function AdminPage() {
             onCopied={handleEditorCopied}
             onChanged={fetchQuestionSets}
             onCancel={handleCancelEdit}
+            /* Same org-console gate as the list's column and Share button,
+               plus the server's own per-row verdict: a set this account can
+               only read must not offer to publish it. */
+            canShare={Boolean(activeOrg) && !onPlatform && editingSet.canManage !== false}
+            onShare={(version) => setSharing({ set: editingSet, version })}
+            onAppeal={handleAppeal}
           />
         ) : (
           <>
@@ -1647,6 +1676,11 @@ function AdminPage() {
               /* Only inside an organisation: there is nowhere to copy TO in
                  platform mode, and the endpoint refuses without an org. */
               onCopy={activeOrg ? handleCopySet : undefined}
+              /* The share pipeline is an org-console feature. Engage's own
+                 library never goes through it, so platform mode gets neither
+                 the "Who can see it" column nor the row action. */
+              showVisibility={Boolean(activeOrg) && !onPlatform}
+              onShare={activeOrg && !onPlatform ? (set) => setSharing({ set, version: null }) : undefined}
               createOpen={isCreateOpen}
             >
               {(isCreateOpen || visibleSets.length === 0) && (
@@ -1888,6 +1922,23 @@ function AdminPage() {
           onCancel={() => setDeletingSet(null)}
           onDeleted={handleSetDeleted}
           onDeactivate={handleDeactivateInstead}
+        />
+      )}
+
+      {/*
+        THE SHARE DIALOG. See components/ShareSetDialog.jsx: it submits the
+        active (or a chosen past) version for the content check and becomes
+        the progress panel — closing it keeps the job running, so the outcome
+        lands in the row via `onOutcome` refreshing the list, not in this
+        window.
+      */}
+      {sharing && (
+        <ShareSetDialog
+          set={sharing.set}
+          version={sharing.version}
+          onClose={() => setSharing(null)}
+          onOutcome={() => { fetchQuestionSets(); }}
+          onNeedsChanges={() => { handleEditQuestionSet(sharing.set); }}
         />
       )}
 
