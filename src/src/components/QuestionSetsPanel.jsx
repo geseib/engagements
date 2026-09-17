@@ -335,7 +335,7 @@ export default function QuestionSetsPanel({
               </button>
             </div>
           ) : (
-            <table className="qsets-tbl">
+            <table className={`qsets-tbl${showVisibility ? ' qsets-tbl--vis' : ''}`}>
               <thead>
                 <tr>
                   <th className="qsets-col-set">Set</th>

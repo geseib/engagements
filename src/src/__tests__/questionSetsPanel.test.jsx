@@ -392,6 +392,7 @@ describe('who can see it', () => {
     mount({ questionSets: VIS });
     expect(screen.queryByRole('columnheader', { name: /who can see it/i })).toBeNull();
     expect(screen.queryByText('Needs changes')).toBeNull();
+    expect(screen.getByRole('table')).not.toHaveClass('qsets-tbl--vis');
   });
   test('each row says who can see it, from the share stamp', () => {
     mount({ questionSets: VIS, showVisibility: true });
@@ -399,6 +400,7 @@ describe('who can see it', () => {
     expect(within(rowFor('Private one')).getByText('Private')).toBeInTheDocument();
     expect(within(rowFor('Public one')).getByText('Public v2')).toBeInTheDocument();
     expect(within(rowFor('Flagged one')).getByText('Needs changes')).toHaveAttribute('title', expect.stringMatching(/what was flagged/));
+    expect(screen.getByRole('table')).toHaveClass('qsets-tbl--vis');
   });
   test('Share is offered on rows you manage, and calls back with the set', () => {
     const onShare = jest.fn();

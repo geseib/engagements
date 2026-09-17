@@ -260,12 +260,16 @@
 .qsets-col-state { width: 26%; }
 .qsets-col-when  { width: 12%; }
 .qsets-col-acts  { width: 16%; }
-/* Org consoles only (showVisibility). NOT funded by shrinking the six columns
-   above: rowActionsReachable.test.js asserts they sum to exactly 100, and this
-   column is additive rather than carved out of --col-set/--col-state (see
-   task-17-report.md for why). 113% declared while shown, 100% while hidden —
-   table-layout: fixed distributes either case; only a browser can show it. */
+/* Org consoles only (showVisibility). The base six above stay pinned to 100
+   for the platform console, where this column is absent
+   (rowActionsReachable.test.js). When it is present the table also carries
+   .qsets-tbl--vis, below, which is what actually funds this column's width. */
 .qsets-col-vis   { width: 13%; }
+/* With "Who can see it" present the seven columns still sum to 100: the
+   visibility column takes its width from Set and State, never from the
+   table's edge (__tests__/rowActionsReachable.test.js pins both sums). */
+.qsets-tbl--vis .qsets-col-set   { width: 22%; }
+.qsets-tbl--vis .qsets-col-state { width: 19%; }
 
 /* A SINGLE TEXT NODE with min-width:0, never a flex container with span
    children — host spec §5.1, audit A2: `text-overflow` is inert on a flex box,
