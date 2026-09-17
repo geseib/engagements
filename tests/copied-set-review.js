@@ -35,6 +35,7 @@ class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class BatchWriteCommand { constructor(i) { this.input = i; this.type = 'batchWrite'; } }
+class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -46,6 +47,18 @@ const fakeDoc = {
         return { Item: it ? { ...it } : undefined };
       }
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
+      case 'update': {
+        const k = key(inp.Key.PK, inp.Key.SK);
+        const item = store.get(k) || { ...inp.Key };
+        const names = inp.ExpressionAttributeNames || {};
+        const values = inp.ExpressionAttributeValues || {};
+        for (const part of String(inp.UpdateExpression).replace(/^SET\s+/i, '').split(/,\s*/)) {
+          const [lhs, rhs] = part.split(/\s*=\s*/);
+          item[names[lhs] || lhs] = values[rhs];
+        }
+        store.set(k, item);
+        return {};
+      }
       case 'batchWrite': {
         for (const reqs of Object.values(inp.RequestItems || {})) {
           for (const r of reqs) {
@@ -79,7 +92,7 @@ const stubs = new Map([
   ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
   ['@aws-sdk/lib-dynamodb', {
     DynamoDBDocumentClient: { from: () => fakeDoc },
-    PutCommand, GetCommand, QueryCommand, DeleteCommand, BatchWriteCommand,
+    PutCommand, GetCommand, QueryCommand, DeleteCommand, BatchWriteCommand, UpdateCommand,
   }],
   ['@aws-sdk/client-kms', kmsStub.exports],
 ]);
