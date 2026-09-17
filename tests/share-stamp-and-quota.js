@@ -1,4 +1,5 @@
 // tests/share-stamp-and-quota.js
+const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const H = require('./helpers/moderation-harness');
@@ -51,6 +52,18 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     await K.recordUnits(db, 'engage-test', 'org_acme', 31, { now });
     await K.recordUnits(db, 'engage-test', 'org_acme', 2, { now });
     assert.strictEqual(H.state.ddb.get('ORG#org_acme|CHECKS#2026-09-17').units, 33);
+  });
+  await H.test('every expression that names the reserved word `day` aliases it as #day', () => {
+    // DynamoDB refuses `day` unaliased; the stub accepts either spelling, so
+    // the guard has to be on the source that ships.
+    const src = fs.readFileSync(path.join(H.REPO, 'lambda-functions/admin/shared/check-quota.js'), 'utf8');
+    const expressions = [...src.matchAll(/UpdateExpression:\s*'([^']*)'/g)].map((m) => m[1]);
+    assert.ok(expressions.length >= 2, `expected the two update expressions, found ${expressions.length}`);
+    for (const e of expressions) {
+      assert.ok(!/(^|[\s,])day\s*=/.test(e), `an expression uses the reserved word unaliased: ${e}`);
+    }
+    assert.ok(expressions.some((e) => /#day\s*=\s*:day/.test(e)), 'no expression writes #day');
+    assert.ok(/ExpressionAttributeNames:\s*\{\s*'#day':\s*'day'\s*\}/.test(src), "the names map does not carry '#day': 'day'");
   });
   H.summary();
 })();
