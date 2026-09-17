@@ -1,9 +1,8 @@
 // tests/moderation-harness.js
-const path = require('path');
 const assert = require('assert');
 const H = require('./helpers/moderation-harness');
 H.install();
-const { PutCommand, UpdateCommand, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { PutCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const db = DynamoDBDocumentClient.from({});
 
@@ -73,6 +72,28 @@ const db = DynamoDBDocumentClient.from({});
     await s3.send(new PutObjectCommand({ Bucket: 'b', Key: 'k', Body: '{"a":1}' }));
     const got = await s3.send(new GetObjectCommand({ Bucket: 'b', Key: 'k' }));
     assert.strictEqual(await got.Body.transformToString(), '{"a":1}');
+  });
+  await H.test('a conditional put on bare equality succeeds when the status matches and is refused when it does not', async () => {
+    H.reset();
+    await db.send(new PutCommand({ TableName: 't', Item: { PK: 'B', SK: 'REVIEW', status: 'flagged' } }));
+    await db.send(new PutCommand({
+      TableName: 't', Item: { PK: 'B', SK: 'REVIEW', status: 'appealed' },
+      ConditionExpression: '#s = :from',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: { ':from': 'flagged' },
+    }));
+    assert.strictEqual(H.state.ddb.get('B|REVIEW').status, 'appealed');
+    let refused = null;
+    try {
+      await db.send(new PutCommand({
+        TableName: 't', Item: { PK: 'B', SK: 'REVIEW', status: 'published' },
+        ConditionExpression: '#s = :from',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: { ':from': 'flagged' },
+      }));
+    } catch (e) { refused = e; }
+    assert.ok(refused && refused.name === 'ConditionalCheckFailedException', 'the bare equality condition was not enforced');
+    assert.strictEqual(H.state.ddb.get('B|REVIEW').status, 'appealed');
   });
   H.summary();
 })();
