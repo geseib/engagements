@@ -1099,11 +1099,14 @@ Resources:
       # this is generous for any ordinary set — and a set large enough to
       # exhaust it leaves the version visibly `checking` rather than silently
       # unreviewed. See the handler's header.
-      Timeout: 300
+      Timeout: 900
       Handler: check-question-set.handler
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
+          ACCOUNT_ID: !Ref AWS::AccountId
+          CHECK_DAILY_CAP: '20'
       Policies:
         # Decrypt only: it reads the org's questions to judge them and writes
         # nothing into an org partition, so it never mints a key.
@@ -1117,8 +1120,28 @@ Resources:
             - Effect: Allow
               Action: [ bedrock:ApplyGuardrail ]
               Resource: !GetAtt ContentGuardrail.GuardrailArn
+            # THE WORKER. The POST self-invokes this function with
+            # InvocationType 'Event' so the check runs against the 900s above
+            # and never against the HTTP API's 30s ceiling.
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
+            # The sentence 06-share-rejected.html promises: one Haiku call per
+            # flagged question (shared/finding-explanations.js).
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # The snapshot a person reviews (spec §3.3) lives under moderation/ in
+        # the prompts bucket; the lifecycle rule below expires it in 30 days.
+        - S3CrudPolicy:
+            BucketName: !Ref AIPromptsBucket
       Events:
         CheckSet:
           Type: HttpApi
@@ -1126,6 +1149,14 @@ Resources:
             ApiId: !Ref RestApi
             Path: /question-sets/{setId}/check
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        CheckSetJob:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/check/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -1175,6 +1206,40 @@ Resources:
             ApiId: !Ref RestApi
             Path: /question-sets/{setId}/publish
             Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  AppealQuestionSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-appeal-question-set'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: appeal-question-set.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # Decrypt only: it reads the set's name for the queue pointer and
+        # writes nothing into an org partition but the plaintext share stamp.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        AppealSet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /question-sets/{setId}/appeal
+            Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -4371,6 +4436,16 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          # Moderation snapshots (spec D9): deleted on decision by the handler;
+          # this is the backstop for one that was never decided.
+          - Id: moderation-snapshots-30d
+            Status: Enabled
+            Prefix: moderation/
+            ExpirationInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
       Tags:
         - Key: Environment
           Value: !Ref Environment
