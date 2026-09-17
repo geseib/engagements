@@ -46,6 +46,10 @@ const T = 'engage-test';
     assert.strictEqual(await R.transitionReview(db, T, REF, 2, R.STATUS.FLAGGED, { status: R.STATUS.APPEALED }), null);
     const passed = await R.transitionReview(db, T, REF, 2, [R.STATUS.ESCALATED, R.STATUS.APPEALED], { status: R.STATUS.PASSED, decidedBy: 'dai' });
     assert.strictEqual(passed.status, R.STATUS.PASSED);
+    const moved2 = await R.transitionReview(db, T, REF, 2, R.STATUS.PASSED, { status: R.STATUS.FLAGGED, PK: 'ELSEWHERE', SK: 'NOTREVIEW', version: 99 });
+    assert.deepStrictEqual({ PK: moved2.PK, SK: moved2.SK, version: moved2.version }, { ...R.reviewKey(REF, 2), version: 2 }, 'a patch moved the row or relabelled its version');
+    assert.strictEqual((await R.readReview(db, T, REF, 2)).status, R.STATUS.FLAGGED);
+    assert.strictEqual(H.state.ddb.has('ELSEWHERE|NOTREVIEW'), false, 'a row was written under the forged key');
   });
   await H.test('isUnfinished is true only for a checking row past the stale window', () => {
     const now = Date.parse('2026-09-17T10:20:00.000Z');

@@ -192,7 +192,15 @@ async function transitionReview(db, tableName, ref, version, from, patch = {}) {
   if (!WRITABLE.includes(patch.status)) throw new Error(`set-review: refusing to write status ${JSON.stringify(patch.status)}`);
   const current = await readReview(db, tableName, ref, version);
   if (!froms.includes(current.status)) return null;
-  const item = { ...current, ...reviewKey(ref, version), ...patch, transitionedAt: new Date().toISOString() };
+  const item = {
+    ...current,
+    ...patch,
+    // The keys and the version come LAST: a patch can change the state and
+    // add facts, never move the row or relabel which version it describes.
+    ...reviewKey(ref, version),
+    version: current.version === undefined ? (version === null || version === undefined ? null : version) : current.version,
+    transitionedAt: new Date().toISOString(),
+  };
   const values = { ':s0': current.status };
   try {
     await db.send(new PutCommand({
