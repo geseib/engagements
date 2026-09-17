@@ -32,9 +32,13 @@ async function appendReviewEvent(db, tableName, ref, event, data = {}, { now = n
   seq = (seq + 1) % 1000000;
   const at = now.toISOString();
   const item = {
+    ...data,
+    // The computed keys come LAST so a caller's `data` can never rename the
+    // event, move the row to another partition, or forge its time.
     PK: reviewLogPk(ref),
     SK: `${at}#${String(seq).padStart(6, '0')}#${event}`,
-    event, at, ...data,
+    event,
+    at,
   };
   await db.send(new PutCommand({ TableName: tableName, Item: item }));
   return item;
