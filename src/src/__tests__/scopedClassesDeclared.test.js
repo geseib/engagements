@@ -57,6 +57,7 @@ const SURFACES = [
   ['PrivacyPanel', 'priv'],
   ['UsageMeter', 'usg'],
   ['ArchivePanel', 'arch'],
+  ['ShareSetDialog', 'pubshare'],
 ];
 
 /** Class names appearing in string literals and template literals in the JSX. */
