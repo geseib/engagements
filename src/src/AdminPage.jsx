@@ -1698,11 +1698,10 @@ function AdminPage() {
             />
           )}
 
-          {resolvedTab === 'archive' && (
-            <div className="tab-content">
-              <ArchivePanel environment={environment} />
-            </div>
-          )}
+          {/* No .tab-content wrapper: that class carries a 500px min-height and
+              a fade-in written for the paper tabs, and the archive owns its own
+              frame now (ArchivePanel.css). */}
+          {resolvedTab === 'archive' && <ArchivePanel environment={environment} />}
 
           {/* No .tab-content wrapper: that class carries a 500px min-height and
               a fade-in written for the paper tabs, and the converted screens

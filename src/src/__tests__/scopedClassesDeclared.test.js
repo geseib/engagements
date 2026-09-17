@@ -56,6 +56,7 @@ const SURFACES = [
   ['BillingPanel', 'bill'],
   ['PrivacyPanel', 'priv'],
   ['UsageMeter', 'usg'],
+  ['ArchivePanel', 'arch'],
 ];
 
 /** Class names appearing in string literals and template literals in the JSX. */

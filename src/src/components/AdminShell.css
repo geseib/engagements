@@ -406,7 +406,9 @@
    theme its content actually is rather than the theme we want it to be. When
    the tabs are converted, AdminPage passes contentTheme="dark" and this block
    goes. The seam is visible on purpose: a half-converted console that says so
-   is better than one that hides the boundary behind an unreadable panel. */
+   is better than one that hides the boundary behind an unreadable panel.
+   2026-09-17: Settings is the ONE section left on it (Archive converted with
+   ArchivePanel.css). */
 .adm-work-body[data-theme="light"] {
   background: #f5f7fa;
   padding: 20px;

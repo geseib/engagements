@@ -181,7 +181,7 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 | **Prompts — summary editor** | `AIPromptManager.jsx:146-878` + `.css` | ok `.pmgr` | ok | ok | ok | ok (`Modal`) | ok | ok | ok `promptEditorPalette`, `promptManagerScope`, `promptManagerDialogs` |
 | **Prompts — advisor** | `AIPromptManager.jsx:881-1086` | ok `.pmgr` | ok | ok | ok | ok (`Modal`) | ok | ok | ok `promptManagerDialogs` |
 | **Prompts — generation library** | `components/AIGenerationPromptEditor.jsx` | ok `.pgen` | ok | ok | ok | ok — a **place**, no longer an overlay | ok — `.padm-back` | ok | ok `aiGenerationPromptEditor` |
-| Archive | `components/ArchivePanel.jsx` + `styles.css:3580+` | FAIL⁴ | FAIL⁴ | **FAIL¹³** | FAIL | **FAIL²¹** | FAIL | FAIL | FAIL |
+| **Archive** | `components/ArchivePanel.{jsx,css}` | ok `.arch` | ok | ok `consoleSections.js` `contentTheme:'dark'` | ok | ok (table, fixed layout; three `Modal` confirms) | ok — one `arch-x` + footer exit, one `closeDialog` | ok — measured, tints composited | ok `archivePalette`, `archivePanel`, `scopedClassesDeclared` |
 | Settings | `AdminPage.jsx:1153+` + `styles.css:4760` | FAIL⁴ | FAIL⁴ | **FAIL¹³** | FAIL | — | — | FAIL | FAIL |
 
 ### Authoring and shared
@@ -247,7 +247,9 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
     `AdminShell.css:410-413` paints `#f5f7fa` under them — three of six sections on the
     wrong side of the seam." **Prompts is fixed** (§6.2 items 11-15): the section carries
     `contentTheme: 'dark'` and `AIPromptManager.css` converted in the same change, which
-    is the only safe order. Archive and Settings are still light; **two** of six now.
+    is the only safe order. **Archive is fixed too** (2026-09-17): `ArchivePanel.css`
+    and `contentTheme: 'dark'` landed in one change and the `.archive-*` rules left
+    `styles.css`. Settings is the last section on the paper patch; **one** of six now.
 14. **Was**: "`components/AIPromptManager.css` declares **global** selectors from a
     component stylesheet — `.btn-primary`, `.btn-secondary`, `.modal-overlay`,
     `.modal-content`, `.large-modal` (with `!important`), `.status-badge`,
@@ -287,8 +289,11 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
     area reached by the same chooser and left by the same control as the summary
     library — which is what the owner asked for when they said the two were *"slightly
     different. they should be the same."*
-21. `styles.css:3632` — `.archive-grid` is a card grid. RATIONALE §10: *"Cards for the
-    archive. Rejected. 214 items."*
+21. **Was**: "`styles.css:3632` — `.archive-grid` is a card grid. RATIONALE §10: *'Cards
+    for the archive. Rejected. 214 items.'*" **Fixed 2026-09-17**: one `.arch-tbl`
+    (`table-layout: fixed`) to `20-archive.html`, the three tabs and both card grids
+    gone, `21-archive-down.html` as the outage state, and the rules deleted from the
+    monolith. `__tests__/archivePalette.test.js` refuses their return.
 22. `BuilderPage.css` — 140 hex literals, bare `.modal`, `.btn`, `.tab`, `.form-group`
     (`:63`), `.section`, `.input`, `.close`, `.nav`. Not designed at all (RATIONALE §1:
     *"Not designed: the `/builder` route"*).
@@ -359,17 +364,19 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 
 ## 4. Headline findings
 
-**The console is four-fifths converted and the seam now runs through Archive.** Question
-sets, Sessions, Users and **Prompts** are dusk, namespaced, ladder-correct and
-contrast-asserted. Archive and Settings are still paper markup on a `#f5f7fa` patch that
-`AdminShell` paints specifically so they do not render at 1.4:1. That patch
-(`AdminShell.css:402-413`) is marked "DELETE WHEN WAVE D LANDS" and has two sections left
+**The console is five-sixths converted and the seam now runs through Settings alone.**
+Question sets, Sessions, Users, **Prompts** and **Archive** are dusk, namespaced,
+ladder-correct and contrast-asserted. Settings is the last paper markup on the `#f5f7fa`
+patch that `AdminShell` paints specifically so it does not render at 1.4:1. That patch
+(`AdminShell.css:402-413`) is marked "DELETE WHEN WAVE D LANDS" and has one section left
 to outlive.
 
 **The worst surfaces, in order.**
 
-1. **Archive** — a card grid over 214 items, in the monolith, unscoped, untested, and the
-   one design doc that mentions it says the format cannot round-trip a set.
+1. ~~**Archive**~~ — **converted 2026-09-17.** One table on the list idiom, three `Modal`
+   confirms, the outage state, `contentTheme: 'dark'`, and the card rules gone from the
+   monolith; the full-fidelity snapshots of 2026-09-15 had already answered the
+   round-trip complaint.
 2. **`/builder`** — 1,422 lines of undesigned CSS, never in scope for any redesign,
    opening in a second tab that does not know which set you were looking at.
 3. ~~**Prompts (editor + advisor + generation editor)**~~ — **converted.** It was "three

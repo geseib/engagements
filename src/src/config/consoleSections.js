@@ -206,6 +206,9 @@ const SECTION = {
     icon: 'Package',
     title: 'Archive',
     subtitle: 'Backups of Engage and public content. Every environment reads and restores the same store.',
+    // Converted with ArchivePanel.css: the markup and the theme change in the
+    // same commit, or the dusk table renders on AdminShell's paper patch.
+    contentTheme: 'dark',
   },
   settings: {
     id: 'settings',
