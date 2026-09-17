@@ -174,6 +174,10 @@ exports.handler = async (event) => {
       // versioned yet", not as an error. `versions` is likewise [] until the
       // set is first replaced or migrated.
       activeVersion: toVersion(item.activeVersion),
+      // THE SHARE STAMP, VERBATIM. The list's "Who can see it" reads this and
+      // nothing else (shared/share-stamp.js) — the alternative is one REVIEW
+      // read per version per set on every list load.
+      share: item.share && typeof item.share === 'object' ? item.share : null,
       versions: versionList(item)
         .map((v) => ({
           version: toVersion(v && v.version),

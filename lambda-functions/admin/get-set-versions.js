@@ -7,7 +7,7 @@ const {
 } = require('./shared/set-version');
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
-const { readReviews } = require('./shared/set-review');
+const { readReviews, publishedKey, isUnfinished } = require('./shared/set-review');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -107,6 +107,16 @@ exports.handler = async (event) => {
     */
     const reviews = await readReviews(db, tableName, found.ref, entries.map((e) => e.version));
 
+    // WHERE EACH VERSION WENT. One GetItem per version: this is the editor's
+    // Versions panel, not the list, and a set has a handful of versions.
+    const published = new Map();
+    for (const e of entries) {
+      const res = await db.send(new GetCommand({ TableName: tableName, Key: publishedKey(found.ref, e.version) })); // eslint-disable-line no-await-in-loop
+      published.set(e.version, res && res.Item
+        ? { publicSetId: res.Item.publicSetId, publicVersion: res.Item.publicVersion, at: res.Item.at }
+        : null);
+    }
+
     const versions = entries.map((entry) => ({
       version: entry.version,
       createdAt: entry.createdAt || null,
@@ -123,6 +133,11 @@ exports.handler = async (event) => {
       */
       review: (reviews.get(entry.version) || {}).status || 'unreviewed',
       reviewFindings: (reviews.get(entry.version) || {}).findings || [],
+      checkedAt: (reviews.get(entry.version) || {}).checkedAt || null,
+      reasons: (reviews.get(entry.version) || {}).reasons || [],
+      note: (reviews.get(entry.version) || {}).note || '',
+      unfinished: isUnfinished(reviews.get(entry.version)),
+      published: published.get(entry.version) || null,
       pinnedByGames: pinnedBySet
         .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)
         .map((g) => String(g.SK).replace('GAME#', ''))
