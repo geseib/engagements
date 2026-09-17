@@ -137,6 +137,14 @@ export default function QuestionsPanel({
   showDownload = true,
   /** `POST /admin/ai-generate-questions` — admins only, and Bedrock spend. */
   showAIAssist = true,
+  /**
+   * "Edit Q14" in the needs-changes banner (components/SetReviewBanner.jsx)
+   * sets this to a question id — bare, e.g. "q014", the same shape the
+   * questions route answers with (utils/questionRows.js:toRow reads `id`
+   * straight onto `row.sk`, and neither carries a `QUESTION#` prefix). The row
+   * scrolls into view and is briefly marked `.focused`.
+   */
+  focusQuestionId = null,
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -267,6 +275,21 @@ export default function QuestionsPanel({
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
   }, [dirty]);
+
+  /* ------------------------------------------------------------- focus --- */
+  // "Edit Q14" from the needs-changes banner. focusQuestionId is BARE (see the
+  // prop doc above) — stripping any `QUESTION#` prefix defensively is cheap
+  // insurance, not evidence one is expected here.
+  const [focusedSk, setFocusedSk] = useState(null);
+  useEffect(() => {
+    if (!focusQuestionId) return undefined;
+    const wanted = String(focusQuestionId).replace('QUESTION#', '');
+    setFocusedSk(wanted);
+    const el = document.querySelector(`[data-question-id="${wanted}"]`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+    const t = setTimeout(() => setFocusedSk(null), 2000);
+    return () => clearTimeout(t);
+  }, [focusQuestionId]);
 
   /* ------------------------------------------------- working-copy edits --- */
 
@@ -935,8 +958,9 @@ export default function QuestionsPanel({
             return (
               <li
                 key={row.uid}
-                className={`qs-question-row${row.removed ? ' removed' : ''}${badge && !row.removed ? ' changed' : ''}`}
+                className={`qs-question-row${row.removed ? ' removed' : ''}${badge && !row.removed ? ' changed' : ''}${row.sk && row.sk === focusedSk ? ' focused' : ''}`}
                 data-testid={`question-${rowIndex}`}
+                data-question-id={String(row.sk || '').replace('QUESTION#', '') || undefined}
               >
                 <div className="qs-question-main">
                   {!row.removed && (

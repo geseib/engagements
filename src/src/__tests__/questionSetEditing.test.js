@@ -329,6 +329,47 @@ describe('normalizeVersions', () => {
   });
 });
 
+// R16: normalizeVersions whitelisted its returned fields and silently dropped
+// every review fact the server sends (review, reviewFindings, checkedAt,
+// reasons, reviewNote, unfinished, published) — so versionChip(v) and
+// SetReviewBanner's `entry` prop would see nothing on the row the panel
+// actually renders, however faithfully the server answered.
+describe('normalizeVersions — the review facts pass through', () => {
+  it('passes all seven review facts through from the payload', () => {
+    const published = { publicSetId: 'orgacme-safety', publicVersion: 1, at: '2026-08-02T10:00:00.000Z' };
+    const rows = normalizeVersions([{
+      version: 1,
+      review: 'flagged',
+      reviewFindings: [{ questionId: 'q014', category: 'VIOLENCE', band: 'HIGH', explanation: 'Injuries in detail.' }],
+      checkedAt: '2026-08-19T10:00:00.000Z',
+      reasons: ['too graphic'],
+      reviewNote: 'Please soften Q14.',
+      unfinished: true,
+      published,
+    }]);
+    expect(rows[0].review).toBe('flagged');
+    expect(rows[0].reviewFindings).toEqual([
+      { questionId: 'q014', category: 'VIOLENCE', band: 'HIGH', explanation: 'Injuries in detail.' },
+    ]);
+    expect(rows[0].checkedAt).toBe('2026-08-19T10:00:00.000Z');
+    expect(rows[0].reasons).toEqual(['too graphic']);
+    expect(rows[0].reviewNote).toBe('Please soften Q14.');
+    expect(rows[0].unfinished).toBe(true);
+    expect(rows[0].published).toEqual(published);
+  });
+
+  it('defaults the seven review facts on a bare version row', () => {
+    const rows = normalizeVersions([{ version: 1 }]);
+    expect(rows[0].review).toBe('unreviewed');
+    expect(rows[0].reviewFindings).toEqual([]);
+    expect(rows[0].checkedAt).toBeNull();
+    expect(rows[0].reasons).toEqual([]);
+    expect(rows[0].reviewNote).toBe('');
+    expect(rows[0].unfinished).toBe(false);
+    expect(rows[0].published).toBeNull();
+  });
+});
+
 describe('nextVersionNumber', () => {
   it('is one past the highest version seen', () => {
     expect(nextVersionNumber(normalizeVersions([{ version: 1 }, { version: 3 }]))).toBe(4);

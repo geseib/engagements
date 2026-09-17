@@ -265,7 +265,18 @@ export function normalizeVersions(payload, activeVersion) {
         isActive: payloadDeclaresActive
           ? v.isActive === true
           : (activeVersion != null && version === Number(activeVersion)),
-        pinnedByGames: Array.isArray(v.pinnedByGames) ? v.pinnedByGames : []
+        pinnedByGames: Array.isArray(v.pinnedByGames) ? v.pinnedByGames : [],
+        // THE REVIEW FACTS, passed through rather than dropped. This whitelist
+        // used to stop at pinnedByGames, so versionChip(v) and the needs-changes
+        // banner's `entry` prop — both reading these fields off exactly this
+        // normalized row — saw nothing, whatever the server actually answered.
+        review: typeof v.review === 'string' ? v.review : 'unreviewed',
+        reviewFindings: Array.isArray(v.reviewFindings) ? v.reviewFindings : [],
+        checkedAt: v.checkedAt || null,
+        reasons: Array.isArray(v.reasons) ? v.reasons : [],
+        reviewNote: v.reviewNote || '',
+        unfinished: v.unfinished === true,
+        published: v.published && typeof v.published === 'object' ? v.published : null
       };
     })
     .filter((v) => Number.isFinite(v.version))
