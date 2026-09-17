@@ -50,6 +50,9 @@ const categories = [{ PK: 'ORG#org_x#SET#s#v2', SK: 'CATEGORY#c001', Name: 'Inju
     const a = P.contentHash(P.buildSnapshot({ source: { scope: 'org', orgId: 'o', setId: 's' }, version: 1, meta, categories, questions: [question, q2], checkedAt: 'T' }));
     const b = P.contentHash(P.buildSnapshot({ source: { scope: 'org', orgId: 'o', setId: 's' }, version: 1, meta, categories, questions: [q2, question], checkedAt: 'T' }));
     assert.strictEqual(a, b);
+    const renamed = { ...question, SK: 'QUESTION#q003' };
+    const c = P.contentHash(P.buildSnapshot({ source: { scope: 'org', orgId: 'o', setId: 's' }, version: 1, meta, categories, questions: [renamed, q2], checkedAt: 'T' }));
+    assert.notStrictEqual(a, c, 'a question with the same content but a different identity hashed the same');
   });
   await check('snapshotHasImages is true only when a question carries an Image', () => {
     const none = P.buildSnapshot({ source: { scope: 'org', orgId: 'o', setId: 's' }, version: 1, meta, categories, questions: [question], checkedAt: 'T' });
