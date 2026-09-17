@@ -117,32 +117,35 @@ exports.handler = async (event) => {
         : null);
     }
 
-    const versions = entries.map((entry) => ({
-      version: entry.version,
-      createdAt: entry.createdAt || null,
-      questionCount: entry.questionCount || 0,
-      categoryCount: entry.categoryCount || 0,
-      sourceFile: entry.sourceFile || '',
-      note: entry.note || '',
-      isActive: entry.version === activeVersion,
-      /*
-        PROJECTED EXPLICITLY, like every other field here. This map is a
-        whitelist: a field not named on it does not reach the client however
-        faithfully it is stored, which is why adding the row was only half the
-        work.
-      */
-      review: (reviews.get(entry.version) || {}).status || 'unreviewed',
-      reviewFindings: (reviews.get(entry.version) || {}).findings || [],
-      checkedAt: (reviews.get(entry.version) || {}).checkedAt || null,
-      reasons: (reviews.get(entry.version) || {}).reasons || [],
-      note: (reviews.get(entry.version) || {}).note || '',
-      unfinished: isUnfinished(reviews.get(entry.version)),
-      published: published.get(entry.version) || null,
-      pinnedByGames: pinnedBySet
-        .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)
-        .map((g) => String(g.SK).replace('GAME#', ''))
-        .filter((gameId) => endedByGameId.get(gameId) === false)
-    }));
+    const versions = entries.map((entry) => {
+      const review = reviews.get(entry.version) || {};
+      return {
+        version: entry.version,
+        createdAt: entry.createdAt || null,
+        questionCount: entry.questionCount || 0,
+        categoryCount: entry.categoryCount || 0,
+        sourceFile: entry.sourceFile || '',
+        note: entry.note || '',
+        isActive: entry.version === activeVersion,
+        /*
+          PROJECTED EXPLICITLY, like every other field here. This map is a
+          whitelist: a field not named on it does not reach the client however
+          faithfully it is stored, which is why adding the row was only half the
+          work.
+        */
+        review: review.status || 'unreviewed',
+        reviewFindings: review.findings || [],
+        checkedAt: review.checkedAt || null,
+        reasons: review.reasons || [],
+        reviewNote: review.note || '',
+        unfinished: isUnfinished(review),
+        published: published.get(entry.version) || null,
+        pinnedByGames: pinnedBySet
+          .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)
+          .map((g) => String(g.SK).replace('GAME#', ''))
+          .filter((gameId) => endedByGameId.get(gameId) === false)
+      };
+    });
 
     console.log(`📚 ${setId}: ${versions.length} version(s), active v${activeVersion ?? '-'}`);
 

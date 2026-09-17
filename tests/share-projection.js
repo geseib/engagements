@@ -17,13 +17,13 @@ async function seed() {
   H.reset();
   H.seedRow(await C.encryptItem(ORG, 'set', {
     PK: `ORG#${ORG}#SETS`, SK: `SET#${SET}`, name: 'Safety', engagementType: 'trivia', scope: 'org', orgId: ORG,
-    activeVersion: 3, versions: [{ version: 2, questionCount: 30 }, { version: 3, questionCount: 31 }], questionCount: 31,
+    activeVersion: 3, versions: [{ version: 2, questionCount: 30, note: 'Imported from the 2025 deck' }, { version: 3, questionCount: 31 }], questionCount: 31,
     share: { version: 3, status: 'flagged', at: '2026-09-17T10:00:00.000Z', contentHash: 'c'.repeat(64) },
   }));
   await R.writeReview(db, T, SRC, 2, { status: R.STATUS.PASSED, checkedAt: '2026-09-01T10:00:00.000Z' });
   H.seedRow({ ...R.publishedKey(SRC, 2), publicSetId: 'orgacme-safety', publicVersion: 1, at: '2026-09-01T10:01:00.000Z' });
   // Seed v3 review with a specific past checkedAt time so isUnfinished detects staleness
-  H.seedRow({ ...R.reviewKey(SRC, 3), status: R.STATUS.CHECKING, checkedAt: '2026-09-17T09:00:00.000Z', reasons: [], version: 3 });
+  H.seedRow({ ...R.reviewKey(SRC, 3), status: R.STATUS.CHECKING, checkedAt: '2026-09-17T09:00:00.000Z', reasons: [], note: 'Q14 needs the injury detail removed.', version: 3 });
 }
 const ev = (method, extra = {}) => H.orgEvent({ orgId: ORG, role: 'member', method, setId: SET, ...extra });
 (async () => {
@@ -40,6 +40,10 @@ const ev = (method, extra = {}) => H.orgEvent({ orgId: ORG, role: 'member', meth
     assert.strictEqual(v3.unfinished, true, 'a check from hours ago still reads as running');
     assert.strictEqual(v3.checkedAt, '2026-09-17T09:00:00.000Z');
     assert.deepStrictEqual(v3.reasons, []);
+    assert.strictEqual(v2.note, 'Imported from the 2025 deck', "the version's own note survives");
+    assert.strictEqual(v2.reviewNote, '', 'a passed review with no note reads empty');
+    assert.strictEqual(v3.note, '', 'v3 has no note of its own');
+    assert.strictEqual(v3.reviewNote, 'Q14 needs the injury detail removed.', "the review's note is its own field");
   });
   await H.test('the set list carries the share stamp verbatim', async () => {
     await seed();
