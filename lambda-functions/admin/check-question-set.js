@@ -92,10 +92,17 @@ exports.handler = async (event, context) => {
       publish: body.publish !== false,
       declaredNotice: Array.isArray(body.declaredNotice) ? body.declaredNotice.map(String).slice(0, 8) : [],
     };
-    await createJob(db, TABLE(), {
-      jobId, kind: 'set-check', requested: Number(meta.questionCount) || 0, request,
-      caller: { userId: callerUserId(event), username: callerUsername(event), orgId, orgRole: tenant.callerOrgRole(event) },
-    });
+    try {
+      await createJob(db, TABLE(), {
+        jobId, kind: 'set-check', requested: Number(meta.questionCount) || 0, request,
+        caller: { userId: callerUserId(event), username: callerUsername(event), orgId, orgRole: tenant.callerOrgRole(event) },
+      });
+    } catch (error) {
+      // The lock was taken for a job that will never exist: release it now
+      // rather than leaving the version "checking" for the stale window.
+      await abandonCheck(db, TABLE(), source, version, { jobId });
+      throw error;
+    }
     try {
       await lambda.send(new InvokeCommand({
         FunctionName: context.functionName,
@@ -108,7 +115,13 @@ exports.handler = async (event, context) => {
       await failJob(db, TABLE(), jobId, `Could not start the content check: ${error.message}`);
       return json(500, { error: `Could not start the content check: ${error.message}`, jobId });
     }
-    await writeShareStamp(db, TABLE(), source, { version, status: 'checking', jobId });
+    try {
+      await writeShareStamp(db, TABLE(), source, { version, status: 'checking', jobId });
+    } catch (error) {
+      // The worker is already running and writes the real outcome over this
+      // stamp; the submit succeeded and must say so.
+      console.warn(`⚠️ share stamp not written for ${orgId}/${setId} v${version} (${error.message}); the worker will write the outcome`);
+    }
     console.log(`🔎 dispatched check ${jobId} for ${orgId}/${setId} v${version}`);
     return json(202, { jobId, version, status: 'queued' });
   } catch (error) {

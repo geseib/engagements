@@ -301,6 +301,48 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual((await review()).status, R.STATUS.PASSED);
     assert.strictEqual(stamp().status, 'published');
   });
+  await H.test('a job row that cannot be written releases the lock and answers 500', async () => {
+    await seed();
+    const realSend = db.send.bind(db);
+    let tripped = false;
+    db.send = async (cmd) => {
+      if (!tripped && cmd && cmd.kind === 'put' && cmd.input && cmd.input.Item && cmd.input.Item.PK === 'AIJOBS') {
+        tripped = true;
+        throw new Error('jobs table down');
+      }
+      return realSend(cmd);
+    };
+    try {
+      const res = await handler(post(), H.ctx());
+      assert.strictEqual(res.statusCode, 500);
+      assert.strictEqual((await review()).status, R.STATUS.UNREVIEWED, 'the lock outlived the failed job write');
+      assert.strictEqual(H.state.dispatched.length, 0);
+    } finally {
+      db.send = realSend;
+    }
+  });
+  await H.test('a stamp that cannot be written after the dispatch is not a failed submit', async () => {
+    await seed();
+    const realSend = db.send.bind(db);
+    let tripped = false;
+    db.send = async (cmd) => {
+      if (!tripped && cmd && cmd.kind === 'update' && cmd.input && String(cmd.input.UpdateExpression || '').includes('#share')) {
+        tripped = true;
+        throw new Error('stamp write down');
+      }
+      return realSend(cmd);
+    };
+    try {
+      const res = await handler(post(), H.ctx());
+      assert.strictEqual(res.statusCode, 202, res.body);
+      const { jobId } = parse(res);
+      assert.ok(jobId);
+      assert.strictEqual(H.state.dispatched.length, 1);
+      assert.strictEqual((await review()).status, R.STATUS.CHECKING, 'the lock stays — the worker owns it now');
+    } finally {
+      db.send = realSend;
+    }
+  });
 
   H.summary();
 })();
