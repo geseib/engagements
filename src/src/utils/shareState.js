@@ -13,6 +13,21 @@ export const STALE_CHECK_MS = 15 * 60 * 1000;
 const PRIVATE = { key: 'private', label: 'Private', title: 'Only your organisation can see this set.' };
 
 export function shareStateOf(set, nowMs = Date.now()) {
+  /*
+   * AN ENGAGE-LIBRARY OR PUBLIC-LIBRARY ROW IS THE PUBLISHED COPY ITSELF —
+   * checked BEFORE the stamp is read, and regardless of whether one exists.
+   * The org-console list also shows ORG -> PLATFORM -> PUBLIC rows
+   * (get-question-sets.js; spec §0 readableScopes), and those rows carry no
+   * `share` stamp of their own (the stamp lives on the ORG row that shared
+   * FROM it) — so falling through to the stamp check below said "Private"
+   * for a set every organisation can already read.
+   */
+  if (set && set.scope === 'public') {
+    return { key: 'public', label: 'Public', title: 'In the public library. Anyone using Engage can read and copy it.' };
+  }
+  if (set && set.scope === 'platform') {
+    return { key: 'public', label: 'Everyone', title: "Engage's shared library — every organisation can read and copy it." };
+  }
   const share = set && set.share && typeof set.share === 'object' ? set.share : null;
   if (!share || !share.status) return PRIVATE;
   const active = Number(set.activeVersion) || null;
@@ -26,7 +41,10 @@ export function shareStateOf(set, nowMs = Date.now()) {
           title: `v${shared} is public; your v${active} has not been shared. Submit it for review to update the library.`,
         };
       }
-      return { key: 'public', label: `Public v${shared || ''}`.trim(), title: 'In the public library. Anyone using Engage can read and copy it.' };
+      // A legacy unversioned set's share carries no version number
+      // (set-version.js's versionList is [] for it) — say "Public", not the
+      // trailing-v "Public v" that `.trim()` alone never removed.
+      return { key: 'public', label: shared ? `Public v${shared}` : 'Public', title: 'In the public library. Anyone using Engage can read and copy it.' };
     }
     case 'checking': {
       const age = share.at ? nowMs - Date.parse(share.at) : 0;

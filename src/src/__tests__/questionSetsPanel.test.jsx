@@ -400,6 +400,9 @@ describe('who can see it', () => {
     expect(within(rowFor('Private one')).getByText('Private')).toBeInTheDocument();
     expect(within(rowFor('Public one')).getByText('Public v2')).toBeInTheDocument();
     expect(within(rowFor('Flagged one')).getByText('Needs changes')).toHaveAttribute('title', expect.stringMatching(/what was flagged/));
+    // An Engage-library (platform-scope) row carries no share stamp of its
+    // own — it is not Private just because nobody has shared FROM it.
+    expect(within(rowFor('Engage one')).getByText('Everyone')).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveClass('qsets-tbl--vis');
   });
   test('Share is offered on rows you manage, and calls back with the set', () => {

@@ -8,6 +8,22 @@ describe('shareStateOf — the "Who can see it" column', () => {
     expect(shareStateOf({}).key).toBe('private');
     expect(shareStateOf({ share: null }).label).toBe('Private');
   });
+  test('a public-library row is visible to everyone, stamp or no stamp', () => {
+    expect(shareStateOf({ scope: 'public' })).toMatchObject({ key: 'public', label: 'Public' });
+    expect(shareStateOf({ scope: 'public' }).title).toMatch(/anyone using engage/i);
+    // A row this org's own console never manages carries no share stamp at
+    // all — the label must not depend on one being present.
+    expect(shareStateOf({ scope: 'public', share: undefined })).toMatchObject({ key: 'public', label: 'Public' });
+  });
+  test("an Engage-library (platform-scope) row reads as Everyone's, not Private", () => {
+    const s = shareStateOf({ scope: 'platform' });
+    expect(s).toMatchObject({ key: 'public', label: 'Everyone' });
+    expect(s.title).toMatch(/every organisation/i);
+  });
+  test('a published stamp with no recorded version says Public, not "Public v"', () => {
+    // Minor #11 / the legacy-unversioned-set case: `shared` is falsy.
+    expect(shareStateOf({ share: { status: 'published', version: null, at: at(60) } }).label).toBe('Public');
+  });
   test('a published stamp at the active version is public, and names the version', () => {
     const s = shareStateOf({ activeVersion: 2, share: { status: 'published', version: 2, publicVersion: 1, at: at(60) } });
     expect(s).toMatchObject({ key: 'public', label: 'Public v2' });
