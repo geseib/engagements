@@ -1,5 +1,28 @@
 # How a "Workie" gets chosen — the current map
 
+> ## ⚠️ SUPERSEDED IN PART — 2026-09-18
+>
+> The two-systems headline below is still the single most useful thing to know: the **persona**
+> (the voice) and the **prompt** (what it says) are resolved independently and never consult each
+> other. Keep reading for that. But several specifics are now wrong, and one whole row of the
+> table has been fixed:
+>
+> - **"host override: none" for the prompt is out of date in spirit.** Neither field could be set
+>   by a host from the host dialog at all — it opened the console's editor without the two lists,
+>   so both selects rendered one dead option. Both are now settable there.
+> - **The org prompt is no longer invisible**, hosts may read the persona list, and the ownership
+>   check on `PUT /games/{id}/persona` exists. Items 1, 2, 7 and 8 of this file's own list are fixed.
+> - **A dangling id is no longer accepted silently.** Writing a prompt or persona id that resolves
+>   to nothing is refused, with the exception of a value a builder did not touch — so renaming an
+>   old set still works, and the editor now shows such a value as unavailable with a one-click clear.
+> - **A copy no longer carries what the destination cannot read**, and `/builder`'s seven hardcoded
+>   prompt ids — which the seeder never mints — are gone.
+> - The resolution ORDERS documented below were re-read on 2026-09-18 and still hold, including
+>   that `resolvePromptTemplate` never consults game type. That last fact is now pinned by
+>   `tests/ai-prompt-resolution.js`, because user-facing copy depends on it.
+>
+> The plan that did this: `docs/superpowers/plans/2026-09-18-workie-settings-and-defects.md`.
+
 *2026-09-02. Research only: no code changed. Every claim carries a `file:line`.*
 
 ## The headline: it is TWO systems, not one

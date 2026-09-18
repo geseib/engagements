@@ -383,6 +383,23 @@ function seedPlatformSet(setId, name) {
        ever have noticed whether a copy kept them. */
     promptId: 'p-retro-summary', personaId: 'coach',
   });
+  /* …AND THE TWO ROWS THOSE IDS NAME. They were absent until Task 2 of the
+     Workie plan, and their absence was invisible: `copy-question-set.js` spread
+     the ids across without asking whether anything answered to them, so the
+     copy assertion below passed on a set whose summary prompt and voice did not
+     exist. It now resolves both against the DESTINATION's libraries and drops
+     what it cannot follow — so a fixture that wants to prove the Workie SURVIVES
+     a copy has to give it something to survive as. Platform rows are plaintext
+     (they have no tenant to key them to) and personas are platform-global. */
+  store.set(key('AIPROMPTS', 'AIPROMPT#p-retro-summary'), {
+    PK: 'AIPROMPTS', SK: 'AIPROMPT#p-retro-summary', promptId: 'p-retro-summary',
+    name: 'Retro summary', category: 'trivia', gameType: 'trivia', status: 'active',
+    s3Key: 'prompts/trivia/p-retro-summary/v1.json',
+  });
+  store.set(key('AIPROMPTS', 'PERSONA#coach'), {
+    PK: 'AIPROMPTS', SK: 'PERSONA#coach', personaId: 'coach', name: 'Coach',
+    voice: 'You are encouraging and brief.', gameTypes: ['all'], status: 'active',
+  });
   store.set(key(`SET#${setId}`, 'CATEGORY#c001'), {
     PK: `SET#${setId}`, SK: 'CATEGORY#c001', Name: 'Pricing', QuestionCount: 2,
   });
@@ -586,11 +603,20 @@ const say = (s) => console.log(s);
     assert.strictEqual(meta.visibility, 'private');
 
     /*
-      THE WORKIE COMES WITH IT, and this is a CHARACTERISATION test rather than
-      a fix: the handler builds the copy from `...meta`, so it already carried
-      these. Nothing proved it, because the fixture had no `promptId` at all —
-      and "it works because of a spread nobody named" is exactly the kind of
-      thing a later tidy-up into an explicit field list removes in silence.
+      THE WORKIE COMES WITH IT — as long as this organisation can follow it.
+
+      This began as a CHARACTERISATION test: the handler built the copy from
+      `...meta`, so it already carried these, and nothing proved it because the
+      fixture had no `promptId` at all. "It works because of a spread nobody
+      named" is exactly the kind of thing a later tidy-up into an explicit field
+      list removes in silence, so the assertion was written down.
+
+      It is now a deliberate property instead of an accident. `copy-question-
+      set.js` resolves both ids against the DESTINATION's libraries and keeps
+      only what resolves; the fixture seeds the platform prompt and the persona
+      those ids name, so what is asserted here is the case that should survive.
+      The case that should NOT — an id naming another team's Workie — is
+      tests/copy-question-set-workie.js.
 
       It matters more than it looks. A set names the summary prompt and the
       voice it is meant to be run with; a copy that loses them is a set that

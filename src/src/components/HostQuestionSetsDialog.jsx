@@ -97,6 +97,34 @@ export default function HostQuestionSetsDialog({
   /** The id of the set whose quickstart flag is currently in flight, or null. */
   const [quickstartBusy, setQuickstartBusy] = useState(null);
   /*
+    WORKIE'S TWO LISTS — the prompt library and the persona library.
+
+    THE BUG THESE FIX IS A MISSING PROP, NOT A MISSING FEATURE. The editor
+    mounted below is `QuestionSetEditor` verbatim, and it already draws both
+    controls; `AdminPage.jsx` hands it `availablePrompts` and
+    `availablePersonas` and this dialog handed it neither. A select with only
+    its own default option in it does not read as "nothing was passed", it
+    reads as "this environment has none" — so a host looking for where Workie
+    is chosen found two dead controls and concluded, reasonably, that the
+    setting did not exist.
+
+    BOTH ROUTES ARE ALREADY A HOST'S. `GET admin/ai-prompts` and
+    `GET admin/personas` are in `HOST_ADMIN_ROUTES` (auth/authorizer.js), the
+    second with a note saying its earlier absence "was an oversight, not a
+    policy". Nothing here opens a route or asks for one.
+
+    `null` UNTIL ONE GENUINELY ARRIVES (ruling W6). These started as `[]`, and
+    the failure paths below leave them where they are, so a 403 reached the
+    editor as an empty library — which the editor then reported to the host as
+    "No voices are set up on this environment yet". That sentence is a
+    diagnosis of the ENVIRONMENT, and a refused request is no evidence for it.
+    An empty array now means the library answered and held nothing; `null`
+    means nobody has said. The warns below are the operator's half of the same
+    distinction; this is the host's.
+  */
+  const [availablePrompts, setAvailablePrompts] = useState(null);
+  const [availablePersonas, setAvailablePersonas] = useState(null);
+  /*
     WHICH BUILDER IS OPEN, or null. `showAIBuilder` was passed to
     QuestionSetUploadPanel without an `onOpenBuilder`, so the button rendered,
     passed its own test, and did nothing — the panel's onClick is
@@ -199,6 +227,71 @@ export default function HostQuestionSetsDialog({
   }, [onSetsChanged]);
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+    THE TWO WORKIE LISTS, READ ONCE WHEN THE DIALOG OPENS.
+
+    ON MOUNT RATHER THAN ON THE EDITOR'S MOUNT, deliberately: the editor is
+    opened and closed repeatedly against the same shelf, and hanging these off
+    it would put two requests on the wire every time a host clicked into a set.
+    They are small, unchanging, platform-wide lists — one read per dialog.
+
+    A FAILURE IS SWALLOWED INTO AN EMPTY LIST, which is what both existing
+    callers do (`AdminPage.jsx` fetchAvailablePrompts / fetchAvailablePersonas)
+    and what this dialog needs: neither list is required to edit a set's
+    questions, its name or anything else, so a 403, a 500 or a request that
+    never leaves must cost the host that one picker and nothing more. The
+    editor renders a select with only its default option in that case, which is
+    the same thing it did before this existed.
+
+    SWALLOWED ON SCREEN, NOT IN SILENCE. Both failure paths say so to the
+    console, as AdminPage's two fetches of these same endpoints always have.
+    Without it the only symptom is a picker holding one option — which is also
+    exactly what a correctly working environment with no voices configured
+    looks like, so there was no way to tell a missing library from an empty
+    one, and a host reporting it left nobody anything to read.
+
+    THE PROMPT LIST IS PASSED RAW (bar the status filter AdminPage applies).
+    `QuestionSetEditor` runs `selectableSummaryPrompts()` on it itself and then
+    reports `availablePrompts.length - choices.length` as "N prompts for other
+    game types are hidden" — filtering here would make that count zero and the
+    sentence a lie. Personas are unfiltered for AdminPage's stated reason: the
+    engagement type is itself editable, so filtering by it would make voices
+    appear and disappear mid-edit.
+  */
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const response = await authFetch(adminApiUrl('admin/ai-prompts'));
+        if (!response.ok) {
+          console.warn(`Prompt library unavailable (${response.status}) — the summary-approach picker will offer its default only`);
+          return;
+        }
+        const data = await response.json().catch(() => ({}));
+        if (live) setAvailablePrompts((data.prompts || []).filter((p) => p.status === 'active'));
+      } catch (e) {
+        // Nothing to say on SCREEN — the picker degrades to its default option
+        // — but plenty to say to whoever is asked why it is empty.
+        console.warn('Prompt library unavailable:', e);
+      }
+    })();
+    (async () => {
+      try {
+        const response = await authFetch(adminApiUrl('admin/personas'));
+        if (!response.ok) {
+          console.warn(`Voice library unavailable (${response.status}) — Workie will adapt to the session, which is the designed default`);
+          return;
+        }
+        const data = await response.json().catch(() => ({}));
+        if (live) setAvailablePersonas(data.personas || []);
+      } catch (e) {
+        // Same: the default on screen stays right, and the reason stops vanishing.
+        console.warn('Voice library unavailable:', e);
+      }
+    })();
+    return () => { live = false; };
+  }, []);
 
   // `canManage` is the SERVER's answer, computed by the same function the edit
   // and delete handlers enforce with. Never re-derived here from a group claim:
@@ -854,6 +947,16 @@ export default function HostQuestionSetsDialog({
             showVersions={false}
             showDownload={false}
             showAIAssist={false}
+            /*
+              ON, AND NOT A FLAG AT ALL — two lists the editor already asks for
+              and already knows what to do with. This is the answer to "where
+              does the Workie selection map to a question set, and how does a
+              host change it?": the same two controls the console has, on the
+              same component, now with something in them. Read-only routes a
+              host is already granted; see the state above.
+            */
+            availablePrompts={availablePrompts}
+            availablePersonas={availablePersonas}
             onDirtyChange={setEditorDirty}
             onSaved={(message) => { setEditingQuestions(null); load(message); }}
             onChanged={async () => {

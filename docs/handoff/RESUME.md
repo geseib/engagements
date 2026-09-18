@@ -3,6 +3,11 @@
 > ## ⚠️ SUPERSEDED IN PART — read `docs/handoff/2026-08-14-session-handoff.md` FIRST,
 > ## then `2026-08-11-session-handoff.md`.
 >
+> **2026-09-18:** the public library and its moderation pipeline (Stages 1 and 2) are live on
+> `dev` as `e6eacead` and on `test` as `5bdd786b`. For that work read
+> `docs/handoff/public-library-2026-09-18.md` — it carries the map, the rules the code embodies,
+> the drive that still needs a signed-in host, and what Stage 3 starts from.
+>
 > **`dev` is at `e8c167d1`; `test` is at `733997f3`. Both deployed and Succeeded.**
 >
 > ### THE FRONTEND TEST BASELINE IN THIS FILE IS WRONG AND WILL MISLEAD YOU

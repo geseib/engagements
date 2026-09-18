@@ -33,6 +33,23 @@
  * an org partition in the clear — indistinguishable from an org's own set, and
  * excluded from the guarantee its owner was given. Category rows keep `Name` in
  * plaintext exactly as an org's own do: it carries the 24-bit mask ordering.
+ *
+ * ── EXCEPT THE TWO FIELDS THAT ARE POINTERS INTO A LIBRARY ─────────────────
+ *
+ * `promptId` (how each round is summed up) and `personaId` (the voice) are not
+ * content. They are references, and a reference is only worth copying where it
+ * can still be followed. An id naming a Workie in the SOURCE team's library
+ * names nothing this organisation may read, so spreading it here produced a set
+ * that was born broken — the picker showed a value, the set claimed to bring
+ * its own summary approach, and `get-ai-summary.js` quietly used the game-type
+ * default instead. Both are resolved against the DESTINATION's libraries below
+ * and dropped when they resolve to nothing.
+ *
+ * `promptDropped` is deleted outright. `shared/publish-set.js` writes it on a
+ * PUBLIC row to record that the publishing org's own Workie did not go public
+ * with it (D5) — a fact about that publish, of that version, by that team. On a
+ * copy it describes a publish that has never happened, and it is not inert:
+ * `get-question-sets.js` projects it on every row it lists, org rows included.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -44,6 +61,7 @@ const {
 } = require('./shared/set-version');
 const tenant = require('./shared/tenant');
 const { ownerStamp } = require('./shared/question-set-access');
+const { resolvePromptRef, resolvePersonaRef } = require('./shared/workie-refs');
 const { encryptItem, decryptItem } = require('./shared/tenant-crypto');
 const { LIFECYCLE_SKS } = require('./shared/archive-snapshot');
 
@@ -141,6 +159,27 @@ exports.handler = async (event) => {
     const targetPk = setPartition({ scope: tenant.ORG, orgId, setId: newSetId }, null);
     const now = new Date().toISOString();
 
+    /*
+      WHAT THIS ORGANISATION CAN ACTUALLY FOLLOW, decided before anything is
+      written. `orgId` here is the DESTINATION's — `resolvePromptRef` reads its
+      own library first and the platform library second, which is the order
+      `get-ai-summary.js` will follow when the copy is played, so the id stored
+      is the id that will really be used. Checking the platform library alone
+      would drop one this team can read; checking the source's would keep one it
+      cannot. Personas are platform-global, so the same id is the same voice
+      everywhere — it still has to exist and still has to have something to say.
+
+      A copy is a mechanical duplication, not a builder choosing a value, so an
+      unusable id is DROPPED rather than refused: the set arrives and falls back
+      to the game-type default, which is what it would have done anyway. The
+      difference is that it no longer claims otherwise.
+    */
+    const { promptId, personaId, promptDropped, ...carried } = meta; // eslint-disable-line no-unused-vars
+    const prompt = await resolvePromptRef(db, TABLE(), promptId, { orgId });
+    const persona = await resolvePersonaRef(db, TABLE(), personaId);
+    if (promptId && !prompt.ok) console.log(`copy: leaving prompt ${promptId} behind (${prompt.reason})`);
+    if (personaId && !persona.ok) console.log(`copy: leaving voice ${personaId} behind (${persona.reason})`);
+
     /* Question rows are encrypted for the destination; category rows are not,
        matching what an org's own sets look like. Anything else is copied as-is
        so a future row type is carried rather than dropped.
@@ -163,9 +202,19 @@ exports.handler = async (event) => {
     await batchPutItems(db, TABLE(), copies);
 
     const metadata = await encryptItem(orgId, 'set', {
-      ...meta,
+      /* `carried` is `meta` minus the two pointers and the publish marker; see
+         the header. Nothing re-adds `promptDropped` — a copy that loses its
+         Workie has not published anything, and minting a marker here would put
+         a second author on a field publish-set.js owns. */
+      ...carried,
       ...setMetadataKey({ scope: tenant.ORG, orgId, setId: newSetId }),
       name,
+      /* Re-attached only where the destination can follow them. The resolved
+         value is empty in two different ways — null when the source named
+         nothing, absent when it named something this org cannot read — and an
+         unset field is the right outcome of both, so one test serves for both. */
+      ...(prompt.prompt ? { promptId } : {}),
+      ...(persona.persona ? { personaId } : {}),
       /* WHERE IT CAME FROM, FOR PROVENANCE ONLY. Nothing follows these: the
          copy is independent, and an edit to the source must never reach it. */
       sourceSetId: setId,

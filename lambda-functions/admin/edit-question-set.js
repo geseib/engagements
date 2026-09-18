@@ -7,6 +7,7 @@ const {
 } = require('./shared/round-kinds');
 const { ORG } = require('./shared/tenant');
 const { ENCRYPTED_FIELDS, encryptValue } = require('./shared/tenant-crypto');
+const { resolvePromptRef, resolvePersonaRef, refusal } = require('./shared/workie-refs');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -54,6 +55,26 @@ const OPTIONAL_FIELDS = [
   // It inherits the clear-vs-skip semantics documented below for free.
   'roundKindBrief'
 ];
+
+/**
+ * ONE SPELLING OF "WHAT THIS FIELD IS WORTH", because there used to be two.
+ *
+ * An optional field arrives as a string, as `null` (the editor's way of saying
+ * "blank this"), or as nothing at all, and every use of it wants the same
+ * answer: the trimmed string, with an absent value reading as ''. That rule was
+ * written out twice below — once by `changed()`, deciding whether a value needs
+ * validating, and once by the write loop, deciding what to store — and a third
+ * time, slightly differently, for the value already on the row.
+ *
+ * Three copies of one rule is a defect waiting for someone to fix a trimming
+ * bug in the copy they happened to be reading. Drift between the first two is
+ * the expensive kind: `changed()` would clear a reference the write then stored
+ * anyway, or refuse a save over a value nobody altered. They agree because they
+ * are now the same function, not because they were kept in step.
+ */
+const normalizeOptional = (value) => (
+  value === null || value === undefined ? '' : String(value).trim()
+);
 
 exports.handler = async (event) => {
   try {
@@ -197,10 +218,65 @@ exports.handler = async (event) => {
       };
     }
 
+    // ── WORKIE'S TWO SETTINGS, CHECKED BEFORE THEY ARE STORED ────────────────
+    //
+    // `promptId` and `personaId` are the only two OPTIONAL_FIELDS that are
+    // REFERENCES rather than prose, and both degrade silently at run time: a
+    // prompt that resolves to nothing falls back to the game-type default, a
+    // voice that resolves to nothing falls through to the next rung. The person
+    // who chose the value was never told, because this route accepted any
+    // string at all. See shared/workie-refs.js.
+    //
+    // THE LIBRARY IS THE SET'S, NOT THE CALLER'S — `cryptoOrgId` is derived
+    // from `found.ref`, the row that was actually read, for the same reason the
+    // encryption above uses it: an Engage admin editing a platform set must not
+    // be able to point it at their own org's Workie, which no other
+    // organisation could then read.
+    //
+    // A CLEAR IS NOT A DANGLING ID. `resolve*Ref` answers ok for '' and null,
+    // so blanking either field stays possible — which it must, since detaching
+    // is the only cure for a value whose target has already been deleted.
+    //
+    // ── AND ONLY A CHANGED VALUE IS ARGUED WITH ──────────────────────────────
+    //
+    // Sets ALREADY carry ids that resolve to nothing: BuilderPage.jsx offers
+    // seven the seeder never mints, and this route's sibling used to stamp
+    // `lessons-learned` on every set regardless of engagement type. The editor
+    // sends the whole set back on every save, so checking the stored value too
+    // would refuse a RENAME over a field the person never opened — turning one
+    // silent defect into a wall in front of an unrelated edit.
+    //
+    // So the comparison is against the row that was already read for the
+    // ownership check; there is no second Get. Untouched passes through exactly
+    // as stored. Changing to a different broken id is still refused, because
+    // that is a choice, and clearing is still allowed, because that is the cure.
+    //
+    // THIS IS NOT WHERE THE DANGLING ID GETS FIXED, and the branch must not be
+    // "tidied up" into a plain check on that reasoning: the editor shows a
+    // stored id that is absent from the fetched list as unavailable, with a
+    // one-click clear (Ruling W4), so a builder meets it before saving instead
+    // of in a refusal afterwards. That is what makes this converge.
+    const changed = (field) => {
+      if (!(field in body) || body[field] === undefined) return false;
+      return normalizeOptional(body[field]) !== normalizeOptional(existing.Item[field]);
+    };
+
+    if (changed('promptId')) {
+      const promptCheck = await resolvePromptRef(
+        db, process.env.TABLE_NAME, body.promptId, { orgId: cryptoOrgId }
+      );
+      if (!promptCheck.ok) return refusal('promptId', promptCheck.reason);
+    }
+
+    if (changed('personaId')) {
+      const personaCheck = await resolvePersonaRef(db, process.env.TABLE_NAME, body.personaId);
+      if (!personaCheck.ok) return refusal('personaId', personaCheck.reason);
+    }
+
     const applied = {};
     for (const field of OPTIONAL_FIELDS) {
       if (!(field in body) || body[field] === undefined) continue;
-      const value = body[field] === null ? '' : String(body[field]).trim();
+      const value = normalizeOptional(body[field]);
       updateParams.UpdateExpression += `, #${field} = :${field}`;
       updateParams.ExpressionAttributeNames[`#${field}`] = field;
       updateParams.ExpressionAttributeValues[`:${field}`] = await store(field, value);

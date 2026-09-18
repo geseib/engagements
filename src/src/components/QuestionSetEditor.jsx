@@ -110,8 +110,16 @@ const aiClip = (value, max) => {
  */
 export default function QuestionSetEditor({
   questionSet,
-  availablePrompts = [],
-  availablePersonas = [],
+  /*
+    AN ARRAY, OR `null` FOR "NOT KNOWN" (ruling W6). An empty array is evidence
+    — this environment has no such library — and the Workie group says so in
+    words. `null` is the absence of evidence: a fetch that failed, was refused,
+    or has not answered yet, and also a caller that passes neither. The default
+    is `null` rather than `[]` for exactly that reason: a caller who says
+    nothing has not told us the environment is empty.
+  */
+  availablePrompts = null,
+  availablePersonas = null,
   availableSets = [],
   defaultInstructions = '',
   /*
@@ -251,12 +259,115 @@ export default function QuestionSetEditor({
 
   const activeVersion = questionSet?.activeVersion;
 
+  /*
+    ── NULL IS "NOBODY TOLD US", AND IT IS NOT AN EMPTY LIBRARY (ruling W6) ───
+
+    Both callers read these lists over the wire and both degrade a refusal into
+    silence. If that silence arrives as `[]` this editor says, with total
+    confidence, "No voices are set up on this environment yet" — a diagnosis of
+    the environment made from a 403. GameSetupDialog refuses exactly this
+    over-claim ten files away by telling `null` from an empty Set; the same rule
+    applies to the same question here, so `AdminPage` and
+    `HostQuestionSetsDialog` now pass `null` until a list genuinely arrives.
+
+    `known` gates every DIAGNOSTIC sentence below — the empty-library lines and
+    both "this environment does not offer" warnings. Nothing else changes: the
+    selects, their defaults and their help all render the same, because they are
+    right whatever happened to the request.
+  */
+  const promptsKnown = Array.isArray(availablePrompts);
+  const personasKnown = Array.isArray(availablePersonas);
+  const prompts = promptsKnown ? availablePrompts : [];
+  const personas = personasKnown ? availablePersonas : [];
+
   // Prompts worth offering for THIS set. Keyed off the live engagementType
   // rather than the saved one, so switching the type re-filters immediately —
   // otherwise you pick "Trivia", save, reopen, and only then see trivia prompts.
-  const summaryPromptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
-  const hiddenPromptCount = availablePrompts.length - summaryPromptChoices.length;
+  const typeMatchedPrompts = selectableSummaryPrompts(prompts, engagementType);
 
+  // THE PUBLIC SCOPE IS DROPPED HERE AND NOWHERE ELSE (P4). `get-ai-prompts.js`
+  // queries the caller's org, the platform library AND public, and stamps the
+  // scope it came from onto every row. `admin/shared/workie-refs.js` — the
+  // resolver every write to this field now goes through — looks in org then
+  // platform only, so a public prompt is a choice the save would answer 400 to.
+  // No admin path creates a public prompt today, which is exactly why this is
+  // cheap to close now rather than after the first one exists.
+  const summaryPromptChoices = typeMatchedPrompts.filter((p) => p.scope !== 'public');
+
+  // COUNTED BEFORE THE SCOPE FILTER, BECAUSE THE SENTENCE SAYS "GAME TYPES"
+  // (ruling W7). Subtracting the post-filter length reported a public prompt as
+  // one hidden for its game type — the sentence naming one reason for a total
+  // that had two in it. The raw list is still what it subtracts FROM, which is
+  // why both callers hand it over unfiltered.
+  const hiddenPromptCount = prompts.length - typeMatchedPrompts.length;
+
+  /*
+    ── WHAT THE TWO STORED IDS RESOLVE TO, OR THAT THEY DO NOT (ruling W4) ────
+
+    A set can hold a `promptId` or `personaId` that is in no list this
+    environment can read: the id it was given months ago, or an org's prompt
+    carried onto a copy made in another org (the defect Task 2 closed at the
+    source). A <select> whose value matches none of its options renders as
+    though the FIRST option were chosen, so that set looked exactly like a set
+    carrying nothing at all.
+
+    `edit-question-set.js` now answers 400 for a CHANGED dangling value and
+    grandfathers an unchanged one on purpose — so that renaming such a set still
+    works. That grandfather clause only converges if the builder can SEE the
+    dead value and drop it, which is what these two drive. Do not remove the
+    grandfathering branch in the lambda; it names W4 in its own comment.
+
+    THE PROMPT RESOLVES AGAINST WHAT THE SELECT OFFERS, NOT THE RAW LIST
+    (ruling W8). Resolving against the raw list printed "Currently: Open Mic."
+    for a public-scoped id that the select excludes and that `get-ai-summary.js`
+    will not honour either — three surfaces disagreeing about one id, on the row
+    that exists to end that. `promptHonoured` is the second half of it: see the
+    warning's two branches in the markup.
+  */
+  const resolvedPersona = personaId
+    ? personas.find((p) => p.personaId === personaId) || null
+    : null;
+  const danglingPersona = personasKnown && Boolean(personaId) && !resolvedPersona;
+  const resolvedPrompt = promptId
+    ? summaryPromptChoices.find((p) => p.promptId === promptId) || null
+    : null;
+  const danglingPrompt = promptsKnown && Boolean(promptId) && !resolvedPrompt;
+  /*
+    An unofferable id Workie WILL still use. `resolvePromptTemplate`
+    (game/get-ai-summary.js) loads a prompt by id from the org library then the
+    platform one and uses it if it parses — the game type is never consulted. So
+    a trivia prompt on a call-and-answer set is honoured; a public-scoped one is
+    in neither library and is not. The two cannot share a consequence sentence,
+    and inventing one for both would plant a fresh falsehood in the middle of
+    the fix that removed one.
+
+    "IF IT PARSES" IS A SHAPE, NOT AN EXISTENCE (ruling W10). The authority is
+    `isUsableSummaryPrompt` in lambda-functions/game/prompt-shape.js: a
+    `template`, or `instructions` + `outputFormat`. A generation-shaped row
+    (`basePrompt`/`contextTemplate`, as scripts/populate-generation-prompts.js
+    writes) has neither and is REJECTED — it falls back to the game-type
+    default, which is the original "I added an Art prompt and nothing changed"
+    report and the exact opposite of what the reassuring branch promises.
+
+    Mirrored through `summaryPromptStatus` rather than re-implemented, because
+    that field IS the endpoint running that same function over the row
+    (get-ai-prompts.js) — a shape check, which is what the ruling asks for, and
+    one that also catches an analysis row broken some other way (instructions
+    with no outputFormat) that a type check would wave through. Only a verdict
+    of 'unusable' counts against a prompt: 'unknown' is the NORMAL answer for a
+    summary prompt, whose body lives in S3 and is not fetched by the list, so
+    reading it as failure would deny the promise for nearly every real prompt.
+    `promptType` is belt and braces — `inferPromptType` derives 'generation'
+    from the shape too.
+  */
+  const willRunAsASummary = (p) => Boolean(p)
+    && p.summaryPromptStatus !== 'unusable'
+    && p.promptType !== 'generation';
+  const promptHonoured = danglingPrompt
+    ? prompts.find((p) => p.promptId === promptId
+        && p.scope !== 'public'
+        && willRunAsASummary(p)) || null
+    : null;
 
   const loadVersions = useCallback(async () => {
     if (!setId) return;
@@ -380,12 +491,6 @@ export default function QuestionSetEditor({
     }
     onCancel();
   }, [onCancel, questionsDirty]);
-
-  /** Display name for a stored personaId, or a warning when it resolves to nothing. */
-  const personaLabel = (id) => {
-    const match = availablePersonas.find((p) => p.personaId === id);
-    return match ? match.name : `${id} (unknown — Workie will adapt instead)`;
-  };
 
   /* ------------------------------------------------ AI drafting the details */
 
@@ -1206,55 +1311,163 @@ export default function QuestionSetEditor({
             </small>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="edit-prompt-id">AI Summary Prompt</label>
-            <select
-              id="edit-prompt-id"
-              value={promptId}
-              onChange={(e) => setPromptId(e.target.value)}
-              className="form-select"
-            >
-              <option value="">Use default prompt for game type</option>
-              {summaryPromptChoices.map((prompt) => (
-                <option key={prompt.promptId} value={prompt.promptId}>
-                  {prompt.name}
-                  {prompt.category ? ` (${prompt.category})` : ''}
-                  {prompt.summaryPromptStatus === 'unusable' ? ' — not a summary prompt' : ''}
-                </option>
-              ))}
-            </select>
-            <small className="help-text">
-              Prompts for <strong>{gameTypeLabel(engagementType)}</strong> sets only.
-              Leave blank to use the default for this game type.
-              {hiddenPromptCount > 0 && ` ${hiddenPromptCount} prompt${
-                hiddenPromptCount === 1 ? '' : 's'
-              } for other game types are hidden.`}
+          {/* ══════════════════════════════════════════ WORKIE, AS ONE THING ══
+            *
+            * These two fields used to be "AI Summary Prompt" and "Workie's
+            * Voice", two rows apart in a run of eight, and nothing on the screen
+            * said they were the same subject. They are the whole of what the AI
+            * does with this set, so they read as one group with two settings —
+            * the register it writes in, and the shape of what it writes.
+            *
+            * PLAIN WORDS, AND NO PROMISE THE PRODUCT CANNOT KEEP. "AI Summary
+            * Prompt" names the implementation; the builder is choosing how each
+            * round gets summed up. Below each control the screen says what it
+            * currently resolves to, what this environment has, or — the case
+            * that used to be silent — that the saved value resolves to nothing.
+            *
+            * BOTH MOUNTS RENDER THIS. AdminPage passes these lists from the
+            * console's own fetches, HostQuestionSetsDialog from its own; the
+            * empty states below are what a host on an unseeded tier reads, and
+            * they must say "this environment has none" rather than nothing.
+            */}
+          <div
+            className="qs-workie"
+            role="group"
+            aria-labelledby="edit-workie-heading"
+            data-testid="workie-group"
+          >
+            <h4 id="edit-workie-heading">Workie</h4>
+            <small className="help-text" data-testid="workie-group-help">
+              What Workie says after each round of this set. Both are optional — leave them
+              alone and Workie reads the room.
             </small>
-            <PromptShapePreview promptId={promptId} prompts={summaryPromptChoices} />
-          </div>
 
-          <div className="form-group">
-            <label htmlFor="edit-persona-id">Workie's Voice</label>
-            <select
-              id="edit-persona-id"
-              value={personaId}
-              onChange={(e) => setPersonaId(e.target.value)}
-              className="form-select"
-            >
-              {/* Adapting is the designed default, not a fallback. A host who
-                  picks a voice at creation still overrides this. */}
-              <option value="">Adapt to the session (recommended)</option>
-              {availablePersonas.map((persona) => (
-                <option key={persona.personaId} value={persona.personaId}>
-                  {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
-                </option>
-              ))}
-            </select>
-            <small className="help-text">
-              The voice Workie uses for summaries of this set. A host's pick at engagement
-              creation takes precedence over this. Leave blank and Workie reads the room.
-              {personaId && <> Currently: {personaLabel(personaId)}.</>}
-            </small>
+            <div className="form-group">
+              <label htmlFor="edit-persona-id">Its voice</label>
+              <select
+                id="edit-persona-id"
+                value={personaId}
+                onChange={(e) => setPersonaId(e.target.value)}
+                className="form-select"
+              >
+                {/* Adapting is the designed default, not a fallback. A host who
+                    picks a voice at creation still overrides this. */}
+                <option value="">Adapt to the session (recommended)</option>
+                {personas.map((persona) => (
+                  <option key={persona.personaId} value={persona.personaId}>
+                    {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
+                  </option>
+                ))}
+              </select>
+              <small className="help-text" data-testid="workie-voice-help">
+                The register Workie writes in. A host&rsquo;s pick when they create the
+                engagement wins for that session.
+                {resolvedPersona && <> Currently: {resolvedPersona.name}.</>}
+              </small>
+              {/* THE SELECT STAYS BESIDE THIS, it is not replaced by it: a lone
+                  "Adapt to the session (recommended)" is the correct default and
+                  the correct control, it just cannot say by itself whether the
+                  list is empty or was never fetched. So the words are added. */}
+              {personasKnown && personas.length === 0 && (
+                <small className="help-text" data-testid="workie-voice-empty">
+                  No voices are set up on this environment yet — Workie reads the room and
+                  picks its own register.
+                </small>
+              )}
+              {danglingPersona && (
+                <p className="qs-workie-warning" data-testid="workie-voice-unavailable">
+                  This set is saved with a voice this environment does not offer
+                  (&ldquo;{personaId}&rdquo;). Workie will adapt to the session until it is
+                  changed.{' '}
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    onClick={() => setPersonaId('')}
+                  >
+                    Clear it
+                  </button>
+                </p>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="edit-prompt-id">How it sums up each round</label>
+              <select
+                id="edit-prompt-id"
+                value={promptId}
+                onChange={(e) => setPromptId(e.target.value)}
+                className="form-select"
+              >
+                {/* The designed default, in the same words the empty state and
+                    the warning below use — "Use default prompt for game type"
+                    named the implementation in a row that no longer does. */}
+                <option value="">The standard way for this game type (recommended)</option>
+                {summaryPromptChoices.map((prompt) => (
+                  <option key={prompt.promptId} value={prompt.promptId}>
+                    {prompt.name}
+                    {prompt.category ? ` (${prompt.category})` : ''}
+                    {prompt.summaryPromptStatus === 'unusable' ? ' — not a summary prompt' : ''}
+                  </option>
+                ))}
+              </select>
+              <small className="help-text" data-testid="workie-prompt-help">
+                The summary approach Workie follows for <strong>{gameTypeLabel(engagementType)}</strong>
+                {' '}sets. Most sets want the standard one.
+                {resolvedPrompt && ` Currently: ${resolvedPrompt.name}.`}
+                {hiddenPromptCount > 0 && ` ${hiddenPromptCount} prompt${
+                  hiddenPromptCount === 1 ? '' : 's'
+                } for other game types are hidden.`}
+              </small>
+              {promptsKnown && prompts.length === 0 && (
+                <small className="help-text" data-testid="workie-prompt-empty">
+                  No summary approaches are set up on this environment yet — Workie sums up
+                  each round the standard {gameTypeLabel(engagementType)} way.
+                </small>
+              )}
+              {/* TWO BRANCHES, BECAUSE THERE ARE TWO OUTCOMES — see
+                  `promptHonoured`. The first is the live case: the engagement
+                  type above is editable, so switching a trivia set to Call &
+                  Answer strands its prompt here, still attached and still
+                  used. The second is an id no readable library holds, which
+                  really does fall back. */}
+              {danglingPrompt && promptHonoured && (
+                <p className="qs-workie-warning" data-testid="workie-prompt-unavailable">
+                  This set is saved with a summary approach written for{' '}
+                  <strong>{gameTypeLabel(promptHonoured.gameType)}</strong> sets
+                  (&ldquo;{promptId}&rdquo;). Workie will still follow it, which is unlikely to
+                  suit a <strong>{gameTypeLabel(engagementType)}</strong> round.{' '}
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    onClick={() => setPromptId('')}
+                  >
+                    Clear it
+                  </button>
+                </p>
+              )}
+              {danglingPrompt && !promptHonoured && (
+                <p className="qs-workie-warning" data-testid="workie-prompt-unavailable">
+                  This set is saved with a summary approach this environment does not offer
+                  (&ldquo;{promptId}&rdquo;). Workie will sum up each round the standard{' '}
+                  {gameTypeLabel(engagementType)} way until it is changed.{' '}
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    onClick={() => setPromptId('')}
+                  >
+                    Clear it
+                  </button>
+                </p>
+              )}
+              {/* WITHHELD FOR A DANGLING ID. Given a promptId it cannot find,
+                  the preview says "this prompt uses the standard shape" — a
+                  sentence about a prompt that is not there, printed directly
+                  under a warning saying so. The warning already states the
+                  outcome; two voices on one row is one too many. */}
+              {!danglingPrompt && (
+                <PromptShapePreview promptId={promptId} prompts={summaryPromptChoices} />
+              )}
+            </div>
           </div>
 
           {/*

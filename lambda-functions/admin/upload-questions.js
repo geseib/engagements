@@ -22,6 +22,7 @@ const {
 } = require('./shared/round-kinds');
 const { ORG } = require('./shared/tenant');
 const { encryptItem } = require('./shared/tenant-crypto');
+const { resolvePromptRef, refusal } = require('./shared/workie-refs');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -714,6 +715,24 @@ exports.handler = async (event) => {
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
       }
+
+      // THE SUMMARY PROMPT, CHECKED BEFORE A ROW EXISTS TO CARRY IT.
+      //
+      // The metadata row below stores `promptId` verbatim and this route used to
+      // take any string. A dangling one is not loud — get-ai-summary.js resolves
+      // a game-type default instead and says so only in a log — so the importer
+      // was told their choice had landed when it had not. See
+      // shared/workie-refs.js.
+      //
+      // ONLY ON THE CREATE PATH, because only the create path stores it: a
+      // replace writes content rows and a targeted flip, deliberately leaving
+      // the existing metadata (promptId included) alone. And it is checked here,
+      // against `targetRef` rather than the caller's active org, so the library
+      // probed is the one the NEW set will actually read.
+      const promptCheck = await resolvePromptRef(db, process.env.TABLE_NAME, promptId, {
+        orgId: targetRef.scope === ORG ? String(targetRef.orgId || '') : ''
+      });
+      if (!promptCheck.ok) return refusal('promptId', promptCheck.reason);
 
       /*
         THE STORAGE ALLOWANCE, CHECKED ONLY WHEN A NEW SET IS BEING CREATED.

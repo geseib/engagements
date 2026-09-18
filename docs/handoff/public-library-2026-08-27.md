@@ -1,5 +1,10 @@
 # Handoff — the public library, per-version moderation, scoped Workies
 
+**SUPERSEDED IN PART.** Sharing, review and moderation shipped as Stages 1 and 2 on
+2026-09-18 — see `docs/handoff/public-library-2026-09-18.md` for what is live, the rules
+the code embodies, and what is next. This file remains the record of the design
+conversation and the traps beneath it.
+
 **Branch:** `dev`, last commit `cee5ec44`. The design is
 `docs/superpowers/specs/2026-08-25-public-library-design.md` and it has been
 through agent review; read §0 here first, then that.

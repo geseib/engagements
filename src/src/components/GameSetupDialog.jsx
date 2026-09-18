@@ -35,6 +35,12 @@
  * the guarantee is spelled out in full on the card, whereas a sticky OFF
  * carries one room's decision silently into the next one.
  *
+ * PURE-PROPS, WITH ONE NAMED EXCEPTION. Every FORM field arrives as a prop and
+ * leaves in one payload, and that stays. The single `authFetch` in this file
+ * reads the prompt library so the plan sentence at the bottom of the screen can
+ * check a claim instead of asserting one — evidence for a sentence, never a
+ * value the form owns. Its reasoning is at the fetch itself.
+ *
  * WHERE A HOST MAKES A QUESTION SET, per the owner: *"the interface for entry to
  * this is create engagements."* This screen is the only place in the product
  * where a host has already discovered that a set is the thing a session needs —
@@ -59,6 +65,8 @@ import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/s
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import Modal from './Modal';
+import { authFetch } from '../auth/authFetch';
+import { adminApiUrl } from '../utils/adminApi';
 import './GameSetupDialog.css';
 
 export default function GameSetupDialog({
@@ -186,6 +194,52 @@ export default function GameSetupDialog({
   }, [questionSets, localSets]);
 
   const setsForType = allSets.filter((set) => set.engagementType === engagementType);
+
+  /*
+    ── THE ONE FETCH IN THIS FILE, AND WHY IT IS ALLOWED TO BE HERE ───────────
+
+    This component's header says it is pure-props, and that is still the rule
+    for everything the FORM owns — every field above arrives as a prop and every
+    value leaves in one payload. This is not a form field. It is the evidence
+    behind a CLAIM the dialog makes at the bottom of the screen ("this set
+    brings its own summary approach"), and that claim was being made from the
+    mere presence of a string.
+
+    Handing it down as a prop would mean the page fetching a list purely so this
+    sentence could be honest, through a component that does not otherwise care
+    about prompts — and `HostQuestionSetsDialog` (hung off this same overlay)
+    already reads the same endpoint the same way for the same reason. One
+    request, when the dialog opens.
+
+    NULL IS "NOT KNOWN", AND IT IS NOT THE SAME AS EMPTY. A 403, a 500 or a
+    request that could not be signed says nothing whatever about the set; a
+    fetched list that does not contain the id says the id resolves to nothing.
+    Only the second is evidence, so a failure leaves this null and the sentence
+    stays where it was. Answering an unreadable list with "the standard way"
+    would be the same over-claim pointed in the other direction.
+  */
+  const [knownPromptIds, setKnownPromptIds] = useState(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const response = await authFetch(adminApiUrl('admin/ai-prompts'));
+        if (!response || !response.ok) return;
+        const data = await response.json().catch(() => ({}));
+        const ids = (data.prompts || []).map((p) => p && p.promptId).filter(Boolean);
+        if (live) setKnownPromptIds(new Set(ids));
+      } catch (e) {
+        // Left unknown on purpose — see above. The host is told nothing about
+        // this request, because nothing on this screen depends on it.
+      }
+    })();
+    return () => { live = false; };
+  }, []);
+
+  /** The chosen set's own summary prompt, and whether it can actually be honoured. */
+  const chosenSetPromptId = allSets.find((s) => s.id === newGameSetId)?.promptId || '';
+  const setPromptWillBeUsed = Boolean(chosenSetPromptId)
+    && (knownPromptIds === null || knownPromptIds.has(chosenSetPromptId));
 
   // The page reloads the voices that suit this format. On mount too, so the
   // default format's list is the one the picker below shows.
@@ -588,10 +642,18 @@ export default function GameSetupDialog({
           the summary approach comes from the set when the set names one, and
           from the format's standard otherwise, with no third state where the
           host must go configure a prompt somewhere first.
+
+          AND IT ONLY PROMISES WHAT WILL HAPPEN. This read `?.promptId` — the
+          presence of a string — and said the set's approach would be followed.
+          A set can carry an id that resolves to nothing (an org's prompt
+          survived a copy into another org until Task 2; an id can simply be
+          old), and `get-ai-summary.js` then falls back to the format default
+          having said the opposite here. `setPromptWillBeUsed` is the same
+          question asked of the library rather than of the string.
         */}
         {newGameSetId && (
           <p className="gsd-workie-plan" data-testid="gsd-workie-plan">
-            {allSets.find((s) => s.id === newGameSetId)?.promptId
+            {setPromptWillBeUsed
               ? 'This question set brings its own summary approach — Workie follows it. Everything above is optional.'
               : `Workie summarizes each round the standard ${gameTypeMeta(engagementType).label} way — nothing above needs setting up.`}
           </p>
