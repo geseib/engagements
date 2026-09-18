@@ -216,13 +216,43 @@ exports.handler = async (event) => {
     // A CLEAR IS NOT A DANGLING ID. `resolve*Ref` answers ok for '' and null,
     // so blanking either field stays possible — which it must, since detaching
     // is the only cure for a value whose target has already been deleted.
-    const promptCheck = await resolvePromptRef(
-      db, process.env.TABLE_NAME, body.promptId, { orgId: cryptoOrgId }
-    );
-    if (!promptCheck.ok) return refusal('promptId', promptCheck.reason);
+    //
+    // ── AND ONLY A CHANGED VALUE IS ARGUED WITH ──────────────────────────────
+    //
+    // Sets ALREADY carry ids that resolve to nothing: BuilderPage.jsx offers
+    // seven the seeder never mints, and this route's sibling used to stamp
+    // `lessons-learned` on every set regardless of engagement type. The editor
+    // sends the whole set back on every save, so checking the stored value too
+    // would refuse a RENAME over a field the person never opened — turning one
+    // silent defect into a wall in front of an unrelated edit.
+    //
+    // So the comparison is against the row that was already read for the
+    // ownership check; there is no second Get. Untouched passes through exactly
+    // as stored. Changing to a different broken id is still refused, because
+    // that is a choice, and clearing is still allowed, because that is the cure.
+    //
+    // THIS IS NOT WHERE THE DANGLING ID GETS FIXED, and the branch must not be
+    // "tidied up" into a plain check on that reasoning: the editor shows a
+    // stored id that is absent from the fetched list as unavailable, with a
+    // one-click clear (Ruling W4), so a builder meets it before saving instead
+    // of in a refusal afterwards. That is what makes this converge.
+    const changed = (field) => {
+      if (!(field in body) || body[field] === undefined) return false;
+      const next = body[field] === null ? '' : String(body[field]).trim();
+      return next !== String(existing.Item[field] ?? '').trim();
+    };
 
-    const personaCheck = await resolvePersonaRef(db, process.env.TABLE_NAME, body.personaId);
-    if (!personaCheck.ok) return refusal('personaId', personaCheck.reason);
+    if (changed('promptId')) {
+      const promptCheck = await resolvePromptRef(
+        db, process.env.TABLE_NAME, body.promptId, { orgId: cryptoOrgId }
+      );
+      if (!promptCheck.ok) return refusal('promptId', promptCheck.reason);
+    }
+
+    if (changed('personaId')) {
+      const personaCheck = await resolvePersonaRef(db, process.env.TABLE_NAME, body.personaId);
+      if (!personaCheck.ok) return refusal('personaId', personaCheck.reason);
+    }
 
     const applied = {};
     for (const field of OPTIONAL_FIELDS) {

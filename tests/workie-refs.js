@@ -286,6 +286,88 @@ const editPlatform = (setId, body) => H.platformEvent({ method: 'PUT', path: { s
     assert.strictEqual(row.personaId, 'storyteller');
   });
 
+  // ── 2b. The legacy set: a value the builder never touched ────────────────
+  //
+  // Sets ALREADY point at ids that resolve to nothing — BuilderPage.jsx offers
+  // seven the seeder never mints, and upload-questions.js used to stamp
+  // `lessons-learned` on every set regardless of type. The editor sends the
+  // whole set back, so a strict check on every save would refuse a RENAME over
+  // a field the person never opened. Ruling W5: validate a changed value only.
+  //
+  // This is not a licence for the id to live forever. Ruling W4 (Task 5) shows
+  // a stored id that is absent from the fetched list as unavailable, with a
+  // one-click clear, so the builder meets it BEFORE saving rather than in a
+  // refusal afterwards.
+
+  await H.test('renaming a set does not re-argue a summary prompt nobody touched', async () => {
+    H.reset();
+    // `lessons-learned` is deliberately NOT in the library — this is the legacy
+    // state the stamp left behind on 14 sets.
+    H.seedRow(platformSet('retro', { promptId: 'lessons-learned' }));
+
+    const res = await editSet(
+      editPlatform('retro', { name: 'Retro, renamed', promptId: 'lessons-learned' }), H.ctx(),
+    );
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const [row] = H.rowsWhere((i) => i.SK === 'SET#retro');
+    assert.strictEqual(row.name, 'Retro, renamed', 'the rename did not land');
+    // rejects: "fixing" the dangling id by blanking it behind the builder's
+    // back. Untouched means untouched.
+    assert.strictEqual(row.promptId, 'lessons-learned');
+  });
+
+  await H.test('renaming a set does not re-argue a voice nobody touched', async () => {
+    H.reset();
+    H.seedRow(platformSet('retro', { personaId: 'curator' }));
+
+    const res = await editSet(
+      editPlatform('retro', { name: 'Retro, renamed', personaId: 'curator' }), H.ctx(),
+    );
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const [row] = H.rowsWhere((i) => i.SK === 'SET#retro');
+    assert.strictEqual(row.name, 'Retro, renamed', 'the rename did not land');
+    assert.strictEqual(row.personaId, 'curator');
+  });
+
+  await H.test('swapping one dangling summary prompt for another is still refused', async () => {
+    H.reset();
+    H.seedRow(platformSet('retro', { promptId: 'lessons-learned' }));
+
+    // rejects: reading W5 as "a set with a dangling id is exempt". The
+    // grandfathering is per VALUE, not per row — choosing a new broken id is a
+    // choice, and it is refused exactly as it is on a clean set.
+    const res = await editSet(editPlatform('retro', { name: 'Retro', promptId: 'still-gone' }), H.ctx());
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.match(parse(res).error, /summary prompt/i, res.body);
+    assert.strictEqual(parse(res).field, 'promptId');
+    const [row] = H.rowsWhere((i) => i.SK === 'SET#retro');
+    assert.strictEqual(row.promptId, 'lessons-learned', 'a refused prompt id was written anyway');
+  });
+
+  await H.test('swapping one unusable voice for another is still refused', async () => {
+    H.reset();
+    H.seedRow(platformSet('retro', { personaId: 'curator' }));
+
+    const res = await editSet(editPlatform('retro', { name: 'Retro', personaId: 'nobody' }), H.ctx());
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.match(parse(res).error, /voice/i, res.body);
+    assert.strictEqual(parse(res).field, 'personaId');
+    const [row] = H.rowsWhere((i) => i.SK === 'SET#retro');
+    assert.strictEqual(row.personaId, 'curator', 'a refused voice was written anyway');
+  });
+
+  await H.test('clearing a dangling summary prompt is the way out, and it works', async () => {
+    H.reset();
+    H.seedRow(platformSet('retro', { promptId: 'lessons-learned' }));
+
+    // The refusal above tells the builder to "clear it". This is that, on the
+    // set that needs it most — the one whose prompt is already gone.
+    const res = await editSet(editPlatform('retro', { name: 'Retro', promptId: '' }), H.ctx());
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const [row] = H.rowsWhere((i) => i.SK === 'SET#retro');
+    assert.strictEqual(row.promptId, '');
+  });
+
   await H.test('clearing either setting is still allowed', async () => {
     H.reset();
     H.seedRow(platformSet('retro', { promptId: 'house-retro', personaId: 'storyteller' }));
