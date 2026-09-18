@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
@@ -337,8 +337,14 @@ export default function QuestionSetEditor({
    * reload. `share.at` moves on every event in the share lifecycle, so it is
    * the signal that a fresh outcome landed.
    */
+  const seenShareAt = useRef(questionSet?.share?.at);
   useEffect(() => {
-    if (questionSet?.share?.at) loadVersions();
+    // Skip the mount run: the [setId] effect above already loads once, and the
+    // stamp the editor was handed is the one it has already seen.
+    if (questionSet?.share?.at && questionSet.share.at !== seenShareAt.current) {
+      seenShareAt.current = questionSet.share.at;
+      loadVersions();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionSet?.share?.at]);
 

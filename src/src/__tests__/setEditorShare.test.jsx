@@ -171,7 +171,7 @@ test('a fresh check finishing inside the editor (a new share.at) reloads the ver
   await screen.findByTestId('version-1');
   const versionGets = () => authFetch.mock.calls.filter(([url]) => url.includes('/versions')).length;
   const before = versionGets();
-  expect(before).toBeGreaterThan(0);
+  expect(before).toBe(1); // the [setId] load only — the share.at effect must not double-fetch on mount
   rerender(
     <QuestionSetEditor
       questionSet={{ ...SET, share: { ...SET.share, at: '2026-08-20T10:00:00.000Z' } }}
