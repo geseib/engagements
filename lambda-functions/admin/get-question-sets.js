@@ -34,7 +34,14 @@ exports.handler = async (event) => {
       const res = await db.send(new QueryCommand({
         TableName: process.env.TABLE_NAME,
         KeyConditionExpression: 'PK = :pk',
-        ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK }
+        ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK },
+        // READ YOUR OWN WRITE. Copy-on-save, create and import put a row here
+        // and re-read the list a moment later to rebind the editor to it; an
+        // eventually-consistent Query can miss that row and leave the editor
+        // bound to a bare id (tests/question-sets-list-consistent.js). The
+        // org's partition is small and is the caller's own; the shared
+        // libraries are nobody's fresh write and stay eventually consistent.
+        ...(ref.scope === ORG ? { ConsistentRead: true } : {}),
       }));
       // The row is stamped with its own scope (ownerStamp), EXCEPT on platform
       // rows where absence IS the stamp — so the ref that found it fills in
