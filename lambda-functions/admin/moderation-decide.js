@@ -2,11 +2,11 @@
 /**
  * POST /admin/moderation/decide — the person's answer (spec §6.1).
  *
- *   approve  REVIEW ← passed (reviewer, note, notice) · publish FROM THE SNAPSHOT
- *            · sensitivity on the public row · share stamp published · log
- *            decided + published · queue row deleted · snapshot kept (D9)
- *   reject   REVIEW ← flagged (reviewer, note) · share stamp flagged with the
- *            note · snapshot deleted · log decided · queue row deleted
+ *   approve  REVIEW ← passed (reviewer, note, notice) · log decided · publish
+ *            FROM THE SNAPSHOT · sensitivity on the public row · share stamp
+ *            published · log published · queue row deleted · snapshot kept (D9)
+ *   reject   REVIEW ← flagged (reviewer, note) · log decided · share stamp
+ *            flagged with the note · snapshot deleted · queue row deleted
  *
  * The REVIEW move is a conditional Put on the row's current status
  * (transitionReview), so two reviewers cannot both decide: the loser is told
@@ -36,11 +36,40 @@
  * queue row that still exists beside an already-decided REVIEW row is not a
  * second decision — it is the first one, crashed. The SAME decision, sent
  * again (by the same reviewer or a different one), RESUMES: it does not
- * re-transition the REVIEW row, it re-runs every write after the transition
- * so whatever didn't land the first time lands now, and it never repeats a
- * write that is not naturally idempotent (the `decided` log entry). A
- * DIFFERENT decision on an already-decided review is still refused as
- * somebody else's call to make.
+ * re-transition the REVIEW row, and it re-runs every write after the
+ * transition so whatever didn't land the first time lands now — INCLUDING a
+ * repeat, deliberately, of the `published` log entry every time a resume
+ * completes something (`resumed: true` marks it as such; it is not idempotent
+ * and is not meant to be — see `decided`, below, for the one write that is
+ * guarded against repeating). A DIFFERENT decision on an already-decided
+ * review is still refused as somebody else's call to make.
+ *
+ * ── `decided` IS LOGGED AT THE TRANSITION, NOT AT THE END (Ruling R11) ─────
+ *
+ * `decided` used to be the second-to-last log write on the approve path (after
+ * publish, the sensitivity write and the share stamp) and the last on reject.
+ * That meant every crash window that leads to a RESUME — by construction,
+ * anywhere after the transition succeeds — happened BEFORE `decided` was
+ * written. A resumed decision then left the log holding `published{resumed:
+ * true}` (or nothing at all, on a resumed reject) with no record that a
+ * person decided, or who: the REVIEW row itself gets overwritten by the org's
+ * next re-check, so the review LOG is the only durable memory of the decision
+ * once that happens.
+ *
+ * So `decided` now runs directly after `transitionReview` succeeds, on both
+ * paths — before publish, before the stamp, before anything that can still
+ * throw. A resume may still need to WRITE it: the crash could have landed
+ * between the (now-earlier) `decided` write and the rest of the tail just as
+ * easily as before. So a resume reads the log first and appends `decided`
+ * only when this version holds none yet, naming the REVIEWER RECORDED ON THE
+ * REVIEW ROW — the person who actually decided — never the person clicking
+ * the retry. That read-then-write is not atomic, and the check is an
+ * in-memory scan of the whole partition's log: two concurrent resumes could
+ * in principle both find nothing and both append. Accepted, on the same
+ * reasoning that already accepts a concurrent double-resume writing two
+ * `published` entries — a duplicate log row is a strictly smaller risk than
+ * the dead end (a decision with no way to finish) this whole mechanism exists
+ * to close.
  *
  * dismiss / take down / keep-with-a-notice are answers to REPORTED rows and
  * arrive with reports (Stage 3); a reported-row sk is refused here.
@@ -53,7 +82,7 @@ const { queueKey, deleteQueueRow } = require('./shared/moderation-queue');
 const { STATUS, readReview, transitionReview } = require('./shared/set-review');
 const { publishSnapshot } = require('./shared/publish-set');
 const { writeShareStamp } = require('./shared/share-stamp');
-const { appendReviewEvent } = require('./shared/review-log');
+const { appendReviewEvent, readReviewLog } = require('./shared/review-log');
 const { readSnapshot, deleteSnapshot } = require('./shared/snapshot-store');
 const { setMetadataKey } = require('./shared/set-version');
 
@@ -167,7 +196,18 @@ exports.handler = async (event) => {
       if (!snapshot || !sameSet(snapshot.source, ref)) {
         return json(409, { error: 'The snapshot is gone, so there is nothing to publish — ask the organisation to submit it again.' });
       }
+      const resumedNote = review.note || '';
       const resumedNotice = Array.isArray(review.notice) ? review.notice : [];
+      // Ruling R11: `decided` moved to right after the transition, so a crash
+      // before this resume could already have written it. Back-fill only if
+      // this version's log holds none yet, and name the person who actually
+      // decided (the REVIEW row's own reviewer), not this retry's caller.
+      const log = await readReviewLog(db, TABLE(), ref);
+      if (!log.some((e) => e.event === 'decided' && Number(e.version) === version)) {
+        await appendReviewEvent(db, TABLE(), ref, 'decided', {
+          version, decision, reviewer: review.reviewer || reviewer, note: resumedNote, notice: resumedNotice,
+        });
+      }
       const published = await publishSnapshot(db, TABLE(), snapshot, {
         review, sourceOrgName: pointer.orgName || '', promptDropped: review.promptDropped === true, resume: true,
       });
@@ -175,8 +215,8 @@ exports.handler = async (event) => {
       await writeShareStamp(db, TABLE(), ref, {
         version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash || review.contentHash,
       });
-      // The decision itself was already logged (or never will be — either
-      // way this is not a new decision); only the completion is new.
+      // `published` is NOT guarded — it is repeated, deliberately, every time
+      // a resume completes something; `resumed: true` marks it as a repeat.
       await appendReviewEvent(db, TABLE(), ref, 'published', { version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, by: reviewer, resumed: true });
       await deleteQueueRow(db, TABLE(), sk);
       return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion, resumed: true });
@@ -184,6 +224,11 @@ exports.handler = async (event) => {
 
     if (resumingReject) {
       const resumedNote = review.note || '';
+      // Ruling R11: same back-fill guard as the resumed approve above.
+      const log = await readReviewLog(db, TABLE(), ref);
+      if (!log.some((e) => e.event === 'decided' && Number(e.version) === version)) {
+        await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer: review.reviewer || reviewer, note: resumedNote });
+      }
       await writeShareStamp(db, TABLE(), ref, { version, status: 'flagged', note: resumedNote, contentHash: review.contentHash });
       if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
       await deleteQueueRow(db, TABLE(), sk);
@@ -202,6 +247,12 @@ exports.handler = async (event) => {
         const now = await readReview(db, TABLE(), ref, version);
         return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status });
       }
+      // Ruling R11: logged HERE, right after the transition succeeds — not
+      // after publish/stamp, which can still throw and leave a resume with
+      // no record of who decided at all. publicSetId/publicVersion are not
+      // known yet at this point and are not this event's job; `published`
+      // carries them.
+      await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, notice });
       const published = await publishSnapshot(db, TABLE(), snapshot, {
         review: moved, sourceOrgName: pointer.orgName || '', promptDropped: review.promptDropped === true,
       });
@@ -209,7 +260,6 @@ exports.handler = async (event) => {
       await writeShareStamp(db, TABLE(), ref, {
         version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash || review.contentHash,
       });
-      await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, notice, publicSetId: published.publicSetId, publicVersion: published.publicVersion });
       await appendReviewEvent(db, TABLE(), ref, 'published', { version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, by: reviewer });
       await deleteQueueRow(db, TABLE(), sk);
       return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion });
@@ -220,9 +270,10 @@ exports.handler = async (event) => {
       const now = await readReview(db, TABLE(), ref, version);
       return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status });
     }
+    // Ruling R11: logged HERE, right after the transition, same as approve.
+    await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note });
     await writeShareStamp(db, TABLE(), ref, { version, status: 'flagged', note, contentHash: review.contentHash });
     if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
-    await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note });
     await deleteQueueRow(db, TABLE(), sk);
     return json(200, { decision });
   } catch (error) {

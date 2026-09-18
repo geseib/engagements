@@ -114,12 +114,11 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     const movedRow = await R.transitionReview(db, T, SRC, 2, R.STATUS.ESCALATED, {
       status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-17T10:05:00.000Z', note: 'Clinical.', notice: ['graphic-medical'],
     });
-    // Simulate a first attempt that got as far as recording the decision and
-    // publishing the snapshot -- the public set is already live -- but died
-    // before the share stamp (and the queue-row delete) landed.
-    await L.appendReviewEvent(db, T, SRC, 'decided', {
-      version: 2, decision: 'approve', reviewer: 'dai', note: 'Clinical.', notice: ['graphic-medical'], publicSetId: PUB, publicVersion: 1,
-    });
+    // A first attempt that transitioned the REVIEW row and published the
+    // snapshot -- the public set is already live -- but crashed before
+    // anything was logged (Ruling R11 narrows this gap by moving `decided`
+    // right after the transition, but does not close it: a throw between the
+    // transition and that log write is still a throw).
     await publishSnapshot(db, T, SNAPSHOT, { review: movedRow, sourceOrgName: 'Acme', promptDropped: true });
     const metaAfterCrash = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }) }))).Item;
     assert.strictEqual(metaAfterCrash.activeVersion, 1, 'the crashed attempt already made the set live');
@@ -144,12 +143,21 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     const decided = events.filter((e) => e.event === 'decided');
     const published = events.filter((e) => e.event === 'published');
     assert.strictEqual(decided.length, 1, `exactly one decided event: ${JSON.stringify(decided)}`);
-    assert.strictEqual(decided[0].reviewer, 'dai');
+    assert.strictEqual(decided[0].reviewer, 'dai', 'named from the REVIEW row, not the retry caller ana');
     assert.strictEqual(published.length, 1);
     assert.strictEqual(published[0].resumed, true);
 
     const review = await R.readReview(db, T, SRC, 2);
     assert.strictEqual(review.reviewer, 'dai');
+
+    // Ruling R11: a second resume attempt (the queue row is already gone, so
+    // this is unrelated 404 territory -- unchanged behaviour) must not have
+    // doubled up the decided back-fill.
+    const secondResume = await decide({ sk: 'org_acme#safety#v2', decision: 'approve' }, H.platformEvent({ method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' }, username: 'ana' }));
+    assert.strictEqual(secondResume.statusCode, 404, secondResume.body);
+    const eventsAfterSecond = await L.readReviewLog(db, T, SRC);
+    const decidedAfterSecond = eventsAfterSecond.filter((e) => e.event === 'decided');
+    assert.strictEqual(decidedAfterSecond.length, 1, `still exactly one decided event: ${JSON.stringify(decidedAfterSecond)}`);
   });
   await H.test('a reject that crashed after the decision is finished by the next reject', async () => {
     await seed();
@@ -167,6 +175,11 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is gone');
     const review = await R.readReview(db, T, SRC, 2);
     assert.strictEqual(review.note, 'no');
+    // Ruling R11: the crashed-then-resumed reject still names who decided.
+    const events = await L.readReviewLog(db, T, SRC);
+    const decided = events.filter((e) => e.event === 'decided');
+    assert.strictEqual(decided.length, 1, `exactly one decided event: ${JSON.stringify(decided)}`);
+    assert.strictEqual(decided[0].reviewer, 'dai');
   });
   await H.test('approve without a snapshot is refused, and nothing changes', async () => {
     await seed();
