@@ -28,6 +28,13 @@ const parse = (res) => JSON.parse(res.body || '{}');
     H.seedRow(await C.encryptItem('org_beta', 'set', { ...V.setMetadataKey({ scope: 'org', orgId: 'org_beta', setId: 'own' }), name: 'Own', engagementType: 'trivia', scope: 'org', orgId: 'org_beta', activeVersion: 1, versions: [{ version: 1 }] }));
     const res = await list(H.orgEvent({ orgId: 'org_beta', role: 'member', method: 'GET', path: {} }), H.ctx());
     const row = parse(res).questionSets.find((s) => s.id === 'own');
+    // The four provenance fields are NEVER encrypted, so all three assertions
+    // below would hold just as happily against a row the projection failed to
+    // decrypt — they read defaults off plaintext attributes. `name` is the one
+    // field here that goes through the org's key, so it is the only one that
+    // proves this row was decrypted on the way out rather than passed through
+    // as ciphertext under a correct-looking shape.
+    assert.strictEqual(row.name, 'Own', 'the org row was listed without being decrypted');
     assert.strictEqual(row.sourceOrgName, '');
     assert.deepStrictEqual(row.sensitivity, []);
     assert.strictEqual(row.promptDropped, false);

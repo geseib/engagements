@@ -180,6 +180,107 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     const decided = events.filter((e) => e.event === 'decided');
     assert.strictEqual(decided.length, 1, `exactly one decided event: ${JSON.stringify(decided)}`);
     assert.strictEqual(decided[0].reviewer, 'dai');
+    // rejects: the reject back-fill copying the approve one's shape. A reject
+    // attaches no content notices — there is nothing published for a notice to
+    // sit on — so `notice` must be ABSENT from the event, not an empty array
+    // that reads to the score card's timeline as "notices were considered".
+    assert.ok(!('notice' in decided[0]), `the reject's decided carried a notice: ${JSON.stringify(decided[0])}`);
+    // Ruling R11, the symmetric half of the approve test above: a second
+    // resume (the queue row is gone by now, so this is 404 territory) must not
+    // double up the back-fill.
+    const secondResume = await decide({ sk: 'org_acme#safety#v2', decision: 'reject', note: 'again' });
+    assert.strictEqual(secondResume.statusCode, 404, secondResume.body);
+    const decidedAfterSecond = (await L.readReviewLog(db, T, SRC)).filter((e) => e.event === 'decided');
+    assert.strictEqual(decidedAfterSecond.length, 1, `still exactly one decided event: ${JSON.stringify(decidedAfterSecond)}`);
+  });
+  /*
+    RULING R19 — spec §11: the organisation deletes the version (or the whole
+    set) while it is sitting in the queue. delete-set-version.js removes the
+    version PARTITION, and the REVIEW row lives in it; the queue row has no TTL
+    and the S3 snapshot is untouched. So readReview answers `unreviewed`, which
+    is not OPEN — and both decisions used to 409 "not waiting for a decision",
+    leaving a queue row NOTHING could ever clear.
+
+    The wipe below is by partition key (V.setPartition(SRC, 2)), not by a
+    literal: no handler or test in this repo spells a partition key out, and
+    tests/no-global-partition-literals.js is the guard that says so.
+  */
+  const wipeVersionPartition = () => {
+    const pk = V.setPartition(SRC, 2);
+    for (const [k, row] of H.state.ddb) if (row.PK === pk) H.state.ddb.delete(k);
+  };
+  await H.test('a version deleted under a queued item is still approvable, and publishes the snapshot (R19)', async () => {
+    await seed();
+    wipeVersionPartition();
+    assert.strictEqual((await R.readReview(db, T, SRC, 2)).status, 'unreviewed', 'the REVIEW row went with the partition');
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 1, 'but the queue row did not');
+
+    const res = await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: 'Clinical, not gratuitous.', notice: ['graphic-medical'] });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(parse(res), { decision: 'approve', publicSetId: PUB, publicVersion: 1, orphaned: true });
+
+    // The snapshot is self-contained, so the publish is the same publish.
+    const pubRows = rowsUnder(V.setPartition({ scope: 'public', orgId: '', setId: PUB }, 1)).filter((r) => String(r.SK).startsWith('QUESTION#'));
+    assert.strictEqual(pubRows.length, 2);
+    assert.strictEqual(pubRows.find((r) => r.SK === 'QUESTION#c001#014').Detail, 'In detail.');
+    const pubMeta = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }) }))).Item;
+    assert.deepStrictEqual(pubMeta.sensitivity, ['graphic-medical'], 'the notice this reviewer attached still lands');
+    // rejects: reading promptDropped off the (absent) REVIEW row, which is
+    // false every time — the org Workie `org-workie` would then ship to the
+    // public copy as a reference nobody outside org_acme can resolve (D5).
+    assert.strictEqual(pubMeta.promptDropped, true, 'the org Workie reached the public copy');
+    assert.strictEqual(pubMeta.promptId, undefined);
+
+    // rejects: transitionReview on the orphan path, which would write a REVIEW
+    // row straight back into a partition the organisation deleted. The
+    // PUBLISHED marker publishSnapshot writes IS tolerated (see the handler's
+    // header) — so the partition holds that and nothing else.
+    const left = rowsUnder(V.setPartition(SRC, 2)).map((r) => r.SK);
+    assert.deepStrictEqual(left, ['PUBLISHED'], `an orphan row was recreated: ${left}`);
+
+    // Only the version was deleted here, so the set's own row survives and the
+    // stamp lands on it. (When the whole set is gone writeShareStamp is
+    // conditional on the row and simply does not apply.)
+    const stamp = S.readShareStamp((await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey(SRC) }))).Item);
+    assert.strictEqual(stamp.status, 'published');
+    assert.strictEqual(stamp.publicSetId, PUB);
+
+    const events = await L.readReviewLog(db, T, SRC);
+    const decided = events.filter((e) => e.event === 'decided');
+    assert.strictEqual(decided.length, 1);
+    assert.strictEqual(decided[0].reviewer, 'dai');
+    assert.strictEqual(decided[0].orphaned, true, 'the record says the set was gone under it');
+    assert.strictEqual(events.filter((e) => e.event === 'published').length, 1);
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is finally clearable');
+  });
+  await H.test('a version deleted under a queued item is still rejectable, and the queue row clears (R19)', async () => {
+    await seed();
+    wipeVersionPartition();
+    const res = await decide({ sk: 'org_acme#safety#v2', decision: 'reject', note: 'Q14 needs the injury detail removed.' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(parse(res), { decision: 'reject', orphaned: true });
+    assert.ok(!H.state.s3.has(`prompts-test/${KEY}`), 'the snapshot is deleted on reject, orphan or not');
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is finally clearable');
+    assert.deepStrictEqual(rowsUnder(V.setPartition(SRC, 2)).map((r) => r.SK), [], 'nothing was written back into the deleted partition');
+    assert.strictEqual(rowsUnder(V.setPartition({ scope: 'public', orgId: '', setId: PUB }, 1)).length, 0, 'nothing published');
+    const decided = (await L.readReviewLog(db, T, SRC)).filter((e) => e.event === 'decided');
+    assert.strictEqual(decided.length, 1);
+    assert.strictEqual(decided[0].decision, 'reject');
+    assert.strictEqual(decided[0].orphaned, true);
+    // rejects: stamping the organisation's row `flagged` for a version they
+    // have deleted. A reject publishes nothing for a stamp to point at, and
+    // the seeded `escalated` stamp is the last true thing anyone wrote.
+    const stamp = S.readShareStamp((await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey(SRC) }))).Item);
+    assert.strictEqual(stamp.status, 'escalated', 'the stamp was rewritten about content that no longer exists');
+  });
+  await H.test('an orphaned approve with no snapshot is still refused (R5 outlives the REVIEW row)', async () => {
+    await seed();
+    wipeVersionPartition();
+    H.state.s3.clear();
+    const res = await decide({ sk: 'org_acme#safety#v2', decision: 'approve' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 1, 'still queued — nothing was published');
+    assert.strictEqual(rowsUnder(V.setPartition({ scope: 'public', orgId: '', setId: PUB }, 1)).length, 0);
   });
   await H.test('approve without a snapshot is refused, and nothing changes', async () => {
     await seed();
@@ -202,6 +303,12 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v2', decision: 'maybe' })).statusCode, 400);
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: 'x'.repeat(501) })).statusCode, 400);
     assert.strictEqual((await decide({ sk: 'PUBLIC#orgacme-safety', decision: 'approve' })).statusCode, 400, 'reported rows are decided in Stage 3');
+    // rejects: `#v(\d+)`, which admits v0 — and setPartition(ref, 0) resolves
+    // to the LEGACY UNVERSIONED partition, so `v0` would have published,
+    // stamped and logged against a different set's content than any queue row
+    // can name. `v01` goes with it: one spelling per version.
+    assert.strictEqual((await decide({ sk: 'org_acme#safety#v0', decision: 'approve' })).statusCode, 400, 'v0 reached the unversioned partition');
+    assert.strictEqual((await decide({ sk: 'org_acme#safety#v01', decision: 'approve' })).statusCode, 400, 'two spellings of one version');
     // Minor #4: a non-string note (e.g. an object) is refused rather than
     // coerced to the string '[object Object]'.
     const badNote = await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: {} });
