@@ -91,6 +91,29 @@ test('the needs-changes banner shows for the flagged version and Edit Q14 focuse
   expect(row.className).toMatch(/focused/);
 });
 
+// R23 fix round 1: clicking "Edit Q14" a second time for the same question
+// used to do nothing — QuestionSetEditor set focusQuestionId to the same
+// string, React bailed out of the identical setState, and QuestionsPanel's
+// effect (deps [focusQuestionId]) never re-ran. No re-scroll, no
+// re-highlight once the first 2-second fade had finished.
+test('Edit Q14 works every time, not just the first', async () => {
+  const scrollIntoView = jest.fn();
+  const original = window.HTMLElement.prototype.scrollIntoView;
+  window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  try {
+    mockApi();
+    render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />);
+    const banner = await screen.findByRole('status');
+    await screen.findByTestId('question-13');
+    fireEvent.click(within(banner).getByRole('button', { name: /edit q14/i }));
+    fireEvent.click(within(banner).getByRole('button', { name: /edit q14/i }));
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('question-13').className).toMatch(/focused/);
+  } finally {
+    window.HTMLElement.prototype.scrollIntoView = original;
+  }
+});
+
 test('without canShare there is no Share button and no banner actions', async () => {
   mockApi();
   render(<QuestionSetEditor questionSet={{ ...SET, canManage: false }} onCancel={() => {}} />);

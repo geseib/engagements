@@ -210,8 +210,11 @@ export default function QuestionSetEditor({
   // still playing this version, held until the owner says go ahead.
   const [pendingDelete, setPendingDelete] = useState(null);
   // "Edit Q14" in the needs-changes banner sets this; QuestionsPanel reads it
-  // to scroll to and briefly highlight the row.
-  const [focusQuestionId, setFocusQuestionId] = useState(null);
+  // to scroll to and briefly highlight the row. `seq` makes every click a NEW
+  // object, even a second click on the same question — an identical id would
+  // otherwise be an identical `setState`, which React bails out of, and the
+  // effect that does the scrolling would never re-run.
+  const [focusRequest, setFocusRequest] = useState(null);
   // The banner's own "Ask for a human review" round trip, so its buttons
   // disable for the one call that is actually in flight rather than for any
   // busyVersion action elsewhere on the panel.
@@ -1307,7 +1310,7 @@ export default function QuestionSetEditor({
               setAppealBusy(true);
               try { await onAppeal(v, message); await loadVersions(); } finally { setAppealBusy(false); }
             } : undefined}
-            onFocusQuestion={(id) => setFocusQuestionId(id)}
+            onFocusQuestion={(id) => setFocusRequest({ id, seq: Date.now() })}
           />
         );
       })()}
@@ -1319,7 +1322,7 @@ export default function QuestionSetEditor({
         showAIAssist={showAIAssist}
         onChanged={async () => { await loadVersions(); if (onChanged) onChanged(); }}
         onDirtyChange={setQuestionsDirty}
-        focusQuestionId={focusQuestionId}
+        focusRequest={focusRequest}
       />
 
       {/* ================================================= 3. VERSIONS === */}

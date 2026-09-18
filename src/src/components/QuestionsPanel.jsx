@@ -139,12 +139,17 @@ export default function QuestionsPanel({
   showAIAssist = true,
   /**
    * "Edit Q14" in the needs-changes banner (components/SetReviewBanner.jsx)
-   * sets this to a question id — bare, e.g. "q014", the same shape the
-   * questions route answers with (utils/questionRows.js:toRow reads `id`
-   * straight onto `row.sk`, and neither carries a `QUESTION#` prefix). The row
-   * scrolls into view and is briefly marked `.focused`.
+   * sets this to `{ id, seq }` — id is a question id, bare, e.g. "q014", the
+   * same shape the questions route answers with (utils/questionRows.js:toRow
+   * reads `id` straight onto `row.sk`, and neither carries a `QUESTION#`
+   * prefix). `seq` exists ONLY so clicking "Edit Q14" again for the same
+   * question is a NEW object — a repeated identical id would otherwise bail
+   * out of the `focusRequest` state update and never re-run the effect below,
+   * so a second click silently did nothing (no re-scroll, no re-highlight
+   * after the first highlight had already faded). The row scrolls into view
+   * and is briefly marked `.focused`.
    */
-  focusQuestionId = null,
+  focusRequest = null,
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -277,19 +282,23 @@ export default function QuestionsPanel({
   }, [dirty]);
 
   /* ------------------------------------------------------------- focus --- */
-  // "Edit Q14" from the needs-changes banner. focusQuestionId is BARE (see the
-  // prop doc above) — stripping any `QUESTION#` prefix defensively is cheap
-  // insurance, not evidence one is expected here.
-  const [focusedSk, setFocusedSk] = useState(null);
+  // "Edit Q14" from the needs-changes banner. focusRequest.id is BARE (see
+  // the prop doc above) — stripping any `QUESTION#` prefix defensively is
+  // cheap insurance, not evidence one is expected here. The effect depends on
+  // the whole `focusRequest` object (not just its id) so a second click on
+  // the same question — a NEW object with the same id, per `seq` — still
+  // re-runs it: re-scrolls and restarts the 2-second highlight, rather than
+  // bailing out the way an identical-id `setState` would.
+  const [focusedId, setFocusedId] = useState(null);
   useEffect(() => {
-    if (!focusQuestionId) return undefined;
-    const wanted = String(focusQuestionId).replace('QUESTION#', '');
-    setFocusedSk(wanted);
+    if (!focusRequest || !focusRequest.id) return undefined;
+    const wanted = String(focusRequest.id).replace('QUESTION#', '');
+    setFocusedId(wanted);
     const el = document.querySelector(`[data-question-id="${wanted}"]`);
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
-    const t = setTimeout(() => setFocusedSk(null), 2000);
+    const t = setTimeout(() => setFocusedId(null), 2000);
     return () => clearTimeout(t);
-  }, [focusQuestionId]);
+  }, [focusRequest]);
 
   /* ------------------------------------------------- working-copy edits --- */
 
@@ -955,12 +964,18 @@ export default function QuestionsPanel({
               : row.origin === 'new' ? 'Added'
                 : row.origin === 'copied' ? 'Copied in'
                   : row.edited ? 'Edited' : '';
+            // Computed once and used for BOTH the attribute and the focus
+            // comparison — R17 asked for the `QUESTION#` strip on both sides,
+            // and comparing this against `row.sk` directly (unstripped) was
+            // exactly the bug: a row whose sk anywhere carried the prefix
+            // would never match a bare focusedId.
+            const bareSk = String(row.sk || '').replace('QUESTION#', '');
             return (
               <li
                 key={row.uid}
-                className={`qs-question-row${row.removed ? ' removed' : ''}${badge && !row.removed ? ' changed' : ''}${row.sk && row.sk === focusedSk ? ' focused' : ''}`}
+                className={`qs-question-row${row.removed ? ' removed' : ''}${badge && !row.removed ? ' changed' : ''}${bareSk && bareSk === focusedId ? ' focused' : ''}`}
                 data-testid={`question-${rowIndex}`}
-                data-question-id={String(row.sk || '').replace('QUESTION#', '') || undefined}
+                data-question-id={bareSk || undefined}
               >
                 <div className="qs-question-main">
                   {!row.removed && (
