@@ -123,6 +123,12 @@ export default function QuestionSetsPanel({
    */
   showVisibility = false,
   onShare,
+  /**
+   * When given, replaces the row's action group entirely — the public
+   * library's Preview / Copy and the staff library's Unpublish are not
+   * variations of Edit.
+   */
+  rowActions,
   onToggleActive,
   onToggleQuickstart,
   /** The three ranked creation paths from mockup 02. */
@@ -436,7 +442,7 @@ export default function QuestionSetsPanel({
                           */}
                           <span
                             className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
-                            title={setOwnerTitle(set)}
+                            title={set.sourceOrgName ? `Published by ${set.sourceOrgName}` : setOwnerTitle(set)}
                           >
                             {setOwnerLabel(set)}
                           </span>
@@ -472,7 +478,7 @@ export default function QuestionSetsPanel({
                             `canManage` at all, and those must keep behaving as
                             they did rather than silently losing their controls.
                           */}
-                          {set.canManage !== false ? (
+                          {rowActions ? rowActions(set) : (set.canManage !== false ? (
                             <>
                               {/*
                                 THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. On an
@@ -541,7 +547,7 @@ export default function QuestionSetsPanel({
                                 </button>
                               )}
                             </>
-                          )}
+                          ))}
                         </div>
                       </td>
                     </tr>

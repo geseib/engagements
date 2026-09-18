@@ -417,3 +417,14 @@ describe('who can see it', () => {
     expect(screen.queryByRole('button', { name: /^share$/i })).toBeNull();
   });
 });
+
+describe('rowActions', () => {
+  test('a caller can replace the row actions, and the owner chip names the publisher', () => {
+    const rows = [{ ...SETS[0], id: 'pub', name: 'Public one', canManage: false, scope: 'public', sourceOrgName: 'Meridian Delivery' }];
+    mount({ questionSets: rows, rowActions: (set) => <button type="button">Do {set.id}</button> });
+    expect(screen.getByRole('button', { name: 'Do pub' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^open$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^copy$/i })).toBeNull();
+    expect(within(rowFor('Public one')).getByText('Public')).toHaveAttribute('title', expect.stringMatching(/Meridian Delivery/));
+  });
+});
