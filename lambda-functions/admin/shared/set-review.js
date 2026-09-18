@@ -99,10 +99,14 @@ async function readReview(db, tableName, ref, version) {
  * effect by accident; naming the list explicitly means the next fact a worker
  * or a staff decision needs to record (spec: `snapshotKey`, `reasons`,
  * `checkedBy`, `promptDropped`, `declaredNotice`) is one entry here, not a
- * silent drop discovered by a review that went looking for it.
+ * silent drop discovered by a review that went looking for it. `reviewer`,
+ * `decidedAt` and `notice` were added for the staff decision (Stage 2 Task 4,
+ * moderation-decide.js) — the review row's own vocabulary for who decided,
+ * when, and which content notices they attached.
  */
 const REVIEW_FIELDS = Object.freeze([
   'jobId', 'note', 'findings', 'contentHash', 'snapshotKey', 'reasons', 'checkedBy', 'promptDropped', 'declaredNotice',
+  'reviewer', 'decidedAt', 'notice',
 ]);
 
 /**
