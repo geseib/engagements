@@ -87,14 +87,62 @@ const del = (body, event) => handler(event || H.platformEvent({ method: 'DELETE'
     const stamp = await stampOf();
     assert.strictEqual(stamp.publicSetId, 'somebody-else', 'the condition on share.publicSetId did not apply');
     assert.strictEqual(stamp.status, 'published');
+    assert.strictEqual(publicRows().length, 0, 'the takedown still ran even though the stamp write was guarded off');
   });
   await H.test('a takedown needs a note, an unknown set is 404, and an org admin is refused', async () => {
     await seed({ versions: 1, questions: 2 });
     assert.strictEqual((await del({})).statusCode, 400);
     assert.strictEqual((await del({ note: 'x'.repeat(501) })).statusCode, 400);
+    const notText = await del({ note: {} });
+    assert.strictEqual(notText.statusCode, 400, 'a non-string note must be refused, not coerced');
+    assert.strictEqual(parse(notText).error, 'The note must be text.');
     assert.strictEqual((await handler(H.platformEvent({ method: 'DELETE', body: { note: 'x' }, path: { publicSetId: 'nope' } }), H.ctx())).statusCode, 404);
     const org = await handler(H.orgEvent({ orgId: 'org_acme', role: 'owner', method: 'DELETE', body: { note: 'x' }, path: { publicSetId: PUB } }), H.ctx());
     assert.strictEqual(org.statusCode, 403);
+  });
+  await H.test('a takedown that crashed after deleting nothing is finished by the next click', async () => {
+    await seed({ versions: 1, questions: 2 });
+    // R10: the org-side writes (log, stamp, queue) must run BEFORE the
+    // destructive unpublishSet. Simulate a crash on the very FIRST write of
+    // the DELETE flow — the 'taken-down' log append — by trapping exactly one
+    // PutCommand whose Item.PK names SRC's review log partition. The harness's
+    // docClient is one object literal with an own, assignable `send`
+    // (tests/helpers/moderation-harness.js), and DynamoDBDocumentClient.from
+    // returns that same singleton to the handler and to this test, so
+    // wrapping `db.send` here intercepts the handler's own calls too.
+    const real = db.send;
+    let tripped = false;
+    db.send = async (cmd) => {
+      if (!tripped && cmd.kind === 'put' && cmd.input && cmd.input.Item && cmd.input.Item.PK === L.reviewLogPk(SRC)) {
+        tripped = true;
+        throw new Error('transient');
+      }
+      return real(cmd);
+    };
+    try {
+      const first = await del({ note: 'Reported for graphic detail.' });
+      assert.strictEqual(first.statusCode, 500, first.body);
+      // Nothing destroyed: the public meta row (and so the whole partition,
+      // since unpublishSet deletes it last of all) must still be there.
+      const metaKey = V.setMetadataKey(PUBREF);
+      assert.ok(H.state.ddb.get(`${metaKey.PK}|${metaKey.SK}`), 'the public meta row must still exist after the crashed attempt');
+      assert.ok(publicRows().length > 0, 'the public partition must still exist after the crashed attempt');
+      const stampAfterCrash = await stampOf();
+      assert.strictEqual(stampAfterCrash.status, 'published', 'the org stamp must be untouched by the crashed attempt');
+
+      const second = await del({ note: 'Reported for graphic detail.' });
+      assert.strictEqual(second.statusCode, 200, second.body);
+      assert.deepStrictEqual(parse(second), { takenDown: PUB });
+      assert.strictEqual(publicRows().length, 0, 'the second attempt finished the takedown');
+      const stampAfterRetry = await stampOf();
+      assert.strictEqual(stampAfterRetry.status, 'flagged');
+      assert.strictEqual(stampAfterRetry.note, 'Reported for graphic detail.');
+      assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'queue rows are gone');
+      const events = await L.readReviewLog(db, T, SRC);
+      assert.ok(events.some((e) => e.event === 'taken-down'), 'taken-down is logged');
+    } finally {
+      db.send = real;
+    }
   });
   H.summary();
 })();

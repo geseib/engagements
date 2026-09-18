@@ -60,8 +60,8 @@ function evalCondition(expr, item, names, values) {
   if (and.length > 1) return and.every((c) => evalCondition(c, item, names, values));
   const c = expr.trim().replace(/^\((.*)\)$/, '$1');
   let m;
-  if ((m = /^attribute_not_exists\((.+)\)$/.exec(c))) return !item || !(resolveName(m[1], names) in item);
-  if ((m = /^attribute_exists\((.+)\)$/.exec(c))) return Boolean(item) && resolveName(m[1], names) in item;
+  if ((m = /^attribute_not_exists\((.+)\)$/.exec(c))) return !item || resolvePath(m[1], names, item) === undefined;
+  if ((m = /^attribute_exists\((.+)\)$/.exec(c))) return Boolean(item) && resolvePath(m[1], names, item) !== undefined;
   if ((m = /^(\S+)\s+IN\s+\((.+)\)$/.exec(c))) {
     const v = item ? item[resolveName(m[1], names)] : undefined;
     return m[2].split(',').map((s) => resolveValue(s.trim(), values)).includes(v);

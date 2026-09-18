@@ -7,12 +7,33 @@
  * org, versions, notice), the org's REVIEW facts for the version it came from,
  * and the review log. Reports (Stage 3) and access rows (Stage 5) join later.
  *
- * DELETE is takedown. It reads `source*` off the public row, deletes the whole
- * public partition in batches (unpublishSet), logs `taken-down` with the note
- * on the org set's log, and flags the org's share stamp ONLY IF it still names
- * this public set (D11). IT NEVER TOUCHES THE ORG'S REVIEW ROW — a Put there
- * would erase the org's own findings and hash; the author's editor reads the
- * note from the stamp and renders 06.
+ * DELETE is takedown. It reads `source*` off the public row, logs `taken-down`
+ * with the note on the org set's log, flags the org's share stamp ONLY IF it
+ * still names this public set (D11), deletes any queue row for the set, and
+ * ONLY THEN deletes the whole public partition in batches (unpublishSet). IT
+ * NEVER TOUCHES THE ORG'S REVIEW ROW — a Put there would erase the org's own
+ * findings and hash; the author's editor reads the note from the stamp and
+ * renders 06.
+ *
+ * ── WHY THE DESTRUCTIVE DELETE RUNS LAST (Ruling R10) ──────────────────────
+ *
+ * `unpublishSet` deletes the public metadata row as part of its batch. Reviewer
+ * found that running it FIRST means a throw in any later write — the log
+ * append, the guarded stamp, a queue delete — leaves the public rows gone, the
+ * org's stamp still `published` and naming a set that no longer exists, the
+ * queue row present, and `taken-down` never logged. Worse: every retry then
+ * 404s (GET included, since `readPublicMeta` is the first thing both verbs do)
+ * — staff cannot even open the entry to try again.
+ *
+ * Ordering the org-side writes FIRST and the delete LAST means a crash leaves
+ * the set still listed and GET/DELETE still reachable, and the NEXT click just
+ * finishes the job: the log append is benign to repeat (it is an append, not a
+ * replace), the guarded stamp write quietly returns null once the stamp no
+ * longer names this set (so a retry after the stamp already flipped is a
+ * no-op, not a re-throw), the queue deletes are unconditional deletes of a key
+ * that may already be gone, and `unpublishSet` itself no-ops once the public
+ * metadata row it keys off is gone. A crashed takedown is finished by the next
+ * click, never stuck half-done.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
@@ -92,6 +113,14 @@ exports.handler = async (event) => {
 
     let body;
     try { body = JSON.parse(event.body || '{}'); } catch { return json(400, { error: 'The request body is not JSON.' }); }
+    // A present-but-wrong-type note (an object, a number, `false`…) must be
+    // refused rather than silently coerced to a string like '[object Object]'
+    // — that would land in the organisation's log and stamp as if it were the
+    // reviewer's own words. Absent (`undefined`) or explicit `null` reads as
+    // "no note", caught by the emptiness check below, same as always.
+    if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') {
+      return json(400, { error: 'The note must be text.' });
+    }
     const note = String(body.note || '').trim();
     if (!note) return json(400, { error: 'A takedown needs a note: the organisation reads it.' });
     if (note.length > NOTE_MAX) return json(400, { error: `The note is over ${NOTE_MAX} characters.` });
@@ -99,13 +128,15 @@ exports.handler = async (event) => {
     const source = sourceOf(meta);
     const version = Number(meta.sourceVersion) || 0;
     const reviewer = reviewerOf(event);
-    await unpublishSet(db, TABLE(), source, pubRefOf(publicSetId));
+    // R10: the organisation is told FIRST — the destructive delete is LAST.
+    // See the handler docstring for why.
     if (source.orgId && source.setId) {
       await appendReviewEvent(db, TABLE(), source, 'taken-down', { version, publicSetId, note, reviewer });
       await writeShareStamp(db, TABLE(), source, { version, status: 'flagged', note }, { onlyIfPublicSetId: publicSetId });
       if (version) await deleteQueueRow(db, TABLE(), queueSk(source, version));
     }
     await deleteQueueRow(db, TABLE(), queueSk(pubRefOf(publicSetId), 0));
+    await unpublishSet(db, TABLE(), source, pubRefOf(publicSetId));
     return json(200, { takenDown: publicSetId });
   } catch (error) {
     console.error('❌ public-library item failed:', error);

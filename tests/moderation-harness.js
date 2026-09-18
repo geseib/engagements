@@ -129,5 +129,52 @@ const db = DynamoDBDocumentClient.from({});
     assert.ok(refused && refused.name === 'ConditionalCheckFailedException', 'the mismatched nested condition was not refused');
     assert.strictEqual(H.state.ddb.get('C|SET#x').touched, true, 'the refused update must not have applied');
   });
+  await H.test('attribute_exists/attribute_not_exists resolve a dotted path through the item, both ways', async () => {
+    H.reset();
+    H.seedRow({ PK: 'D', SK: 'SET#present', share: { publicSetId: 'pub1' } });
+    H.seedRow({ PK: 'D', SK: 'SET#absent', share: {} });
+    // attribute_exists(dotted): true when the leaf is present…
+    await db.send(new UpdateCommand({
+      TableName: 't', Key: { PK: 'D', SK: 'SET#present' },
+      UpdateExpression: 'SET seen = :yes',
+      ExpressionAttributeNames: { '#s': 'share' },
+      ExpressionAttributeValues: { ':yes': true },
+      ConditionExpression: 'attribute_exists(#s.publicSetId)',
+    }));
+    assert.strictEqual(H.state.ddb.get('D|SET#present').seen, true, 'attribute_exists(dotted) did not match a present nested field');
+    // …false when the intermediate object exists but the leaf is missing.
+    let existsRefused = null;
+    try {
+      await db.send(new UpdateCommand({
+        TableName: 't', Key: { PK: 'D', SK: 'SET#absent' },
+        UpdateExpression: 'SET seen = :yes',
+        ExpressionAttributeNames: { '#s': 'share' },
+        ExpressionAttributeValues: { ':yes': true },
+        ConditionExpression: 'attribute_exists(#s.publicSetId)',
+      }));
+    } catch (e) { existsRefused = e; }
+    assert.ok(existsRefused && existsRefused.name === 'ConditionalCheckFailedException', 'attribute_exists(dotted) did not refuse a missing nested field');
+    // attribute_not_exists(dotted): true when the leaf is missing…
+    await db.send(new UpdateCommand({
+      TableName: 't', Key: { PK: 'D', SK: 'SET#absent' },
+      UpdateExpression: 'SET seen = :yes',
+      ExpressionAttributeNames: { '#s': 'share' },
+      ExpressionAttributeValues: { ':yes': true },
+      ConditionExpression: 'attribute_not_exists(#s.publicSetId)',
+    }));
+    assert.strictEqual(H.state.ddb.get('D|SET#absent').seen, true, 'attribute_not_exists(dotted) did not match a missing nested field');
+    // …false when the leaf is present.
+    let notExistsRefused = null;
+    try {
+      await db.send(new UpdateCommand({
+        TableName: 't', Key: { PK: 'D', SK: 'SET#present' },
+        UpdateExpression: 'SET seen2 = :yes',
+        ExpressionAttributeNames: { '#s': 'share' },
+        ExpressionAttributeValues: { ':yes': true },
+        ConditionExpression: 'attribute_not_exists(#s.publicSetId)',
+      }));
+    } catch (e) { notExistsRefused = e; }
+    assert.ok(notExistsRefused && notExistsRefused.name === 'ConditionalCheckFailedException', 'attribute_not_exists(dotted) did not refuse a present nested field');
+  });
   H.summary();
 })();
