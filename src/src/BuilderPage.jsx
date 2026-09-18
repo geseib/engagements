@@ -9,6 +9,9 @@ import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import { tagsToCsvCell } from './utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
+import { adminApiUrl } from './utils/adminApi';
+import { selectableSummaryPrompts } from './utils/questionSetEditing';
+import { gameTypeLabel } from './config/gameTypes';
 
 const API_BASE = window.API_BASE;
 
@@ -19,13 +22,55 @@ function BuilderPage() {
     description: '',
     customInstructions: '',
     aiContextInstructions: '',
-    promptId: 'lessons-learned', // Default AI prompt
+    /* EMPTY MEANS "WHATEVER THIS GAME TYPE ALREADY DOES".
+       This used to read `promptId: 'lessons-learned'`, one of ten ids written
+       into the JSX below by hand. No seeder mints them —
+       scripts/populate-defaults.js mints random ids — so the value this page
+       sent on every save resolved to nothing, for every set it ever made.
+       An absent promptId is the honest default: get-ai-summary.js already
+       resolves a type-appropriate prompt when a set carries none. */
+    promptId: '',
     questions: []
   });
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [saveStatus, setSaveStatus] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [availablePrompts, setAvailablePrompts] = useState([]);
+
+  /* THE PROMPT LIBRARY, READ THE WAY THE CONSOLE READS IT.
+     AdminPage.fetchAvailablePrompts() is the model: GET admin/ai-prompts
+     through authFetch, keep the active rows, and let the picker filter the
+     rest. The route is allowed to hosts as well as admins
+     (auth/authorizer.js), which matters because the host's create dialog
+     offers this page too.
+
+     A failure is not fatal here. The picker falls back to its one honest
+     option — use the game type's default — which is exactly what an unset
+     promptId does at run time. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await authFetch(adminApiUrl('admin/ai-prompts'));
+        if (!response.ok) {
+          console.warn(`Prompt library unavailable (${response.status})`);
+          return;
+        }
+        const data = await response.json();
+        const active = (data.prompts || []).filter((prompt) => prompt.status === 'active');
+        if (!cancelled) setAvailablePrompts(active);
+      } catch (error) {
+        console.error('Error fetching available prompts:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Prompts this set could actually use: the right game type, and a summary
+     prompt rather than a generation one. The same helper the console's editor
+     and the upload panel use, so all three pickers agree. */
+  const promptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
 
   // Handle adding a new question
   const handleAddQuestion = () => {
@@ -137,7 +182,7 @@ function BuilderPage() {
           description: '',
           customInstructions: '',
           aiContextInstructions: '',
-          promptId: 'lessons-learned',
+          promptId: '',
           questions: []
         });
       } else {
@@ -331,16 +376,12 @@ function BuilderPage() {
                   onChange={(e) => setQuestionSet(prev => ({ ...prev, promptId: e.target.value }))}
                   className="input-field"
                 >
-                  <option value="lessons-learned">Lessons Learned - Strategic Insights</option>
-                  <option value="problem-solving">Problem-Solving - Solution Architecture</option>
-                  <option value="team-building">Team Building - Culture & Collaboration</option>
-                  <option value="strategic-planning">Strategic Planning - Vision & Goals</option>
-                  <option value="innovation">Innovation - Creative Solutions</option>
-                  <option value="leadership">Leadership - Development & Growth</option>
-                  <option value="customer-insights">Customer Experience - Voice of Customer</option>
-                  <option value="process-improvement">Process Improvement - Operational Excellence</option>
-                  <option value="change-management">Change Management - Transformation</option>
-                  <option value="interview-prep">Interview Prep - Best Practices</option>
+                  <option value="">Use the default prompt for {gameTypeLabel(engagementType)}</option>
+                  {promptChoices.map((prompt) => (
+                    <option key={prompt.promptId} value={prompt.promptId}>
+                      {prompt.name}
+                    </option>
+                  ))}
                 </select>
                 <p className="form-helper">Select the AI analysis style for summarizing player responses</p>
               </div>
