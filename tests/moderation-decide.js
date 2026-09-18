@@ -12,7 +12,7 @@ const R = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-review.js
 const L = require(path.join(H.REPO, 'lambda-functions/admin/shared/review-log.js'));
 const S = require(path.join(H.REPO, 'lambda-functions/admin/shared/share-stamp.js'));
 const V = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-version.js'));
-const { publicSetIdFor } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
+const { publicSetIdFor, publishSnapshot } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
 const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/moderation-decide.js'));
 const parse = (res) => JSON.parse(res.body || '{}');
 const SRC = { scope: 'org', orgId: 'org_acme', setId: 'safety' };
@@ -95,11 +95,78 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     assert.strictEqual(first.statusCode, 200);
     const second = await decide({ sk: 'org_acme#safety#v2', decision: 'approve' }, H.platformEvent({ method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' }, username: 'ana' }));
     assert.strictEqual(second.statusCode, 404, 'the queue row is gone, so the second reviewer is told nothing is waiting');
+    // Ruling R9 rule 4: even if the queue row comes back (a stale
+    // re-escalation), a DIFFERENT decision on an already-decided review is
+    // refused -- flagged+approve is not the same decision replayed, so this
+    // is not a resume, it is somebody else's call to make.
+    await Q.upsertQueueRow(db, T, { ref: SRC, version: 2, reason: 'escalated', orgName: 'Acme', title: 'Safety walkthrough', gameType: 'trivia', questionCount: 2, snapshotKey: KEY, contentHash: 'c'.repeat(64) });
+    const crossDecision = await decide({ sk: 'org_acme#safety#v2', decision: 'approve' }, H.platformEvent({ method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' }, username: 'ana' }));
+    assert.strictEqual(crossDecision.statusCode, 409, crossDecision.body);
+    assert.match(parse(crossDecision).error, /already decided by dai/i);
     await seed();
     await R.writeReview(db, T, SRC, 2, { status: R.STATUS.PASSED, reviewer: 'dai', findings: [] });
     const stale = await decide({ sk: 'org_acme#safety#v2', decision: 'reject', note: 'late' });
     assert.strictEqual(stale.statusCode, 409, stale.body);
     assert.match(parse(stale).error, /already decided by dai/i);
+  });
+  await H.test('an approve that crashed after the decision is finished by the next approve, not refused', async () => {
+    await seed();
+    const movedRow = await R.transitionReview(db, T, SRC, 2, R.STATUS.ESCALATED, {
+      status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-17T10:05:00.000Z', note: 'Clinical.', notice: ['graphic-medical'],
+    });
+    // Simulate a first attempt that got as far as recording the decision and
+    // publishing the snapshot -- the public set is already live -- but died
+    // before the share stamp (and the queue-row delete) landed.
+    await L.appendReviewEvent(db, T, SRC, 'decided', {
+      version: 2, decision: 'approve', reviewer: 'dai', note: 'Clinical.', notice: ['graphic-medical'], publicSetId: PUB, publicVersion: 1,
+    });
+    await publishSnapshot(db, T, SNAPSHOT, { review: movedRow, sourceOrgName: 'Acme', promptDropped: true });
+    const metaAfterCrash = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }) }))).Item;
+    assert.strictEqual(metaAfterCrash.activeVersion, 1, 'the crashed attempt already made the set live');
+
+    const res = await decide({ sk: 'org_acme#safety#v2', decision: 'approve' }, H.platformEvent({ method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' }, username: 'ana' }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(parse(res), { decision: 'approve', publicSetId: PUB, publicVersion: 1, resumed: true });
+
+    const metaAfterResume = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }) }))).Item;
+    assert.strictEqual(metaAfterResume.activeVersion, 1, 'no version bump on resume');
+    assert.strictEqual(metaAfterResume.versions.length, 1, 'no duplicate versions entry');
+    assert.deepStrictEqual(metaAfterResume.sensitivity, ['graphic-medical'], 'sensitivity comes from the REVIEW row -- the retry sent none');
+
+    const srcMeta = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey(SRC) }))).Item;
+    const stamp = S.readShareStamp(srcMeta);
+    assert.strictEqual(stamp.status, 'published');
+    assert.strictEqual(stamp.publicVersion, 1);
+
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is gone');
+
+    const events = await L.readReviewLog(db, T, SRC);
+    const decided = events.filter((e) => e.event === 'decided');
+    const published = events.filter((e) => e.event === 'published');
+    assert.strictEqual(decided.length, 1, `exactly one decided event: ${JSON.stringify(decided)}`);
+    assert.strictEqual(decided[0].reviewer, 'dai');
+    assert.strictEqual(published.length, 1);
+    assert.strictEqual(published[0].resumed, true);
+
+    const review = await R.readReview(db, T, SRC, 2);
+    assert.strictEqual(review.reviewer, 'dai');
+  });
+  await H.test('a reject that crashed after the decision is finished by the next reject', async () => {
+    await seed();
+    await R.transitionReview(db, T, SRC, 2, R.STATUS.ESCALATED, {
+      status: R.STATUS.FLAGGED, reviewer: 'dai', decidedAt: '2026-09-17T10:05:00.000Z', note: 'no',
+    });
+    const res = await decide({ sk: 'org_acme#safety#v2', decision: 'reject', note: 'ignored' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(parse(res), { decision: 'reject', resumed: true });
+    const srcMeta = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey(SRC) }))).Item;
+    const stamp = S.readShareStamp(srcMeta);
+    assert.strictEqual(stamp.status, 'flagged');
+    assert.strictEqual(stamp.note, 'no', "the recorded note wins, not the retry's");
+    assert.ok(!H.state.s3.has(`prompts-test/${KEY}`), 'the snapshot is gone');
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is gone');
+    const review = await R.readReview(db, T, SRC, 2);
+    assert.strictEqual(review.note, 'no');
   });
   await H.test('approve without a snapshot is refused, and nothing changes', async () => {
     await seed();
@@ -122,8 +189,17 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v2', decision: 'maybe' })).statusCode, 400);
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: 'x'.repeat(501) })).statusCode, 400);
     assert.strictEqual((await decide({ sk: 'PUBLIC#orgacme-safety', decision: 'approve' })).statusCode, 400, 'reported rows are decided in Stage 3');
+    // Minor #4: a non-string note (e.g. an object) is refused rather than
+    // coerced to the string '[object Object]'.
+    const badNote = await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: {} });
+    assert.strictEqual(badNote.statusCode, 400);
+    assert.match(parse(badNote).error, /note must be text/i);
     const org = await handler(H.orgEvent({ orgId: 'org_acme', role: 'owner', method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' } }), H.ctx());
     assert.strictEqual(org.statusCode, 403);
+    // Minor #6: the acting-as-Engage interlock, not just "not an admin" --
+    // an admins-group caller standing INSIDE an org is still refused.
+    const orgAdmin = await handler(H.orgEvent({ orgId: 'org_acme', role: 'owner', groups: 'admins', method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' } }), H.ctx());
+    assert.strictEqual(orgAdmin.statusCode, 403);
   });
   H.summary();
 })();
