@@ -247,6 +247,64 @@ describe('a list that will not load costs the host nothing else', () => {
   });
 });
 
+/* ------------------------------------------------- and the failure is heard --- */
+
+/**
+ * SWALLOWED IS NOT THE SAME AS SILENT. Degrading to an empty list is the right
+ * behaviour on screen — neither list is needed to edit a set — but the two
+ * fetches used to do it with a comment where a log line belongs, so a host
+ * saying "the voice picker is empty" left nobody anything to read. Both
+ * existing callers of these endpoints (`AdminPage.fetchAvailablePrompts` /
+ * `fetchAvailablePersonas`, and BuilderPage's prompt read) report the failure
+ * to the console; this dialog now does too.
+ */
+describe('a list that will not load is still reported somewhere', () => {
+  const capturingWarnings = async (body) => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await body();
+      return warn.mock.calls.map((args) => args.map(String).join(' ')).join('\n');
+    } finally {
+      warn.mockRestore();
+    }
+  };
+
+  test('a refused list names itself and its status', async () => {
+    // rejects: `if (!response.ok) return;` with nothing said. A 403 on one list
+    // and a 500 on the other are the two most likely failures here and were the
+    // two least visible.
+    const said = await capturingWarnings(async () => {
+      await openDialog({ promptStatus: 403, personaStatus: 500 });
+      await openEditor();
+    });
+    expect(said).toMatch(/prompt/i);
+    expect(said).toMatch(/403/);
+    expect(said).toMatch(/voice|persona/i);
+    expect(said).toMatch(/500/);
+  });
+
+  test('a thrown request is reported, not only caught', async () => {
+    // rejects: THE DEFECT as written — two catch blocks whose whole body was a
+    // comment. authFetch rejects outright when there is no session, which is
+    // precisely the case somebody would be asked to diagnose.
+    const said = await capturingWarnings(async () => {
+      authFetch.mockReset();
+      authFetch.mockImplementation(async (url) => {
+        if (/\/admin\/question-sets$/.test(String(url))) {
+          return jsonResponse(200, { questionSets: HOST_VIEW });
+        }
+        throw new Error('no session');
+      });
+      render(<HostQuestionSetsDialog onClose={jest.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/loading your question sets/i)).toBeNull());
+      await waitFor(() => expect(screen.getByText('Ivy Retro')).toBeTruthy());
+    });
+    expect(said).toMatch(/prompt/i);
+    expect(said).toMatch(/voice|persona/i);
+    expect(said).toMatch(/no session/);
+  });
+});
+
 /* ------------------------------------------------------------ once, not per --- */
 
 describe('the lists are read when the dialog opens, once', () => {

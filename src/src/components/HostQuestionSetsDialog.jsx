@@ -235,6 +235,13 @@ export default function HostQuestionSetsDialog({
     editor renders a select with only its default option in that case, which is
     the same thing it did before this existed.
 
+    SWALLOWED ON SCREEN, NOT IN SILENCE. Both failure paths say so to the
+    console, as AdminPage's two fetches of these same endpoints always have.
+    Without it the only symptom is a picker holding one option — which is also
+    exactly what a correctly working environment with no voices configured
+    looks like, so there was no way to tell a missing library from an empty
+    one, and a host reporting it left nobody anything to read.
+
     THE PROMPT LIST IS PASSED RAW (bar the status filter AdminPage applies).
     `QuestionSetEditor` runs `selectableSummaryPrompts()` on it itself and then
     reports `availablePrompts.length - choices.length` as "N prompts for other
@@ -248,21 +255,30 @@ export default function HostQuestionSetsDialog({
     (async () => {
       try {
         const response = await authFetch(adminApiUrl('admin/ai-prompts'));
-        if (!response.ok) return;
+        if (!response.ok) {
+          console.warn(`Prompt library unavailable (${response.status}) — the summary-approach picker will offer its default only`);
+          return;
+        }
         const data = await response.json().catch(() => ({}));
         if (live) setAvailablePrompts((data.prompts || []).filter((p) => p.status === 'active'));
       } catch (e) {
-        // Nothing to say on screen: the picker degrades to its default option.
+        // Nothing to say on SCREEN — the picker degrades to its default option
+        // — but plenty to say to whoever is asked why it is empty.
+        console.warn('Prompt library unavailable:', e);
       }
     })();
     (async () => {
       try {
         const response = await authFetch(adminApiUrl('admin/personas'));
-        if (!response.ok) return;
+        if (!response.ok) {
+          console.warn(`Voice library unavailable (${response.status}) — Workie will adapt to the session, which is the designed default`);
+          return;
+        }
         const data = await response.json().catch(() => ({}));
         if (live) setAvailablePersonas(data.personas || []);
       } catch (e) {
-        // Same: Workie adapts to the session, which is the designed default.
+        // Same: the default on screen stays right, and the reason stops vanishing.
+        console.warn('Voice library unavailable:', e);
       }
     })();
     return () => { live = false; };

@@ -72,6 +72,31 @@ function BuilderPage() {
      and the upload panel use, so all three pickers agree. */
   const promptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
 
+  /* CHANGING THE FORMAT RE-EXAMINES THE SUMMARY APPROACH, because the picker is
+     conditional and the save body is not.
+
+     The select above renders for call & answer only — `handleSave` sends
+     `promptId` for every format. So a prompt chosen here and then abandoned by
+     switching to Trivia stayed in state and rode onto a trivia set, with no
+     control left on the screen that would have shown it. The person who chose
+     it could not have known, which is what makes it worth a rule rather than a
+     note.
+
+     RE-VALIDATED, NOT BLANKED. A prompt filed under `gameType: 'all'` is
+     offered for the new format too, and clearing it unconditionally would take
+     away a choice that is still good without saying so. The test is the same
+     one the picker applies to what it offers, so what the builder can see and
+     what the builder can save cannot disagree. */
+  const handleEngagementTypeChange = (nextType) => {
+    setEngagementType(nextType);
+    setQuestionSet((prev) => {
+      if (!prev.promptId) return prev;
+      const stillOffered = selectableSummaryPrompts(availablePrompts, nextType)
+        .some((prompt) => prompt.promptId === prev.promptId);
+      return stillOffered ? prev : { ...prev, promptId: '' };
+    });
+  };
+
   // Handle adding a new question
   const handleAddQuestion = () => {
     const newQuestion = {
@@ -299,7 +324,7 @@ function BuilderPage() {
               <select
                 id="engagement-type"
                 value={engagementType}
-                onChange={(e) => setEngagementType(e.target.value)}
+                onChange={(e) => handleEngagementTypeChange(e.target.value)}
                 className="input-field"
               >
                 <option value="call-and-answer">Call and Answer</option>

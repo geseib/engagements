@@ -214,3 +214,82 @@ describe('BuilderPage summary-prompt picker', () => {
     expect(uploads[0].promptId).toBe('');
   });
 });
+
+/* ------------------------------------------ when the format changes under it --- */
+
+/**
+ * THE PICKER IS CONDITIONAL; THE SAVE BODY IS NOT. `{engagementType ===
+ * 'call-and-answer' && …}` hides the control for the other three formats, but
+ * `handleSave` has always sent `promptId: questionSet.promptId` whatever the
+ * format is. So a prompt chosen for a call & answer set and then abandoned by
+ * switching to Trivia stayed in state, stayed submittable, and rode onto a set
+ * it was never written for — out of sight of the person who chose it, because
+ * the control that would have shown it is no longer on the page.
+ */
+describe('a summary approach chosen for one format does not follow the set to another', () => {
+  test('switching the engagement type drops a prompt that belongs to the old one', async () => {
+    const uploads = [];
+    mockApi({ uploads });
+    render(<BuilderPage />);
+
+    const select = await loadedPromptSelect();
+    fireEvent.change(select, { target: { value: 'sum-1c8b44' } });
+
+    fireEvent.change(screen.getByLabelText(/Engagement Type/i), { target: { value: 'trivia' } });
+    // The control is gone, which is exactly why the value must not linger: there
+    // is no longer anywhere on the screen that would show it.
+    expect(screen.queryByLabelText(/AI Summary Prompt/i)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Quiz' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
+
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    expect(uploads[0].engagementType).toBe('trivia');
+    // rejects: THE DEFECT — a call & answer summary approach stored on a trivia
+    // set, where `selectableSummaryPrompts` would never have offered it.
+    expect(uploads[0].promptId).toBe('');
+  });
+
+  test('coming back to the old format finds the picker empty, not silently set', async () => {
+    mockApi();
+    render(<BuilderPage />);
+
+    const select = await loadedPromptSelect();
+    fireEvent.change(select, { target: { value: 'sum-1c8b44' } });
+    expect(select.value).toBe('sum-1c8b44');
+
+    const type = screen.getByLabelText(/Engagement Type/i);
+    fireEvent.change(type, { target: { value: 'poll' } });
+    fireEvent.change(type, { target: { value: 'call-and-answer' } });
+
+    // rejects: the round trip quietly restoring a choice the builder last saw
+    // two formats ago. Whatever the picker shows has to be what will be saved.
+    const back = await loadedPromptSelect();
+    expect(back.value).toBe('');
+  });
+
+  test('a prompt that suits every format survives the switch', async () => {
+    const uploads = [];
+    mockApi({
+      uploads,
+      prompts: [{ promptId: 'sum-any-01', name: 'Any Format Readout', gameType: 'all', status: 'active' }],
+    });
+    render(<BuilderPage />);
+
+    const select = await promptSelect();
+    await within(select).findByRole('option', { name: 'Any Format Readout' });
+    fireEvent.change(select, { target: { value: 'sum-any-01' } });
+
+    fireEvent.change(screen.getByLabelText(/Engagement Type/i), { target: { value: 'poll' } });
+    fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Pulse' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
+
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    // rejects: blanking the field on every format change. `gameType: 'all'` is
+    // offered for the new format too, so clearing it would take away a valid
+    // choice the builder made and never say that it had.
+    expect(uploads[0].promptId).toBe('sum-any-01');
+  });
+});
