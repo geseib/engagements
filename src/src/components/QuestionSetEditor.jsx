@@ -340,9 +340,33 @@ export default function QuestionSetEditor({
     in neither library and is not. The two cannot share a consequence sentence,
     and inventing one for both would plant a fresh falsehood in the middle of
     the fix that removed one.
+
+    "IF IT PARSES" IS A SHAPE, NOT AN EXISTENCE (ruling W10). The authority is
+    `isUsableSummaryPrompt` in lambda-functions/game/prompt-shape.js: a
+    `template`, or `instructions` + `outputFormat`. A generation-shaped row
+    (`basePrompt`/`contextTemplate`, as scripts/populate-generation-prompts.js
+    writes) has neither and is REJECTED — it falls back to the game-type
+    default, which is the original "I added an Art prompt and nothing changed"
+    report and the exact opposite of what the reassuring branch promises.
+
+    Mirrored through `summaryPromptStatus` rather than re-implemented, because
+    that field IS the endpoint running that same function over the row
+    (get-ai-prompts.js) — a shape check, which is what the ruling asks for, and
+    one that also catches an analysis row broken some other way (instructions
+    with no outputFormat) that a type check would wave through. Only a verdict
+    of 'unusable' counts against a prompt: 'unknown' is the NORMAL answer for a
+    summary prompt, whose body lives in S3 and is not fetched by the list, so
+    reading it as failure would deny the promise for nearly every real prompt.
+    `promptType` is belt and braces — `inferPromptType` derives 'generation'
+    from the shape too.
   */
+  const willRunAsASummary = (p) => Boolean(p)
+    && p.summaryPromptStatus !== 'unusable'
+    && p.promptType !== 'generation';
   const promptHonoured = danglingPrompt
-    ? prompts.find((p) => p.promptId === promptId && p.scope !== 'public') || null
+    ? prompts.find((p) => p.promptId === promptId
+        && p.scope !== 'public'
+        && willRunAsASummary(p)) || null
     : null;
 
   const loadVersions = useCallback(async () => {

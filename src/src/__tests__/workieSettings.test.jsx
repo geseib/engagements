@@ -370,6 +370,42 @@ describe('the picker never offers a scope the writer would refuse', () => {
       expect(notice.textContent).toMatch(/will still follow it/i);
       expect(notice.textContent).not.toMatch(/standard Call & Answer way/);
     });
+
+    /*
+      RULING W10 — "Workie will still follow it" IS A PROMISE ABOUT A SHAPE.
+
+      The branch above was chosen by "a non-public row with this id exists",
+      which is not the gate the backend applies. `isUsableSummaryPrompt`
+      (lambda-functions/game/prompt-shape.js) wants a `template`, or
+      `instructions` + `outputFormat` — a SHAPE. A generation-shaped row carries
+      `basePrompt`/`contextTemplate` and neither of those, so
+      `resolvePromptTemplate` rejects it and falls back to the game-type default:
+      the exact opposite of what the reassuring sentence promises, and the
+      original "I added an Art prompt and nothing changed" report.
+
+      The row below is what `get-ai-prompts.js` sends for one —
+      `summaryPromptStatus: 'unusable'` is that endpoint applying the very same
+      function, and `promptType` is `inferPromptType`'s reading of the shape.
+      Unreachable today (nothing writes a gen id onto a set's promptId), which is
+      why it is a fix rather than an emergency.
+    */
+    test('a generation-shaped prompt is not promised, however readable its library', () => {
+      const generationRow = {
+        promptId: 'gen-art', name: 'Art Scenario Generator', status: 'active',
+        gameType: 'call-and-answer', scope: 'platform', promptType: 'generation',
+        summaryPromptStatus: 'unusable',
+        summaryPromptDefect: 'generation-format prompt (basePrompt/contextTemplate)',
+      };
+      mockEditorApi();
+      renderEditor({
+        availablePrompts: [...PROMPTS, generationRow],
+        questionSet: { ...SET, promptId: 'gen-art' },
+      });
+      const notice = screen.getByTestId('workie-prompt-unavailable');
+      expect(notice.textContent).toMatch(/does not offer/i);
+      expect(notice.textContent).toMatch(/standard Call & Answer way/);
+      expect(notice.textContent).not.toMatch(/will still follow it/i);
+    });
   });
 });
 
