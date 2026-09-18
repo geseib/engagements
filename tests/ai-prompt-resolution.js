@@ -14,6 +14,50 @@
  *
  * That matters because prompt deletion is known to leave orphan references
  * (see docs/handoff/admin-prompt-cleanup-plan.md), so any set can end up here.
+ *
+ * ── RULING W9: TWO SENTENCES ON A SCREEN DEPEND ON THIS FILE ────────────────
+ *
+ * The set editor tells a builder what will happen to an attached prompt it
+ * cannot offer, and it says two different things depending on WHY it cannot
+ * offer it. Both claims are claims about `resolvePromptTemplate` below, and
+ * until this ruling nothing checked either of them. Whoever changes that
+ * function is reading this because one of the last two cases failed, so here is
+ * what you just falsified — the exact words, from
+ * `src/src/components/QuestionSetEditor.jsx`:
+ *
+ *  1. THE CROSS-FORMAT SENTENCE (the `workie-prompt-unavailable` branch guarded
+ *     by `promptHonoured`):
+ *
+ *       "This set is saved with a summary approach written for <Format> sets
+ *        ("<id>"). Workie will still follow it, which is unlikely to suit a
+ *        <Format> round."
+ *
+ *     "will still follow it" is true ONLY because `resolvePromptTemplate`
+ *     resolves a prompt by id and never consults the set's game type —
+ *     `gameType` reaches it, but is spent on `findDefaultPromptId` and on log
+ *     text. Add a game-type filter to the id path, however reasonable it looks
+ *     from inside this file, and that sentence becomes a lie: the builder is
+ *     told their trivia prompt is being followed on a call-and-answer set while
+ *     the engine quietly substitutes the default. The editor deliberately does
+ *     NOT offer to fall back here, so there is no second sentence to catch it.
+ *
+ *  2. THE UNOFFERABLE SENTENCE (the same branch without `promptHonoured`):
+ *
+ *       "This set is saved with a summary approach this environment does not
+ *        offer ("<id>"). Workie will sum up each round the standard <Format>
+ *        way until it is changed."
+ *
+ *     The editor decides which branch to draw by excluding `scope === 'public'`
+ *     (QuestionSetEditor.jsx ~:344), and that exclusion is only correct while
+ *     `promptLibrariesFor` reads the org library then the platform one and
+ *     NOTHING ELSE — the same org-then-platform order `admin/shared/
+ *     workie-refs.js` `promptRefsFor` enforces at the write. Teach this file to
+ *     read `PUBLIC#AIPROMPTS` and the editor starts promising a fallback that
+ *     will not happen.
+ *
+ * Neither case is a guess about intent: if a game-type filter or a public
+ * library is genuinely wanted, the editor's copy has to change in the same
+ * commit. That is the whole purpose of failing here.
  */
 const path = require('path');
 const assert = require('assert');
@@ -38,13 +82,41 @@ function stub(name, exports) { stubs.set(name, exports); }
 // The prompt that EXISTS — the call-and-answer default.
 const DEFAULT_PROMPT_ID = 'default-callandanswer';
 const DANGLING_PROMPT_ID = 'mdaikmsyh34dwoqayi';
+// W9's two rows: one filed under the WRONG game type, one in a library this
+// path does not read.
+const TRIVIA_PROMPT_ID = 'quiz-recap';
+const PUBLIC_PROMPT_ID = 'open-mic';
+
+/* The partition names come from tenant.js rather than from string literals, so
+   a partition that is renamed there cannot leave this test quietly probing the
+   old one and passing for the wrong reason. `promptsMetadataPk(PUBLIC, '')` is
+   also the ONE place this file states what "the public library" is called. */
+const tenant = require(path.join(REPO, 'lambda-functions', 'game', 'tenant.js'));
+const PLATFORM_PROMPTS_PK = tenant.promptsMetadataPk(tenant.PLATFORM, '');
+const PUBLIC_PROMPTS_PK = tenant.promptsMetadataPk(tenant.PUBLIC, '');
 
 const ddbItems = new Map([
-  [`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`, {
-    PK: 'AIPROMPTS', SK: `AIPROMPT#${DEFAULT_PROMPT_ID}`,
+  [`${PLATFORM_PROMPTS_PK}|AIPROMPT#${DEFAULT_PROMPT_ID}`, {
+    PK: PLATFORM_PROMPTS_PK, SK: `AIPROMPT#${DEFAULT_PROMPT_ID}`,
     promptId: DEFAULT_PROMPT_ID, name: 'Lessons Learned - Strategic Insights',
     gameType: 'callandanswer', isDefault: true, category: 'lessons-learned',
     s3Key: `prompts/callandanswer/${DEFAULT_PROMPT_ID}/v1.json`,
+  }],
+  // A TRIVIA prompt in the platform library. Nothing marks it as a default, so
+  // it can only ever be reached by id — which is what case 6 is about.
+  [`${PLATFORM_PROMPTS_PK}|AIPROMPT#${TRIVIA_PROMPT_ID}`, {
+    PK: PLATFORM_PROMPTS_PK, SK: `AIPROMPT#${TRIVIA_PROMPT_ID}`,
+    promptId: TRIVIA_PROMPT_ID, name: 'Quiz Recap',
+    gameType: 'trivia', category: 'trivia',
+    s3Key: `prompts/trivia/${TRIVIA_PROMPT_ID}/v1.json`,
+  }],
+  // A PUBLIC prompt, seeded and perfectly usable, sitting in the one library
+  // this path must not read. Case 7 asserts it is never even probed.
+  [`${PUBLIC_PROMPTS_PK}|AIPROMPT#${PUBLIC_PROMPT_ID}`, {
+    PK: PUBLIC_PROMPTS_PK, SK: `AIPROMPT#${PUBLIC_PROMPT_ID}`,
+    promptId: PUBLIC_PROMPT_ID, name: 'Open Mic',
+    gameType: 'call-and-answer', category: 'callandanswer',
+    s3Key: `prompts/public/${PUBLIC_PROMPT_ID}/v1.json`,
   }],
   // NOTE: no record for DANGLING_PROMPT_ID — that is the whole point.
 ]);
@@ -85,18 +157,36 @@ stub('@aws-sdk/lib-dynamodb', {
   GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand,
 });
 
-// S3 serves a real template for the default prompt only.
+/**
+ * S3 bodies by key. Every other key is a NoSuchKey, as it was when this served
+ * the default prompt alone — the map exists so W9's cases can put a SECOND
+ * usable template behind a second row, and tell which of the two came back.
+ */
+const s3Bodies = new Map([
+  [`prompts/callandanswer/${DEFAULT_PROMPT_ID}/v1.json`, {
+    name: 'Lessons Learned - Strategic Insights',
+    instructions: 'Summarise the responses.',
+    outputFormat: '## Summary\n{responsesText}',
+  }],
+  [`prompts/trivia/${TRIVIA_PROMPT_ID}/v1.json`, {
+    name: 'Quiz Recap',
+    instructions: 'Read back the scores.',
+    outputFormat: '## Scores\n{responsesText}',
+  }],
+  [`prompts/public/${PUBLIC_PROMPT_ID}/v1.json`, {
+    name: 'Open Mic',
+    instructions: 'Read the room.',
+    outputFormat: '## Open\n{responsesText}',
+  }],
+]);
+
 const s3Fetches = [];
 stub('@aws-sdk/client-s3', {
   S3Client: class { async send(cmd) {
     const key = cmd.input.Key;
     s3Fetches.push(key);
-    if (key === `prompts/callandanswer/${DEFAULT_PROMPT_ID}/v1.json`) {
-      return { Body: { transformToString: async () => JSON.stringify({
-        name: 'Lessons Learned - Strategic Insights',
-        instructions: 'Summarise the responses.',
-        outputFormat: '## Summary\n{responsesText}',
-      }) } };
+    if (s3Bodies.has(key)) {
+      return { Body: { transformToString: async () => JSON.stringify(s3Bodies.get(key)) } };
     }
     const err = new Error('NoSuchKey'); err.name = 'NoSuchKey'; throw err;
   } },
@@ -168,12 +258,72 @@ function check(label, fn) {
   // 5. Genuinely nothing available: caller must still get a clean signal so it
   //    can use the data-driven fallback rather than throwing. Empty the table
   //    of defaults to reach that state — an unknown game type no longer does.
-  const savedDefault = ddbItems.get(`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`);
-  ddbItems.delete(`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`);
+  const defaultKey = `${PLATFORM_PROMPTS_PK}|AIPROMPT#${DEFAULT_PROMPT_ID}`;
+  const savedDefault = ddbItems.get(defaultKey);
+  ddbItems.delete(defaultKey);
   const empty = await mod.resolvePromptTemplate('nope', 'call-and-answer');
-  ddbItems.set(`AIPROMPTS|AIPROMPT#${DEFAULT_PROMPT_ID}`, savedDefault);
+  ddbItems.set(defaultKey, savedDefault);
   check('unresolvable everything returns null rather than throwing', () =>
     assert.strictEqual(empty, null));
+
+  // ── RULING W9 ────────────────────────────────────────────────────────────
+  // Two properties the set editor's copy asserts in words. See the header for
+  // the sentences themselves; break one of these and you have falsified one.
+
+  // 6. A prompt written for ANOTHER game type is still the prompt that runs.
+  //    `gameType` is passed to resolvePromptTemplate and is spent entirely on
+  //    findDefaultPromptId and on log text — the id path never consults it. The
+  //    editor tells a builder "Workie will still follow it" on the strength of
+  //    exactly this, and offers them no fallback, so a filter added here would
+  //    not merely change behaviour: it would leave a false sentence on screen
+  //    with nothing to correct it.
+  s3Fetches.length = 0;
+  const crossFormat = await mod.resolvePromptTemplate(TRIVIA_PROMPT_ID, 'call-and-answer');
+  check('a prompt written for another game type still resolves', () =>
+    assert(crossFormat && crossFormat.promptData,
+      'a trivia prompt on a call-and-answer set lost its template'));
+  check('…and it is that prompt, not the game-type default, that is used', () => {
+    assert.strictEqual(crossFormat.promptId, TRIVIA_PROMPT_ID,
+      'the id came back rewritten to the default — "Workie will still follow it" is now false');
+    // The id alone could match while the BODY came from somewhere else, so the
+    // template itself is checked: this is the trivia text, not the house one.
+    assert.strictEqual(crossFormat.promptData.name, 'Quiz Recap');
+    assert.match(crossFormat.promptData.outputFormat, /## Scores/);
+  });
+  check('…and nothing is reported as recovered, because nothing was', () =>
+    assert.strictEqual(crossFormat.recoveredFrom, undefined,
+      'a silent substitution is exactly what the editor promises will not happen'));
+  check('…the default prompt was never even fetched', () =>
+    assert(!s3Fetches.includes(`prompts/callandanswer/${DEFAULT_PROMPT_ID}/v1.json`),
+      'the default was read, so some branch is preferring it over the attached id'));
+
+  // 7. A PUBLIC-scoped id does not resolve here, with or without an org.
+  //    promptLibrariesFor reads the org library then the platform one and
+  //    nothing else — the same org-then-platform order workie-refs.js's
+  //    promptRefsFor enforces at the write. The editor excludes `scope ===
+  //    'public'` from the ids it calls honoured on the strength of it, and says
+  //    the round will be summed up the standard way instead.
+  check('the public row really is seeded — this is about reach, not absence', () =>
+    assert(ddbItems.has(`${PUBLIC_PROMPTS_PK}|AIPROMPT#${PUBLIC_PROMPT_ID}`)
+      && s3Bodies.has(`prompts/public/${PUBLIC_PROMPT_ID}/v1.json`),
+      'the row and a usable body must both exist, or case 7 proves nothing'));
+
+  for (const orgId of ['', 'org_acme']) {
+    s3Fetches.length = 0;
+    // eslint-disable-next-line no-await-in-loop
+    const fromPublic = await mod.resolvePromptTemplate(PUBLIC_PROMPT_ID, 'call-and-answer', orgId);
+    const where = orgId ? 'for an org session' : 'for a platform session';
+    check(`a public-scoped prompt id does not resolve ${where}`, () =>
+      assert.strictEqual(fromPublic.promptId, DEFAULT_PROMPT_ID,
+        'the public library was read — the editor now promises a fallback that will not happen'));
+    check(`…it falls back and says so ${where}`, () => {
+      assert.strictEqual(fromPublic.recoveredFrom, PUBLIC_PROMPT_ID);
+      assert.strictEqual(fromPublic.recoveryReason, 'missing');
+    });
+    check(`…and its partition was never probed ${where}`, () =>
+      assert(!s3Fetches.includes(`prompts/public/${PUBLIC_PROMPT_ID}/v1.json`),
+        'S3 was asked for the public body, so the row was found first'));
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
