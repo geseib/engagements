@@ -379,7 +379,13 @@ function requiredGroupsForRoute(method, path) {
     return ['hosts', 'admins'];
   }
 
-  // All other admin routes require the admins group
+  // All other admin routes require the admins group — including the moderation queue
+  // and public library (spec §9): `admin/moderation`, `admin/moderation/{sk}`,
+  // `admin/moderation/decide`, `admin/public-library/{publicSetId}` — staff routes
+  // that lean on THIS catch-all, since the `{sk}` segment's percent-encoded set id is
+  // answered here before any `includes()` clause below gets a turn. Handlers also
+  // re-ask `canManageScope(event, PLATFORM, '')` — platform MODE, not just the group.
+  // `tests/authorizer-staff-routes.js` pins this, so narrowing or moving it fails that suite.
   if (path.startsWith('admin')) {
     return ['admins'];
   }
@@ -435,21 +441,6 @@ function requiredGroupsForRoute(method, path) {
 
   const PLATFORM_ROUTE = /^platform\/orgs(\/[^/]+\/status)?$/;
   if (PLATFORM_ROUTE.test(path)) {
-    return ['admins'];
-  }
-
-  // ── MODERATION AND THE PUBLIC LIBRARY (spec §9) ──────────────────────────
-  //
-  // Engage staff only, and the handler re-asks `canManageScope(event,
-  // PLATFORM, '')` — platform MODE, not just the group. Anchored: the queue's
-  // {sk} segment carries a set id (percent-encoded `org%23callandanswer%23v2`),
-  // exactly the kind of path the generic includes() rules below would decide.
-  const STAFF_ROUTE = /^admin\/(moderation(\/[^/]+)?|public-library\/[^/]+)$/;
-  if (path === 'admin/moderation'
-    || path === 'admin/moderation/{sk}'
-    || path === 'admin/moderation/decide'
-    || path === 'admin/public-library/{publicSetId}'
-    || STAFF_ROUTE.test(path)) {
     return ['admins'];
   }
 
