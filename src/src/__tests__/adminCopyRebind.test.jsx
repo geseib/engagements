@@ -54,7 +54,7 @@ function serve() {
     const u = String(url); const method = (options.method || 'GET').toUpperCase();
     calls.push(`${method} ${u.replace(/^.*?\/(admin|question-sets|orgs)/, '$1')}`);
     if (u.includes('/orgs')) return json({ orgs: [HOME] });
-    if (u.includes('admin/question-sets')) return json({ questionSets: copied ? [COPY_ROW, PUBLIC_ROW] : [PUBLIC_ROW] });
+    if (u.includes('admin/question-sets')) return json({ questionSets: copied ? [PUBLIC_ROW, COPY_ROW] : [PUBLIC_ROW] }) // the public row can come FIRST, and it shares the copy's id;
     if (method === 'POST' && u.includes('/question-sets/name-that-thing/copy')) { copied = true; return json({ setId: 'name-that-thing', name: 'Name that thing (mine)', sourceSetId: 'name-that-thing' }); }
     if (method === 'PUT' && u.includes('admin/edit-question-set/')) return json({ updated: { name: true } });
     if (u.includes('/versions')) return json([]);

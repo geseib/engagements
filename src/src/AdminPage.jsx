@@ -396,6 +396,7 @@ function AdminPage() {
   const handleEditorCopied = async (newSetId, message) => {
     await fetchQuestionSets();
     setEditingSetId(newSetId);
+    setEditingSetScope('org'); // the copy is always the caller's own
     setNotice({ tone: 'success', text: message });
   };
 
@@ -461,6 +462,13 @@ function AdminPage() {
   // components/QuestionSetEditor.jsx — this page only decides which set is open
   // and shows the confirmation after the editor closes.
   const [editingSetId, setEditingSetId] = useState('');
+  /* WHICH LIBRARY the open set lives in. A set id is a slug and slugs collide
+     across libraries by design — the public copy of a set and an org's own copy
+     of it can share an id — so the id alone cannot name the set being edited.
+     The list arrives platform, public, org; looked up by id alone, a public row
+     shadowed the org copy an editor had just made, and the person was left on
+     the public row making copy after copy (__tests__/adminCopyRebind.test.jsx). */
+  const [editingSetScope, setEditingSetScope] = useState('');
   /*
     ONE BANNER for everything this page does on the question-set screen's
     behalf: a save that landed, a toggle that failed, an AI-generated set that
@@ -593,6 +601,7 @@ function AdminPage() {
   const handleEditQuestionSet = (questionSet) => {
     setEditMode(true);
     setEditingSetId(questionSet.id);
+    setEditingSetScope(String(questionSet.scope || ''));
     setNotice(null);
     setActiveTab('questionsets');
   };
@@ -661,6 +670,7 @@ function AdminPage() {
     if (sectionId !== activeTab) {
       setEditMode(false);
       setEditingSetId('');
+      setEditingSetScope('');
     }
     setActiveTab(sectionId);
     setSectionAsked(true);
@@ -699,6 +709,7 @@ function AdminPage() {
         if (current !== next) {
           setEditMode(false);
           setEditingSetId('');
+          setEditingSetScope('');
         }
         return next;
       });
@@ -745,6 +756,7 @@ function AdminPage() {
   const handleCancelEdit = () => {
     setEditMode(false);
     setEditingSetId('');
+    setEditingSetScope('');
     setNotice(null);
   };
 
@@ -757,6 +769,7 @@ function AdminPage() {
     setNotice({ text: message, tone: 'success' });
     setEditMode(false);
     setEditingSetId('');
+    setEditingSetScope('');
     await fetchQuestionSets();
   };
 
@@ -1312,7 +1325,9 @@ function AdminPage() {
   // The set open in the detail place, or null when the list is the place.
   const editingSet =
     editMode && editingSetId
-      ? questionSets.find((set) => set.id === editingSetId) || { id: editingSetId }
+      ? questionSets.find((set) => set.id === editingSetId && (!editingSetScope || String(set.scope || 'platform') === editingSetScope))
+        || questionSets.find((set) => set.id === editingSetId)
+        || { id: editingSetId }
       : null;
 
   /*
