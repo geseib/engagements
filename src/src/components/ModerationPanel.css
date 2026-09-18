@@ -5,7 +5,7 @@
      --text  #F4EDE4 on --bg #0F1A2E     14.9:1     --muted #9BA8BE on --bg     6.9:1
      --primary #F6A94C on --bg           9.1:1     --secondary #7CA7E6 on --bg 7.0:1
      --text on --surface #1B2942        12.5:1     --muted on --surface        6.1:1
-     --danger-text #EF8C86 on --surface  6.1:1     --modq-success-text on --surface 7.8:1
+     --danger-text #EF8C86 on --surface  6.1:1
      --bg on --primary (filled Approve)  8.9:1
      the uncertain tint (--primary at --modq-tint-alpha over --surface) keeps --text and --muted ≥ AA */
 .modq {
@@ -14,7 +14,6 @@
   --modq-t-body: 15px;
   --modq-t-head: 19px;
   --modq-row-h: 36px;
-  --modq-success-text: #6FD0A4;
   --modq-tint-alpha: 0.08;
   --modq-rule: rgba(155, 168, 190, .20);
   --modq-rule-strong: rgba(155, 168, 190, .34);
@@ -33,7 +32,7 @@
 .modq-row td { height: var(--modq-row-h); padding: 4px 8px; border-bottom: 1px solid var(--modq-rule); vertical-align: middle; overflow: hidden; }
 .modq-row:hover td { background: var(--modq-row-hover); }
 .modq-nm { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.modq-sub { display: block; color: var(--muted); font-size: var(--modq-t-floor); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modq-row .modq-sub { display: block; min-width: 0; color: var(--muted); font-size: var(--modq-t-floor); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modq-why-cell { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modq-wait { color: var(--muted); font-variant-numeric: tabular-nums; }
 .modq-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -52,7 +51,7 @@
 .modq-x { flex: none; width: 32px; height: 32px; border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 6px; }
 .modq-x:hover { color: var(--text); background: var(--modq-rule); }
 .modq-body { padding: 10px 20px; flex: 1; }
-.modq-sub { color: var(--muted); font-size: var(--modq-t-label); }
+.modq-dlg-sub { color: var(--muted); font-size: var(--modq-t-label); }
 .modq-note { color: var(--primary); }
 .modq-h { margin: 14px 0 6px; font-size: var(--modq-t-body); font-weight: 700; }
 .modq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

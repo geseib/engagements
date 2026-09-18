@@ -33,6 +33,18 @@ function ReviewDialog({ sk, onClose, onDecided }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [verdict, setVerdict] = useState(null);      // the 409 sentence
+  /*
+    requestClose is the DELIBERATE exit — the X and the bottom Close both call
+    it, gated only on `busy` (a decision in flight can't be interrupted by a
+    stray click; see decide()'s finally, which always clears it). A deliberate
+    click discards an unsaved note on purpose, same as clicking Reject/Approve
+    would have.
+
+    Escape and a backdrop click are the ACCIDENTAL exits, below on the Modal —
+    gated on `busy` AND on an unsaved note (`!note.trim()`), so a note the
+    reviewer is mid-typing survives a stray Escape press or an off-card click.
+    This is the design contract's "gated on unsaved work, not disabled".
+  */
   const requestClose = () => { if (!busy) onClose(); };
 
   useEffect(() => {
@@ -71,7 +83,7 @@ function ReviewDialog({ sk, onClose, onDecided }) {
   const questions = (item && item.snapshot && item.snapshot.questions) || [];
   const uncertain = questions.filter((q) => q.findings.length).length;
   return (
-    <Modal overlayClassName="modq modq-scrim" contentClassName="modq-card modq-card--tall" labelledBy="modq-title" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !busy}>
+    <Modal overlayClassName="modq modq-scrim" contentClassName="modq-card modq-card--tall" labelledBy="modq-title" onClose={requestClose} closeOnBackdrop={() => !busy && !note.trim()} closeOnEscape={() => !busy && !note.trim()}>
       <header className="modq-head">
         <h2 id="modq-title">{title}</h2>
         {/* aria-label reads "Close review" rather than the bare "Close" the rest
@@ -87,7 +99,7 @@ function ReviewDialog({ sk, onClose, onDecided }) {
         {state === 'error' && <StatusMessage message={error} tone="error" className="modq-alert" />}
         {state === 'ready' && item && (
           <>
-            <p className="modq-sub">
+            <p className="modq-dlg-sub">
               {item.pointer.orgName} · {gameTypeLabel(item.snapshot ? item.snapshot.meta.engagementType : item.pointer.gameType)} · {questions.length || item.pointer.questionCount || 0} questions · v{item.pointer.version} · {whyLabel(item.pointer)}
             </p>
             {!item.snapshot && (
@@ -96,7 +108,7 @@ function ReviewDialog({ sk, onClose, onDecided }) {
             {item.setFindings.length > 0 && (
               <p className="modq-note"><strong>The set's own text:</strong> {item.setFindings.map((f) => `${bandWord(f.band)} for ${String(f.category || '').toLowerCase()}`).join('; ')}.</p>
             )}
-            <h3 className="modq-h">{uncertain ? `${uncertain} the check could not decide` : 'Every question'}</h3>
+            <h3 className="modq-h">{uncertain ? `${uncertain} question${uncertain === 1 ? '' : 's'} the check could not decide` : 'Every question'}</h3>
             <ul className="modq-list">
               {questions.map((q) => (
                 <li key={q.questionId} className={`modq-q${q.findings.length ? ' modq-q--uncertain' : ''}`} data-testid="modq-question">
@@ -186,25 +198,32 @@ export default function ModerationPanel({ onOpenScoreCard }) {
             <tr><th className="modq-col-set">Set</th><th className="modq-col-org">Organisation</th><th className="modq-col-why">Why it escalated</th><th className="modq-col-wait">Waiting</th><th className="modq-col-act" /></tr>
           </thead>
           <tbody>
-            {queue.items.map((item) => (
-              <tr key={item.sk} className="modq-row">
-                <td>
-                  <span className="modq-nm" title={item.title}>{item.title || item.setId}</span>
-                  <span className="modq-sub">{gameTypeLabel(item.gameType)} · {item.questionCount || 0} questions · v{item.version}</span>
-                </td>
-                <td><span className="modq-nm" title={item.orgName}>{item.orgName || item.orgId}</span></td>
-                <td><span className="modq-why-cell" title={whyLabel(item)}>{whyLabel(item)}</span></td>
-                <td className="modq-wait">{waitedLabel(item.waitingSince, now)}</td>
-                <td>
-                  <div className="modq-rowact">
-                    {onOpenScoreCard && item.publicSetId && (
-                      <button type="button" className="modq-btn modq-btn--sm" onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
-                    )}
-                    <button type="button" className="modq-btn modq-btn--sm modq-btn--primary" onClick={() => setOpen(item.sk)}>Review</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {queue.items.map((item) => {
+              // Every truncating cell (.modq-nm, .modq-why-cell, and this
+              // sub-line) carries its full text as `title` — the row is the
+              // one place in the console where three separate strings on one
+              // line can all be clipped by table-layout: fixed at once.
+              const subLine = `${gameTypeLabel(item.gameType)} · ${item.questionCount || 0} questions · v${item.version}`;
+              return (
+                <tr key={item.sk} className="modq-row">
+                  <td>
+                    <span className="modq-nm" title={item.title}>{item.title || item.setId}</span>
+                    <span className="modq-sub" title={subLine}>{subLine}</span>
+                  </td>
+                  <td><span className="modq-nm" title={item.orgName}>{item.orgName || item.orgId}</span></td>
+                  <td><span className="modq-why-cell" title={whyLabel(item)}>{whyLabel(item)}</span></td>
+                  <td className="modq-wait">{waitedLabel(item.waitingSince, now)}</td>
+                  <td>
+                    <div className="modq-rowact">
+                      {onOpenScoreCard && item.publicSetId && (
+                        <button type="button" className="modq-btn modq-btn--sm" onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
+                      )}
+                      <button type="button" className="modq-btn modq-btn--sm modq-btn--primary" onClick={() => setOpen(item.sk)}>Review</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

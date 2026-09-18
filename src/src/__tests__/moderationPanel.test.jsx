@@ -39,9 +39,9 @@ test('the head says how many and how long, and each row says why in band words',
   expect(within(row).getByText('Acme')).toBeInTheDocument();
   expect(within(row).getByText('2 uncertain questions')).toBeInTheDocument();
   expect(within(row).getByText('2 days')).toBeInTheDocument();
-  // moderationRow.js's appealWords() wraps the appeal message in straight
-  // ASCII quotes ("..."), not the curly U+201C/U+201D quotes — verified by
-  // reading the Task 8 source byte-for-byte. See task-9-report.md.
+  // moderationRow.js's appealWords() wraps the appeal message in the
+  // console's curly U+201C/U+201D quotes (fixed in 7bd1d490 to match the rest
+  // of the console's typography), not straight ASCII ones.
   expect(within(screen.getByText('Onboarding').closest('tr')).getByText('Appealed: “It is a clinical set.”')).toBeInTheDocument();
   expect(screen.getByText(/these are the ones it flagged as uncertain/i)).toBeInTheDocument();
 });
@@ -64,6 +64,12 @@ test('Review opens the snapshot with the uncertain question first, and Approve d
   // once state==='ready' has to be awaited too, not read synchronously right
   // after the wrapper appears. See task-9-report.md.
   expect(await within(dialog).findByRole('heading', { name: /safety walkthrough/i })).toBeInTheDocument();
+  // Pins skUrl()'s encodeURIComponent(sk): the sk contains '#', which must
+  // reach the wire as '%23' or the request targets the wrong (truncated)
+  // path segment. authFetch is called with a single argument here (no
+  // options object) — global.fetch(...args) receives exactly what
+  // authFetch(skUrl(sk)) passed it.
+  expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('org_acme%23safety%23v2'));
   const items = within(dialog).getAllByTestId('modq-question');
   expect(items[0]).toHaveTextContent('Describe the injury');
   expect(items[0]).toHaveTextContent(/medium/i);
@@ -91,6 +97,20 @@ test('a lost race says who decided and refreshes; the dialog has an X and a bott
   // state==='ready', so it has to be awaited rather than read synchronously.
   fireEvent.click(await within(dialog).findByRole('button', { name: /^reject$/i }));
   expect(await within(dialog).findByText(/already decided by dai/i)).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: /^close$/i }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+test('a typed note survives an accidental Escape, but a deliberate Close still works (R16)', async () => {
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByRole('heading', { name: /safety walkthrough/i });
+  fireEvent.change(within(dialog).getByRole('textbox', { name: /note/i }), { target: { value: 'Still drafting this.' } });
+  // Accidental exit, gated on the unsaved note: the dialog must stay open.
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  // Deliberate exit, through requestClose: still works regardless of the note.
   fireEvent.click(within(dialog).getByRole('button', { name: /^close$/i }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });

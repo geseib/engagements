@@ -18,14 +18,14 @@ function token(css, block, name) {
   return m[1];
 }
 const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
-const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), primary: token(GLOBAL_CSS, ROOT, '--primary'), secondary: token(GLOBAL_CSS, ROOT, '--secondary'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'), success: token(CSS, '.modq {', '--modq-success-text') };
+const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), primary: token(GLOBAL_CSS, ROOT, '--primary'), secondary: token(GLOBAL_CSS, ROOT, '--secondary'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text') };
 const tintAlpha = Number((CSS.match(/--modq-tint-alpha:\s*([\d.]+)/) || [])[1]);
 const AA = 4.5;
 describe('ModerationPanel palette', () => {
   test.each([
     ['--text on --bg', T.text, T.bg], ['--muted on --bg', T.muted, T.bg], ['--primary on --bg', T.primary, T.bg], ['--secondary on --bg', T.secondary, T.bg],
     ['--text on --surface', T.text, T.surface], ['--muted on --surface', T.muted, T.surface], ['--danger-text on --surface', T.dangerText, T.surface],
-    ['--modq-success-text on --surface', T.success, T.surface], ['--bg on --primary (filled Approve)', T.bg, T.primary],
+    ['--bg on --primary (filled Approve)', T.bg, T.primary],
   ])('%s clears AA', (_l, fg, bg) => expect(ratio(hex(fg), hex(bg))).toBeGreaterThanOrEqual(AA));
   test('the uncertain-question tint keeps --text and --muted at AA', () => {
     expect(tintAlpha).toBeGreaterThan(0);
