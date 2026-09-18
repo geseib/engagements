@@ -526,6 +526,13 @@ Resources:
         # change what is coming.
         - DynamoDBReadPolicy:
             TableName: !Ref GameTable
+        # Decrypt only: an organisation's question rows are encrypted at rest and
+        # the plan shows their titles (tests/kms-grants-match-code.js).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

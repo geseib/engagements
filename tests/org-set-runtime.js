@@ -17,6 +17,16 @@ const assert = require('assert');
 const REPO = path.join(__dirname, '..');
 const { createTable, installStubs } = require('./helpers/player-table');
 
+// KMS, faked: an org's question rows are encrypted at rest (tenant-crypto.js),
+// and the plan must show their titles in plaintext.
+const kmsStubs = require('./helpers/tenant-crypto-stub');
+const kms = kmsStubs.makeKmsStub();
+for (const base of [REPO, path.join(REPO, 'lambda-functions'), path.join(REPO, 'lambda-functions', 'game')]) {
+  let p;
+  try { p = require.resolve('@aws-sdk/client-kms', { paths: [base] }); } catch { continue; }
+  require.cache[p] = { id: p, filename: p, loaded: true, exports: kms.exports };
+}
+
 const table = createTable();
 const sent = [];
 installStubs({ table, sent });
@@ -25,6 +35,8 @@ process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
 
 const { handler: upNext } = require(path.join(REPO, 'lambda-functions/game/up-next.js'));
 const queue = require(path.join(REPO, 'lambda-functions/game/question-queue.js'));
+const C = require(path.join(REPO, 'lambda-functions/game/tenant-crypto.js'));
+kmsStubs.installTestKeyLoader();
 
 let pass = 0; let fail = 0;
 const check = async (label, fn) => {
@@ -91,6 +103,26 @@ const CASES = [
     const after = await plan(c.gameId, c.orgId);
     await check(`${c.label}: the queued question leads the plan`, () => assert.strictEqual(titles(after)[0], 'Things 002', `plan: ${JSON.stringify(titles(after))}`));
   }
+  console.log("\n4. an org set's titles are encrypted at rest and the plan still reads them");
+  table.store.clear(); sent.length = 0;
+  const enc = CASES[1];
+  seed(enc);
+  for (const [k, row] of [...table.store.entries()]) {
+    if (row.PK === enc.contentPk && String(row.SK).startsWith('QUESTION#')) {
+      table.store.set(k, await C.encryptItem(ORG, 'question', row)); // eslint-disable-line no-await-in-loop
+    }
+  }
+  const stored = table.store.get(table.keyOf(enc.contentPk, 'QUESTION#c001#001'));
+  await check('the seeded title is an envelope, not plaintext', () =>
+    assert.ok(stored && typeof stored.Title === 'object', `stored Title: ${JSON.stringify(stored && stored.Title)}`));
+  const encPlan = await plan(enc.gameId, enc.orgId);
+  await check('the plan shows the plaintext titles', () => {
+    assert.strictEqual(encPlan.status, 200, `got ${encPlan.status}`);
+    const t = titles(encPlan);
+    assert.ok(t.length > 0, `empty plan: ${JSON.stringify(encPlan.body).slice(0, 160)}`);
+    assert.ok(t.every((x) => typeof x === 'string' && /^(Things|Stuff) \d{3}$/.test(x)), `plan titles: ${JSON.stringify(t)}`);
+  });
+
   console.log(`\n${pass} passed, ${fail} failed\n`);
   if (fail) process.exit(1);
 })();
