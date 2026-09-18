@@ -7,6 +7,7 @@ const {
 } = require('./shared/round-kinds');
 const { ORG } = require('./shared/tenant');
 const { ENCRYPTED_FIELDS, encryptValue } = require('./shared/tenant-crypto');
+const { resolvePromptRef, resolvePersonaRef, refusal } = require('./shared/workie-refs');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -196,6 +197,32 @@ exports.handler = async (event) => {
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
+
+    // ── WORKIE'S TWO SETTINGS, CHECKED BEFORE THEY ARE STORED ────────────────
+    //
+    // `promptId` and `personaId` are the only two OPTIONAL_FIELDS that are
+    // REFERENCES rather than prose, and both degrade silently at run time: a
+    // prompt that resolves to nothing falls back to the game-type default, a
+    // voice that resolves to nothing falls through to the next rung. The person
+    // who chose the value was never told, because this route accepted any
+    // string at all. See shared/workie-refs.js.
+    //
+    // THE LIBRARY IS THE SET'S, NOT THE CALLER'S — `cryptoOrgId` is derived
+    // from `found.ref`, the row that was actually read, for the same reason the
+    // encryption above uses it: an Engage admin editing a platform set must not
+    // be able to point it at their own org's Workie, which no other
+    // organisation could then read.
+    //
+    // A CLEAR IS NOT A DANGLING ID. `resolve*Ref` answers ok for '' and null,
+    // so blanking either field stays possible — which it must, since detaching
+    // is the only cure for a value whose target has already been deleted.
+    const promptCheck = await resolvePromptRef(
+      db, process.env.TABLE_NAME, body.promptId, { orgId: cryptoOrgId }
+    );
+    if (!promptCheck.ok) return refusal('promptId', promptCheck.reason);
+
+    const personaCheck = await resolvePersonaRef(db, process.env.TABLE_NAME, body.personaId);
+    if (!personaCheck.ok) return refusal('personaId', personaCheck.reason);
 
     const applied = {};
     for (const field of OPTIONAL_FIELDS) {

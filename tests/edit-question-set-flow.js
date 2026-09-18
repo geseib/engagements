@@ -55,7 +55,31 @@ const store = new Map();        // "PK|SK" -> Item
 const log = [];                 // every command the handlers issued
 const k = (pk, sk) => `${pk}|${sk}`;
 const put = (item) => store.set(k(item.PK, item.SK), item);
-function resetDb() { store.clear(); log.length = 0; }
+/**
+ * THE WORKIE LIBRARY THIS SUITE'S FIXTURES POINT AT.
+ *
+ * Every id used below — `lessons-learned`, `art-summary`, `trivia-summary`,
+ * `curator` — used to be a bare string nothing checked. `shared/workie-refs.js`
+ * now refuses a summary prompt or a voice that resolves to nothing, at both
+ * writers, so a fixture that names one has to have one.
+ *
+ * The rows are the minimum the resolver reads: prompts live at the platform
+ * prompt partition, personas at the (deliberately platform-only) persona one,
+ * and a persona is usable only while it has a `voice` and is not `inactive`.
+ * This suite's subject is unchanged — which clauses reach the
+ * UpdateExpression — and the ids it already used are the ones seeded here.
+ */
+function seedWorkieLibrary() {
+  for (const promptId of ['lessons-learned', 'art-summary', 'trivia-summary']) {
+    put({ PK: 'AIPROMPTS', SK: `AIPROMPT#${promptId}`, promptId, name: promptId, status: 'active' });
+  }
+  put({
+    PK: 'AIPROMPTS', SK: 'PERSONA#curator', personaId: 'curator', name: 'Curator',
+    voice: 'You are an unhurried gallery curator.', status: 'active',
+  });
+}
+
+function resetDb() { store.clear(); log.length = 0; seedWorkieLibrary(); }
 
 /**
  * Apply a `SET a = :a, #b = :b` UpdateExpression to an item.
