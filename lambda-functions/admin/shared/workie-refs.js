@@ -42,9 +42,20 @@
  * "a scope this caller cannot read is never probed, so another organisation's
  * Workie is not 'forbidden' here, it is ABSENT". Answering `unreadable` would
  * mean establishing that org B has a Workie called `retro` and then telling org
- * A so. `unreadable` is kept for the case that genuinely is one — a row in OUR
- * library sealed to somebody else's key, which is what a careless cross-org
- * copy leaves behind. We found it, and we still cannot read a word of it.
+ * A so. `unreadable` is kept for the case that genuinely is one: a row in OUR
+ * library that we found, that is ours by partition, and that we still cannot
+ * read a word of.
+ *
+ * WHAT IT DOES NOT SAY IS WHY. It used to — "belongs to another organisation",
+ * which is one explanation out of five. `tenant-crypto.decryptItem` throws on a
+ * rotated key, on a torn write, on a data key that has been forgotten and on a
+ * transient KMS Decrypt as readily as on a row a careless cross-org copy left
+ * sealed to somebody else. Four of those five are OURS, and during a KMS blip
+ * that sentence told a builder their own organisation's prompt belonged to
+ * somebody else — sending them to look for a copy that never happened. The
+ * refusal now says only what is true in all five cases, which is that it cannot
+ * be read. The cause is not lost: it goes to `console.warn` with the thrown
+ * message, where the person who can act on it is the one reading.
  *
  * Personas take no org at all: `tenant.personasPk()` ignores scope on purpose
  * (see its comment), so there is one cast of voices and the same id means the
@@ -64,11 +75,18 @@ const clean = (v) => (typeof v === 'string' ? v.trim() : '');
  */
 const PROMPT_REFUSALS = Object.freeze({
   missing: 'That summary prompt no longer exists. Choose another, or clear it to use the default for this game type.',
-  unreadable: 'That summary prompt belongs to another organisation, so this set cannot use it. Choose another, or clear it to use the default for this game type.',
+  unreadable: 'That summary prompt cannot be read, so this set cannot use it. Choose another, or clear it to use the default for this game type.',
 });
 const PERSONA_REFUSALS = Object.freeze({
   missing: 'That voice no longer exists. Choose another, or clear it to use the standard voice.',
   inactive: 'That voice has been turned off. Choose another, or clear it to use the standard voice.',
+  // A THIRD STATE, BECAUSE IT IS A THIRD STATE. A persona row with a blank
+  // `voice` is just as unusable as one that was switched off, and for a while
+  // it was reported with the switched-off sentence — which is a claim about an
+  // action nobody took, and sends whoever reads it hunting for a toggle that is
+  // already where they left it. `game/personas.js` has always logged the two
+  // apart; this is the same distinction, said to a person instead of a log.
+  voiceless: 'That voice has no words recorded yet. Choose another, or clear it to use the standard voice.',
 });
 
 /** Every prompt library a set in this org may read, most specific first. */
@@ -110,7 +128,11 @@ async function resolvePromptRef(db, tableName, promptId, { orgId = '' } = {}) {
       // eslint-disable-next-line no-await-in-loop
       return { ok: true, prompt: await decryptItem(ref.orgId, 'prompt', item) };
     } catch (error) {
-      console.warn(`⚠️ WORKIE: prompt ${id} is in ${ref.orgId}'s library but sealed to another key: ${error.message}`);
+      // THE ONLY PLACE THE CAUSE SURVIVES. The sentence the builder reads says
+      // just "cannot be read", because decryptItem throws for five different
+      // reasons and four of them are ours. Whoever is debugging it needs the
+      // fifth, so the thrown message rides here verbatim.
+      console.warn(`⚠️ WORKIE: prompt ${id} is in ${ref.orgId}'s library but could not be decrypted: ${error.message}`);
       return { ok: false, reason: 'unreadable' };
     }
   }
@@ -125,7 +147,12 @@ async function resolvePromptRef(db, tableName, promptId, { orgId = '' } = {}) {
  * that last one alike, because a persona with nothing to say changes no words.
  * All three are refused here so that a set cannot be saved pointing at one.
  *
- * @returns {Promise<{ok: true, persona: object|null}|{ok: false, reason: 'missing'|'inactive'}>}
+ * THREE CAUSES, THREE ANSWERS, IN PERSONAS.JS'S OWN ORDER. It tests the empty
+ * voice BEFORE the status, and so does this, so that a row which is both blank
+ * and switched off gets the same account of itself in a refusal as it does in
+ * the run-time log — one thing to match up rather than two to reconcile.
+ *
+ * @returns {Promise<{ok: true, persona: object|null}|{ok: false, reason: 'missing'|'voiceless'|'inactive'}>}
  */
 async function resolvePersonaRef(db, tableName, personaId) {
   const id = clean(personaId);
@@ -137,7 +164,8 @@ async function resolvePersonaRef(db, tableName, personaId) {
   }));
   const item = res && res.Item;
   if (!item) return { ok: false, reason: 'missing' };
-  if (item.status === 'inactive' || !clean(item.voice)) return { ok: false, reason: 'inactive' };
+  if (!clean(item.voice)) return { ok: false, reason: 'voiceless' };
+  if (item.status === 'inactive') return { ok: false, reason: 'inactive' };
   return { ok: true, persona: item };
 }
 

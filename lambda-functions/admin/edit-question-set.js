@@ -56,6 +56,26 @@ const OPTIONAL_FIELDS = [
   'roundKindBrief'
 ];
 
+/**
+ * ONE SPELLING OF "WHAT THIS FIELD IS WORTH", because there used to be two.
+ *
+ * An optional field arrives as a string, as `null` (the editor's way of saying
+ * "blank this"), or as nothing at all, and every use of it wants the same
+ * answer: the trimmed string, with an absent value reading as ''. That rule was
+ * written out twice below — once by `changed()`, deciding whether a value needs
+ * validating, and once by the write loop, deciding what to store — and a third
+ * time, slightly differently, for the value already on the row.
+ *
+ * Three copies of one rule is a defect waiting for someone to fix a trimming
+ * bug in the copy they happened to be reading. Drift between the first two is
+ * the expensive kind: `changed()` would clear a reference the write then stored
+ * anyway, or refuse a save over a value nobody altered. They agree because they
+ * are now the same function, not because they were kept in step.
+ */
+const normalizeOptional = (value) => (
+  value === null || value === undefined ? '' : String(value).trim()
+);
+
 exports.handler = async (event) => {
   try {
     const setId = event.pathParameters?.setId;
@@ -238,8 +258,7 @@ exports.handler = async (event) => {
     // of in a refusal afterwards. That is what makes this converge.
     const changed = (field) => {
       if (!(field in body) || body[field] === undefined) return false;
-      const next = body[field] === null ? '' : String(body[field]).trim();
-      return next !== String(existing.Item[field] ?? '').trim();
+      return normalizeOptional(body[field]) !== normalizeOptional(existing.Item[field]);
     };
 
     if (changed('promptId')) {
@@ -257,7 +276,7 @@ exports.handler = async (event) => {
     const applied = {};
     for (const field of OPTIONAL_FIELDS) {
       if (!(field in body) || body[field] === undefined) continue;
-      const value = body[field] === null ? '' : String(body[field]).trim();
+      const value = normalizeOptional(body[field]);
       updateParams.UpdateExpression += `, #${field} = :${field}`;
       updateParams.ExpressionAttributeNames[`#${field}`] = field;
       updateParams.ExpressionAttributeValues[`:${field}`] = await store(field, value);

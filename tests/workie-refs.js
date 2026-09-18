@@ -202,13 +202,78 @@ const editPlatform = (setId, body) => H.platformEvent({ method: 'PUT', path: { s
     );
     // rejects: calling an empty-voiced persona usable. personas.js falls
     // through on `!record.voice` exactly as it does on `status === 'inactive'`,
-    // so storing one would promise a voice that never speaks.
+    // so storing one would promise a voice that never speaks. The REASON is
+    // its own, though — see the next case.
     assert.deepStrictEqual(
-      await W.resolvePersonaRef(db, T, 'voiceless'), { ok: false, reason: 'inactive' },
+      await W.resolvePersonaRef(db, T, 'voiceless'), { ok: false, reason: 'voiceless' },
     );
     assert.deepStrictEqual(
       await W.resolvePersonaRef(db, T, 'nobody'), { ok: false, reason: 'missing' },
     );
+  });
+
+  await H.test('a voice with no words is not a voice that was turned off', async () => {
+    // rejects: THE DEFECT — one reason code for two different states, and a
+    // sentence that told a builder their voice "has been turned off" when
+    // nobody had turned anything off. `game/personas.js` has always kept the
+    // two apart in its own logs ("referenced but missing or empty" against
+    // "is inactive"); a refusal that conflates them sends the person who is
+    // reading it hunting for a switch that was never thrown, on a row whose
+    // real problem is that its voice field is blank.
+    H.reset();
+    H.seedRow(persona('retired', { status: 'inactive' }));
+    H.seedRow(persona('voiceless', { voice: '   ' }));
+
+    assert.deepStrictEqual(
+      await W.resolvePersonaRef(db, T, 'retired'), { ok: false, reason: 'inactive' },
+    );
+    assert.deepStrictEqual(
+      await W.resolvePersonaRef(db, T, 'voiceless'), { ok: false, reason: 'voiceless' },
+    );
+
+    const turnedOff = parse(W.refusal('personaId', 'inactive')).error;
+    const wordless = parse(W.refusal('personaId', 'voiceless')).error;
+    assert.match(turnedOff, /turned off/i, turnedOff);
+    assert.match(wordless, /no words/i, wordless);
+    assert.doesNotMatch(wordless, /turned off/i, 'a switch nobody threw must not be reported as thrown');
+    // …and it still ends in the way out, like every other refusal in the table.
+    assert.match(wordless, /clear it/i, 'a refusal must name the way out');
+  });
+
+  await H.test('a prompt that will not decrypt does not accuse another organisation', async () => {
+    // rejects: THE OTHER DEFECT — rendering every `decryptItem` failure as
+    // "belongs to another organisation". tenant-crypto throws there on a
+    // rotated key, a torn write, a data key that has been forgotten AND a
+    // transient KMS Decrypt, so during a thirty-second blip a builder was told
+    // their own organisation's prompt was somebody else's. The sentence has to
+    // be true in every one of those cases, which means it can only say that it
+    // cannot be read — and the cause has to survive somewhere, which is the
+    // console.warn this asserts is still emitted.
+    H.reset();
+    H.seedRow(await orgPrompt(BETA, 'carried-over', 'Acme retro', ACME));
+
+    const warnings = [];
+    const realWarn = console.warn;
+    console.warn = (...args) => { warnings.push(args.map(String).join(' ')); };
+    let res;
+    try {
+      res = await W.resolvePromptRef(db, T, 'carried-over', { orgId: BETA });
+    } finally {
+      console.warn = realWarn;
+    }
+
+    assert.deepStrictEqual(res, { ok: false, reason: 'unreadable' });
+    // rejects: softening the sentence by going silent. Once the words a builder
+    // reads name no cause, the log is the only place the cause survives.
+    assert.ok(
+      warnings.some((line) => /carried-over/.test(line)),
+      `the real cause must still reach the log: ${JSON.stringify(warnings)}`,
+    );
+
+    const sentence = parse(W.refusal('promptId', 'unreadable')).error;
+    assert.doesNotMatch(sentence, /another organisation|another organization/i, sentence);
+    assert.match(sentence, /cannot be read/i, sentence);
+    assert.match(sentence, /clear it/i, 'a refusal must name the way out');
   });
 
   await H.test('personas are platform-global — an org never gets its own', async () => {
@@ -260,8 +325,16 @@ const editPlatform = (setId, body) => H.platformEvent({ method: 'PUT', path: { s
     H.reset();
     H.seedRow(platformSet('retro'));
     H.seedRow(persona('retired', { status: 'inactive' }));
+    H.seedRow(persona('voiceless', { voice: '' }));
 
-    for (const [personaId, pattern] of [['nobody', /no longer exists/i], ['retired', /turned off/i]]) {
+    for (const [personaId, pattern] of [
+      ['nobody', /no longer exists/i],
+      ['retired', /turned off/i],
+      // rejects: the write path collapsing the third state back into the
+      // second. A blank voice reaches a builder as its own sentence or the
+      // distinction the resolver draws never leaves the resolver.
+      ['voiceless', /no words/i],
+    ]) {
       const res = await editSet(editPlatform('retro', { name: 'Retro', personaId }), H.ctx());
       assert.strictEqual(res.statusCode, 400, res.body);
       const body = parse(res);
