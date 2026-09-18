@@ -114,6 +114,22 @@ test('Edit Q14 works every time, not just the first', async () => {
   }
 });
 
+// R24 fix round 1: AdminPage's handleAppeal used to call a page-level
+// `notice` that renders only in the list panel — unmounted for as long as
+// this editor is open, so a rejected appeal noticed nowhere anyone could see.
+// handleAppeal now RETURNS its outcome instead, and this editor shows it
+// right where the action was taken: its own local status, above the banner.
+test('an appeal the server refuses shows the reason right where it was sent from', async () => {
+  mockApi();
+  const onAppeal = jest.fn().mockResolvedValue({ ok: false, error: 'boom' });
+  render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={onAppeal} onCancel={() => {}} />);
+  const banner = await screen.findByRole('status');
+  fireEvent.click(within(banner).getByRole('button', { name: /ask for a human review/i }));
+  fireEvent.click(within(banner).getByRole('button', { name: /^send$/i }));
+  expect(await screen.findByText('boom')).toBeInTheDocument();
+  expect(onAppeal).toHaveBeenCalledWith(2, '');
+});
+
 test('without canShare there is no Share button and no banner actions', async () => {
   mockApi();
   render(<QuestionSetEditor questionSet={{ ...SET, canManage: false }} onCancel={() => {}} />);

@@ -422,17 +422,21 @@ function AdminPage() {
     }
   };
 
-  /** "Ask for a human review" — POST the appeal, then re-read the list so the row says Waiting. */
+  /** "Ask for a human review" — POST the appeal; the editor shows the outcome, the list re-reads either way. */
   const handleAppeal = async (version, message) => {
-    if (!editingSet) return;
-    const res = await authFetch(adminApiUrl(`question-sets/${encodeURIComponent(editingSet.id)}/appeal`), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version, message }),
-    });
-    if (!res.ok) {
+    if (!editingSet) return { ok: false, error: 'No set is open.' };
+    try {
+      const res = await authFetch(adminApiUrl(`question-sets/${encodeURIComponent(editingSet.id)}/appeal`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version, message }),
+      });
+      if (res.ok) return { ok: true };
       const body = await res.json().catch(() => ({}));
-      setNotice({ tone: 'error', text: body.error || `Could not send that for review (${res.status}).` });
+      return { ok: false, error: body.error || `Could not send that for review (${res.status}).` };
+    } catch (err) {
+      return { ok: false, error: `Could not send that for review: ${err.message}` };
+    } finally {
+      await fetchQuestionSets();
     }
-    await fetchQuestionSets();
   };
 
   const handleSwitchOrg = (orgId) => {

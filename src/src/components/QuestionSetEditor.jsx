@@ -219,6 +219,11 @@ export default function QuestionSetEditor({
   // disable for the one call that is actually in flight rather than for any
   // busyVersion action elsewhere on the panel.
   const [appealBusy, setAppealBusy] = useState(false);
+  // The outcome of that round trip, shown right where the action was taken.
+  // AdminPage's own `notice` banner never reaches here — it renders only in
+  // the list panel, which is unmounted for as long as this editor is open —
+  // so an appeal that could not be sent needs its own, local place to say so.
+  const [appealStatus, setAppealStatus] = useState(null);
 
   /* ----------------------------------------------------------- questions -- */
   // The Questions panel's working copy is unsaved until IT saves. Closing the
@@ -1301,17 +1306,27 @@ export default function QuestionSetEditor({
         const entry = versions.find((v) => v.version === target);
         if (!entry) return null;
         return (
-          <SetReviewBanner
-            entry={entry}
-            share={shared || null}
-            busy={appealBusy}
-            onResubmit={canShare && onShare ? (v) => onShare(v) : undefined}
-            onAppeal={canShare && onAppeal ? async (v, message) => {
-              setAppealBusy(true);
-              try { await onAppeal(v, message); await loadVersions(); } finally { setAppealBusy(false); }
-            } : undefined}
-            onFocusQuestion={(id) => setFocusRequest({ id, seq: Date.now() })}
-          />
+          <>
+            {appealStatus && <StatusMessage message={appealStatus.text} tone={appealStatus.tone} />}
+            <SetReviewBanner
+              entry={entry}
+              share={shared || null}
+              busy={appealBusy}
+              onResubmit={canShare && onShare ? (v) => onShare(v) : undefined}
+              onAppeal={canShare && onAppeal ? async (v, message) => {
+                setAppealStatus(null);
+                setAppealBusy(true);
+                try {
+                  const result = await onAppeal(v, message);
+                  if (result && result.ok === false) {
+                    setAppealStatus({ tone: 'error', text: result.error || 'Could not send that for review.' });
+                  }
+                  await loadVersions();
+                } finally { setAppealBusy(false); }
+              } : undefined}
+              onFocusQuestion={(id) => setFocusRequest({ id, seq: Date.now() })}
+            />
+          </>
         );
       })()}
       <QuestionsPanel

@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import {
-  render, screen, fireEvent, within,
+  render, screen, fireEvent, within, waitFor,
 } from '@testing-library/react';
 
 let mockActiveOrg = '';
@@ -102,4 +102,90 @@ test('the platform console has neither the column nor Share', async () => {
   await screen.findByRole('table');
   expect(screen.queryByRole('columnheader', { name: /who can see it/i })).toBeNull();
   expect(screen.queryByRole('button', { name: /^share$/i })).toBeNull();
+});
+
+/**
+ * A version whose review flagged one question — normalizeVersions() shape
+ * (utils/questionSetEditing.js), the payload GET admin/question-sets/safety/
+ * versions answers with. Drives components/SetReviewBanner.jsx's flagged
+ * branch (role="status") when the editor opens on "safety".
+ */
+const VERSIONS_SAFETY = [
+  {
+    version: 2,
+    isActive: true,
+    review: 'flagged',
+    reviewFindings: [{
+      questionId: 'q014', category: 'VIOLENCE', band: 'HIGH', explanation: 'Injuries in detail.',
+    }],
+    published: null,
+    unfinished: false,
+    reasons: [],
+    questionCount: 30,
+    pinnedByGames: [],
+  },
+  {
+    version: 1,
+    isActive: false,
+    review: 'passed',
+    reviewFindings: [],
+    published: null,
+    unfinished: false,
+    reasons: [],
+    questionCount: 28,
+    pinnedByGames: [],
+  },
+];
+
+test('a rejected appeal still notices and refreshes the list', async () => {
+  mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
+  let listCalls = 0;
+  global.fetch = jest.fn(async (url, init) => {
+    const u = String(url);
+    const method = (init && init.method) || 'GET';
+    // The appeal itself: authFetch REJECTS (offline/DNS/CORS), not a !ok response.
+    if (u.includes('question-sets/safety/appeal') && method === 'POST') {
+      throw new Error('Network down');
+    }
+    if (u.includes('question-sets/safety/versions')) {
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => VERSIONS_SAFETY,
+      };
+    }
+    if (u.includes('question-sets/safety/questions') || u.includes('question-sets/clean/questions')) {
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => [],
+      };
+    }
+    if (u.includes('admin/question-sets')) {
+      listCalls += 1;
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => SETS,
+      };
+    }
+    if (u.includes('/orgs')) {
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => ({ orgs: [HOME] }),
+      };
+    }
+    return {
+      ok: true, status: 200, text: async () => '{}', json: async () => ({}),
+    };
+  });
+
+  render(<AdminPage />);
+  await screen.findByRole('columnheader', { name: /who can see it/i });
+  const callsBeforeAppeal = listCalls;
+
+  const row = screen.getByText('Safety walkthrough').closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^edit$/i }));
+
+  // The needs-changes banner (components/SetReviewBanner.jsx) — its own
+  // role="status" section, present once the flagged version 2 loads.
+  await screen.findByRole('status');
+  fireEvent.click(screen.getByRole('button', { name: /ask for a human review/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
+
+  expect(await screen.findByText(/could not send that for review: network down/i)).toBeInTheDocument();
+  await waitFor(() => expect(listCalls).toBeGreaterThan(callsBeforeAppeal));
 });
