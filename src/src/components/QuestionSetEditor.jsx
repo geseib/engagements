@@ -110,8 +110,16 @@ const aiClip = (value, max) => {
  */
 export default function QuestionSetEditor({
   questionSet,
-  availablePrompts = [],
-  availablePersonas = [],
+  /*
+    AN ARRAY, OR `null` FOR "NOT KNOWN" (ruling W6). An empty array is evidence
+    — this environment has no such library — and the Workie group says so in
+    words. `null` is the absence of evidence: a fetch that failed, was refused,
+    or has not answered yet, and also a caller that passes neither. The default
+    is `null` rather than `[]` for exactly that reason: a caller who says
+    nothing has not told us the environment is empty.
+  */
+  availablePrompts = null,
+  availablePersonas = null,
   availableSets = [],
   defaultInstructions = '',
   /*
@@ -251,10 +259,32 @@ export default function QuestionSetEditor({
 
   const activeVersion = questionSet?.activeVersion;
 
+  /*
+    ── NULL IS "NOBODY TOLD US", AND IT IS NOT AN EMPTY LIBRARY (ruling W6) ───
+
+    Both callers read these lists over the wire and both degrade a refusal into
+    silence. If that silence arrives as `[]` this editor says, with total
+    confidence, "No voices are set up on this environment yet" — a diagnosis of
+    the environment made from a 403. GameSetupDialog refuses exactly this
+    over-claim ten files away by telling `null` from an empty Set; the same rule
+    applies to the same question here, so `AdminPage` and
+    `HostQuestionSetsDialog` now pass `null` until a list genuinely arrives.
+
+    `known` gates every DIAGNOSTIC sentence below — the empty-library lines and
+    both "this environment does not offer" warnings. Nothing else changes: the
+    selects, their defaults and their help all render the same, because they are
+    right whatever happened to the request.
+  */
+  const promptsKnown = Array.isArray(availablePrompts);
+  const personasKnown = Array.isArray(availablePersonas);
+  const prompts = promptsKnown ? availablePrompts : [];
+  const personas = personasKnown ? availablePersonas : [];
+
   // Prompts worth offering for THIS set. Keyed off the live engagementType
   // rather than the saved one, so switching the type re-filters immediately —
   // otherwise you pick "Trivia", save, reopen, and only then see trivia prompts.
-  //
+  const typeMatchedPrompts = selectableSummaryPrompts(prompts, engagementType);
+
   // THE PUBLIC SCOPE IS DROPPED HERE AND NOWHERE ELSE (P4). `get-ai-prompts.js`
   // queries the caller's org, the platform library AND public, and stamps the
   // scope it came from onto every row. `admin/shared/workie-refs.js` — the
@@ -262,14 +292,14 @@ export default function QuestionSetEditor({
   // platform only, so a public prompt is a choice the save would answer 400 to.
   // No admin path creates a public prompt today, which is exactly why this is
   // cheap to close now rather than after the first one exists.
-  //
-  // FILTERED AFTER `selectableSummaryPrompts`, NEVER BEFORE IT. `hiddenPromptCount`
-  // is the raw list minus what is offered, and the callers hand the raw list over
-  // for that reason (HostQuestionSetsDialog.jsx says so at its fetch). A public
-  // row therefore counts as hidden, which is true of it; there are none today.
-  const summaryPromptChoices = selectableSummaryPrompts(availablePrompts, engagementType)
-    .filter((p) => p.scope !== 'public');
-  const hiddenPromptCount = availablePrompts.length - summaryPromptChoices.length;
+  const summaryPromptChoices = typeMatchedPrompts.filter((p) => p.scope !== 'public');
+
+  // COUNTED BEFORE THE SCOPE FILTER, BECAUSE THE SENTENCE SAYS "GAME TYPES"
+  // (ruling W7). Subtracting the post-filter length reported a public prompt as
+  // one hidden for its game type — the sentence naming one reason for a total
+  // that had two in it. The raw list is still what it subtracts FROM, which is
+  // why both callers hand it over unfiltered.
+  const hiddenPromptCount = prompts.length - typeMatchedPrompts.length;
 
   /*
     ── WHAT THE TWO STORED IDS RESOLVE TO, OR THAT THEY DO NOT (ruling W4) ────
@@ -287,19 +317,33 @@ export default function QuestionSetEditor({
     dead value and drop it, which is what these two drive. Do not remove the
     grandfathering branch in the lambda; it names W4 in its own comment.
 
-    Resolved against the RAW list, not the offered one: a prompt for another
-    game type is still a prompt that exists, and calling it "not available"
-    would be a second lie on top of the first.
+    THE PROMPT RESOLVES AGAINST WHAT THE SELECT OFFERS, NOT THE RAW LIST
+    (ruling W8). Resolving against the raw list printed "Currently: Open Mic."
+    for a public-scoped id that the select excludes and that `get-ai-summary.js`
+    will not honour either — three surfaces disagreeing about one id, on the row
+    that exists to end that. `promptHonoured` is the second half of it: see the
+    warning's two branches in the markup.
   */
   const resolvedPersona = personaId
-    ? availablePersonas.find((p) => p.personaId === personaId) || null
+    ? personas.find((p) => p.personaId === personaId) || null
     : null;
-  const danglingPersona = Boolean(personaId) && !resolvedPersona;
+  const danglingPersona = personasKnown && Boolean(personaId) && !resolvedPersona;
   const resolvedPrompt = promptId
-    ? availablePrompts.find((p) => p.promptId === promptId) || null
+    ? summaryPromptChoices.find((p) => p.promptId === promptId) || null
     : null;
-  const danglingPrompt = Boolean(promptId) && !resolvedPrompt;
-
+  const danglingPrompt = promptsKnown && Boolean(promptId) && !resolvedPrompt;
+  /*
+    An unofferable id Workie WILL still use. `resolvePromptTemplate`
+    (game/get-ai-summary.js) loads a prompt by id from the org library then the
+    platform one and uses it if it parses — the game type is never consulted. So
+    a trivia prompt on a call-and-answer set is honoured; a public-scoped one is
+    in neither library and is not. The two cannot share a consequence sentence,
+    and inventing one for both would plant a fresh falsehood in the middle of
+    the fix that removed one.
+  */
+  const promptHonoured = danglingPrompt
+    ? prompts.find((p) => p.promptId === promptId && p.scope !== 'public') || null
+    : null;
 
   const loadVersions = useCallback(async () => {
     if (!setId) return;
@@ -1285,7 +1329,7 @@ export default function QuestionSetEditor({
                 {/* Adapting is the designed default, not a fallback. A host who
                     picks a voice at creation still overrides this. */}
                 <option value="">Adapt to the session (recommended)</option>
-                {availablePersonas.map((persona) => (
+                {personas.map((persona) => (
                   <option key={persona.personaId} value={persona.personaId}>
                     {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
                   </option>
@@ -1300,7 +1344,7 @@ export default function QuestionSetEditor({
                   "Adapt to the session (recommended)" is the correct default and
                   the correct control, it just cannot say by itself whether the
                   list is empty or was never fetched. So the words are added. */}
-              {availablePersonas.length === 0 && (
+              {personasKnown && personas.length === 0 && (
                 <small className="help-text" data-testid="workie-voice-empty">
                   No voices are set up on this environment yet — Workie reads the room and
                   picks its own register.
@@ -1350,13 +1394,34 @@ export default function QuestionSetEditor({
                   hiddenPromptCount === 1 ? '' : 's'
                 } for other game types are hidden.`}
               </small>
-              {availablePrompts.length === 0 && (
+              {promptsKnown && prompts.length === 0 && (
                 <small className="help-text" data-testid="workie-prompt-empty">
                   No summary approaches are set up on this environment yet — Workie sums up
                   each round the standard {gameTypeLabel(engagementType)} way.
                 </small>
               )}
-              {danglingPrompt && (
+              {/* TWO BRANCHES, BECAUSE THERE ARE TWO OUTCOMES — see
+                  `promptHonoured`. The first is the live case: the engagement
+                  type above is editable, so switching a trivia set to Call &
+                  Answer strands its prompt here, still attached and still
+                  used. The second is an id no readable library holds, which
+                  really does fall back. */}
+              {danglingPrompt && promptHonoured && (
+                <p className="qs-workie-warning" data-testid="workie-prompt-unavailable">
+                  This set is saved with a summary approach written for{' '}
+                  <strong>{gameTypeLabel(promptHonoured.gameType)}</strong> sets
+                  (&ldquo;{promptId}&rdquo;). Workie will still follow it, which is unlikely to
+                  suit a <strong>{gameTypeLabel(engagementType)}</strong> round.{' '}
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    onClick={() => setPromptId('')}
+                  >
+                    Clear it
+                  </button>
+                </p>
+              )}
+              {danglingPrompt && !promptHonoured && (
                 <p className="qs-workie-warning" data-testid="workie-prompt-unavailable">
                   This set is saved with a summary approach this environment does not offer
                   (&ldquo;{promptId}&rdquo;). Workie will sum up each round the standard{' '}

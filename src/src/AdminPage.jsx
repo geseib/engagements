@@ -536,8 +536,17 @@ function AdminPage() {
   */
   const [notice, setNotice] = useState(null); // { text, tone } | null
 
-  // Available prompts for selection
-  const [availablePrompts, setAvailablePrompts] = useState([]);
+  /*
+    Available prompts for selection — AN ARRAY, OR `null` FOR "NOT KNOWN".
+
+    Ruling W6. `fetchAvailablePrompts` below sets this only on a 2xx, so a 403
+    or an outage used to leave it at `[]` and QuestionSetEditor told the person
+    at the console "No summary approaches are set up on this environment yet" —
+    a confident diagnosis of the environment, made from a failed request. Empty
+    now means the library answered and held nothing; `null` means nobody said.
+    Readers of this value take `|| []` where they only need the rows.
+  */
+  const [availablePrompts, setAvailablePrompts] = useState(null);
   /*
    * THE OTHER HALF OF `promptId` — Important #5. ShareSetDialog.jsx reads
    * `set.promptScope` to decide whether to say "Published without your
@@ -549,11 +558,14 @@ function AdminPage() {
    * own `scope` (get-ai-prompts.js), and is the one place that can look it up
    * before handing the set to the dialog.
    */
-  const promptScopeOf = (set) => (availablePrompts.find((p) => p.promptId === set.promptId) || {}).scope || null;
+  const promptScopeOf = (set) => ((availablePrompts || []).find((p) => p.promptId === set.promptId) || {}).scope || null;
   // The persona library, read from GET /admin/personas. Personas live under
   // SK='PERSONA#' which get-ai-prompts.js hard-filters out, so they need their
   // own endpoint — this is the list that used to be unreachable (D8).
-  const [availablePersonas, setAvailablePersonas] = useState([]);
+  // An array, or `null` for "not known" — the same W6 rule as availablePrompts
+  // above, and the same reason: `fetchAvailablePersonas` returns without setting
+  // on a refusal, so `[]` would have been a refusal wearing an answer's clothes.
+  const [availablePersonas, setAvailablePersonas] = useState(null);
 
   // AI Scenario Builder
   const [showAIScenarioBuilder, setShowAIScenarioBuilder] = useState(false);
@@ -634,7 +646,7 @@ function AdminPage() {
 
   /** Display name for a stored personaId, or a warning when it resolves to nothing. */
   const personaLabel = (personaId) => {
-    const match = availablePersonas.find((p) => p.personaId === personaId);
+    const match = (availablePersonas || []).find((p) => p.personaId === personaId);
     return match ? match.name : `${personaId} (unknown — Workie will adapt instead)`;
   };
 
@@ -1821,7 +1833,11 @@ function AdminPage() {
                   scrollIntoViewOnMount={isCreateOpen}
                   engagementType={engagementType}
                   onEngagementTypeChange={setEngagementType}
-                  availablePrompts={availablePrompts}
+                  /* The upload panel draws no empty-library sentence, so it
+                     wants the rows and not the distinction — `|| []` keeps its
+                     contract an array while `availablePrompts` carries W6's
+                     third state for the editor below. */
+                  availablePrompts={availablePrompts || []}
                   defaultInstructions={defaultInstructions}
                   onOpenBuilder={handleOpenBuilder}
                   onUploaded={fetchQuestionSets}

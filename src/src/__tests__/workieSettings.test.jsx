@@ -35,6 +35,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import QuestionSetEditor from '../components/QuestionSetEditor';
 import GameSetupDialog from '../components/GameSetupDialog';
+import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
 import { authFetch } from '../auth/authFetch';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
@@ -179,6 +180,42 @@ describe('an environment with nothing seeded says so in words', () => {
     expect(screen.queryByTestId('workie-voice-empty')).toBeNull();
     expect(screen.queryByTestId('workie-prompt-empty')).toBeNull();
   });
+
+  /*
+    RULING W6 — AND IT IS THE SAME RULING GameSetupDialog ALREADY FOLLOWS.
+
+    "No voices are set up on this environment yet" is a DIAGNOSIS. A caller that
+    swallowed a 403 into an empty array makes the editor state it with total
+    confidence, which is precisely the over-claim the setup dialog refuses to
+    make ten files away by telling `null` apart from an empty Set. Null here
+    means the same thing it means there: nothing arrived, so there is nothing to
+    say. An empty ARRAY is the only evidence that the environment has none.
+  */
+  test.each([
+    ['voices', { availablePersonas: null }, 'workie-voice-empty'],
+    ['summary approaches', { availablePrompts: null }, 'workie-prompt-empty'],
+  ])('a list that never arrived is not reported as an empty %s library', (_n, props, testid) => {
+    mockEditorApi();
+    renderEditor(props);
+    expect(screen.queryByTestId(testid)).toBeNull();
+    // Everything else still works: the default option and its help line are
+    // right whatever happened to the list, and they are the whole control on an
+    // environment that genuinely has none.
+    expect(optionLabels(voiceSelect()).length).toBeGreaterThanOrEqual(1);
+    expect(optionLabels(promptSelect()).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // rejects: the same over-claim wearing W4's clothes. "This set is saved with a
+  // voice this environment does not offer" is a diagnosis too, and a list that
+  // never arrived is no evidence for it either.
+  test.each([
+    ['voice', { availablePersonas: null, questionSet: { ...SET, personaId: 'ghost' } }, 'workie-voice-unavailable'],
+    ['summary approach', { availablePrompts: null, questionSet: { ...SET, promptId: 'ghost-prompt' } }, 'workie-prompt-unavailable'],
+  ])('a list that never arrived cannot condemn a stored %s', (_n, props, testid) => {
+    mockEditorApi();
+    renderEditor(props);
+    expect(screen.queryByTestId(testid)).toBeNull();
+  });
 });
 
 /* ---------------------------------------------- W4: a value that dangles --- */
@@ -276,14 +313,63 @@ describe('the picker never offers a scope the writer would refuse', () => {
     expect(labels).not.toMatch(/Open Mic/);
   });
 
-  // rejects: closing P4 by filtering the list the count is taken FROM. The
-  // sentence is `availablePrompts.length - choices.length`, and a caller (or a
-  // helper) that pre-filters the raw list makes the count zero and the sentence
-  // a lie. hostWorkieSettings.test.jsx pins the same sentence from the host side.
-  test('the hidden-prompt sentence survives', () => {
+  /*
+    RULING W7 — THE SENTENCE COUNTS ONLY WHAT IT NAMES.
+
+    This asserted the PHRASE and so had no teeth: with the four prompts above,
+    one is hidden for its game type (`quiz-recap`, trivia) and one for its scope
+    (`open-mic`, public), and subtracting the post-scope-filter length reported
+    BOTH as "for other game types". The number is the assertion, because the
+    number is the part that was wrong.
+
+    hostWorkieSettings.test.jsx pins the same sentence from the host side, where
+    no fixture carries a scope and the count is unaffected either way.
+  */
+  test('the hidden-prompt sentence counts game types only', () => {
     mockEditorApi();
     renderEditor();
-    expect(screen.getByText(/prompts? for other game types are hidden/i)).toBeTruthy();
+    const help = screen.getByTestId('workie-prompt-help').textContent;
+    expect(help).toMatch(/1 prompt for other game types are hidden/);
+    expect(help).not.toMatch(/2 prompts/);
+  });
+
+  /*
+    RULING W8 — AND THE ONE CLAIM THAT DOES NOT SURVIVE THE MOVE.
+
+    Resolving the stored id against the RAW list printed "Currently: Open Mic."
+    for a prompt the select excludes and `get-ai-summary.js` will not honour
+    (it reads the org library then the platform one; public is in neither), so
+    three surfaces disagreed about one id. It resolves against what the select
+    offers now, which puts such an id into W4's warning.
+
+    That move sweeps in a SECOND kind of unofferable id — one for another game
+    type — and the two cannot share a consequence. `resolvePromptTemplate`
+    loads a prompt by id and uses it if it parses; the game type is never
+    consulted. So a trivia prompt on a call-and-answer set IS honoured, and
+    telling the builder Workie would fall back to the standard way would be a
+    fresh falsehood planted in the middle of the fix. Two branches, each true.
+  */
+  describe('a stored prompt the picker cannot offer', () => {
+    test('a public-scoped id takes the warning, and the standard-way outcome', () => {
+      mockEditorApi();
+      renderEditor({ questionSet: { ...SET, promptId: 'open-mic' } });
+      const notice = screen.getByTestId('workie-prompt-unavailable');
+      expect(notice.textContent).toMatch(/does not offer/i);
+      expect(notice.textContent).toMatch(/open-mic/);
+      expect(notice.textContent).toMatch(/standard Call & Answer way/);
+      // and it is no longer announced as though it were in force
+      expect(screen.getByTestId('workie-prompt-help').textContent).not.toMatch(/Currently/);
+    });
+
+    test("a prompt for another game type is warned about as one Workie WILL follow", () => {
+      mockEditorApi();
+      renderEditor({ questionSet: { ...SET, promptId: 'quiz-recap' } });
+      const notice = screen.getByTestId('workie-prompt-unavailable');
+      expect(notice.textContent).toMatch(/written for/i);
+      expect(notice.textContent).toMatch(/Trivia/);
+      expect(notice.textContent).toMatch(/will still follow it/i);
+      expect(notice.textContent).not.toMatch(/standard Call & Answer way/);
+    });
   });
 });
 
@@ -366,11 +452,18 @@ describe('the setup dialog only promises what will happen', () => {
     expect(plan().textContent).toMatch(/brings its own summary approach/i);
   });
 
-  test('a thrown request is caught rather than left unhandled', async () => {
+  // POINTED AT THE SET THAT CAN TELL THE DIFFERENCE. This chose `plain` — a set
+  // with no promptId — so it passed whether the catch existed or not, and
+  // whether the throw was read as "unknown" or as "empty". `ghosted` carries an
+  // id, so the sentence it produces says which of those happened.
+  test('a thrown request is caught, and read as unknown rather than empty', async () => {
     mockPromptApi({ throws: true });
     renderDialog();
-    fireEvent.change(setSelect(), { target: { value: 'platform:plain' } });
-    await waitFor(() => expect(plan().textContent).toMatch(/standard Call & Answer way/));
+    fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
+    await waitFor(() => expect(plan().textContent).toMatch(/brings its own summary approach/i));
+    // and the dialog is still a dialog: an unhandled rejection in the effect
+    // would have taken it down with it.
+    expect(screen.getByRole('button', { name: /create engagement/i })).toBeTruthy();
   });
 
   // rejects: a fetch in the render body, which would re-read the list on every
@@ -382,5 +475,89 @@ describe('the setup dialog only promises what will happen', () => {
     fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
     fireEvent.change(setSelect(), { target: { value: 'platform:plain' } });
     expect(promptCalls()).toHaveLength(1);
+  });
+});
+
+/* ═══════════════════════════════════════════ the group at a REAL mount ══════
+ *
+ * Everything above renders `QuestionSetEditor` on its own with props handed
+ * straight in, which proves the markup and proves nothing about the wiring. The
+ * host's dialog is the surface the complaint came from ("expose the same style
+ * … to the host question set screens") and the cheaper of the two real mounts —
+ * `AdminPage` needs the whole console. So the group is seen once through it.
+ *
+ * It is also where ruling W6 is decided. The editor can only tell an empty
+ * library from an absent one if its CALLER can, and both callers used to
+ * swallow a 403 into `[]`.
+ */
+const HOST_VIEW = [
+  {
+    id: 'ivy-retro', name: 'Ivy Retro', description: 'Made last Tuesday',
+    engagementType: 'call-and-answer', totalQuestions: 12, categoryCount: 2,
+    active: true, hasImages: false, canManage: true, mine: true, createdByName: 'ivy',
+    promptId: 'ghost-prompt',
+  },
+];
+
+const IVY_QUESTIONS = {
+  setId: 'ivy-retro',
+  questions: [{
+    id: 'c001#001', Category: 'Retro', title: 'WHAT WENT WRONG', QuestionNumber: 1,
+    questionDetail: 'Pick one incident.', Tags: ['retro'],
+  }],
+};
+
+function mockHostApi({ personaStatus = 200, personas = PERSONAS } = {}) {
+  authFetch.mockImplementation(async (url, options = {}) => {
+    const method = (options.method || 'GET').toUpperCase();
+    if (method === 'GET' && /\/admin\/question-sets$/.test(url)) return jsonResponse(200, { questionSets: HOST_VIEW });
+    if (method === 'GET' && /\/question-sets\/[^/]+\/questions$/.test(url)) return jsonResponse(200, IVY_QUESTIONS);
+    if (method === 'GET' && /\/admin\/ai-prompts$/.test(url)) return jsonResponse(200, { prompts: PROMPTS });
+    if (method === 'GET' && /\/admin\/personas$/.test(url)) {
+      return personaStatus === 200 ? jsonResponse(200, { personas }) : jsonResponse(personaStatus, { error: 'nope' });
+    }
+    throw new Error(`Unhandled request: ${method} ${url}`);
+  });
+}
+
+async function openHostEditor(options) {
+  mockHostApi(options);
+  render(<HostQuestionSetsDialog onClose={jest.fn()} />);
+  await waitFor(() => expect(screen.queryByText(/loading your question sets/i)).toBeNull());
+  fireEvent.click(within(screen.getByText('Ivy Retro').closest('tr')).getByRole('button', { name: /edit questions/i }));
+  await screen.findByTestId('question-0');
+}
+
+describe('the host opens the same group the console has', () => {
+  // rejects: markup that only holds together with props posted straight into
+  // it. Everything here arrived over the wire through a real caller.
+  test('the group, its two rows and its warning all arrive through the host dialog', async () => {
+    await openHostEditor();
+    const group = screen.getByTestId('workie-group');
+    expect(within(group).getByRole('heading', { name: /^workie$/i })).toBeTruthy();
+    expect(within(group).getByLabelText(/^its voice$/i)).toBeTruthy();
+    expect(within(group).getByLabelText(/^how it sums up each round$/i)).toBeTruthy();
+    // Ivy Retro is saved with an id no library holds — W4, end to end.
+    expect(screen.getByTestId('workie-prompt-unavailable').textContent).toMatch(/ghost-prompt/);
+  });
+
+  // RULING W6 AT ITS SOURCE. rejects: `useState([])` plus a failure path that
+  // returns without setting — which makes a refused library indistinguishable
+  // from an environment that has none, in a component whose whole job here is
+  // to tell the host which one they are looking at.
+  test('a refused voice library is not reported as an environment with no voices', async () => {
+    await openHostEditor({ personaStatus: 403 });
+    expect(screen.queryByTestId('workie-voice-empty')).toBeNull();
+    expect(optionLabels(voiceSelect())).toHaveLength(1);
+  });
+
+  // The other half, and the reason the first half is not simply "never say it":
+  // a library that answered with nothing IS an environment with no voices, and
+  // that is worth saying — it is the difference between a confusing picker and
+  // an explained one.
+  test('a library that really is empty is reported as one', async () => {
+    await openHostEditor({ personas: [] });
+    expect(screen.getByTestId('workie-voice-empty').textContent)
+      .toMatch(/No voices are set up on this environment yet/i);
   });
 });

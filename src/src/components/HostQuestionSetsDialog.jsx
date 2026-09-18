@@ -112,9 +112,18 @@ export default function HostQuestionSetsDialog({
     `GET admin/personas` are in `HOST_ADMIN_ROUTES` (auth/authorizer.js), the
     second with a note saying its earlier absence "was an oversight, not a
     policy". Nothing here opens a route or asks for one.
+
+    `null` UNTIL ONE GENUINELY ARRIVES (ruling W6). These started as `[]`, and
+    the failure paths below leave them where they are, so a 403 reached the
+    editor as an empty library — which the editor then reported to the host as
+    "No voices are set up on this environment yet". That sentence is a
+    diagnosis of the ENVIRONMENT, and a refused request is no evidence for it.
+    An empty array now means the library answered and held nothing; `null`
+    means nobody has said. The warns below are the operator's half of the same
+    distinction; this is the host's.
   */
-  const [availablePrompts, setAvailablePrompts] = useState([]);
-  const [availablePersonas, setAvailablePersonas] = useState([]);
+  const [availablePrompts, setAvailablePrompts] = useState(null);
+  const [availablePersonas, setAvailablePersonas] = useState(null);
   /*
     WHICH BUILDER IS OPEN, or null. `showAIBuilder` was passed to
     QuestionSetUploadPanel without an `onOpenBuilder`, so the button rendered,
