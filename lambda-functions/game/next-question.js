@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { resolveSetPartition } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 
@@ -853,7 +853,7 @@ exports.handler = async (event) => {
     // through to its legacy `SET#<id>` partition.
     const resolvedSet = await resolveSetPartition(
       db, process.env.TABLE_NAME,
-      gameMetadata.Item.QuestionSetId,
+      gameSetRef(gameMetadata.Item),
       gameMetadata.Item.QuestionSetVersion
     );
     const setPk = resolvedSet.pk;
@@ -1112,6 +1112,12 @@ exports.handler = async (event) => {
         SK: `QUESTION#${questionNumber}#REF`,
         SourceQuestionId: nextQuestion.questionId,
         SetId: gameMetadata.Item.QuestionSetId,
+        // THE SCOPE PIN, beside the id: get-question.js, get-game-state.js and
+        // get-results.js resolve this round's set from the REF row alone, and
+        // a REF with no scope reads as platform — wrong for a session built on
+        // an organisation's own set or a public copy (tests/org-set-runtime.js).
+        SetScope: resolvedSet.scope,
+        ...(resolvedSet.orgId ? { SetOrgId: resolvedSet.orgId } : {}),
         // The version this round was actually served from. get-question.js reads
         // it back as the pin, so a round already on screen keeps resolving to
         // the same version even if the set is replaced or promoted mid-round.

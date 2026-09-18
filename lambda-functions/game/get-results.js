@@ -2,7 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { resolveSetPartition } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
@@ -723,7 +723,7 @@ async function handleTriviaResults(event, gameId, questionId) {
         // RESULTS must show the same question text ASK did, so this resolves
         // through the same pin > activeVersion > legacy order.
         const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
         );
 
         // Get the actual question from the question set (same as get-question.js)
@@ -1072,7 +1072,7 @@ async function handleWavelengthResults(event, gameId, questionId) {
 
         // Same version resolution as the trivia branch above.
         const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
         );
 
         // Get the actual question from the question set
@@ -1574,7 +1574,7 @@ async function decrementCategoryCount(gameId, questionId) {
         // read the same version the round was served from.
         const resolvedCategorySet = await resolveSetPartition(
           db, process.env.TABLE_NAME,
-          questionRef.Item.SetId || 'unknown',
+          refSetRef(questionRef.Item, questionRef.Item.SetId || 'unknown'),
           questionRef.Item.SetVersion
         );
         const categoriesQuery = await db.send(new QueryCommand({

@@ -11,7 +11,7 @@ const {
 const { normalizeGameType } = require('./game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 const { extractVariableTokens } = require('./template-variables');
-const { resolveSetPartition } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
 const { consensusLabel } = require('./consensus');
 // buildWavelengthProse lives in wavelength.js WITH the engine, not here.
@@ -782,7 +782,7 @@ exports.handler = async (event) => {
         // wrong version would narrate the wrong answer at RESULTS.
         questionSetVersion = questionRef.Item.SetVersion;
         const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, questionSetId, questionSetVersion
+          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionSetVersion
         );
 
         // Get the actual question from the question set (same as get-results.js)
@@ -1172,6 +1172,7 @@ exports.handler = async (event) => {
       // the report context and cannot derive it — it is handed `gameId` and a
       // set id, neither of which says which library.
       setKey: sessionSetKey(metadata, questionSetId),
+      setScope: (metadata && metadata.QuestionSetScope) || '',
       // WHICH PROMPT LIBRARY. Resolved here for the same reason as setKey: the
       // session row is in scope. Without it the summary engine reads only
       // Engage's library and an organisation's own Workie is invisible.
@@ -1406,7 +1407,7 @@ exports.buildFallbackSummary = buildFallbackSummary;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1631,7 +1632,9 @@ async function generateAISummary({ setKey, eventTitle, gameType, gameAiContext, 
     // Count questions in the set. This is prompt CONTEXT ("question 3 of 20"),
     // not the round's content, so it resolves without a pin: the set's
     // activeVersion, falling back to the legacy partition.
-    const resolvedSet = await resolveSetPartition(db, process.env.TABLE_NAME, questionSetId, null);
+    // The session's pinned scope, carried in beside setKey: a bare id here read as
+    // platform and summarised an org or public set from an empty partition.
+    const resolvedSet = await resolveSetPartition(db, process.env.TABLE_NAME, { scope: setScope, orgId, setId: questionSetId }, null);
     const allQuestions = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',

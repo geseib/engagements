@@ -60,7 +60,7 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
-const { resolveSetPartition } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { QUEUE_OPS, applyQueueOp, normaliseQueue } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 
@@ -175,7 +175,7 @@ const resolveGameSet = async (gameId) => {
   if (!setId) return { setId: null, version: null };
 
   const resolved = await resolveSetPartition(
-    db, process.env.TABLE_NAME, setId, metadata.Item.QuestionSetVersion
+    db, process.env.TABLE_NAME, gameSetRef(metadata.Item), metadata.Item.QuestionSetVersion
   );
   return { setId, version: resolved.version };
 };

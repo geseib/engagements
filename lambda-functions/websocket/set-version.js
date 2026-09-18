@@ -409,7 +409,39 @@ async function findGamesPinnedToVersion(db, tableName, ref, version) {
   return games;
 }
 
+/**
+ * THE SET A GAME PLAYS, as the pair the resolver needs. A game pins
+ * `QuestionSetScope` beside `QuestionSetId` and carries its `orgId`; handing
+ * the resolver the bare id reads as PLATFORM (`setRef`), which is how a
+ * session built on an organisation's own set, or on a public copy, planned
+ * and played nothing while the scope-aware admin listed every question
+ * (tests/org-set-runtime.js).
+ */
+function gameSetRef(gameRow) {
+  const row = gameRow || {};
+  return {
+    scope: String(row.QuestionSetScope || '').trim() || tenant.PLATFORM,
+    orgId: String(row.orgId || row.OrgId || '').trim(),
+    setId: String(row.QuestionSetId || '').trim(),
+  };
+}
+
+/**
+ * The set a `QUESTION#<n>#REF` row points at, as the same pair. REF rows
+ * written before tenancy carry no scope, which reads as platform.
+ */
+function refSetRef(refRow, setId) {
+  const row = refRow || {};
+  return {
+    scope: String(row.SetScope || '').trim() || tenant.PLATFORM,
+    orgId: String(row.SetOrgId || '').trim(),
+    setId: String(setId || row.SetId || '').trim(),
+  };
+}
+
 module.exports = {
+  gameSetRef,
+  refSetRef,
   BATCH_LIMIT,
   findGamesPinnedToVersion,
   MAX_BATCH_ATTEMPTS,
