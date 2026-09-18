@@ -93,6 +93,12 @@ describe('row action buttons stay reachable', () => {
     expect(total).toBe(100);
     expect(block(QS_CSS, '.qsets-nm')).toMatch(/text-overflow:\s*ellipsis/);
   });
+
+  test('with "Who can see it" present, the seven columns still add to 100', () => {
+    const total = pct('.qsets-tbl--vis .qsets-col-set') + pct('.qsets-col-type') + pct('.qsets-col-qs')
+      + pct('.qsets-tbl--vis .qsets-col-state') + pct('.qsets-col-when') + pct('.qsets-col-acts') + pct('.qsets-col-vis');
+    expect(total).toBe(100);
+  });
 });
 
 describe('the prompt library inherited the fix, not just the shape', () => {

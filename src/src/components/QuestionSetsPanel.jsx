@@ -16,6 +16,7 @@ import {
   notPlayableReason,
 } from '../config/gameTypes';
 import { truncate } from '../utils/questionSetEditing';
+import { shareStateOf } from '../utils/shareState';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
 
@@ -113,6 +114,15 @@ export default function QuestionSetsPanel({
    * copy, so a Copy control only appears where the page can actually honour it.
    */
   onCopy,
+  /**
+   * The share lifecycle, org consoles only. `showVisibility` adds the "Who
+   * can see it" column read from the server's share stamp (utils/shareState);
+   * `onShare` adds the row action that opens the share dialog. Engage's own
+   * library never goes through this pipeline, so the platform console passes
+   * neither.
+   */
+  showVisibility = false,
+  onShare,
   onToggleActive,
   onToggleQuickstart,
   /** The three ranked creation paths from mockup 02. */
@@ -325,13 +335,14 @@ export default function QuestionSetsPanel({
               </button>
             </div>
           ) : (
-            <table className="qsets-tbl">
+            <table className={`qsets-tbl${showVisibility ? ' qsets-tbl--vis' : ''}`}>
               <thead>
                 <tr>
                   <th className="qsets-col-set">Set</th>
                   <th className="qsets-col-type">Type</th>
                   <th className="qsets-col-qs">Qs</th>
                   <th className="qsets-col-state">State</th>
+                  {showVisibility && <th className="qsets-col-vis">Who can see it</th>}
                   <th className="qsets-col-when">Updated</th>
                   <th className="qsets-col-acts" />
                 </tr>
@@ -431,6 +442,14 @@ export default function QuestionSetsPanel({
                           </span>
                         </div>
                       </td>
+                      {showVisibility && (() => {
+                        const vis = shareStateOf(set);
+                        return (
+                          <td className="qsets-vis">
+                            <span className={`qsets-chip qsets-chip--vis-${vis.key}`} title={vis.title}>{vis.label}</span>
+                          </td>
+                        );
+                      })()}
                       <td className="qsets-when">{formatWhen(set.updatedAt || set.createdAt)}</td>
                       <td>
                         <div className="qsets-rowact">
@@ -473,6 +492,16 @@ export default function QuestionSetsPanel({
                               >
                                 {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
                               </button>
+                              {showVisibility && onShare && (
+                                <button
+                                  type="button"
+                                  className="qsets-btn qsets-btn--sm"
+                                  onClick={() => onShare(set)}
+                                  title="Submit the active version for the content check; it goes public if it passes"
+                                >
+                                  Share
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"

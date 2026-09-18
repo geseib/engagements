@@ -85,6 +85,7 @@ const T = {
   text: token(GLOBAL_CSS, DUSK, '--text'),
   muted: token(GLOBAL_CSS, DUSK, '--muted'),
   primary: token(GLOBAL_CSS, ROOT, '--primary'),
+  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
   danger: token(GLOBAL_CSS, ROOT, '--danger'),
   dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
   dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
@@ -140,6 +141,7 @@ describe('the flat pairings this screen paints', () => {
     ['--danger-text on --surface (the delete dialog)', T.dangerText, PANEL],
     ['--bg on --primary (the filled New set / Upload button)', T.bg, [T.primary]],
     ['--text on --danger-deep (the filled Delete the set)', T.text, [T.dangerDeep]],
+    ['--secondary on the work field (the Waiting for Engage chip)', T.secondary, FIELD],
   ];
 
   test.each(pairs)('%s clears AA', (_label, fg, layers) => {

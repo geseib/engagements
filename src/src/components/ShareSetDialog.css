@@ -1,0 +1,58 @@
+/* src/src/components/ShareSetDialog.css
+   THE SHARE DIALOG — 05-share-review.html. Scoped under .pubshare, not .share --
+   styles.css already declares .share-url-container. Tokens only.
+   MEASURED (asserted in __tests__/sharePalette.test.js, in that order):
+     --text  #F4EDE4 on --surface #1B2942         12.53:1
+     --muted #9BA8BE on --surface                  6.06:1
+     --primary #F6A94C on --surface                7.42:1
+     --danger-text #EF8C86 on --surface            6.08:1
+     --pubshare-success-text #6FD0A4 on --surface  7.79:1
+     --bg on --primary (filled Submit)             8.86:1 */
+.pubshare {
+  --pubshare-t-floor: 12px;
+  --pubshare-t-label: 13px;
+  --pubshare-t-body: 15px;
+  --pubshare-t-head: 19px;
+  --pubshare-success-text: #6FD0A4;
+  --pubshare-rule: rgba(155, 168, 190, .20);
+  --pubshare-tint: rgba(246, 169, 76, .09);
+  color: var(--text);
+  font: 400 var(--pubshare-t-body)/1.5 var(--font-ui);
+}
+.pubshare-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto; padding: 48px 16px;
+  background: rgba(15, 26, 46, .72);
+}
+.pubshare-card {
+  width: min(640px, 100%); margin: auto;
+  background: var(--surface); border: 1px solid var(--pubshare-rule); border-radius: 10px;
+}
+.pubshare-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 0; }
+.pubshare-head h2 { margin: 0; flex: 1; min-width: 0; font-size: var(--pubshare-t-head); font-weight: 700; line-height: 1.3; }
+.pubshare-x { flex: none; width: 32px; height: 32px; border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 6px; }
+.pubshare-x:hover { color: var(--text); background: var(--pubshare-rule); }
+.pubshare-body { padding: 12px 20px 20px; }
+.pubshare-body p { margin: 0 0 12px; }
+.pubshare-sub { color: var(--muted); font-size: var(--pubshare-t-label); }
+.pubshare-callout { padding: 12px 14px; border-radius: 8px; background: var(--pubshare-tint); border: 1px solid var(--pubshare-rule); margin: 0 0 14px; }
+.pubshare-outcomes { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; }
+.pubshare-outcomes dt { color: var(--muted); font-size: var(--pubshare-t-label); }
+.pubshare-outcomes dd { margin: 0; }
+.pubshare-note { color: var(--primary); }
+.pubshare-fine { color: var(--muted); font-size: var(--pubshare-t-label); }
+.pubshare-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; border-top: 1px solid var(--pubshare-rule); }
+.pubshare-btn { height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--pubshare-rule); background: transparent; color: var(--text); font: 600 var(--pubshare-t-body)/1 var(--font-ui); cursor: pointer; }
+.pubshare-btn:hover { background: var(--pubshare-rule); }
+.pubshare-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--bg); }
+.pubshare-btn--primary:disabled { opacity: .6; cursor: default; }
+.pubshare-running { text-align: center; }
+.pubshare-done { padding-top: 4px; }
+.pubshare-bignum { font-size: 30px; font-weight: 700; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+.pubshare-of { color: var(--muted); font-size: var(--pubshare-t-head); }
+.pubshare-phase { color: var(--muted); }
+.pubshare-result { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.pubshare-result--ok { color: var(--pubshare-success-text); }
+.pubshare-alert { margin: 0 0 12px; }
+@media (max-width: 560px) { .pubshare-outcomes { grid-template-columns: 1fr; } }

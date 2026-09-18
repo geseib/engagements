@@ -68,6 +68,11 @@ const MUST_BE_CLOSED = [
   ['GET', '/question-sets'],
   ['GET', '/question-sets/{setId}/questions'],
   ['GET', '/question-sets/{setId}/categories'],
+  ['POST', '/question-sets/{setId}/check'],
+  ['GET', '/question-sets/{setId}/check/{jobId}'],
+  ['POST', '/question-sets/{setId}/appeal'],
+  ['POST', '/question-sets/{setId}/publish'],
+  ['DELETE', '/question-sets/{setId}/publish'],
 ];
 const MUST_STAY_OPEN = [
   ['GET', '/games/{gameId}'],

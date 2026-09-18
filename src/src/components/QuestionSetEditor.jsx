@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
@@ -6,7 +6,9 @@ import PromptShapePreview from './PromptShapePreview';
 import RoundKindPicker from './RoundKindPicker';
 import QuestionsPanel from './QuestionsPanel';
 import SetMediaPanel from './SetMediaPanel';
+import SetReviewBanner from './SetReviewBanner';
 import { authFetch } from '../auth/authFetch';
+import { versionChip } from '../utils/shareState';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
@@ -160,6 +162,12 @@ export default function QuestionSetEditor({
    * Cancel, which already asks.
    */
   onDirtyChange,
+  /** Show a "Share publicly" button per version. AdminPage decides who gets it. */
+  canShare = false,
+  /** Submit a version for the content check. Also drives the banner's Resubmit. */
+  onShare,
+  /** Ask a person to review a flagged version. Returns a promise; versions reload after. */
+  onAppeal,
   onCancel
 }) {
   const setId = questionSet?.id || '';
@@ -201,6 +209,21 @@ export default function QuestionSetEditor({
   // A delete the server answered with a warning instead of a deletion: the games
   // still playing this version, held until the owner says go ahead.
   const [pendingDelete, setPendingDelete] = useState(null);
+  // "Edit Q14" in the needs-changes banner sets this; QuestionsPanel reads it
+  // to scroll to and briefly highlight the row. `seq` makes every click a NEW
+  // object, even a second click on the same question — an identical id would
+  // otherwise be an identical `setState`, which React bails out of, and the
+  // effect that does the scrolling would never re-run.
+  const [focusRequest, setFocusRequest] = useState(null);
+  // The banner's own "Ask for a human review" round trip, so its buttons
+  // disable for the one call that is actually in flight rather than for any
+  // busyVersion action elsewhere on the panel.
+  const [appealBusy, setAppealBusy] = useState(false);
+  // The outcome of that round trip, shown right where the action was taken.
+  // AdminPage's own `notice` banner never reaches here — it renders only in
+  // the list panel, which is unmounted for as long as this editor is open —
+  // so an appeal that could not be sent needs its own, local place to say so.
+  const [appealStatus, setAppealStatus] = useState(null);
 
   /* ----------------------------------------------------------- questions -- */
   // The Questions panel's working copy is unsaved until IT saves. Closing the
@@ -300,6 +323,30 @@ export default function QuestionSetEditor({
   useEffect(() => {
     if (onDirtyChange) onDirtyChange(questionsDirty);
   }, [questionsDirty, onDirtyChange]);
+
+  /*
+   * A CHECK CAN FINISH WHILE THIS EDITOR IS STILL OPEN, and the `[setId]`
+   * effect above loads `versions` exactly once, on mount. A resubmit from
+   * INSIDE the editor calls `onShare` -> `ShareSetDialog` -> `onOutcome` ->
+   * `fetchQuestionSets`, which refreshes `questionSet.share` (AdminPage
+   * re-derives `editingSet`) but never touches this component's own
+   * `versions` state. Flagged again on v3: `share` correctly says flagged v3
+   * while the stale `versions` list still has v3 `unreviewed` — the banner
+   * renders off `share.status` with no findings for that version ("0 of 30
+   * questions were flagged", nothing listed) until something else happens to
+   * reload. `share.at` moves on every event in the share lifecycle, so it is
+   * the signal that a fresh outcome landed.
+   */
+  const seenShareAt = useRef(questionSet?.share?.at);
+  useEffect(() => {
+    // Skip the mount run: the [setId] effect above already loads once, and the
+    // stamp the editor was handed is the one it has already seen.
+    if (questionSet?.share?.at && questionSet.share.at !== seenShareAt.current) {
+      seenShareAt.current = questionSet.share.at;
+      loadVersions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionSet?.share?.at]);
 
   /*
    * THE ONE WAY OUT, CALLED FROM THREE PLACES.
@@ -1271,6 +1318,53 @@ export default function QuestionSetEditor({
         working copy are two writers of the same rows and only a panel that
         holds both can say so. See components/QuestionsPanel.jsx.
       */}
+      {/* ============================================ 2b. NEEDS CHANGES ===
+        Not a fifth panel — the editor's state when the version the share
+        stamp points at (or, absent a stamp, the active version) came back
+        flagged or is waiting on a person. See components/SetReviewBanner.jsx;
+        it renders nothing for any other version state.
+      */}
+      {showVersions && (() => {
+        const shared = questionSet && questionSet.share;
+        const target = (shared && Number(shared.version)) || activeVersion;
+        const entry = versions.find((v) => v.version === target);
+        if (!entry) return null;
+        return (
+          <>
+            {appealStatus && <StatusMessage message={appealStatus.text} tone={appealStatus.tone} />}
+            <SetReviewBanner
+              entry={entry}
+              share={shared || null}
+              busy={appealBusy}
+              /*
+                THE BANNER POINTS AT THE FLAGGED VERSION (`entry.version`,
+                below) — but "fix it in the Questions panel, then Resubmit"
+                writes a NEW version (one replace = one version), so by the
+                time Resubmit is pressed the active version has moved past the
+                one the banner is showing. Resubmitting the flagged version
+                re-checks the exact content that was already flagged, and
+                loops. Submit the ACTIVE version whenever it is newer than the
+                one the banner names; otherwise (banner and active agree,
+                or somehow the banner is ahead) submit what the banner asked
+                for.
+              */
+              onResubmit={canShare && onShare ? (v) => onShare(Number(activeVersion) > v ? Number(activeVersion) : v) : undefined}
+              onAppeal={canShare && onAppeal ? async (v, message) => {
+                setAppealStatus(null);
+                setAppealBusy(true);
+                try {
+                  const result = await onAppeal(v, message);
+                  if (result && result.ok === false) {
+                    setAppealStatus({ tone: 'error', text: result.error || 'Could not send that for review.' });
+                  }
+                  await loadVersions();
+                } finally { setAppealBusy(false); }
+              } : undefined}
+              onFocusQuestion={(id) => setFocusRequest({ id, seq: Date.now() })}
+            />
+          </>
+        );
+      })()}
       <QuestionsPanel
         questionSet={currentSet}
         availableSets={availableSets}
@@ -1279,6 +1373,7 @@ export default function QuestionSetEditor({
         showAIAssist={showAIAssist}
         onChanged={async () => { await loadVersions(); if (onChanged) onChanged(); }}
         onDirtyChange={setQuestionsDirty}
+        focusRequest={focusRequest}
       />
 
       {/* ================================================= 3. VERSIONS === */}
@@ -1314,6 +1409,11 @@ export default function QuestionSetEditor({
                       Active
                     </span>
                   )}
+                  {(() => { const chip = versionChip(v); return (
+                    <span className={`qs-version-chip qs-version-chip--${chip.key}`} title={chip.key === 'public' ? `Public as ${v.published.publicSetId} v${v.published.publicVersion}` : undefined}>
+                      {chip.label}
+                    </span>
+                  ); })()}
                   {v.pinnedByGames.length > 0 && (
                     <span className="qs-version-pinned-badge" title={v.pinnedByGames.join(', ')}>
                       <Icon name="PushPin" weight="fill" size={14} color="var(--primary)" />{' '}
@@ -1328,6 +1428,16 @@ export default function QuestionSetEditor({
                   {v.createdAt && <span>{new Date(v.createdAt).toLocaleString()}</span>}
                 </div>
                 <div className="qs-version-actions">
+                  {canShare && onShare && (
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => onShare(v.version)}
+                      disabled={busyVersion === v.version || v.review === 'checking'}
+                      title={v.published ? 'Share this version again' : 'Submit this version for the content check; it goes public if it passes'}
+                    >
+                      <Icon name="Broadcast" weight="bold" size={14} color="currentColor" /> Share publicly
+                    </button>
+                  )}
                   <button
                     className="btn-secondary btn-small"
                     onClick={() => handlePromote(v.version)}

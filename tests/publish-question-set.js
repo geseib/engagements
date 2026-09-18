@@ -35,12 +35,14 @@ const REPO = path.join(__dirname, '..');
 
 const store = new Map();
 const key = (pk, sk) => `${pk}|${sk}`;
+let batchWrites = 0;
 
 class PutCommand { constructor(i) { this.input = i; this.type = 'put'; } }
 class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class BatchWriteCommand { constructor(i) { this.input = i; this.type = 'batchWrite'; } }
+class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -53,6 +55,7 @@ const fakeDoc = {
       }
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
       case 'batchWrite': {
+        batchWrites += 1;
         for (const reqs of Object.values(inp.RequestItems || {})) {
           for (const r of reqs) {
             if (r.PutRequest) {
@@ -65,9 +68,24 @@ const fakeDoc = {
         }
         return { UnprocessedItems: {} };
       }
+      case 'update': {
+        const k = key(inp.Key.PK, inp.Key.SK);
+        const item = store.get(k) || { ...inp.Key };
+        const names = inp.ExpressionAttributeNames || {};
+        const values = inp.ExpressionAttributeValues || {};
+        for (const part of String(inp.UpdateExpression).replace(/^SET\s+/i, '').split(/,\s*/)) {
+          const [lhs, rhs] = part.split(/\s*=\s*/);
+          item[names[lhs] || lhs] = values[rhs];
+        }
+        store.set(k, item);
+        return {};
+      }
       case 'query': {
         const v = inp.ExpressionAttributeValues || {};
-        const pk = v[':pk'];
+        // ddb-delete.js's collectPartitionKeys names its placeholder `:setpk`,
+        // not `:pk` — accept either so a helper that queries a whole partition
+        // for deletion works against this same fake.
+        const pk = v[':setpk'] !== undefined ? v[':setpk'] : v[':pk'];
         const prefix = v[':sk'] || '';
         const items = [...store.values()]
           .filter((i) => i.PK === pk && String(i.SK).startsWith(String(prefix)));
@@ -85,7 +103,7 @@ const stubs = new Map([
   ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
   ['@aws-sdk/lib-dynamodb', {
     DynamoDBDocumentClient: { from: () => fakeDoc },
-    PutCommand, GetCommand, QueryCommand, DeleteCommand, BatchWriteCommand,
+    PutCommand, GetCommand, QueryCommand, DeleteCommand, BatchWriteCommand, UpdateCommand,
   }],
   ['@aws-sdk/client-kms', kmsStub.exports],
 ]);
@@ -100,6 +118,7 @@ process.env.TENANT_KMS_KEY_ID = 'alias/test-tenant-key';
 
 const publish = require(path.join(REPO, 'lambda-functions/admin/publish-question-set.js')).handler;
 const R = require(path.join(REPO, 'lambda-functions/admin/shared/set-review.js'));
+const Pub = require(path.join(REPO, 'lambda-functions/admin/shared/publishable.js'));
 
 let pass = 0; let fail = 0;
 const say = console.log;
@@ -160,6 +179,16 @@ async function seed({ reviewStatus = R.STATUS.PASSED } = {}) {
 const publicRows = () => [...store.values()].filter((i) => String(i.PK).startsWith('PUBLIC#'));
 const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
 
+/** The hash `share()` would compute right now, from the live org-side rows —
+ *  the same `buildSnapshot` + `contentHash` the handler itself calls. */
+function currentHash() {
+  const meta = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+  const rows = [...store.values()].filter((i) => i.PK === `ORG#${ORG}#SET#${SET}#v2`);
+  const categories = rows.filter((r) => String(r.SK).startsWith('CATEGORY#'));
+  const questions = rows.filter((r) => String(r.SK).startsWith('QUESTION#'));
+  return Pub.contentHash(Pub.buildSnapshot({ source: ORG_REF, version: 2, meta, categories, questions }));
+}
+
 (async () => {
   say('\npublishing a set\n');
 
@@ -185,6 +214,47 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
   }
   await check('a passed version publishes', async () => {
     await seed();
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+  });
+
+  say('\n1b. a passed review is checked against the LIVE content, not just its status [R25]');
+  /*
+    [R2] made the content hash a record on the review row rather than a gate,
+    on the premise that publish always runs from the S3 snapshot. It does not
+    (that read is Stage 2) — it rebuilds from the live org partition, and the
+    set-level prose (name, description, …) is edited in place with no new
+    version. So an edit after the passed review used to republish unjudged
+    prose on a bare `POST /publish {version}`. Ruling R25: gate on the hash
+    when the review row carries one; a passed row with none (the fixture
+    above, and every pre-hash row) is unaffected.
+  */
+  await check('a passed review whose hash matches the live content publishes as today', async () => {
+    await seed();
+    const hash = currentHash();
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, { status: R.STATUS.PASSED, contentHash: hash });
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+  });
+  await check('editing the set after the passed review is refused, not silently republished', async () => {
+    await seed();
+    const hash = currentHash();
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, { status: R.STATUS.PASSED, contentHash: hash });
+    // The prose edit `edit-question-set.js` makes in place — no new version,
+    // so the gate above (which only reads `activeVersion`/review status) would
+    // otherwise wave this straight through.
+    const row = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    store.set(key(`ORG#${ORG}#SETS`, `SET#${SET}`), { ...row, description: 'A totally different pitch, written after the check passed.' });
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /changed since it was checked/);
+    assert.strictEqual(parse(res).status, R.STATUS.PASSED);
+    assert.deepStrictEqual(publicRows(), [], 'the edited, unjudged content reached the public partition');
+  });
+  await check('an older passed review with no recorded hash is unaffected by the gate', async () => {
+    await seed(); // seed()'s writeReview carries no contentHash at all
+    const row = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    store.set(key(`ORG#${ORG}#SETS`, `SET#${SET}`), { ...row, description: 'Edited after a pre-hash review.' });
     const res = await publish(owner({ version: 2 }));
     assert.strictEqual(res.statusCode, 201, res.body);
   });
@@ -219,6 +289,7 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     await publish(owner({ version: 2 }));
     const review = await R.readReview(fakeDoc, 'engage-test', PUBLIC_REF, 1);
     assert.strictEqual(review.status, R.STATUS.PASSED, `public v1 reads as ${review.status}`);
+    assert.match(review.contentHash || '', /^[0-9a-f]{64}$/, 'the public review row carries no hash');
   });
   // rejects: leaving org ciphertext in a partition nobody can decrypt. Public
   // content is plaintext by design — encrypting it would make the shared
@@ -231,13 +302,24 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.strictEqual(q.Title, 'WHAT DID WE CHARGE',
       'the public copy is unreadable — it kept the org ciphertext');
   });
-  // rejects: losing the Workie on the way out. The owner asked for exactly
-  // this: "if you copy it to public it knows about the workie".
-  await check('the Workie comes with it', async () => {
+  // rejects: losing the Workie on the way out, when it is one every organisation
+  // may read. The owner asked for exactly this: "if you copy it to public it
+  // knows about the workie".
+  await check('a PLATFORM Workie comes with it', async () => {
     await seed();
+    store.set(key('AIPROMPTS', 'AIPROMPT#p-pricing'), { PK: 'AIPROMPTS', SK: 'AIPROMPT#p-pricing', name: 'Pricing coach' });
     await publish(owner({ version: 2 }));
     assert.strictEqual(publicMeta().promptId, 'p-pricing');
     assert.strictEqual(publicMeta().personaId, 'coach');
+    assert.notStrictEqual(publicMeta().promptDropped, true);
+  });
+  // rejects: shipping a public set that points at a Workie only one
+  // organisation can read — every copy would hold a dangling reference (D5).
+  await check('an ORG Workie is dropped from the public copy, and the drop is recorded', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    assert.strictEqual(publicMeta().promptId, undefined, 'an org Workie reached the public copy');
+    assert.strictEqual(publicMeta().promptDropped, true);
   });
   // rejects: a public row with no way back to who published it.
   await check('provenance records the source org, set and version', async () => {
@@ -306,6 +388,34 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     assert.deepStrictEqual(publicRows(), []);
   });
 
+  say('\n4b. what the copy records');
+  await check('the public row names the source organisation, so 07 needs no extra read', async () => {
+    await seed();
+    store.set(key(`ORG#${ORG}`, 'METADATA'), { ...store.get(key(`ORG#${ORG}`, 'METADATA')), name: 'Acme Learning' });
+    await publish(owner({ version: 2 }));
+    assert.strictEqual(publicMeta().sourceOrgName, 'Acme Learning');
+    assert.match(publicMeta().contentHash || '', /^[0-9a-f]{64}$/, 'no content hash on the public row');
+  });
+  await check('the org row gets a share stamp and never leaks it into the public row', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const org = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    assert.strictEqual(org.share.status, 'published');
+    assert.strictEqual(org.share.publicSetId, 'orgacme-pricingmechanics');
+    assert.strictEqual(org.share.publicVersion, 1);
+    // Re-share: NOW the org row carries a real stamp when share() re-reads it —
+    // a freshly-seeded row has nothing to leak, so only this proves the guarantee.
+    await publish(owner({ version: 2 }));
+    assert.strictEqual(publicMeta().share, undefined, 'the org stamp was copied onto the public row');
+    assert.strictEqual(publicMeta().activeVersion, 2);
+  });
+  await check('publishing appends to the review log', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const log = [...store.values()].filter((i) => i.PK === `REVIEWLOG#org#${ORG}#${SET}`);
+    assert.ok(log.some((e) => e.event === 'published' && e.publicVersion === 1), 'no published event');
+  });
+
   say('\n5. unpublishing');
   // rejects: an unpublish that leaves the questions behind, readable by
   // everyone, while the library stops listing them.
@@ -318,6 +428,18 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
     const res = await publish(ev);
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.deepStrictEqual(publicRows(), [], 'public rows survived the unpublish');
+  });
+  await check('unpublishing deletes in batches, stamps the org row, and removes the PUBLISHED markers', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    await publish(owner({ version: 2 }));   // two public versions
+    batchWrites = 0;
+    const res = await publish({ ...owner(), requestContext: { ...owner().requestContext, http: { method: 'DELETE' } } });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(publicRows(), []);
+    assert.ok(batchWrites > 0, 'rows were deleted one DeleteCommand at a time');
+    assert.strictEqual(store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`)).share.status, 'unpublished');
+    assert.strictEqual(store.has(key(`ORG#${ORG}#SET#${SET}#v2`, 'PUBLISHED')), false, 'the PUBLISHED marker outlived the listing');
   });
   // rejects: an unpublish that reaches into the copies other teams made. The
   // copy handler already promises independence; this must not break it.

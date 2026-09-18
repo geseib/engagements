@@ -7,7 +7,7 @@ const {
 } = require('./shared/set-version');
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
-const { readReviews } = require('./shared/set-review');
+const { readReviews, publishedKey, isUnfinished } = require('./shared/set-review');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -107,27 +107,45 @@ exports.handler = async (event) => {
     */
     const reviews = await readReviews(db, tableName, found.ref, entries.map((e) => e.version));
 
-    const versions = entries.map((entry) => ({
-      version: entry.version,
-      createdAt: entry.createdAt || null,
-      questionCount: entry.questionCount || 0,
-      categoryCount: entry.categoryCount || 0,
-      sourceFile: entry.sourceFile || '',
-      note: entry.note || '',
-      isActive: entry.version === activeVersion,
-      /*
-        PROJECTED EXPLICITLY, like every other field here. This map is a
-        whitelist: a field not named on it does not reach the client however
-        faithfully it is stored, which is why adding the row was only half the
-        work.
-      */
-      review: (reviews.get(entry.version) || {}).status || 'unreviewed',
-      reviewFindings: (reviews.get(entry.version) || {}).findings || [],
-      pinnedByGames: pinnedBySet
-        .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)
-        .map((g) => String(g.SK).replace('GAME#', ''))
-        .filter((gameId) => endedByGameId.get(gameId) === false)
-    }));
+    // WHERE EACH VERSION WENT. One GetItem per version: this is the editor's
+    // Versions panel, not the list, and a set has a handful of versions.
+    const published = new Map();
+    for (const e of entries) {
+      const res = await db.send(new GetCommand({ TableName: tableName, Key: publishedKey(found.ref, e.version) })); // eslint-disable-line no-await-in-loop
+      published.set(e.version, res && res.Item
+        ? { publicSetId: res.Item.publicSetId, publicVersion: res.Item.publicVersion, at: res.Item.at }
+        : null);
+    }
+
+    const versions = entries.map((entry) => {
+      const review = reviews.get(entry.version) || {};
+      return {
+        version: entry.version,
+        createdAt: entry.createdAt || null,
+        questionCount: entry.questionCount || 0,
+        categoryCount: entry.categoryCount || 0,
+        sourceFile: entry.sourceFile || '',
+        note: entry.note || '',
+        isActive: entry.version === activeVersion,
+        /*
+          PROJECTED EXPLICITLY, like every other field here. This map is a
+          whitelist: a field not named on it does not reach the client however
+          faithfully it is stored, which is why adding the row was only half the
+          work.
+        */
+        review: review.status || 'unreviewed',
+        reviewFindings: review.findings || [],
+        checkedAt: review.checkedAt || null,
+        reasons: review.reasons || [],
+        reviewNote: review.note || '',
+        unfinished: isUnfinished(review),
+        published: published.get(entry.version) || null,
+        pinnedByGames: pinnedBySet
+          .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)
+          .map((g) => String(g.SK).replace('GAME#', ''))
+          .filter((gameId) => endedByGameId.get(gameId) === false)
+      };
+    });
 
     console.log(`📚 ${setId}: ${versions.length} version(s), active v${activeVersion ?? '-'}`);
 
