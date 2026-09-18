@@ -60,6 +60,7 @@ const SURFACES = [
   ['ShareSetDialog', 'pubshare'],
   ['SetReviewBanner', 'srev'],
   ['ModerationPanel', 'modq'],
+  ['ScoreCard', 'scard'],
 ];
 
 /** Class names appearing in string literals and template literals in the JSX. */
