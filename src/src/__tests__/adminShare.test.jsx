@@ -253,3 +253,18 @@ test('a rejected appeal still notices and refreshes the list', async () => {
   expect(await screen.findByText(/could not send that for review: network down/i)).toBeInTheDocument();
   await waitFor(() => expect(listCalls).toBeGreaterThan(callsBeforeAppeal));
 });
+
+// The Public library section is still Stage 2's placeholder — but its old copy
+// said the sharing pipeline "is not built", which sent the owner looking here
+// for a Share control that lives on the Question sets rows. The placeholder
+// must point at where sharing IS, and never claim the pipeline is absent.
+test('the Public library placeholder points at Share on the Question sets rows', async () => {
+  mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
+  serve();
+  render(<AdminPage />);
+  await screen.findByRole('columnheader', { name: /who can see it/i });
+  const nav = screen.getByRole('navigation', { name: /sections/i });
+  fireEvent.click(within(nav).getByText('Public library'));
+  await screen.findByText(/every set you own has a Share button/i);
+  expect(screen.queryByText(/is not built/i)).toBeNull();
+});
