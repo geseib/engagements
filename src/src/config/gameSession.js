@@ -28,7 +28,8 @@
  *     since the extraction they live inside components/GameSetupDialog.jsx,
  *     which unmounts when the dialog closes: engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
- *     newGamePersonaId, localSets, localTitle, editCategoryNames. (This list named five and omitted three until the
+ *     newGamePersonaId, localSets, localTitle, editCategoryNames, knownPromptIds.
+ *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a
  *     session from history, not the one on stage, so it must not live in the
  *     page's `eventTitle`; it seeds from `initialValues` and dies with the
@@ -42,7 +43,11 @@
  *     side task: it caches what `GET /admin/question-sets` returned while the
  *     host was making or renaming a set, so the picker can offer a new set at
  *     once rather than after a reload. That is library data, like `questionSets`
- *     below, and it dies with the dialog regardless.)
+ *     below, and it dies with the dialog regardless. `knownPromptIds` is the
+ *     same kind of thing and joined for the same reason: the summary prompts
+ *     this environment has, read once so the dialog's closing sentence can
+ *     check its own claim about the chosen set instead of asserting it. Neither
+ *     describes the game being run, so neither belongs in a reset.)
  *   - libraries that are refetched anyway (questionSets, personas).
  *   - the display profile — a room-display preference. A host running a
  *     projector wants it to stay a projector across games; the profile is

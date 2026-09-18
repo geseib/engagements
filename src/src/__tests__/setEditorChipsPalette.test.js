@@ -63,3 +63,51 @@ test('the waiting chip declares its own scoped token rather than reusing --secon
   expect(waitingInkHex.toUpperCase()).toBe('#2B5F9E');
   expect(ratio(secondary, paperBg)).toBeLessThan(AA);
 });
+
+/* ── THE WORKIE GROUP: THE SAME DEFECT, DECLINED RATHER THAN MEASURED ────────
+
+   `.qs-workie` boxes the set's two Workie settings, and this editor renders on
+   BOTH the paper console and the host's dusk dialog. That is exactly the split
+   that produced the chip inks above: a colour measured against one surface and
+   shipped onto the other.
+
+   So the group declares no ink at all, and these tests pin that decision rather
+   than a ratio. There is nothing to measure, which is the point — copy that
+   inherits its surface's own --text cannot fail in either theme, and a future
+   edit that adds `color:` here has to come past this file first. */
+const block = (selector) => {
+  const start = GLOBAL_CSS.indexOf(`${selector} {`);
+  if (start < 0) throw new Error(`${selector} is not declared in styles.css`);
+  return GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('}', start));
+};
+
+describe('the Workie group is theme-proof by declining ink', () => {
+  test.each([
+    ['.qs-workie'],
+    ['.qs-workie h4'],
+    ['.qs-workie-warning'],
+  ])('%s sets no text or background colour', (selector) => {
+    const body = block(selector);
+    expect(body).not.toMatch(/(^|[;{\s])color\s*:/);
+    expect(body).not.toMatch(/(^|[;{\s])background(-color)?\s*:/);
+  });
+
+  test('the group hairline is the token, not a hand-written rgba', () => {
+    // Fifty-odd rules in this sheet spell rgba(155,168,190,.35) by hand. The
+    // token exists (:root --hairline); new rules use it.
+    expect(block('.qs-workie')).toMatch(/border:\s*var\(--hairline\)/);
+    expect(block('.qs-workie')).not.toMatch(/#[0-9A-Fa-f]{3,8}|rgba?\(/);
+  });
+
+  test("the warning's only colour is a border, where no ratio applies", () => {
+    const body = block('.qs-workie-warning');
+    expect(body).toMatch(/border-left:\s*3px solid var\(--primary\)/);
+    expect(body).not.toMatch(/#[0-9A-Fa-f]{3,8}|rgba?\(/);
+  });
+
+  test('both type sizes sit on the 12/13/15/19/24/30 ladder', () => {
+    const sizes = [block('.qs-workie h4'), block('.qs-workie-warning')]
+      .map((b) => Number((b.match(/font-size:\s*(\d+)px/) || [])[1]));
+    expect(sizes).toEqual([15, 13]);
+  });
+});

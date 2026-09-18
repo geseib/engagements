@@ -10692,6 +10692,51 @@ body {
   border-top: none;
 }
 
+/* --- WORKIE'S TWO SETTINGS, DRAWN AS ONE (QuestionSetEditor Details panel) ---
+
+   The voice and the summary approach are the whole of what the AI does with a
+   set, and they rendered as two unrelated rows two fields apart. One hairline
+   box, the same one `.qs-ai-source` uses, is the entire visual claim: these
+   belong together.
+
+   IT DECLARES NO INK ON PURPOSE. This editor is mounted on the paper console
+   AND inside the host's dusk dialog, and a colour chosen against one of those
+   is how R3 shipped a 2.6:1 chip twice. Inheriting the surface's own text
+   colour cannot fail in either theme. The one colour here is --primary on a
+   BORDER, where no contrast ratio applies; the warning's weight comes from the
+   rule, not from tinted copy. Measured as text in setEditorChipsPalette.test.js. */
+.qs-workie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+.qs-workie h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* The rows inside carry the group's gap, not their own 20px stack margin —
+   otherwise the box reads as two fields that happen to share a border. */
+.qs-workie .form-group {
+  margin-bottom: 0;
+}
+
+/* A saved id this environment cannot resolve (ruling W4). Not an error state —
+   nothing is broken and the set still plays — so it takes a rule rather than
+   danger ink, and sits with its one-click Clear. */
+.qs-workie-warning {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
 .qs-ai-toggle {
   align-self: flex-start;
   margin-top: 6px;
