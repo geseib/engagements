@@ -97,6 +97,25 @@ export default function HostQuestionSetsDialog({
   /** The id of the set whose quickstart flag is currently in flight, or null. */
   const [quickstartBusy, setQuickstartBusy] = useState(null);
   /*
+    WORKIE'S TWO LISTS — the prompt library and the persona library.
+
+    THE BUG THESE FIX IS A MISSING PROP, NOT A MISSING FEATURE. The editor
+    mounted below is `QuestionSetEditor` verbatim, and it already draws both
+    controls; `AdminPage.jsx` hands it `availablePrompts` and
+    `availablePersonas` and this dialog handed it neither. A select with only
+    its own default option in it does not read as "nothing was passed", it
+    reads as "this environment has none" — so a host looking for where Workie
+    is chosen found two dead controls and concluded, reasonably, that the
+    setting did not exist.
+
+    BOTH ROUTES ARE ALREADY A HOST'S. `GET admin/ai-prompts` and
+    `GET admin/personas` are in `HOST_ADMIN_ROUTES` (auth/authorizer.js), the
+    second with a note saying its earlier absence "was an oversight, not a
+    policy". Nothing here opens a route or asks for one.
+  */
+  const [availablePrompts, setAvailablePrompts] = useState([]);
+  const [availablePersonas, setAvailablePersonas] = useState([]);
+  /*
     WHICH BUILDER IS OPEN, or null. `showAIBuilder` was passed to
     QuestionSetUploadPanel without an `onOpenBuilder`, so the button rendered,
     passed its own test, and did nothing — the panel's onClick is
@@ -199,6 +218,55 @@ export default function HostQuestionSetsDialog({
   }, [onSetsChanged]);
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+    THE TWO WORKIE LISTS, READ ONCE WHEN THE DIALOG OPENS.
+
+    ON MOUNT RATHER THAN ON THE EDITOR'S MOUNT, deliberately: the editor is
+    opened and closed repeatedly against the same shelf, and hanging these off
+    it would put two requests on the wire every time a host clicked into a set.
+    They are small, unchanging, platform-wide lists — one read per dialog.
+
+    A FAILURE IS SWALLOWED INTO AN EMPTY LIST, which is what both existing
+    callers do (`AdminPage.jsx` fetchAvailablePrompts / fetchAvailablePersonas)
+    and what this dialog needs: neither list is required to edit a set's
+    questions, its name or anything else, so a 403, a 500 or a request that
+    never leaves must cost the host that one picker and nothing more. The
+    editor renders a select with only its default option in that case, which is
+    the same thing it did before this existed.
+
+    THE PROMPT LIST IS PASSED RAW (bar the status filter AdminPage applies).
+    `QuestionSetEditor` runs `selectableSummaryPrompts()` on it itself and then
+    reports `availablePrompts.length - choices.length` as "N prompts for other
+    game types are hidden" — filtering here would make that count zero and the
+    sentence a lie. Personas are unfiltered for AdminPage's stated reason: the
+    engagement type is itself editable, so filtering by it would make voices
+    appear and disappear mid-edit.
+  */
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const response = await authFetch(adminApiUrl('admin/ai-prompts'));
+        if (!response.ok) return;
+        const data = await response.json().catch(() => ({}));
+        if (live) setAvailablePrompts((data.prompts || []).filter((p) => p.status === 'active'));
+      } catch (e) {
+        // Nothing to say on screen: the picker degrades to its default option.
+      }
+    })();
+    (async () => {
+      try {
+        const response = await authFetch(adminApiUrl('admin/personas'));
+        if (!response.ok) return;
+        const data = await response.json().catch(() => ({}));
+        if (live) setAvailablePersonas(data.personas || []);
+      } catch (e) {
+        // Same: Workie adapts to the session, which is the designed default.
+      }
+    })();
+    return () => { live = false; };
+  }, []);
 
   // `canManage` is the SERVER's answer, computed by the same function the edit
   // and delete handlers enforce with. Never re-derived here from a group claim:
@@ -854,6 +922,16 @@ export default function HostQuestionSetsDialog({
             showVersions={false}
             showDownload={false}
             showAIAssist={false}
+            /*
+              ON, AND NOT A FLAG AT ALL — two lists the editor already asks for
+              and already knows what to do with. This is the answer to "where
+              does the Workie selection map to a question set, and how does a
+              host change it?": the same two controls the console has, on the
+              same component, now with something in them. Read-only routes a
+              host is already granted; see the state above.
+            */
+            availablePrompts={availablePrompts}
+            availablePersonas={availablePersonas}
             onDirtyChange={setEditorDirty}
             onSaved={(message) => { setEditingQuestions(null); load(message); }}
             onChanged={async () => {
