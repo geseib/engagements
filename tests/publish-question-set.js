@@ -119,6 +119,7 @@ process.env.TENANT_KMS_KEY_ID = 'alias/test-tenant-key';
 const publish = require(path.join(REPO, 'lambda-functions/admin/publish-question-set.js')).handler;
 const R = require(path.join(REPO, 'lambda-functions/admin/shared/set-review.js'));
 const Pub = require(path.join(REPO, 'lambda-functions/admin/shared/publishable.js'));
+const { publishSnapshot } = require(path.join(REPO, 'lambda-functions/admin/shared/publish-set.js'));
 
 let pass = 0; let fail = 0;
 const say = console.log;
@@ -187,6 +188,22 @@ function currentHash() {
   const categories = rows.filter((r) => String(r.SK).startsWith('CATEGORY#'));
   const questions = rows.filter((r) => String(r.SK).startsWith('QUESTION#'));
   return Pub.contentHash(Pub.buildSnapshot({ source: ORG_REF, version: 2, meta, categories, questions }));
+}
+
+/** The snapshot the handler would build from the live org rows, with the source
+ *  version and the content hash overridable so the resume guard can be probed
+ *  one condition at a time. */
+function snapshotOf({ version = 2, contentHash } = {}) {
+  const meta = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+  const rows = [...store.values()].filter((i) => i.PK === `ORG#${ORG}#SET#${SET}#v2`);
+  const snapshot = Pub.buildSnapshot({
+    source: ORG_REF,
+    version,
+    meta,
+    categories: rows.filter((r) => String(r.SK).startsWith('CATEGORY#')),
+    questions: rows.filter((r) => String(r.SK).startsWith('QUESTION#')),
+  });
+  return { ...snapshot, contentHash: contentHash || Pub.contentHash(snapshot) };
 }
 
 (async () => {
@@ -364,6 +381,57 @@ function currentHash() {
     assert.strictEqual(res.statusCode, 201, res.body);
     const markers = publicRows().filter((i) => i.SK === 'PUBLISHED').map((i) => i.PK);
     assert.deepStrictEqual(markers, [], `a PUBLISHED row reached ${markers.join(', ')}`);
+  });
+
+  say('\n3b. `resume` converges on ONE publish, and only on that one');
+  /*
+    publishSnapshot's `resume` flag (Ruling R9, moderation-decide.js finishing a
+    decision that crashed after this already ran) reuses the live public version
+    instead of minting a new one — but ONLY when the public row records this
+    exact publish: same source version, same content hash, same org and set.
+    Those three conditions are the whole guard, and a guard whose negatives are
+    untested is a guard that can be widened by accident into "a resume never
+    bumps", which would silently merge a genuinely newer share into the version
+    already live.
+
+    Stage 1's ordinary re-share (section 3 above) is the other half of the
+    contract and stays unaffected: without `resume` a second share of identical
+    content is deliberately public v2.
+  */
+  await check('a resume of the SAME version and hash reuses the live public version', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    assert.strictEqual(publicMeta().activeVersion, 1);
+    const again = await publishSnapshot(fakeDoc, 'engage-test', snapshotOf(), { resume: true });
+    assert.strictEqual(again.publicVersion, 1, 'a true resume minted a second public version');
+    assert.strictEqual(publicMeta().activeVersion, 1);
+    assert.strictEqual(publicMeta().versions.length, 1, 'a true resume pushed a duplicate versions[] entry');
+  });
+  // rejects: widening the guard to "resume means never bump". An older source
+  // version arriving late is not the crashed publish of the version that is
+  // live — it is a different share, and merging it into the live version would
+  // quietly replace newer public content with older content under the same
+  // version number.
+  await check('but an OLDER source version still bumps, resume or not', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));   // public v1 records sourceVersion 2
+    const older = await publishSnapshot(fakeDoc, 'engage-test', snapshotOf({ version: 1 }), { resume: true });
+    assert.strictEqual(older.publicVersion, 2, 'an older source version merged into the live public version');
+    assert.strictEqual(publicMeta().activeVersion, 2);
+    assert.strictEqual(publicMeta().sourceVersion, 1);
+    assert.strictEqual(publicMeta().versions.length, 2);
+  });
+  // rejects: dropping the hash from the guard. The same version number can be
+  // submitted twice with different content (set-level prose is edited in place
+  // — see 1b), so version alone cannot identify a publish.
+  await check('and the same version with a DIFFERENT hash still bumps', async () => {
+    await seed();
+    await publish(owner({ version: 2 }));
+    const edited = await publishSnapshot(fakeDoc, 'engage-test', snapshotOf({ contentHash: 'd'.repeat(64) }), { resume: true });
+    assert.strictEqual(edited.publicVersion, 2, 'edited content merged into the live public version');
+    assert.strictEqual(publicMeta().activeVersion, 2);
+    assert.strictEqual(publicMeta().contentHash, 'd'.repeat(64));
+    assert.strictEqual(publicMeta().versions.length, 2);
   });
 
   say('\n4. who may do it');

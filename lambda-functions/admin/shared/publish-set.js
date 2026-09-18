@@ -34,15 +34,36 @@ async function platformPromptExists(db, tableName, promptId) {
   return Boolean(res && res.Item);
 }
 
-async function publishSnapshot(db, tableName, snapshot, { review = {}, sourceOrgName = '', promptDropped = false } = {}) {
+/**
+ * `resume`: opt-in idempotency for Ruling R9 (moderation-decide.js resuming a
+ * decision that crashed AFTER this already ran once). When true AND the
+ * existing public metadata row records this EXACT publish -- same source
+ * version, same content hash, same org/set -- the version already written is
+ * reused rather than bumped, and no duplicate `versions[]` entry is pushed, so
+ * a publish that died part-way converges instead of minting a second public
+ * version for content that was already made live. Without `resume` (every
+ * caller before Stage 2 Task 4, and the direct approve/reject path today)
+ * behaviour is byte-for-byte unchanged: Stage 1's direct re-share deliberately
+ * makes a NEW public version even for identical content (a second share is
+ * supposed to land as version 2, not silently merge into version 1).
+ */
+async function publishSnapshot(db, tableName, snapshot, {
+  review = {}, sourceOrgName = '', promptDropped = false, resume = false,
+} = {}) {
   const source = setRef(snapshot.source);
   const pubRef = setRef({ scope: tenant.PUBLIC, orgId: '', setId: publicSetIdFor(source.orgId, source.setId) });
   const version = toVersion(snapshot.version);
   const now = new Date().toISOString();
+  const hash = snapshot.contentHash || contentHash(snapshot);
 
   const existingRes = await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(pubRef) }));
   const existing = existingRes.Item;
-  const publicVersion = (toVersion(existing && existing.activeVersion) || 0) + 1;
+  const resuming = Boolean(resume && existing
+    && toVersion(existing.sourceVersion) === version
+    && existing.contentHash === hash
+    && existing.sourceOrgId === source.orgId
+    && existing.sourceSetId === source.setId);
+  const publicVersion = resuming ? toVersion(existing.activeVersion) : (toVersion(existing && existing.activeVersion) || 0) + 1;
   const targetPk = setPartition(pubRef, publicVersion);
 
   const copies = [...(snapshot.categories || []), ...(snapshot.questions || [])]
@@ -53,7 +74,6 @@ async function publishSnapshot(db, tableName, snapshot, { review = {}, sourceOrg
   }
   await batchPutItems(db, tableName, copies);
 
-  const hash = snapshot.contentHash || contentHash(snapshot);
   // The public version's own review record: the verdict on exactly these rows.
   await writeReview(db, tableName, pubRef, publicVersion, {
     status: STATUS.PASSED,
@@ -64,7 +84,11 @@ async function publishSnapshot(db, tableName, snapshot, { review = {}, sourceOrg
 
   const questionCount = copies.filter((row) => String(row.SK).startsWith('QUESTION#')).length;
   const versions = Array.isArray(existing && existing.versions) ? [...existing.versions] : [];
-  versions.push({ version: publicVersion, createdAt: now, questionCount });
+  // Resuming converges onto a version already recorded here -- never push a
+  // second entry for the same version number.
+  if (!versions.some((v) => toVersion(v && v.version) === publicVersion)) {
+    versions.push({ version: publicVersion, createdAt: now, questionCount });
+  }
 
   const { share, promptId, ...meta } = snapshot.meta || {}; // eslint-disable-line no-unused-vars
   const publicMeta = {
@@ -82,7 +106,7 @@ async function publishSnapshot(db, tableName, snapshot, { review = {}, sourceOrg
     sourceSetId: source.setId,
     sourceVersion: version,
     contentHash: hash,
-    publishedAt: now,
+    publishedAt: resuming ? (existing.publishedAt || now) : now,
     updatedAt: now,
     createdAt: (existing && existing.createdAt) || now,
     // Kept across re-shares; set by later stages.

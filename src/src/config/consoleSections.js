@@ -181,6 +181,23 @@ const SECTION = {
     subtitle: 'Every organisation on this tier. Their content is not reachable from here.',
     contentTheme: 'dark',
   },
+  /*
+    THE PLATFORM CONSOLE'S PUBLIC LIBRARY — the same public rows `library`
+    shows an organisation, read as Engage: open the score card or unpublish.
+    A separate id from `library` (unlike `platformsets`/`questionsets`
+    reusing one id above) because the two consoles offer genuinely different
+    actions on the same rows, not the same screen reading a different scope —
+    `PublicLibraryPanel`'s `mode` prop is what actually branches the row
+    actions; this section only has to name the place staff reach it from.
+  */
+  publiclibrary: {
+    id: 'publiclibrary',
+    label: 'Public library',
+    icon: 'Broadcast',
+    title: 'Public library',
+    subtitle: 'Everything organisations have published. Take a set down here; they keep their copy and read your note.',
+    contentTheme: 'dark',
+  },
   moderation: {
     id: 'moderation',
     label: 'Moderation',
@@ -266,6 +283,7 @@ export function sectionsFor({
     return [group('platform', 'Engage', [
       SECTION.orgs,
       SECTION.platformsets,
+      SECTION.publiclibrary,
       SECTION.moderation,
       SECTION.accounts,
       SECTION.archive,

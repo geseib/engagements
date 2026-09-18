@@ -159,3 +159,102 @@ describe('the prompt library inherited the fix, not just the shape', () => {
     expect(jsx).toMatch(/className="plib-nm"\s+title=\{prompt\.name\}/);
   });
 });
+
+/*
+ * STAGE 2'S THREE SHEETS, PINNED RATHER THAN HAND-CHECKED.
+ *
+ * Every one of them copied this screen's shape — a fixed-layout table with
+ * declared column widths and a flex row-action group — which is exactly the
+ * moment a fixed bug comes back (see the prompt library, above, which copied
+ * the shape BEFORE the fix). They were written correctly and reviewed by eye;
+ * an unpinned contract is an unchecked one, and the whole reason this file
+ * parses CSS is that no rendered test can see any of it.
+ */
+const MODQ_CSS = fs.readFileSync(
+  path.join(__dirname, '..', 'components', 'ModerationPanel.css'), 'utf8',
+);
+const SCARD_CSS = fs.readFileSync(
+  path.join(__dirname, '..', 'components', 'ScoreCard.css'), 'utf8',
+);
+const PUBLIB_CSS = fs.readFileSync(
+  path.join(__dirname, '..', 'components', 'PublicLibraryPanel.css'), 'utf8',
+);
+const widthIn = (css, selector) => {
+  const width = block(css, selector).match(/width:\s*([\d.]+)%/);
+  if (!width) throw new Error(`No percentage width on "${selector}"`);
+  return parseFloat(width[1]);
+};
+
+describe('the moderation queue inherited the fix, not just the shape', () => {
+  // rejects: `.modq-rowact { justify-content: flex-end }`, which is what the
+  //          sets screen said until it was reported from real use. `.modq-row
+  //          td` is `overflow: hidden`, so end-alignment puts the spill on the
+  //          leading edge where no gesture can reach it.
+  test('the action row does not align in a way that clips its leading edge', () => {
+    expect(block(MODQ_CSS, '.modq-rowact'))
+      .not.toMatch(/justify-content:\s*(flex-end|end|center|right)/);
+  });
+
+  test('the controls still sit to the right while they fit, and wrap rather than overflow', () => {
+    expect(MODQ_CSS).toMatch(/\.modq-rowact\s*>\s*:first-child\s*\{[^}]*margin-left:\s*auto/);
+    expect(block(MODQ_CSS, '.modq-rowact')).toMatch(/flex-wrap:\s*wrap/);
+  });
+
+  // rejects: half of hard rule 11. Under `table-layout: auto` a declared width
+  //          is a hint, and the nowrap chips' min-content width wins — growing
+  //          the table until the actions column is narrower than the buttons
+  //          in it, which is the alignment fault arrived at from the other
+  //          side. Fixed layout plus declared widths is one contract.
+  test('the table is fixed-layout and its five columns add to 100', () => {
+    expect(block(MODQ_CSS, '.modq-tbl')).toMatch(/table-layout:\s*fixed/);
+    const cols = ['.modq-col-set', '.modq-col-org', '.modq-col-why', '.modq-col-wait', '.modq-col-act'];
+    expect(cols.reduce((a, s) => a + widthIn(MODQ_CSS, s), 0)).toBe(100);
+  });
+
+  test('and every truncated cell is still recoverable', () => {
+    // rejects: a reduction with no recovery, which is a deletion (hard rule 7).
+    //          Three separate strings share this row and all three can clip.
+    const jsx = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'ModerationPanel.jsx'), 'utf8');
+    expect(jsx).toMatch(/className="modq-nm" title=\{item\.title\}/);
+    expect(jsx).toMatch(/className="modq-sub" title=\{subLine\}/);
+    expect(jsx).toMatch(/className="modq-why-cell" title=\{whyLabel\(item\)\}/);
+    expect(block(MODQ_CSS, '.modq-nm')).toMatch(/text-overflow:\s*ellipsis/);
+  });
+});
+
+describe('the score card table keeps the same fixed-layout contract', () => {
+  test('fixed layout, and its four columns add to 100', () => {
+    expect(block(SCARD_CSS, '.scard-tbl')).toMatch(/table-layout:\s*fixed/);
+    const cols = ['.scard-col-q', '.scard-col-b', '.scard-col-c', '.scard-col-w'];
+    expect(cols.reduce((a, s) => a + widthIn(SCARD_CSS, s), 0)).toBe(100);
+  });
+});
+
+describe('the public library borrows the sets table rather than copying it', () => {
+  /*
+    R20 — the one thing worth pinning here is a NEGATIVE. PublicLibraryPanel
+    renders QuestionSetsPanel, so its rows are `.qsets-rowact` and are already
+    covered by the first block in this file. A `.publib-rowact` appearing in
+    that sheet would mean the shape had been copied again, and a copy is where
+    the alignment fault has come back twice now.
+  */
+  test('it declares no row-action group of its own', () => {
+    expect(PUBLIB_CSS).not.toMatch(/\.publib-(rowact|tbl|col-)/);
+    const jsx = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'PublicLibraryPanel.jsx'), 'utf8');
+    expect(jsx).toMatch(/className="qsets-rowact"/);
+  });
+
+  /*
+    R20 — with rowActions given there is no State column, so `.qsets-tbl` runs
+    five columns wide instead of six. Fixed layout resolves a shortfall by
+    inventing widths of its own, which is how a declared-width table silently
+    stops honouring its declarations; both sums are pinned so neither can drift.
+  */
+  test('and without the State column the remaining five still add to 100', () => {
+    const total = pct('.qsets-tbl--nostate .qsets-col-set') + pct('.qsets-col-type')
+      + pct('.qsets-col-qs') + pct('.qsets-col-when') + pct('.qsets-tbl--nostate .qsets-col-acts');
+    expect(total).toBe(100);
+  });
+});

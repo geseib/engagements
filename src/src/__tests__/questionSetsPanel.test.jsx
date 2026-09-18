@@ -417,3 +417,49 @@ describe('who can see it', () => {
     expect(screen.queryByRole('button', { name: /^share$/i })).toBeNull();
   });
 });
+
+describe('rowActions', () => {
+  /*
+    RULING R20 amends this test's second half.
+
+    It used to read the publisher off the owner chip's `title`, which is a
+    HOVER — unreachable on the tablets this console is read on, and invisible
+    to anyone scanning the list. And the chip lives in the State cell, which a
+    rowActions caller no longer gets at all: the Active and Quickstart chips
+    beside it are BUTTONS wired to `onToggleActive` / `onToggleQuickstart`, and
+    a caller that replaces the row's actions passes neither, so both rendered
+    as live controls that did nothing when clicked.
+
+    `docs/design/tenancy-redesign/07-public-library.html` is the authority and
+    prints the publisher as a visible sub-line. So that is what is asserted
+    now. The chip and its title are untouched everywhere the column still
+    renders — the two tests in `the owner chip` below still read them.
+  */
+  test('a caller can replace the row actions, and the publisher is visible text', () => {
+    const rows = [{ ...SETS[0], id: 'pub', name: 'Public one', canManage: false, scope: 'public', sourceOrgName: 'Meridian Delivery' }];
+    mount({ questionSets: rows, rowActions: (set) => <button type="button">Do {set.id}</button> });
+    expect(screen.getByRole('button', { name: 'Do pub' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^open$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^copy$/i })).toBeNull();
+    expect(within(rowFor('Public one')).getByText(/by Meridian Delivery/)).toBeInTheDocument();
+  });
+
+  // rejects: the State column surviving into a screen that cannot honour it.
+  //          A control that is always inert reads as a broken product rather
+  //          than as a boundary — the same argument the actions column's own
+  //          comment makes about Edit on a set you cannot manage.
+  test('and the State column goes with them — header and cell', () => {
+    const rows = [{ ...SETS[0], id: 'pub', name: 'Public one', canManage: false, scope: 'public' }];
+    mount({ questionSets: rows, rowActions: () => <button type="button">Do it</button> });
+    expect(screen.queryByRole('columnheader', { name: /^state$/i })).toBeNull();
+    expect(within(rowFor('Public one')).queryByRole('button', { name: /^active$|^inactive$/i })).toBeNull();
+    expect(within(rowFor('Public one')).queryByRole('button', { name: /quickstart/i })).toBeNull();
+  });
+
+  // rejects: removing the column for everyone. The org console's own list is
+  //          where those toggles work, and it passes no rowActions.
+  test('but the ordinary list keeps it', () => {
+    mount({});
+    expect(screen.getByRole('columnheader', { name: /^state$/i })).toBeInTheDocument();
+  });
+});

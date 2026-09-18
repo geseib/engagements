@@ -1,0 +1,75 @@
+/* src/src/components/ModerationPanel.css
+   MODERATION — 11-moderation.html. Scoped under .modq; dusk (the platform
+   console sets contentTheme 'dark'). Tokens only.
+   MEASURED (asserted in __tests__/modqPalette.test.js):
+     --text  #F4EDE4 on --bg #0F1A2E     14.9:1     --muted #9BA8BE on --bg     6.9:1
+     --primary #F6A94C on --bg           9.1:1     --secondary #7CA7E6 on --bg 7.0:1
+     --text on --surface #1B2942        12.5:1     --muted on --surface        6.1:1
+     --danger-text #EF8C86 on --surface  6.1:1
+     --bg on --primary (filled Approve)  8.9:1
+     the uncertain tint (--primary at --modq-tint-alpha over --surface) keeps --text and --muted ≥ AA */
+.modq {
+  --modq-t-floor: 12px;
+  --modq-t-label: 13px;
+  --modq-t-body: 15px;
+  --modq-t-head: 19px;
+  --modq-row-h: 36px;
+  --modq-tint-alpha: 0.08;
+  --modq-rule: rgba(155, 168, 190, .20);
+  --modq-rule-strong: rgba(155, 168, 190, .34);
+  --modq-row-hover: rgba(155, 168, 190, .055);
+  color: var(--text);
+  font: 400 var(--modq-t-body)/1.45 var(--font-ui);
+}
+.modq-lede { margin: 0 0 12px; }
+.modq-headline { margin: 0 0 4px; font-size: var(--modq-t-head); font-weight: 700; }
+.modq-fine { margin: 0; color: var(--muted); font-size: var(--modq-t-label); }
+.modq-empty { margin: 24px 0; color: var(--muted); }
+.modq-outage { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--modq-rule-strong); border-radius: 6px; color: var(--danger-text); }
+.modq-tbl { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.modq-tbl th { text-align: left; font-size: var(--modq-t-label); font-weight: 600; color: var(--muted); padding: 0 8px 6px; border-bottom: 1px solid var(--modq-rule-strong); }
+.modq-col-set { width: 30%; } .modq-col-org { width: 18%; } .modq-col-why { width: 30%; } .modq-col-wait { width: 10%; } .modq-col-act { width: 12%; }
+.modq-row td { height: var(--modq-row-h); padding: 4px 8px; border-bottom: 1px solid var(--modq-rule); vertical-align: middle; overflow: hidden; }
+.modq-row:hover td { background: var(--modq-row-hover); }
+.modq-nm { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.modq-row .modq-sub { display: block; min-width: 0; color: var(--muted); font-size: var(--modq-t-floor); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modq-why-cell { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modq-wait { color: var(--muted); font-variant-numeric: tabular-nums; }
+.modq-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
+.modq-rowact > :first-child { margin-left: auto; }
+.modq-btn { height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--modq-rule-strong); background: transparent; color: var(--text); font: 600 var(--modq-t-body)/1 var(--font-ui); cursor: pointer; }
+.modq-btn:hover { background: var(--modq-row-hover); }
+.modq-btn--sm { height: 28px; padding: 0 10px; font-size: var(--modq-t-label); }
+.modq-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--bg); }
+.modq-btn--danger { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
+.modq-btn:disabled { opacity: .6; cursor: default; }
+.modq-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32px 16px; background: rgba(15, 26, 46, .72); }
+.modq-card { width: min(880px, 100%); margin: auto; background: var(--surface); border: 1px solid var(--modq-rule); border-radius: 10px; display: flex; flex-direction: column; }
+.modq-card--tall { min-height: min(80vh, 900px); }
+.modq-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 0; }
+.modq-head h2 { margin: 0; flex: 1; min-width: 0; font-size: var(--modq-t-head); font-weight: 700; }
+.modq-x { flex: none; width: 32px; height: 32px; border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 6px; }
+.modq-x:hover { color: var(--text); background: var(--modq-rule); }
+.modq-body { padding: 10px 20px; flex: 1; }
+.modq-dlg-sub { color: var(--muted); font-size: var(--modq-t-label); }
+.modq-note { color: var(--primary); }
+/* The set's own judged text, beside a set-level finding. A two-column grid so
+   the labels line up and the values wrap — these are the reviewer's evidence,
+   not a table cell, so nothing here truncates. */
+.modq-prose { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--modq-rule); border-radius: 6px; }
+.modq-prose dt { color: var(--muted); font-size: var(--modq-t-label); }
+.modq-prose dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.modq-h { margin: 14px 0 6px; font-size: var(--modq-t-body); font-weight: 700; }
+.modq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.modq-q { padding: 10px 12px; border: 1px solid var(--modq-rule); border-radius: 6px; }
+.modq-q--uncertain { background: rgba(246, 169, 76, var(--modq-tint-alpha)); border-color: rgba(246, 169, 76, .5); }
+.modq-q-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.modq-q-text { margin: 6px 0 0; }
+.modq-why { margin: 6px 0 0; color: var(--muted); font-size: var(--modq-t-label); }
+.modq-chip { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--modq-rule-strong); font-size: var(--modq-t-floor); font-weight: 600; color: var(--muted); white-space: nowrap; }
+.modq-chip--flagged { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
+.modq-chip--uncertain { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
+.modq-label { display: block; margin: 14px 0 4px; font-size: var(--modq-t-label); color: var(--muted); }
+.modq-textarea { width: 100%; box-sizing: border-box; font: inherit; color: var(--text); background: transparent; border: 1px solid var(--modq-rule-strong); border-radius: 6px; padding: 8px; }
+.modq-alert { margin: 8px 0; }
+.modq-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 18px; border-top: 1px solid var(--modq-rule); }

@@ -39,6 +39,17 @@ const GLOBAL_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'ut
 const AIPM_CSS = fs.readFileSync(
   path.join(__dirname, '..', 'components', 'AIPromptManager.css'), 'utf8',
 );
+/* Stage 2's three scoped sheets, each with a scrim of its own. Pinned here
+   rather than hand-checked at review time: the geometry that makes a dialog
+   reachable is exactly what jsdom cannot see, so an unpinned scrim is an
+   unchecked one however carefully it was written. */
+const STAGE2_SCRIMS = [
+  ['ModerationPanel.css', '.modq-scrim', '.modq-card'],
+  ['ScoreCard.css', '.scard-scrim', '.scard-dialog'],
+  ['PublicLibraryPanel.css', '.publib-scrim', '.publib-dialog'],
+].map(([file, scrim, card]) => ({
+  file, scrim, card, css: fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8'),
+}));
 
 /** A rule's declaration block, read out of the stylesheet by exact selector. */
 function block(css, selector) {
@@ -250,5 +261,46 @@ describe('the prompt editor scrim is reachable too', () => {
   test('the head and the footer are not what gets compressed', () => {
     expect(block(AIPM_CSS, '.pmgr-modal-head')).toMatch(/flex:\s*none/);
     expect(block(AIPM_CSS, '.pmgr .form-actions')).toMatch(/flex:\s*none/);
+  });
+});
+
+/*
+ * THE SIXTH INSTANCE IS THE ONE NOBODY LISTED.
+ *
+ * The block above asserts the absence of the GLOBAL names in component sheets,
+ * which is what stops a redeclaration. It says nothing about a scrim a
+ * component declares under its own name — and Stage 2 added three of them
+ * (`.modq-scrim` over a dialog that holds a whole question set, `.scard-scrim`
+ * and `.publib-scrim` over takedown/unpublish confirmations whose only exits
+ * are in the footer). Each was written with the fix in it; none of them was
+ * pinned, so each was one careless edit from the trap this whole file exists
+ * for.
+ *
+ * The contract is the `.modal-overlay` one, not the `.pmgr-scrim` one: the
+ * SCRIM scrolls and the card is uncapped, so the card centres itself with
+ * `margin: auto` while it fits and yields to the scroll once it does not.
+ */
+describe.each(STAGE2_SCRIMS)('$file keeps its dialog reachable', ({ css, scrim, card }) => {
+  const scrimBlock = () => block(css, scrim);
+
+  // rejects: the centred-overflow trap, again. A flex child centred by the
+  //          container overflows in BOTH directions and a scroll container can
+  //          only reach one of them.
+  test('the scrim scrolls and does not centre with the flex container', () => {
+    expect(scrimBlock()).toMatch(/overflow-y:\s*auto/);
+    expect(scrimBlock()).not.toMatch(/align-items:\s*center/);
+    expect(scrimBlock()).toMatch(/align-items:\s*flex-start/);
+  });
+
+  // rejects: a scrim with no breathing room, so the last row of a scrolled
+  //          card reads as clipped even when it is fully scrollable.
+  test('the scrim has padding', () => {
+    expect(scrimBlock()).toMatch(/padding:\s*\S+/);
+  });
+
+  // rejects: dropping the auto margin along with the centring, which would jam
+  //          every short dialog against the top edge. The two are one fix.
+  test('the card still centres itself while it fits', () => {
+    expect(block(css, card)).toMatch(/margin:\s*auto/);
   });
 });
