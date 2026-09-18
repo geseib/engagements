@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
-import StatusMessage from './StatusMessage';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -36,11 +35,39 @@ const EVENT_WORDS = {
 };
 const eventWords = (e) => (EVENT_WORDS[e.event] ? EVENT_WORDS[e.event](e) : e.event);
 
-function TakedownDialog({ name, busy, onClose, onConfirm }) {
+function TakedownDialog({ name, onClose, onConfirm }) {
   const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  /*
+    requestClose is the DELIBERATE exit — the X and the bottom Cancel both call
+    it, gated only on `busy` (a request in flight can't be interrupted by a
+    stray click). A deliberate click discards an unsaved note on purpose, same
+    as clicking Take down itself would eventually do.
+
+    Escape and a backdrop click are the ACCIDENTAL exits, on the Modal below —
+    gated on `busy` AND on an unsaved note (`!note.trim()`), so a note the
+    reviewer is mid-typing survives a stray Escape press or an off-card click.
+    This is the design contract's "gated on unsaved work, not disabled" (R16).
+  */
   const requestClose = () => { if (!busy) onClose(); };
+
+  // onConfirm (ScoreCard's takeDown) resolves on a successful DELETE — the
+  // parent then closes this dialog itself, so there is nothing left to do
+  // here — and rejects on failure, so the note and the dialog both survive a
+  // failed attempt and the confirm button stays live for a retry.
+  const handleConfirm = async () => {
+    setBusy(true); setError(null);
+    try {
+      await onConfirm(note.trim());
+    } catch (e) {
+      setError(e.message || 'Could not take it down.');
+      setBusy(false);
+    }
+  };
+
   return (
-    <Modal overlayClassName="scard scard-scrim" contentClassName="scard-dialog" labelledBy="scard-td-title" onClose={requestClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy}>
+    <Modal overlayClassName="scard scard-scrim" contentClassName="scard-dialog" labelledBy="scard-td-title" onClose={requestClose} closeOnBackdrop={() => !busy && !note.trim()} closeOnEscape={() => !busy && !note.trim()}>
       <header className="scard-head">
         <h2 id="scard-td-title">Take down “{name}”?</h2>
         <button type="button" className="scard-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
@@ -49,10 +76,11 @@ function TakedownDialog({ name, busy, onClose, onConfirm }) {
         <p>It is gone for everyone. The organisation keeps their copy and sees your note — their editor shows it where the check's own findings would.</p>
         <label className="scard-label" htmlFor="scard-td-note">Note to the organisation (required)</label>
         <textarea id="scard-td-note" className="scard-textarea" rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
+        {error && <div className="scard-outage" role="alert">{error}</div>}
       </div>
       <footer className="scard-foot">
         <button type="button" className="scard-btn" onClick={requestClose} disabled={busy}>Cancel</button>
-        <button type="button" className="scard-btn scard-btn--danger" onClick={() => onConfirm(note.trim())} disabled={busy || !note.trim()}>Take down</button>
+        <button type="button" className="scard-btn scard-btn--danger" onClick={handleConfirm} disabled={busy || !note.trim()}>Take down</button>
       </footer>
     </Modal>
   );
@@ -62,7 +90,6 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
   const [card, setCard] = useState(null);
   const [error, setError] = useState(null);
   const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -79,25 +106,36 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
     return () => { live = false; };
   }, [publicSetId]);
 
+  // Resolves on success (after closing the dialog itself); THROWS on failure
+  // rather than touching page-level `error` — a failed takedown is the
+  // dialog's problem to show, beside the note, with the confirm live for a
+  // retry, not a reason to unmount the dialog and lose what was typed (R17).
   const takeDown = async (note) => {
-    setBusy(true);
+    let res;
     try {
-      const res = await authFetch(itemUrl(publicSetId), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(body.error || `Could not take it down (${res.status}).`); setAsking(false); return; }
-      setAsking(false);
-      if (onTakenDown) onTakenDown(publicSetId);
-    } catch (e) { setError(`Could not take it down: ${e.message}`); setAsking(false); } finally { setBusy(false); }
+      res = await authFetch(itemUrl(publicSetId), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
+    } catch (e) {
+      throw new Error(`Could not take it down: ${e.message}`);
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Could not take it down (${res.status}).`);
+    setAsking(false);
+    if (onTakenDown) onTakenDown(publicSetId);
   };
 
+  // Read once, here, rather than at each `card.review.*` site: the server is
+  // documented to always send `review`, but a defensive `|| {}` costs nothing
+  // and means a set that somehow arrives without one renders instead of
+  // throwing during render.
+  const review = card ? (card.review || {}) : {};
   const identity = card ? [
     `Public v${card.publicVersion || '—'}`,
     card.sourceOrgName ? `by ${card.sourceOrgName}` : '',
-    card.review && card.review.reviewer ? `approved by ${card.review.reviewer}${card.review.decidedAt ? `, ${day(card.review.decidedAt)}` : ''}` : (card.publishedAt ? `published ${day(card.publishedAt)}` : ''),
+    review.reviewer ? `approved by ${review.reviewer}${review.decidedAt ? `, ${day(review.decidedAt)}` : ''}` : (card.publishedAt ? `published ${day(card.publishedAt)}` : ''),
     card.sensitivity && card.sensitivity.length ? `content notice: ${card.sensitivity.map(humanise).join(', ')}` : '',
     // Stage 3: `${reports} reports` joins here.
   ].filter(Boolean).join(' · ') : '';
-  const findings = card ? [...(card.review.findings || [])].sort((a, b) => (BAND_RANK[String(a.band).toUpperCase()] ?? 9) - (BAND_RANK[String(b.band).toUpperCase()] ?? 9)) : [];
+  const findings = [...(review.findings || [])].sort((a, b) => (BAND_RANK[String(a.band).toUpperCase()] ?? 9) - (BAND_RANK[String(b.band).toUpperCase()] ?? 9));
   const timeline = card ? [...(card.log || [])].sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))) : [];
 
   return (
@@ -126,13 +164,13 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
             ))}
             {!timeline.length && <li className="scard-fine">No events recorded.</li>}
           </ol>
-          <h3 className="scard-h">The latest check{card.review.checkedAt ? ` · ${day(card.review.checkedAt)}` : ''}</h3>
+          <h3 className="scard-h">The latest check{review.checkedAt ? ` · ${day(review.checkedAt)}` : ''}</h3>
           {findings.length ? (
             <table className="scard-tbl">
               <thead><tr><th className="scard-col-q">Question</th><th className="scard-col-b">Band</th><th className="scard-col-c">Category</th><th className="scard-col-w">Why</th></tr></thead>
               <tbody>
                 {findings.map((f, i) => (
-                  <tr key={i} className="scard-finding" data-testid="scard-finding">
+                  <tr key={f.questionId || i} className="scard-finding" data-testid="scard-finding">
                     <td>{f.questionId === '(set)' ? "The set's own text" : f.questionId}</td>
                     <td><span className={`scard-chip scard-chip--${bandWord(f.band) || 'none'}`}>{bandWord(f.band)}</span></td>
                     <td>{String(f.category || '').toLowerCase()}</td>
@@ -145,7 +183,7 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
           {/* Stage 3: reports by type, and each report's note (never the reporter). */}
         </>
       )}
-      {asking && card && <TakedownDialog name={card.name || card.publicSetId} busy={busy} onClose={() => setAsking(false)} onConfirm={takeDown} />}
+      {asking && card && <TakedownDialog name={card.name || card.publicSetId} onClose={() => setAsking(false)} onConfirm={takeDown} />}
     </section>
   );
 }

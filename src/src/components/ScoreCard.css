@@ -1,7 +1,8 @@
 /* src/src/components/ScoreCard.css
    THE SCORE CARD — spec §10.5. Scoped under .scard; dusk; tokens only.
-   MEASURED (asserted in __tests__/scardPalette.test.js):
-     --text on --bg 14.9:1 · --muted on --bg 6.9:1 · --primary on --bg 9.1:1 · --danger-text on --bg 5.4:1
+   MEASURED (asserted in __tests__/scardPalette.test.js; recomputed with the
+   test's own ratio() helper for this fix round — see task-10-fix-round-1-report.md):
+     --text on --bg 15.0:1 · --muted on --bg 7.2:1 · --primary on --bg 8.9:1 · --danger-text on --bg 7.3:1
      --text on --surface 12.5:1 · --muted on --surface 6.1:1 · --scard-success-text on --surface 7.8:1 */
 .scard {
   --scard-t-floor: 12px;

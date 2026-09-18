@@ -69,3 +69,44 @@ test('the back link calls onBack, and a missing set says so', async () => {
   render(<ScoreCard publicSetId="gone" onBack={() => {}} onTakenDown={() => {}} />);
   expect(await screen.findByRole('alert')).toHaveTextContent(/no such public set/i);
 });
+test('a card with no review renders without throwing (R17 Important #1)', async () => {
+  const { review, ...noReview } = CARD;
+  global.fetch = jest.fn(async () => json(noReview));
+  render(<ScoreCard publicSetId="orgacme-safety" onBack={() => {}} onTakenDown={() => {}} />);
+  expect(await screen.findByRole('heading', { name: /safety walkthrough/i })).toBeInTheDocument();
+});
+test('a typed note survives an accidental Escape, but a deliberate Cancel still works (R16)', async () => {
+  render(<ScoreCard publicSetId="orgacme-safety" onBack={() => {}} onTakenDown={() => {}} />);
+  fireEvent.click(await screen.findByRole('button', { name: /take down/i }));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.change(within(dialog).getByRole('textbox', { name: /note/i }), { target: { value: 'Still drafting this.' } });
+  // Accidental exit, gated on the unsaved note: the dialog must stay open.
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  // Deliberate exit, through requestClose: still works regardless of the note.
+  fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+test('a failed takedown keeps the note and shows why, and a retry succeeds (R17 Important #3)', async () => {
+  const onTakenDown = jest.fn();
+  render(<ScoreCard publicSetId="orgacme-safety" onBack={() => {}} onTakenDown={onTakenDown} />);
+  fireEvent.click(await screen.findByRole('button', { name: /take down/i }));
+  const dialog = await screen.findByRole('dialog');
+  const note = within(dialog).getByRole('textbox', { name: /note/i });
+  fireEvent.change(note, { target: { value: 'Reported for graphic detail.' } });
+
+  global.fetch = jest.fn(async () => json({ error: 'boom' }, 500));
+  fireEvent.click(within(dialog).getByRole('button', { name: /^take down$/i }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(/boom/i);
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(note).toHaveValue('Reported for graphic detail.');
+
+  global.fetch = jest.fn(async (url, options = {}) => {
+    deleted.push(JSON.parse(options.body));
+    return json({ takenDown: 'orgacme-safety' });
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: /^take down$/i }));
+  await waitFor(() => expect(deleted).toEqual([{ note: 'Reported for graphic detail.' }]));
+  await waitFor(() => expect(onTakenDown).toHaveBeenCalledWith('orgacme-safety'));
+  expect(onTakenDown).toHaveBeenCalledTimes(1);
+});
