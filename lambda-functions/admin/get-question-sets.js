@@ -185,6 +185,15 @@ exports.handler = async (event) => {
       // nothing else (shared/share-stamp.js) — the alternative is one REVIEW
       // read per version per set on every list load.
       share: item.share && typeof item.share === 'object' ? item.share : null,
+      // PROVENANCE OF A PUBLIC COPY (publish-set.js writes these on the public
+      // row): the library says "by <organisation>", and the staff library's
+      // takedown names the source. Empty on every other row.
+      sourceOrgName: typeof item.sourceOrgName === 'string' ? item.sourceOrgName : '',
+      sourceOrgId: typeof item.sourceOrgId === 'string' ? item.sourceOrgId : '',
+      // THE CONTENT NOTICE (spec §7): set by a reviewer on approve; its vocabulary
+      // and the chips arrive with Stage 4, the ids travel now.
+      sensitivity: Array.isArray(item.sensitivity) ? item.sensitivity : [],
+      promptDropped: item.promptDropped === true,
       versions: versionList(item)
         .map((v) => ({
           version: toVersion(v && v.version),
