@@ -10431,14 +10431,16 @@ body {
 
 /* Where this version went (utils/shareState.js versionChip) — public, needs
    changes, waiting for a person, still checking, or never shared at all.
-   --qs-chip-public-ink is scoped to this rule rather than reusing --success
-   (#4FB286): --success is only 2.6:1 on this paper editor's --bg, not
-   text-safe, where #1E7A52 clears 4.5:1 on both paper --bg and white
-   (__tests__/setEditorChipsPalette.test.js). */
-.qs-version-chip { --qs-chip-public-ink: #1E7A52; display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(155,168,190,.34); font-size: 12px; color: var(--muted); }
+   --qs-chip-public-ink and --qs-chip-waiting-ink are scoped to this rule
+   rather than reusing --success / --secondary: --success (#4FB286) is only
+   2.6:1 on this paper editor's --bg and --secondary (#7CA7E6, written for the
+   list's own waiting chip on dusk, 7.0:1 there) is only ~2.3:1 here — neither
+   is text-safe on paper. #1E7A52 and #2B5F9E clear 4.5:1 on both paper --bg
+   and white (__tests__/setEditorChipsPalette.test.js). */
+.qs-version-chip { --qs-chip-public-ink: #1E7A52; --qs-chip-waiting-ink: #2B5F9E; display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(155,168,190,.34); font-size: 12px; color: var(--muted); }
 .qs-version-chip--public { color: var(--qs-chip-public-ink); border-color: rgba(79,178,134,.5); }
 .qs-version-chip--flagged, .qs-version-chip--unfinished { color: var(--danger-deep); border-color: rgba(229,100,94,.5); }
-.qs-version-chip--waiting { color: var(--secondary); }
+.qs-version-chip--waiting { color: var(--qs-chip-waiting-ink); border-color: rgba(43,95,158,.4); }
 
 .qs-version-meta {
   display: flex;
@@ -10553,12 +10555,13 @@ body {
 }
 
 /* "Edit Q14" from the needs-changes banner scrolls here and marks it for 2s.
-   Fallback matches this section's own convention for --primary (e.g.
-   .field-lock:focus-visible below): the paper amber #8a5300, not --primary's
-   real value #F6A94C, which is only 1.96:1 and cannot carry a border reliably
-   against every neighbouring surface in this panel. */
+   --primary is declared on :root (styles.css:~17), so its `, #8a5300`
+   fallback below never applied — the ring rendered --primary's real value,
+   #F6A94C, which is only 1.96:1 and cannot carry a border reliably against
+   every neighbouring surface in this panel. --primary-deep (#C77B4A,
+   theme-invariant) clears the 3:1 non-text bar at ~3.3:1 on the white row. */
 .qs-question-row.focused {
-  outline: 2px solid var(--primary, #8a5300);
+  outline: 2px solid var(--primary-deep);
   outline-offset: 2px;
 }
 

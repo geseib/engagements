@@ -325,6 +325,24 @@ export default function QuestionSetEditor({
   }, [questionsDirty, onDirtyChange]);
 
   /*
+   * A CHECK CAN FINISH WHILE THIS EDITOR IS STILL OPEN, and the `[setId]`
+   * effect above loads `versions` exactly once, on mount. A resubmit from
+   * INSIDE the editor calls `onShare` -> `ShareSetDialog` -> `onOutcome` ->
+   * `fetchQuestionSets`, which refreshes `questionSet.share` (AdminPage
+   * re-derives `editingSet`) but never touches this component's own
+   * `versions` state. Flagged again on v3: `share` correctly says flagged v3
+   * while the stale `versions` list still has v3 `unreviewed` — the banner
+   * renders off `share.status` with no findings for that version ("0 of 30
+   * questions were flagged", nothing listed) until something else happens to
+   * reload. `share.at` moves on every event in the share lifecycle, so it is
+   * the signal that a fresh outcome landed.
+   */
+  useEffect(() => {
+    if (questionSet?.share?.at) loadVersions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionSet?.share?.at]);
+
+  /*
    * THE ONE WAY OUT, CALLED FROM THREE PLACES.
    *
    * Reported by the owner: *"there is no way to back out of 'edit question set'
@@ -1312,7 +1330,19 @@ export default function QuestionSetEditor({
               entry={entry}
               share={shared || null}
               busy={appealBusy}
-              onResubmit={canShare && onShare ? (v) => onShare(v) : undefined}
+              /*
+                THE BANNER POINTS AT THE FLAGGED VERSION (`entry.version`,
+                below) — but "fix it in the Questions panel, then Resubmit"
+                writes a NEW version (one replace = one version), so by the
+                time Resubmit is pressed the active version has moved past the
+                one the banner is showing. Resubmitting the flagged version
+                re-checks the exact content that was already flagged, and
+                loops. Submit the ACTIVE version whenever it is newer than the
+                one the banner names; otherwise (banner and active agree,
+                or somehow the banner is ahead) submit what the banner asked
+                for.
+              */
+              onResubmit={canShare && onShare ? (v) => onShare(Number(activeVersion) > v ? Number(activeVersion) : v) : undefined}
               onAppeal={canShare && onAppeal ? async (v, message) => {
                 setAppealStatus(null);
                 setAppealBusy(true);

@@ -1,9 +1,14 @@
-/* R3: the version chip's "public" ink cannot be --success (#4FB286) — that is
-   only 2.6:1 on the paper editor's --bg, not text-safe. .qs-version-chip
-   instead declares a scoped custom property, --qs-chip-public-ink: #1E7A52,
-   and the flagged/unfinished chip carries --danger-deep. This asserts both
-   clear AA on paper --bg AND on white, following srevPalette.test.js's method
-   (the helpers below are copied from there). */
+/* R3 / Important #3: neither of the version chip's non-token inks carries the
+   editor's own paper theme. --success (#4FB286) is only 2.6:1 on the paper
+   editor's --bg for the "public" chip, and --secondary (#7CA7E6, 6.8:1 on the
+   dusk list where it was written) is only ~2.3:1 there for the "waiting for
+   Engage" chip — the exact same defect R3 already fixed once, missed the
+   second time because the list's own waiting chip sits on dusk and passes.
+   .qs-version-chip instead declares two scoped custom properties,
+   --qs-chip-public-ink: #1E7A52 and --qs-chip-waiting-ink: #2B5F9E, and the
+   flagged/unfinished chip carries --danger-deep. This asserts all three clear
+   AA on paper --bg AND on white, following srevPalette.test.js's method (the
+   helpers below are copied from there). */
 const fs = require('fs');
 const path = require('path');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
@@ -25,8 +30,11 @@ const AA = 4.5;
 
 const paperBg = hex(token(GLOBAL_CSS, PAPER, '--bg'));
 const dangerDeep = hex(token(GLOBAL_CSS, ROOT, '--danger-deep'));
+const secondary = hex(token(GLOBAL_CSS, ROOT, '--secondary'));
 const publicInkHex = token(GLOBAL_CSS, '.qs-version-chip {', '--qs-chip-public-ink');
 const publicInk = hex(publicInkHex);
+const waitingInkHex = token(GLOBAL_CSS, '.qs-version-chip {', '--qs-chip-waiting-ink');
+const waitingInk = hex(waitingInkHex);
 
 describe.each([
   ['paper --bg', paperBg],
@@ -38,10 +46,20 @@ describe.each([
   test('the flagged/unfinished chip ink (--danger-deep) clears AA', () => {
     expect(ratio(dangerDeep, bg)).toBeGreaterThanOrEqual(AA);
   });
+  test('the waiting-for-Engage chip ink (--qs-chip-waiting-ink) clears AA', () => {
+    expect(ratio(waitingInk, bg)).toBeGreaterThanOrEqual(AA);
+  });
 });
 
 test('the public chip declares its own scoped token rather than reusing --success', () => {
   // --success (#4FB286) is only 2.6:1 on paper --bg — the bug this token fixes.
   expect(publicInkHex.toUpperCase()).toBe('#1E7A52');
   expect(ratio(hex('#4FB286'), paperBg)).toBeLessThan(AA);
+});
+
+test('the waiting chip declares its own scoped token rather than reusing --secondary', () => {
+  // --secondary (#7CA7E6) is ~2.3:1 on paper --bg — text-safe only on dusk,
+  // where the list's own waiting chip lives (7.0:1, questionSetsPanel.css).
+  expect(waitingInkHex.toUpperCase()).toBe('#2B5F9E');
+  expect(ratio(secondary, paperBg)).toBeLessThan(AA);
 });

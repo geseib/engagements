@@ -1,5 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import {
+  render, screen, fireEvent, within, waitFor,
+} from '@testing-library/react';
 import QuestionSetEditor from '../components/QuestionSetEditor';
 import { authFetch } from '../auth/authFetch';
 
@@ -136,4 +138,48 @@ test('without canShare there is no Share button and no banner actions', async ()
   await screen.findByTestId('version-1');
   expect(screen.queryByRole('button', { name: /share publicly/i })).toBeNull();
   expect(screen.queryByRole('button', { name: /resubmit/i })).toBeNull();
+});
+
+// Important #1: the banner points at the FLAGGED version (v2 here, via
+// SET.share.version), but "fix it, then Resubmit" should not re-check the
+// flagged content — Save in QuestionsPanel already made v3 the active
+// version. Resubmit must submit v3, or the drive loops: flagged again.
+test('Resubmit submits the active version when it is newer than the flagged one', async () => {
+  const versions = [
+    { version: 1, createdAt: '2026-08-01T10:00:00.000Z', questionCount: 30, categoryCount: 3, isActive: false, review: 'passed', reviewFindings: [], published: { publicSetId: 'orgacme-safety', publicVersion: 1, at: '2026-08-02T10:00:00.000Z' }, pinnedByGames: [], unfinished: false, reasons: [] },
+    { version: 2, createdAt: '2026-08-19T10:00:00.000Z', questionCount: 30, categoryCount: 3, isActive: false, review: 'flagged', reviewFindings: [{ questionId: 'q014', category: 'VIOLENCE', band: 'HIGH', explanation: 'Injuries in detail.' }], published: null, pinnedByGames: [], unfinished: false, reasons: [] },
+    { version: 3, createdAt: '2026-08-25T10:00:00.000Z', questionCount: 30, categoryCount: 3, isActive: true, review: 'unreviewed', reviewFindings: [], published: null, pinnedByGames: [], unfinished: false, reasons: [] },
+  ];
+  mockApi({ 'GET /versions': async () => jsonResponse(200, versions) });
+  const onShare = jest.fn();
+  render(<QuestionSetEditor questionSet={{ ...SET, activeVersion: 3 }} canShare onShare={onShare} onAppeal={jest.fn()} onCancel={() => {}} />);
+  const banner = await screen.findByRole('status');
+  fireEvent.click(within(banner).getByRole('button', { name: /^resubmit$/i }));
+  expect(onShare).toHaveBeenCalledWith(3);
+});
+
+// Important #2: the editor's own `[setId]` effect loads versions once, on
+// mount. A resubmit finishing WHILE the editor is still open changes
+// `questionSet.share.at` (AdminPage re-derives `editingSet` on `onOutcome` ->
+// `fetchQuestionSets`) but never re-fetches `versions` — so the banner and
+// chips go stale exactly when a fresh outcome most needs to be seen.
+test('a fresh check finishing inside the editor (a new share.at) reloads the versions list', async () => {
+  mockApi();
+  const { rerender } = render(
+    <QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />,
+  );
+  await screen.findByTestId('version-1');
+  const versionGets = () => authFetch.mock.calls.filter(([url]) => url.includes('/versions')).length;
+  const before = versionGets();
+  expect(before).toBeGreaterThan(0);
+  rerender(
+    <QuestionSetEditor
+      questionSet={{ ...SET, share: { ...SET.share, at: '2026-08-20T10:00:00.000Z' } }}
+      canShare
+      onShare={jest.fn()}
+      onAppeal={jest.fn()}
+      onCancel={() => {}}
+    />,
+  );
+  await waitFor(() => expect(versionGets()).toBeGreaterThan(before));
 });
