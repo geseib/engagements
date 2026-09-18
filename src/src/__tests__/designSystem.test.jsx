@@ -39,6 +39,24 @@ describe('Icon', () => {
     expect(container.querySelector('svg')).toBeInTheDocument();
   });
 
+  /*
+    THE FALLBACK IS ALSO HOW A MISSING ICON HIDES.
+
+    `ICONS[name] ?? Circle` means a name nobody added to the map renders as a
+    plain dot — no warning, no crash, and every call site keeps working. Four
+    of them asked for WarningCircle (PlayerPage twice, GameReport, and the
+    moderation outage banner) and all four were drawing a bare circle beside
+    the word "error". So the assertion cannot be "an svg rendered": that is
+    true of the fallback too. It has to be "this is NOT the fallback".
+  */
+  it('resolves WarningCircle instead of silently drawing the Circle fallback', () => {
+    expect(ICONS.WarningCircle).toBeDefined();
+    expect(ICONS.WarningCircle).not.toBe(ICONS.Circle);
+    const warning = render(<Icon name="WarningCircle" />).container.querySelector('svg');
+    const fallback = render(<Icon name="NotARealGlyph" />).container.querySelector('svg');
+    expect(warning.innerHTML).not.toEqual(fallback.innerHTML);
+  });
+
   it('honours the size prop', () => {
     const { container } = render(<Icon name="Trophy" size={48} />);
     expect(container.querySelector('svg')).toHaveAttribute('width', '48');

@@ -81,10 +81,22 @@ test('Review opens the snapshot with the uncertain question first, and Approve d
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(await screen.findByText('1 set the check would not decide on its own. Oldest has waited 3 hours.')).toBeInTheDocument();
 });
-test('a lost race says who decided and refreshes; the dialog has an X and a bottom exit', async () => {
+/*
+  RULING R21 REFRAMED WHAT THIS 409 MEANS, and so this test's first assertion.
+
+  The fixture is unchanged: a reviewer sends `reject` and the server answers
+  409 `{ status: 'passed' }`. What that actually describes is not a race
+  somebody lost — the queue row is still there (a 404 is what a lost race
+  looks like, since the winner deletes that row LAST), so under Ruling R9 it
+  is dai's approve, crashed part-way and waiting to be finished. The dialog
+  used to close the door on it with "Already decided by dai" and no buttons;
+  it now says who decided AND what finishes it. The exits this test also
+  guards — the X and the bottom Close — are unchanged.
+*/
+test('a decision that did not finish names who made it; the dialog still has an X and a bottom exit', async () => {
   global.fetch = jest.fn(async (url, options = {}) => {
     const u = String(url); const method = (options.method || 'GET').toUpperCase();
-    if (method === 'POST') return json({ error: 'Already decided by dai.', status: 'passed' }, 409);
+    if (method === 'POST') return json({ error: 'Already decided by dai.', status: 'passed', reviewer: 'dai' }, 409);
     if (u.endsWith('/admin/moderation')) return json(QUEUE);
     if (u.includes('/admin/moderation/')) return json(ITEM);
     return json({});
@@ -96,7 +108,7 @@ test('a lost race says who decided and refreshes; the dialog has an X and a bott
   // Same loading-state gap as the test above: Reject only exists once
   // state==='ready', so it has to be awaited rather than read synchronously.
   fireEvent.click(await within(dialog).findByRole('button', { name: /^reject$/i }));
-  expect(await within(dialog).findByText(/already decided by dai/i)).toBeInTheDocument();
+  expect(await within(dialog).findByText(/Approved by dai/)).toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole('button', { name: /^close$/i }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
@@ -113,4 +125,118 @@ test('a typed note survives an accidental Escape, but a deliberate Close still w
   // Deliberate exit, through requestClose: still works regardless of the note.
   fireEvent.click(within(dialog).getByRole('button', { name: /^close$/i }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+/*
+  RULING R21 — THE TWO RECOVERY PATHS THAT WERE DEAD ENDS.
+
+  Both arrive at this dialog as a non-2xx from `decide`, and both used to end
+  the reviewer's session with the item: the 404 as a generic "not recorded"
+  beside two buttons that could only ever produce it again, the resumable 409
+  as "Already decided" with every button gone.
+*/
+test('a 404 is a verdict, not an error: the list refreshes behind the open dialog (R21)', async () => {
+  let listReads = 0;
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST') return json({ error: 'Nothing is waiting under that entry — it may already be decided.' }, 404);
+    if (u.endsWith('/admin/moderation')) { listReads += 1; return json(QUEUE); }
+    if (u.includes('/admin/moderation/')) return json(ITEM);
+    return json({});
+  });
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  const before = listReads;
+  fireEvent.click(await within(dialog).findByRole('button', { name: /^reject$/i }));
+  // The server's own sentence, rendered as the verdict — not "The decision was
+  // not recorded (404)", and not an alert.
+  expect(await within(dialog).findByText(/nothing is waiting under that entry/i)).toBeInTheDocument();
+  // The dialog stays open (the reviewer reads why); the list behind it reloads
+  // so the row that is no longer waiting goes.
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  await waitFor(() => expect(listReads).toBeGreaterThan(before));
+  // rejects: leaving the buttons live. Every further click is the same 404.
+  expect(within(dialog).queryByRole('button', { name: /^reject$/i })).toBeNull();
+  expect(within(dialog).queryByRole('button', { name: /^approve$/i })).toBeNull();
+});
+
+test("a crashed decision keeps the button that finishes it, and clicking it posts again (R21)", async () => {
+  const posts = [];
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST') {
+      posts.push(JSON.parse(options.body));
+      if (posts.length === 1) return json({ error: 'Already decided by dai.', status: 'passed', reviewer: 'dai' }, 409);
+      return json({ decision: 'approve', publicSetId: 'orgacme-safety', publicVersion: 1, resumed: true });
+    }
+    if (u.endsWith('/admin/moderation')) return json(QUEUE);
+    if (u.includes('/admin/moderation/')) return json(ITEM);
+    return json({});
+  });
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(await within(dialog).findByRole('button', { name: /^approve$/i }));
+
+  // The sentence says what happened AND what to do about it.
+  expect(await within(dialog).findByText(/Approved by dai, but that decision did not finish — Approve again to complete it\./)).toBeInTheDocument();
+  // rejects: hiding the one button that would finish it — the whole defect.
+  const approve = within(dialog).getByRole('button', { name: /^approve$/i });
+  expect(approve).toBeEnabled();
+  // rejects: offering Reject as well. The server refuses a DIFFERENT decision
+  // on an already-decided review, so it would be a second dead end.
+  expect(within(dialog).queryByRole('button', { name: /^reject$/i })).toBeNull();
+
+  fireEvent.click(approve);
+  await waitFor(() => expect(posts).toHaveLength(2));
+  expect(posts[1]).toEqual({ sk: 'org_acme#safety#v2', decision: 'approve', note: '' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('a 409 that is a genuine lost race stays the dead end it was', async () => {
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST') return json({ error: 'That entry is not waiting for a decision (status: checking).', status: 'checking' }, 409);
+    if (u.endsWith('/admin/moderation')) return json(QUEUE);
+    if (u.includes('/admin/moderation/')) return json(ITEM);
+    return json({});
+  });
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(await within(dialog).findByRole('button', { name: /^reject$/i }));
+  expect(await within(dialog).findByText(/not waiting for a decision/i)).toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: /^reject$/i })).toBeNull();
+  expect(within(dialog).queryByRole('button', { name: /^approve$/i })).toBeNull();
+});
+
+/*
+  W6 — the nav badge was fetched once, when staff switched into platform mode,
+  and never again. Decide four items and it still said four.
+*/
+test('every successful load reports the count, so the nav badge follows decisions', async () => {
+  const counts = [];
+  render(<ModerationPanel onQueueChanged={(n) => counts.push(n)} />);
+  await screen.findByText('Safety walkthrough');
+  await waitFor(() => expect(counts).toEqual([2]));
+  const row = screen.getByText('Safety walkthrough').closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(await within(dialog).findByRole('button', { name: /^approve$/i }));
+  // The shared mock serves a one-item queue once anything has been decided.
+  await waitFor(() => expect(counts).toEqual([2, 1]));
+});
+
+test('an outage reports nothing rather than clearing the badge to zero', async () => {
+  const counts = [];
+  global.fetch = jest.fn(async () => json({ error: 'boom' }, 500));
+  render(<ModerationPanel onQueueChanged={(n) => counts.push(n)} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not read the queue/i);
+  // rejects: reporting 0 on a failure to look, which would clear a badge that
+  // is the only sign anything is waiting.
+  expect(counts).toEqual([]);
 });

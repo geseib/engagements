@@ -21,6 +21,18 @@ const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
 const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), primary: token(GLOBAL_CSS, ROOT, '--primary'), secondary: token(GLOBAL_CSS, ROOT, '--secondary'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text') };
 const tintAlpha = Number((CSS.match(/--modq-tint-alpha:\s*([\d.]+)/) || [])[1]);
 const AA = 4.5;
+/*
+  RULING R22 — THE 12px FLOOR CHECK BELOW IS VACUOUS ON ITS OWN.
+
+  It looks for a `px` literal with `font-size` within the preceding 40
+  characters. Every font-size in this sheet is `var(--modq-t-…)`, so the
+  literals only ever appear in the token block, where nothing says `font-size`
+  — the loop runs, matches nothing, and passes no matter what the tokens say.
+  The floor lives in the TOKENS, so that is what has to be read. Setting
+  `--modq-t-floor` to 10px in a scratch copy fails `floorTokens` and did not
+  fail the loop.
+*/
+const floorTokens = (css, scope) => [...css.matchAll(new RegExp(`--${scope}-t-[a-z]+:\\s*(\\d+)px`, 'g'))].map((m) => Number(m[1]));
 describe('ModerationPanel palette', () => {
   test.each([
     ['--text on --bg', T.text, T.bg], ['--muted on --bg', T.muted, T.bg], ['--primary on --bg', T.primary, T.bg], ['--secondary on --bg', T.secondary, T.bg],
@@ -39,6 +51,9 @@ describe('ModerationPanel palette', () => {
     expect((stripped.replace(tokenBlock, '').match(/#[0-9A-Fa-f]{3,6}\b/g) || [])).toEqual([]);
     expect(stripped).not.toMatch(/color:\s*var\(--danger\)/);
     for (const m of stripped.matchAll(/(\d+(?:\.\d+)?)px/g)) { if (/font-size/.test(stripped.slice(Math.max(0, m.index - 40), m.index))) expect(Number(m[1])).toBeGreaterThanOrEqual(12); }
+    const sizes = floorTokens(stripped, 'modq');
+    expect(sizes.length).toBeGreaterThan(3);
+    for (const size of sizes) expect(size).toBeGreaterThanOrEqual(12);
     for (const sel of stripped.matchAll(/(^|\})\s*([^{@}]+)\{/g)) for (const part of sel[2].split(',')) expect(part.trim()).toMatch(/^\.modq(\b|-)/);
     expect(stripped).toMatch(/--modq-row-h:\s*36px/);
     expect(stripped).toMatch(/table-layout:\s*fixed/);

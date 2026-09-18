@@ -118,9 +118,54 @@ test('a failed unpublish keeps the dialog open with the reason and the note, and
   fireEvent.click(within(dialog).getByRole('button', { name: /^unpublish$/i }));
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(/boom/i);
   expect(within(dialog).getByRole('textbox', { name: /note/i })).toHaveValue('Taken down pending an edit.');
+  const listReadsBefore = global.fetch.mock.calls.filter(([u]) => String(u).includes('admin/question-sets')).length;
   fireEvent.click(within(dialog).getByRole('button', { name: /^unpublish$/i }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(deleted).toEqual([{ note: 'Taken down pending an edit.' }]);
+  /*
+    R18's other half, and the one this test was not asserting: a successful
+    unpublish has to be followed by a re-read of the list. The row it removed
+    is still in this page's `questionSets` state, so without the re-fetch the
+    library goes on listing a set that no longer exists — and the next click
+    on its Unpublish is a 404. A closed dialog is not evidence of that; only
+    the fetch is.
+  */
+  await waitFor(() => {
+    const after = global.fetch.mock.calls.filter(([u]) => String(u).includes('admin/question-sets')).length;
+    expect(after).toBeGreaterThan(listReadsBefore);
+  });
+});
+
+/*
+  TASK 12 — the score card is a PLACE, so Back has to leave it.
+
+  `handleNavigate` closes it when a nav item is clicked; the popstate handler
+  beside it closed the set editor and forgot this one. So Back out of a card
+  into another section and Forward again returned to the card while the shell
+  said Public library — the URL and the screen disagreeing, which is the exact
+  fault popstate handling exists to prevent.
+*/
+test('Back out of a score card leaves it behind, and Forward does not bring it back', async () => {
+  mockActiveOrg = '~platform'; mockGroups = ['admins', 'hosts'];
+  serveStaff();
+  window.history.pushState({}, '', '/admin?section=publiclibrary');
+  render(<AdminPage />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /score card/i }));
+  expect(await screen.findByRole('heading', { level: 1, name: /score card/i })).toBeInTheDocument();
+
+  // The browser's own Back: the URL moves and `popstate` is the only signal.
+  window.history.pushState({}, '', '/admin?section=moderation');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  expect(await screen.findByRole('heading', { level: 1, name: /moderation/i })).toBeInTheDocument();
+
+  // Forward, back to the section the card was open in.
+  window.history.pushState({}, '', '/admin?section=publiclibrary');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  expect(await screen.findByRole('heading', { level: 1, name: /public library/i })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { level: 1, name: /score card/i })).toBeNull();
+  // The list, not a stale card.
+  expect(await screen.findByText('Safety walkthrough')).toBeInTheDocument();
 });
 
 test('Score card is a place: the breadcrumb goes back to the Public library', async () => {

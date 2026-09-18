@@ -10,6 +10,18 @@ const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 function token(css, block, name) { const s = css.indexOf(block); const body = css.slice(s, css.indexOf('}', s)); const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`)); if (!m) throw new Error(`${name} not in ${block}`); return m[1]; }
 const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
 const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text') };
+/*
+  RULING R22 — THE 12px FLOOR CHECK BELOW IS VACUOUS ON ITS OWN.
+
+  It looks for a `px` literal with `font-size` within the preceding 40
+  characters. Every font-size in this sheet is `var(--publib-t-…)`, so the
+  literals only ever appear in the token block, where nothing says `font-size`
+  — the loop runs, matches nothing, and passes no matter what the tokens say.
+  The floor lives in the TOKENS, so that is what has to be read. Setting
+  `--publib-t-label` to 10px in a scratch copy fails `floorTokens` and did not
+  fail the loop.
+*/
+const floorTokens = (css, scope) => [...css.matchAll(new RegExp(`--${scope}-t-[a-z]+:\\s*(\\d+)px`, 'g'))].map((m) => Number(m[1]));
 describe('PublicLibraryPanel palette', () => {
   test.each([['--text on --bg', T.text, T.bg], ['--muted on --bg', T.muted, T.bg], ['--text on --surface', T.text, T.surface], ['--muted on --surface', T.muted, T.surface], ['--danger-text on --surface', T.dangerText, T.surface]])('%s clears AA', (_l, fg, bg) => expect(ratio(hex(fg), hex(bg))).toBeGreaterThanOrEqual(4.5));
   test('scoped, token-only, no --danger text, 12px floor', () => {
@@ -18,6 +30,9 @@ describe('PublicLibraryPanel palette', () => {
     expect((stripped.replace(tokenBlock, '').match(/#[0-9A-Fa-f]{3,6}\b/g) || [])).toEqual([]);
     expect(stripped).not.toMatch(/color:\s*var\(--danger\)/);
     for (const m of stripped.matchAll(/(\d+(?:\.\d+)?)px/g)) { if (/font-size/.test(stripped.slice(Math.max(0, m.index - 40), m.index))) expect(Number(m[1])).toBeGreaterThanOrEqual(12); }
+    const sizes = floorTokens(stripped, 'publib');
+    expect(sizes.length).toBeGreaterThan(2);
+    for (const size of sizes) expect(size).toBeGreaterThanOrEqual(12);
     for (const sel of stripped.matchAll(/(^|\})\s*([^{@}]+)\{/g)) for (const part of sel[2].split(',')) expect(part.trim()).toMatch(/^\.publib(\b|-)/);
     expect(GLOBAL_CSS).not.toMatch(/\.publib(\b|-)/);
   });
