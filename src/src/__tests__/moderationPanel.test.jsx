@@ -42,7 +42,7 @@ test('the head says how many and how long, and each row says why in band words',
   // moderationRow.js's appealWords() wraps the appeal message in straight
   // ASCII quotes ("..."), not the curly U+201C/U+201D quotes — verified by
   // reading the Task 8 source byte-for-byte. See task-9-report.md.
-  expect(within(screen.getByText('Onboarding').closest('tr')).getByText('Appealed: "It is a clinical set."')).toBeInTheDocument();
+  expect(within(screen.getByText('Onboarding').closest('tr')).getByText('Appealed: “It is a clinical set.”')).toBeInTheDocument();
   expect(screen.getByText(/these are the ones it flagged as uncertain/i)).toBeInTheDocument();
 });
 test('an empty queue says the check decided everything, and never lies about an outage', async () => {

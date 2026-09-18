@@ -20,7 +20,7 @@ function appealWords(item) {
   const msg = String(item.appealMessage || '').trim();
   if (!msg) return 'Appealed';
   const shown = msg.length > APPEAL_MAX ? `${msg.slice(0, APPEAL_MAX - 1)}…` : msg;
-  return `Appealed: "${shown}"`;
+  return `Appealed: “${shown}”`;
 }
 
 function reportWords(item) {
