@@ -137,6 +137,70 @@ const VERSIONS_SAFETY = [
   },
 ];
 
+/**
+ * Important #5: ShareSetDialog.jsx:104 gates the "Published without your
+ * Workie" note on `set.promptScope !== 'platform'`, but nothing ever sent
+ * `promptScope` — get-question-sets.js projects `promptId` only. So the note
+ * fired for EVERY set with a prompt, including one already on a platform
+ * Workie, which spec §4.1 says must be right. AdminPage already holds
+ * `availablePrompts` with each prompt's own `scope`; it must look the caller's
+ * promptId up there before handing the set to the dialog.
+ */
+const SETS_WITH_PROMPTS = {
+  questionSets: [
+    {
+      id: 'onplat', name: 'On a platform Workie', engagementType: 'trivia', totalQuestions: 5, canManage: true, scope: 'org', activeVersion: 1, promptId: 'p-plat',
+    },
+    {
+      id: 'onorg', name: 'On an org Workie', engagementType: 'trivia', totalQuestions: 5, canManage: true, scope: 'org', activeVersion: 1, promptId: 'p-org',
+    },
+  ],
+};
+const PROMPTS = {
+  prompts: [
+    { promptId: 'p-plat', scope: 'platform', status: 'active', name: 'House coach' },
+    { promptId: 'p-org', scope: 'org', status: 'active', name: 'Acme coach' },
+  ],
+};
+
+test("the Workie note in the share dialog reflects the prompt's own scope, not merely its presence", async () => {
+  mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
+  global.fetch = jest.fn(async (url) => {
+    const u = String(url);
+    if (u.includes('admin/ai-prompts')) {
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => PROMPTS,
+      };
+    }
+    if (u.includes('admin/question-sets')) {
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => SETS_WITH_PROMPTS,
+      };
+    }
+    if (u.includes('/orgs')) {
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => ({ orgs: [HOME] }),
+      };
+    }
+    return {
+      ok: true, status: 200, text: async () => '{}', json: async () => ({}),
+    };
+  });
+  render(<AdminPage />);
+  await screen.findByRole('columnheader', { name: /who can see it/i });
+
+  const platRow = screen.getByText('On a platform Workie').closest('tr');
+  fireEvent.click(within(platRow).getByRole('button', { name: /^share$/i }));
+  await screen.findByRole('heading', { name: /share “On a platform Workie” publicly/i });
+  expect(screen.queryByText(/published without your workie/i)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+  const orgRow = screen.getByText('On an org Workie').closest('tr');
+  fireEvent.click(within(orgRow).getByRole('button', { name: /^share$/i }));
+  await screen.findByRole('heading', { name: /share “On an org Workie” publicly/i });
+  expect(screen.getByText(/published without your workie/i)).toBeInTheDocument();
+});
+
 test('a rejected appeal still notices and refreshes the list', async () => {
   mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
   let listCalls = 0;

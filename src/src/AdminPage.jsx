@@ -335,6 +335,12 @@ function AdminPage() {
     ? null
     : (orgs.find((o) => o.orgId === activeOrgId) || null);
   const orgRole = activeOrg ? (activeOrg.yourRole || activeOrg.role || '') : '';
+  /* THE SHARE PIPELINE'S OWN GATE, written once. `canShare`, `showVisibility`
+     and `onShare` (the list's) each re-spelled `Boolean(activeOrg) &&
+     !onPlatform` independently — three places one drift could untie. It is an
+     org-console feature: Engage's own library never goes through it, and
+     platform mode has no organisation to share FROM. */
+  const orgConsole = Boolean(activeOrg) && !onPlatform;
   const consoleIdentity = {
     groups: currentUser?.groups || [],
     orgRole,
@@ -466,6 +472,18 @@ function AdminPage() {
 
   // Available prompts for selection
   const [availablePrompts, setAvailablePrompts] = useState([]);
+  /*
+   * THE OTHER HALF OF `promptId` — Important #5. ShareSetDialog.jsx reads
+   * `set.promptScope` to decide whether to say "Published without your
+   * Workie": that note must fire only for an ORG Workie, never a platform one
+   * every organisation can already read. No projection ever sent a
+   * `promptScope` field (get-question-sets.js sends `promptId` only), so the
+   * dialog's `set.promptScope !== 'platform'` was true for every set with a
+   * prompt — this page already holds `availablePrompts` with each prompt's
+   * own `scope` (get-ai-prompts.js), and is the one place that can look it up
+   * before handing the set to the dialog.
+   */
+  const promptScopeOf = (set) => (availablePrompts.find((p) => p.promptId === set.promptId) || {}).scope || null;
   // The persona library, read from GET /admin/personas. Personas live under
   // SK='PERSONA#' which get-ai-prompts.js hard-filters out, so they need their
   // own endpoint — this is the list that used to be unreachable (D8).
@@ -1540,8 +1558,8 @@ function AdminPage() {
             /* Same org-console gate as the list's column and Share button,
                plus the server's own per-row verdict: a set this account can
                only read must not offer to publish it. */
-            canShare={Boolean(activeOrg) && !onPlatform && editingSet.canManage !== false}
-            onShare={(version) => setSharing({ set: editingSet, version })}
+            canShare={orgConsole && editingSet.canManage !== false}
+            onShare={(version) => setSharing({ set: { ...editingSet, promptScope: promptScopeOf(editingSet) }, version })}
             onAppeal={handleAppeal}
           />
         ) : (
@@ -1683,8 +1701,8 @@ function AdminPage() {
               /* The share pipeline is an org-console feature. Engage's own
                  library never goes through it, so platform mode gets neither
                  the "Who can see it" column nor the row action. */
-              showVisibility={Boolean(activeOrg) && !onPlatform}
-              onShare={activeOrg && !onPlatform ? (set) => setSharing({ set, version: null }) : undefined}
+              showVisibility={orgConsole}
+              onShare={orgConsole ? (set) => setSharing({ set: { ...set, promptScope: promptScopeOf(set) }, version: null }) : undefined}
               createOpen={isCreateOpen}
             >
               {(isCreateOpen || visibleSets.length === 0) && (
