@@ -19,7 +19,7 @@ const { queueKey } = require('./shared/moderation-queue');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog } = require('./shared/review-log');
 const { readSnapshot } = require('./shared/snapshot-store');
-const { questionText } = require('./shared/publishable');
+const { questionText, SET_FIELDS } = require('./shared/publishable');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
@@ -28,10 +28,18 @@ const BUCKET = () => process.env.AI_PROMPTS_BUCKET || '';
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org', 'Access-Control-Allow-Methods': 'GET,OPTIONS', 'Content-Type': 'application/json' };
 const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stringify(body) });
 
-/** The three shapes of §3.2, and the ref each names. Anything else is refused. */
+/**
+ * The three shapes of §3.2, and the ref each names. Anything else is refused.
+ *
+ * `#v([1-9]\d*)` and NOT `#v(\d+)`: a version is one-based, and `v0` would
+ * parse to `setPartition(ref, 0)`, which `set-version.js` resolves to the
+ * LEGACY UNVERSIONED partition — a different set's content read under a
+ * version-shaped key. `v01` is refused on the same reasoning: one spelling per
+ * version, so two queue skus cannot name one row.
+ */
 function parseSk(raw) {
   const sk = String(raw || '').trim();
-  let m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v(\d+)$/.exec(sk);
+  let m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v([1-9]\d*)$/.exec(sk);
   if (m) return { sk, ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) };
   m = /^PUBLIC#([A-Za-z0-9_-]+)$/.exec(sk);
   if (m) return { sk, ref: { scope: 'public', orgId: '', setId: m[1] }, version: 0 };
@@ -42,6 +50,47 @@ function parseSk(raw) {
 
 const bareId = (sk) => String(sk || '').replace(/^QUESTION#/, '');
 const categoryId = (sk) => String(sk || '').replace(/^CATEGORY#/, '');
+
+/**
+ * ONE ROW'S TEXT FIELD, in the row's own case. Metadata rows written before the
+ * lowercase spelling settled carry `Name`/`Description`; everything else is
+ * lowercase. A non-string (an array, an object, a stray number) reads as '',
+ * because this feeds a reviewer's screen and `String({})` is not text.
+ */
+function metaText(meta, field) {
+  const capitalised = field.charAt(0).toUpperCase() + field.slice(1);
+  const value = (meta[field] === undefined || meta[field] === null || meta[field] === '')
+    ? meta[capitalised] : meta[field];
+  return typeof value === 'string' ? value : '';
+}
+
+/**
+ * THE SET'S OWN TEXT, ALL OF IT — all five SET_FIELDS, not three.
+ *
+ * `publishable.contentHash` judges those five and the check raises `'(set)'`
+ * findings against them, so projecting only name/description/engagementType
+ * left a finding about `customInstruction`, `aiContextInstruction` or
+ * `roundKindBrief` with NOTHING on screen to read it against: the reviewer was
+ * told the set's own text was flagged and shown text that could not have been
+ * the cause. Absent fields come back as '' so the shape never varies.
+ */
+function shapeMeta(meta) {
+  const m = meta && typeof meta === 'object' ? meta : {};
+  const out = {};
+  for (const field of SET_FIELDS) out[field] = metaText(m, field);
+  // Not a SET_FIELD (the check does not judge it) — the dialog's header prints it.
+  out.engagementType = metaText(m, 'engagementType');
+  return out;
+}
+
+/**
+ * The review log, as a record rather than as rows: `PK`/`SK` are storage and
+ * are never part of the answer, the same whitelist discipline
+ * `moderation-list.js` applies to the pointer. Everything an event recorded
+ * survives — the log's `data` bag is deliberately open — but the partition key
+ * that would tell a caller how to go looking for other partitions does not.
+ */
+const shapeLog = (rows) => (rows || []).map(({ PK, SK, ...rest }) => rest); // eslint-disable-line no-unused-vars
 
 /** Uncertain (any finding) first, in set order within each group. */
 function shapeSnapshot(snapshot, findings) {
@@ -62,11 +111,7 @@ function shapeSnapshot(snapshot, findings) {
   const uncertain = questions.filter((q) => q.findings.length);
   const rest = questions.filter((q) => !q.findings.length);
   return {
-    meta: {
-      name: (snapshot.meta && (snapshot.meta.name || snapshot.meta.Name)) || '',
-      description: (snapshot.meta && (snapshot.meta.description || snapshot.meta.Description)) || '',
-      engagementType: (snapshot.meta && snapshot.meta.engagementType) || '',
-    },
+    meta: shapeMeta(snapshot.meta),
     categories: (snapshot.categories || []).map((c) => ({ id: categoryId(c.SK), name: c.Name || c.name || '' })),
     questions: [...uncertain, ...rest],
   };
@@ -106,7 +151,7 @@ exports.handler = async (event) => {
       },
       snapshot: shapeSnapshot(snapshot, findings),
       setFindings: findings.filter((f) => f && f.questionId === '(set)'),
-      log,
+      log: shapeLog(log),
     });
   } catch (error) {
     console.error('❌ moderation get failed:', error);

@@ -71,6 +71,38 @@
  * the dead end (a decision with no way to finish) this whole mechanism exists
  * to close.
  *
+ * ── THE QUEUE ROW, NOT THE REVIEW ROW, IS WHAT MAKES AN ITEM DECIDABLE (R19) ─
+ *
+ * Spec §11: an organisation may delete a version, or the whole set, while it
+ * is sitting in this queue. `delete-set-version.js` / `delete-question-set.js`
+ * remove the version PARTITION — and the REVIEW row lives in it — but neither
+ * the queue row (no TTL, by design: a queue row must not vanish) nor the S3
+ * snapshot. `readReview` then answers `unreviewed`, which is not OPEN, so both
+ * decisions used to 409 with "not waiting for a decision" and the queue row
+ * could never be cleared by anything: a permanent entry nobody could act on.
+ *
+ * A queued item is ALWAYS looked up first here, so `unreviewed` beside a queue
+ * row does not mean "never checked" — it means the REVIEW row vanished from
+ * under an item the check had already escalated. That is decidable:
+ *
+ *   approve  skip transitionReview (it would recreate an orphan row in a
+ *            partition the organisation deleted) · publish FROM THE SNAPSHOT,
+ *            which is self-contained · sensitivity · share stamp, which simply
+ *            does not apply when the whole set is gone (writeShareStamp is
+ *            conditional on the row) · log decided + published · queue row
+ *            deleted · 200 with `orphaned: true`
+ *   reject   snapshot deleted · log decided · queue row deleted · 200. No
+ *            share stamp: a reject publishes nothing for the stamp to point
+ *            at, and telling an organisation their v2 is `flagged` when they
+ *            have deleted v2 is a state about content that no longer exists.
+ *
+ * Nothing else changes: the orphaned approve differs from the ordinary one in
+ * exactly one way — it does not move a REVIEW row that is not there. A
+ * PUBLISHED marker does land back in the deleted partition (publishSnapshot
+ * writes one), and that is tolerated rather than fought: Stage 1's re-share
+ * already leaves markers behind, and a marker is a fact about where a publish
+ * went, not a claim that the content is still there.
+ *
  * dismiss / take down / keep-with-a-notice are answers to REPORTED rows and
  * arrive with reports (Stage 3); a reported-row sk is refused here.
  */
@@ -80,7 +112,7 @@ const { S3Client } = require('@aws-sdk/client-s3');
 const tenant = require('./shared/tenant');
 const { queueKey, deleteQueueRow } = require('./shared/moderation-queue');
 const { STATUS, readReview, transitionReview } = require('./shared/set-review');
-const { publishSnapshot } = require('./shared/publish-set');
+const { publishSnapshot, platformPromptExists } = require('./shared/publish-set');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { appendReviewEvent, readReviewLog } = require('./shared/review-log');
 const { readSnapshot, deleteSnapshot } = require('./shared/snapshot-store');
@@ -102,9 +134,18 @@ const OPEN = [STATUS.ESCALATED, STATUS.APPEALED];
 
 const reviewerOf = (event) => String(event?.requestContext?.authorizer?.lambda?.username || event?.requestContext?.authorizer?.lambda?.userId || 'engage').trim();
 
-/** Only the org shape decides here; PUBLIC# and PLATFORM# rows are reports (Stage 3). */
+/**
+ * Only the org shape decides here; PUBLIC# and PLATFORM# rows are reports
+ * (Stage 3).
+ *
+ * `#v([1-9]\d*)` and NOT `#v(\d+)`: a version is one-based, and `v0` would
+ * parse to `setPartition(ref, 0)`, which `set-version.js` resolves to the
+ * LEGACY UNVERSIONED partition — so `org_acme#safety#v0` would have decided,
+ * published and stamped a DIFFERENT set's content than any queue row can name.
+ * `v01` goes with it: one spelling per version.
+ */
 function parseOrgSk(raw) {
-  const m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v(\d+)$/.exec(String(raw || '').trim());
+  const m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v([1-9]\d*)$/.exec(String(raw || '').trim());
   return m ? { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) } : null;
 }
 
@@ -183,12 +224,52 @@ exports.handler = async (event) => {
     // opens (unreviewed, checking...) is refused as not waiting at all.
     const resumingApprove = review.status === STATUS.PASSED && decision === 'approve';
     const resumingReject = review.status === STATUS.FLAGGED && decision === 'reject';
+    // Ruling R19: no REVIEW row under a row that IS queued means the
+    // organisation deleted the version (or the set) while it waited — see the
+    // header. Decidable, without a transition.
+    const orphaned = review.status === STATUS.UNREVIEWED;
 
-    if (!OPEN.includes(review.status) && !resumingApprove && !resumingReject) {
+    if (!OPEN.includes(review.status) && !resumingApprove && !resumingReject && !orphaned) {
       if (review.status === STATUS.PASSED || review.status === STATUS.FLAGGED) {
         return json(409, { error: `Already decided by ${review.reviewer || 'somebody else'}.`, status: review.status });
       }
       return json(409, { error: `That entry is not waiting for a decision (status: ${review.status}).`, status: review.status });
+    }
+
+    if (orphaned) {
+      if (decision === 'approve') {
+        const snapshot = pointer.snapshotKey ? await readSnapshot(s3, BUCKET(), pointer.snapshotKey) : null;
+        if (!snapshot || !sameSet(snapshot.source, ref)) {
+          return json(409, { error: 'The snapshot is gone, so there is nothing to publish — ask the organisation to submit it again.' });
+        }
+        // The REVIEW row carried `promptDropped`, and it is gone with the
+        // partition — so this is re-derived from the snapshot's OWN meta
+        // against the PLATFORM prompts partition, exactly as
+        // publish-question-set.js derives it. Reading `review.promptDropped`
+        // here would be `false` every time, and a public set pointing at an
+        // organisation's private Workie is a dangling reference in every copy
+        // anyone takes of it (D5).
+        const promptId = (snapshot.meta && snapshot.meta.promptId) || '';
+        const promptDropped = Boolean(promptId) && !(await platformPromptExists(db, TABLE(), promptId));
+        await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, notice, orphaned: true });
+        const published = await publishSnapshot(db, TABLE(), snapshot, {
+          review: { findings: [], note }, sourceOrgName: pointer.orgName || '', promptDropped,
+        });
+        if (notice.length) await writeSensitivity(published.pubRef, notice);
+        // No-ops when the whole set was deleted; lands when only the version
+        // was, which is the case where the organisation's list still has a row
+        // that ought to say where this went.
+        await writeShareStamp(db, TABLE(), ref, {
+          version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash,
+        });
+        await appendReviewEvent(db, TABLE(), ref, 'published', { version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, by: reviewer });
+        await deleteQueueRow(db, TABLE(), sk);
+        return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion, orphaned: true });
+      }
+      await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, orphaned: true });
+      if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
+      await deleteQueueRow(db, TABLE(), sk);
+      return json(200, { decision, orphaned: true });
     }
 
     if (resumingApprove) {
