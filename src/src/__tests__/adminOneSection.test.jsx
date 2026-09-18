@@ -78,6 +78,7 @@ const MARKERS = {
   Members: '.team',
   'Plan & usage': '.bill',
   'Data & privacy': '.privacy',
+  'Public library': '.publib',
 };
 
 /** Which of the known sections are currently in the document. */
@@ -141,6 +142,19 @@ describe('platform mode', () => {
     await settle();
     await waitFor(() => expect(mounted()).toEqual(['Question sets']));
     expect(document.querySelector('h1')).toHaveTextContent('Shared library');
+  });
+
+  // rejects: the Public library section being unreachable, or mounting
+  // alongside another platform section (the exact bug this whole file exists
+  // to catch, now for the fourth platform section to land).
+  it('opens the Public library on its own', async () => {
+    mockActiveOrg = PLATFORM_MODE;
+    window.history.pushState({}, '', '/admin?section=publiclibrary');
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Public library']));
+    expect(document.querySelector('h1')).toHaveTextContent('Public library');
   });
 
   /* `games` rather than `billing`: Sessions is a section platform mode does not

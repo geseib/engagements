@@ -13,6 +13,9 @@ import IssueFab from './components/IssueFab';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
+import PublicLibraryPanel from './components/PublicLibraryPanel';
+import ModerationPanel from './components/ModerationPanel';
+import ScoreCard from './components/ScoreCard';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
@@ -156,7 +159,7 @@ function urlNamesKnownSection() {
    derived from `sectionsFor`, because this is used to decide whether to draw
    the acting-as strip and calling the nav builder again for that would couple
    a banner to the shape of the nav. */
-const PLATFORM_SECTION_IDS = ['orgs', 'moderation', 'users', 'archive'];
+const PLATFORM_SECTION_IDS = ['orgs', 'publiclibrary', 'moderation', 'users', 'archive'];
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -380,6 +383,32 @@ function AdminPage() {
     return () => { cancelled = true; };
   }, [activeTab, activeOrgId]);
 
+  // The score card is a PLACE inside the platform Public library section, the
+  // same way the set editor is a place inside Question sets — see the shell's
+  // breadcrumb/title props below. Which public set, or '' for the list.
+  const [scoreCardId, setScoreCardId] = useState('');
+  /* The Moderation nav badge. Fetched once when staff switch into platform
+     mode — not tied to which platform section is open, because the whole
+     point is a number visible from Organisations or the Shared library, not
+     only after opening Moderation itself. Errors are swallowed: a missing or
+     stale count beside a nav item is a convenience gone quiet, not a reason
+     to interrupt anyone who can still open the queue directly. */
+  const [moderationCount, setModerationCount] = useState(0);
+  useEffect(() => {
+    if (!onPlatform) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl('admin/moderation'));
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setModerationCount(body.count || 0);
+      } catch {
+        // convenience badge only — see comment above
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [onPlatform]);
+
   /**
    * Take this organisation's own copy of a set Engage or another org publishes.
    *
@@ -441,6 +470,33 @@ function AdminPage() {
       return { ok: false, error: body.error || `Could not send that for review (${res.status}).` };
     } catch (err) {
       return { ok: false, error: `Could not send that for review: ${err.message}` };
+    } finally {
+      await fetchQuestionSets();
+    }
+  };
+
+  /**
+   * Staff take a public set down: DELETE with the note, then re-read the list.
+   *
+   * THROWS ON FAILURE (R18) rather than resolving with `{ error }` or reaching
+   * for the page-level `setNotice` banner. PublicLibraryPanel's
+   * UnpublishDialog owns the failure the same way ScoreCard's TakedownDialog
+   * already does (R17): a rejected DELETE has to leave the dialog mounted,
+   * the note intact and the confirm button live for a retry, with the reason
+   * shown beside the note — closing the dialog on failure would lose a note
+   * someone just typed. `setNotice` never enters into an unpublish failure.
+   */
+  const handleUnpublish = async (set, note) => {
+    try {
+      const res = await authFetch(adminApiUrl(`admin/public-library/${encodeURIComponent(set.id)}`), {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Could not take that down (${res.status}).`);
+      }
+    } catch (err) {
+      throw err instanceof Error ? err : new Error(`Could not take that down: ${err.message || err}`);
     } finally {
       await fetchQuestionSets();
     }
@@ -671,6 +727,9 @@ function AdminPage() {
       setEditMode(false);
       setEditingSetId('');
       setEditingSetScope('');
+      // Leaving a section closes any place open inside it — the score card is
+      // the Public library's version of the detail place editingSet is above.
+      setScoreCardId('');
     }
     setActiveTab(sectionId);
     setSectionAsked(true);
@@ -1480,9 +1539,9 @@ function AdminPage() {
       <AdminShell
         navGroups={navGroups.map((group) => ({
           ...group,
-          items: group.items.map((item) =>
-            (item.id === 'questionsets'
-              ? {
+          items: group.items.map((item) => {
+            if (item.id === 'questionsets') {
+              return {
                 ...item,
                 // No count until there is one to state. A "0" beside Question
                 // sets while the list is still loading is an empty state that
@@ -1491,8 +1550,16 @@ function AdminPage() {
                 // The one number in this console that decays if nobody looks:
                 // sets the check sent back. Absent when zero (spec §10.3).
                 badge: questionSets.filter((s) => s.share && s.share.status === 'flagged').length || undefined,
-              }
-              : item)),
+              };
+            }
+            // Sets waiting on a human. Absent (not "0") until the read lands
+            // or while the queue is genuinely empty — same "no lying zero"
+            // rule Question sets' own count follows above.
+            if (item.id === 'moderation') {
+              return { ...item, count: moderationCount || undefined };
+            }
+            return item;
+          }),
         }))}
         footNavItems={FOOT_SECTIONS.length ? FOOT_SECTIONS : ADMIN_FOOT_SECTIONS}
         orgSwitcher={
@@ -1524,10 +1591,22 @@ function AdminPage() {
         currentUser={currentUser}
         onSignOut={handleSignOut}
         breadcrumb={
-          editingSet ? { parentLabel: 'Question sets', onBack: handleCancelEdit } : null
+          editingSet
+            ? { parentLabel: 'Question sets', onBack: handleCancelEdit }
+            : (scoreCardId && resolvedTab === 'publiclibrary'
+              ? { parentLabel: 'Public library', onBack: () => setScoreCardId('') }
+              : null)
         }
-        title={editingSet ? editingSet.name || editingSet.id : section.title}
-        subtitle={editingSet ? undefined : section.subtitle}
+        title={
+          editingSet
+            ? editingSet.name || editingSet.id
+            : (scoreCardId && resolvedTab === 'publiclibrary' ? 'Score card' : section.title)
+        }
+        subtitle={
+          editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
+            ? undefined
+            : section.subtitle
+        }
         /*
           Wave D converts the tabs one at a time, so the theme is per-section
           rather than per-console. Users and Sessions are dusk now; the rest are
@@ -1802,46 +1881,53 @@ function AdminPage() {
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
 
-          {/* THE PUBLIC LIBRARY IS IN EVERY NON-PLATFORM NAV AND HAS NO
-              RENDERER. Without this branch the section drew its title over an
-              empty work area — and inherited Question sets' subtitle through
-              the fallback chain, so it read "The thing every session is built
-              from." over nothing at all.
-
-              An honest placeholder, the same choice Moderation makes below: an
-              empty screen with no explanation reads as a broken product, and a
-              silent one reads as "there is nothing published yet", which is a
-              different and untrue claim. */}
-          {resolvedTab === 'library' && (
-            <div className="tab-content">
-              <p style={{ maxWidth: '62ch' }}>
-                Sharing is live: in Question sets, every set you own has a Share button
-                and a “Who can see it” column. Submit a set and every question is checked
-                automatically; it is published if it passes, and anything flagged comes
-                back to you with the reason, in the set’s editor.
-              </p>
-              <p style={{ maxWidth: '62ch' }}>
-                This page will list what other organisations have published, with a way
-                to copy a set into yours. That part is next — it is not an empty library
-                meaning nobody has published anything.
-              </p>
-              <p style={{ maxWidth: '62ch' }}>
-                Engage’s own shared library is already available to you: it is in
-                Question sets, badged “Engage”, and you can copy any of it.
-              </p>
-            </div>
+          {/* THE ORG CONSOLE'S PUBLIC LIBRARY — every public row, read as a
+              member: preview (the read-only editor, the same place the list's
+              own Open leads to) or copy a set into this organisation. Gated on
+              `activeOrg`, mirroring `members`/`billing` below: there is
+              nowhere to copy TO without one. */}
+          {resolvedTab === 'library' && activeOrg && (
+            <PublicLibraryPanel
+              questionSets={questionSets}
+              mode="org"
+              loading={questionSetsLoading}
+              onCopy={handleCopySet}
+              onPreview={handleEditQuestionSet}
+            />
           )}
 
+          {/* THE PLATFORM CONSOLE'S PUBLIC LIBRARY — the same public rows,
+              read as Engage: open the score card or unpublish. The score card
+              is a PLACE inside this section (`scoreCardId`), not a modal — see
+              the shell's breadcrumb/title props above, which name it the same
+              way the set editor names Question sets. */}
+          {resolvedTab === 'publiclibrary' && onPlatform && (
+            scoreCardId
+              ? (
+                <ScoreCard
+                  publicSetId={scoreCardId}
+                  onBack={() => setScoreCardId('')}
+                  onTakenDown={() => { setScoreCardId(''); fetchQuestionSets(); }}
+                />
+              )
+              : (
+                <PublicLibraryPanel
+                  questionSets={questionSets}
+                  mode="platform"
+                  loading={questionSetsLoading}
+                  onOpenScoreCard={setScoreCardId}
+                  onUnpublish={handleUnpublish}
+                />
+              )
+          )}
+
+          {/* THE QUEUE. A row's own "Score card" button jumps straight into
+              the Public library's detail place, on the section that actually
+              owns it — not a duplicate renderer here. */}
           {resolvedTab === 'moderation' && onPlatform && (
-            <div className="tab-content">
-              <p style={{ maxWidth: '62ch' }}>
-                Nothing reaches this queue yet. Sets become public by being
-                submitted for review, and that pipeline — the safety pass and the
-                approve/reject decision — is not built. This screen is here so the
-                nav matches what the platform console will hold; it is not an
-                empty queue meaning everything has been reviewed.
-              </p>
-            </div>
+            <ModerationPanel
+              onOpenScoreCard={(id) => { setScoreCardId(id); setActiveTab('publiclibrary'); }}
+            />
           )}
 
           {resolvedTab === 'members' && activeOrg && (

@@ -254,17 +254,21 @@ test('a rejected appeal still notices and refreshes the list', async () => {
   await waitFor(() => expect(listCalls).toBeGreaterThan(callsBeforeAppeal));
 });
 
-// The Public library section is still Stage 2's placeholder — but its old copy
-// said the sharing pipeline "is not built", which sent the owner looking here
-// for a Share control that lives on the Question sets rows. The placeholder
-// must point at where sharing IS, and never claim the pipeline is absent.
-test('the Public library placeholder points at Share on the Question sets rows', async () => {
+// UPDATED FOR TASK 12: the Public library section is no longer Stage 2's
+// placeholder — this exact test used to assert that placeholder's copy
+// ("every set you own has a Share button"), which Task 12 replaces with the
+// real PublicLibraryPanel. This fixture's SETS carry no `scope: 'public'`
+// row, so the honest thing on screen now is the panel's own empty state, not
+// the retired "is not built" copy this test was originally written against.
+test('the Public library section renders the real panel, not the retired placeholder', async () => {
   mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
   serve();
   render(<AdminPage />);
   await screen.findByRole('columnheader', { name: /who can see it/i });
   const nav = screen.getByRole('navigation', { name: /sections/i });
   fireEvent.click(within(nav).getByText('Public library'));
-  await screen.findByText(/every set you own has a Share button/i);
+  await screen.findByRole('heading', { level: 1, name: /public library/i });
+  expect(screen.queryByText(/every set you own has a Share button/i)).toBeNull();
   expect(screen.queryByText(/is not built/i)).toBeNull();
+  expect(await screen.findByText(/nobody has published a set yet/i)).toBeInTheDocument();
 });
