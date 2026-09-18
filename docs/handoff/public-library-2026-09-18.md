@@ -105,7 +105,10 @@ breadcrumb, `handleUnpublish` (throws on failure so the dialog keeps the note) a
 - **A push to `dev` deploys dev.** Test is MERGED into (`git checkout -B promote-test origin/test && git merge
   --no-ff <sha> -m "Merge branch 'dev' into test" && git push origin promote-test:test`), never fast-forwarded.
   Push the branch OR a tag, never both. Prod halts at the owner's approval gate.
-- Commits end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (the project's literal convention).
+- Commits carry a `Co-Authored-By:` trailer naming the model that wrote them. It is **not** a fixed
+  project constant: this stage's commits say `Claude Fable 5.1`, the Workie work of the same day says
+  `Claude Opus 5`. Use whatever the current session's attribution guidance gives you, and do not
+  "correct" older commits to match — the trailer is a record of who wrote that commit.
 
 ## 4. TRAPS FOUND WHILE BUILDING — the next stage will meet the same ones
 
