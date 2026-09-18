@@ -42,7 +42,8 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 
 const { planAhead, seedFor } = require('./question-plan');
-const { callerMayDriveSession } = require('./tenant');
+const { callerMayDriveSession, ORG } = require('./tenant');
+const { decryptItems } = require('./tenant-crypto');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
@@ -195,7 +196,13 @@ exports.handler = async (event) => {
       .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
 
     const questionRows = rows.filter((r) => String(r.SK).startsWith('QUESTION#'));
-    const titleOf = new Map(questionRows.map((r) => [
+    // AN ORG'S QUESTION ROWS ARE ENCRYPTED AT REST (tenant-crypto.js), and the
+    // plan shows their titles — so it reads them the way get-question.js does.
+    // Platform and public rows are plaintext and pass straight through.
+    const plainQuestionRows = resolved.scope === ORG && resolved.orgId
+      ? await decryptItems(resolved.orgId, 'question', questionRows)
+      : questionRows;
+    const titleOf = new Map(plainQuestionRows.map((r) => [
       r.SK,
       r.Title || r.title || r.Prompt || r.prompt || '',
     ]));
