@@ -1,6 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolveSetPartition, setMetadataKey } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition, setMetadataKey } = require('./set-version');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
@@ -313,7 +313,7 @@ exports.handler = async (event) => {
     // the questions the players actually saw, so it resolves through the game's
     // pin first, then the set's activeVersion, then the legacy partition.
     const resolvedSet = questionSetId
-      ? await resolveSetPartition(db, process.env.TABLE_NAME, questionSetId, gameMetadata.Item.QuestionSetVersion)
+      ? await resolveSetPartition(db, process.env.TABLE_NAME, gameSetRef(gameMetadata.Item), gameMetadata.Item.QuestionSetVersion)
       : { pk: null, version: null };
     
     if (questionSetId) {

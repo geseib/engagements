@@ -43,7 +43,7 @@ const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/l
 
 const { planAhead, seedFor } = require('./question-plan');
 const { callerMayDriveSession } = require('./tenant');
-const { resolveSetPartition } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -177,7 +177,7 @@ exports.handler = async (event) => {
     }
 
     const resolved = await resolveSetPartition(
-      db, process.env.TABLE_NAME, metaRes.Item.QuestionSetId, undefined
+      db, process.env.TABLE_NAME, gameSetRef(metaRes.Item), metaRes.Item.QuestionSetVersion
     );
 
     // Every CATEGORY# and QUESTION# row of the set, in one read. The planner

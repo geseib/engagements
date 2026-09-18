@@ -51,7 +51,7 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolveSetPartition } = require('./set-version');
+const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
 const { encryptValue } = require('./tenant-crypto');
 
@@ -282,7 +282,7 @@ exports.handler = async (event) => {
       if (!metadata.Item) return reply(404, { error: 'Game not found' });
 
       const resolved = await resolveSetPartition(
-        db, process.env.TABLE_NAME, metadata.Item.QuestionSetId,
+        db, process.env.TABLE_NAME, gameSetRef(metadata.Item),
         metadata.Item.QuestionSetVersion
       );
       const catQuery = await db.send(new QueryCommand({
