@@ -44,6 +44,26 @@ const skUrl = (sk) => adminApiUrl(`admin/moderation/${encodeURIComponent(sk)}`);
   and says what it will do. A 409 with any other status stays the dead end it
   was.
 */
+/*
+  THE FIVE FIELDS A `'(set)'` FINDING CAN BE ABOUT.
+
+  `shared/publishable.js` SET_FIELDS, in reading order, with the words a person
+  uses for them rather than the row's own keys. The check judges exactly these
+  five and `moderation-get.js` projects exactly these five, so a set-level
+  finding always names something in this list — and until now the dialog showed
+  the verdict on them and none of the text. The name and the description at
+  least appear in the heading and the sub-line; the other three were nowhere on
+  the screen at all, which left a reviewer deciding about prose they could not
+  read.
+*/
+const SET_PROSE = [
+  ['name', 'Name'],
+  ['description', 'Description'],
+  ['customInstruction', 'Custom instruction'],
+  ['aiContextInstruction', 'AI context'],
+  ['roundKindBrief', 'Round brief'],
+];
+
 const RESUME = {
   passed: { decision: 'approve', past: 'Approved', button: 'Approve' },
   flagged: { decision: 'reject', past: 'Rejected', button: 'Reject' },
@@ -156,6 +176,27 @@ function ReviewDialog({ sk, onClose, onDecided }) {
             )}
             {item.setFindings.length > 0 && (
               <p className="modq-note"><strong>The set's own text:</strong> {item.setFindings.map((f) => `${bandWord(f.band)} for ${String(f.category || '').toLowerCase()}`).join('; ')}.</p>
+            )}
+            {/*
+              The text that verdict is ABOUT. Only beside a set-level finding —
+              a set the check had nothing to say about does not need its own
+              prose recited back — and only when there is a snapshot, which is
+              the thing that was judged; without one the banner above already
+              says there is nothing to approve. Empty fields are skipped rather
+              than printed blank, so the one that matters is not buried in four
+              empty rows. Values WRAP rather than truncate: unlike the queue
+              row's cells these are the reviewer's actual evidence, and a `title`
+              is a hover, which is not evidence on a tablet.
+            */}
+            {item.setFindings.length > 0 && item.snapshot && (
+              <dl className="modq-prose">
+                {SET_PROSE.filter(([field]) => item.snapshot.meta[field]).map(([field, label]) => (
+                  <React.Fragment key={field}>
+                    <dt>{label}</dt>
+                    <dd>{item.snapshot.meta[field]}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
             )}
             <h3 className="modq-h">{uncertain ? `${uncertain} question${uncertain === 1 ? '' : 's'} the check could not decide` : 'Every question'}</h3>
             <ul className="modq-list">

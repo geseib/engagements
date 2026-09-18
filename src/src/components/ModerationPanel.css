@@ -53,6 +53,12 @@
 .modq-body { padding: 10px 20px; flex: 1; }
 .modq-dlg-sub { color: var(--muted); font-size: var(--modq-t-label); }
 .modq-note { color: var(--primary); }
+/* The set's own judged text, beside a set-level finding. A two-column grid so
+   the labels line up and the values wrap — these are the reviewer's evidence,
+   not a table cell, so nothing here truncates. */
+.modq-prose { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--modq-rule); border-radius: 6px; }
+.modq-prose dt { color: var(--muted); font-size: var(--modq-t-label); }
+.modq-prose dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .modq-h { margin: 14px 0 6px; font-size: var(--modq-t-body); font-weight: 700; }
 .modq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .modq-q { padding: 10px 12px; border: 1px solid var(--modq-rule); border-radius: 6px; }

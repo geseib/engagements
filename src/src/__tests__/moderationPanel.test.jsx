@@ -240,3 +240,86 @@ test('an outage reports nothing rather than clearing the badge to zero', async (
   // is the only sign anything is waiting.
   expect(counts).toEqual([]);
 });
+
+/*
+  ITEM 1b — A SET-LEVEL FINDING WITH NOTHING TO READ IT AGAINST.
+
+  `moderation-get.js` projects all five fields `publishable.contentHash`
+  judges, and the check raises `'(set)'` findings against exactly those five.
+  The dialog printed the VERDICT on them — "The set's own text: uncertain for
+  harassment." — and none of the text, so a reviewer was asked to decide about
+  prose they could not see: the name and the description are in the header and
+  the sub-line, and `customInstruction`, `aiContextInstruction` and
+  `roundKindBrief` were nowhere on the screen at all.
+*/
+const serveItem = (overrides) => {
+  const item = {
+    ...ITEM,
+    ...overrides,
+    snapshot: { ...ITEM.snapshot, meta: { ...ITEM.snapshot.meta, ...(overrides.meta || {}) } },
+  };
+  delete item.meta;
+  global.fetch = jest.fn(async (url) => {
+    const u = String(url);
+    if (u.endsWith('/admin/moderation')) return json(QUEUE);
+    if (u.includes('/admin/moderation/')) return json(item);
+    return json({});
+  });
+};
+const openReview = async () => {
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByRole('heading', { name: /safety walkthrough/i });
+  return dialog;
+};
+
+test("a set-level finding shows the set's own judged text, labelled", async () => {
+  serveItem({
+    setFindings: [{ questionId: '(set)', category: 'HARASSMENT', band: 'MEDIUM', explanation: 'x' }],
+    meta: { customInstruction: 'Insult the losers' },
+  });
+  const dialog = await openReview();
+  // The verdict line is still there…
+  expect(within(dialog).getByText(/The set's own text:/)).toBeInTheDocument();
+  // …and now so is the text it is a verdict ON.
+  expect(within(dialog).getByText('Custom instruction')).toBeInTheDocument();
+  expect(within(dialog).getByText('Insult the losers')).toBeInTheDocument();
+  // rejects: a block that prints empty rows for the fields this set does not
+  // carry, which would bury the one that matters in four blank lines.
+  expect(within(dialog).queryByText('Round brief')).toBeNull();
+  expect(within(dialog).queryByText('AI context')).toBeNull();
+});
+
+test('and with nothing flagged at set level the block is absent', async () => {
+  serveItem({ setFindings: [], meta: { customInstruction: 'Insult the losers' } });
+  const dialog = await openReview();
+  expect(within(dialog).queryByText('Custom instruction')).toBeNull();
+  expect(within(dialog).queryByText('Insult the losers')).toBeNull();
+  // rejects: hiding the whole surrounding line as well — there is no set-level
+  // finding here, so neither should be on screen, and the questions still are.
+  expect(within(dialog).queryByText(/The set's own text:/)).toBeNull();
+  expect(within(dialog).getAllByTestId('modq-question')).toHaveLength(2);
+});
+
+test('a set-level finding with the snapshot gone renders no block to read', async () => {
+  serveItem({ setFindings: [{ questionId: '(set)', category: 'HARASSMENT', band: 'MEDIUM' }] });
+  // The snapshot is what was judged; without it there is nothing to show, and
+  // the banner above already says so.
+  global.fetch = jest.fn(async (url) => {
+    const u = String(url);
+    if (u.endsWith('/admin/moderation')) return json(QUEUE);
+    if (u.includes('/admin/moderation/')) {
+      return json({ ...ITEM, snapshot: null, setFindings: [{ questionId: '(set)', category: 'HARASSMENT', band: 'MEDIUM' }] });
+    }
+    return json({});
+  });
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /^review$/i }));
+  const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText(/The set's own text:/)).toBeInTheDocument();
+  expect(within(dialog).queryByText('Custom instruction')).toBeNull();
+  expect(within(dialog).queryByText('Name')).toBeNull();
+});
