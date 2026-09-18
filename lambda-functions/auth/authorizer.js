@@ -438,6 +438,21 @@ function requiredGroupsForRoute(method, path) {
     return ['admins'];
   }
 
+  // ── MODERATION AND THE PUBLIC LIBRARY (spec §9) ──────────────────────────
+  //
+  // Engage staff only, and the handler re-asks `canManageScope(event,
+  // PLATFORM, '')` — platform MODE, not just the group. Anchored: the queue's
+  // {sk} segment carries a set id (percent-encoded `org%23callandanswer%23v2`),
+  // exactly the kind of path the generic includes() rules below would decide.
+  const STAFF_ROUTE = /^admin\/(moderation(\/[^/]+)?|public-library\/[^/]+)$/;
+  if (path === 'admin/moderation'
+    || path === 'admin/moderation/{sk}'
+    || path === 'admin/moderation/decide'
+    || path === 'admin/public-library/{publicSetId}'
+    || STAFF_ROUTE.test(path)) {
+    return ['admins'];
+  }
+
   // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
   //
   // Hosts and admins both: copying is how an ordinary member adapts something

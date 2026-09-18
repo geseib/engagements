@@ -89,6 +89,27 @@ const MUST_STAY_OPEN = [
   ['GET', '/games/{gameId}/ai-summary'],
 ];
 
+/**
+ * THE MODERATION QUEUE AND THE PUBLIC LIBRARY, WHICH ARE STAFF-ONLY (spec §9).
+ *
+ * Kept OUT of MUST_BE_CLOSED deliberately (Ruling R7 of the Stage 2 plan).
+ * That array's own loop below (section 3) pins every entry to
+ * `['hosts', 'admins']`, which is correct for the question-set routes and
+ * would be WRONG here — a host, and an organisation's own `admin` role, must
+ * both be refused the queue. Folding these five in would either weaken that
+ * assertion for everybody or go red for good the moment this list is added.
+ * So they get their own frozen list and their own sibling assertion in
+ * section 3, while section 2 (the template half) still runs over both lists
+ * together — a route is only closed when both halves agree, staff route or not.
+ */
+const STAFF_ONLY = [
+  ['GET', '/admin/moderation'],
+  ['GET', '/admin/moderation/{sk}'],
+  ['POST', '/admin/moderation/decide'],
+  ['GET', '/admin/public-library/{publicSetId}'],
+  ['DELETE', '/admin/public-library/{publicSetId}'],
+];
+
 const routes = routesFromTemplate();
 
 // ---------- 1. The scanner works at all ----------
@@ -98,8 +119,8 @@ check('scanner finds routes, sees Auth, and is not matching everything', () =>
   assertScannerWorks(routes));
 
 // ---------- 2. Half one: the template ----------
-console.log('\n2. template-clean.yaml attaches the authorizer to all three');
-for (const [method, p] of MUST_BE_CLOSED) {
+console.log('\n2. template-clean.yaml attaches the authorizer to all three, and to the five staff routes');
+for (const [method, p] of [...MUST_BE_CLOSED, ...STAFF_ONLY]) {
   check(`${method} ${p} carries CognitoAuthorizer`, () => {
     const hit = findRoute(routes, method, p);
     assert.ok(hit, `route ${method} ${p} is not in the template at all`);
@@ -117,6 +138,18 @@ for (const [method, p] of MUST_BE_CLOSED) {
     const groups = requiredGroupsForRoute(method, bare);
     assert.deepStrictEqual(groups, ['hosts', 'admins'],
       `got ${JSON.stringify(groups)} — a pending, unapproved account would pass`);
+  });
+}
+
+// The staff routes are the sibling of the loop above, not a member of it —
+// see the comment on STAFF_ONLY for why they cannot share MUST_BE_CLOSED's
+// ['hosts', 'admins'] assertion.
+console.log('\n   requiredGroupsForRoute names the staff routes as admins-only');
+for (const [method, p] of STAFF_ONLY) {
+  const bare = p.replace(/^\//, '');
+  check(`${method} ${bare} requires admins only`, () => {
+    const groups = requiredGroupsForRoute(method, bare);
+    assert.deepStrictEqual(groups, ['admins'], 'a host or an org admin would pass');
   });
 }
 

@@ -1255,6 +1255,130 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  ModerationListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-moderation-list'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: moderation-list.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Events:
+        ModerationList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/moderation
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ModerationGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-moderation-get'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: moderation-get.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        # The snapshot a person reviews (spec §3.3) — read only.
+        - S3ReadPolicy:
+            BucketName: !Ref AIPromptsBucket
+      Events:
+        ModerationGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/moderation/{sk}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ModerationDecideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-moderation-decide'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 60
+      Handler: moderation-decide.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # Approve reads the snapshot to publish it; reject deletes it (D9).
+        - S3CrudPolicy:
+            BucketName: !Ref AIPromptsBucket
+      Events:
+        ModerationDecide:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/moderation/decide
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  PublicLibraryItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-public-library-item'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 60
+      Handler: public-library-item.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        PublicLibraryItemGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/public-library/{publicSetId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PublicLibraryItemDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/public-library/{publicSetId}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   OrgGetFunction:
     Type: AWS::Serverless::Function
     Properties:
