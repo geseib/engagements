@@ -1800,10 +1800,15 @@ function AdminPage() {
           {resolvedTab === 'library' && (
             <div className="tab-content">
               <p style={{ maxWidth: '62ch' }}>
-                Nothing is here yet. Publishing a set for other organisations to use —
-                and the safety review that has to pass first — is not built. This is
-                where it will appear; it is not an empty library meaning nobody has
-                published anything.
+                Sharing is live: in Question sets, every set you own has a Share button
+                and a “Who can see it” column. Submit a set and every question is checked
+                automatically; it is published if it passes, and anything flagged comes
+                back to you with the reason, in the set’s editor.
+              </p>
+              <p style={{ maxWidth: '62ch' }}>
+                This page will list what other organisations have published, with a way
+                to copy a set into yours. That part is next — it is not an empty library
+                meaning nobody has published anything.
               </p>
               <p style={{ maxWidth: '62ch' }}>
                 Engage’s own shared library is already available to you: it is in
