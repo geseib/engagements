@@ -341,13 +341,31 @@ export default function QuestionSetsPanel({
               </button>
             </div>
           ) : (
-            <table className={`qsets-tbl${showVisibility ? ' qsets-tbl--vis' : ''}`}>
+            /*
+              RULING R20 — A COLUMN OF CONTROLS THAT CANNOT WORK IS NOT A COLUMN.
+
+              The State cell's Active and Quickstart chips are BUTTONS, and they
+              call `onToggleActive` / `onToggleQuickstart`. A caller that
+              replaces the row's actions — the public library, both consoles —
+              passes neither, so both chips rendered as live-looking controls
+              that did nothing at all when clicked: the "always refused" shape
+              the actions column's own comment (below) says to remove rather
+              than keep offering.
+
+              `docs/design/tenancy-redesign/07-public-library.html` is the
+              authority and agrees: Set / Format / Questions / Copied / actions,
+              with the publisher as a visible sub-line and no State column. The
+              attribution that was hover-only on the owner chip is that sub-line
+              now (see `.qsets-sub` below); the chip and its title stay exactly
+              as they are everywhere the column still renders.
+            */
+            <table className={`qsets-tbl${showVisibility ? ' qsets-tbl--vis' : ''}${rowActions ? ' qsets-tbl--nostate' : ''}`}>
               <thead>
                 <tr>
                   <th className="qsets-col-set">Set</th>
                   <th className="qsets-col-type">Type</th>
                   <th className="qsets-col-qs">Qs</th>
-                  <th className="qsets-col-state">State</th>
+                  {!rowActions && <th className="qsets-col-state">State</th>}
                   {showVisibility && <th className="qsets-col-vis">Who can see it</th>}
                   <th className="qsets-col-when">Updated</th>
                   <th className="qsets-col-acts" />
@@ -357,6 +375,19 @@ export default function QuestionSetsPanel({
                 {shown.map((set) => {
                   const typeId = normalizeGameType(set.engagementType);
                   const playable = isPlayableGameType(typeId);
+                  /*
+                    R20: WHO PUBLISHED IT, IN TEXT, AHEAD OF THE BLURB.
+
+                    It was on the owner chip's `title` and nowhere else, which
+                    is a hover — unreachable on the tablets this console is read
+                    on, and invisible to anyone scanning the list for a team
+                    they trust. The mockup prints it; so does this. Joined into
+                    ONE text node rather than two spans so the row is still one
+                    clipped line with one `title` carrying the whole of it.
+                  */
+                  const publisher = set.sourceOrgName ? `by ${set.sourceOrgName}` : '';
+                  const blurb = truncate(set.description, 110);
+                  const subLine = [publisher, blurb].filter(Boolean).join(' · ') || '—';
                   return (
                     <tr key={set.id}>
                       <td>
@@ -364,90 +395,92 @@ export default function QuestionSetsPanel({
                           {set.name}
                           <SetImageBadge hasImages={set.hasImages} />
                         </span>
-                        <span className="qsets-sub">{truncate(set.description, 110) || '—'}</span>
+                        <span className="qsets-sub" title={subLine}>{subLine}</span>
                       </td>
                       <td>
                         <span className="qsets-chip qsets-chip--type">{gameTypeLabel(typeId)}</span>
                       </td>
                       <td className="qsets-num">{set.totalQuestions ?? 0}</td>
-                      <td>
-                        <div className="qsets-states">
-                          <button
-                            type="button"
-                            className={`qsets-chip ${set.active ? 'qsets-chip--on' : 'qsets-chip--off'}`}
-                            onClick={() => onToggleActive && onToggleActive(set)}
-                            title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
-                          >
-                            {set.active ? 'Active' : 'Inactive'}
-                          </button>
-                          <button
-                            type="button"
-                            className={`qsets-chip ${set.quickstart ? 'qsets-chip--warn' : 'qsets-chip--off'}`}
-                            onClick={() => onToggleQuickstart && onToggleQuickstart(set, !set.quickstart)}
-                            title="Show this set in the host's quickstart menu"
-                          >
-                            <Icon name="Lightning" weight={set.quickstart ? 'fill' : 'regular'} size={12} color="currentColor" />
-                            Quickstart
-                          </button>
-                          {/*
-                            THE STATES THAT ARE REAL DEFECTS, VISIBLE (mockup 01).
-                            A set that imported zero rows and a set that cannot be
-                            played both read as ordinary rows today.
-                          */}
-                          {!playable && (
-                            <span className="qsets-chip qsets-chip--bad" title={notPlayableReason(typeId)}>
-                              {NOT_PLAYABLE_LABEL}
+                      {!rowActions && (
+                        <td>
+                          <div className="qsets-states">
+                            <button
+                              type="button"
+                              className={`qsets-chip ${set.active ? 'qsets-chip--on' : 'qsets-chip--off'}`}
+                              onClick={() => onToggleActive && onToggleActive(set)}
+                              title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
+                            >
+                              {set.active ? 'Active' : 'Inactive'}
+                            </button>
+                            <button
+                              type="button"
+                              className={`qsets-chip ${set.quickstart ? 'qsets-chip--warn' : 'qsets-chip--off'}`}
+                              onClick={() => onToggleQuickstart && onToggleQuickstart(set, !set.quickstart)}
+                              title="Show this set in the host's quickstart menu"
+                            >
+                              <Icon name="Lightning" weight={set.quickstart ? 'fill' : 'regular'} size={12} color="currentColor" />
+                              Quickstart
+                            </button>
+                            {/*
+                              THE STATES THAT ARE REAL DEFECTS, VISIBLE (mockup 01).
+                              A set that imported zero rows and a set that cannot be
+                              played both read as ordinary rows today.
+                            */}
+                            {!playable && (
+                              <span className="qsets-chip qsets-chip--bad" title={notPlayableReason(typeId)}>
+                                {NOT_PLAYABLE_LABEL}
+                              </span>
+                            )}
+                            {!set.totalQuestions && <span className="qsets-chip qsets-chip--bad">Empty</span>}
+                            {/*
+                              AI, AND WHETHER ANYONE HAS READ IT. A generated set
+                              arrives switched OFF and unreviewed
+                              (admin/shared/generated-set.js, note 2), and until
+                              now the row said only "AI" — the same badge a set
+                              that was generated, reviewed and switched on months
+                              ago carries. The state that changes what to DO is
+                              the unreviewed one, so that is the one that is named.
+                            */}
+                            {set.isAIGenerated && (
+                              set.active === false ? (
+                                <span className="qsets-chip qsets-chip--warn" title="Written by the generator and not reviewed yet.">
+                                  AI draft
+                                </span>
+                              ) : (
+                                <span className="qsets-chip qsets-chip--warn" title="AI-generated content">
+                                  AI
+                                </span>
+                              )
+                            )}
+                            {/*
+                              WHOSE IT IS, ON EVERY ROW — Yours / Team / Engage /
+                              Public. This reverses what was here, which badged
+                              only the rows that were NOT this organisation's, on
+                              the argument that "the common case is the quiet one,
+                              or every row shouts and none of them reads."
+
+                              That argument is right about alarms and wrong about
+                              this. Badging the exceptions makes the chip a
+                              WARNING, so an unbadged row means "no warning" —
+                              which is not the same as "yours", and cannot be told
+                              apart from a badge that failed to render. Tagging
+                              every row makes it a COLUMN: four values, always
+                              present, read once and then scanned.
+
+                              The tone stays binary (see utils/setOwnerTag.js).
+                              Four colours would be a legend to memorise; the only
+                              distinction that changes what you can DO is whether
+                              you must copy it first.
+                            */}
+                            <span
+                              className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
+                              title={set.sourceOrgName ? `Published by ${set.sourceOrgName}` : setOwnerTitle(set)}
+                            >
+                              {setOwnerLabel(set)}
                             </span>
-                          )}
-                          {!set.totalQuestions && <span className="qsets-chip qsets-chip--bad">Empty</span>}
-                          {/*
-                            AI, AND WHETHER ANYONE HAS READ IT. A generated set
-                            arrives switched OFF and unreviewed
-                            (admin/shared/generated-set.js, note 2), and until
-                            now the row said only "AI" — the same badge a set
-                            that was generated, reviewed and switched on months
-                            ago carries. The state that changes what to DO is
-                            the unreviewed one, so that is the one that is named.
-                          */}
-                          {set.isAIGenerated && (
-                            set.active === false ? (
-                              <span className="qsets-chip qsets-chip--warn" title="Written by the generator and not reviewed yet.">
-                                AI draft
-                              </span>
-                            ) : (
-                              <span className="qsets-chip qsets-chip--warn" title="AI-generated content">
-                                AI
-                              </span>
-                            )
-                          )}
-                          {/*
-                            WHOSE IT IS, ON EVERY ROW — Yours / Team / Engage /
-                            Public. This reverses what was here, which badged
-                            only the rows that were NOT this organisation's, on
-                            the argument that "the common case is the quiet one,
-                            or every row shouts and none of them reads."
-
-                            That argument is right about alarms and wrong about
-                            this. Badging the exceptions makes the chip a
-                            WARNING, so an unbadged row means "no warning" —
-                            which is not the same as "yours", and cannot be told
-                            apart from a badge that failed to render. Tagging
-                            every row makes it a COLUMN: four values, always
-                            present, read once and then scanned.
-
-                            The tone stays binary (see utils/setOwnerTag.js).
-                            Four colours would be a legend to memorise; the only
-                            distinction that changes what you can DO is whether
-                            you must copy it first.
-                          */}
-                          <span
-                            className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
-                            title={set.sourceOrgName ? `Published by ${set.sourceOrgName}` : setOwnerTitle(set)}
-                          >
-                            {setOwnerLabel(set)}
-                          </span>
-                        </div>
-                      </td>
+                          </div>
+                        </td>
+                      )}
                       {showVisibility && (() => {
                         const vis = shareStateOf(set);
                         return (

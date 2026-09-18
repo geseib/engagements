@@ -56,12 +56,19 @@ function TakedownDialog({ name, onClose, onConfirm }) {
   // parent then closes this dialog itself, so there is nothing left to do
   // here — and rejects on failure, so the note and the dialog both survive a
   // failed attempt and the confirm button stays live for a retry.
+  // `busy` clears in `finally`, not only in `catch`. On the success path the
+  // parent unmounts this dialog so the clear is usually a no-op — but
+  // "usually" made this dialog's correctness depend on what its parent does
+  // next: an `onConfirm` that resolves WITHOUT closing would leave the confirm
+  // button disabled for ever with no way back. React 18 treats a state update
+  // on an unmounted component as a no-op, so the ordinary path costs nothing.
   const handleConfirm = async () => {
     setBusy(true); setError(null);
     try {
       await onConfirm(note.trim());
     } catch (e) {
       setError(e.message || 'Could not take it down.');
+    } finally {
       setBusy(false);
     }
   };

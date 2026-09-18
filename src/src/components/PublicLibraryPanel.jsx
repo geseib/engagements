@@ -59,12 +59,23 @@ function UnpublishDialog({ set, onClose, onConfirm }) {
   const [error, setError] = useState(null);
   const requestClose = () => { if (!busy) onClose(); };
 
+  /*
+    `busy` is cleared in `finally`, not only in `catch`. On the success path
+    the parent unmounts this dialog, so the clear is usually a no-op — but
+    "usually" is the whole problem: it made the dialog's own correctness depend
+    on what its parent does next. A caller whose `onConfirm` resolves without
+    closing (a soft failure folded into a resolve, a future confirm-and-stay)
+    would leave the confirm button disabled for ever with no way back.
+    React 18 treats a state update on an unmounted component as a no-op, so
+    the ordinary path costs nothing.
+  */
   const handleConfirm = async () => {
     setBusy(true); setError(null);
     try {
       await onConfirm(note.trim());
     } catch (e) {
       setError(e.message || 'Could not unpublish it.');
+    } finally {
       setBusy(false);
     }
   };
@@ -112,8 +123,14 @@ export default function PublicLibraryPanel({ questionSets = [], mode = 'org', on
   // retry, not a reason to unmount the dialog and lose what was typed (R17).
   // A resolved `{ error }` is folded into the same throw, so the dialog does
   // not have to tell rejection and a soft failure apart.
+  // `onUnpublish &&` for the same reason as onCopy/onPreview/onOpenScoreCard
+  // above: every callback into this panel is optional, and an unguarded one
+  // turns a caller's omission into a TypeError thrown inside a dialog whose
+  // own error path would then render "onUnpublish is not a function" to a
+  // reviewer. Absent, the dialog simply closes, which is what the guarded
+  // siblings do too — nothing happened, and nothing claims to have.
   const confirmUnpublish = async (note) => {
-    const result = await onUnpublish(unpublishing, note);
+    const result = onUnpublish && await onUnpublish(unpublishing, note);
     if (result && result.error) throw new Error(result.error);
     setUnpublishing(null);
   };

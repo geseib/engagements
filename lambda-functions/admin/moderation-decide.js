@@ -231,7 +231,7 @@ exports.handler = async (event) => {
 
     if (!OPEN.includes(review.status) && !resumingApprove && !resumingReject && !orphaned) {
       if (review.status === STATUS.PASSED || review.status === STATUS.FLAGGED) {
-        return json(409, { error: `Already decided by ${review.reviewer || 'somebody else'}.`, status: review.status });
+        return json(409, { error: `Already decided by ${review.reviewer || 'somebody else'}.`, status: review.status, reviewer: review.reviewer || '' });
       }
       return json(409, { error: `That entry is not waiting for a decision (status: ${review.status}).`, status: review.status });
     }
@@ -326,7 +326,7 @@ exports.handler = async (event) => {
       });
       if (!moved) {
         const now = await readReview(db, TABLE(), ref, version);
-        return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status });
+        return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status, reviewer: now.reviewer || '' });
       }
       // Ruling R11: logged HERE, right after the transition succeeds — not
       // after publish/stamp, which can still throw and leave a resume with
@@ -349,7 +349,7 @@ exports.handler = async (event) => {
     const moved = await transitionReview(db, TABLE(), ref, version, review.status, { status: STATUS.FLAGGED, reviewer, decidedAt, note });
     if (!moved) {
       const now = await readReview(db, TABLE(), ref, version);
-      return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status });
+      return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status, reviewer: now.reviewer || '' });
     }
     // Ruling R11: logged HERE, right after the transition, same as approve.
     await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note });

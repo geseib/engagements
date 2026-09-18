@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
@@ -26,13 +26,41 @@ const BAND_WORD = { HIGH: 'flagged', MEDIUM: 'uncertain', LOW: 'low', NONE: '' }
 const bandWord = (band) => BAND_WORD[String(band || '').toUpperCase()] || String(band || '').toLowerCase();
 const skUrl = (sk) => adminApiUrl(`admin/moderation/${encodeURIComponent(sk)}`);
 
+/*
+  RULING R21 — A 409 IS NOT ALWAYS SOMEBODY ELSE'S DECISION.
+
+  The server answers 409 in two quite different situations and the dialog used
+  to render both as the same dead end: "Already decided by <name>", both
+  buttons gone, nothing to do but Close.
+
+  One of them is a real race, and a dead end is the right answer. The other is
+  Ruling R9's RESUME: a decision that moved the REVIEW row and then crashed
+  before it finished, which the server will happily complete if the SAME
+  decision is sent again — and `body.status` says which one it wants. Hiding
+  the button that would finish it left the only route back through a refresh
+  and a second click on a row that no longer looked like it needed one.
+
+  So a 409 carrying `passed` or `flagged` keeps exactly the matching button,
+  and says what it will do. A 409 with any other status stays the dead end it
+  was.
+*/
+const RESUME = {
+  passed: { decision: 'approve', past: 'Approved', button: 'Approve' },
+  flagged: { decision: 'reject', past: 'Rejected', button: 'Reject' },
+};
+const resumeSentence = (status, reviewer) => {
+  const words = RESUME[status];
+  return `${words.past}${reviewer ? ` by ${reviewer}` : ''}, but that decision did not finish — ${words.button} again to complete it.`;
+};
+
 function ReviewDialog({ sk, onClose, onDecided }) {
   const [state, setState] = useState('loading');   // loading | ready | error
   const [item, setItem] = useState(null);
   const [error, setError] = useState(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [verdict, setVerdict] = useState(null);      // the 409 sentence
+  const [verdict, setVerdict] = useState(null);      // the 409/404 sentence
+  const [resume, setResume] = useState(null);        // 'approve' | 'reject' — R21
   /*
     requestClose is the DELIBERATE exit — the X and the bottom Close both call
     it, gated only on `busy` (a decision in flight can't be interrupted by a
@@ -62,14 +90,35 @@ function ReviewDialog({ sk, onClose, onDecided }) {
   }, [sk]);
 
   const decide = async (decision) => {
-    setBusy(true); setVerdict(null); setError(null);
+    setBusy(true); setVerdict(null); setResume(null); setError(null);
     try {
       const res = await authFetch(adminApiUrl('admin/moderation/decide'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sk, decision, note: note.trim() }),
       });
       const body = await res.json().catch(() => ({}));
-      if (res.status === 409) { setVerdict(body.error || 'Already decided.'); onDecided({ refreshOnly: true }); return; }
+      /*
+        R21: a 404 here means the QUEUE ROW is gone — the loser of a real race
+        between two reviewers, since the winner's decision deletes it last.
+        That is the same outcome as a 409 and was being rendered as a generic
+        "The decision was not recorded (404)" beside two still-live buttons
+        that could only ever produce the same 404 again. It is a verdict, and
+        the list behind the dialog refreshes so the row goes.
+      */
+      if (res.status === 404) {
+        setVerdict(body.error || 'Already decided — the item is no longer waiting.');
+        onDecided({ refreshOnly: true });
+        return;
+      }
+      if (res.status === 409) {
+        // R21: `passed`/`flagged` is a crashed decision waiting to be resumed,
+        // not a race that has been lost — keep the button that finishes it.
+        const resumable = RESUME[body.status] ? body.status : null;
+        setVerdict(resumable ? resumeSentence(resumable, body.reviewer) : (body.error || 'Already decided.'));
+        setResume(resumable ? RESUME[resumable].decision : null);
+        onDecided({ refreshOnly: true });
+        return;
+      }
       if (!res.ok) { setError(body.error || `The decision was not recorded (${res.status}).`); return; }
       onDecided(body);
     } catch (e) {
@@ -143,24 +192,49 @@ function ReviewDialog({ sk, onClose, onDecided }) {
       </div>
       <footer className="modq-foot">
         <button type="button" className="modq-btn" onClick={requestClose} disabled={busy}>Close</button>
-        {state === 'ready' && !verdict && (
-          <>
-            <button type="button" className="modq-btn modq-btn--danger" onClick={() => decide('reject')} disabled={busy}>Reject</button>
-            {/* Stage 4: "Approve with a content notice" opens the picker inline here. */}
-            <button type="button" className="modq-btn modq-btn--primary" onClick={() => decide('approve')} disabled={busy || !item || !item.snapshot}>Approve</button>
-          </>
+        {/*
+          R21: undecided → both. A resumable 409 → ONLY the one the server is
+          waiting for; offering the other would send a decision it refuses as
+          somebody else's call and put a second dead end on top of the first.
+          Any other verdict → neither, which is the dead end that is correct.
+        */}
+        {state === 'ready' && (!verdict || resume === 'reject') && (
+          <button type="button" className="modq-btn modq-btn--danger" onClick={() => decide('reject')} disabled={busy}>Reject</button>
+        )}
+        {/* Stage 4: "Approve with a content notice" opens the picker inline here. */}
+        {state === 'ready' && (!verdict || resume === 'approve') && (
+          <button type="button" className="modq-btn modq-btn--primary" onClick={() => decide('approve')} disabled={busy || !item || !item.snapshot}>Approve</button>
         )}
       </footer>
     </Modal>
   );
 }
 
-export default function ModerationPanel({ onOpenScoreCard }) {
+/**
+ * `onQueueChanged(count)` — the nav badge's only honest source.
+ *
+ * AdminPage fetches the count ONCE, when staff switch into platform mode, so
+ * the badge could sit on "3" through an entire afternoon of deciding: every
+ * decision here reloads this list and nothing told the nav. Called after every
+ * successful load, including the first, so the badge agrees with the table
+ * beside it rather than with whatever was true when the section opened.
+ * Optional, like every other callback into this panel.
+ */
+export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
   const [queue, setQueue] = useState({ items: [], count: 0, oldestWaitingSince: null });
   const [state, setState] = useState('loading');   // loading | ready | outage
   const [outage, setOutage] = useState('');
   const [open, setOpen] = useState(null);           // the sk under review
   const now = Date.now();
+  /*
+    Held in a ref, not read straight out of the closure, so `load` keeps an
+    empty dependency list. A caller that passes an inline arrow would otherwise
+    hand this component a new `onQueueChanged` on every render — a new `load`,
+    a re-fired effect, a setState, another render: a fetch loop that only shows
+    up at the one call site nobody wrote the test for.
+  */
+  const queueChanged = useRef(onQueueChanged);
+  useEffect(() => { queueChanged.current = onQueueChanged; }, [onQueueChanged]);
 
   const load = useCallback(async () => {
     try {
@@ -178,8 +252,12 @@ export default function ModerationPanel({ onOpenScoreCard }) {
         is appended to the fixed lede rather than replacing it.
       */
       if (!res.ok) { setOutage(body.error ? `Could not read the queue: ${body.error}` : `Could not read the queue (${res.status}).`); setState('outage'); return; }
-      setQueue({ items: body.items || [], count: body.count || 0, oldestWaitingSince: body.oldestWaitingSince || null });
+      const count = body.count || 0;
+      setQueue({ items: body.items || [], count, oldestWaitingSince: body.oldestWaitingSince || null });
       setState('ready');
+      // Only on a SUCCESSFUL read: an outage means the count is unknown, and
+      // reporting 0 there would clear the badge on a failure to look.
+      if (queueChanged.current) queueChanged.current(count);
     } catch (e) { setOutage(`Could not read the queue: ${e.message}`); setState('outage'); }
   }, []);
   useEffect(() => { load(); }, [load]);

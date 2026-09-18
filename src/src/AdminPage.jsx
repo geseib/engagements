@@ -155,10 +155,12 @@ function urlNamesKnownSection() {
   return Boolean(asked) && ADMIN_SECTION_IDS.includes(asked);
 }
 
-/* The four sections that only exist in platform mode. Listed here rather than
+/* The sections that only exist in platform mode. Listed here rather than
    derived from `sectionsFor`, because this is used to decide whether to draw
    the acting-as strip and calling the nav builder again for that would couple
-   a banner to the shape of the nav. */
+   a banner to the shape of the nav. Deliberately not counted in this sentence:
+   it said "the four" while the array held five, which is the reliable fate of
+   a number written beside a list that grows. */
 const PLATFORM_SECTION_IDS = ['orgs', 'publiclibrary', 'moderation', 'users', 'archive'];
 
 function AdminPage() {
@@ -769,6 +771,11 @@ function AdminPage() {
           setEditMode(false);
           setEditingSetId('');
           setEditingSetScope('');
+          // The score card is the Public library's detail place, exactly as
+          // the editor is Question sets'. It was the one this handler forgot,
+          // so Back out of a card and Forward into it again returned to a card
+          // the screen had already stopped naming.
+          setScoreCardId('');
         }
         return next;
       });
@@ -1927,6 +1934,11 @@ function AdminPage() {
           {resolvedTab === 'moderation' && onPlatform && (
             <ModerationPanel
               onOpenScoreCard={(id) => { setScoreCardId(id); setActiveTab('publiclibrary'); }}
+              /* The queue reloads after every decision; without this the nav
+                 badge kept saying whatever the count was when platform mode
+                 was entered. `setModerationCount` is React's own setter and is
+                 stable across renders, which is what the panel's `load` needs. */
+              onQueueChanged={setModerationCount}
             />
           )}
 

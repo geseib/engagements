@@ -3,7 +3,7 @@
    MEASURED (asserted in __tests__/scardPalette.test.js; recomputed with the
    test's own ratio() helper for this fix round — see task-10-fix-round-1-report.md):
      --text on --bg 15.0:1 · --muted on --bg 7.2:1 · --primary on --bg 8.9:1 · --danger-text on --bg 7.3:1
-     --text on --surface 12.5:1 · --muted on --surface 6.1:1 · --scard-success-text on --surface 7.8:1 */
+     --text on --surface 12.5:1 · --muted on --surface 6.1:1 */
 .scard {
   --scard-t-floor: 12px;
   --scard-t-label: 13px;
@@ -11,7 +11,6 @@
   --scard-t-head: 19px;
   --scard-t-title: 24px;
   --scard-row-h: 36px;
-  --scard-success-text: #6FD0A4;
   --scard-rule: rgba(155, 168, 190, .20);
   --scard-rule-strong: rgba(155, 168, 190, .34);
   --scard-row-hover: rgba(155, 168, 190, .055);

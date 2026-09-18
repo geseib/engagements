@@ -270,6 +270,17 @@
    table's edge (__tests__/rowActionsReachable.test.js pins both sums). */
 .qsets-tbl--vis .qsets-col-set   { width: 22%; }
 .qsets-tbl--vis .qsets-col-state { width: 19%; }
+/* R20: a caller that replaces the row actions gets no State column at all (the
+   Active/Quickstart chips are buttons with nowhere to call), so its 26% has to
+   go somewhere or `table-layout: fixed` resolves the shortfall itself and the
+   declared widths stop being widths. Twenty goes to Set, which now carries the
+   publisher as well as the blurb and is the one cell that ellipsizes; eight to
+   the actions, whose widest pair here is "Preview" + "Copy to my team". Never
+   combined with --vis: the public library passes no showVisibility, and the
+   org consoles that do pass no rowActions. Declared last so that if the two
+   ever did meet, the narrower Set would not win by source order. */
+.qsets-tbl--nostate .qsets-col-set  { width: 48%; }
+.qsets-tbl--nostate .qsets-col-acts { width: 22%; }
 
 /* A SINGLE TEXT NODE with min-width:0, never a flex container with span
    children — host spec §5.1, audit A2: `text-overflow` is inert on a flex box,
