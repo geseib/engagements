@@ -65,6 +65,16 @@ const db = DynamoDBDocumentClient.from({});
     }));
     assert.deepStrictEqual(res.Items.map((i) => i.SK), ['a', 'b']);
   });
+  await H.test('a query keyed by :setpk — ddb-delete.js collectPartitionKeys\' placeholder — is honoured too', async () => {
+    H.reset();
+    H.seedRow({ PK: 'ORG#o#SET#s#v1', SK: 'QUESTION#q001', x: 1 });
+    H.seedRow({ PK: 'ORG#o#SET#s#v1', SK: 'QUESTION#q002', x: 2 });
+    H.seedRow({ PK: 'OTHER', SK: 'a', x: 3 });
+    const res = await db.send(new QueryCommand({
+      TableName: 't', KeyConditionExpression: 'PK = :setpk', ExpressionAttributeValues: { ':setpk': 'ORG#o#SET#s#v1' },
+    }));
+    assert.deepStrictEqual(res.Items.map((i) => i.SK), ['QUESTION#q001', 'QUESTION#q002'], 'collectPartitionKeys would silently collect nothing under this harness');
+  });
   await H.test('S3 put then get round-trips a string body', async () => {
     H.reset();
     const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');

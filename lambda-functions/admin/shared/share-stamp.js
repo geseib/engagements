@@ -25,13 +25,25 @@ async function writeShareStamp(db, tableName, sourceRef, stamp, { now = new Date
   }
   const share = Object.fromEntries(FIELDS.filter((f) => stamp[f] !== undefined && stamp[f] !== null).map((f) => [f, stamp[f]]));
   share.at = now.toISOString();
-  await db.send(new UpdateCommand({
-    TableName: tableName,
-    Key: setMetadataKey(sourceRef),
-    UpdateExpression: 'SET #share = :share',
-    ExpressionAttributeNames: { '#share': 'share' },
-    ExpressionAttributeValues: { ':share': share },
-  }));
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: setMetadataKey(sourceRef),
+      UpdateExpression: 'SET #share = :share',
+      ExpressionAttributeNames: { '#share': 'share' },
+      ExpressionAttributeValues: { ':share': share },
+      // The set may have been deleted (or never existed) between whoever read
+      // it and this write — spec §11: the stamp update is conditional and
+      // simply does not apply, rather than upserting a nameless stub row
+      // under ORG#<org>#SETS that the list would then show.
+      ConditionExpression: 'attribute_exists(PK)',
+    }));
+  } catch (error) {
+    if (error && (error.name === 'ConditionalCheckFailedException' || error.code === 'ConditionalCheckFailedException')) {
+      return null;
+    }
+    throw error;
+  }
   return share;
 }
 const readShareStamp = (meta) => (meta && meta.share && typeof meta.share === 'object' ? meta.share : null);

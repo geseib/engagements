@@ -51,6 +51,33 @@ const post = (body, role = 'owner') => H.orgEvent({ orgId: ORG, role, method: 'P
       assert.strictEqual(parse(res).status, status);
     }
   });
+  await H.test('a lost race answers with the status as it now stands, not the one already gone', async () => {
+    await seed(); // flagged
+    // Simulate a concurrent write landing between the handler's own readReview
+    // (line 48) and transitionReview's internal re-read: intercept the SECOND
+    // Get of the REVIEW row (the first is the handler's) and mutate the row
+    // before it is returned, exactly as a racing writer would have.
+    const realSend = db.send.bind(db);
+    let reviewGets = 0;
+    db.send = async (cmd) => {
+      if (cmd && cmd.kind === 'get' && cmd.input && cmd.input.Key && cmd.input.Key.SK === 'REVIEW') {
+        reviewGets += 1;
+        if (reviewGets === 2) {
+          const k = `${cmd.input.Key.PK}|${cmd.input.Key.SK}`;
+          const row = H.state.ddb.get(k);
+          H.state.ddb.set(k, { ...row, status: 'escalated' });
+        }
+      }
+      return realSend(cmd);
+    };
+    try {
+      const res = await handler(post({ version: 2 }), H.ctx());
+      assert.strictEqual(res.statusCode, 409, res.body);
+      assert.strictEqual(parse(res).status, 'escalated', 'echoed the pre-race status instead of the current one');
+    } finally {
+      db.send = realSend;
+    }
+  });
   await H.test('a member cannot appeal; the message is capped at 500 characters', async () => {
     await seed();
     assert.strictEqual((await handler(post({ version: 2 }, 'member'), H.ctx())).statusCode, 403);

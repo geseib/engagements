@@ -33,6 +33,13 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     H.reset();
     await assert.rejects(() => S.writeShareStamp(db, 'engage-test', ORG, { version: 1, status: 'live' }), /refusing/);
   });
+  await H.test('a stamp on a missing row writes no row', async () => {
+    H.reset();
+    // No seedRow: the set was deleted (or never existed) under this key.
+    const result = await S.writeShareStamp(db, 'engage-test', ORG, { version: 1, status: 'checking', jobId: 'j1' });
+    assert.strictEqual(result, null, 'writeShareStamp did not report the missing row');
+    assert.strictEqual(H.state.ddb.get('ORG#org_acme#SETS|SET#pricing'), undefined, 'a stub row was created for a deleted set');
+  });
   await H.test('the daily cap admits `cap` submits and refuses the next', async () => {
     H.reset();
     const now = new Date('2026-09-17T10:00:00.000Z');

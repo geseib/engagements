@@ -157,16 +157,21 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual((await J.getJob(db, T, jobId)).meta.promptDropped, true);
   });
 
-  await H.test('running out of budget stops cleanly and escalates with the reason', async () => {
+  await H.test('running out of budget stops cleanly, escalates with the reason, and spends no more time on Haiku', async () => {
     await seed({ questions: 3 });
-    H.state.guardrailReplies = clean(4);
+    // q1 is a real HIGH hit — so `findings` is non-empty and status lands on
+    // FLAGGED — and the budget still runs out before q2, so `result.stopped`
+    // is true. Haiku must not run either way: BUDGET_FLOOR_MS is 20s and up to
+    // 12 Haiku calls do not fit in a budget already this thin.
+    H.state.guardrailReplies = [H.guardrailHit('VIOLENCE', 'HIGH'), ...clean(3)];
     let remaining = 100000;
     const ctx = { functionName: 'fn', getRemainingTimeInMillis: () => { const r = remaining; remaining = 1000; return r; } };
     await W.runSetCheck(deps, { jobId: await job() }, ctx);
     const r = await review();
-    assert.strictEqual(r.status, R.STATUS.ESCALATED);
+    assert.strictEqual(r.status, R.STATUS.FLAGGED, `status was ${r.status}: ${r.note}`);
     assert.ok(r.reasons.includes('timeout'), `reasons were ${r.reasons}`);
     assert.strictEqual(H.state.sentGuardrail.length, 1, 'the loop did not stop after the first question');
+    assert.strictEqual(H.state.sentHaiku.length, 0, 'Haiku ran after the budget was already spent');
   });
 
   await H.test('a snapshot upload failure escalates and publishes nothing', async () => {
@@ -222,6 +227,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(row.snapshotKey, r.snapshotKey);
     assert.strictEqual(row.title, 'Safety walkthrough');
     assert.strictEqual(row.questionCount, 3);
+    assert.strictEqual(row.gameType, 'trivia', 'the catch path had the snapshot in hand and still left gameType off the queue row');
     assert.ok(H.state.s3.has(`prompts-test/${r.snapshotKey}`), 'the object is orphaned');
     const j = await J.getJob(db, T, jobId);
     assert.strictEqual(j.status, 'error');

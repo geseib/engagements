@@ -112,7 +112,13 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
 
     let status = AS_STATUS[worstOf(result.outcome, setResult.outcome)] || STATUS.ESCALATED;
     if (status !== STATUS.FLAGGED && reasons.length) status = STATUS.ESCALATED;
-    if (status !== STATUS.PASSED) findings = await explainFindings(bedrock, InvokeModelCommand, snapshot, findings);
+    // A budget already declared exhausted (`result.stopped`) is not spent on
+    // up to 12 more round trips to Haiku either — BUDGET_FLOOR_MS is 20s and
+    // that many calls do not fit in it, risking the Lambda being killed before
+    // writeReview below ever runs. The row still gets its outcome; a reviewer
+    // sees the band-only sentence (finding-explanations.js's bandSentence
+    // fallback) instead of the model's explanation.
+    if (status !== STATUS.PASSED && !result.stopped) findings = await explainFindings(bedrock, InvokeModelCommand, snapshot, findings);
 
     await recordUnits(db, tableName, orgId, checked);
     await writeReview(db, tableName, source, version, {
@@ -177,6 +183,9 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         ref: source, version, reason: 'escalated', orgId,
         setId: source.setId,
         title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
+        // The snapshot is already in hand here — free to carry, and the queue
+        // row would otherwise say nothing about what kind of set this is.
+        gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
         questionCount: snapshot ? snapshot.questions.length : 0,
         bands: {}, orgName: await orgName(db, tableName, orgId),
         snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,

@@ -118,7 +118,11 @@ const docClient = {
       }
       case 'query': {
         const v = inp.ExpressionAttributeValues || {};
-        const pk = v[':pk']; const prefix = v[':sk'] || '';
+        // ddb-delete.js's collectPartitionKeys names its placeholder `:setpk`,
+        // not `:pk` — accept either so a caller that queries a whole partition
+        // for deletion (unpublishSet among them) is not silently answered [].
+        const pk = v[':pk'] !== undefined ? v[':pk'] : v[':setpk'];
+        const prefix = v[':sk'] || '';
         const items = [...state.ddb.values()]
           .filter((i) => i.PK === pk && String(i.SK).startsWith(String(prefix)))
           .sort((a, b) => (a.SK < b.SK ? -1 : a.SK > b.SK ? 1 : 0))

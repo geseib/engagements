@@ -52,7 +52,13 @@ exports.handler = async (event) => {
     const moved = await transitionReview(db, TABLE(), source, version, STATUS.FLAGGED, {
       status: STATUS.APPEALED, appealMessage: message, appealedBy: callerUserId(event) || null, appealedAt: new Date().toISOString(),
     });
-    if (!moved) return json(409, { error: 'This version changed while you were writing. Reload and try again.', status: current.status });
+    if (!moved) {
+      // `current` is the status as it stood before the race, not after it —
+      // re-read so a caller told "reload and try again" is told what it would
+      // actually see.
+      const now = await readReview(db, TABLE(), source, version);
+      return json(409, { error: 'This version changed while you were writing. Reload and try again.', status: now.status });
+    }
 
     const plainMeta = await decryptItem(orgId, 'set', meta);
     const orgRow = (await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: tenant.orgPk(orgId), SK: 'METADATA' } }))).Item;

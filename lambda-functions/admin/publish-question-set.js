@@ -129,6 +129,31 @@ async function share(event, source, pubRef, orgId, setId) {
   const snapshot = buildSnapshot({ source, version, meta: plainMeta, categories, questions });
   snapshot.contentHash = contentHash(snapshot);
 
+  /*
+   * THE RE-SHARE GATE [R25]. `mayPublish` above only asks whether this version
+   * was ever judged PASSED — it says nothing about whether the judged content
+   * is what this call is about to publish. The version's question rows are
+   * immutable, but the set-level prose (name, description, custom/AI-context
+   * instructions, round brief) is edited in place with no new version
+   * (edit-question-set.js), and that prose IS part of what the guardrail
+   * judged (publishable.js's SET_FIELDS). So: submit v2 -> passes -> publish
+   * -> edit the description -> unpublish -> `POST /publish {version:2}` would
+   * otherwise republish the new, unjudged prose under the old verdict.
+   *
+   * [R2] recorded the hash rather than gating on it, on the premise that
+   * publish always reads from the S3 snapshot. This path does not (that read
+   * is Stage 2) — it rebuilds from the live org partition, which is exactly
+   * what makes the edit-after-check window real. An older `passed` review
+   * with no recorded hash (every row from before [R2] shipped) carries no
+   * hash to compare and is unaffected.
+   */
+  if (review.contentHash && review.contentHash !== snapshot.contentHash) {
+    return json(409, {
+      error: 'This set has changed since it was checked. Submit it for review again.',
+      status: review.status,
+    });
+  }
+
   const promptDropped = Boolean(plainMeta.promptId) && !(await platformPromptExists(db, TABLE(), plainMeta.promptId));
   const orgRow = (await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: tenant.orgPk(orgId), SK: 'METADATA' } }))).Item;
   const published = await publishSnapshot(db, TABLE(), snapshot, {

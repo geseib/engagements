@@ -118,6 +118,7 @@ process.env.TENANT_KMS_KEY_ID = 'alias/test-tenant-key';
 
 const publish = require(path.join(REPO, 'lambda-functions/admin/publish-question-set.js')).handler;
 const R = require(path.join(REPO, 'lambda-functions/admin/shared/set-review.js'));
+const Pub = require(path.join(REPO, 'lambda-functions/admin/shared/publishable.js'));
 
 let pass = 0; let fail = 0;
 const say = console.log;
@@ -178,6 +179,16 @@ async function seed({ reviewStatus = R.STATUS.PASSED } = {}) {
 const publicRows = () => [...store.values()].filter((i) => String(i.PK).startsWith('PUBLIC#'));
 const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
 
+/** The hash `share()` would compute right now, from the live org-side rows —
+ *  the same `buildSnapshot` + `contentHash` the handler itself calls. */
+function currentHash() {
+  const meta = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+  const rows = [...store.values()].filter((i) => i.PK === `ORG#${ORG}#SET#${SET}#v2`);
+  const categories = rows.filter((r) => String(r.SK).startsWith('CATEGORY#'));
+  const questions = rows.filter((r) => String(r.SK).startsWith('QUESTION#'));
+  return Pub.contentHash(Pub.buildSnapshot({ source: ORG_REF, version: 2, meta, categories, questions }));
+}
+
 (async () => {
   say('\npublishing a set\n');
 
@@ -203,6 +214,47 @@ const publicMeta = () => publicRows().find((i) => i.PK === 'PUBLIC#SETS');
   }
   await check('a passed version publishes', async () => {
     await seed();
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+  });
+
+  say('\n1b. a passed review is checked against the LIVE content, not just its status [R25]');
+  /*
+    [R2] made the content hash a record on the review row rather than a gate,
+    on the premise that publish always runs from the S3 snapshot. It does not
+    (that read is Stage 2) — it rebuilds from the live org partition, and the
+    set-level prose (name, description, …) is edited in place with no new
+    version. So an edit after the passed review used to republish unjudged
+    prose on a bare `POST /publish {version}`. Ruling R25: gate on the hash
+    when the review row carries one; a passed row with none (the fixture
+    above, and every pre-hash row) is unaffected.
+  */
+  await check('a passed review whose hash matches the live content publishes as today', async () => {
+    await seed();
+    const hash = currentHash();
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, { status: R.STATUS.PASSED, contentHash: hash });
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+  });
+  await check('editing the set after the passed review is refused, not silently republished', async () => {
+    await seed();
+    const hash = currentHash();
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, { status: R.STATUS.PASSED, contentHash: hash });
+    // The prose edit `edit-question-set.js` makes in place — no new version,
+    // so the gate above (which only reads `activeVersion`/review status) would
+    // otherwise wave this straight through.
+    const row = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    store.set(key(`ORG#${ORG}#SETS`, `SET#${SET}`), { ...row, description: 'A totally different pitch, written after the check passed.' });
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /changed since it was checked/);
+    assert.strictEqual(parse(res).status, R.STATUS.PASSED);
+    assert.deepStrictEqual(publicRows(), [], 'the edited, unjudged content reached the public partition');
+  });
+  await check('an older passed review with no recorded hash is unaffected by the gate', async () => {
+    await seed(); // seed()'s writeReview carries no contentHash at all
+    const row = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    store.set(key(`ORG#${ORG}#SETS`, `SET#${SET}`), { ...row, description: 'Edited after a pre-hash review.' });
     const res = await publish(owner({ version: 2 }));
     assert.strictEqual(res.statusCode, 201, res.body);
   });
