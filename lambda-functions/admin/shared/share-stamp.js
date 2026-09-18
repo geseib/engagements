@@ -19,24 +19,28 @@ const { setMetadataKey } = require('./set-version');
 const SHARE_STATUSES = Object.freeze(['checking', 'passed', 'published', 'flagged', 'escalated', 'appealed', 'unpublished']);
 const FIELDS = Object.freeze(['version', 'status', 'publicSetId', 'publicVersion', 'note', 'contentHash', 'jobId', 'reasons']);
 
-async function writeShareStamp(db, tableName, sourceRef, stamp, { now = new Date() } = {}) {
+async function writeShareStamp(db, tableName, sourceRef, stamp, { now = new Date(), onlyIfPublicSetId = '' } = {}) {
   if (!SHARE_STATUSES.includes(stamp && stamp.status)) {
     throw new Error(`share-stamp: refusing status ${JSON.stringify(stamp && stamp.status)}`);
   }
   const share = Object.fromEntries(FIELDS.filter((f) => stamp[f] !== undefined && stamp[f] !== null).map((f) => [f, stamp[f]]));
   share.at = now.toISOString();
+  // TAKEDOWN'S GUARD (D11): the stamp is flagged only if the org row still
+  // points at the public set being taken down. An org that has since re-shared
+  // as a different public set keeps its newer stamp; the takedown still runs.
+  const guard = String(onlyIfPublicSetId || '').trim();
   try {
     await db.send(new UpdateCommand({
       TableName: tableName,
       Key: setMetadataKey(sourceRef),
       UpdateExpression: 'SET #share = :share',
       ExpressionAttributeNames: { '#share': 'share' },
-      ExpressionAttributeValues: { ':share': share },
+      ExpressionAttributeValues: guard ? { ':share': share, ':pub': guard } : { ':share': share },
       // The set may have been deleted (or never existed) between whoever read
       // it and this write — spec §11: the stamp update is conditional and
       // simply does not apply, rather than upserting a nameless stub row
       // under ORG#<org>#SETS that the list would then show.
-      ConditionExpression: 'attribute_exists(PK)',
+      ConditionExpression: guard ? 'attribute_exists(PK) AND #share.publicSetId = :pub' : 'attribute_exists(PK)',
     }));
   } catch (error) {
     if (error && (error.name === 'ConditionalCheckFailedException' || error.code === 'ConditionalCheckFailedException')) {

@@ -105,5 +105,29 @@ const db = DynamoDBDocumentClient.from({});
     assert.ok(refused && refused.name === 'ConditionalCheckFailedException', 'the bare equality condition was not enforced');
     assert.strictEqual(H.state.ddb.get('B|REVIEW').status, 'appealed');
   });
+  await H.test('a condition resolves a nested path (#s.publicSetId) through the item, both ways', async () => {
+    H.reset();
+    H.seedRow({ PK: 'C', SK: 'SET#x', share: { publicSetId: 'pub1' } });
+    await db.send(new UpdateCommand({
+      TableName: 't', Key: { PK: 'C', SK: 'SET#x' },
+      UpdateExpression: 'SET touched = :yes',
+      ExpressionAttributeNames: { '#s': 'share' },
+      ExpressionAttributeValues: { ':yes': true, ':p': 'pub1' },
+      ConditionExpression: 'attribute_exists(PK) AND #s.publicSetId = :p',
+    }));
+    assert.strictEqual(H.state.ddb.get('C|SET#x').touched, true, 'the matching nested condition was refused');
+    let refused = null;
+    try {
+      await db.send(new UpdateCommand({
+        TableName: 't', Key: { PK: 'C', SK: 'SET#x' },
+        UpdateExpression: 'SET touched = :no',
+        ExpressionAttributeNames: { '#s': 'share' },
+        ExpressionAttributeValues: { ':no': false, ':p': 'somebody-else' },
+        ConditionExpression: 'attribute_exists(PK) AND #s.publicSetId = :p',
+      }));
+    } catch (e) { refused = e; }
+    assert.ok(refused && refused.name === 'ConditionalCheckFailedException', 'the mismatched nested condition was not refused');
+    assert.strictEqual(H.state.ddb.get('C|SET#x').touched, true, 'the refused update must not have applied');
+  });
   H.summary();
 })();

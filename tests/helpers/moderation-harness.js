@@ -33,6 +33,24 @@ class BatchWriteCommand extends Cmd { constructor(i) { super('batchWrite', i); }
 const conditionFailed = () => Object.assign(new Error('The conditional request failed'), { name: 'ConditionalCheckFailedException' });
 const resolveName = (token, names) => (names && names[token]) || token;
 const resolveValue = (token, values) => (values && token in values ? values[token] : token);
+/**
+ * Resolve a (possibly `#name`-substituted) attribute PATH — e.g.
+ * `#share.publicSetId` — into the item's value at that path. Each
+ * dot-separated segment is name-substituted independently, then the item is
+ * walked segment by segment; a missing or non-object intermediate resolves to
+ * undefined rather than throwing. For a plain, undotted token this is exactly
+ * `item[resolveName(token, names)]`, so every existing bare-name condition is
+ * unaffected.
+ */
+function resolvePath(token, names, item) {
+  const segments = String(token).split('.').map((seg) => resolveName(seg, names));
+  let cur = item;
+  for (const seg of segments) {
+    if (cur === undefined || cur === null || typeof cur !== 'object') return undefined;
+    cur = cur[seg];
+  }
+  return cur;
+}
 
 /** One-level `A OR B OR C` / `A AND B`; clauses: attribute_(not_)exists, =, <>, <, <=, >, >=, IN. */
 function evalCondition(expr, item, names, values) {
@@ -49,7 +67,7 @@ function evalCondition(expr, item, names, values) {
     return m[2].split(',').map((s) => resolveValue(s.trim(), values)).includes(v);
   }
   if ((m = /^(\S+)\s*(<>|<=|>=|=|<|>)\s*(\S+)$/.exec(c))) {
-    const left = item ? item[resolveName(m[1], names)] : undefined;
+    const left = item ? resolvePath(m[1], names, item) : undefined;
     const right = resolveValue(m[3], values);
     if (left === undefined) return false;
     switch (m[2]) {
