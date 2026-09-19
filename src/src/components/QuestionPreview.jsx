@@ -207,6 +207,12 @@ export default function QuestionPreview({
   return (
     <div className="qprev" data-theme="light" data-testid="question-preview" onKeyDown={onKeyDown}>
       <div className="qprev-list">
+        {/* ESCAPE CLEARS THE SEARCH, AND STOPS HERE — while there is a search to
+            clear. The editor can be a dialog (the host shelf), and components/
+            Modal.jsx closes it on an Escape heard at `document` when nothing is
+            unsaved, so an Escape meant for this box closed the whole editor. An
+            empty box has nothing to clear, and its Escape goes on to the dialog
+            as one pressed anywhere else in the editor would. */}
         <input
           type="search"
           className="qprev-search"
@@ -214,6 +220,12 @@ export default function QuestionPreview({
           aria-label="Search titles and details"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape' || !search) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setSearch('');
+          }}
         />
         {categories.length > 1 && (
           <div className="qprev-chips" role="group" aria-label="Category">

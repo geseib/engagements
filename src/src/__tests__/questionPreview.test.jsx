@@ -88,6 +88,27 @@ describe('the list — the in-session browser\'s mechanics', () => {
     expect(options()[0]).toHaveTextContent('The Green River case');
   });
 
+  test('Escape clears a search with text in it and stops there; an empty box lets it through', () => {
+    // rejects: the Escape reaching `document`, where a dialog around the
+    // editor (components/Modal.jsx) closes on it — and rejects stopping every
+    // Escape, which would take the dialog's keyboard exit away.
+    const heard = jest.fn();
+    document.addEventListener('keydown', heard);
+    try {
+      renderPreview();
+      const box = screen.getByRole('searchbox');
+      fireEvent.change(box, { target: { value: 'green river' } });
+      fireEvent.keyDown(box, { key: 'Escape' });
+      expect(box).toHaveValue('');
+      expect(options()).toHaveLength(3);
+      expect(heard).not.toHaveBeenCalled();
+      fireEvent.keyDown(box, { key: 'Escape' });
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener('keydown', heard);
+    }
+  });
+
   test('category chips narrow the list, and pressing the lit one returns to All', () => {
     renderPreview();
     const chips = within(screen.getByRole('group', { name: 'Category' }));

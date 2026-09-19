@@ -628,6 +628,42 @@ describe('a host edits the questions in a set they own', () => {
     expect(screen.getByTestId('unsaved-bar')).toBeTruthy();
   });
 
+  /*
+   * ESCAPE IN THE PREVIEW'S SEARCH. The editor's Modal answers Escape on
+   * `document` and closes when nothing is unsaved, so an Escape meant for the
+   * search box closed the whole editor. The box answers it first while it
+   * holds text; an empty box has nothing to clear and passes it on.
+   */
+  const previewSearch = () => {
+    fireEvent.click(within(screen.getByRole('group', { name: 'How the questions are shown' }))
+      .getByRole('button', { name: 'Preview' }));
+    return screen.getByRole('searchbox', { name: 'Search titles and details' });
+  };
+
+  test('Escape in the preview\'s search, with text in it, clears the search and leaves the editor open', async () => {
+    // rejects: the Escape reaching the editor's dialog — nothing is unsaved,
+    // so it closed, and clearing a search cost the host the editor.
+    await openDialog();
+    await openEditor();
+    const box = previewSearch();
+    fireEvent.change(box, { target: { value: 'wrong' } });
+    expect(screen.getByTestId('preview-count')).toHaveTextContent('Showing 1 of 2');
+    fireEvent.keyDown(box, { key: 'Escape' });
+    expect(box).toHaveValue('');
+    expect(screen.getByTestId('preview-count')).toHaveTextContent('Showing 2 of 2');
+    expect(screen.getByTestId('questions-panel')).toBeTruthy();
+  });
+
+  test('Escape in an empty preview search goes through to the editor, as it does anywhere else in it', async () => {
+    // rejects: the box swallowing every Escape, which would leave the host no
+    // keyboard way out from the one control that has focus.
+    await openDialog();
+    await openEditor();
+    fireEvent.keyDown(previewSearch(), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
+  });
+
   test('Escape declines while an unsaved working copy is open', async () => {
     // THE WORK-LOSS GUARD. The Questions panel holds edits that exist nowhere
     // but this tab; the editor's own Cancel asks before dropping them, and
