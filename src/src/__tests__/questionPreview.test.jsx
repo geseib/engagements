@@ -179,6 +179,21 @@ describe('selection', () => {
       fireEvent.keyDown(listbox(), { key: 'ArrowDown' });
       expect(cardTitle()).toBe('The Green River case');
       expect(heard).not.toHaveBeenCalled();
+
+      // AND WITH NOTHING VISIBLE TO STEP THROUGH. rejects: returning before the
+      // key is stopped when the search matches nothing — the key is still the
+      // preview's, and it still turned the projector's page.
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz' } });
+      expect(screen.queryByRole('listbox')).toBeNull();
+      for (const target of [
+        screen.getByRole('button', { name: 'Clear search' }),
+        screen.getByRole('button', { name: 'All' }),
+        screen.getByRole('button', { name: 'Reveal' }),
+      ]) {
+        fireEvent.keyDown(target, { key: 'ArrowDown' });
+        fireEvent.keyDown(target, { key: 'ArrowUp' });
+      }
+      expect(heard).not.toHaveBeenCalled();
     } finally {
       window.removeEventListener('keydown', heard);
     }

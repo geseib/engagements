@@ -80,8 +80,9 @@ export function QuestionViewSwitch({ mode = 'table', onChange, previewBlocked = 
  * ↑ / ↓ STOP HERE. They are handled on this root and never reach a window
  * listener — the stage's pager pages on a bare ↑/↓ (config/stagePaging.js
  * `pageIntentFor`), and a preview key must never turn a page on a projector.
- * They step through the VISIBLE rows, wrap at the ends, and belong to the field
- * instead whenever focus is in something the person types into.
+ * That holds with nothing visible to step through, too. They step through the
+ * VISIBLE rows, wrap at the ends, and belong to the field instead whenever
+ * focus is in something the person types into.
  *
  * `selectRequest` is `{ uid }` — "Edit Q14" from the needs-changes banner
  * (components/SetReviewBanner.jsx), which the Questions tab resolves to a row of
@@ -182,11 +183,15 @@ export default function QuestionPreview({
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
     if (isTextEntry(event.target)) return;
+    // Stopped FIRST, whether or not there is anything to step to. With nothing
+    // visible the key is still the preview's, and a window listener — the
+    // stage's pager — would otherwise hear it and turn the projector's page.
+    // Only a step takes the key's default (the page's own scroll) with it.
+    event.stopPropagation();
     const next = stepSelection(visible.map((r) => r.id), selected ? selected.id : null,
       event.key === 'ArrowDown' ? 1 : -1);
     if (!next) return;
     event.preventDefault();
-    event.stopPropagation();
     setSelectedId(next);
     const el = document.getElementById(optionDomId(next));
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
