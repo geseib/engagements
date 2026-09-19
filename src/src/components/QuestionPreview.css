@@ -163,6 +163,9 @@
 .qprev-detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .qprev-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .qprev-pos { font-size: var(--qprev-t-label); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* overflow: hidden gives the pressed tint the group's rounded corners. It also
+   clips whatever a segment draws outside itself — its focus ring included,
+   which is why that ring is drawn inside the segment (below). */
 .qprev-seg,
 .qprev-switch {
   display: inline-flex;
@@ -208,6 +211,12 @@
 .qprev-link:focus-visible,
 .qprev-search:focus-visible,
 .qprev-rows:focus-visible { outline: 2px solid var(--qprev-accent); outline-offset: 2px; }
+/* A SEGMENT'S RING IS DRAWN INSIDE IT. The segment sits flush on its group's
+   clipped edge, so a ring offset outward loses its top, bottom and outer end
+   and survives only as a bar inside the NEIGHBOURING segment — pointing at the
+   wrong control. Every other control here keeps the outward ring; none of
+   their containers clips. */
+.qprev-seg-btn:focus-visible { outline-offset: -2px; }
 
 /* -- the screen ------------------------------------------------------------ */
 /* The ground and the box. The inheritable typography is restated because the

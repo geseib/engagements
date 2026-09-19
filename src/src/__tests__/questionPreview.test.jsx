@@ -351,6 +351,102 @@ describe('the view switch', () => {
   });
 });
 
+/*
+ * WHAT THE SHEET DOES TO THE MARKUP. jsdom loads no stylesheet and lays nothing
+ * out, so these read QuestionPreview.css as text and hold the rendered markup
+ * to what it declares. Green means the markup and the sheet still agree; it
+ * cannot show how a browser paints the ring.
+ */
+const SHEET = require('fs')
+  .readFileSync(require('path').join(__dirname, '..', 'components', 'QuestionPreview.css'), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** Every rule in the sheet, in source order. An @media prelude is dropped; its rules are kept. */
+const RULES = [...SHEET.replace(/@media[^{]*\{/g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .map(([, head, body]) => ({ selectors: head.split(',').map((s) => s.trim()), body }));
+
+/**
+ * The value the sheet last gives `prop` in a rule naming one of `selectors`
+ * exactly. Every selector that could match here is one class, or one class and
+ * a pseudo-class, so source order is the cascade.
+ */
+function declared(selectors, prop) {
+  let value = null;
+  for (const rule of RULES) {
+    if (!rule.selectors.some((s) => selectors.includes(s))) continue;
+    const m = rule.body.match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
+    if (m) value = m[1].trim();
+  }
+  return value;
+}
+
+describe('what the sheet does to the markup', () => {
+  const classes = (el) => [...el.classList].map((c) => `.${c}`);
+  const ancestors = (el) => {
+    const out = [];
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) out.push(node);
+    return out;
+  };
+  const name = (el) => el.getAttribute('aria-label') || el.textContent.trim();
+  /** What a keyboard can land on, in document order. */
+  const controls = () => [...document.body.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
+    .filter((el) => !el.disabled && el.tabIndex >= 0);
+  /** Does the sheet clip this element's descendants — outlines included? */
+  const clips = (el) => ['overflow', 'overflow-x', 'overflow-y']
+    .some((prop) => /^(hidden|clip|auto|scroll)\b/.test(declared(classes(el), prop) || ''));
+  /** The ring the sheet draws when `el` has keyboard focus. */
+  const ringOf = (el) => {
+    const focus = classes(el).map((c) => `${c}:focus-visible`);
+    return {
+      outline: declared(focus, 'outline'),
+      offset: declared(focus, 'outline-offset'),
+      shadow: declared(focus, 'box-shadow'),
+    };
+  };
+  const px = (value) => Number((String(value || '').match(/-?[\d.]+(?=px)/) || [0])[0]);
+  const hasOutline = ({ outline }) => Boolean(outline) && !/^(none|0)\b/.test(outline);
+  const drawsRing = (ring) => hasOutline(ring) || (Boolean(ring.shadow) && ring.shadow !== 'none');
+  /** Entirely inside the control's own border edge, where no ancestor's clip can reach it. */
+  const drawnInside = (ring) => (hasOutline(ring)
+    ? px(ring.offset) + px(ring.outline) <= 0
+    : /\binset\b/.test(ring.shadow || ''));
+
+  const renderEverything = () => render(
+    <>
+      <QuestionViewSwitch mode="preview" onChange={() => {}} />
+      <QuestionPreview rows={makeRows()} gameType="trivia" setId={SET_ID} onEditQuestion={() => {}} />
+    </>
+  );
+
+  test('every control a keyboard can reach draws a focus ring', () => {
+    renderEverything();
+    const reached = new Set(controls());
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz' } });   // brings "Clear search"
+    controls().forEach((el) => reached.add(el));
+    // the premise, so this cannot pass by reaching nothing
+    expect([...reached].map(name)).toEqual(expect.arrayContaining([
+      'Table', 'Preview', 'Search titles and details', 'All', 'Questions', 'ASK', 'Reveal',
+      'Edit this question', 'Clear search',
+    ]));
+    expect([...reached].filter((el) => !drawsRing(ringOf(el))).map(name)).toEqual([]);
+  });
+
+  test('a control whose container clips draws its ring inside itself, where the clip cannot cut it', () => {
+    // rejects: the outward ring on a segment. The segmented groups clip — so
+    // the pressed tint takes their rounded corners — and a segment sits flush
+    // on that edge: an outward ring loses its top, bottom and outer end, and
+    // survives only as a bar inside the NEIGHBOURING segment, pointing at the
+    // wrong control. Seen in Chromium on ASK, Reveal, Table and Preview.
+    renderEverything();
+    const clipped = controls().filter((el) => ancestors(el).some(clips));
+    // the premise: the groups do clip, so this cannot pass by finding nothing
+    expect(clipped.map(name)).toEqual(expect.arrayContaining(['Table', 'Preview', 'ASK', 'Reveal']));
+    expect(clipped.filter((el) => !drawnInside(ringOf(el))).map(
+      (el) => `${name(el)}: outline ${ringOf(el).outline}, offset ${ringOf(el).offset}`,
+    )).toEqual([]);
+  });
+});
+
 describe('the list, as data (config/questionPreview.js)', () => {
   test('previewRows: keyed by uid, tombstones dropped, and no answer in any value', () => {
     const rows = makeRows();
