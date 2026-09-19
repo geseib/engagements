@@ -115,6 +115,29 @@ export function nothingToPreview(rows = []) {
     + 'Restore one in the Table, or discard your changes.';
 }
 
+/** A question's reveal — `answerDetails`, trimmed — or '' when it has none. */
+export function revealText(row) {
+  return String((row && row.answerDetails) || '').trim();
+}
+
+/**
+ * IS THERE ANYTHING BEHIND [Reveal]? The control is offered only when there is
+ * (a control that does nothing is not rendered), and there is in two cases:
+ *
+ *   trivia       every question has its answer: the correct option, marked.
+ *   any format   a question that carries a reveal. An art set is
+ *                call-and-answer and keeps the artwork's real title there, so
+ *                gating on trivia alone — the spec's first rule, corrected
+ *                2026-09-19 — left an art answer impossible to preview.
+ *
+ * Decided for the SET — every question not marked for removal — never for the
+ * question on the card, so the control does not come and go while paging.
+ */
+export function canReveal(rows = [], gameType = '') {
+  if (gameType === 'trivia') return true;
+  return rows.some((row) => row && !row.removed && revealText(row) !== '');
+}
+
 /** The categories the rows actually use, in the order they first appear. */
 export function previewCategories(listRows = []) {
   const seen = [];

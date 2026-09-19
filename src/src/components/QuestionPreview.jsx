@@ -5,6 +5,7 @@ import { filterBrowserRows } from '../config/setupPanel';
 import { resolveInstruction } from '../config/instructions';
 import {
   stagedQuestion, previewRows, previewCategories, stepSelection, refindPlace, nothingToPreview,
+  canReveal, revealText,
 } from '../config/questionPreview';
 import { savedKeys } from '../utils/questionRows';
 import './QuestionPreview.css';
@@ -177,7 +178,11 @@ export default function QuestionPreview({
 
   const selectedRow = selected ? rows.find((r) => r.uid === selected.id) || null : null;
   const staged = selectedRow ? stagedQuestion(selectedRow, { setId }) : null;
-  const reveal = gameType === 'trivia' && phase === 'REVEAL';
+  // Offered for the SET, not the question on the card (config/questionPreview.js
+  // `canReveal`): trivia always, any other format once a question carries a
+  // reveal, so the control holds still while paging.
+  const revealable = useMemo(() => canReveal(rows, gameType), [rows, gameType]);
+  const reveal = revealable && phase === 'REVEAL';
 
   const onKeyDown = (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -301,7 +306,7 @@ export default function QuestionPreview({
 
       <div className="qprev-detail">
         <div className="qprev-bar">
-          {gameType === 'trivia' && (
+          {revealable && (
             <div className="qprev-seg" role="group" aria-label="What the card shows">
               <button
                 type="button"
@@ -341,12 +346,16 @@ export default function QuestionPreview({
             every question you move to arrives already revealed. The options
             alone would be four answers with nothing saying what was asked; the
             card draws the question above them in ASK's own lines, as the spec's
-            §1 sketch has it. */}
+            §1 sketch has it.
+            ONLY TRIVIA'S CARD CHANGES IN REVEAL. Its answer is on the card: the
+            correct option, marked. Any other format's reveal is text the stage
+            never draws at RESULTS — an art set's real title, say — so its card
+            stays exactly as in ASK and the reveal is the note below. */}
         <div className="qprev-screen stage-ladder-table" data-theme="dark" data-testid="preview-screen">
           {staged ? (
             <div className="qprev-card">
               <QuestionCard
-                phase={reveal ? 'REVEAL' : 'ASK'}
+                phase={reveal && gameType === 'trivia' ? 'REVEAL' : 'ASK'}
                 question={staged}
                 gameType={gameType}
                 instruction={resolveInstruction(staged, setInstruction, gameType)}
@@ -361,10 +370,10 @@ export default function QuestionPreview({
         {/* NOT ON THE SCREEN, AND SAID SO. The stage's RESULTS never shows the
             reveal text — it reaches players only in the round report — so it
             sits below and outside the screen, under the editor's own words. */}
-        {reveal && selectedRow && selectedRow.answerDetails && (
+        {reveal && revealText(selectedRow) && (
           <p className="qprev-note" data-testid="preview-note">
             <b>Reveal — shown only after the round</b>
-            {selectedRow.answerDetails}
+            {revealText(selectedRow)}
           </p>
         )}
       </div>

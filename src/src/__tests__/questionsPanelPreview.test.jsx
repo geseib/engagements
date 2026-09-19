@@ -225,12 +225,29 @@ describe('the preview reads the working copy', () => {
     expect(card().querySelector('.opt.correct .txt')).toHaveTextContent('David Berkowitz');
   });
 
-  test('a call-and-answer set has nothing to reveal', async () => {
+  test('a call-and-answer set with no reveal written on any question has nothing to reveal', async () => {
     mockApi();
     renderPanel({ questionSet: { ...SET, engagementType: 'call-and-answer' } });
     await ready();
     fireEvent.click(views().getByRole('button', { name: 'Preview' }));
     expect(screen.queryByRole('group', { name: 'What the card shows' })).toBeNull();
+  });
+
+  test('an art set, which is call-and-answer with the real title kept as its reveal, can be revealed', async () => {
+    // rejects: the Reveal gated on trivia, which no art set ever is.
+    mockApi({
+      setId: 'masterpieces',
+      questions: [{
+        id: 'c001#001', Category: 'Renaissance', title: 'THE ENIGMATIC SMILE', School: 'Leonardo da Vinci',
+        Image: 'smile.jpg', AnswerDetails: 'Real title: Mona Lisa. Stolen from the Louvre in 1911.',
+      }],
+    });
+    renderPanel({ questionSet: { ...SET, id: 'masterpieces', engagementType: 'call-and-answer', customInstruction: '' } });
+    await screen.findByText('THE ENIGMATIC SMILE');
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'What the card shows' })).getByRole('button', { name: 'Reveal' }));
+    expect(card().querySelector('img.stage-art')).toHaveAttribute('src', 'sets/masterpieces/smile.jpg');
+    expect(screen.getByTestId('preview-note')).toHaveTextContent('Real title: Mona Lisa.');
   });
 
   test('the how-to-answer line is the question\'s own, else the set\'s', async () => {

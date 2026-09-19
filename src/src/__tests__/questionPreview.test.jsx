@@ -356,16 +356,62 @@ describe('the card', () => {
 describe('ASK and Reveal', () => {
   const phaseGroup = () => screen.queryByRole('group', { name: 'What the card shows' });
 
-  test('only trivia has anything to reveal, so only trivia gets the toggle', () => {
-    const { unmount } = renderPreview();
-    expect(phaseGroup()).not.toBeNull();
+  test('the toggle is offered wherever there is something to reveal: trivia always, any format with a reveal written', () => {
+    // CORRECTED 2026-09-19. This test was "only trivia has anything to reveal"
+    // — the spec's rule, and wrong: an art set is call-and-answer and keeps the
+    // artwork's real title in answerDetails. What it guarded still holds: with
+    // nothing behind it, there is no control.
+    const noReveal = () => makeRows().map((r) => ({ ...r, answerDetails: '' }));
+    const { unmount } = renderPreview({ rows: noReveal() });
+    expect(phaseGroup()).not.toBeNull();                        // trivia: the answer itself
     expect(within(phaseGroup()).getByRole('button', { name: 'ASK' })).toHaveAttribute('aria-pressed', 'true');
     unmount();
     for (const gameType of ['call-and-answer', 'poll', 'wavelength']) {
-      const view = renderPreview({ gameType });
-      expect(phaseGroup()).toBeNull();
-      view.unmount();
+      const bare = renderPreview({ gameType, rows: noReveal() });
+      expect(phaseGroup()).toBeNull();                          // nothing to reveal, no control
+      bare.unmount();
+      const revealing = renderPreview({ gameType });            // makeRows()[0] carries a reveal
+      expect(phaseGroup()).not.toBeNull();
+      revealing.unmount();
     }
+    // A reveal on a question marked for removal is not one: it will not exist once saved.
+    const rows = makeRows();
+    rows[0] = { ...rows[0], removed: true };
+    renderPreview({ gameType: 'call-and-answer', rows });
+    expect(phaseGroup()).toBeNull();
+  });
+
+  test('an art set reveals the artwork\'s real title: the card as in ASK, and the reveal below it', () => {
+    // rejects: gating Reveal on trivia, which left the preview no way to show
+    // an art answer — and rejects drawing it ON the card: the stage's RESULTS
+    // never shows answerDetails (it reaches players only in the round report).
+    const art = (id, fields) => toRow({ id, category: 'Renaissance', school: 'Leonardo da Vinci', ...fields });
+    const rows = [
+      art('c001#001', { title: 'THE ENIGMATIC SMILE', image: 'smile.jpg',
+        answerDetails: 'Real title: Mona Lisa. Stolen from the Louvre in 1911.' }),
+      art('c001#002', { title: 'A SWIRLING NIGHT SKY', image: 'night.jpg', answerDetails: 'Real title: The Starry Night.' }),
+      art('c001#003', { title: 'AN UNTITLED STUDY', image: 'study.jpg' }),
+    ];
+    renderPreview({ rows, gameType: 'call-and-answer' });
+    const pane = () => screen.getByTestId('preview-screen');
+    const asAsked = pane().innerHTML;
+    fireEvent.click(within(phaseGroup()).getByRole('button', { name: 'Reveal' }));
+    expect(pane().innerHTML).toBe(asAsked);
+    expect(pane().querySelector('img.stage-art')).toHaveAttribute('src', `sets/${SET_ID}/smile.jpg`);
+    expect(pane().querySelector('p.qdetail[data-drop-note="How to answer"]')).not.toBeNull();
+    const note = screen.getByTestId('preview-note');
+    expect(note).toHaveTextContent('Reveal — shown only after the round');
+    expect(note).toHaveTextContent('Real title: Mona Lisa. Stolen from the Louvre in 1911.');
+    expect(pane()).not.toContainElement(note);
+
+    // Decided for the SET, so it holds still while paging: a question with no
+    // reveal written keeps the control, shows its card, and shows no note.
+    fireEvent.click(options()[2]);
+    expect(within(phaseGroup()).getByRole('button', { name: 'Reveal' })).toHaveAttribute('aria-pressed', 'true');
+    expect(cardTitle()).toBe('AN UNTITLED STUDY');
+    expect(screen.queryByTestId('preview-note')).toBeNull();
+    fireEvent.click(options()[1]);
+    expect(screen.getByTestId('preview-note')).toHaveTextContent('Real title: The Starry Night.');
   });
 
   test('Reveal is the RESULTS option treatment, with no bar and no share', () => {
