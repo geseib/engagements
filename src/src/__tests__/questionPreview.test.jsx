@@ -351,6 +351,63 @@ describe('ASK and Reveal', () => {
       .toHaveTextContent('John Wayne Gacy');
   });
 
+  /*
+   * THE QUESTION STAYS ABOVE ITS ANSWER. Reveal used to draw the options alone,
+   * so a sticky Reveal showed every question you moved to as four answers with
+   * nothing saying what was asked. The spec's §1 sketch is drawn in Reveal and
+   * has the question above them. The heading alone would not be enough: the
+   * trivia generator writes the title as a label and the question as asked into
+   * the detail (lambda-functions/admin/ai-generate-trivia.js).
+   *
+   * Order is DOCUMENT order, which jsdom models; nothing here is geometry.
+   */
+  const follows = (earlier, later) => Boolean(
+    earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING
+  );
+
+  test('Reveal keeps the question above its answer: the heading, the picture and the question as asked', () => {
+    const rows = makeRows();
+    rows[0] = { ...rows[0], image: 'son-of-sam.jpg' };
+    renderPreview({ rows });
+    fireEvent.click(within(phaseGroup()).getByRole('button', { name: 'Reveal' }));
+    const pane = screen.getByTestId('preview-screen');
+    const heading = pane.querySelector('h1.q');
+    const picture = pane.querySelector('img.stage-art');
+    const asked = pane.querySelector('p.qdetail[data-drop-note="Full prompt"]');
+    const answer = pane.querySelector('.opt.correct');
+    expect(heading).toHaveTextContent('Which killer was caught by a parking ticket?');
+    expect(picture).toHaveAttribute('src', `sets/${SET_ID}/son-of-sam.jpg`);
+    expect(asked).toHaveTextContent('New York, 1977.');
+    expect(answer).toHaveTextContent('David Berkowitz');
+    expect(follows(heading, picture)).toBe(true);
+    expect(follows(picture, asked)).toBe(true);
+    expect(follows(asked, answer)).toBe(true);
+    // The how-to-answer line is ASK's: in Reveal the answering is over, and the
+    // stage's RESULTS never draws it either.
+    expect(pane.querySelector('p.qdetail[data-drop-note="How to answer"]')).toBeNull();
+    // Still no expand affordance: the preview has nothing to expand into.
+    expect(heading.hasAttribute('data-expandable')).toBe(false);
+  });
+
+  test('every question you move to in Reveal arrives with its question above its answer', () => {
+    renderPreview();
+    fireEvent.click(within(phaseGroup()).getByRole('button', { name: 'Reveal' }));
+    const pane = () => screen.getByTestId('preview-screen');
+
+    fireEvent.keyDown(listbox(), { key: 'ArrowDown' });
+    expect(cardTitle()).toBe('The Green River case');
+    expect(pane().querySelector('p.qdetail[data-drop-note="Full prompt"]')).toHaveTextContent('Solved by DNA in 2001.');
+    expect(pane().querySelector('.opt.correct .txt')).toHaveTextContent('John Wayne Gacy');
+    expect(follows(pane().querySelector('h1.q'), pane().querySelector('.opt.correct'))).toBe(true);
+
+    // A question with no detail: its heading, then its answer, and no empty line.
+    fireEvent.click(options()[2]);
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    expect(pane().querySelector('p.qdetail')).toBeNull();
+    expect(pane().querySelector('.opt.correct .txt')).toHaveTextContent('Richard Ramirez');
+    expect(follows(pane().querySelector('h1.q'), pane().querySelector('.opt.correct'))).toBe(true);
+  });
+
   test('the reveal text sits below the screen, marked as not on it — only in Reveal, only when present', () => {
     renderPreview();
     expect(screen.queryByTestId('preview-note')).toBeNull();                 // ASK

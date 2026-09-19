@@ -29,6 +29,16 @@ import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/que
  *                   is true. Without `answers` (the preview) neither the bar
  *                   nor the figure renders: there were no votes, and a 0% bar
  *                   would claim nobody chose it.
+ *                   With `withQuestion` (the preview) the question comes first,
+ *                   in ASK's own lines: the heading, the picture and the full
+ *                   prompt. The preview's Reveal is sticky, so every question it
+ *                   moves to arrives already revealed, and the options alone
+ *                   said nothing about what was asked. The how-to-answer line
+ *                   stays ASK's: in Reveal the answering is over. The stage
+ *                   never passes it, so its RESULTS is still the DOM it drew
+ *                   inline (both held in __tests__/questionCardDom.test.jsx).
+ *                   ASK draws its question anyway; there the prop changes
+ *                   nothing.
  *
  * `instruction` IS A PROP. The stage passes getHostInstructionText(…) and the
  * preview resolveInstruction(…); the card never decides what the room is told.
@@ -40,11 +50,12 @@ export default function QuestionCard({
   instruction = '',
   answers,
   onExpand,
+  withQuestion = false,
 }) {
   if (phase === 'REVEAL') {
     if (gameType !== 'trivia') return null;
     const tallied = Array.isArray(answers);
-    return (
+    const options = (
       <div className="opts">
         {triviaOptions(question).map(({ key, letter, text }) => {
           const isCorrect = isCorrectTriviaOption(question, key, letter);
@@ -60,10 +71,44 @@ export default function QuestionCard({
         })}
       </div>
     );
+    if (!withQuestion || !question) return options;
+    return (
+      <>
+        <QuestionLines question={question} gameType={gameType} onExpand={onExpand} />
+        {options}
+      </>
+    );
   }
 
   if (!question) return null;
 
+  return (
+    <>
+      <QuestionLines question={question} gameType={gameType} onExpand={onExpand} />
+      {gameType === 'trivia' && (
+        <div className="opts">
+          {triviaOptions(question).map(({ key, letter, text }) => (
+            <div key={key} className="opt">
+              <span className="ltr">{letter}</span>
+              <span className="txt">{text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="qdetail" data-drop="3" data-drop-note="How to answer">
+        {instruction}
+      </p>
+    </>
+  );
+}
+
+/**
+ * WHAT WAS ASKED — the heading, the picture and the full prompt, in that order.
+ * ASK draws them above its options; REVEAL draws them above its answer only on
+ * request (`withQuestion`). One block for both, so the question in the
+ * preview's Reveal is the stage's ASK question and cannot drift from it.
+ */
+function QuestionLines({ question, gameType, onExpand }) {
   /* THE RECOVERY FOR A DROPPED PROMPT, and only where there is one.
      The full prompt below is the LAST thing the fitter sacrifices on a dense
      ASK, after both host controls and the how-to-answer line — but it can
@@ -97,25 +142,13 @@ export default function QuestionCard({
           looking to them to share their meaning." A stored detail sentence IS
           a definition, so for wavelength this line never renders — whatever
           the set carries. The subject is the headline above; the
-          how-to-answer line below is the only other thing the room needs. */}
+          how-to-answer line ASK draws last is the only other thing the room
+          needs. */}
       {gameType !== 'wavelength' && detail && (
         <p className="qdetail" data-drop="4" data-drop-note="Full prompt">
           {detail}
         </p>
       )}
-      {gameType === 'trivia' && (
-        <div className="opts">
-          {triviaOptions(question).map(({ key, letter, text }) => (
-            <div key={key} className="opt">
-              <span className="ltr">{letter}</span>
-              <span className="txt">{text}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <p className="qdetail" data-drop="3" data-drop-note="How to answer">
-        {instruction}
-      </p>
     </>
   );
 }

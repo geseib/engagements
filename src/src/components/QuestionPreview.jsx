@@ -294,7 +294,12 @@ export default function QuestionPreview({
         {/* THE SCREEN. Dusk and the Table ladder on this pane alone, so the card
             looks like the stage inside a paper editor. Nothing in here is
             restyled by this component's stylesheet: the card's rules are
-            stage.css's, untouched (QuestionPreviewPalette.test.js holds that). */}
+            stage.css's, untouched (QuestionPreviewPalette.test.js holds that).
+            REVEAL KEEPS ITS QUESTION (`withQuestion`). Reveal is sticky, so
+            every question you move to arrives already revealed. The options
+            alone would be four answers with nothing saying what was asked; the
+            card draws the question above them in ASK's own lines, as the spec's
+            §1 sketch has it. */}
         <div className="qprev-screen stage-ladder-table" data-theme="dark" data-testid="preview-screen">
           {staged ? (
             <div className="qprev-card">
@@ -303,6 +308,7 @@ export default function QuestionPreview({
                 question={staged}
                 gameType={gameType}
                 instruction={resolveInstruction(staged, setInstruction, gameType)}
+                withQuestion
               />
             </div>
           ) : (

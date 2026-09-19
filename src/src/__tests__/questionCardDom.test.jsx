@@ -217,6 +217,69 @@ describe('REVEAL — the trivia RESULTS option treatment', () => {
   });
 });
 
+/*
+ * REVEAL WITH ITS QUESTION — the set editor's preview, the card's second caller.
+ *
+ * The preview holds Reveal across every question it moves to, so each one
+ * arrives already revealed. The options alone put four answers on the screen
+ * and nothing saying what was asked, which is not what the spec draws: its
+ * sketch (2026-09-19 §1) is in Reveal and has the question above them. The
+ * heading alone is not enough either. The trivia generator writes the title as
+ * "a label for the question, not the question itself" and the question as asked
+ * into the detail (lambda-functions/admin/ai-generate-trivia.js), so the full
+ * prompt is the question.
+ *
+ * Built from the frozen oracles above and nothing else, so the composition can
+ * only be made of lines the stage draws: ASK's heading, picture and full prompt,
+ * then RESULTS' options without the tally. The how-to-answer line is not one of
+ * them. It tells the room how to answer, and in Reveal the answering is over.
+ *
+ * Each oracle is cut down in a detached COPY of what it rendered. Removing
+ * nodes React still owns makes the unmount after the test throw.
+ */
+function oracleRevealWithQuestion(question) {
+  const ask = render(
+    <OracleAsk currentQuestion={question} currentGameType="trivia" instructionText={HOW} expandQuestion={() => {}} />
+  ).container.cloneNode(true);
+  const heading = ask.querySelector('h1.q');
+  heading.removeAttribute('data-expandable');                 // the preview passes no handler
+  heading.removeAttribute('title');
+  ask.querySelector('.opts').remove();                        // RESULTS' options replace ASK's
+  ask.querySelector('[data-drop-note="How to answer"]').remove();
+  const results = render(<OracleTriviaResults currentQuestion={question} answers={[]} />).container.cloneNode(true);
+  results.querySelectorAll('.fill, .pct').forEach((node) => node.remove());   // no votes, no tally
+  return `${ask.innerHTML}${results.innerHTML}`;
+}
+
+describe('REVEAL withQuestion — the question above its answer, in the stage\'s own lines', () => {
+  const PICTURED = { ...TRIVIA, image: '/assets/art/x.jpg' };
+
+  test.each([
+    ['a heading, a picture and a full prompt', PICTURED],
+    ['a heading alone, over slots that skip a letter', GAPPED],
+  ])('%s: ASK\'s question lines, then RESULTS\' options without the tally', (_label, question) => {
+    // rejects: the options alone, which is what the preview drew before.
+    expect(html(<QuestionCard phase="REVEAL" question={question} gameType="trivia" withQuestion />))
+      .toBe(oracleRevealWithQuestion(question));
+  });
+
+  test('ASK already draws its question, so asking for it there changes nothing', () => {
+    const onExpand = () => {};
+    expect(html(<QuestionCard phase="ASK" question={PICTURED} gameType="trivia" instruction={HOW} onExpand={onExpand} withQuestion />))
+      .toBe(html(<OracleAsk currentQuestion={PICTURED} currentGameType="trivia" instructionText={HOW} expandQuestion={onExpand} />));
+  });
+
+  test('it adds a question to a Reveal and never makes one: no question, or no trivia, draws what it drew before', () => {
+    // With no question there is nothing to put above the options, and the card
+    // must not throw reading one.
+    expect(html(<QuestionCard phase="REVEAL" question={null} gameType="trivia" withQuestion />))
+      .toBe(html(<QuestionCard phase="REVEAL" question={null} gameType="trivia" />));
+    for (const gameType of ['call-and-answer', 'poll', 'wavelength', 'survey']) {
+      expect(html(<QuestionCard phase="REVEAL" question={TRIVIA} gameType={gameType} withQuestion />)).toBe('');
+    }
+  });
+});
+
 describe('the stage really renders it', () => {
   /*
    * Read from the source, because GameHostPage cannot mount in jsdom. Without
@@ -249,6 +312,13 @@ describe('the stage really renders it', () => {
     // rejects: dropping `answers` at the call site. The card would then render
     // the PREVIEW's treatment on the projector: no bars, no percentages.
     expect(reveal).toMatch(/answers=\{answers\}/);
+  });
+
+  test('the stage never asks for the question above its RESULTS', () => {
+    // rejects: the projector's RESULTS growing a heading, a picture and a
+    // prompt. Every oracle above would stay green, because they render the card
+    // without the prop; only the stage's own call sites can show it was passed.
+    expect(source).not.toMatch(/withQuestion/);
   });
 
   test('none of the card\'s markup survives inline', () => {
