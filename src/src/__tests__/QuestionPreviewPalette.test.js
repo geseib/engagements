@@ -205,6 +205,25 @@ describe('the screen: the stage\'s own card on the stage\'s own ground', () => {
     expect(groundOf('.qprev-screen', DUSK)).toBe(hexIn(STAGE, '--bg'));
   });
 
+  test('the screen restates the stage\'s own text wrapping, which the host shelf\'s dialog changes', () => {
+    // `.qsets-modal` sets `overflow-wrap: anywhere` (QuestionSetsPanel.css, for
+    // a 98-character set title) and the host shelf renders the editor inside
+    // it, so the card inherited it: its heading and prompt broke a long word
+    // anywhere, which the stage never does. rejects: dropping a restatement.
+    const screenRule = ruleBody(QPREV_CSS, '.qprev-screen');
+    for (const prop of ['overflow-wrap', 'word-break', 'white-space']) {
+      expect(screenRule).toMatch(new RegExp(`(^|;)\\s*${prop}\\s*:\\s*normal\\s*(;|$)`));
+    }
+    // and `normal` IS the stage's value: nothing between the stage's body and
+    // its card (.content > .fitbox, GameHostPage.jsx) declares any of the three.
+    const cardAncestors = ['body', '.stage', '.main', '.content', '.fitbox', '.content > .fitbox'];
+    const offenders = [...strip(STAGE_CSS).replace(/@media[^{]*\{/g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, head, body]) => head.split(',').some((s) => cardAncestors.includes(s.trim()))
+        && /(overflow-wrap|word-break|white-space)\s*:/.test(body))
+      .map(([, head]) => head.trim());
+    expect(offenders).toEqual([]);
+  });
+
   test('the question and its prompt', () => {
     expect(on(S.text, SCREEN_GROUND)).toBeGreaterThanOrEqual(AA);
     // .qdetail is --text at opacity .82: the colour that reaches the eye is the
