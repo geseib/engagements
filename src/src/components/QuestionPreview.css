@@ -134,8 +134,9 @@
   background: var(--qprev-row-sel);
   box-shadow: inset 3px 0 0 var(--qprev-accent);
 }
-/* One text node with min-width:0, or text-overflow is inert and the title is
-   silently cut. `title=` on the span carries the full string. */
+/* One text node with min-width:0, or text-overflow is inert and the text is
+   silently cut. `title=` on EACH span carries its full string: a cut with no
+   recovery is a deletion, and the meta line's difficulty is the first to go. */
 .qprev-row-title,
 .qprev-row-meta {
   display: block;

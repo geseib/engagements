@@ -59,6 +59,9 @@ describe('the list — the in-session browser\'s mechanics', () => {
     // rejects: a truncation with no recovery, which is a deletion.
     expect(first.querySelector('.qprev-row-title')).toHaveAttribute('title', 'Which killer was caught by a parking ticket?');
     expect(first.querySelector('.qprev-row-meta')).toHaveTextContent('History · easy');
+    // The meta line is cut the same way. Difficulty is written last, so it is
+    // the first thing lost — and nothing else in the preview shows it.
+    expect(first.querySelector('.qprev-row-meta')).toHaveAttribute('title', 'History · easy');
   });
 
   test('no row carries an answer — the answer appears only in the card, in Reveal', () => {
@@ -355,7 +358,7 @@ describe('the view switch', () => {
  * WHAT THE SHEET DOES TO THE MARKUP. jsdom loads no stylesheet and lays nothing
  * out, so these read QuestionPreview.css as text and hold the rendered markup
  * to what it declares. Green means the markup and the sheet still agree; it
- * cannot show how a browser paints the ring.
+ * cannot show where a browser puts the ellipsis or how it paints the ring.
  */
 const SHEET = require('fs')
   .readFileSync(require('path').join(__dirname, '..', 'components', 'QuestionPreview.css'), 'utf8')
@@ -444,6 +447,18 @@ describe('what the sheet does to the markup', () => {
     expect(clipped.filter((el) => !drawnInside(ringOf(el))).map(
       (el) => `${name(el)}: outline ${ringOf(el).outline}, offset ${ringOf(el).offset}`,
     )).toEqual([]);
+  });
+
+  test('every line the sheet cuts short carries its whole string on title=', () => {
+    // rejects: an ellipsis with no recovery, which is a deletion (engage-design
+    // hard rule 7). The meta line shared the title's cut and not its title=.
+    renderEverything();
+    const cutBy = RULES.filter((rule) => /text-overflow\s*:\s*ellipsis/.test(rule.body))
+      .flatMap((rule) => rule.selectors);
+    const cut = cutBy.flatMap((selector) => [...document.querySelectorAll(selector)]);
+    // the premise: the sheet does cut something the preview renders
+    expect(cut.length).toBeGreaterThan(0);
+    expect(cut.filter((el) => el.getAttribute('title') !== el.textContent).map((el) => el.textContent)).toEqual([]);
   });
 });
 

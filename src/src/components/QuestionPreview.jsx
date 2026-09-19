@@ -196,7 +196,11 @@ export default function QuestionPreview({
             aria-activedescendant={selected ? optionDomId(selected.id) : undefined}
           >
             {visible.map((r) => {
+              // Both lines are cut to one line, so both carry their whole
+              // string on title= — a cut with no recovery is a deletion, and
+              // difficulty, written last, is the first thing the meta line loses.
               const title = r.title || 'Untitled question';
+              const meta = [r.category || 'No category', r.difficulty].filter(Boolean).join(' · ');
               return (
                 <li
                   key={r.id}
@@ -207,9 +211,7 @@ export default function QuestionPreview({
                   onClick={() => setSelectedId(r.id)}
                 >
                   <span className="qprev-row-title" title={title}>{title}</span>
-                  <span className="qprev-row-meta">
-                    {[r.category || 'No category', r.difficulty].filter(Boolean).join(' · ')}
-                  </span>
+                  <span className="qprev-row-meta" title={meta}>{meta}</span>
                 </li>
               );
             })}
