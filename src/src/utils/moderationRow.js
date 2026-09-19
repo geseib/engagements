@@ -37,8 +37,10 @@ function bandWords(bands) {
 }
 
 function escalationWords(item) {
-  const ids = Array.isArray(item.uncertainQuestionIds) ? item.uncertainQuestionIds : [];
-  const head = ids.length ? plural(ids.length, 'uncertain question') : 'Uncertain';
+  // Questions, not findings: the check writes an id per finding, so a question
+  // held in two categories is on the row twice (set-check-worker.js).
+  const questions = new Set(Array.isArray(item.uncertainQuestionIds) ? item.uncertainQuestionIds : []).size;
+  const head = questions ? plural(questions, 'uncertain question') : 'Uncertain';
   const detail = bandWords(item.bands);
   return detail ? `${head} (${detail})` : head;
 }

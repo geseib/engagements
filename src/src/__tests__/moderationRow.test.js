@@ -21,10 +21,21 @@ describe('whyLabel — band words, never scores', () => {
     expect(whyLabel({ reasons: ['escalated'], bands: { VIOLENCE: 'MEDIUM', HATE: 'MEDIUM' } })).toBe('Uncertain (medium: hate, violence)');
     // Beside the count of questions, not instead of it.
     expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['q001', 'q003'], bands: { HATE: 'MEDIUM' } })).toBe('2 uncertain questions (medium: hate)');
+    // The order alone, worst band first: an escalation holds MEDIUM only (a
+    // HIGH flags the set instead), so no row the check writes mixes bands.
     expect(whyLabel({ reasons: ['escalated'], bands: { HATE: 'MEDIUM', VIOLENCE: 'HIGH' } })).toBe('Uncertain (high: violence; medium: hate)');
     // The error path's empty map, and a band that is no band at all.
     expect(whyLabel({ reasons: ['escalated'], bands: {} })).toBe('Uncertain');
     expect(whyLabel({ reasons: ['escalated'], bands: { HATE: 'NONE' } })).toBe('Uncertain');
+  });
+  /*
+    One question held in two categories is two findings, and the check writes
+    an id per finding: this is the row set-check-worker.js wrote for q001 seen
+    at MEDIUM for hate and for insults (its note: 3/4 clean). The review
+    dialog counts questions, and so does this line — rows already written too.
+  */
+  test('a question held in two categories is one uncertain question', () => {
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['guardrail'], uncertainQuestionIds: ['q001', 'q001'], bands: { HATE: 'MEDIUM', INSULTS: 'MEDIUM' } })).toBe('1 uncertain question (medium: hate, insults)');
   });
   test('a number where a band belongs is never printed', () => {
     expect(whyLabel({ reasons: ['escalated'], bands: { MEDIUM: 3 } })).toBe('Uncertain');
