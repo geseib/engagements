@@ -224,12 +224,24 @@ export function browserRow(question = {}, { usedIds = [], activeCategories = nul
  * It composes with the rest rather than replacing them, so "enabled and
  * unasked" is the natural way to answer "what can I actually ask next".
  */
+/**
+ * `matchDetail` IS OPT-IN, AND OFF IS THE STAGE'S BEHAVIOUR.
+ *
+ * The set editor's preview (components/QuestionPreview.jsx) searches a set its
+ * author wrote, so a phrase from the body of a question is a fair way in, and
+ * it passes `matchDetail: true`. The in-session browser does not: its search
+ * box says "Search titles…", and a hit on text the box never promised to look
+ * in would read as a bug in front of the room. Defaulting to false keeps that
+ * placeholder true without the stage having to say anything.
+ */
 export function filterBrowserRows(rows = [], {
-  search = '', category = '', unaskedOnly = false, enabledOnly = false,
+  search = '', category = '', unaskedOnly = false, enabledOnly = false, matchDetail = false,
 } = {}) {
   const needle = search.trim().toLowerCase();
   return rows.filter((row) => {
-    if (needle && !(row.title || '').toLowerCase().includes(needle)) return false;
+    if (needle
+      && !(row.title || '').toLowerCase().includes(needle)
+      && !(matchDetail && (row.detail || '').toLowerCase().includes(needle))) return false;
     if (category && row.category !== category) return false;
     if (unaskedOnly && row.used) return false;
     if (enabledOnly && row.disabled) return false;
