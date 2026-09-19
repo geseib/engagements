@@ -116,6 +116,64 @@ test('Edit Q14 works every time, not just the first', async () => {
   }
 });
 
+// Review of b5e3f2d7: Preview unmounts the table, and the table's rows were
+// the only thing "Edit Q14" could find — so in Preview the banner's button
+// did nothing at all: no scroll, no highlight, no selection, no dialog. In
+// Preview it now goes to Q14 the preview's own way: the list selects it and
+// the card draws it, with "Edit this question" beside it. The person's view is
+// not swapped out from under them.
+describe('Edit Q14 while the Questions tab is in Preview', () => {
+  const previewOptions = () => within(screen.getByRole('listbox', { name: 'Questions' })).getAllByRole('option');
+  // Exact, not toHaveTextContent: that is a substring match, and "Question 1"
+  // is a substring of "Question 14".
+  const cardTitle = () => screen.getByTestId('preview-screen').querySelector('h1.q').textContent;
+  let scrollIntoView;
+  let original;
+  beforeEach(() => {
+    scrollIntoView = jest.fn();
+    original = window.HTMLElement.prototype.scrollIntoView;
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  });
+  afterEach(() => {
+    window.HTMLElement.prototype.scrollIntoView = original;
+  });
+
+  async function openInPreview() {
+    mockApi();
+    render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />);
+    const banner = await screen.findByRole('status');
+    await screen.findByTestId('question-13');
+    fireEvent.click(within(screen.getByRole('group', { name: 'How the questions are shown' }))
+      .getByRole('button', { name: 'Preview' }));
+    expect(previewOptions()[0]).toHaveAttribute('aria-selected', 'true');
+    return banner;
+  }
+
+  test('it selects Q14 in the preview list, draws it on the card, and scrolls it into view', async () => {
+    const banner = await openInPreview();
+    fireEvent.click(within(banner).getByRole('button', { name: /edit q14/i }));
+    expect(previewOptions()[13]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('Question 14');
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(previewOptions()[13]);
+    // Still the preview, and nothing opened over it.
+    expect(screen.getByTestId('question-preview')).toBeInTheDocument();
+    expect(screen.queryByTestId('question-13')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('it works every time, not just the first — after the list has moved on, Q14 comes back', async () => {
+    const banner = await openInPreview();
+    fireEvent.click(within(banner).getByRole('button', { name: /edit q14/i }));
+    fireEvent.click(previewOptions()[0]);
+    expect(cardTitle()).toBe('Question 1');
+    fireEvent.click(within(banner).getByRole('button', { name: /edit q14/i }));
+    expect(previewOptions()[13]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('Question 14');
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+});
+
 // R24 fix round 1: AdminPage's handleAppeal used to call a page-level
 // `notice` that renders only in the list panel — unmounted for as long as
 // this editor is open, so a rejected appeal noticed nowhere anyone could see.

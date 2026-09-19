@@ -5,6 +5,7 @@ import StatusMessage from './StatusMessage';
 import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
+import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
@@ -146,8 +147,10 @@ export default function QuestionsPanel({
    * question is a NEW object — a repeated identical id would otherwise bail
    * out of the `focusRequest` state update and never re-run the effect below,
    * so a second click silently did nothing (no re-scroll, no re-highlight
-   * after the first highlight had already faded). The row scrolls into view
-   * and is briefly marked `.focused`.
+   * after the first highlight had already faded). In Table the row scrolls
+   * into view and is briefly marked `.focused`; in Preview the preview selects
+   * the question instead, and a removed one takes the tab back to the Table
+   * (the focus effects below).
    */
   focusRequest = null,
 }) {
@@ -205,6 +208,12 @@ export default function QuestionsPanel({
   const [newSetDialog, setNewSetDialog] = useState(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
+  /* ---------------------------------------------------------------- view -- */
+  // TABLE OR PREVIEW — how the working copy is shown, never what it holds.
+  // Named `viewMode`, not anything with "preview" in it: `preview` below is the
+  // replace-from-a-CSV diff, a different thing that happens to share the word.
+  const [viewMode, setViewMode] = useState('table');
+
   /* ------------------------------------------------------------- replace -- */
   const [replaceFile, setReplaceFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -216,6 +225,17 @@ export default function QuestionsPanel({
   const problems = useMemo(
     () => workingCopyProblems(rows, engagementType), [rows, engagementType]
   );
+
+  // Why Preview cannot be pressed right now, or '' when it can. The switch
+  // prints it as the disabled button's title — a control that says why.
+  // Worked out here, above the focus effects that read `previewing`: a hook's
+  // dependency array naming a const declared further down throws on the first
+  // render (the outage .eslintrc.js records).
+  const previewBlocked = loadState === 'loading' ? 'The questions are still loading.'
+    : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
+      : summary.questionCount === 0 ? 'This set has no questions yet, so there is nothing to preview.'
+        : '';
+  const previewing = viewMode === 'preview' && !previewBlocked;
 
   /* ----------------------------------------------------------- loading --- */
 
@@ -264,6 +284,7 @@ export default function QuestionsPanel({
     closeForm();
     setStatus({ text: '', tone: '' });
     setCategoryFilter('');
+    setViewMode('table');
     load();
   }, [setId, load, closeForm]);
 
@@ -289,16 +310,68 @@ export default function QuestionsPanel({
   // the same question — a NEW object with the same id, per `seq` — still
   // re-runs it: re-scrolls and restarts the 2-second highlight, rather than
   // bailing out the way an identical-id `setState` would.
+  //
+  // IN PREVIEW THE TABLE IS NOT ON SCREEN, and its rows are the only thing that
+  // carries `data-question-id` — so there the request is resolved to its row of
+  // the working copy and handed to the preview as `previewRequest`, and the
+  // preview selects it (QuestionPreview.jsx). Until this, the banner's button
+  // did nothing at all in Preview. A question the working copy has REMOVED is
+  // not in the preview (a tombstone will not exist once the set is saved), so
+  // for that one the tab goes back to the Table, where the struck-through row
+  // and its Restore are, and the row is scrolled to once the table renders.
+  //
+  // The rows and the view are read through `focusContext`, as of the latest
+  // render, rather than listed as dependencies: the request is the event, and
+  // re-running it whenever a row changed would re-scroll and re-highlight on
+  // every edit made after it.
   const [focusedId, setFocusedId] = useState(null);
+  const [previewRequest, setPreviewRequest] = useState(null);
+  const pendingRowFocus = useRef(null);
+  const focusContext = useRef(null);
+  focusContext.current = { rows, previewing };
   useEffect(() => {
     if (!focusRequest || !focusRequest.id) return undefined;
     const wanted = String(focusRequest.id).replace('QUESTION#', '');
+    const { rows: current, previewing: inPreview } = focusContext.current;
+    if (inPreview) {
+      const row = current.find((r) => String(r.sk || '').replace('QUESTION#', '') === wanted);
+      if (row && row.removed) {
+        setViewMode('table');
+      } else {
+        // Whatever an earlier request marked in the table is over: this one
+        // is the preview's. One that is not in the working copy at all
+        // (deleted and saved since the flagged version was checked, say) has
+        // no table row either, so switching views would only lose the
+        // preview's place.
+        setFocusedId(null);
+        pendingRowFocus.current = null;
+        // A new object on every request, so a second press is a new request.
+        if (row) setPreviewRequest({ uid: row.uid });
+        return undefined;
+      }
+    }
     setFocusedId(wanted);
-    const el = document.querySelector(`[data-question-id="${wanted}"]`);
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+    pendingRowFocus.current = wanted;
     const t = setTimeout(() => setFocusedId(null), 2000);
     return () => clearTimeout(t);
   }, [focusRequest]);
+
+  // The table row's scroll waits for the table: at once when it is already on
+  // screen, or on the render that brings it back from Preview.
+  useEffect(() => {
+    const wanted = pendingRowFocus.current;
+    if (!wanted || previewing) return;
+    pendingRowFocus.current = null;
+    const el = document.querySelector(`[data-question-id="${wanted}"]`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+  }, [focusRequest, previewing]);
+
+  // A request is spent with the preview it was made for. Leaving Preview drops
+  // it, so coming back starts where the preview always starts, not on a
+  // question the banner named minutes ago.
+  useEffect(() => {
+    if (!previewing) setPreviewRequest(null);
+  }, [previewing]);
 
   /* ------------------------------------------------- working-copy edits --- */
 
@@ -928,7 +1001,9 @@ export default function QuestionsPanel({
             Save {selected.length} selected as a new set…
           </button>
         )}
-        {categories.length > 1 && (
+        {/* The table's own filter. Preview has chips of its own, and a select
+            that filters a table nobody can see is a control that does nothing. */}
+        {categories.length > 1 && !previewing && (
           <label className="qs-filter">
             Filter by category:{' '}
             <select
@@ -941,6 +1016,11 @@ export default function QuestionsPanel({
             </select>
           </label>
         )}
+        <QuestionViewSwitch
+          mode={previewing ? 'preview' : 'table'}
+          onChange={setViewMode}
+          previewBlocked={previewBlocked}
+        />
       </div>
 
       {loadState === 'loading' && <p className="qs-empty">Loading questions…</p>}
@@ -948,7 +1028,22 @@ export default function QuestionsPanel({
         <StatusMessage message={`${loadError} Nothing has been changed.`} tone="error" />
       )}
 
-      {loadState === 'ready' && visibleRows.length === 0 && (
+      {/* PREVIEW REPLACES THE TABLE, and nothing else on this panel. The dirty
+          bar, Add, Pull, Save and the CSV controls stay where they are: they act
+          on the working copy, which is the thing being previewed. Edit opens the
+          same question dialog the table's Edit does — no second container. */}
+      {previewing && (
+        <QuestionPreview
+          rows={rows}
+          gameType={engagementType}
+          setInstruction={questionSet?.customInstruction || ''}
+          setId={setId}
+          onEditQuestion={startEdit}
+          selectRequest={previewRequest}
+        />
+      )}
+
+      {loadState === 'ready' && !previewing && visibleRows.length === 0 && (
         <p className="qs-empty">
           {rows.length
             ? 'No questions in that category.'
@@ -956,7 +1051,7 @@ export default function QuestionsPanel({
         </p>
       )}
 
-      {loadState === 'ready' && visibleRows.length > 0 && (
+      {loadState === 'ready' && !previewing && visibleRows.length > 0 && (
         <ol className="qs-question-list">
           {visibleRows.map((row) => {
             const rowIndex = rows.indexOf(row);
