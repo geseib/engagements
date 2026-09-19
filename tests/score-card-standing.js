@@ -186,6 +186,19 @@ async function shareJob(version) {
     assert.strictEqual(card.review.status, 'passed');
     assert.strictEqual(card.review.note, '30/30 clean');
   });
+  // rejects: the card saying "Declared: a content notice" of a set whose
+  // author named the notice. The worker keeps what was declared on the REVIEW
+  // row beside the `declared` reason (set-check-worker.js), and the projection
+  // dropped it. A row without one — an older check, or one written from the
+  // worker's catch block — projects none, never a guess.
+  await H.test('the review projects the notices its author declared, and a row without them projects none', async () => {
+    await seedApproved();
+    assert.deepStrictEqual((await get()).review.declaredNotice, ['graphic-violence']);
+    H.reset();
+    seedPublic();
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.PASSED, findings: [], note: '30/30 clean', contentHash: HASH, checkedBy: 'sub-amara' });
+    assert.deepStrictEqual((await get()).review.declaredNotice, []);
+  });
 
   /*
     An approval KEEPS the row: transitionReview spreads what the row holds, so

@@ -14,6 +14,8 @@
 const APPEAL_MAX = 80;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const humanise = (id) => String(id || '').replace(/[-_]+/g, ' ').trim();
+/** One notice id, or the review row's list of what the author declared (up to eight, check-question-set.js). */
+const noticeWords = (notice) => (Array.isArray(notice) ? notice : [notice]).map(humanise).filter(Boolean).join(', ');
 
 function escalationWords(item) {
   const ids = Array.isArray(item.uncertainQuestionIds) ? item.uncertainQuestionIds : [];
@@ -44,7 +46,7 @@ export function whyLabel(item = {}) {
   if (reasons.includes('escalated') || reasons.includes('guardrail')) parts.push(escalationWords(item));
   if (reasons.includes('appealed')) parts.push(appealWords(item));
   if (reasons.includes('reported')) parts.push(reportWords(item));
-  if (reasons.includes('declared')) parts.push(`Declared: ${humanise(item.declaredNotice) || 'a content notice'}`);
+  if (reasons.includes('declared')) parts.push(`Declared: ${noticeWords(item.declaredNotice) || 'a content notice'}`);
   if (reasons.includes('images')) parts.push('Images');
   if (reasons.includes('timeout')) parts.push('Out of time');
   if (reasons.includes('snapshot')) parts.push('Snapshot not saved');

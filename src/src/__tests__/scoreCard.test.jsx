@@ -553,15 +553,18 @@ test('the check\'s reasons read in the queue\'s words under the verdict, whether
   const stopped = await open(UNFINISHED);
   expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Error');
   stopped.unmount();
-  // Images the text filters cannot see and the author's own notice, on a check that saw nothing.
-  await open(withReview({ reasons: ['images', 'declared'], findings: [], observed: [], tally: CLEAN }, {
+  // Images the text filters cannot see and the notices the author declared, on
+  // a check that saw nothing. The worker names `declared` only beside the
+  // notices themselves (set-check-worker.js), up to eight of them
+  // (check-question-set.js), and the endpoint projects them: each is named.
+  await open(withReview({ reasons: ['images', 'declared'], declaredNotice: ['graphic-violence', 'strong-language'], findings: [], observed: [], tally: CLEAN }, {
     log: [
       { event: 'checked', at: '2026-09-19T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['images', 'declared'], checked: 31, clean: 31 },
       { event: 'escalated', at: '2026-09-19T09:00:01.000Z', version: 3, reasons: ['images', 'declared'] },
       ...TRUE_CRIME.log.slice(2),
     ],
   }));
-  expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Declared: a content notice · Images');
+  expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Declared: graphic violence, strong language · Images');
 });
 // rejects: whyLabel's "Waiting", its word for a queue row with no reason,
 // printed under every verdict the check reached on its own.
@@ -602,6 +605,29 @@ test('a HIGH that held the set says so in the word the timeline uses for the sam
   const events = screen.getAllByTestId('scard-event');
   expect(events[events.length - 1]).toHaveTextContent('Checked — needs changes');
   expect(container).not.toHaveTextContent(/\bflagged\b/);
+});
+/*
+  THE AUTHOR'S WORDS ON AN APPEAL. The review row and the queue row call them
+  `appealMessage`; the log event appeal-question-set.js appends calls them
+  `message`, and that is the only writer of an appeal to the log. The event
+  below is the row appendReviewEvent puts, keys and all.
+*/
+// rejects: the timeline reading `appealMessage` off an event that has never
+// carried it, so every appeal read as a bare "Appealed".
+test('an appeal on the timeline quotes the author, from the event the appeal logs', async () => {
+  await open(decided({}, {
+    log: [
+      { event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 3, outcome: 'flagged', reasons: [], checked: 31, clean: 30 },
+      {
+        PK: 'REVIEWLOG#org#org_acme#safety', SK: '2026-09-18T09:30:00.000Z#000007#appealed', event: 'appealed', at: '2026-09-18T09:30:00.000Z',
+        version: 3, message: 'It is a history set, not a how-to.', by: 'sub-amara',
+      },
+      { event: 'decided', at: '2026-09-18T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Historical, not gratuitous.' },
+      { event: 'published', at: '2026-09-18T10:01:00.000Z', version: 3, publicVersion: 1 },
+    ],
+  }));
+  const appeal = screen.getAllByTestId('scard-event')[2];
+  expect(appeal).toHaveTextContent('Appealed: “It is a history set, not a how-to.” · v3');
 });
 test('the timeline and the verdict speak the app\'s words, never a raw status', async () => {
   const { container } = await open({

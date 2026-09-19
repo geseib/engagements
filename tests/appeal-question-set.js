@@ -42,6 +42,9 @@ const post = (body, role = 'owner') => H.orgEvent({ orgId: ORG, role, method: 'P
     assert.strictEqual(row.snapshotKey, 'moderation/org_acme/safety/v2/t.json');
     assert.strictEqual(H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`).share.status, 'appealed');
     assert.ok(H.rowsWhere((x) => x.PK === `REVIEWLOG#org#${ORG}#${SET}` && x.event === 'appealed').length === 1);
+    // The score card's timeline quotes the author from this event, as `message`.
+    const [appealed] = H.rowsWhere((x) => x.PK === `REVIEWLOG#org#${ORG}#${SET}` && x.event === 'appealed');
+    assert.strictEqual(appealed.message, 'It is a clinical safety set.');
   });
   await H.test('only a flagged version can be appealed', async () => {
     for (const status of [R.STATUS.PASSED, R.STATUS.ESCALATED, R.STATUS.CHECKING]) {

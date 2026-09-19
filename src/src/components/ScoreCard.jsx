@@ -300,7 +300,10 @@ const EVENT_WORDS = {
     return chip && chip.key !== 'passed' ? `Checked — ${chip.label}` : 'Checked';
   },
   escalated: () => 'Sent to a person',
-  appealed: (e) => `Appealed${e.appealMessage ? `: “${e.appealMessage}”` : ''}`,
+  // The author's words ride the event as `message` (appeal-question-set.js,
+  // the only writer of this event); `appealMessage` is the review row's and the
+  // queue row's name for them, and no log event has ever carried it.
+  appealed: (e) => `Appealed${e.message ? `: “${e.message}”` : ''}`,
   decided: (e) => `${e.decision === 'approve' ? 'Approved' : 'Rejected'}${e.reviewer ? ` by ${e.reviewer}` : ''}`,
   published: (e) => `Published${e.publicVersion ? ` as public v${e.publicVersion}` : ''}`,
   unpublished: () => 'Unpublished by the organisation',

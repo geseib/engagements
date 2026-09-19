@@ -16,6 +16,8 @@ describe('whyLabel — band words, never scores', () => {
   test('reports, a declared notice and images each say so; several reasons join', () => {
     expect(whyLabel({ reasons: ['reported'], reports: { count: 3, byType: { graphic: 2, inaccurate: 1 } } })).toBe('Reported ×3 · graphic (2), inaccurate (1)');
     expect(whyLabel({ reasons: ['declared'], declaredNotice: 'graphic-medical' })).toBe('Declared: graphic medical');
+    // A review row keeps what the author declared as a list, up to eight (check-question-set.js).
+    expect(whyLabel({ reasons: ['declared'], declaredNotice: ['graphic-violence', 'strong-language'] })).toBe('Declared: graphic violence, strong language');
     expect(whyLabel({ reasons: ['images'] })).toBe('Images');
     expect(whyLabel({ reasons: ['escalated', 'appealed'], uncertainQuestionIds: ['a'], appealMessage: 'Please.' })).toBe('1 uncertain question · Appealed: “Please.”');
     expect(whyLabel({})).toBe('Waiting');

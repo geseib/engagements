@@ -11,7 +11,8 @@
  *
  * The owner: the card "doesn't reveal much". The review now carries `tally`
  * (per category, in questions) and `observed` (every band the check saw), and
- * GET projects both with `reasons`. Each observation is named by its question's
+ * GET projects both with `reasons` and the notices an author declared, which
+ * the card's reasons line names. Each observation is named by its question's
  * TEXT, read from the public copy's own question rows by id: publish copies the
  * judged snapshot's rows byte-for-byte, keys and all (shared/publish-set.js),
  * so the review's ids are the public copy's ids. Not the S3 snapshot —
@@ -144,6 +145,9 @@ async function standing(meta, publicSetId) {
       findings,
       checkedAt: review.checkedAt || null,
       reasons: Array.isArray(review.reasons) ? review.reasons : [],
+      // What the author declared, which the worker keeps beside a `declared`
+      // reason (set-check-worker.js): the card's reasons line names it.
+      declaredNotice: Array.isArray(review.declaredNotice) ? review.declaredNotice : [],
       // null, not {}: "checked before measuring existed" is not "measured,
       // and nothing seen" (content-guardrail.js tallyOf, `scope: 'full'`).
       tally: review.tally && typeof review.tally === 'object' ? review.tally : null,
