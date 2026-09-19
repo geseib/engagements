@@ -4,9 +4,31 @@ const NOW = Date.parse('2026-09-17T12:00:00.000Z');
 
 describe('whyLabel — band words, never scores', () => {
   test('an escalation names how many questions the check could not decide', () => {
-    expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['c001#014', 'c002#022'], bands: { MEDIUM: 2 } })).toBe('2 uncertain questions');
+    expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['c001#014', 'c002#022'] })).toBe('2 uncertain questions');
     expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['c001#014'] })).toBe('1 uncertain question');
-    expect(whyLabel({ reasons: ['escalated'], bands: { MEDIUM: 3 } })).toBe('Uncertain (medium ×3)');
+  });
+  /*
+    A queue row's `bands` is ONE BAND PER CATEGORY — { HATE: 'MEDIUM' } — the
+    shape spec §3.2 defines, set-check-worker.js and appeal-question-set.js
+    write, and tests/set-check-job.js pins; the worker's error path writes {}.
+    These fixtures are those rows. The reader once took `bands` for counts per
+    band ({ MEDIUM: 3 }, a shape nothing has ever written), so every escalation
+    without question ids read just "Uncertain" and the bands never showed.
+  */
+  test('an escalation names what the check was unsure of, one band per category, worst first', () => {
+    // The set's own text alone: it has no question id, so only the bands say what.
+    expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: [], bands: { HATE: 'MEDIUM' } })).toBe('Uncertain (medium: hate)');
+    expect(whyLabel({ reasons: ['escalated'], bands: { VIOLENCE: 'MEDIUM', HATE: 'MEDIUM' } })).toBe('Uncertain (medium: hate, violence)');
+    // Beside the count of questions, not instead of it.
+    expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['q001', 'q003'], bands: { HATE: 'MEDIUM' } })).toBe('2 uncertain questions (medium: hate)');
+    expect(whyLabel({ reasons: ['escalated'], bands: { HATE: 'MEDIUM', VIOLENCE: 'HIGH' } })).toBe('Uncertain (high: violence; medium: hate)');
+    // The error path's empty map, and a band that is no band at all.
+    expect(whyLabel({ reasons: ['escalated'], bands: {} })).toBe('Uncertain');
+    expect(whyLabel({ reasons: ['escalated'], bands: { HATE: 'NONE' } })).toBe('Uncertain');
+  });
+  test('a number where a band belongs is never printed', () => {
+    expect(whyLabel({ reasons: ['escalated'], bands: { MEDIUM: 3 } })).toBe('Uncertain');
+    expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['a', 'b'], bands: { HIGH: 0, MEDIUM: 2 } })).toBe('2 uncertain questions');
   });
   test('an appeal quotes the author, shortened', () => {
     expect(whyLabel({ reasons: ['appealed'], appealMessage: 'It is a clinical safety set.' })).toBe('Appealed: “It is a clinical safety set.”');

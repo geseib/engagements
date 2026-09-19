@@ -164,6 +164,10 @@ attributes: reasons: Set<'escalated'|'appealed'|'reported'>, waitingSince, lates
             snapshotKey                                  (S3, §3.3)
 ```
 
+*Corrected 2026-09-19.* `bands` is **one band per category**, `{ HATE: 'MEDIUM' }`, as the
+check and the appeal write it; never a count per band. The Stage 2 reader assumed counts
+(`{ MEDIUM: 3 }`), which no writer has produced, so its why line could never show a band.
+
 Rows are **≤4KB pointers**. A Query on the partition returns the whole queue; at tens of
 rows it is sorted by `waitingSince` in memory. **No TTL** — a queue row must not vanish;
 an alarm on the oldest `waitingSince` is the safeguard. Deleted by the decision.
@@ -515,7 +519,7 @@ with one action changed.
 
 `ModerationPanel` (`.modq`). Head: *"N sets the check would not decide on its own. Oldest
 has waited 2 days."* Table: set (title, format · N questions), organisation, why —
-**band words**, *"Appealed: <message>"*, *"Reported ×3 · graphic (2), inaccurate (1)"*,
+**band words** (*"2 uncertain questions (medium: hate)"*), *"Appealed: <message>"*, *"Reported ×3 · graphic (2), inaccurate (1)"*,
 *"Declared: graphic medical detail"*, *"Images"* — waiting, Review. The disclosure note
 stays. Empty state: *"Nothing is waiting — the check decided everything on its own."*
 

@@ -17,12 +17,29 @@ const humanise = (id) => String(id || '').replace(/[-_]+/g, ' ').trim();
 /** One notice id, or the review row's list of what the author declared (up to eight, check-question-set.js). */
 const noticeWords = (notice) => (Array.isArray(notice) ? notice : [notice]).map(humanise).filter(Boolean).join(', ');
 
+const BANDS = ['HIGH', 'MEDIUM', 'LOW'];
+/**
+ * A queue row's `bands` is one band per category — { HATE: 'MEDIUM' } (spec
+ * §3.2), as the check and the appeal write it — so it reads worst band first,
+ * each with the categories seen at it, in the review dialog's own words for
+ * them: "medium: hate, violence". A value that is not a band is skipped, never
+ * printed: no writer has ever stored a count here, and a number on this line
+ * would be a score.
+ */
+function bandWords(bands) {
+  const seen = new Map(BANDS.map((b) => [b, []]));
+  for (const [category, band] of Object.entries(bands && typeof bands === 'object' ? bands : {})) {
+    const b = String(band || '').toUpperCase();
+    if (seen.has(b)) seen.get(b).push(humanise(category).toLowerCase());
+  }
+  return BANDS.filter((b) => seen.get(b).length).map((b) => `${b.toLowerCase()}: ${seen.get(b).sort().join(', ')}`).join('; ');
+}
+
 function escalationWords(item) {
   const ids = Array.isArray(item.uncertainQuestionIds) ? item.uncertainQuestionIds : [];
-  if (ids.length) return `${plural(ids.length, 'uncertain question')}`;
-  const bands = item.bands && typeof item.bands === 'object' ? item.bands : {};
-  const parts = ['HIGH', 'MEDIUM', 'LOW'].filter((b) => Number(bands[b]) > 0).map((b) => `${b.toLowerCase()} ×${Number(bands[b])}`);
-  return parts.length ? `Uncertain (${parts.join(', ')})` : 'Uncertain';
+  const head = ids.length ? plural(ids.length, 'uncertain question') : 'Uncertain';
+  const detail = bandWords(item.bands);
+  return detail ? `${head} (${detail})` : head;
 }
 
 function appealWords(item) {
