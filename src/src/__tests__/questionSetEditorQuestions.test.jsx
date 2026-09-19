@@ -579,6 +579,41 @@ describe('carving a subset out', () => {
     expect(titlesIn(posts[0])).toEqual(['WHAT WENT WRONG', 'ARE WE SHIPPING']);
     expect(posts[0].sourceSetId).toBe('lessons-learned');
   });
+
+  it('starts over after a Save: the questions come back under new identities, so the selection is cleared, never counted', async () => {
+    // The reviewer's repro: tick one, remove another, Preview, Save, Table.
+    // rejects: keeping the selection across the read-back. Every row returns
+    // under a new uid, so the uids it held named nothing on screen: "Save 1
+    // selected as a new set…" with no box ticked, and a dialog offering a set
+    // "from the 0 questions you selected" — which it then posted, a header
+    // and no rows, for the importer to refuse.
+    const [, CHANGE, WRONG] = QUESTIONS.questions;
+    let reads = 0;
+    const posts = mockApi({
+      'GET lessons-learned/questions': () => {
+        reads += 1;
+        return jsonResponse(200, reads === 1 ? QUESTIONS : { setId: SET.id, questions: [WRONG, CHANGE] });
+      },
+    });
+    const views = () => within(screen.getByRole('group', { name: 'How the questions are shown' }));
+    renderPanel();
+    await ready();
+
+    fireEvent.click(screen.getByLabelText('Select WHAT WENT WRONG'));
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    await waitFor(() => expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument());
+    fireEvent.click(views().getByRole('button', { name: 'Table' }));
+
+    expect(screen.queryByRole('button', { name: /selected as a new set/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox').filter((box) => box.checked)).toHaveLength(0);
+    // And a tick made now is counted: the selection works on the rows read back.
+    fireEvent.click(screen.getByLabelText('Select WHAT WENT WRONG'));
+    fireEvent.click(screen.getByRole('button', { name: /Save 1 selected as a new set/i }));
+    expect(await screen.findByText(/from the 1 question you selected/)).toBeInTheDocument();
+    expect(posts).toHaveLength(1);
+  });
 });
 
 /*

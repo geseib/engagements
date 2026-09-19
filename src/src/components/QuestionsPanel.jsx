@@ -10,7 +10,7 @@ import { nothingToPreview } from '../config/questionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
-import { summarizeCsv, describeReplacePlan } from '../utils/questionSetEditing';
+import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/questionSetEditing';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
 import {
@@ -293,6 +293,16 @@ export default function QuestionsPanel({
       setRows(loaded);
       setBaseline(loaded);
       setBaselineOrder(loaded.map((r) => r.uid));
+      // THE SELECTION STARTS OVER. Every row read comes back under a new uid,
+      // so after a Save's read-back the uids a selection held name nothing on
+      // screen: "Save 1 selected as a new set…" with no box ticked, offering a
+      // set of 0 questions. Cleared, as Discard and opening another set clear
+      // it — the other two places the working copy is replaced wholesale. Not
+      // carried across by the key the importer gives each row (`savedKeys`,
+      // as the preview's place is): that has no honest fallback for a question
+      // it cannot find again, and a selection quietly shortened, or moved onto
+      // another question, is worse than unticked boxes one click from redone.
+      setSelected([]);
       setLoadState('ready');
       setLoadError('');
     } catch (error) {
@@ -801,12 +811,19 @@ export default function QuestionsPanel({
   /** Fork, or carve a subset out. One path; only the rows and the title differ. */
   const handleSaveAsNewSet = async () => {
     if (!newSetDialog) return;
+    // Never a set of no questions (utils/questionSetEditing.js `rowsForNewSet`).
+    // Said on the status line, which this dialog covers, so the dialog closes.
+    const chosen = rowsForNewSet(newSetDialog, rows);
+    if (!chosen) {
+      setNewSetDialog(null);
+      setStatus({ text: 'No set was made: there were no questions to make it from.', tone: 'error' });
+      return;
+    }
     const title = String(newSetDialog.title || '').trim();
     if (!title) {
       setStatus({ text: 'The new set needs a name.', tone: 'error' });
       return;
     }
-    const chosen = (newSetDialog.rows || rows).filter((r) => !r.removed);
     // Provenance, write-once: a row copied in from a third set keeps ITS
     // origin, because that is the truer answer to "where did this come from".
     const stamped = chosen.map((r) => ({

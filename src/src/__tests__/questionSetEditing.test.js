@@ -13,6 +13,7 @@ import {
   interpretVersionDelete,
   versionDeleteTone,
   selectableSummaryPrompts,
+  rowsForNewSet,
 } from '../utils/questionSetEditing';
 import { statusTone } from '../utils/statusTone';
 
@@ -510,5 +511,43 @@ describe('selectableSummaryPrompts', () => {
   test('an empty prompt list is not an error', () => {
     expect(selectableSummaryPrompts([], 'trivia')).toEqual([]);
     expect(selectableSummaryPrompts(undefined, 'trivia')).toEqual([]);
+  });
+});
+
+/*
+ * WHAT A NEW SET IS MADE FROM. The Questions tab makes a set two ways from its
+ * working copy (QuestionsPanel.jsx `handleSaveAsNewSet`): a FORK of the whole
+ * copy, and a SUBSET of the questions ticked in the table. Rows here are the
+ * working copy's shape as far as this rule reads it — a uid, a title, and the
+ * tombstone flag a removal sets.
+ */
+describe('rowsForNewSet', () => {
+  const row = (title, removed = false) => ({ uid: `row-${title}`, title, removed });
+  const copy = [row('WHAT WENT WRONG'), row('ARE WE SHIPPING', true), row('WHAT WOULD YOU CHANGE')];
+  const titles = (rows) => rows.map((r) => r.title);
+
+  test('a fork is the whole working copy, less what is marked for removal', () => {
+    expect(titles(rowsForNewSet({ mode: 'fork', rows: null }, copy)))
+      .toEqual(['WHAT WENT WRONG', 'WHAT WOULD YOU CHANGE']);
+  });
+
+  test('a subset is the questions chosen, less what is marked for removal', () => {
+    expect(titles(rowsForNewSet({ mode: 'subset', rows: [copy[2], copy[1]] }, copy)))
+      .toEqual(['WHAT WOULD YOU CHANGE']);
+  });
+
+  test('a subset of nothing makes nothing: not a set of no questions, and never the whole copy', () => {
+    // rejects: `(dialog.rows || rows)`. An empty choice is an empty array,
+    // which is truthy, so it went to the server as a set of 0 questions — a
+    // CSV header with no rows, which the importer refuses as "No valid
+    // questions found in CSV". And rejects the obvious repair, falling back
+    // to `rows` when the choice is empty, which makes a set of every question
+    // when none was chosen.
+    expect(rowsForNewSet({ mode: 'subset', rows: [] }, copy)).toBeNull();
+    expect(rowsForNewSet({ mode: 'subset', rows: [copy[1]] }, copy)).toBeNull();
+  });
+
+  test('a fork of a copy with every question marked for removal makes nothing too', () => {
+    expect(rowsForNewSet({ mode: 'fork', rows: null }, [row('ARE WE SHIPPING', true)])).toBeNull();
   });
 });
