@@ -184,6 +184,100 @@ describe('selection', () => {
   });
 });
 
+/*
+ * "EDIT Q14" FROM THE NEEDS-CHANGES BANNER, IN PREVIEW. The Questions tab
+ * resolves the banner's question id to its row and hands the uid in as
+ * `selectRequest` (questionsPanelPreview.test.jsx holds the panel to that;
+ * setEditorShare.test.jsx drives the banner end to end). Here: what the
+ * preview does with it.
+ */
+describe('a request to show one question', () => {
+  let scrollIntoView;
+  let original;
+  beforeEach(() => {
+    scrollIntoView = jest.fn();
+    original = window.HTMLElement.prototype.scrollIntoView;
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  });
+  afterEach(() => {
+    window.HTMLElement.prototype.scrollIntoView = original;
+  });
+
+  /** One set of rows for the whole test, so the uids a request names stay put. */
+  function renderWithRows(rows = makeRows()) {
+    const view = render(<QuestionPreview rows={rows} gameType="trivia" setId={SET_ID} />);
+    const ask = (selectRequest, nextRows = rows) => view.rerender(
+      <QuestionPreview rows={nextRows} gameType="trivia" setId={SET_ID} selectRequest={selectRequest} />
+    );
+    return { rows, ask };
+  }
+
+  test('it selects the question and scrolls its row into view, the way ↑/↓ do', () => {
+    const { rows, ask } = renderWithRows();
+    ask({ uid: rows[2].uid });
+    expect(options()[2]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(options()[2]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  test('a search and a chip that hide the question are cleared — else the selection would move straight to the first row', () => {
+    const { rows, ask } = renderWithRows();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));     // hides Green River (Method)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'killer' } });
+    expect(options()).toHaveLength(1);
+    ask({ uid: rows[1].uid });
+    expect(screen.getByRole('searchbox')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+    expect(options()).toHaveLength(3);
+    expect(options()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('The Green River case');
+    expect(scrollIntoView.mock.contexts[0]).toBe(options()[1]);
+  });
+
+  test('a filter that does not hide the question is left as it was', () => {
+    const { rows, ask } = renderWithRows();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));     // Which killer, Night Stalker
+    ask({ uid: rows[2].uid });
+    expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute('aria-pressed', 'true');
+    expect(options()).toHaveLength(2);
+    expect(options()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+  });
+
+  test('each request is acted on once: the list can move on from it, and a new request brings it back', () => {
+    const { rows, ask } = renderWithRows();
+    const first = { uid: rows[2].uid };
+    ask(first);
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    fireEvent.click(options()[0]);
+    // The same request, with the working copy changed under it (an edit):
+    // rejects snapping back to the question every time a row changes.
+    const edited = rows.map((r, i) => (i === 0 ? { ...r, title: 'Which killer, reworded?', edited: true } : r));
+    ask(first, edited);
+    expect(cardTitle()).toBe('Which killer, reworded?');
+    // A second click on the banner is a new object.
+    ask({ uid: rows[2].uid }, edited);
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  test('a request for a question the list does not hold — a removed one — changes nothing here', () => {
+    // The Questions tab never sends one (it takes a removed question to the
+    // Table, where its Restore is); this holds the preview to not looping on it.
+    const rows = makeRows();
+    rows[1] = { ...rows[1], removed: true };
+    const { ask } = renderWithRows(rows);
+    fireEvent.click(options()[1]);                                          // Night Stalker
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'stalker' } });
+    ask({ uid: rows[1].uid });
+    expect(screen.getByRole('searchbox')).toHaveValue('stalker');
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
 describe('the card', () => {
   test('it is the stage\'s card on a Table-ladder dusk screen, inside a paper preview', () => {
     renderPreview();

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import QuestionCard from './QuestionCard';
 import { filterBrowserRows } from '../config/setupPanel';
@@ -81,6 +81,10 @@ export function QuestionViewSwitch({ mode = 'table', onChange, previewBlocked = 
  * `pageIntentFor`), and a preview key must never turn a page on a projector.
  * They step through the VISIBLE rows, wrap at the ends, and belong to the field
  * instead whenever focus is in something the person types into.
+ *
+ * `selectRequest` is `{ uid }` — "Edit Q14" from the needs-changes banner
+ * (components/SetReviewBanner.jsx), which the Questions tab resolves to a row of
+ * the working copy and hands here while this view is up. See the effect below.
  */
 export default function QuestionPreview({
   rows = [],
@@ -88,6 +92,7 @@ export default function QuestionPreview({
   setInstruction = '',
   setId = '',
   onEditQuestion,
+  selectRequest = null,
 }) {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
@@ -111,6 +116,39 @@ export default function QuestionPreview({
   useEffect(() => {
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);
   }, [selected, selectedId]);
+
+  // GOING TO ONE QUESTION ON REQUEST. The preview's way of going to a question
+  // is selecting it: the card draws it and "Edit this question" is beside it,
+  // and the row scrolls into view the way ↑/↓ scroll it.
+  //
+  // A search or chip that hides the question is cleared first. Left in place,
+  // the rule above would move the selection straight back to the first visible
+  // row, and the request would look as if it had done nothing. A filter that
+  // does not hide it is left alone. A row this list does not hold (a removed
+  // one) is not this view's to show; the Questions tab sends that one to the
+  // Table instead.
+  //
+  // Each request OBJECT is acted on once, so the list can move on from it and
+  // an edit to the working copy does not snap back to it. A second press of the
+  // banner's button arrives as a new object.
+  const handledRequest = useRef(null);
+  useEffect(() => {
+    if (!selectRequest || !selectRequest.uid || handledRequest.current === selectRequest) return;
+    const { uid } = selectRequest;
+    if (!visible.some((r) => r.id === uid)) {
+      if (listRows.some((r) => r.id === uid) && (search.trim() || activeCategory)) {
+        setSearch('');
+        setCategory('');
+        return; // acted on at the next render, when the cleared list is on screen
+      }
+      handledRequest.current = selectRequest;
+      return;
+    }
+    handledRequest.current = selectRequest;
+    setSelectedId(uid);
+    const el = document.getElementById(optionDomId(uid));
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [selectRequest, visible, listRows, search, activeCategory]);
 
   const selectedRow = selected ? rows.find((r) => r.uid === selected.id) || null : null;
   const staged = selectedRow ? stagedQuestion(selectedRow, { setId }) : null;

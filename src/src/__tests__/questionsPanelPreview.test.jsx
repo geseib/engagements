@@ -213,3 +213,92 @@ describe('the preview reads the working copy', () => {
     expect(howTo()).toBe('Name the man, not the river.');
   });
 });
+
+/*
+ * "EDIT Qn" FROM THE NEEDS-CHANGES BANNER, WHILE IN PREVIEW. The banner lives
+ * in QuestionSetEditor (setEditorShare.test.jsx drives it end to end); here the
+ * panel is handed what the editor passes down — `focusRequest`, a BARE question
+ * id and a `seq` — and held to where it sends it. The table's rows are the only
+ * thing that carries `data-question-id`, and Preview unmounts the table, so
+ * before this the request found nothing and did nothing at all.
+ */
+describe('"Edit Qn" from the needs-changes banner, in Preview', () => {
+  let scrollIntoView;
+  let original;
+  beforeEach(() => {
+    scrollIntoView = jest.fn();
+    original = window.HTMLElement.prototype.scrollIntoView;
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  });
+  afterEach(() => {
+    window.HTMLElement.prototype.scrollIntoView = original;
+  });
+
+  function renderAsking() {
+    const view = renderPanel();
+    return (id, seq) => view.rerender(
+      <QuestionsPanel questionSet={SET} availableSets={[SET]} plannedVersion={2}
+        onChanged={jest.fn()} onDirtyChange={jest.fn()} focusRequest={{ id, seq }} />
+    );
+  }
+  const options = () => within(screen.getByRole('listbox', { name: 'Questions' })).getAllByRole('option');
+  const cardTitle = () => card().querySelector('h1.q').textContent;
+
+  test('the question is found by its bare id and shown in the preview: the list selects it, the card draws it', async () => {
+    mockApi();
+    const ask = renderAsking();
+    await ready();
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    ask('c002#001', 1);
+    expect(options()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('The Green River case');
+    expect(views().getByRole('button', { name: 'Preview' })).toHaveAttribute('aria-pressed', 'true');
+    expect(scrollIntoView.mock.contexts).toEqual([options()[1]]);
+  });
+
+  test('a question removed from the working copy is not in the preview, so the request goes to the Table, where its Restore is', async () => {
+    mockApi();
+    const ask = renderAsking();
+    await ready();
+    fireEvent.click(within(screen.getByTestId('question-1')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    ask('c002#001', 1);
+    expect(views().getByRole('button', { name: 'Table' })).toHaveAttribute('aria-pressed', 'true');
+    const row = screen.getByTestId('question-1');
+    expect(row).toHaveAttribute('data-question-id', 'c002#001');
+    expect(row).toHaveClass('removed', 'focused');
+    expect(within(row).getByRole('button', { name: /restore/i })).toBeInTheDocument();
+    expect(scrollIntoView.mock.contexts).toEqual([row]);
+  });
+
+  test('a table highlight from an earlier request does not outlive a request the preview takes', async () => {
+    // rejects: the next request clearing the highlight's 2-second timer while
+    // setting none of its own — the preview's sets none — so the table row
+    // stays marked for good.
+    mockApi();
+    const ask = renderAsking();
+    await ready();
+    ask('c002#001', 1);                                           // in the Table
+    expect(screen.getByTestId('question-1')).toHaveClass('focused');
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    ask('c002#001', 2);                                           // the preview's
+    expect(cardTitle()).toBe('The Green River case');
+    fireEvent.click(views().getByRole('button', { name: 'Table' }));
+    expect(screen.getByTestId('question-1')).not.toHaveClass('focused');
+  });
+
+  test('a request is spent with the preview it was made for: Table and back starts at the top again', async () => {
+    // rejects: the preview remounting on a request made minutes ago and
+    // jumping to it, as if the banner had been pressed again.
+    mockApi();
+    const ask = renderAsking();
+    await ready();
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    ask('c002#001', 1);
+    expect(cardTitle()).toBe('The Green River case');
+    fireEvent.click(views().getByRole('button', { name: 'Table' }));
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    expect(options()[0]).toHaveAttribute('aria-selected', 'true');
+    expect(cardTitle()).toBe('Which killer was caught by a parking ticket?');
+  });
+});
