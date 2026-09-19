@@ -192,6 +192,47 @@ describe('the list and its controls, on the editor\'s paper panel', () => {
   });
 });
 
+/*
+ * WHAT THE POSITION, THE NOTE AND THE EMPTY LINE STAND ON. They paint no ground
+ * of their own: "3 / 30", the reveal note and its label, and the empty-state
+ * line sit on the set editor's panel, and are only as legible as the panel
+ * under them. The host shelf's panel is pinned above. The admin console's is
+ * paper only because AdminPage.jsx renders the editor with contentTheme
+ * 'light': on the dusk work body the same paper --muted would stand on
+ * #25375A, at about 1.9:1, and nothing here would fail.
+ *
+ * PINNED, NOT BOXED. The other fix — an opaque ground of their own on each
+ * line — would make the lines independent of the parent, but it is not the
+ * pattern the engage-design skill sets: the markup and its theme move in the
+ * same change and a palette test pins the pairing (testing-a-surface.md §2.3,
+ * hard-rules.md §9), and contrast is measured up the real ancestor chain
+ * (hard-rules.md §4). A box behind a count and a note would also be a visual
+ * change to a surface whose siblings (the qsets idiom) set muted text straight
+ * on the panel.
+ */
+describe('what the position, the note and the empty line stand on', () => {
+  test('the admin console renders the editor on the paper panel these are measured on', () => {
+    // rejects: the console's editor moving to the dusk work body while this
+    // sheet still paints paper text on it.
+    const page = strip(read('AdminPage.jsx'));
+    const theme = page.match(/contentTheme=\{editingSet \? '(\w+)'/);
+    expect(theme).not.toBeNull();
+    expect(theme[1]).toBe('light');
+    expect(hexIn(theme[1] === 'light' ? PAPER : DUSK, '--surface-2')).toBe(P.panel);
+  });
+
+  // Each stack is the panel, then whatever ground this sheet paints on the way
+  // down to the text — read from the sheet, so a ground added later is measured.
+  test.each([
+    ['the position', P.muted, ['.qprev', '.qprev-detail', '.qprev-bar', '.qprev-pos']],
+    ['the reveal note', P.text, ['.qprev', '.qprev-detail', '.qprev-note']],
+    ['the reveal note\'s label', P.muted, ['.qprev', '.qprev-detail', '.qprev-note', '.qprev-note b']],
+    ['the empty-state line', P.muted, ['.qprev', '.qprev--empty', '.qprev-empty']],
+  ])('%s clears AA on the panel', (_label, fg, chain) => {
+    expect(on(fg, [P.panel, ...chain.map((selector) => groundOf(selector, PAPER))])).toBeGreaterThanOrEqual(AA);
+  });
+});
+
 describe('the screen: the stage\'s own card on the stage\'s own ground', () => {
   test('the screen restates exactly the stage\'s tokens, nothing near them', () => {
     // rejects: a "close enough" dusk. The card must look like the projector.
