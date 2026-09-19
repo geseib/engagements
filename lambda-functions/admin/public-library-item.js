@@ -7,6 +7,18 @@
  * org, versions, notice), the org's REVIEW facts for the version it came from,
  * and the review log. Reports (Stage 3) and access rows (Stage 5) join later.
  *
+ * ── WHAT THE CHECK MEASURED, NAMED BY TEXT (2026-09-19) ────────────────────
+ *
+ * The owner: the card "doesn't reveal much". The review now carries `tally`
+ * (per category, in questions) and `observed` (every band the check saw), and
+ * GET projects both with `reasons`. Each observation is named by its question's
+ * TEXT, read from the public copy's own question rows by id: publish copies the
+ * judged snapshot's rows byte-for-byte, keys and all (shared/publish-set.js),
+ * so the review's ids are the public copy's ids. Not the S3 snapshot —
+ * snapshots expire after 30 days and this function has no S3 grant — and not
+ * the org's rows, which are encrypted and may have been edited since. A review
+ * checked before measuring existed projects `tally: null` and no observations.
+ *
  * DELETE is takedown. It reads `source*` off the public row, logs `taken-down`
  * with the note on the org set's log, flags the org's share stamp ONLY IF it
  * still names this public set (D11), deletes any queue row for the set, and
@@ -38,7 +50,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('./shared/tenant');
-const { setMetadataKey } = require('./shared/set-version');
+const { setMetadataKey, setPartition, queryPartition } = require('./shared/set-version');
 const { unpublishSet } = require('./shared/publish-set');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
@@ -62,10 +74,33 @@ async function readPublicMeta(publicSetId) {
   return res && res.Item ? res.Item : null;
 }
 
+const SET_SUBJECT = '(set)';
+const QUESTION_PREFIX = 'QUESTION#';
+const lines = (...values) => values.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean).join('\n');
+
+/**
+ * Name each observation by its text (see the header). A question reads as a
+ * room sees it asked — title, then detail, one per line; the set's own
+ * subject by the public set's title and description. An id the active public
+ * copy does not hold gets '' rather than a guess.
+ */
+async function withText(observed, meta, publicSetId) {
+  const rows = observed.filter((o) => o && typeof o === 'object');
+  const texts = new Map();
+  if (rows.some((o) => o.questionId && o.questionId !== SET_SUBJECT)) {
+    const pk = setPartition(pubRefOf(publicSetId), meta.activeVersion);
+    const { items } = await queryPartition(db, TABLE(), pk, QUESTION_PREFIX);
+    for (const row of items) texts.set(String(row.SK).slice(QUESTION_PREFIX.length), lines(row.Title, row.Detail));
+  }
+  const setName = lines(meta.name, meta.description);
+  return rows.map((o) => ({ ...o, text: o.questionId === SET_SUBJECT ? setName : (texts.get(o.questionId) || '') }));
+}
+
 async function standing(meta, publicSetId) {
   const source = sourceOf(meta);
   const version = Number(meta.sourceVersion) || 0;
   const review = source.orgId && source.setId && version ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
+  const observed = Array.isArray(review.observed) ? await withText(review.observed, meta, publicSetId) : [];
   const log = source.orgId && source.setId ? await readReviewLog(db, TABLE(), source) : [];
   const versions = Array.isArray(meta.versions) ? meta.versions : [];
   const latest = versions.find((v) => Number(v.version) === Number(meta.activeVersion)) || versions[versions.length - 1] || {};
@@ -92,6 +127,11 @@ async function standing(meta, publicSetId) {
       notice: Array.isArray(review.notice) ? review.notice : [],
       findings: Array.isArray(review.findings) ? review.findings : [],
       checkedAt: review.checkedAt || null,
+      reasons: Array.isArray(review.reasons) ? review.reasons : [],
+      // null, not {}: "checked before measuring existed" is not "measured,
+      // and nothing seen" (content-guardrail.js tallyOf, `scope: 'full'`).
+      tally: review.tally && typeof review.tally === 'object' ? review.tally : null,
+      observed,
     },
     log,
   };

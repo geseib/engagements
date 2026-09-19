@@ -17,11 +17,37 @@ const parse = (res) => JSON.parse(res.body || '{}');
 const SRC = { scope: 'org', orgId: 'org_acme', setId: 'safety' };
 const PUB = publicSetIdFor('org_acme', 'safety');
 const PUBREF = { scope: 'public', orgId: '', setId: PUB };
-const FINDINGS = [{ questionId: 'c001#014', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'x' }];
+/*
+  The org's REVIEW row the way production leaves it for a set like this one:
+  the check held it on one MEDIUM that intervened (the finding), saw a LOW it
+  let through and a LOW in the set's own text (observations, with the tally),
+  and Engage staff approved it with the notice the public row carries. This
+  fixture used to write `passed` straight away with the finding on it — a
+  passed review holding a finding with no decision behind it, which no code
+  path writes — and named c001#014, a question its three-question GET fixture
+  never publishes.
+*/
+const FINDINGS = [{ questionId: 'c001#002', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'Describing the injury in detail is what was flagged, not the safety topic.' }];
+const OBSERVED = [
+  { questionId: 'c001#001', category: 'VIOLENCE', band: 'LOW', intervened: false, explanation: 'The check noted violence or injury at low confidence and let the question through.' },
+  { ...FINDINGS[0], intervened: true },
+  { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false },
+];
+const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
+const tallyFor = (questions) => ({
+  scope: 'full', questions, setTextChecked: true, spotless: questions - 2, unread: 0,
+  categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 1, high: 0 }, SEXUAL: NONE_SEEN, HATE: NONE_SEEN, INSULTS: NONE_SEEN, MISCONDUCT: NONE_SEEN },
+});
 async function seed({ versions = 5, questions = 200 } = {}) {
   H.reset();
   H.seedRow({ ...V.setMetadataKey(SRC), name: 'x', activeVersion: 2, versions: [{ version: 2 }] });
-  await R.writeReview(db, T, SRC, 2, { status: R.STATUS.PASSED, findings: FINDINGS, contentHash: 'c'.repeat(64), checkedBy: 'guardrail' });
+  await R.writeReview(db, T, SRC, 2, {
+    status: R.STATUS.ESCALATED, findings: FINDINGS, observed: OBSERVED, tally: tallyFor(questions),
+    note: `${questions}/${questions + 1} clean`, reasons: ['guardrail'], contentHash: 'c'.repeat(64), checkedBy: 'sub-amara',
+  });
+  await R.transitionReview(db, T, SRC, 2, R.STATUS.ESCALATED, {
+    status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-17T09:55:00.000Z', note: 'Clinical, not gratuitous.', notice: ['graphic-medical'],
+  });
   await S.writeShareStamp(db, T, SRC, { version: 2, status: 'published', publicSetId: PUB, publicVersion: versions, contentHash: 'c'.repeat(64) });
   H.seedRow({ ...V.setMetadataKey(PUBREF), name: 'Safety walkthrough', description: 'Site safety', engagementType: 'trivia', activeVersion: versions, versions: Array.from({ length: versions }, (_, i) => ({ version: i + 1, createdAt: '2026-09-17T10:00:00.000Z', questionCount: questions })), sourceOrgId: 'org_acme', sourceOrgName: 'Acme', sourceSetId: 'safety', sourceVersion: 2, contentHash: 'c'.repeat(64), questionCount: questions, sensitivity: ['graphic-medical'] });
   for (let v = 1; v <= versions; v += 1) {
