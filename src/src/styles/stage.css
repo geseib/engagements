@@ -75,7 +75,14 @@
   --hair:2px;                         /* 1px rules do not survive a video codec */
   --dock-h:calc(9vh + 4vh);
 }
-:root.d-table{
+/* TABLE, ON THE ROOT OR ON ONE ELEMENT. `.stage-ladder-table` is the set
+   editor's question preview (components/QuestionPreview.jsx): the preview must
+   draw the card at the Table profile WITHOUT touching :root, which carries the
+   live stage's profile. One declaration, two selectors — nothing to keep in
+   sync. `--hair` is restated at the value :root already gives Table, so a Call
+   root's 2px cannot reach the preview through inheritance; on the stage it
+   changes nothing. Pinned by __tests__/stageLadderScope.test.js. */
+:root.d-table, .stage-ladder-table{
   --L-hero:      clamp(44px, 6.2vh, 64px);
   --L-primary:   clamp(32px, 4.0vh, 44px);
   --L-secondary: clamp(22px, 2.6vh, 30px);
@@ -83,6 +90,7 @@
   --L-meta:      clamp(16px, 1.5vh, 19px);
   --floor:16px; --measure-base:30ch; --bar-h:5px; --fit-min:.55;
   --dock-h:calc(8vh + 3.5vh);
+  --hair:1px;
 }
 
 body{
@@ -90,7 +98,15 @@ body{
   font-family:var(--font-ui);
   -webkit-font-smoothing:antialiased;
   font-variant-numeric:tabular-nums;
-  /* Chrome tokens read the profile ladder directly. Only .content re-scales. */
+}
+/* Chrome tokens read the profile ladder directly. Only .content re-scales.
+   DERIVED ON THE PREVIEW'S SCOPE TOO, NOT ONLY ON body. A custom property
+   holding var() is resolved where it is declared and inherited as that
+   resolved value — so --t-* computed at body against :root's Room ladder would
+   reach the preview's card as Room sizes, whatever `.stage-ladder-table`
+   redeclared above. That is exactly how the retired --k scalar drew all four
+   profiles identically. */
+body, .stage-ladder-table{
   --t-hero:var(--L-hero); --t-primary:var(--L-primary);
   --t-secondary:var(--L-secondary); --t-body:var(--L-body); --t-meta:var(--L-meta);
   --measure:var(--measure-base);
@@ -720,8 +736,8 @@ body{
 /* Artwork rounds carry a real image rather than the mockup's .artwork
    placeholder gradient. Capped in vh so a tall image cannot push the question
    off a fixed-height stage — the fitter can shrink type, but it cannot shrink
-   a raster. */
-.content .stage-art{display:block;margin:0 auto;max-width:100%;max-height:44vh;
+   a raster. The preview's card has no .content, so its scope is named too. */
+.content .stage-art, .stage-ladder-table .stage-art{display:block;margin:0 auto;max-width:100%;max-height:44vh;
   object-fit:contain;border-radius:var(--radius);border:var(--hair) solid var(--rule)}
 
 /* The dock's primary action is HostActionBar's own button — Dock wraps it
