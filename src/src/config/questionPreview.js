@@ -96,6 +96,25 @@ export function previewRows(rows = []) {
     .map((row) => browserRow({ ...row, id: row.uid }));
 }
 
+/**
+ * WHY THERE IS NOTHING TO PREVIEW, or '' when there is something.
+ *
+ * Two situations, two lines — an empty state that lies sends people the wrong
+ * way. A set with no rows has nothing yet, and the way on is adding one. A set
+ * whose every row is a tombstone HAS questions, each marked for removal and
+ * struck through in the Table with its Restore beside it, and Discard in the
+ * bar above undoes them all; adding one is not the way back.
+ *
+ * One source for both places that say it: the preview's own empty state, and
+ * the title on the Questions tab's disabled [Preview] (QuestionsPanel.jsx).
+ */
+export function nothingToPreview(rows = []) {
+  if (rows.some((row) => row && !row.removed)) return '';
+  if (!rows.some(Boolean)) return 'This set has no questions yet, so there is nothing to preview.';
+  return 'Every question is marked for removal, so there is nothing to preview. '
+    + 'Restore one in the Table, or discard your changes.';
+}
+
 /** The categories the rows actually use, in the order they first appear. */
 export function previewCategories(listRows = []) {
   const seen = [];

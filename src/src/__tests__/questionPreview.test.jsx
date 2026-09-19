@@ -421,16 +421,24 @@ describe('ASK and Reveal', () => {
   });
 });
 
-describe('the two empty states, which are different situations', () => {
+describe('the three empty states, which are different situations', () => {
   test('a set with no questions says there is nothing to preview', () => {
     renderPreview({ rows: [] });
     expect(screen.getByText(/This set has no questions yet, so there is nothing to preview/)).toBeInTheDocument();
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  test('a set whose every row is removed is the same situation', () => {
+  test('a set whose every question is marked for removal says so, and names the way back', () => {
+    // rejects: "This set has no questions yet" — false, the set has questions
+    // marked for removal, and the way back is Restore or Discard, not adding one.
     renderPreview({ rows: makeRows().map((r) => ({ ...r, removed: true })) });
-    expect(screen.getByText(/nothing to preview/)).toBeInTheDocument();
+    const line = screen.getByText(/nothing to preview/);
+    expect(line).toHaveTextContent(
+      'Every question is marked for removal, so there is nothing to preview. '
+      + 'Restore one in the Table, or discard your changes.',
+    );
+    expect(line).not.toHaveTextContent(/no questions yet/);
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
   test('nothing matching the search says so, offers the way out, and the screen says nothing is selected', () => {

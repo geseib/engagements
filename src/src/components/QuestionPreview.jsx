@@ -4,7 +4,7 @@ import QuestionCard from './QuestionCard';
 import { filterBrowserRows } from '../config/setupPanel';
 import { resolveInstruction } from '../config/instructions';
 import {
-  stagedQuestion, previewRows, previewCategories, stepSelection, refindPlace,
+  stagedQuestion, previewRows, previewCategories, stepSelection, refindPlace, nothingToPreview,
 } from '../config/questionPreview';
 import { savedKeys } from '../utils/questionRows';
 import './QuestionPreview.css';
@@ -192,10 +192,11 @@ export default function QuestionPreview({
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
   };
 
+  // No rows, or only tombstones: two different lines (config/questionPreview.js).
   if (listRows.length === 0) {
     return (
       <div className="qprev qprev--empty" data-theme="light" data-testid="question-preview">
-        <p className="qprev-empty">This set has no questions yet, so there is nothing to preview.</p>
+        <p className="qprev-empty">{nothingToPreview(rows)}</p>
       </div>
     );
   }

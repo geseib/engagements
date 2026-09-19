@@ -6,6 +6,7 @@ import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
 import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
+import { nothingToPreview } from '../config/questionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
@@ -238,10 +239,12 @@ export default function QuestionsPanel({
   // first question in ASK. It finds its question again in the rows that come
   // back (QuestionPreview.jsx, `place`). Only a load with nothing to show yet —
   // a set just opened — blocks it.
+  // With nothing to show, the reason is the preview's own empty line: a set
+  // with no questions and a set whose every question is marked for removal are
+  // different situations with different ways back (config/questionPreview.js).
   const previewBlocked = loadState === 'loading' && rows.length === 0 ? 'The questions are still loading.'
     : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
-      : summary.questionCount === 0 ? 'This set has no questions yet, so there is nothing to preview.'
-        : '';
+      : nothingToPreview(rows);
   const previewing = viewMode === 'preview' && !previewBlocked;
 
   /* ----------------------------------------------------------- loading --- */

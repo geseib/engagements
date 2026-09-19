@@ -97,6 +97,22 @@ describe('the switch', () => {
     expect(preview).toHaveAttribute('title', 'This set has no questions yet, so there is nothing to preview.');
   });
 
+  test('Preview is disabled, and says why, when every question is marked for removal', async () => {
+    // rejects: calling that set empty. It has two questions, both struck
+    // through with Restore beside them, and Discard in the bar above.
+    mockApi();
+    renderPanel();
+    await ready();
+    for (const i of [0, 1]) {
+      fireEvent.click(within(screen.getByTestId(`question-${i}`)).getByRole('button', { name: /remove/i }));
+    }
+    const preview = views().getByRole('button', { name: 'Preview' });
+    expect(preview).toBeDisabled();
+    expect(preview).toHaveAttribute('title',
+      'Every question is marked for removal, so there is nothing to preview. '
+      + 'Restore one in the Table, or discard your changes.');
+  });
+
   test('while the questions load, and after they fail to, Preview says so — never that the set is empty', async () => {
     // rejects: one reason for every blocked state. A load that failed is not
     // an empty set, and saying it is would be an empty state that lies.
