@@ -999,7 +999,10 @@ export default function QuestionsPanel({
         >
           <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
         </button>
-        {selected.length > 0 && (
+        {/* The selection is the table's checkboxes, and Preview does not show
+            them: a "Save 2 selected" there acts on two questions nothing on
+            screen names. Hidden, not cleared — it returns with the table. */}
+        {selected.length > 0 && !previewing && (
           <button
             className="btn-secondary btn-small"
             onClick={() => setNewSetDialog({

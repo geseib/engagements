@@ -138,6 +138,21 @@ describe('the switch', () => {
     expect(screen.getByRole('group', { name: 'Category' })).toBeInTheDocument();
   });
 
+  test('"Save N selected as a new set…" is not offered in Preview, where the selection cannot be seen', async () => {
+    // rejects: a button that acts on checkboxes the preview does not show —
+    // "Save 1 selected" with nothing on screen saying which one.
+    mockApi();
+    renderPanel();
+    await ready();
+    fireEvent.click(screen.getByLabelText('Select Which killer was caught by a parking ticket?'));
+    expect(screen.getByRole('button', { name: /Save 1 selected as a new set/ })).toBeInTheDocument();
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    expect(screen.queryByRole('button', { name: /selected as a new set/ })).toBeNull();
+    // The selection is kept, and the button returns with the table that shows it.
+    fireEvent.click(views().getByRole('button', { name: 'Table' }));
+    expect(screen.getByRole('button', { name: /Save 1 selected as a new set/ })).toBeInTheDocument();
+  });
+
   test('opening a different set starts it in Table', async () => {
     mockApi();
     const { rerender } = renderPanel();
