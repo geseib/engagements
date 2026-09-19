@@ -224,9 +224,11 @@ describe('the moderation queue inherited the fix, not just the shape', () => {
 });
 
 describe('the score card table keeps the same fixed-layout contract', () => {
-  test('fixed layout, and its four columns add to 100', () => {
+  // 2026-09-19: a fifth column, "Held the set" — whether a row sent the set to
+  // a person, now that the table lists what the check let through as well.
+  test('fixed layout, and its five columns add to 100', () => {
     expect(block(SCARD_CSS, '.scard-tbl')).toMatch(/table-layout:\s*fixed/);
-    const cols = ['.scard-col-q', '.scard-col-b', '.scard-col-c', '.scard-col-w'];
+    const cols = ['.scard-col-q', '.scard-col-b', '.scard-col-c', '.scard-col-w', '.scard-col-h'];
     expect(cols.reduce((a, s) => a + widthIn(SCARD_CSS, s), 0)).toBe(100);
   });
 });
