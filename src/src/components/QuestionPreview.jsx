@@ -4,8 +4,9 @@ import QuestionCard from './QuestionCard';
 import { filterBrowserRows } from '../config/setupPanel';
 import { resolveInstruction } from '../config/instructions';
 import {
-  stagedQuestion, previewRows, previewCategories, stepSelection,
+  stagedQuestion, previewRows, previewCategories, stepSelection, refindPlace,
 } from '../config/questionPreview';
+import { savedKeys } from '../utils/questionRows';
 import './QuestionPreview.css';
 
 /** Input types a person types into — ↑/↓ belong to the field there, not the list. */
@@ -109,13 +110,36 @@ export default function QuestionPreview({
     () => filterBrowserRows(listRows, { search, category: activeCategory, matchDetail: true }),
     [listRows, search, activeCategory],
   );
-  const selected = visible.find((r) => r.id === selectedId) || visible[0] || null;
+  const keys = useMemo(() => savedKeys(rows), [rows]);
+
+  // THE PLACE SURVIVES THE ROWS BEING READ BACK. A Save reads the set back
+  // (QuestionsPanel `load`), and every row arrives with a new uid, so the
+  // selection's uid is simply gone from the list. `place` is where it was as of
+  // the last render — the key the question was saved under, its title, its
+  // position — and the question is found again from it (config/questionPreview.js
+  // `refindPlace`) in the same render, so the card never shows another question
+  // in between. A selection that is only FILTERED OUT is still in the list, and
+  // keeps the rule below.
+  const place = useRef(null);
+  const lost = selectedId !== null && !listRows.some((r) => r.id === selectedId);
+  const found = lost ? refindPlace(place.current, rows, visible) : null;
+  const selected = visible.find((r) => r.id === selectedId) || found || visible[0] || null;
 
   // A selection that is filtered out MOVES to the first visible row — it does
   // not wait there to snap back when the filter clears.
   useEffect(() => {
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);
   }, [selected, selectedId]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const row = rows.find((r) => r.uid === selected.id);
+    place.current = {
+      key: keys.get(selected.id) || '',
+      title: String((row && row.title) || '').trim(),
+      index: visible.indexOf(selected),
+    };
+  }, [selected, rows, keys, visible]);
 
   // GOING TO ONE QUESTION ON REQUEST. The preview's way of going to a question
   // is selecting it: the card draws it and "Edit this question" is beside it,

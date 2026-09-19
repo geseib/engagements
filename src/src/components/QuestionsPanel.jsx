@@ -231,7 +231,14 @@ export default function QuestionsPanel({
   // Worked out here, above the focus effects that read `previewing`: a hook's
   // dependency array naming a const declared further down throws on the first
   // render (the outage .eslintrc.js records).
-  const previewBlocked = loadState === 'loading' ? 'The questions are still loading.'
+  //
+  // A READ-BACK IS NOT A FIRST LOAD. A Save (or a replace from a CSV) reads the
+  // set back while the rows just written are still on screen, and the preview
+  // stays up over them: blocking it there unmounted it, and it came back at the
+  // first question in ASK. It finds its question again in the rows that come
+  // back (QuestionPreview.jsx, `place`). Only a load with nothing to show yet —
+  // a set just opened — blocks it.
+  const previewBlocked = loadState === 'loading' && rows.length === 0 ? 'The questions are still loading.'
     : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
       : summary.questionCount === 0 ? 'This set has no questions yet, so there is nothing to preview.'
         : '';
@@ -1023,7 +1030,10 @@ export default function QuestionsPanel({
         />
       </div>
 
-      {loadState === 'loading' && <p className="qs-empty">Loading questions…</p>}
+      {/* Not over a preview that is reading its set back: the questions it
+          shows are the ones just saved, and the line would push it down and
+          back up again for nothing. */}
+      {loadState === 'loading' && !previewing && <p className="qs-empty">Loading questions…</p>}
       {loadState === 'error' && (
         <StatusMessage message={`${loadError} Nothing has been changed.`} tone="error" />
       )}

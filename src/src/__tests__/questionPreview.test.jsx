@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import QuestionPreview, { QuestionViewSwitch } from '../components/QuestionPreview';
 import { previewRows, previewCategories, stepSelection } from '../config/questionPreview';
-import { toRow } from '../utils/questionRows';
+import { toRow, editableRows, savedKeys } from '../utils/questionRows';
 
 /**
  * THE PREVIEW — the list's mechanics, the card, and the one rule about :root.
@@ -610,6 +610,104 @@ describe('what the sheet does to the markup', () => {
     // the premise: the sheet does cut something the preview renders
     expect(cut.length).toBeGreaterThan(0);
     expect(cut.filter((el) => el.getAttribute('title') !== el.textContent).map((el) => el.textContent)).toEqual([]);
+  });
+});
+
+/*
+ * THE WORKING COPY READ BACK AFTER A SAVE. The Questions tab reads the set back
+ * once a Save lands, and every row arrives with a new uid — uids are minted per
+ * read (utils/questionRows.js `nextUid`) — so a selection held by uid is lost
+ * unless the preview finds the question again. questionsPanelPreview.test.jsx
+ * drives the Save; here the read-back is handed straight in, built by the
+ * panel's own reader (`editableRows`) from what the importer stored.
+ */
+describe('the place survives the working copy being read back', () => {
+  const wire = (row, id) => ({
+    id, Category: row.category, title: row.title, questionDetail: row.detail,
+    optionA: row.optionA, optionB: row.optionB, optionC: row.optionC, optionD: row.optionD,
+    correctAnswer: row.correctAnswer, difficulty: row.difficulty,
+  });
+  const position = () => screen.getByTestId('preview-position').textContent;
+
+  test('a question added since the last save is found where the save put it, not at its old place', () => {
+    // rejects: finding it by position. It was third in the working copy, and
+    // the set comes back in key order, where the save put it second — beside
+    // the History question it was written under.
+    const [killer, green] = makeRows();
+    const added = toRow({
+      title: 'Who was dubbed the Night Stalker?', category: 'History', optionA: 'Ted Bundy',
+      optionB: 'Richard Ramirez', correctAnswer: 'OptionB', difficulty: 'hard',
+    }, { origin: 'new' });
+    expect(added.sk).toBe('');
+    const { rerender } = render(<QuestionPreview rows={[killer, green, added]} gameType="trivia" setId={SET_ID} />);
+    fireEvent.click(options()[2]);
+    expect(position()).toBe('3 / 3');
+
+    const back = editableRows({ questions: [wire(killer, 'c001#001'), wire(green, 'c002#001'), wire(added, 'c001#002')] });
+    rerender(<QuestionPreview rows={back} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    expect(position()).toBe('2 / 3');
+  });
+
+  test('a question the save renumbered is found under its new key, not its old one', () => {
+    // rejects: matching the key the question had before the save. Removing
+    // the first History question renumbers the rest: the cipher question was
+    // c001#003, and once saved c001#003 is the Bundy question.
+    const [killer, green, stalker] = makeRows();
+    const cipher = trivia('c001#003', { title: 'Whose cipher was solved in 2020?', category: 'History' });
+    const bundy = trivia('c001#004', { title: 'Who was Ted Bundy?', category: 'History' });
+    const working = [{ ...killer, removed: true }, stalker, cipher, bundy, green];
+    const { rerender } = render(<QuestionPreview rows={working} gameType="trivia" setId={SET_ID} />);
+    fireEvent.click(options()[1]);
+    expect(cardTitle()).toBe('Whose cipher was solved in 2020?');
+
+    const back = editableRows({ questions: [
+      wire(stalker, 'c001#001'), wire(cipher, 'c001#002'), wire(bundy, 'c001#003'), wire(green, 'c002#001'),
+    ] });
+    rerender(<QuestionPreview rows={back} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Whose cipher was solved in 2020?');
+    expect(position()).toBe('2 / 4');
+  });
+
+  test('a set read back without the question keeps the place by position, the last place at most', () => {
+    // A replace from a CSV, say: nothing of the old working copy is left to
+    // find. rejects: jumping to the top when the question is gone.
+    const { rerender } = render(<QuestionPreview rows={makeRows()} gameType="trivia" setId={SET_ID} />);
+    fireEvent.click(options()[1]);
+    const other = (n) => toRow({ id: `c001#00${n}`, title: `Replaced ${n}`, category: 'Other', optionA: 'A', optionB: 'B', correctAnswer: 'OptionA' });
+    rerender(<QuestionPreview rows={[other(1), other(2), other(3)]} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Replaced 2');
+
+    fireEvent.click(options()[2]);
+    rerender(<QuestionPreview rows={[other(1), other(2)].map((r) => ({ ...r, uid: `${r.uid}-again` }))} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Replaced 2');
+    expect(position()).toBe('2 / 2');
+  });
+});
+
+describe('savedKeys — the key the importer will store each row under', () => {
+  // lambda-functions/admin/upload-questions.js numbers categories in the order
+  // they first appear and questions within their category, over the rows it
+  // accepts. tests/question-set-roundtrip.js holds this mirror to the real
+  // importer; these are its rules, one at a time.
+  const row = (title, category, extra = {}) => toRow({ title, category }, extra);
+
+  test('categories by first appearance, questions counted within their category', () => {
+    const rows = [row('a', 'History'), row('b', 'Method'), row('c', 'History')];
+    const keys = savedKeys(rows);
+    expect(rows.map((r) => keys.get(r.uid))).toEqual(['c001#001', 'c002#001', 'c001#002']);
+  });
+
+  test('a category is one category whatever its case or spacing, as the importer folds it', () => {
+    const rows = [row('a', 'World Series'), row('b', 'world  series ')];
+    const keys = savedKeys(rows);
+    expect(rows.map((r) => keys.get(r.uid))).toEqual(['c001#001', 'c001#002']);
+  });
+
+  test('a removed row, and one the importer would skip, take no key and shift nothing', () => {
+    const rows = [row('a', 'History', { removed: true }), row('', 'History'), row('c', ''), row('d', 'History')];
+    const keys = savedKeys(rows);
+    expect(rows.map((r) => keys.get(r.uid))).toEqual([undefined, undefined, undefined, 'c001#001']);
   });
 });
 

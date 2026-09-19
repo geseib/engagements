@@ -106,6 +106,37 @@ export function previewCategories(listRows = []) {
 }
 
 /**
+ * THE SELECTED QUESTION, FOUND AGAIN after the rows it was chosen from are gone.
+ *
+ * `place` is where the selection was, as of the last render that showed it:
+ * the key the question is stored under once saved (utils/questionRows.js
+ * `savedKeys`), its title, and its position in the visible list. A Save reads
+ * the set back and every row arrives with a new uid, so the selection's uid
+ * matches nothing; the stored key is what says which read-back row is the same
+ * question. Its title must match too — a key names a place in the set, and if
+ * the server numbered differently the place holds another question.
+ *
+ * Returns a VISIBLE row, or null:
+ *   found, and visible          that row.
+ *   found, but filtered out     null — the caller's rule for a selection the
+ *                               filter hides (the first visible row) applies.
+ *   not found                   the row at the same position, the last at most:
+ *                               a set replaced from a CSV, say, where nothing
+ *                               of the old working copy is left to find.
+ */
+export function refindPlace(place, rows = [], visible = []) {
+  if (!place || !visible.length) return null;
+  const bare = (key) => String(key || '').replace('QUESTION#', '');
+  if (place.key) {
+    const same = rows.find((row) => row && !row.removed
+      && bare(row.sk) === place.key
+      && String(row.title || '').trim() === place.title);
+    if (same) return visible.find((r) => r.id === same.uid) || null;
+  }
+  return visible[Math.min(Math.max(place.index, 0), visible.length - 1)];
+}
+
+/**
  * The id `delta` steps from `currentId` through `ids`, wrapping at both ends.
  * An id that is not in the list steps from the top. `null` when there is
  * nothing to step through.

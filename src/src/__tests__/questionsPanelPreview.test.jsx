@@ -215,6 +215,80 @@ describe('the preview reads the working copy', () => {
 });
 
 /*
+ * A SAVE MADE IN PREVIEW. Save writes the working copy and reads the set back:
+ * every row returns with a new uid (utils/questionRows.js mints one per read),
+ * and every key is the one the importer just gave it, which is not always the
+ * key it had. The preview used to be unmounted for that read and come back at
+ * the first question in ASK.
+ */
+describe('a Save made in Preview keeps the preview where it was', () => {
+  const trivia = (id, title, answer) => ({
+    id, Category: 'History', title, questionDetail: `${title} (the question as asked)`,
+    optionA: 'Ted Bundy', optionB: 'David Berkowitz', optionC: 'Zodiac', optionD: 'Richard Ramirez',
+    correctAnswer: answer, difficulty: 'medium',
+  });
+  const KILLER = trivia('c001#001', 'Which killer was caught by a parking ticket?', 'OptionB');
+  const STALKER = trivia('c001#002', 'Who was dubbed the Night Stalker?', 'OptionD');
+  const CIPHER = trivia('c001#003', 'Whose cipher was solved in 2020?', 'OptionC');
+  const BTK = trivia('c001#004', 'Who signed his letters BTK?', 'OptionA');
+  const GREEN = { ...trivia('c002#001', 'The Green River case', 'OptionA'), Category: 'Method' };
+  // What the importer stores once KILLER is gone: History renumbered from 1.
+  const READ_BACK = [
+    { ...STALKER, id: 'c001#001' }, { ...CIPHER, id: 'c001#002' }, { ...BTK, id: 'c001#003' }, GREEN,
+  ];
+
+  const options = () => within(screen.getByRole('listbox', { name: 'Questions' })).getAllByRole('option');
+  const cardTitle = () => card().querySelector('h1.q').textContent;
+  const phase = () => within(screen.getByRole('group', { name: 'What the card shows' }));
+
+  test('it stays up through the read-back, on the same question, still in Reveal', async () => {
+    // rejects: unmounting the preview while the saved set is read back (it
+    // returned at question 1 in ASK), keeping it up but losing the question
+    // with its uid, and finding the question by the key it had BEFORE the save
+    // — CIPHER was stored as c001#003, and after this save c001#003 is BTK.
+    let readBack = null;
+    let reads = 0;
+    authFetch.mockImplementation(async (url, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/questions')) {
+        reads += 1;
+        if (reads === 1) return jsonResponse(200, { setId: SET.id, questions: [KILLER, STALKER, CIPHER, BTK, GREEN] });
+        return new Promise((resolve) => {
+          readBack = () => resolve(jsonResponse(200, { setId: SET.id, questions: READ_BACK }));
+        });
+      }
+      if (method === 'POST' && url.includes('/admin/upload-questions')) {
+        return jsonResponse(200, { version: 2, questionCount: 4, setName: SET.name });
+      }
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+    renderPanel();
+    await ready();
+    fireEvent.click(within(screen.getByTestId('question-0')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    fireEvent.click(options()[1]);
+    fireEvent.click(phase().getByRole('button', { name: 'Reveal' }));
+    expect(cardTitle()).toBe(CIPHER.title);
+    const preview = screen.getByTestId('question-preview');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save as version 2' })[0]);
+    await waitFor(() => expect(readBack).not.toBeNull());
+    // While the saved set is read back, the preview is still the one on screen.
+    expect(screen.getByTestId('question-preview')).toBe(preview);
+    expect(cardTitle()).toBe(CIPHER.title);
+
+    readBack();
+    await waitFor(() => expect(screen.queryByTestId('unsaved-bar')).toBeNull());
+    expect(screen.getByTestId('question-preview')).toBe(preview);
+    expect(cardTitle()).toBe(CIPHER.title);
+    expect(options()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('preview-position')).toHaveTextContent('2 / 4');
+    expect(phase().getByRole('button', { name: 'Reveal' })).toHaveAttribute('aria-pressed', 'true');
+    expect(card().querySelector('.opt.correct .txt')).toHaveTextContent('Zodiac');
+  });
+});
+
+/*
  * "EDIT Qn" FROM THE NEEDS-CHANGES BANNER, WHILE IN PREVIEW. The banner lives
  * in QuestionSetEditor (setEditorShare.test.jsx drives it end to end); here the
  * panel is handed what the editor passes down — `focusRequest`, a BARE question

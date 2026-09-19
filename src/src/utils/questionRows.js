@@ -366,6 +366,50 @@ function rowsToCsv(rows, engagementType, options = {}) {
   return [header, ...body].join('\n') + '\n';
 }
 
+/* ---------------------------------------------------------- stored keys --- */
+
+const pad3 = (n) => String(n).padStart(3, '0');
+
+/**
+ * THE KEY EACH ROW WILL BE STORED UNDER once this working copy is saved, by
+ * uid — `c001#002`, the stored key as the questions endpoint returns it.
+ *
+ * Needed because a Save reads the set back and every row arrives with a new
+ * uid: whatever was holding a row by uid (the question preview's selection)
+ * has to find the question again, and the stored key is how a read-back row
+ * says which question it is.
+ *
+ * A KEY IS NOT KEPT ACROSS A SAVE. `upload-questions.js` numbers every save
+ * afresh from the CSV's order — categories in the order they first appear,
+ * questions counted within their category, over the rows it accepts — so
+ * removing, moving or re-categorising one question renumbers others, and the
+ * key a question had before the save can belong to a different question after
+ * it. This mirrors that numbering over exactly the rows `rowsToCsv` writes:
+ * a tombstone is not written, and a row with no title or no category is one
+ * the importer skips, numbering nothing for it. A category is identified the
+ * way the importer folds it (`categoryKey`: trimmed, inner whitespace
+ * collapsed, lower-cased), so two spellings of one category share a counter.
+ *
+ * tests/question-set-roundtrip.js holds this to the keys the real importer
+ * writes.
+ */
+function savedKeys(rows) {
+  const keys = new Map();
+  const categoryIndex = new Map();
+  const counters = new Map();
+  for (const row of rows || []) {
+    if (!row || row.removed) continue;
+    const category = text(row.category);
+    if (!category || !text(row.title)) continue;
+    const folded = category.replace(/\s+/g, ' ').toLowerCase();
+    if (!categoryIndex.has(folded)) categoryIndex.set(folded, categoryIndex.size + 1);
+    const count = (counters.get(folded) || 0) + 1;
+    counters.set(folded, count);
+    keys.set(row.uid, `c${pad3(categoryIndex.get(folded))}#${pad3(count)}`);
+  }
+  return keys;
+}
+
 module.exports = {
   toRow,
   editableRows,
@@ -378,5 +422,6 @@ module.exports = {
   versionNote,
   moveRow,
   rowsToCsv,
+  savedKeys,
   toTagList,
 };
