@@ -31,6 +31,21 @@
  * check refuses war history. Into NONE and nothing ever reaches the moderation
  * queue, which is then a screen with no input.
  *
+ * ── MEASURE EVERYTHING, DECIDE ONLY ON WHAT INTERVENED ────────────────────
+ *
+ * The owner, 2026-09-19, on the score card: it "doesn't reveal much" — a
+ * trivia set about serial killers said "Checked — passed" and nothing else.
+ * The request used to go out with no `outputScope`, so Bedrock answered with
+ * only the filters that INTERVENED, and the template's LOW strength
+ * intervenes on HIGH confidence only: LOW and MEDIUM never came back at all.
+ *
+ * So every request now asks for `outputScope: 'FULL'` — every filter, each
+ * with its confidence and a `detected` flag — and every filter in a judged
+ * category seen at LOW, MEDIUM or HIGH becomes an OBSERVATION. The OUTCOME is
+ * untouched (the owner's decision B): only a filter that intervened is banded
+ * into a finding, exactly as before FULL, so a set the check passed before
+ * still passes. `findings` keeps its old meaning; `observed` is new.
+ *
  * ── PROMPT ATTACK IS FOR PROMPTS ONLY ─────────────────────────────────────
  *
  * A Workie is EXECUTABLE TEXT: it is fed to a model as instructions. Publishing
@@ -72,6 +87,22 @@ const PROMPT_CATEGORIES = Object.freeze([...SET_CATEGORIES, 'PROMPT_ATTACK']);
 
 const band = (f) => String(f.confidence || f.strength || '').toUpperCase();
 
+/** The bands worth recording. NONE is the filter having seen nothing. */
+const OBSERVED_BANDS = Object.freeze(['LOW', 'MEDIUM', 'HIGH']);
+
+/**
+ * Did this filter INTERVENE? A FULL reply says so on every filter; an
+ * INTERVENTIONS-scope reply — every reply before FULL was asked for, and every
+ * older test stub — lists only the filters that intervened and carries no
+ * flag at all, so a missing flag means yes. Only an explicit `false` is the
+ * guardrail having seen something and let it through. Anything else fails
+ * toward deciding on it, which is what happened to every filter before FULL.
+ */
+const intervened = (filter) => filter.detected !== false;
+
+/** The subject the set's own prose is judged under (`checkText`). */
+const SET_SUBJECT = '(set)';
+
 /** HIGH refuses, MEDIUM asks a person, anything else is noise. */
 function outcomeForBand(b) {
   if (b === 'HIGH') return OUTCOME.FLAGGED;
@@ -80,9 +111,10 @@ function outcomeForBand(b) {
 }
 
 /**
- * One evaluation. Returns `{outcome, findings}` and never throws: a guardrail
- * that is unreachable is a reason to ask a person, not a reason to fail a
- * request the person cannot retry.
+ * One evaluation. Returns `{outcome, findings, observed}` and never throws: a
+ * guardrail that is unreachable is a reason to ask a person, not a reason to
+ * fail a request the person cannot retry. A subject that was never read
+ * observes nothing — an empty `observed` there is not a clean bill.
  */
 async function evaluate(text, { categories, subject }) {
   const guardrailIdentifier = process.env.CONTENT_GUARDRAIL_ID;
@@ -92,6 +124,7 @@ async function evaluate(text, { categories, subject }) {
     return {
       outcome: OUTCOME.ESCALATED,
       findings: [{ questionId: subject, category: 'UNCONFIGURED', band: 'NONE' }],
+      observed: [],
     };
   }
 
@@ -102,31 +135,42 @@ async function evaluate(text, { categories, subject }) {
       guardrailVersion: process.env.CONTENT_GUARDRAIL_VERSION || 'DRAFT',
       source: 'INPUT',
       content: [{ text: { text: String(text || '') } }],
+      // Every filter, with its confidence, whether or not it intervened. See
+      // the header: without this only interventions come back, and at the
+      // template's strength that is HIGH confidence and nothing else.
+      outputScope: 'FULL',
     }));
   } catch (error) {
     console.warn(`⚠️ guardrail could not read ${subject}: ${error.message}`);
     return {
       outcome: OUTCOME.ESCALATED,
       findings: [{ questionId: subject, category: 'ERROR', band: 'NONE', detail: error.message }],
+      observed: [],
     };
   }
 
   const findings = [];
+  const observed = [];
   let outcome = OUTCOME.PASSED;
   for (const assessment of res.assessments || []) {
     for (const filter of (assessment.contentPolicy || {}).filters || []) {
       const type = String(filter.type || '').toUpperCase();
-      // A category this subject is not judged on is not a finding at all —
-      // this is where PROMPT_ATTACK is dropped for question sets.
+      // A category this subject is not judged on is neither a finding nor an
+      // observation — this is where PROMPT_ATTACK is dropped for question sets.
       if (!categories.includes(type)) continue;
       const b = band(filter);
+      const held = intervened(filter);
+      if (OBSERVED_BANDS.includes(b)) observed.push({ questionId: subject, category: type, band: b, intervened: held });
+      // Seen and let through: recorded above, decides nothing. What remains is
+      // banded exactly as it was before FULL was asked for.
+      if (!held) continue;
       const o = outcomeForBand(b);
       if (o === OUTCOME.PASSED) continue;
       findings.push({ questionId: subject, category: type, band: b });
       outcome = worst(outcome, o);
     }
   }
-  return { outcome, findings };
+  return { outcome, findings, observed };
 }
 
 /**
@@ -148,12 +192,14 @@ async function checkQuestions(questions = [], { onEach, budget } = {}) {
     return {
       outcome: OUTCOME.ESCALATED,
       findings: [{ questionId: null, category: 'EMPTY', band: 'NONE' }],
+      observed: [],
       checked: 0,
       clean: 0,
     };
   }
 
   const findings = [];
+  const observed = [];
   let outcome = OUTCOME.PASSED;
   let clean = 0;
   let checked = 0;
@@ -178,13 +224,16 @@ async function checkQuestions(questions = [], { onEach, budget } = {}) {
     // eslint-disable-next-line no-await-in-loop
     const r = await evaluate(text, { categories: SET_CATEGORIES, subject });
     checked += 1;
+    // `clean` keeps its meaning — no FINDING — so the "N/N clean" note does
+    // too. A question seen at LOW and let through is still clean.
     if (r.findings.length === 0) clean += 1;
     findings.push(...r.findings);
+    observed.push(...r.observed);
     outcome = worst(outcome, r.outcome);
     if (typeof onEach === 'function') onEach(checked, questions.length, r);
   }
 
-  return { outcome, findings, checked, clean, stopped };
+  return { outcome, findings, observed, checked, clean, stopped };
 }
 
 /** Check one Workie's text. Same bands, plus prompt attack. */
@@ -194,17 +243,70 @@ async function checkPromptText(text, subject = '(prompt)') {
 }
 
 /** Set-level prose — name, description, instructions, category names — judged as one subject. */
-async function checkText(text, subject = '(set)') {
+async function checkText(text, subject = SET_SUBJECT) {
   const r = await evaluate(text, { categories: SET_CATEGORIES, subject });
   return { ...r, checked: 1, clean: r.findings.length === 0 ? 1 : 0 };
+}
+
+/**
+ * WHAT THE CHECK MEASURED, per category — the score card's five rows.
+ *
+ * Counted in QUESTIONS, not observations: each band's number is how many
+ * distinct questions were seen at it. The set's own prose is judged as well,
+ * but it is not a question: its observations stay in `observed` under '(set)'
+ * and count here nowhere but `setTextChecked`.
+ *
+ *   categories  all five, always — nothing seen is `worst: null` and zeros,
+ *               which the card writes out as "none" rather than omitting
+ *   worst       the worst band any QUESTION was seen at in that category
+ *   spotless    questions read and seen at nothing, in any category
+ *   unread      questions the guardrail could not read (an error, or no
+ *               guardrail configured): neither spotless nor observed, because
+ *               nothing looked. questions = spotless + observed ones + unread.
+ *   scope       'full' — the marker. A review carrying a tally was measured
+ *               this way; one without was checked before measuring existed.
+ */
+function tallyOf({ observed = [], findings = [], questions = 0, setTextChecked = false } = {}) {
+  const isQuestion = (id) => typeof id === 'string' && id !== '' && id !== SET_SUBJECT;
+  const seen = Object.fromEntries(SET_CATEGORIES.map((c) => [c, { LOW: new Set(), MEDIUM: new Set(), HIGH: new Set() }]));
+  const observedIds = new Set();
+  for (const o of observed) {
+    if (!o || !isQuestion(o.questionId)) continue;
+    observedIds.add(o.questionId);
+    const ids = seen[o.category] && seen[o.category][o.band];
+    if (ids) ids.add(o.questionId);
+  }
+  // A finding outside the judged categories is the check's own (ERROR,
+  // UNCONFIGURED): that question was never measured.
+  const unreadIds = new Set(findings
+    .filter((f) => f && isQuestion(f.questionId) && !SET_CATEGORIES.includes(f.category))
+    .map((f) => f.questionId));
+  const categories = {};
+  for (const c of SET_CATEGORIES) {
+    const { LOW, MEDIUM, HIGH } = seen[c];
+    const worstSeen = (HIGH.size && 'HIGH') || (MEDIUM.size && 'MEDIUM') || (LOW.size && 'LOW') || null;
+    categories[c] = { worst: worstSeen, low: LOW.size, medium: MEDIUM.size, high: HIGH.size };
+  }
+  const total = Number(questions) || 0;
+  const touched = new Set([...observedIds, ...unreadIds]).size;
+  return {
+    scope: 'full',
+    questions: total,
+    setTextChecked: setTextChecked === true,
+    spotless: Math.max(0, total - touched),
+    unread: unreadIds.size,
+    categories,
+  };
 }
 
 module.exports = {
   OUTCOME,
   SET_CATEGORIES,
   PROMPT_CATEGORIES,
+  SET_SUBJECT,
   outcomeForBand,
   checkQuestions,
   checkPromptText,
   checkText,
+  tallyOf,
 };

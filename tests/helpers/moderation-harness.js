@@ -209,6 +209,36 @@ const guardrailHit = (category, band) => ({
   assessments: [{ contentPolicy: { filters: [{ type: category, confidence: band, action: 'BLOCKED' }] } }],
 });
 const guardrailClean = () => ({ action: 'NONE', assessments: [] });
+/**
+ * A reply to a request sent with `outputScope: 'FULL'`, shaped the way
+ * Bedrock sends one: EVERY configured filter comes back, each with its
+ * confidence and a `detected` flag saying whether it intervened — not only
+ * the ones that tripped, which is all an INTERVENTIONS-scope reply (and so
+ * `guardrailHit`/`guardrailClean` above) ever carries.
+ *
+ *   guardrailFull({ VIOLENCE: 'MEDIUM' })                    seen, not held
+ *   guardrailFull({ VIOLENCE: 'HIGH' }, { VIOLENCE: true })  seen and held
+ *
+ * Unnamed filters answer NONE and did not intervene. The strengths are the
+ * template's: LOW for the five set categories, HIGH for PROMPT_ATTACK.
+ */
+const FULL_FILTERS = ['VIOLENCE', 'SEXUAL', 'HATE', 'INSULTS', 'MISCONDUCT', 'PROMPT_ATTACK'];
+function guardrailFull(bands = {}, detected = {}) {
+  const filters = FULL_FILTERS.map((type) => {
+    const hit = detected[type] === true;
+    return {
+      type,
+      confidence: bands[type] || 'NONE',
+      filterStrength: type === 'PROMPT_ATTACK' ? 'HIGH' : 'LOW',
+      action: hit ? 'BLOCKED' : 'NONE',
+      detected: hit,
+    };
+  });
+  return {
+    action: filters.some((f) => f.detected) ? 'GUARDRAIL_INTERVENED' : 'NONE',
+    assessments: [{ contentPolicy: { filters } }],
+  };
+}
 
 function install() {
   process.env.TABLE_NAME = 'engage-test';
@@ -286,5 +316,5 @@ function summary() {
 }
 module.exports = {
   REPO, state, install, reset, seedRow, rowsWhere, orgEvent, platformEvent, ctx, test, summary,
-  guardrailHit, guardrailClean, plainRow: cryptoStub.plainRow, plainRowAuto: cryptoStub.plainRowAuto,
+  guardrailHit, guardrailClean, guardrailFull, plainRow: cryptoStub.plainRow, plainRowAuto: cryptoStub.plainRowAuto,
 };
