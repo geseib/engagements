@@ -187,6 +187,41 @@ async function shareJob(version) {
     assert.strictEqual(card.review.note, '30/30 clean');
   });
 
+  /*
+    An approval KEEPS the row: transitionReview spreads what the row holds, so
+    an escalation or an appeal a person approved still carries the findings
+    that held it, explanations and all, whether or not it was ever measured.
+    For a review checked before measuring existed they are all the card has
+    to show, so they are named the way observations are.
+  */
+  // rejects: findings projected as bare ids, which is how a pre-tally card
+  // lost every row the base card used to list.
+  await H.test('a review checked before the tally existed and approved by staff names what held it, by its text', async () => {
+    H.reset();
+    seedPublic();
+    const findings = [
+      { questionId: 'c001#002', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'The murders are the setting; the question asks about a place.' },
+      { questionId: '(set)', category: 'HATE', band: 'MEDIUM' },
+      { questionId: 'c009#001', category: 'INSULTS', band: 'HIGH' },
+      { questionId: 'c001#003', category: 'ERROR', band: 'NONE', detail: 'Throttled' },
+    ];
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.ESCALATED, findings, note: '1/5 clean', reasons: ['guardrail'], contentHash: HASH, checkedBy: 'sub-amara' });
+    await R.transitionReview(db, T, SRC, 3, R.STATUS.ESCALATED, {
+      status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-18T09:55:00.000Z', note: 'Historical, not gratuitous.',
+    });
+    const card = await get();
+    assert.strictEqual(card.review.tally, null);
+    assert.deepStrictEqual(card.review.observed, []);
+    assert.strictEqual(card.review.status, 'passed');
+    // The findings themselves are untouched: same rows, same order, text beside them.
+    assert.deepStrictEqual(card.review.findings.map(({ text, ...row }) => row), findings); // eslint-disable-line no-unused-vars
+    const [ripper, setText, missing, unread] = card.review.findings;
+    assert.strictEqual(ripper.text, 'The Ripper\nIn which district were the murders?');
+    assert.strictEqual(setText.text, 'True crime\nInfamous cases, solved and not.');
+    assert.strictEqual(missing.text, '', 'an id the public copy does not hold is left without text');
+    assert.strictEqual(unread.text, 'Bow Street\nWho founded the Bow Street Runners?');
+  });
+
   // rejects: the card's question count being the organisation's ACTIVE
   // version's. Every version row in the editor can be shared, and publish
   // spreads the org row onto the public one, so sharing v2 (25 questions)

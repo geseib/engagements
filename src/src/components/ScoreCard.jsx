@@ -29,15 +29,21 @@ import './ScoreCard.css';
  *                all five categories with "none" written out, and one table
  *                of everything seen, worst first, saying which rows held it
  *   pre-tally    checked before measuring existed (decision C): it says so,
- *                and shows what it has — the verdict and the check's note.
- *                No re-check, no backfill.
+ *                and shows what it has — the verdict, the check's note, and
+ *                what held the set. An approval keeps the row
+ *                (set-review.js transitionReview), so every escalation or
+ *                appeal staff approved still carries the findings that held
+ *                it, and they are listed by their text; the reviewer's note
+ *                replaces the check's on the row, so that is read back from
+ *                the check's own logged event. No re-check, no backfill.
  *   running      a re-check in flight, or one that never finished
  *   unchecked    no review row at all, which is not a verdict to print
  *
  * GATING IS NOT THIS CARD'S (decision B): a row that was seen and let through
  * is a near-miss, and nothing here calls it flagged or uncertain. `findings`
- * still carries only what held the set; every finding is also an
- * observation, so the table reads `observed` alone.
+ * still carries only what held the set, and every finding is also an
+ * observation, so a measured card's table reads `observed` alone; a card
+ * checked before measuring reads `findings`, all that check kept.
  */
 const SET_SUBJECT = '(set)';
 const BAND_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
@@ -58,6 +64,13 @@ const CATEGORIES = [
   ['MISCONDUCT', 'dangerous or criminal instructions'],
 ];
 const CATEGORY_WORDS = Object.fromEntries(CATEGORIES);
+/**
+ * Judged in one of the five? Anything else in `findings` is the check's own —
+ * a subject the guardrail could not read, a check its budget stopped, a set
+ * with nothing in it — and has no band to show (see `preTallyLine`).
+ */
+const JUDGED = new Set(CATEGORIES.map(([id]) => id));
+const isJudged = (row) => JUDGED.has(String(row.category || '').toUpperCase());
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 const humanise = (id) => String(id || '').replace(/[-_]+/g, ' ');
@@ -91,11 +104,14 @@ function heldWords(row) {
 }
 /** Worst band first; within a band, what held before what was let through (finding-explanations.js `rank`). */
 const rank = (row) => (BAND_RANK[bandOf(row)] ?? 3) * 2 + (held(row) ? 0 : 1);
+/** Stored in question order; the card puts the worst first, stably. */
+const worstFirst = (list) => list.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o) || a.i - b.i).map(({ o }) => o);
 /** The worst of some bands, or null when none of them is HIGH, MEDIUM or LOW. */
 const worstBand = (bands) => bands
   .map((b) => String(b || '').toUpperCase())
   .filter((b) => BAND_RANK[b] !== undefined)
   .sort((a, b) => BAND_RANK[a] - BAND_RANK[b])[0] || null;
+const rowsOf = (list) => (Array.isArray(list) ? list : []).filter((o) => o && typeof o === 'object');
 /**
  * The "why" where there is no explanation — the set's own subject never has
  * one, nor does a check whose budget ran out. The words are
@@ -150,6 +166,55 @@ function categoryRow(id, tally, observed) {
     inSetText ? `the set's own text at ${bandWord(inSetText)}` : '',
   ].filter(Boolean).join(' · ');
   return { worst: worstBand([inQuestions, inSetText]), where };
+}
+
+/**
+ * What a check made before measuring existed kept: its verdict and, when
+ * anything held the set, that — never what it let through, which that check
+ * was never told about. An approval keeps those findings, so this is not
+ * "only its verdict" for any set a person decided.
+ *
+ * A finding outside the five categories has no band, so it is said here
+ * rather than dressed as a row. The rule is content-guardrail.js tallyOf's
+ * for `unread`: one on a question is a question the guardrail could not read,
+ * one on the set's own subject that text; TIMEOUT and EMPTY name no subject.
+ */
+function preTallyLine(findings) {
+  if (!findings.length) return 'Checked before detailed scoring existed — this check recorded only its verdict.';
+  const own = findings.filter((f) => !isJudged(f));
+  const kind = (f) => String(f.category || '').toUpperCase();
+  const unread = new Set(own
+    .filter((f) => typeof f.questionId === 'string' && f.questionId !== '' && f.questionId !== SET_SUBJECT)
+    .map((f) => f.questionId)).size;
+  return [
+    'Checked before detailed scoring existed — this check recorded only what held the set, nothing it let through.',
+    unread ? `${unread} ${unread === 1 ? 'question' : 'questions'} could not be read.` : '',
+    own.some((f) => f.questionId === SET_SUBJECT) ? "The set's own text could not be read." : '',
+    own.some((f) => kind(f) === 'TIMEOUT') ? 'The check was stopped before it finished.' : '',
+    own.some((f) => kind(f) === 'EMPTY') ? 'The set had no questions to check.' : '',
+  ].filter(Boolean).join(' ');
+}
+
+/**
+ * The CHECK's note beside a pre-tally verdict — "30/30 clean", all such a
+ * check measured. Beside a tally there is none: that "N/N clean" counts what
+ * held the set, not what was seen, and would sit one line from the summary
+ * asking to be reconciled with it.
+ *
+ * It is on the row until a person decides. A decision writes the reviewer's
+ * note over it (moderation-decide.js), and the reviewer's words are the
+ * decision's, quoted on its own row in the timeline. The check's note is still
+ * on the check's own `checked` event (set-check-worker.js), so a decided
+ * review reads it from there: the latest check of the version this came from,
+ * which is the one the row describes, and only if that check counted. One
+ * that crashed logged no counts, and an older check's are not this one's.
+ */
+function checkNoteOf(review, log, version) {
+  if (!review.reviewer) return String(review.note || '').trim();
+  const latest = (Array.isArray(log) ? log : [])
+    .filter((e) => e && e.event === 'checked' && Number(e.version) === Number(version))
+    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))[0];
+  return latest && Number.isInteger(latest.checked) && Number.isInteger(latest.clean) ? `${latest.clean}/${latest.checked} clean` : '';
 }
 
 /**
@@ -218,6 +283,36 @@ const EVENT_WORDS = {
   access: (e) => `Opened by ${(e.who && e.who.name) || 'Engage'}`,
 };
 const eventWords = (e) => (EVENT_WORDS[e.event] ? EVENT_WORDS[e.event](e) : e.event);
+
+/**
+ * Everything the check saw — or, checked before measuring existed, everything
+ * that held the set — worst first: each row named by its text, its band, its
+ * category in words, why, and whether it held the set. One table for both, so
+ * a finding reads the same whichever kind of check kept it.
+ */
+function SeenTable({ rows }) {
+  return (
+    <table className="scard-tbl">
+      <thead><tr><th className="scard-col-q">Question</th><th className="scard-col-b">Band</th><th className="scard-col-c">Category</th><th className="scard-col-w">Why</th><th className="scard-col-h">Held the set</th></tr></thead>
+      <tbody>
+        {rows.map((o, i) => {
+          const subject = subjectOf(o);
+          const band = bandOf(o);
+          const holds = heldWords(o);
+          return (
+            <tr key={`${o.questionId}|${o.category}|${i}`} className="scard-obs" data-testid="scard-obs">
+              <td><span className={subject.missing ? 'scard-q scard-q--missing' : 'scard-q'} title={subject.title}>{subject.label}</span></td>
+              <td>{BAND_RANK[band] !== undefined && <span className={`scard-chip scard-chip--${bandWord(band)}`}>{bandWord(band)}</span>}</td>
+              <td>{categoryWords(o.category)}</td>
+              <td className="scard-why">{o.explanation || bandSentence(o)}</td>
+              <td className={holds === 'no' ? 'scard-held' : 'scard-held scard-held--yes'}>{holds}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
 
 function TakedownDialog({ name, onClose, onConfirm }) {
   const [note, setNote] = useState('');
@@ -332,20 +427,15 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
   // Only a tally the card understands is a measurement; one without the
   // marker was never measured (decision C), which is not "measured, clean".
   const tally = review.tally && review.tally.scope === 'full' ? review.tally : null;
-  const observed = (Array.isArray(review.observed) ? review.observed : []).filter((o) => o && typeof o === 'object');
-  // Stored in question order; the card puts the worst first, stably.
-  const rows = observed.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o) || a.i - b.i).map(({ o }) => o);
+  const observed = rowsOf(review.observed);
+  // What held the set, as findings: all a check before measuring kept. Only
+  // those judged in a category have a band to show; the check's own are words.
+  const findings = rowsOf(review.findings);
+  const heldRows = worstFirst(findings.filter((f) => isJudged(f) && BAND_RANK[bandOf(f)] !== undefined));
   // Clean only if the guardrail READ the set's own text and saw nothing there;
   // text it could not read is `setTextUnread`, never `setTextChecked`.
   const setClean = Boolean(tally && tally.setTextChecked) && !observed.some((o) => o.questionId === SET_SUBJECT);
-  /*
-    The note beside a pre-tally verdict is the CHECK's ("30/30 clean") — all
-    such a check measured. Two notes are not it: a reviewer's, which the
-    decision's own row in the timeline already quotes, and any note beside a
-    tally, whose "N/N clean" counts what HELD the set, not what was seen, and
-    would sit one line from the summary asking to be reconciled with it.
-  */
-  const checkNote = !tally && !review.reviewer ? String(review.note || '').trim() : '';
+  const checkNote = card && !tally ? checkNoteOf(review, card.log, card.sourceVersion) : '';
 
   return (
     <section className="scard" data-theme="dark">
@@ -378,9 +468,13 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
             <p className="scard-verdict" data-testid="scard-verdict">Verdict: {verdict.label}{checkNote ? ` · “${checkNote}”` : ''}</p>
           ) : <p className="scard-summary">No check is on record for the version this came from.</p>}
           {/* Not fine print: where a tally would stand, this is the answer to
-              "why is there nothing else here?" */}
+              "why is there nothing else here?" — and, for a set a person
+              decided, what held it. */}
           {verdict && !running && !tally && (
-            <p className="scard-summary">Checked before detailed scoring existed — this check recorded only its verdict.</p>
+            <>
+              <p className="scard-summary" data-testid="scard-pretally">{preTallyLine(findings)}</p>
+              {heldRows.length > 0 && <SeenTable rows={heldRows} />}
+            </>
           )}
           {verdict && !running && tally && (
             <>
@@ -400,27 +494,7 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
                   })}
                 </tbody>
               </table>
-              {rows.length > 0 && (
-                <table className="scard-tbl">
-                  <thead><tr><th className="scard-col-q">Question</th><th className="scard-col-b">Band</th><th className="scard-col-c">Category</th><th className="scard-col-w">Why</th><th className="scard-col-h">Held the set</th></tr></thead>
-                  <tbody>
-                    {rows.map((o, i) => {
-                      const subject = subjectOf(o);
-                      const band = bandOf(o);
-                      const holds = heldWords(o);
-                      return (
-                        <tr key={`${o.questionId}|${o.category}|${i}`} className="scard-obs" data-testid="scard-obs">
-                          <td><span className={subject.missing ? 'scard-q scard-q--missing' : 'scard-q'} title={subject.title}>{subject.label}</span></td>
-                          <td>{BAND_RANK[band] !== undefined && <span className={`scard-chip scard-chip--${bandWord(band)}`}>{bandWord(band)}</span>}</td>
-                          <td>{categoryWords(o.category)}</td>
-                          <td className="scard-why">{o.explanation || bandSentence(o)}</td>
-                          <td className={holds === 'no' ? 'scard-held' : 'scard-held scard-held--yes'}>{holds}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
+              {observed.length > 0 && <SeenTable rows={worstFirst(observed)} />}
             </>
           )}
           {/* Stage 3: reports by type, and each report's note (never the reporter). */}

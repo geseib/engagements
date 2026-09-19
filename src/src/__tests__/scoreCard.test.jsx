@@ -377,6 +377,117 @@ test('a reviewer\'s note is theirs: the verdict does not quote it as the check\'
   // It is where the reviewer said it: on the decision, in the timeline.
   expect(screen.getAllByTestId('scard-event')[1]).toHaveTextContent(/historical, not gratuitous/i);
 });
+/*
+  CHECKED BEFORE MEASURING, THEN DECIDED BY A PERSON — the final review,
+  2026-09-19. The pre-tally card printed one line, "this check recorded only
+  its verdict": true of a pass nobody touched, false of every escalation or
+  appeal staff approved. An approval KEEPS the row (set-review.js
+  transitionReview spreads it), so the findings that held the set stay on it
+  with their explanations, and the reviewer's note is written over the
+  check's "N/N clean" — which the check's own `checked` event still carries.
+  The base card listed those findings. The measured card lists them too, by
+  their text, and says what that check did and did not keep.
+*/
+const DECIDED = {
+  ...TRUE_CRIME,
+  sourceVersion: 3,
+  publicVersion: 1,
+  log: [
+    { event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['guardrail'], checked: 31, clean: 29 },
+    { event: 'escalated', at: '2026-09-18T09:00:01.000Z', version: 3, reasons: ['guardrail'] },
+    { event: 'decided', at: '2026-09-18T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Historical, not gratuitous.' },
+    { event: 'published', at: '2026-09-18T10:01:00.000Z', version: 3, publicVersion: 1 },
+  ],
+  review: {
+    status: 'passed', reviewer: 'dai', decidedAt: '2026-09-18T10:00:00.000Z', note: 'Historical, not gratuitous.', notice: [], checkedAt: '2026-09-18T09:00:00.000Z',
+    reasons: ['guardrail'], tally: null, observed: [],
+    // In the order the check stored them; worst first is the card's job.
+    findings: [
+      { questionId: 'c001#005', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'The wounds described in detail are what held it, not the case.', text: 'The Black Dahlia\nDescribe the injuries found on the body.' },
+      { questionId: '(set)', category: 'HATE', band: 'MEDIUM', text: 'True crime\nInfamous cases, solved and not.' },
+    ],
+  },
+};
+const decided = (review, extra = {}) => ({ ...DECIDED, ...extra, review: { ...DECIDED.review, ...review } });
+const PRE_TALLY_HELD = 'Checked before detailed scoring existed — this check recorded only what held the set, nothing it let through.';
+
+// rejects: HEAD's card, which read no findings at all and told the reader the
+// check "recorded only its verdict" above an empty space.
+test('a set checked before measuring and approved by a person still lists what held it, by its text', async () => {
+  await open(DECIDED);
+  expect(screen.getByTestId('scard-pretally')).toHaveTextContent(PRE_TALLY_HELD);
+  expect(screen.queryByText(/only its verdict/)).toBeNull();
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(rows.map((r) => cells(r)[0].textContent)).toEqual(['The Black Dahlia — Describe the injuries found on the body.', "The set's own text"]);
+  expect(subjectOf(rows[0])).toHaveAttribute('title', 'The Black Dahlia\nDescribe the injuries found on the body.');
+  expect(cells(rows[0])[1]).toHaveTextContent('medium');
+  expect(cells(rows[0])[2]).toHaveTextContent('violence or injury');
+  expect(cells(rows[0])[3]).toHaveTextContent('The wounds described in detail are what held it, not the case.');
+  expect(cells(rows[0])[4]).toHaveTextContent('sent to a person');
+  expect(cells(rows[1])[2]).toHaveTextContent('hateful content');
+  expect(cells(rows[1])[3]).toHaveTextContent("The check was unsure (medium confidence) whether the set's own text contains hateful content, so a person will look.");
+  expect(cells(rows[1])[4]).toHaveTextContent('sent to a person');
+  // Nothing was measured, so there is no tally to show and none is invented.
+  expect(screen.queryAllByTestId('scard-cat')).toHaveLength(0);
+  expect(screen.queryByTestId('scard-summary')).toBeNull();
+  expect(screen.queryByText(/c00\d#\d{3}/)).toBeNull();
+});
+test('an approved appeal keeps the finding that flagged it, and it reads first', async () => {
+  await open(decided({
+    findings: [
+      ...DECIDED.review.findings,
+      { questionId: 'c002#001', category: 'MISCONDUCT', band: 'HIGH', explanation: 'The method is set out step by step.', text: 'The Poisoner\nHow was the poison prepared and given?' },
+    ],
+  }));
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(cells(rows[0])[0].textContent).toBe('The Poisoner — How was the poison prepared and given?');
+  expect(cells(rows[0])[1]).toHaveTextContent('high');
+  expect(cells(rows[0])[2]).toHaveTextContent('dangerous or criminal instructions');
+  expect(cells(rows[0])[4]).toHaveTextContent('flagged');
+  expect(rows).toHaveLength(3);
+});
+// rejects: dropping the check's own note the moment a reviewer's replaced it
+// on the row, and borrowing counts from a check that was not this one.
+test('the check\'s "N/N clean" stays beside the verdict, read from its own logged check once a reviewer\'s note replaced it', async () => {
+  const view = await open(DECIDED);
+  const verdict = screen.getByTestId('scard-verdict');
+  expect(verdict).toHaveTextContent('Verdict: checked · “29/31 clean”');
+  expect(verdict).not.toHaveTextContent(/historical/i);
+  view.unmount();
+  // The latest check of this version crashed and counted nothing; an older one's counts are not its.
+  const crashed = await open(decided({}, {
+    log: [
+      { event: 'checked', at: '2026-09-17T09:00:00.000Z', version: 3, outcome: 'passed', reasons: [], checked: 31, clean: 31 },
+      { event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['error'], error: 'Throttled' },
+      ...DECIDED.log.slice(1),
+    ],
+  }));
+  expect(screen.getByTestId('scard-verdict').textContent).toBe('Verdict: checked');
+  crashed.unmount();
+  // Nor are another version's.
+  await open(decided({}, { log: [{ event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 2, outcome: 'passed', reasons: [], checked: 25, clean: 25 }, ...DECIDED.log.slice(1)] }));
+  expect(screen.getByTestId('scard-verdict').textContent).toBe('Verdict: checked');
+});
+// rejects: a subject the guardrail never read being dressed as a band row —
+// "noted at none confidence and let through" — or left out, which would make
+// "what held the set" point at nothing.
+test('what that check could not read held the set too, and it is said in words, never as a band', async () => {
+  const view = await open(decided({
+    reasons: ['error'],
+    findings: [
+      { questionId: 'c001#003', category: 'ERROR', band: 'NONE', detail: 'Throttled', text: 'Bow Street\nWho founded the Bow Street Runners?' },
+      { questionId: 'c001#004', category: 'ERROR', band: 'NONE', detail: 'Throttled', text: 'The Yard\nWhere was Scotland Yard first housed?' },
+      { questionId: '(set)', category: 'UNCONFIGURED', band: 'NONE', text: 'True crime\nInfamous cases, solved and not.' },
+    ],
+  }));
+  expect(screen.getByTestId('scard-pretally').textContent).toBe(`${PRE_TALLY_HELD} 2 questions could not be read. The set's own text could not be read.`);
+  expect(screen.queryAllByTestId('scard-obs')).toHaveLength(0);
+  expect(screen.queryByText(/none confidence/)).toBeNull();
+  view.unmount();
+  await open(decided({ reasons: ['timeout'], findings: [{ questionId: null, category: 'TIMEOUT', band: 'NONE', text: '' }] }));
+  expect(screen.getByTestId('scard-pretally').textContent).toBe(`${PRE_TALLY_HELD} The check was stopped before it finished.`);
+  expect(screen.queryAllByTestId('scard-obs')).toHaveLength(0);
+});
 test('the timeline and the verdict speak the app\'s words, never a raw status', async () => {
   const { container } = await open({
     ...TRUE_CRIME,

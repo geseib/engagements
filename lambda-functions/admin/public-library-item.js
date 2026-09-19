@@ -19,6 +19,12 @@
  * the org's rows, which are encrypted and may have been edited since. A review
  * checked before measuring existed projects `tally: null` and no observations.
  *
+ * Findings are named the same way, from the same one read. For a review
+ * checked before measuring existed they are all the card has to show, and an
+ * approved one still has them: an approval keeps the row (set-review.js
+ * transitionReview), so every escalation or appeal staff approved carries the
+ * findings that held it, explanations and all.
+ *
  * DELETE is takedown. It reads `source*` off the public row, logs `taken-down`
  * with the note on the org set's log, flags the org's share stamp ONLY IF it
  * still names this public set (D11), deletes any queue row for the set, and
@@ -79,28 +85,32 @@ const QUESTION_PREFIX = 'QUESTION#';
 const lines = (...values) => values.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean).join('\n');
 
 /**
- * Name each observation by its text (see the header). A question reads as a
+ * Name each row of each list by its text (see the header), from ONE read of
+ * the public copy however many lists name a question. A question reads as a
  * room sees it asked — title, then detail, one per line; the set's own
  * subject by the public set's title and description. An id the active public
- * copy does not hold gets '' rather than a guess.
+ * copy does not hold, and a row that names no subject at all, get '' rather
+ * than a guess. A list that is not an array comes back empty.
  */
-async function withText(observed, meta, publicSetId) {
-  const rows = observed.filter((o) => o && typeof o === 'object');
+async function withText(lists, meta, publicSetId) {
+  const rowsOf = (list) => (Array.isArray(list) ? list : []).filter((o) => o && typeof o === 'object');
+  const all = lists.map(rowsOf);
   const texts = new Map();
-  if (rows.some((o) => o.questionId && o.questionId !== SET_SUBJECT)) {
+  if (all.some((rows) => rows.some((o) => o.questionId && o.questionId !== SET_SUBJECT))) {
     const pk = setPartition(pubRefOf(publicSetId), meta.activeVersion);
     const { items } = await queryPartition(db, TABLE(), pk, QUESTION_PREFIX);
     for (const row of items) texts.set(String(row.SK).slice(QUESTION_PREFIX.length), lines(row.Title, row.Detail));
   }
   const setName = lines(meta.name, meta.description);
-  return rows.map((o) => ({ ...o, text: o.questionId === SET_SUBJECT ? setName : (texts.get(o.questionId) || '') }));
+  const named = (o) => ({ ...o, text: o.questionId === SET_SUBJECT ? setName : (texts.get(o.questionId) || '') });
+  return all.map((rows) => rows.map(named));
 }
 
 async function standing(meta, publicSetId) {
   const source = sourceOf(meta);
   const version = Number(meta.sourceVersion) || 0;
   const review = source.orgId && source.setId && version ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
-  const observed = Array.isArray(review.observed) ? await withText(review.observed, meta, publicSetId) : [];
+  const [observed, findings] = await withText([review.observed, review.findings], meta, publicSetId);
   const log = source.orgId && source.setId ? await readReviewLog(db, TABLE(), source) : [];
   const versions = Array.isArray(meta.versions) ? meta.versions : [];
   const latest = versions.find((v) => Number(v.version) === Number(meta.activeVersion)) || versions[versions.length - 1] || {};
@@ -130,7 +140,8 @@ async function standing(meta, publicSetId) {
       decidedAt: review.decidedAt || null,
       note: review.note || '',
       notice: Array.isArray(review.notice) ? review.notice : [],
-      findings: Array.isArray(review.findings) ? review.findings : [],
+      // Still only what held the set — named, not changed.
+      findings,
       checkedAt: review.checkedAt || null,
       reasons: Array.isArray(review.reasons) ? review.reasons : [],
       // null, not {}: "checked before measuring existed" is not "measured,
