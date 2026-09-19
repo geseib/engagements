@@ -190,7 +190,8 @@ test('a measured check: the summary line from the tally, and all five categories
     'Violence or injury', 'Sexual content', 'Hateful content', 'Insulting or harassing language', 'Dangerous or criminal instructions',
   ]);
   expect(cells(cats[0])[1]).toHaveTextContent('medium');
-  expect(cells(cats[0])[2]).toHaveTextContent('2 at medium · 1 at low');
+  // The tally counts questions; the set's own text, seen here too, is named beside them.
+  expect(cells(cats[0])[2].textContent).toBe("2 at medium · 1 at low · the set's own text at low");
   expect(cells(cats[1])[1]).toHaveTextContent('none');
   expect(cells(cats[2])[1]).toHaveTextContent('low');
   expect(cells(cats[2])[2]).toHaveTextContent('1 at low');
@@ -326,6 +327,39 @@ test('a band seen only in the set\'s own text leaves every question clean, and i
   }));
   expect(screen.getByTestId('scard-summary')).toHaveTextContent("30 questions and the set's own text checked · every question clean in every category");
   expect(screen.getAllByTestId('scard-obs').map((r) => cells(r)[0].textContent)).toEqual(["The set's own text"]);
+  // The category block says so too: every category's question count is empty,
+  // and violence was still seen — in the set's own text, never "none".
+  const cats = screen.getAllByTestId('scard-cat');
+  expect(cells(cats[0])[1].textContent).toBe('low');
+  expect(cells(cats[0])[2].textContent).toBe("the set's own text at low");
+  expect(cats.slice(1).map((c) => cells(c)[1].textContent)).toEqual(['none', 'none', 'none', 'none']);
+});
+/*
+  The final review, 2026-09-19: the tally counts QUESTIONS (content-guardrail.js
+  tallyOf skips the set's own subject), so a category seen only in the set's
+  own text had a null `worst`, and the card wrote "none" for it — one line
+  above that text's own row, sending the set to a person.
+*/
+test('the category block never writes none over the set\'s own text, least of all where that text held the set', async () => {
+  const SET_HELD = { questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM', intervened: true, text: 'True crime\nInfamous cases, solved and not.' };
+  const clean = { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 30, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+  const view = await open(withReview({
+    reasons: ['guardrail'], findings: [{ questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM' }], observed: [SET_HELD], tally: clean,
+  }));
+  const violence = screen.getAllByTestId('scard-cat')[0];
+  expect(cells(violence)[1].textContent).toBe('medium');
+  expect(cells(violence)[2].textContent).toBe("the set's own text at medium");
+  expect(cells(screen.getAllByTestId('scard-obs')[0])[4]).toHaveTextContent('sent to a person');
+  view.unmount();
+  // Beside a question seen lower, the set's own text still sets the worst, and says it was the set's.
+  await open(withReview({
+    reasons: ['guardrail'], findings: [{ questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM' }],
+    observed: [{ questionId: 'c001#003', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Bow Street\nWho founded the Bow Street Runners?' }, SET_HELD],
+    tally: { ...clean, spotless: 29, categories: { ...clean.categories, VIOLENCE: { worst: 'LOW', low: 1, medium: 0, high: 0 } } },
+  }));
+  const mixed = screen.getAllByTestId('scard-cat')[0];
+  expect(cells(mixed)[1].textContent).toBe('medium');
+  expect(cells(mixed)[2].textContent).toBe("1 at low · the set's own text at medium");
 });
 test('a set checked before measuring existed says so, with its verdict and its note', async () => {
   await open(withReview({ reasons: [], findings: [], observed: [], tally: null, reviewer: '', decidedAt: null, note: '30/30 clean' }));

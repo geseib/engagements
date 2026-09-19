@@ -91,6 +91,11 @@ function heldWords(row) {
 }
 /** Worst band first; within a band, what held before what was let through (finding-explanations.js `rank`). */
 const rank = (row) => (BAND_RANK[bandOf(row)] ?? 3) * 2 + (held(row) ? 0 : 1);
+/** The worst of some bands, or null when none of them is HIGH, MEDIUM or LOW. */
+const worstBand = (bands) => bands
+  .map((b) => String(b || '').toUpperCase())
+  .filter((b) => BAND_RANK[b] !== undefined)
+  .sort((a, b) => BAND_RANK[a] - BAND_RANK[b])[0] || null;
 /**
  * The "why" where there is no explanation — the set's own subject never has
  * one, nor does a check whose budget ran out. The words are
@@ -124,6 +129,28 @@ const countsWords = (c) => ['HIGH', 'MEDIUM', 'LOW']
   .filter(([, n]) => n > 0)
   .map(([b, n]) => `${n} at ${bandWord(b)}`)
   .join(' · ');
+
+/**
+ * One row of the category block: the worst band ANYTHING was seen at in the
+ * category, and where. The tally counts questions (content-guardrail.js
+ * tallyOf) and leaves the set's own text out of every count — it is one
+ * subject, not a question — so that text is read from `observed` and named
+ * beside the counts. Reading the tally alone, a category seen only in the
+ * set's own text read "none", one line above that text's own row sending the
+ * set to a person; and one seen lower in a question named the lower band.
+ */
+function categoryRow(id, tally, observed) {
+  const seen = (tally.categories && tally.categories[id]) || {};
+  const inQuestions = worstBand([seen.worst]);
+  const inSetText = worstBand(observed
+    .filter((o) => o.questionId === SET_SUBJECT && String(o.category || '').toUpperCase() === id)
+    .map(bandOf));
+  const where = [
+    inQuestions ? countsWords(seen) : '',
+    inSetText ? `the set's own text at ${bandWord(inSetText)}` : '',
+  ].filter(Boolean).join(' · ');
+  return { worst: worstBand([inQuestions, inSetText]), where };
+}
 
 /**
  * How far the check got with the set's own text, which it judges last
@@ -362,13 +389,12 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
                 <thead><tr><th className="scard-col-cat">Category</th><th className="scard-col-worst">Worst</th><th className="scard-col-count">Questions</th></tr></thead>
                 <tbody>
                   {CATEGORIES.map(([id, words]) => {
-                    const seen = (tally.categories && tally.categories[id]) || {};
-                    const worst = BAND_RANK[String(seen.worst || '').toUpperCase()] !== undefined ? String(seen.worst).toUpperCase() : null;
+                    const { worst, where } = categoryRow(id, tally, observed);
                     return (
                       <tr key={id} className="scard-cat" data-testid="scard-cat">
                         <td>{capitalised(words)}</td>
                         <td>{worst ? <span className={`scard-chip scard-chip--${bandWord(worst)}`}>{bandWord(worst)}</span> : <span className="scard-none">none</span>}</td>
-                        <td className="scard-count">{worst ? countsWords(seen) : ''}</td>
+                        <td className="scard-count">{where}</td>
                       </tr>
                     );
                   })}
