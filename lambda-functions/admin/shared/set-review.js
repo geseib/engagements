@@ -103,10 +103,17 @@ async function readReview(db, tableName, ref, version) {
  * `decidedAt` and `notice` were added for the staff decision (Stage 2 Task 4,
  * moderation-decide.js) — the review row's own vocabulary for who decided,
  * when, and which content notices they attached.
+ *
+ * `tally` and `observed` are what the check MEASURED, beside what it decided
+ * (content-guardrail.js `tallyOf`, and every band it saw): the score card's
+ * data. `findings` keeps its meaning — only what intervened — so nothing that
+ * reads findings sees a near-miss. A row without a tally was checked before
+ * measuring existed; nothing back-fills one.
  */
 const REVIEW_FIELDS = Object.freeze([
   'jobId', 'note', 'findings', 'contentHash', 'snapshotKey', 'reasons', 'checkedBy', 'promptDropped', 'declaredNotice',
   'reviewer', 'decidedAt', 'notice',
+  'tally', 'observed',
 ]);
 
 /**
@@ -119,8 +126,13 @@ async function writeReview(db, tableName, ref, version, { status, ...facts } = {
     throw new Error(`set-review: refusing to write status ${JSON.stringify(status)}`);
   }
   // findings keeps its old rule — written only when it actually is an array —
-  // rather than the generic "present and not null" the rest of the whitelist uses.
-  const bag = { ...facts, findings: Array.isArray(facts.findings) ? facts.findings : undefined };
+  // rather than the generic "present and not null" the rest of the whitelist
+  // uses. observed is a list the score card walks, so it takes the same rule.
+  const bag = {
+    ...facts,
+    findings: Array.isArray(facts.findings) ? facts.findings : undefined,
+    observed: Array.isArray(facts.observed) ? facts.observed : undefined,
+  };
   const kept = Object.fromEntries(
     REVIEW_FIELDS.filter((f) => bag[f] !== undefined && bag[f] !== null).map((f) => [f, bag[f]]),
   );

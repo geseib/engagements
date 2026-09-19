@@ -11,8 +11,8 @@
  * Order matters and is deliberate:
  *   snapshot → S3        so a person can review exactly what was judged
  *   guardrail            per question, then the set prose as one more subject
- *   explanations         flagged/escalated only — a handful of Haiku calls
- *   REVIEW row           the gate
+ *   explanations         what it saw, worst first — at most 12 Haiku calls
+ *   REVIEW row           the gate, and what the check measured (the tally)
  *   log, queue, publish  the record, the person, the library
  *
  * Everything unknown fails toward a person (spec §11): a thrown error, a
@@ -26,7 +26,7 @@ const tenant = require('./tenant');
 const { setRef, setMetadataKey, resolvePartitionFromMeta, toVersion, queryPartition } = require('./set-version');
 const { decryptItem } = require('./tenant-crypto');
 const { writeReview, STATUS } = require('./set-review');
-const { checkQuestions, checkText, OUTCOME } = require('./content-guardrail');
+const { checkQuestions, checkText, tallyOf, OUTCOME } = require('./content-guardrail');
 const { buildSnapshot, contentHash, questionText, setText, snapshotHasImages } = require('./publishable');
 const { explainFindings } = require('./finding-explanations');
 const { publishSnapshot, platformPromptExists } = require('./publish-set');
@@ -45,6 +45,23 @@ const worstOf = (a, b) => {
 const snapshotKeyFor = (source, version, checkedAt) => `moderation/${source.orgId}/${source.setId}/v${version}/${String(checkedAt).replace(/[:.]/g, '-')}.json`;
 const minimalFinding = ({ questionId, category, band }) => ({ questionId: questionId === undefined ? null : questionId, category, band });
 
+/**
+ * Every finding is also an observation (the same filter, seen and held), and
+ * the sentences are written for the observations. The review dialog and the
+ * author's banner read FINDINGS, so each finding carries its observation's.
+ */
+function withExplanations(findings, observed) {
+  const said = new Map();
+  for (const o of observed) {
+    const k = `${o.questionId}|${o.category}`;
+    if (o.explanation && !said.has(k)) said.set(k, o.explanation);
+  }
+  return findings.map((f) => {
+    const explanation = said.get(`${f.questionId}|${f.category}`);
+    return explanation ? { ...f, explanation } : f;
+  });
+}
+
 async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, context) {
   const job = await getJob(db, tableName, jobId);
   if (!job) { console.error(`🔎 check job ${jobId}: no job row`); return; }
@@ -56,6 +73,9 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   const declaredNotice = Array.isArray(request.declaredNotice) ? request.declaredNotice : [];
   const reasons = [];
   let findings = []; let checked = 0; let clean = 0;
+  // Hoisted like `findings`: a check that measured everything and then failed
+  // in bookkeeping still records what it measured. Null until it has.
+  let observed = null; let tally = null;
   // Hoisted above the try: the snapshot is uploaded early and a failure any
   // time after that must still be able to point a reviewer at it, rather
   // than orphaning the S3 object the moment something downstream throws.
@@ -90,10 +110,11 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     if (declaredNotice.length) reasons.push('declared');
 
     const remaining = () => (context && typeof context.getRemainingTimeInMillis === 'function' ? context.getRemainingTimeInMillis() : Infinity);
+    const inBudget = () => remaining() > BUDGET_FLOOR_MS;
     const result = await checkQuestions(
       questions.map((q) => ({ id: String(q.SK).replace('QUESTION#', ''), text: questionText(q) })),
       {
-        budget: () => remaining() > BUDGET_FLOOR_MS,
+        budget: inBudget,
         onEach: (i, n) => {
           if (i % 5 === 0 || i === n) updateJobProgress(db, tableName, jobId, { completed: i, phase: `Checking ${i} of ${n}` }).catch(() => {});
         },
@@ -101,9 +122,13 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     );
     // A budget already declared exhausted is not spent on one more call.
     const setResult = result.stopped
-      ? { outcome: OUTCOME.PASSED, findings: [], checked: 0, clean: 0 }
+      ? { outcome: OUTCOME.PASSED, findings: [], observed: [], checked: 0, clean: 0 }
       : await checkText(setText(plainMeta, categories), '(set)');
     findings = [...result.findings, ...setResult.findings];
+    observed = [...result.observed, ...setResult.observed];
+    // What was MEASURED — every band seen, per category, in questions. It
+    // decides nothing: the status below is computed from findings alone.
+    tally = tallyOf({ observed, findings, questions: result.checked, setTextChecked: !result.stopped });
     checked = result.checked + setResult.checked;
     clean = result.clean + setResult.clean;
     const note = `${clean}/${checked} clean`;
@@ -112,23 +137,32 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
 
     let status = AS_STATUS[worstOf(result.outcome, setResult.outcome)] || STATUS.ESCALATED;
     if (status !== STATUS.FLAGGED && reasons.length) status = STATUS.ESCALATED;
-    // A budget already declared exhausted (`result.stopped`) is not spent on
-    // up to 12 more round trips to Haiku either — BUDGET_FLOOR_MS is 20s and
-    // that many calls do not fit in it, risking the Lambda being killed before
-    // writeReview below ever runs. The row still gets its outcome; a reviewer
-    // sees the band-only sentence (finding-explanations.js's bandSentence
-    // fallback) instead of the model's explanation.
-    if (status !== STATUS.PASSED && !result.stopped) findings = await explainFindings(bedrock, InvokeModelCommand, snapshot, findings);
+    // The sentences are written for what the check SAW — passed sets too — in
+    // one allowance of 12 Haiku calls, worst band first, and each finding
+    // takes its observation's. A budget already declared exhausted
+    // (`result.stopped`) is not spent on them at all — BUDGET_FLOOR_MS is 20s
+    // and that many calls do not fit in it, risking the Lambda being killed
+    // before writeReview below ever runs — and the budget is asked again
+    // before every call, since a check that merely finished late is in the
+    // same danger. The row still gets its outcome; a reader sees the
+    // band-only sentence (finding-explanations.js's bandSentence fallback)
+    // where the model's explanation would have been.
+    if (!result.stopped) {
+      observed = await explainFindings(bedrock, InvokeModelCommand, snapshot, observed, { budget: inBudget });
+      findings = withExplanations(findings, observed);
+    }
 
     await recordUnits(db, tableName, orgId, checked);
     await writeReview(db, tableName, source, version, {
       status, findings, note, jobId,
       contentHash: snapshot.contentHash, snapshotKey, reasons, checkedBy: job.callerUserId || null,
-      promptDropped, declaredNotice,
+      promptDropped, declaredNotice, tally, observed,
     });
+    // The log is the memory and keeps the small tally; the observations live
+    // on the REVIEW row only, so a log row does not grow with the set.
     await appendReviewEvent(db, tableName, source, 'checked', {
       version, outcome: status, reasons, checked, clean, contentHash: snapshot.contentHash, snapshotKey,
-      findings: findings.map(minimalFinding), by: job.callerUserId || null,
+      findings: findings.map(minimalFinding), tally, by: job.callerUserId || null,
     });
 
     let published = null;
@@ -174,10 +208,10 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       // S3 before this error, a reviewer must still be able to find it.
       await writeReview(db, tableName, source, version, {
         status: STATUS.ESCALATED, findings, note: error.message, jobId, reasons: ['error'], checkedBy: job.callerUserId || null,
-        contentHash: snapshot ? snapshot.contentHash : null, snapshotKey,
+        contentHash: snapshot ? snapshot.contentHash : null, snapshotKey, tally, observed,
       });
       await appendReviewEvent(db, tableName, source, 'checked', {
-        version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message, snapshotKey,
+        version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message, snapshotKey, ...(tally ? { tally } : {}),
       });
       await upsertQueueRow(db, tableName, {
         ref: source, version, reason: 'escalated', orgId,
