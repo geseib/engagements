@@ -7,9 +7,10 @@
  * The score card reads a REVIEW row's reasons through the same function, so a
  * reason reads the same on both screens. Those are the check's own
  * (set-check-worker.js): 'guardrail' is the escalation the queue already words,
- * the check unsure; a budget that ran out, a snapshot that would not save and a
- * check that threw reach a queue row only as 'escalated', so the queue's line
- * is unchanged by their words here.
+ * the check unsure. A queue row the check escalated carries the same list as
+ * `checkReasons` (reasonsOf, below), so images, a declared notice, a budget
+ * that ran out, a snapshot that would not save and a check that threw read the
+ * same on the queue as on the card.
  */
 const APPEAL_MAX = 80;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -57,8 +58,24 @@ function reportWords(item) {
   return `Reported${count ? ` ×${count}` : ''}${types.length ? ` · ${types.join(', ')}` : ''}`;
 }
 
+/**
+ * What a row is waiting for. A queue row the check escalated says only
+ * 'escalated', and carries beside it what the escalation was for — the check's
+ * own reasons, `checkReasons` (set-check-worker.js). Those replace it, and
+ * 'escalated' keeps its words only for what they leave unexplained: questions
+ * or bands the guardrail could not decide. A row that carries none — an appeal,
+ * or a row written before the check named them — reads as it always did.
+ */
+function reasonsOf(item) {
+  const listed = Array.isArray(item.reasons) ? item.reasons : [];
+  const own = Array.isArray(item.checkReasons) ? item.checkReasons : [];
+  if (!own.length || !listed.includes('escalated')) return listed;
+  const undecided = (Array.isArray(item.uncertainQuestionIds) && item.uncertainQuestionIds.length > 0) || bandWords(item.bands) !== '';
+  return [...listed.filter((r) => r !== 'escalated' || undecided), ...own];
+}
+
 export function whyLabel(item = {}) {
-  const reasons = Array.isArray(item.reasons) ? item.reasons : [];
+  const reasons = reasonsOf(item);
   const parts = [];
   if (reasons.includes('escalated') || reasons.includes('guardrail')) parts.push(escalationWords(item));
   if (reasons.includes('appealed')) parts.push(appealWords(item));
@@ -68,6 +85,9 @@ export function whyLabel(item = {}) {
   if (reasons.includes('timeout')) parts.push('Out of time');
   if (reasons.includes('snapshot')) parts.push('Snapshot not saved');
   if (reasons.includes('error')) parts.push('Error');
+  // A check reason with no words here yet still sent the set to a person: say
+  // what the queue always said of an escalation, not "Waiting".
+  if (!parts.length && Array.isArray(item.reasons) && item.reasons.includes('escalated')) parts.push(escalationWords(item));
   return parts.length ? parts.join(' · ') : 'Waiting';
 }
 

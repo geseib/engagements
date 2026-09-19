@@ -14,10 +14,16 @@ const { GetCommand, PutCommand, DeleteCommand, QueryCommand } = require('@aws-sd
 
 const QUEUE_PK = 'MODERATION';
 const REASONS = Object.freeze(['escalated', 'appealed', 'reported', 'declared', 'images']);
-/** Fields a pointer may carry. Anything else — snapshots, questions — is refused by omission. */
+/**
+ * Fields a pointer may carry. Anything else — snapshots, questions — is refused by omission.
+ * `checkReasons` is what a check escalation was FOR (the REVIEW row's reasons:
+ * images, declared, guardrail, timeout, snapshot, error) and `declaredNotice`
+ * the notices it names; like `bands`, a later check replaces them.
+ */
 const POINTER_FIELDS = Object.freeze([
   'orgId', 'orgName', 'setId', 'title', 'version', 'gameType', 'questionCount',
-  'bands', 'uncertainQuestionIds', 'appealMessage', 'reports', 'snapshotKey', 'contentHash', 'publicSetId',
+  'bands', 'uncertainQuestionIds', 'checkReasons', 'declaredNotice',
+  'appealMessage', 'reports', 'snapshotKey', 'contentHash', 'publicSetId',
 ]);
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 const versionOf = (version) => { const v = Number(version); return Number.isFinite(v) && v > 0 ? v : 0; };

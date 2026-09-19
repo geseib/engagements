@@ -49,8 +49,8 @@ describe('whyLabel — band words, never scores', () => {
     are the check's own (set-check-worker.js): 'images' and 'declared' the
     queue already words; the guardrail unsure, a budget that ran out, a
     snapshot that would not save and a check that threw it had no words for,
-    and would have answered "Waiting" under an approved set. No queue row
-    carries any of them, so the queue's line is unchanged.
+    and would have answered "Waiting" under an approved set. A queue row the
+    check escalated carries the same reasons as `checkReasons` (below).
   */
   test('a check\'s own reasons each say so, in the same words', () => {
     expect(whyLabel({ reasons: ['guardrail'] })).toBe('Uncertain');
@@ -58,6 +58,32 @@ describe('whyLabel — band words, never scores', () => {
     expect(whyLabel({ reasons: ['snapshot'] })).toBe('Snapshot not saved');
     expect(whyLabel({ reasons: ['error'] })).toBe('Error');
     expect(whyLabel({ reasons: ['snapshot', 'images', 'guardrail'] })).toBe('Uncertain · Images · Snapshot not saved');
+  });
+  /*
+    WHAT AN ESCALATION WAS FOR. A queue row the check escalated says only
+    'escalated'; it also carries the check's own reasons (`checkReasons`) and
+    the notices the author declared, as set-check-worker.js writes them and
+    tests/set-check-job.js pins. So a set held for its images, a declared
+    notice or an error says so (spec §10.5's "Declared: …" and "Images")
+    instead of "Uncertain", which is what the queue said of every one of them.
+  */
+  test('a queue row the check escalated says what for, in the check\'s own words', () => {
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['images'], bands: {} })).toBe('Images');
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['declared'], declaredNotice: ['graphic-medical'], bands: {} })).toBe('Declared: graphic medical');
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['error'], bands: {} })).toBe('Error');
+    // The line's order, not the list's.
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['images', 'declared'], declaredNotice: ['graphic-medical'], bands: {} })).toBe('Declared: graphic medical · Images');
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['guardrail', 'images'], uncertainQuestionIds: ['q002'], bands: { HATE: 'MEDIUM' } })).toBe('1 uncertain question (medium: hate) · Images');
+    // A question the guardrail could not read is undecided with no reason of
+    // its own (content-guardrail.js files it as an ERROR finding), so it keeps its words.
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['images'], uncertainQuestionIds: ['q002'], bands: {} })).toBe('1 uncertain question · Images');
+  });
+  test('a queue row with none of the check\'s reasons on it reads as it always did', () => {
+    // Written before the check named them, or escalated for nothing but undecided questions.
+    expect(whyLabel({ reasons: ['escalated'], bands: {} })).toBe('Uncertain');
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: [], declaredNotice: [], uncertainQuestionIds: ['q001'], bands: {} })).toBe('1 uncertain question');
+    // A reason this line has no words for yet says what the queue always said, never "Waiting".
+    expect(whyLabel({ reasons: ['escalated'], checkReasons: ['a-reason-with-no-words'], bands: {} })).toBe('Uncertain');
   });
 });
 

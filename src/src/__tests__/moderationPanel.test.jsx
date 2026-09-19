@@ -45,6 +45,26 @@ test('the head says how many and how long, and each row says why in band words',
   expect(within(screen.getByText('Onboarding').closest('tr')).getByText('Appealed: “It is a clinical set.”')).toBeInTheDocument();
   expect(screen.getByText(/these are the ones it flagged as uncertain/i)).toBeInTheDocument();
 });
+/*
+  Rows as GET /admin/moderation projects them (moderation-list.js): bands one
+  per category, and what a check escalation was for. Every one of these once
+  read "Uncertain" — the queue row said only 'escalated', and the bands were
+  read as counts.
+*/
+test('each row says what the check escalated it for, as the endpoint sends it', async () => {
+  const base = { orgName: 'Acme', gameType: 'trivia', questionCount: 3, version: 1, reasons: ['escalated'], bands: {}, uncertainQuestionIds: [], checkReasons: [], declaredNotice: [], waitingSince: '2026-09-17T09:00:00.000Z' };
+  const items = [
+    { ...base, sk: 'org_acme#art#v1', setId: 'art', title: 'Gallery walk', checkReasons: ['images'] },
+    { ...base, sk: 'org_acme#ward#v1', setId: 'ward', title: 'Ward drills', checkReasons: ['declared'], declaredNotice: ['graphic-medical'] },
+    { ...base, sk: 'org_acme#hist#v1', setId: 'hist', title: 'A timeline', checkReasons: ['guardrail'], bands: { VIOLENCE: 'MEDIUM' }, uncertainQuestionIds: ['q002'] },
+  ];
+  global.fetch = jest.fn(async () => json({ count: items.length, oldestWaitingSince: base.waitingSince, items }));
+  render(<ModerationPanel />);
+  const rowOf = async (title) => within((await screen.findByText(title)).closest('tr'));
+  expect((await rowOf('Gallery walk')).getByText('Images')).toBeInTheDocument();
+  expect((await rowOf('Ward drills')).getByText('Declared: graphic medical')).toBeInTheDocument();
+  expect((await rowOf('A timeline')).getByText('1 uncertain question (medium: violence)')).toBeInTheDocument();
+});
 test('an empty queue says the check decided everything, and never lies about an outage', async () => {
   global.fetch = jest.fn(async () => json({ count: 0, oldestWaitingSince: null, items: [] }));
   render(<ModerationPanel />);

@@ -160,6 +160,7 @@ attributes: reasons: Set<'escalated'|'appealed'|'reported'>, waitingSince, lates
             orgId, orgName, setId, title, version, gameType, questionCount,
             bands: { category: band } for the uncertain questions,
             uncertainQuestionIds: [...], appealMessage,
+            checkReasons: [...], declaredNotice: [...]   (a check escalation; see below)
             reports: { count, byType: { <type>: n } },
             snapshotKey                                  (S3, §3.3)
 ```
@@ -167,6 +168,12 @@ attributes: reasons: Set<'escalated'|'appealed'|'reported'>, waitingSince, lates
 *Corrected 2026-09-19.* `bands` is **one band per category**, `{ HATE: 'MEDIUM' }`, as the
 check and the appeal write it; never a count per band. The Stage 2 reader assumed counts
 (`{ MEDIUM: 3 }`), which no writer has produced, so its why line could never show a band.
+`reasons` says only `escalated` for every check escalation, so the row also carries what the
+escalation was for: `checkReasons` (the REVIEW row's reasons: `images`, `declared`,
+`guardrail`, `timeout`, `snapshot`, `error`) and `declaredNotice` (the declared ids, each cut
+to 40 characters, the `NOTICE_ID` bound). A later check replaces both, as it does `bands` and
+`uncertainQuestionIds`, including a check that throws. A row without them (an appeal, or one
+written before) reads as before.
 
 Rows are **≤4KB pointers**. A Query on the partition returns the whole queue; at tens of
 rows it is sorted by `waitingSince` in memory. **No TTL** — a queue row must not vanish;
