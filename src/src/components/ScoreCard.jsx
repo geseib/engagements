@@ -4,6 +4,7 @@ import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
 import { versionChip, STALE_CHECK_MS } from '../utils/shareState';
+import { whyLabel } from '../utils/moderationRow';
 import './ScoreCard.css';
 
 /**
@@ -23,7 +24,7 @@ import './ScoreCard.css';
  * The review now carries `tally` (per category, counted in questions) and
  * `observed` (every band the check saw, intervened or not), each observation
  * named by its question's TEXT from the published public copy
- * (admin/public-library-item.js). So the latest check reads one of four ways:
+ * (admin/public-library-item.js). So the latest check reads one of five ways:
  *
  *   measured     `tally.scope === 'full'`: a summary line from the numbers,
  *                all five categories with "none" written out, and one table
@@ -36,8 +37,16 @@ import './ScoreCard.css';
  *                it, and they are listed by their text; the reviewer's note
  *                replaces the check's on the row, so that is read back from
  *                the check's own logged event. No re-check, no backfill.
- *   running      a re-check in flight, or one that never finished
+ *   unfinished   a check that threw before it had measured: the worker keeps
+ *                a tally only once measuring has finished, so this row has
+ *                none either, and it says the check did not finish rather
+ *                than dating it (`didNotFinish`)
+ *   running      a re-check in flight, or one that died without writing
  *   unchecked    no review row at all, which is not a verdict to print
+ *
+ * Whichever it is, the check's reasons — why a person was needed — read one
+ * line under the verdict, in the moderation queue's words
+ * (utils/moderationRow.js whyLabel), never a second vocabulary.
  *
  * GATING IS NOT THIS CARD'S (decision B): a row that was seen and let through
  * is a near-miss, and nothing here calls it flagged or uncertain. `findings`
@@ -67,7 +76,7 @@ const CATEGORY_WORDS = Object.fromEntries(CATEGORIES);
 /**
  * Judged in one of the five? Anything else in `findings` is the check's own —
  * a subject the guardrail could not read, a check its budget stopped, a set
- * with nothing in it — and has no band to show (see `preTallyLine`).
+ * with nothing in it — and has no band to show (see `noTallyLine`).
  */
 const JUDGED = new Set(CATEGORIES.map(([id]) => id));
 const isJudged = (row) => JUDGED.has(String(row.category || '').toUpperCase());
@@ -95,10 +104,15 @@ function statusChip(status, checkedAt, nowMs = Date.now()) {
 
 /** Did this row hold the set? Only an intervention can (finding-explanations.js `held`). */
 const held = (row) => row.intervened !== false;
-/** …and only at HIGH, which flags it, or MEDIUM, which sends it to a person. A LOW never held a set. */
+/**
+ * …and only at HIGH, which flags it, or MEDIUM, which sends it to a person. A
+ * LOW never held a set. A flag reads as the app says it (shareState.js), the
+ * word the timeline and the verdict use for the same outcome, never the raw
+ * status.
+ */
 function heldWords(row) {
   if (!held(row)) return 'no';
-  if (bandOf(row) === 'HIGH') return 'flagged';
+  if (bandOf(row) === 'HIGH') return statusChip('flagged').label;
   if (bandOf(row) === 'MEDIUM') return 'sent to a person';
   return 'no';
 }
@@ -169,25 +183,39 @@ function categoryRow(id, tally, observed) {
 }
 
 /**
- * What a check made before measuring existed kept: its verdict and, when
- * anything held the set, that — never what it let through, which that check
- * was never told about. An approval keeps those findings, so this is not
- * "only its verdict" for any set a person decided.
+ * Did the check stop before it finished? The worker keeps a tally only once
+ * measuring has finished, and a check that throws writes its review from the
+ * catch block with `reasons: ['error']` in place of any it had gathered
+ * (set-check-worker.js) — nothing else writes 'error'. Every other reason, and
+ * every finding outside the five categories, comes from a check that ran to
+ * its end, which now always keeps a tally: without one, that check came
+ * before measuring existed.
+ */
+const didNotFinish = (reasons) => reasons.includes('error');
+
+/**
+ * Why a review has no tally, and what it kept. A check made before measuring
+ * existed kept its verdict and, when anything held the set, that — never what
+ * it let through, which that check was never told about. An approval keeps
+ * those findings, so this is not "only its verdict" for any set a person
+ * decided. A check that did not finish says so instead of dating itself:
+ * "before detailed scoring existed" is false of every one that failed since.
  *
  * A finding outside the five categories has no band, so it is said here
  * rather than dressed as a row. The rule is content-guardrail.js tallyOf's
  * for `unread`: one on a question is a question the guardrail could not read,
  * one on the set's own subject that text; TIMEOUT and EMPTY name no subject.
  */
-function preTallyLine(findings) {
-  if (!findings.length) return 'Checked before detailed scoring existed — this check recorded only its verdict.';
+function noTallyLine(findings, unfinished) {
   const own = findings.filter((f) => !isJudged(f));
   const kind = (f) => String(f.category || '').toUpperCase();
   const unread = new Set(own
     .filter((f) => typeof f.questionId === 'string' && f.questionId !== '' && f.questionId !== SET_SUBJECT)
     .map((f) => f.questionId)).size;
   return [
-    'Checked before detailed scoring existed — this check recorded only what held the set, nothing it let through.',
+    unfinished
+      ? 'This check did not finish — it recorded no detailed scoring.'
+      : `Checked before detailed scoring existed — this check recorded only ${findings.length ? 'what held the set, nothing it let through' : 'its verdict'}.`,
     unread ? `${unread} ${unread === 1 ? 'question' : 'questions'} could not be read.` : '',
     own.some((f) => f.questionId === SET_SUBJECT) ? "The set's own text could not be read." : '',
     own.some((f) => kind(f) === 'TIMEOUT') ? 'The check was stopped before it finished.' : '',
@@ -436,6 +464,10 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
   // text it could not read is `setTextUnread`, never `setTextChecked`.
   const setClean = Boolean(tally && tally.setTextChecked) && !observed.some((o) => o.questionId === SET_SUBJECT);
   const checkNote = card && !tally ? checkNoteOf(review, card.log, card.sourceVersion) : '';
+  // Why a person was needed, under any verdict a check reached, in the queue's
+  // words — and nothing at all when it needed none, never whyLabel's "Waiting".
+  const reasons = Array.isArray(review.reasons) ? review.reasons : [];
+  const why = verdict && !running && reasons.length ? whyLabel(review) : '';
 
   return (
     <section className="scard" data-theme="dark">
@@ -467,12 +499,13 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
           {verdict ? (
             <p className="scard-verdict" data-testid="scard-verdict">Verdict: {verdict.label}{checkNote ? ` · “${checkNote}”` : ''}</p>
           ) : <p className="scard-summary">No check is on record for the version this came from.</p>}
+          {why ? <p className="scard-fine" data-testid="scard-reasons">Why a person was needed: {why}</p> : null}
           {/* Not fine print: where a tally would stand, this is the answer to
               "why is there nothing else here?" — and, for a set a person
               decided, what held it. */}
           {verdict && !running && !tally && (
             <>
-              <p className="scard-summary" data-testid="scard-pretally">{preTallyLine(findings)}</p>
+              <p className="scard-summary" data-testid="scard-pretally">{noTallyLine(findings, didNotFinish(reasons))}</p>
               {heldRows.length > 0 && <SeenTable rows={heldRows} />}
             </>
           )}

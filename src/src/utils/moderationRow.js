@@ -3,6 +3,13 @@
  * is waiting; this turns it into the one line the table shows — band words,
  * never scores (spec §10.5). Content-notice labels are Stage 4's vocabulary;
  * until then an id reads as its words ("graphic-medical" → "graphic medical").
+ *
+ * The score card reads a REVIEW row's reasons through the same function, so a
+ * reason reads the same on both screens. Those are the check's own
+ * (set-check-worker.js): 'guardrail' is the escalation the queue already words,
+ * the check unsure; a budget that ran out, a snapshot that would not save and a
+ * check that threw reach a queue row only as 'escalated', so the queue's line
+ * is unchanged by their words here.
  */
 const APPEAL_MAX = 80;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -34,11 +41,14 @@ function reportWords(item) {
 export function whyLabel(item = {}) {
   const reasons = Array.isArray(item.reasons) ? item.reasons : [];
   const parts = [];
-  if (reasons.includes('escalated')) parts.push(escalationWords(item));
+  if (reasons.includes('escalated') || reasons.includes('guardrail')) parts.push(escalationWords(item));
   if (reasons.includes('appealed')) parts.push(appealWords(item));
   if (reasons.includes('reported')) parts.push(reportWords(item));
   if (reasons.includes('declared')) parts.push(`Declared: ${humanise(item.declaredNotice) || 'a content notice'}`);
   if (reasons.includes('images')) parts.push('Images');
+  if (reasons.includes('timeout')) parts.push('Out of time');
+  if (reasons.includes('snapshot')) parts.push('Snapshot not saved');
+  if (reasons.includes('error')) parts.push('Error');
   return parts.length ? parts.join(' · ') : 'Waiting';
 }
 

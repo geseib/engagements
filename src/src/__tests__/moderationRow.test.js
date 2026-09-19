@@ -20,6 +20,21 @@ describe('whyLabel — band words, never scores', () => {
     expect(whyLabel({ reasons: ['escalated', 'appealed'], uncertainQuestionIds: ['a'], appealMessage: 'Please.' })).toBe('1 uncertain question · Appealed: “Please.”');
     expect(whyLabel({})).toBe('Waiting');
   });
+  /*
+    The score card reads a REVIEW row through the same function. Its reasons
+    are the check's own (set-check-worker.js): 'images' and 'declared' the
+    queue already words; the guardrail unsure, a budget that ran out, a
+    snapshot that would not save and a check that threw it had no words for,
+    and would have answered "Waiting" under an approved set. No queue row
+    carries any of them, so the queue's line is unchanged.
+  */
+  test('a check\'s own reasons each say so, in the same words', () => {
+    expect(whyLabel({ reasons: ['guardrail'] })).toBe('Uncertain');
+    expect(whyLabel({ reasons: ['timeout'] })).toBe('Out of time');
+    expect(whyLabel({ reasons: ['snapshot'] })).toBe('Snapshot not saved');
+    expect(whyLabel({ reasons: ['error'] })).toBe('Error');
+    expect(whyLabel({ reasons: ['snapshot', 'images', 'guardrail'] })).toBe('Uncertain · Images · Snapshot not saved');
+  });
 });
 
 describe('waitedLabel and the headline', () => {
