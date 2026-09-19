@@ -771,7 +771,13 @@ describe('what the host page must now render', () => {
     // above the markup — including the numbers it used to have — and a scan
     // that counted those would report the file's own explanation of the bug as
     // the bug.
-    const markup = source.replace(/\/\*[\s\S]*?\*\//g, '');
+    //
+    // TWO FILES, ONE STAGE. ASK's two content lines ("Full prompt" and "How to
+    // answer") are rendered by components/QuestionCard.jsx, the card the set
+    // editor's preview shares. Scanning GameHostPage alone would drop ASK out
+    // of "every state" — and fail the floor below — so the scan reads both.
+    const card = readFileSync(join(__dirname, '..', 'components', 'QuestionCard.jsx'), 'utf8');
+    const markup = `${source}\n${card}`.replace(/\/\*[\s\S]*?\*\//g, '');
     // Each match runs from `data-drop="N"` to the end of that JSX tag, so the
     // note is found only when it is on the SAME element.
     const groups = [];

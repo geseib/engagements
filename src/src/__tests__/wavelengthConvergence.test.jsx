@@ -22,6 +22,7 @@ import { render, screen } from '@testing-library/react';
 import fs from 'fs';
 import path from 'path';
 import WavelengthConvergence from '../components/stage/WavelengthConvergence';
+import QuestionCard from '../components/QuestionCard';
 import {
   normalizeWavelengthAnalysis,
   wavelengthHeadline,
@@ -399,10 +400,30 @@ describe('ASK shows the term and NOTHING about it — the AI Jargon report', () 
   // whatever the set carries. Source-scanned because neither page mounts in
   // jsdom (auth provider), following this file's call-sites pattern.
   const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
+  const card = stripComments(fs.readFileSync(src('components', 'QuestionCard.jsx'), 'utf8'));
   const player = stripComments(fs.readFileSync(src('PlayerPage.jsx'), 'utf8'));
 
   test('the host stage detail line is gated off wavelength', () => {
-    expect(host).toMatch(/currentGameType !== 'wavelength'\s*&&\s*\(currentQuestion\.questionDetail/);
+    // The stage's ASK markup is components/QuestionCard.jsx now — the card the
+    // set editor's preview shares — so the gate lives there, and the stage
+    // hands the card its own game type. Both halves are needed; both are held.
+    expect(card).toMatch(/gameType !== 'wavelength'\s*&&\s*detail/);
+    expect(host).toMatch(/<QuestionCard\b[^>]*phase="ASK"[^>]*gameType=\{currentGameType\}/);
+    // And rendered, which a source scan cannot prove: a subject carrying a
+    // stored definition shows the subject and the how-to-answer line, only.
+    // The definition rides under BOTH names, as the wire sends it
+    // (game/get-question.js fills questionDetail and detail from each other).
+    const definition = 'The delay before a transfer begins.';
+    const { container } = render(
+      <QuestionCard
+        phase="ASK"
+        question={{ title: 'Latency', questionDetail: definition, detail: definition }}
+        gameType="wavelength"
+        instruction="Enter up to 10 words that come to mind for this subject:"
+      />
+    );
+    expect(container.textContent).not.toMatch(/delay before a transfer/);
+    expect(container.querySelector('[data-drop="4"]')).toBeNull();
   });
 
   test('no screen renders the retired topic field', () => {

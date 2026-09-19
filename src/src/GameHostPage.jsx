@@ -12,6 +12,7 @@ import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
+import QuestionCard from './components/QuestionCard';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
@@ -74,37 +75,9 @@ const API_BASE = window.API_BASE;
  */
 const STAGE_GROW = { LOBBY: '1.5', ASK: '1.35', ENDED: '1.5' };
 
-/** Trivia answer slots, in display order. */
-const TRIVIA_OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
-
-/**
- * Is this option slot the correct answer?
- *
- * Question sets in the wild record `correctAnswer` four different ways —
- * "OptionA", "A", the option's own text, or an array of any of those — so the
- * comparison has to try all of them. Lifted verbatim out of the RESULTS render
- * when that moved onto the stage; the logic is unchanged.
- */
-function isCorrectTriviaOption(question, key, letter) {
-  if (!question) return false;
-  const optionId = `Option${letter}`;
-  const candidates = Array.isArray(question.correctAnswer)
-    ? question.correctAnswer
-    : [question.correctAnswer];
-
-  for (const correct of candidates) {
-    if (!correct) continue;
-    if (correct === optionId || correct === letter || correct === question[key]) return true;
-    if (typeof correct === 'string' && correct.startsWith('Option')) {
-      const correctLetter = correct.replace('Option', '');
-      if (`option${correctLetter}` === key || correctLetter === letter) return true;
-    }
-    if (typeof correct === 'string' && correct.length === 1 && /[A-F]/.test(correct)) {
-      if (`option${correct}` === key || correct === letter) return true;
-    }
-  }
-  return false;
-}
+/* The trivia option slots and the correct-answer test that used to live here
+   are in config/questionCard.js now, beside the card that reads them
+   (components/QuestionCard.jsx). */
 
 function GameHostPage() {
   // 🎯 AUTHENTICATION
@@ -5608,7 +5581,8 @@ Focus on actionable business strategy insights.`;
             group carrying a data-drop-note (content announces its own loss)
             may never sort before a group without one (chrome goes silently).
 
-            Numbering per state, in this file:
+            Numbering per state, in this file and in components/QuestionCard.jsx,
+            which renders ASK's two content lines:
               1  fn-controls                  host-only controls
                  (`early-reveal` was the other 1 and is retired — the author
                   reveal is a session setting in the sidebar now, and a control
@@ -5657,63 +5631,19 @@ Focus on actionable business strategy insights.`;
               </>
             )}
 
+            {/* THE QUESTION — components/QuestionCard.jsx, the one card the
+                stage and the set editor's question preview share (spec
+                2026-09-19 §2.3), so the two cannot drift. The click-to-expand
+                recovery and the wavelength rule that used to be written here
+                are explained there, beside the markup they govern. */}
             {hostPhase === 'ASK' && currentQuestion && (
-              <>
-                {/* THE RECOVERY FOR A DROPPED PROMPT.
-                    The full prompt below is data-drop="4" — the LAST thing the
-                    fitter sacrifices on a dense ASK, after both host controls
-                    and the how-to-answer line at "3" — but it can still go.
-                    Click-to-expand is how the host gets it back, and without it
-                    a dense round loses the prompt from both the room's screen
-                    and the host's with no way to read it again. Mouse-only on
-                    purpose: giving the heading a
-                    tabIndex would put SPACE — the advance shortcut — on a
-                    focusable element that also opens a modal. */}
-                <h1
-                  className="q"
-                  data-expandable="1"
-                  title="Show the full question"
-                  onClick={expandQuestion}
-                >
-                  {currentQuestion.title || currentQuestion.question}
-                </h1>
-                {currentQuestion.image && (
-                  <img
-                    className="stage-art"
-                    src={currentQuestion.image}
-                    alt={currentQuestion.title || 'Artwork'}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                )}
-                {/* WAVELENGTH SHOWS THE TERM AND NOTHING ABOUT IT. The owner,
-                    off the AI Jargon set: "we dont want to give them ideas of
-                    the meaning, we are looking to them to share their meaning."
-                    A stored detail sentence IS a definition, so for wavelength
-                    this line never renders — whatever the set carries. The
-                    subject is the headline above; the how-to-answer line below
-                    is the only other thing the room needs. */}
-                {currentGameType !== 'wavelength'
-                  && (currentQuestion.questionDetail || currentQuestion.detail) && (
-                  <p className="qdetail" data-drop="4" data-drop-note="Full prompt">
-                    {currentQuestion.questionDetail || currentQuestion.detail}
-                  </p>
-                )}
-                {currentGameType === 'trivia' && (
-                  <div className="opts">
-                    {TRIVIA_OPTION_KEYS
-                      .filter((key) => currentQuestion[key])
-                      .map((key, index) => (
-                        <div key={key} className="opt">
-                          <span className="ltr">{String.fromCharCode(65 + index)}</span>
-                          <span className="txt">{currentQuestion[key]}</span>
-                        </div>
-                      ))}
-                  </div>
-                )}
-                <p className="qdetail" data-drop="3" data-drop-note="How to answer">
-                  {getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
-                </p>
-              </>
+              <QuestionCard
+                phase="ASK"
+                question={currentQuestion}
+                gameType={currentGameType}
+                instruction={getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
+                onExpand={expandQuestion}
+              />
             )}
 
             {hostPhase === 'VOTE' && (
@@ -5840,25 +5770,16 @@ Focus on actionable business strategy insights.`;
                 {currentGameType !== 'trivia' && answers.length === 0 ? (
                   <p className="qdetail">No responses came in for this one.</p>
                 ) : currentGameType === 'trivia' ? (
-                  <div className="opts">
-                    {TRIVIA_OPTION_KEYS
-                      .filter((key) => currentQuestion?.[key])
-                      .map((key, index) => {
-                        const letter = String.fromCharCode(65 + index);
-                        const isCorrect = isCorrectTriviaOption(currentQuestion, key, letter);
-                        const picked = answers.filter((a) => a.answer === letter).length;
-                        const pct = answers.length
-                          ? Math.round((picked / answers.length) * 100) : 0;
-                        return (
-                          <div key={key} className={`opt ${isCorrect ? 'correct' : 'dim'}`}>
-                            <span className="fill" style={{ width: `${pct}%` }} />
-                            <span className="ltr">{letter}</span>
-                            <span className="txt">{currentQuestion[key]}</span>
-                            <span className="pct">{`${pct}%`}</span>
-                          </div>
-                        );
-                      })}
-                  </div>
+                  /* The same card as ASK, in its RESULTS treatment: the correct
+                     row marked and every row's share of the room. `answers` is
+                     what draws the shares — a caller with no votes to show
+                     (the set editor's preview) passes none. */
+                  <QuestionCard
+                    phase="REVEAL"
+                    question={currentQuestion}
+                    gameType={currentGameType}
+                    answers={answers}
+                  />
                 ) : currentGameType === 'wavelength' ? (
                   /* The ranked .terms flow the mockup drew, carrying the
                      convergence spec's semantics: landed words (on EVERY
