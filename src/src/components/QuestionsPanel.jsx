@@ -200,6 +200,12 @@ export default function QuestionsPanel({
   // The draft as it was when the modal opened, so closing can tell "you have
   // typed something" from "you opened this and changed your mind".
   const [draftSeed, setDraftSeed] = useState(null);
+  // HOW THE DIALOG WAS OPENED: 'add' (Add a question) or 'edit' (a row's
+  // Edit, in the table or the preview). Recorded, never inferred from whether
+  // the draft's uid is in `rows`: a Save's read-back gives every row a new uid,
+  // so an edit open across it would read as an add — and did, until Done
+  // appended the saved question a second time. See `commitEdit`.
+  const [draftKind, setDraftKind] = useState(null);
   const [confirmDropDraft, setConfirmDropDraft] = useState(false);
   // Validation belongs INSIDE the modal — the panel's status bar is behind it.
   const [formError, setFormError] = useState('');
@@ -256,6 +262,16 @@ export default function QuestionsPanel({
       : nothingToPreview(rows);
   const previewing = viewMode === 'preview' && !previewBlocked;
 
+  // WHY THE PREVIEW'S EDIT IS HELD, or '' when it is not. The preview stays up
+  // while a Save — or a replace from a CSV — is written and while the set is
+  // read back after it, and the read-back gives every row a new uid. So a
+  // dialog opened in that time is an edit of a row about to stop existing, and
+  // finished after the read-back it has no row to land on (`commitEdit`
+  // refuses it; it used to append it, the saved question twice). Held until
+  // the set on screen is the saved one: disabled, saying why, never live and
+  // never missing from the bar.
+  const editBlocked = loadState === 'ready' && !saving && !isReplacing ? '' : 'Wait for the save to finish.';
+
   /* ----------------------------------------------------------- loading --- */
 
   const load = useCallback(async () => {
@@ -289,6 +305,7 @@ export default function QuestionsPanel({
   const closeForm = useCallback(() => {
     setDraft(null);
     setDraftSeed(null);
+    setDraftKind(null);
     setConfirmDropDraft(false);
     setFormError('');
     setAiOpen(false);
@@ -430,9 +447,10 @@ export default function QuestionsPanel({
       .slice(0, SIBLING_LIMIT);
   }, [rows, draft, draftCategory]);
 
-  const openForm = (row) => {
+  const openForm = (row, kind) => {
     setDraft(row);
     setDraftSeed(row);
+    setDraftKind(kind);
     setConfirmDropDraft(false);
     setFormError('');
     setAiOpen(false);
@@ -447,13 +465,13 @@ export default function QuestionsPanel({
     // category of the last row, so adding a run of questions to one category
     // does not mean retyping its name every time.
     const seedCategory = categoryFilter || rows[rows.length - 1]?.category || '';
-    openForm(blankRow({ category: seedCategory }));
+    openForm(blankRow({ category: seedCategory }), 'add');
   };
 
-  const startEdit = (row) => openForm({ ...row });
+  const startEdit = (row) => openForm({ ...row }, 'edit');
 
-  /** Is this draft in the working copy already, or is it an add in progress? */
-  const isAdding = Boolean(draft) && !rows.some((r) => r.uid === draft.uid);
+  /** Is this an add in progress, or an edit of a row? By how it was opened. */
+  const isAdding = Boolean(draft) && draftKind === 'add';
   // Reference equality is enough and is what we want: `openForm` stores the very
   // object it hands the form, and every edit replaces it.
   const draftTouched = Boolean(draft) && draft !== draftSeed;
@@ -470,18 +488,38 @@ export default function QuestionsPanel({
 
   const commitEdit = () => {
     if (!draft) return;
+    // AN EDIT LANDS ON THE ROW IT WAS OPENED ON, OR NOWHERE — never as an add.
+    //
+    // A Save reads the set back and every row returns under a new uid. The
+    // table stays up while the version is written, so an edit can be opened
+    // on a row the read-back then replaces; Done after it finds no row with
+    // this uid. This used to take that for an add and append the draft — the
+    // saved question, twice. Refused instead, and said so on the status line,
+    // which is in view once the dialog closes. Decided by how the dialog was
+    // opened: a new question's uid is never in `rows`, and it must still go in.
+    if (draftKind === 'edit' && !rows.some((r) => r.uid === draft.uid)) {
+      const opened = String(draftSeed?.title || '').trim();
+      closeForm();
+      setStatus({
+        text: `That edit was not applied: the set was reloaded while ${opened ? `"${opened}"` : 'the question'} `
+          + 'was open, so it was editing a copy that no longer exists. Nothing was added. '
+          + 'Open the question again to make the change.',
+        tone: 'error',
+      });
+      return;
+    }
     const problemsNow = rowProblems(draft, engagementType);
     if (problemsNow.length) {
       // In the modal, not in the panel's status bar underneath it.
       setFormError(`That question ${problemsNow.join(', and ')}.`);
       return;
     }
-    setRows((current) => (current.some((r) => r.uid === draft.uid)
-      ? current.map((r) => (r.uid === draft.uid
-        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
-        : r))
+    setRows((current) => (draftKind === 'add'
       // An add only reaches the working copy here.
-      : [...current, draft]));
+      ? [...current, draft]
+      : current.map((r) => (r.uid === draft.uid
+        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
+        : r))));
     closeForm();
     setStatus({ text: '', tone: '' });
   };
@@ -1066,6 +1104,7 @@ export default function QuestionsPanel({
             : (questionSet?.customInstruction || '')}
           setId={setId}
           onEditQuestion={startEdit}
+          editBlocked={editBlocked}
           selectRequest={previewRequest}
         />
       )}

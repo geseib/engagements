@@ -231,6 +231,17 @@ describe('what the position, the note and the empty line stand on', () => {
   ])('%s clears AA on the panel', (_label, fg, chain) => {
     expect(on(fg, [P.panel, ...chain.map((selector) => groundOf(selector, PAPER))])).toBeGreaterThanOrEqual(AA);
   });
+
+  test('a held Edit, in the colour its :disabled rule draws it, clears AA on its own ground', () => {
+    // Held while a Save is written and read back, and its title says why — a
+    // reason is only a reason if the words it sits on can be read. The ink is
+    // read from the sheet's :disabled rule, so a later colour is measured too.
+    const ink = ruleBody(QPREV_CSS, '.qprev-btn:disabled').match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
+    expect(ink).not.toBeNull();
+    const chain = ['.qprev', '.qprev-detail', '.qprev-bar', '.qprev-btn'];
+    expect(on(hexIn(PAPER, ink[1]), [P.panel, ...chain.map((selector) => groundOf(selector, PAPER))]))
+      .toBeGreaterThanOrEqual(AA);
+  });
 });
 
 describe('the screen: the stage\'s own card on the stage\'s own ground', () => {

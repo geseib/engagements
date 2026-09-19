@@ -302,6 +302,122 @@ describe('the working copy', () => {
   });
 });
 
+/*
+ * AN EDIT OPEN ACROSS A SAVE'S READ-BACK. A Save writes the working copy and
+ * then reads the set back, and every row comes back under a new uid. The table
+ * stays up while the version is written, so its Edit can open a dialog on a row
+ * the read-back is about to replace. Done after the read-back used to find no
+ * row with the draft's uid and take the edit for a NEW question — the saved
+ * question, twice. The Questions tab now decides "edit or add" by how the
+ * dialog was opened, and refuses an edit whose row is gone, saying so.
+ */
+describe('an edit open while a Save is written and read back', () => {
+  const [, CHANGE, WRONG] = QUESTIONS.questions;   // the endpoint's order: ARE WE SHIPPING is first
+  const ADDED = { id: 'c002#002', Category: 'Delivery', title: 'SHOULD WE HAVE SHIPPED', QuestionNumber: 2 };
+
+  /** The first read answers at once; the write and the read-back after it wait for the test. */
+  function holdTheSave(readBack) {
+    const held = { write: null, readBack: null };
+    let reads = 0;
+    mockApi({
+      'GET lessons-learned/questions': () => {
+        reads += 1;
+        if (reads === 1) return jsonResponse(200, QUESTIONS);
+        return new Promise((resolve) => {
+          held.readBack = () => resolve(jsonResponse(200, { setId: SET.id, questions: readBack }));
+        });
+      },
+      'POST upload-questions': () => new Promise((resolve) => {
+        held.write = () => resolve(jsonResponse(200, {
+          setId: SET.id, setName: SET.name, version: 3, questionCount: readBack.length,
+        }));
+      }),
+    });
+    return held;
+  }
+  async function letTheSaveLand(held) {
+    held.write();
+    await waitFor(() => expect(held.readBack).not.toBeNull());
+    held.readBack();
+    await waitFor(() => expect(screen.queryByText('Loading questions…')).not.toBeInTheDocument());
+  }
+  const tableRows = () => screen.queryAllByTestId(/^question-\d+$/);
+
+  it('opened while the version is written and finished after the read-back, it is refused and says so — the saved question is not added a second time', async () => {
+    // rejects: commitEdit's add branch taking the edit for a new question.
+    // The dialog was opened on WHAT WENT WRONG while the version was written;
+    // after the read-back its uid named nothing, and Done appended it — two
+    // copies of the question, and an "Unsaved" bar over a set just saved.
+    const held = holdTheSave([WRONG, CHANGE]);
+    renderPanel();
+    await ready();
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    fireEvent.click(within(rowFor('WHAT WENT WRONG')).getByRole('button', { name: /edit/i }));
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'WHAT REALLY WENT WRONG' } });
+
+    await letTheSaveLand(held);
+    // Still an edit: its heading is not re-read from whether its row is there.
+    const dialog = screen.getByRole('dialog', { name: /edit question/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(tableRows()).toHaveLength(2);
+    expect(screen.queryByText('WHAT REALLY WENT WRONG')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument();
+    const said = screen.getByText(/That edit was not applied/);
+    expect(said).toHaveTextContent(/reloaded while "WHAT WENT WRONG" was open.*Nothing was added/);
+    expect(said.closest('.status-message')).toHaveClass('error');
+  });
+
+  it('is refused the same way for a question added earlier in the session: how the dialog was opened decides, not where the question came from', async () => {
+    // rejects: telling an edit from an add by the row's origin. The question
+    // was added before the Save, so the copy the dialog opened is
+    // `origin: 'new'` — and the read-back has it as a saved question under a
+    // new uid. Read as an add, Done would have put it in twice.
+    const held = holdTheSave([...QUESTIONS.questions, ADDED]);
+    renderPanel();
+    await ready();
+    fireEvent.click(screen.getByRole('button', { name: /Add a question/i }));
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'SHOULD WE HAVE SHIPPED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    fireEvent.click(within(rowFor('SHOULD WE HAVE SHIPPED')).getByRole('button', { name: /edit/i }));
+
+    await letTheSaveLand(held);
+    const dialog = screen.getByRole('dialog', { name: /edit question/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+
+    expect(tableRows()).toHaveLength(4);
+    expect(screen.getAllByText('SHOULD WE HAVE SHIPPED')).toHaveLength(1);
+    expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument();
+    expect(screen.getByText(/That edit was not applied/)).toBeInTheDocument();
+  });
+
+  it('still takes a new question: one added after the read-back goes in, as any new question does', async () => {
+    // rejects: refusing every draft whose uid is not in the working copy. A
+    // new question's never is — it only reaches the copy at Done.
+    const held = holdTheSave([WRONG, CHANGE]);
+    renderPanel();
+    await ready();
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    await letTheSaveLand(held);
+    expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Add a question/i }));
+    expect(screen.getByRole('dialog', { name: /new question/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'WHAT WOULD YOU KEEP' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(tableRows()).toHaveLength(3);
+    expect(rowFor('WHAT WOULD YOU KEEP')).toBeInTheDocument();
+    expect(screen.getByTestId('unsaved-bar')).toHaveTextContent('Unsaved: 1 added');
+    expect(screen.queryByText(/That edit was not applied/)).not.toBeInTheDocument();
+  });
+});
+
 describe('pulling questions out of another set', () => {
   it('filters what was already fetched, without asking the server again', async () => {
     // rejects: a request per filter change, and a filter that claims to search

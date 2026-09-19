@@ -547,6 +547,21 @@ describe('Edit', () => {
     renderPreview();
     expect(screen.queryByRole('button', { name: /edit this question/i })).toBeNull();
   });
+
+  test('held, it is disabled and says why on its own title, and pressing it hands nothing over', () => {
+    // The Questions tab holds Edit while a Save is written and read back: the
+    // read-back replaces every row, so the row Edit would open is about to go.
+    // rejects: an Edit that stays live through that, and one held with no
+    // reason — a control that does nothing and does not say why.
+    const onEditQuestion = jest.fn();
+    render(<QuestionPreview rows={makeRows()} gameType="trivia" setId={SET_ID}
+      onEditQuestion={onEditQuestion} editBlocked="Wait for the save to finish." />);
+    const edit = screen.getByRole('button', { name: /edit this question/i });
+    expect(edit).toBeDisabled();
+    expect(edit).toHaveAttribute('title', 'Wait for the save to finish.');
+    fireEvent.click(edit);
+    expect(onEditQuestion).not.toHaveBeenCalled();
+  });
 });
 
 describe('the root is never touched', () => {
@@ -688,6 +703,18 @@ describe('what the sheet does to the markup', () => {
     expect(clipped.filter((el) => !drawnInside(ringOf(el))).map(
       (el) => `${name(el)}: outline ${ringOf(el).outline}, offset ${ringOf(el).offset}`,
     )).toEqual([]);
+  });
+
+  test('a held Edit does not look like a live one', () => {
+    // rejects: holding Edit with nothing on screen to show it. `.qprev-btn`
+    // sets its own colour, and an author's colour outranks the browser's
+    // greyed text for a disabled button — so with no :disabled rule of its
+    // own, the held Edit is drawn exactly as the live one: a control that
+    // looks pressable and does nothing. QuestionPreviewPalette.test.js
+    // measures the colour it is drawn in.
+    const held = declared(['.qprev-btn:disabled'], 'color');
+    expect(held).not.toBeNull();
+    expect(held).not.toBe(declared(['.qprev-btn'], 'color'));
   });
 
   test('every line the sheet cuts short carries its whole string on title=', () => {

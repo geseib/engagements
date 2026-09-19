@@ -205,6 +205,11 @@
   min-height: 30px;
   cursor: pointer;
 }
+/* Edit is held while a Save is written and read back (its title says why).
+   Restated because .qprev-btn sets its own colour, which outranks the
+   browser's greyed text for a disabled button: without this the held Edit
+   looks exactly like the live one. --muted on its white is 6.2. */
+.qprev-btn:disabled { color: var(--muted); cursor: not-allowed; }
 .qprev-edit { margin-left: auto; }
 .qprev-chip:focus-visible,
 .qprev-seg-btn:focus-visible,

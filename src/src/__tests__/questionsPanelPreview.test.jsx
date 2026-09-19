@@ -375,6 +375,96 @@ describe('a Save made in Preview keeps the preview where it was', () => {
 });
 
 /*
+ * THE PREVIEW'S EDIT WAITS FOR A SAVE. The preview stays up while a Save is
+ * written and while the set is read back after it, and the read-back gives
+ * every row a new uid. An edit opened in that time is an edit of a row that is
+ * about to stop existing: a dialog opened on it and finished after the
+ * read-back came back into the working copy as a NEW question — the saved one,
+ * twice. So Edit is held, and says why, until the set it shows is the saved one.
+ */
+describe('the preview\'s Edit waits while a Save is written and read back', () => {
+  const edit = () => screen.getByRole('button', { name: /edit this question/i });
+  const KILLER = QUESTIONS.questions[0];
+
+  /** The first read answers at once; the write and the read-back after it wait for the test. */
+  function holdTheSave() {
+    const held = { write: null, readBack: null };
+    let reads = 0;
+    authFetch.mockImplementation(async (url, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/questions')) {
+        reads += 1;
+        if (reads === 1) return jsonResponse(200, QUESTIONS);
+        return new Promise((resolve) => {
+          held.readBack = (questions) => resolve(jsonResponse(200, { setId: SET.id, questions }));
+        });
+      }
+      if (method === 'POST' && url.includes('/admin/upload-questions')) {
+        return new Promise((resolve) => {
+          held.write = () => resolve(jsonResponse(200, { version: 2, questionCount: 1, setName: SET.name }));
+        });
+      }
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+    return held;
+  }
+
+  test('the reviewer\'s repro: Edit is held and says why, so the saved set comes back once and nothing is unsaved', async () => {
+    // rejects: an Edit left live over the read-back. Pressed there, it opened
+    // the dialog on a row the read-back replaced, and Done appended that row
+    // as a new question — "Showing 2 of 2" for a set of one, and "Unsaved:
+    // reordered … 2 questions will be saved as version 2".
+    const held = holdTheSave();
+    renderPanel();
+    await ready();
+    fireEvent.click(within(screen.getByTestId('question-1')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save as version 2' })[0]);
+
+    // While the version is written…
+    expect(edit()).toBeDisabled();
+    expect(edit()).toHaveAttribute('title', 'Wait for the save to finish.');
+    held.write();
+    // …and while the set is read back after it.
+    await waitFor(() => expect(held.readBack).not.toBeNull());
+    expect(edit()).toBeDisabled();
+    expect(edit()).toHaveAttribute('title', 'Wait for the save to finish.');
+    fireEvent.click(edit());
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    held.readBack([KILLER]);
+    await waitFor(() => expect(edit()).toBeEnabled());
+    expect(edit()).not.toHaveAttribute('title');
+    expect(screen.getByTestId('preview-count')).toHaveTextContent('Showing 1 of 1');
+    expect(screen.queryByTestId('unsaved-bar')).toBeNull();
+  });
+
+  test('a replace from a CSV holds it the same way, until the set it wrote is read back', async () => {
+    // rejects: holding Edit for a Save alone. A replace writes a version and
+    // reads the set back under the preview exactly as a Save does — its
+    // controls stay below the preview, and the preview stays up through it.
+    const held = holdTheSave();
+    renderPanel();
+    await ready();
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    const csv = new File(['Category,Title\nHistory,Which killer was caught by a parking ticket?\n'],
+      'replacement.csv', { type: 'text/csv' });
+    fireEvent.change(screen.getByLabelText('Replace every question from a CSV...'), { target: { files: [csv] } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Replace questions with replacement.csv' }));
+
+    expect(edit()).toBeDisabled();
+    expect(edit()).toHaveAttribute('title', 'Wait for the save to finish.');
+    held.write();
+    await waitFor(() => expect(held.readBack).not.toBeNull());
+    expect(edit()).toBeDisabled();
+
+    held.readBack([KILLER]);
+    await waitFor(() => expect(edit()).toBeEnabled());
+    expect(screen.getByTestId('preview-count')).toHaveTextContent('Showing 1 of 1');
+  });
+});
+
+/*
  * "EDIT Qn" FROM THE NEEDS-CHANGES BANNER, WHILE IN PREVIEW. The banner lives
  * in QuestionSetEditor (setEditorShare.test.jsx drives it end to end); here the
  * panel is handed what the editor passes down — `focusRequest`, a BARE question

@@ -88,6 +88,12 @@ export function QuestionViewSwitch({ mode = 'table', onChange, previewBlocked = 
  * `selectRequest` is `{ uid }` — "Edit Q14" from the needs-changes banner
  * (components/SetReviewBanner.jsx), which the Questions tab resolves to a row of
  * the working copy and hands here while this view is up. See the effect below.
+ *
+ * `editBlocked` is why "Edit this question" cannot be pressed right now, or ''
+ * when it can — the Questions tab holds it while a Save is written and read
+ * back, because the read-back replaces the row it would open. Held, it stays in
+ * the bar, disabled, with the reason on its own title, as the view switch's
+ * `previewBlocked` does. With no `onEditQuestion` there is no Edit at all.
  */
 export default function QuestionPreview({
   rows = [],
@@ -95,6 +101,7 @@ export default function QuestionPreview({
   setInstruction = '',
   setId = '',
   onEditQuestion,
+  editBlocked = '',
   selectRequest = null,
 }) {
   const [search, setSearch] = useState('');
@@ -332,7 +339,13 @@ export default function QuestionPreview({
             </span>
           )}
           {selectedRow && typeof onEditQuestion === 'function' && (
-            <button type="button" className="qprev-btn qprev-edit" onClick={() => onEditQuestion(selectedRow)}>
+            <button
+              type="button"
+              className="qprev-btn qprev-edit"
+              disabled={Boolean(editBlocked)}
+              title={editBlocked || undefined}
+              onClick={() => onEditQuestion(selectedRow)}
+            >
               <Icon name="PencilSimple" weight="bold" size={14} color="currentColor" /> Edit this question
             </button>
           )}
