@@ -1587,6 +1587,9 @@ export default function QuestionSetEditor({
         onChanged={async () => { await loadVersions(); if (onChanged) onChanged(); }}
         onDirtyChange={setQuestionsDirty}
         focusRequest={focusRequest}
+        // The Custom Instructions field as it stands, saved or not, for the
+        // Questions tab's preview (QuestionsPanel `detailsInstruction`).
+        detailsInstruction={instructions}
       />
 
       {/* ================================================= 3. VERSIONS === */}

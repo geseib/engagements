@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import QuestionsPanel from '../components/QuestionsPanel';
+import QuestionSetEditor from '../components/QuestionSetEditor';
 import { authFetch } from '../auth/authFetch';
 
 /*
@@ -242,6 +243,43 @@ describe('the preview reads the working copy', () => {
     // Scoped to the list: the table's <select> options are role="option" too.
     fireEvent.click(within(screen.getByRole('listbox', { name: 'Questions' })).getAllByRole('option')[1]);
     expect(howTo()).toBe('Name the man, not the river.');
+  });
+});
+
+/*
+ * THE SET'S OWN INSTRUCTION, AS THE DETAILS PANEL HOLDS IT. The editor draws
+ * Details and Questions together, and the owner's decision is that the
+ * preview shows unsaved edits — a Details edit is one. The real editor is
+ * rendered here, because the value lives in its state, not in the set object
+ * the panel is handed.
+ */
+describe('the how-to-answer line follows the set editor\'s Details, saved or not', () => {
+  test('an unsaved change to Custom Instructions shows on the card, and a cleared one falls to the default', async () => {
+    // rejects: reading the SAVED instruction (questionSet.customInstruction),
+    // which showed the old line until Details' own Save Changes.
+    authFetch.mockImplementation(async (url, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/versions')) return jsonResponse(200, []);
+      if (method === 'GET' && url.includes('/questions')) return jsonResponse(200, QUESTIONS);
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+    render(<QuestionSetEditor questionSet={SET} availableSets={[SET]}
+      onSaved={jest.fn()} onChanged={jest.fn()} onCancel={jest.fn()} />);
+    await ready();
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    const howTo = () => card().querySelector('p.qdetail[data-drop="3"]').textContent;
+    expect(howTo()).toBe('Answer for your table.');
+
+    const field = screen.getByLabelText(/Custom Instructions/);
+    fireEvent.change(field, { target: { value: 'One word per table, no conferring.' } });
+    expect(howTo()).toBe('One word per table, no conferring.');
+    // A question's own instruction still wins over the set's.
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Questions' })).getAllByRole('option')[1]);
+    expect(howTo()).toBe('Name the man, not the river.');
+    // Cleared, the set has no line of its own, and saving it would give the format's.
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Questions' })).getAllByRole('option')[0]);
+    fireEvent.change(field, { target: { value: '   ' } });
+    expect(howTo()).toBe('Select the best answer:');
   });
 });
 

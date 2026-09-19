@@ -154,6 +154,15 @@ export default function QuestionsPanel({
    * (the focus effects below).
    */
   focusRequest = null,
+  /**
+   * The set's own instruction as the editor's Details panel holds it right
+   * now, saved or not (QuestionSetEditor's Custom Instructions). The preview's
+   * how-to-answer line reads it: the owner's decision is that the preview shows
+   * unsaved edits, and a Details edit is one. '' is a real value — a cleared
+   * field, which leaves the format's default line. Absent, on a mount with no
+   * Details panel beside it, the saved instruction stands in.
+   */
+  detailsInstruction,
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -1052,7 +1061,9 @@ export default function QuestionsPanel({
         <QuestionPreview
           rows={rows}
           gameType={engagementType}
-          setInstruction={questionSet?.customInstruction || ''}
+          setInstruction={detailsInstruction !== undefined
+            ? detailsInstruction
+            : (questionSet?.customInstruction || '')}
           setId={setId}
           onEditQuestion={startEdit}
           selectRequest={previewRequest}
