@@ -6,10 +6,11 @@ import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
 import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
+import { nothingToPreview } from '../config/questionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
-import { summarizeCsv, describeReplacePlan } from '../utils/questionSetEditing';
+import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/questionSetEditing';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
 import {
@@ -153,6 +154,15 @@ export default function QuestionsPanel({
    * (the focus effects below).
    */
   focusRequest = null,
+  /**
+   * The set's own instruction as the editor's Details panel holds it right
+   * now, saved or not (QuestionSetEditor's Custom Instructions). The preview's
+   * how-to-answer line reads it: the owner's decision is that the preview shows
+   * unsaved edits, and a Details edit is one. '' is a real value — a cleared
+   * field, which leaves the format's default line. Absent, on a mount with no
+   * Details panel beside it, the saved instruction stands in.
+   */
+  detailsInstruction,
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -190,6 +200,12 @@ export default function QuestionsPanel({
   // The draft as it was when the modal opened, so closing can tell "you have
   // typed something" from "you opened this and changed your mind".
   const [draftSeed, setDraftSeed] = useState(null);
+  // HOW THE DIALOG WAS OPENED: 'add' (Add a question) or 'edit' (a row's
+  // Edit, in the table or the preview). Recorded, never inferred from whether
+  // the draft's uid is in `rows`: a Save's read-back gives every row a new uid,
+  // so an edit open across it would read as an add — and did, until Done
+  // appended the saved question a second time. See `commitEdit`.
+  const [draftKind, setDraftKind] = useState(null);
   const [confirmDropDraft, setConfirmDropDraft] = useState(false);
   // Validation belongs INSIDE the modal — the panel's status bar is behind it.
   const [formError, setFormError] = useState('');
@@ -231,11 +247,30 @@ export default function QuestionsPanel({
   // Worked out here, above the focus effects that read `previewing`: a hook's
   // dependency array naming a const declared further down throws on the first
   // render (the outage .eslintrc.js records).
-  const previewBlocked = loadState === 'loading' ? 'The questions are still loading.'
+  //
+  // A READ-BACK IS NOT A FIRST LOAD. A Save (or a replace from a CSV) reads the
+  // set back while the rows just written are still on screen, and the preview
+  // stays up over them: blocking it there unmounted it, and it came back at the
+  // first question in ASK. It finds its question again in the rows that come
+  // back (QuestionPreview.jsx, `place`). Only a load with nothing to show yet —
+  // a set just opened — blocks it.
+  // With nothing to show, the reason is the preview's own empty line: a set
+  // with no questions and a set whose every question is marked for removal are
+  // different situations with different ways back (config/questionPreview.js).
+  const previewBlocked = loadState === 'loading' && rows.length === 0 ? 'The questions are still loading.'
     : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
-      : summary.questionCount === 0 ? 'This set has no questions yet, so there is nothing to preview.'
-        : '';
+      : nothingToPreview(rows);
   const previewing = viewMode === 'preview' && !previewBlocked;
+
+  // WHY THE PREVIEW'S EDIT IS HELD, or '' when it is not. The preview stays up
+  // while a Save — or a replace from a CSV — is written and while the set is
+  // read back after it, and the read-back gives every row a new uid. So a
+  // dialog opened in that time is an edit of a row about to stop existing, and
+  // finished after the read-back it has no row to land on (`commitEdit`
+  // refuses it; it used to append it, the saved question twice). Held until
+  // the set on screen is the saved one: disabled, saying why, never live and
+  // never missing from the bar.
+  const editBlocked = loadState === 'ready' && !saving && !isReplacing ? '' : 'Wait for the save to finish.';
 
   /* ----------------------------------------------------------- loading --- */
 
@@ -258,6 +293,16 @@ export default function QuestionsPanel({
       setRows(loaded);
       setBaseline(loaded);
       setBaselineOrder(loaded.map((r) => r.uid));
+      // THE SELECTION STARTS OVER. Every row read comes back under a new uid,
+      // so after a Save's read-back the uids a selection held name nothing on
+      // screen: "Save 1 selected as a new set…" with no box ticked, offering a
+      // set of 0 questions. Cleared, as Discard and opening another set clear
+      // it — the other two places the working copy is replaced wholesale. Not
+      // carried across by the key the importer gives each row (`savedKeys`,
+      // as the preview's place is): that has no honest fallback for a question
+      // it cannot find again, and a selection quietly shortened, or moved onto
+      // another question, is worse than unticked boxes one click from redone.
+      setSelected([]);
       setLoadState('ready');
       setLoadError('');
     } catch (error) {
@@ -270,6 +315,7 @@ export default function QuestionsPanel({
   const closeForm = useCallback(() => {
     setDraft(null);
     setDraftSeed(null);
+    setDraftKind(null);
     setConfirmDropDraft(false);
     setFormError('');
     setAiOpen(false);
@@ -411,9 +457,10 @@ export default function QuestionsPanel({
       .slice(0, SIBLING_LIMIT);
   }, [rows, draft, draftCategory]);
 
-  const openForm = (row) => {
+  const openForm = (row, kind) => {
     setDraft(row);
     setDraftSeed(row);
+    setDraftKind(kind);
     setConfirmDropDraft(false);
     setFormError('');
     setAiOpen(false);
@@ -428,13 +475,13 @@ export default function QuestionsPanel({
     // category of the last row, so adding a run of questions to one category
     // does not mean retyping its name every time.
     const seedCategory = categoryFilter || rows[rows.length - 1]?.category || '';
-    openForm(blankRow({ category: seedCategory }));
+    openForm(blankRow({ category: seedCategory }), 'add');
   };
 
-  const startEdit = (row) => openForm({ ...row });
+  const startEdit = (row) => openForm({ ...row }, 'edit');
 
-  /** Is this draft in the working copy already, or is it an add in progress? */
-  const isAdding = Boolean(draft) && !rows.some((r) => r.uid === draft.uid);
+  /** Is this an add in progress, or an edit of a row? By how it was opened. */
+  const isAdding = Boolean(draft) && draftKind === 'add';
   // Reference equality is enough and is what we want: `openForm` stores the very
   // object it hands the form, and every edit replaces it.
   const draftTouched = Boolean(draft) && draft !== draftSeed;
@@ -451,18 +498,38 @@ export default function QuestionsPanel({
 
   const commitEdit = () => {
     if (!draft) return;
+    // AN EDIT LANDS ON THE ROW IT WAS OPENED ON, OR NOWHERE — never as an add.
+    //
+    // A Save reads the set back and every row returns under a new uid. The
+    // table stays up while the version is written, so an edit can be opened
+    // on a row the read-back then replaces; Done after it finds no row with
+    // this uid. This used to take that for an add and append the draft — the
+    // saved question, twice. Refused instead, and said so on the status line,
+    // which is in view once the dialog closes. Decided by how the dialog was
+    // opened: a new question's uid is never in `rows`, and it must still go in.
+    if (draftKind === 'edit' && !rows.some((r) => r.uid === draft.uid)) {
+      const opened = String(draftSeed?.title || '').trim();
+      closeForm();
+      setStatus({
+        text: `That edit was not applied: the set was reloaded while ${opened ? `"${opened}"` : 'the question'} `
+          + 'was open, so it was editing a copy that no longer exists. Nothing was added. '
+          + 'Open the question again to make the change.',
+        tone: 'error',
+      });
+      return;
+    }
     const problemsNow = rowProblems(draft, engagementType);
     if (problemsNow.length) {
       // In the modal, not in the panel's status bar underneath it.
       setFormError(`That question ${problemsNow.join(', and ')}.`);
       return;
     }
-    setRows((current) => (current.some((r) => r.uid === draft.uid)
-      ? current.map((r) => (r.uid === draft.uid
-        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
-        : r))
+    setRows((current) => (draftKind === 'add'
       // An add only reaches the working copy here.
-      : [...current, draft]));
+      ? [...current, draft]
+      : current.map((r) => (r.uid === draft.uid
+        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
+        : r))));
     closeForm();
     setStatus({ text: '', tone: '' });
   };
@@ -744,12 +811,19 @@ export default function QuestionsPanel({
   /** Fork, or carve a subset out. One path; only the rows and the title differ. */
   const handleSaveAsNewSet = async () => {
     if (!newSetDialog) return;
+    // Never a set of no questions (utils/questionSetEditing.js `rowsForNewSet`).
+    // Said on the status line, which this dialog covers, so the dialog closes.
+    const chosen = rowsForNewSet(newSetDialog, rows);
+    if (!chosen) {
+      setNewSetDialog(null);
+      setStatus({ text: 'No set was made: there were no questions to make it from.', tone: 'error' });
+      return;
+    }
     const title = String(newSetDialog.title || '').trim();
     if (!title) {
       setStatus({ text: 'The new set needs a name.', tone: 'error' });
       return;
     }
-    const chosen = (newSetDialog.rows || rows).filter((r) => !r.removed);
     // Provenance, write-once: a row copied in from a third set keeps ITS
     // origin, because that is the truer answer to "where did this come from".
     const stamped = chosen.map((r) => ({
@@ -989,7 +1063,10 @@ export default function QuestionsPanel({
         >
           <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
         </button>
-        {selected.length > 0 && (
+        {/* The selection is the table's checkboxes, and Preview does not show
+            them: a "Save 2 selected" there acts on two questions nothing on
+            screen names. Hidden, not cleared — it returns with the table. */}
+        {selected.length > 0 && !previewing && (
           <button
             className="btn-secondary btn-small"
             onClick={() => setNewSetDialog({
@@ -1023,7 +1100,10 @@ export default function QuestionsPanel({
         />
       </div>
 
-      {loadState === 'loading' && <p className="qs-empty">Loading questions…</p>}
+      {/* Not over a preview that is reading its set back: the questions it
+          shows are the ones just saved, and the line would push it down and
+          back up again for nothing. */}
+      {loadState === 'loading' && !previewing && <p className="qs-empty">Loading questions…</p>}
       {loadState === 'error' && (
         <StatusMessage message={`${loadError} Nothing has been changed.`} tone="error" />
       )}
@@ -1036,9 +1116,12 @@ export default function QuestionsPanel({
         <QuestionPreview
           rows={rows}
           gameType={engagementType}
-          setInstruction={questionSet?.customInstruction || ''}
+          setInstruction={detailsInstruction !== undefined
+            ? detailsInstruction
+            : (questionSet?.customInstruction || '')}
           setId={setId}
           onEditQuestion={startEdit}
+          editBlocked={editBlocked}
           selectRequest={previewRequest}
         />
       )}

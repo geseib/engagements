@@ -96,6 +96,48 @@ export function previewRows(rows = []) {
     .map((row) => browserRow({ ...row, id: row.uid }));
 }
 
+/**
+ * WHY THERE IS NOTHING TO PREVIEW, or '' when there is something.
+ *
+ * Two situations, two lines — an empty state that lies sends people the wrong
+ * way. A set with no rows has nothing yet, and the way on is adding one. A set
+ * whose every row is a tombstone HAS questions, each marked for removal and
+ * struck through in the Table with its Restore beside it, and Discard in the
+ * bar above undoes them all; adding one is not the way back.
+ *
+ * One source for both places that say it: the preview's own empty state, and
+ * the title on the Questions tab's disabled [Preview] (QuestionsPanel.jsx).
+ */
+export function nothingToPreview(rows = []) {
+  if (rows.some((row) => row && !row.removed)) return '';
+  if (!rows.some(Boolean)) return 'This set has no questions yet, so there is nothing to preview.';
+  return 'Every question is marked for removal, so there is nothing to preview. '
+    + 'Restore one in the Table, or discard your changes.';
+}
+
+/** A question's reveal — `answerDetails`, trimmed — or '' when it has none. */
+export function revealText(row) {
+  return String((row && row.answerDetails) || '').trim();
+}
+
+/**
+ * IS THERE ANYTHING BEHIND [Reveal]? The control is offered only when there is
+ * (a control that does nothing is not rendered), and there is in two cases:
+ *
+ *   trivia       every question has its answer: the correct option, marked.
+ *   any format   a question that carries a reveal. An art set is
+ *                call-and-answer and keeps the artwork's real title there, so
+ *                gating on trivia alone — the spec's first rule, corrected
+ *                2026-09-19 — left an art answer impossible to preview.
+ *
+ * Decided for the SET — every question not marked for removal — never for the
+ * question on the card, so the control does not come and go while paging.
+ */
+export function canReveal(rows = [], gameType = '') {
+  if (gameType === 'trivia') return true;
+  return rows.some((row) => row && !row.removed && revealText(row) !== '');
+}
+
 /** The categories the rows actually use, in the order they first appear. */
 export function previewCategories(listRows = []) {
   const seen = [];
@@ -103,6 +145,37 @@ export function previewCategories(listRows = []) {
     if (row.category && !seen.includes(row.category)) seen.push(row.category);
   }
   return seen;
+}
+
+/**
+ * THE SELECTED QUESTION, FOUND AGAIN after the rows it was chosen from are gone.
+ *
+ * `place` is where the selection was, as of the last render that showed it:
+ * the key the question is stored under once saved (utils/questionRows.js
+ * `savedKeys`), its title, and its position in the visible list. A Save reads
+ * the set back and every row arrives with a new uid, so the selection's uid
+ * matches nothing; the stored key is what says which read-back row is the same
+ * question. Its title must match too — a key names a place in the set, and if
+ * the server numbered differently the place holds another question.
+ *
+ * Returns a VISIBLE row, or null:
+ *   found, and visible          that row.
+ *   found, but filtered out     null — the caller's rule for a selection the
+ *                               filter hides (the first visible row) applies.
+ *   not found                   the row at the same position, the last at most:
+ *                               a set replaced from a CSV, say, where nothing
+ *                               of the old working copy is left to find.
+ */
+export function refindPlace(place, rows = [], visible = []) {
+  if (!place || !visible.length) return null;
+  const bare = (key) => String(key || '').replace('QUESTION#', '');
+  if (place.key) {
+    const same = rows.find((row) => row && !row.removed
+      && bare(row.sk) === place.key
+      && String(row.title || '').trim() === place.title);
+    if (same) return visible.find((r) => r.id === same.uid) || null;
+  }
+  return visible[Math.min(Math.max(place.index, 0), visible.length - 1)];
 }
 
 /**

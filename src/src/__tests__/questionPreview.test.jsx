@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import QuestionPreview, { QuestionViewSwitch } from '../components/QuestionPreview';
 import { previewRows, previewCategories, stepSelection } from '../config/questionPreview';
-import { toRow } from '../utils/questionRows';
+import { toRow, editableRows, savedKeys } from '../utils/questionRows';
 
 /**
  * THE PREVIEW — the list's mechanics, the card, and the one rule about :root.
@@ -88,6 +88,27 @@ describe('the list — the in-session browser\'s mechanics', () => {
     expect(options()[0]).toHaveTextContent('The Green River case');
   });
 
+  test('Escape clears a search with text in it and stops there; an empty box lets it through', () => {
+    // rejects: the Escape reaching `document`, where a dialog around the
+    // editor (components/Modal.jsx) closes on it — and rejects stopping every
+    // Escape, which would take the dialog's keyboard exit away.
+    const heard = jest.fn();
+    document.addEventListener('keydown', heard);
+    try {
+      renderPreview();
+      const box = screen.getByRole('searchbox');
+      fireEvent.change(box, { target: { value: 'green river' } });
+      fireEvent.keyDown(box, { key: 'Escape' });
+      expect(box).toHaveValue('');
+      expect(options()).toHaveLength(3);
+      expect(heard).not.toHaveBeenCalled();
+      fireEvent.keyDown(box, { key: 'Escape' });
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener('keydown', heard);
+    }
+  });
+
   test('category chips narrow the list, and pressing the lit one returns to All', () => {
     renderPreview();
     const chips = within(screen.getByRole('group', { name: 'Category' }));
@@ -157,6 +178,21 @@ describe('selection', () => {
       renderPreview();
       fireEvent.keyDown(listbox(), { key: 'ArrowDown' });
       expect(cardTitle()).toBe('The Green River case');
+      expect(heard).not.toHaveBeenCalled();
+
+      // AND WITH NOTHING VISIBLE TO STEP THROUGH. rejects: returning before the
+      // key is stopped when the search matches nothing — the key is still the
+      // preview's, and it still turned the projector's page.
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzz' } });
+      expect(screen.queryByRole('listbox')).toBeNull();
+      for (const target of [
+        screen.getByRole('button', { name: 'Clear search' }),
+        screen.getByRole('button', { name: 'All' }),
+        screen.getByRole('button', { name: 'Reveal' }),
+      ]) {
+        fireEvent.keyDown(target, { key: 'ArrowDown' });
+        fireEvent.keyDown(target, { key: 'ArrowUp' });
+      }
       expect(heard).not.toHaveBeenCalled();
     } finally {
       window.removeEventListener('keydown', heard);
@@ -320,16 +356,62 @@ describe('the card', () => {
 describe('ASK and Reveal', () => {
   const phaseGroup = () => screen.queryByRole('group', { name: 'What the card shows' });
 
-  test('only trivia has anything to reveal, so only trivia gets the toggle', () => {
-    const { unmount } = renderPreview();
-    expect(phaseGroup()).not.toBeNull();
+  test('the toggle is offered wherever there is something to reveal: trivia always, any format with a reveal written', () => {
+    // CORRECTED 2026-09-19. This test was "only trivia has anything to reveal"
+    // — the spec's rule, and wrong: an art set is call-and-answer and keeps the
+    // artwork's real title in answerDetails. What it guarded still holds: with
+    // nothing behind it, there is no control.
+    const noReveal = () => makeRows().map((r) => ({ ...r, answerDetails: '' }));
+    const { unmount } = renderPreview({ rows: noReveal() });
+    expect(phaseGroup()).not.toBeNull();                        // trivia: the answer itself
     expect(within(phaseGroup()).getByRole('button', { name: 'ASK' })).toHaveAttribute('aria-pressed', 'true');
     unmount();
     for (const gameType of ['call-and-answer', 'poll', 'wavelength']) {
-      const view = renderPreview({ gameType });
-      expect(phaseGroup()).toBeNull();
-      view.unmount();
+      const bare = renderPreview({ gameType, rows: noReveal() });
+      expect(phaseGroup()).toBeNull();                          // nothing to reveal, no control
+      bare.unmount();
+      const revealing = renderPreview({ gameType });            // makeRows()[0] carries a reveal
+      expect(phaseGroup()).not.toBeNull();
+      revealing.unmount();
     }
+    // A reveal on a question marked for removal is not one: it will not exist once saved.
+    const rows = makeRows();
+    rows[0] = { ...rows[0], removed: true };
+    renderPreview({ gameType: 'call-and-answer', rows });
+    expect(phaseGroup()).toBeNull();
+  });
+
+  test('an art set reveals the artwork\'s real title: the card as in ASK, and the reveal below it', () => {
+    // rejects: gating Reveal on trivia, which left the preview no way to show
+    // an art answer — and rejects drawing it ON the card: the stage's RESULTS
+    // never shows answerDetails (it reaches players only in the round report).
+    const art = (id, fields) => toRow({ id, category: 'Renaissance', school: 'Leonardo da Vinci', ...fields });
+    const rows = [
+      art('c001#001', { title: 'THE ENIGMATIC SMILE', image: 'smile.jpg',
+        answerDetails: 'Real title: Mona Lisa. Stolen from the Louvre in 1911.' }),
+      art('c001#002', { title: 'A SWIRLING NIGHT SKY', image: 'night.jpg', answerDetails: 'Real title: The Starry Night.' }),
+      art('c001#003', { title: 'AN UNTITLED STUDY', image: 'study.jpg' }),
+    ];
+    renderPreview({ rows, gameType: 'call-and-answer' });
+    const pane = () => screen.getByTestId('preview-screen');
+    const asAsked = pane().innerHTML;
+    fireEvent.click(within(phaseGroup()).getByRole('button', { name: 'Reveal' }));
+    expect(pane().innerHTML).toBe(asAsked);
+    expect(pane().querySelector('img.stage-art')).toHaveAttribute('src', `sets/${SET_ID}/smile.jpg`);
+    expect(pane().querySelector('p.qdetail[data-drop-note="How to answer"]')).not.toBeNull();
+    const note = screen.getByTestId('preview-note');
+    expect(note).toHaveTextContent('Reveal — shown only after the round');
+    expect(note).toHaveTextContent('Real title: Mona Lisa. Stolen from the Louvre in 1911.');
+    expect(pane()).not.toContainElement(note);
+
+    // Decided for the SET, so it holds still while paging: a question with no
+    // reveal written keeps the control, shows its card, and shows no note.
+    fireEvent.click(options()[2]);
+    expect(within(phaseGroup()).getByRole('button', { name: 'Reveal' })).toHaveAttribute('aria-pressed', 'true');
+    expect(cardTitle()).toBe('AN UNTITLED STUDY');
+    expect(screen.queryByTestId('preview-note')).toBeNull();
+    fireEvent.click(options()[1]);
+    expect(screen.getByTestId('preview-note')).toHaveTextContent('Real title: The Starry Night.');
   });
 
   test('Reveal is the RESULTS option treatment, with no bar and no share', () => {
@@ -421,16 +503,24 @@ describe('ASK and Reveal', () => {
   });
 });
 
-describe('the two empty states, which are different situations', () => {
+describe('the three empty states, which are different situations', () => {
   test('a set with no questions says there is nothing to preview', () => {
     renderPreview({ rows: [] });
     expect(screen.getByText(/This set has no questions yet, so there is nothing to preview/)).toBeInTheDocument();
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  test('a set whose every row is removed is the same situation', () => {
+  test('a set whose every question is marked for removal says so, and names the way back', () => {
+    // rejects: "This set has no questions yet" — false, the set has questions
+    // marked for removal, and the way back is Restore or Discard, not adding one.
     renderPreview({ rows: makeRows().map((r) => ({ ...r, removed: true })) });
-    expect(screen.getByText(/nothing to preview/)).toBeInTheDocument();
+    const line = screen.getByText(/nothing to preview/);
+    expect(line).toHaveTextContent(
+      'Every question is marked for removal, so there is nothing to preview. '
+      + 'Restore one in the Table, or discard your changes.',
+    );
+    expect(line).not.toHaveTextContent(/no questions yet/);
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
   test('nothing matching the search says so, offers the way out, and the screen says nothing is selected', () => {
@@ -456,6 +546,21 @@ describe('Edit', () => {
   test('without a handler there is no Edit — never a dead control', () => {
     renderPreview();
     expect(screen.queryByRole('button', { name: /edit this question/i })).toBeNull();
+  });
+
+  test('held, it is disabled and says why on its own title, and pressing it hands nothing over', () => {
+    // The Questions tab holds Edit while a Save is written and read back: the
+    // read-back replaces every row, so the row Edit would open is about to go.
+    // rejects: an Edit that stays live through that, and one held with no
+    // reason — a control that does nothing and does not say why.
+    const onEditQuestion = jest.fn();
+    render(<QuestionPreview rows={makeRows()} gameType="trivia" setId={SET_ID}
+      onEditQuestion={onEditQuestion} editBlocked="Wait for the save to finish." />);
+    const edit = screen.getByRole('button', { name: /edit this question/i });
+    expect(edit).toBeDisabled();
+    expect(edit).toHaveAttribute('title', 'Wait for the save to finish.');
+    fireEvent.click(edit);
+    expect(onEditQuestion).not.toHaveBeenCalled();
   });
 });
 
@@ -600,6 +705,18 @@ describe('what the sheet does to the markup', () => {
     )).toEqual([]);
   });
 
+  test('a held Edit does not look like a live one', () => {
+    // rejects: holding Edit with nothing on screen to show it. `.qprev-btn`
+    // sets its own colour, and an author's colour outranks the browser's
+    // greyed text for a disabled button — so with no :disabled rule of its
+    // own, the held Edit is drawn exactly as the live one: a control that
+    // looks pressable and does nothing. QuestionPreviewPalette.test.js
+    // measures the colour it is drawn in.
+    const held = declared(['.qprev-btn:disabled'], 'color');
+    expect(held).not.toBeNull();
+    expect(held).not.toBe(declared(['.qprev-btn'], 'color'));
+  });
+
   test('every line the sheet cuts short carries its whole string on title=', () => {
     // rejects: an ellipsis with no recovery, which is a deletion (engage-design
     // hard rule 7). The meta line shared the title's cut and not its title=.
@@ -610,6 +727,104 @@ describe('what the sheet does to the markup', () => {
     // the premise: the sheet does cut something the preview renders
     expect(cut.length).toBeGreaterThan(0);
     expect(cut.filter((el) => el.getAttribute('title') !== el.textContent).map((el) => el.textContent)).toEqual([]);
+  });
+});
+
+/*
+ * THE WORKING COPY READ BACK AFTER A SAVE. The Questions tab reads the set back
+ * once a Save lands, and every row arrives with a new uid — uids are minted per
+ * read (utils/questionRows.js `nextUid`) — so a selection held by uid is lost
+ * unless the preview finds the question again. questionsPanelPreview.test.jsx
+ * drives the Save; here the read-back is handed straight in, built by the
+ * panel's own reader (`editableRows`) from what the importer stored.
+ */
+describe('the place survives the working copy being read back', () => {
+  const wire = (row, id) => ({
+    id, Category: row.category, title: row.title, questionDetail: row.detail,
+    optionA: row.optionA, optionB: row.optionB, optionC: row.optionC, optionD: row.optionD,
+    correctAnswer: row.correctAnswer, difficulty: row.difficulty,
+  });
+  const position = () => screen.getByTestId('preview-position').textContent;
+
+  test('a question added since the last save is found where the save put it, not at its old place', () => {
+    // rejects: finding it by position. It was third in the working copy, and
+    // the set comes back in key order, where the save put it second — beside
+    // the History question it was written under.
+    const [killer, green] = makeRows();
+    const added = toRow({
+      title: 'Who was dubbed the Night Stalker?', category: 'History', optionA: 'Ted Bundy',
+      optionB: 'Richard Ramirez', correctAnswer: 'OptionB', difficulty: 'hard',
+    }, { origin: 'new' });
+    expect(added.sk).toBe('');
+    const { rerender } = render(<QuestionPreview rows={[killer, green, added]} gameType="trivia" setId={SET_ID} />);
+    fireEvent.click(options()[2]);
+    expect(position()).toBe('3 / 3');
+
+    const back = editableRows({ questions: [wire(killer, 'c001#001'), wire(green, 'c002#001'), wire(added, 'c001#002')] });
+    rerender(<QuestionPreview rows={back} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Who was dubbed the Night Stalker?');
+    expect(position()).toBe('2 / 3');
+  });
+
+  test('a question the save renumbered is found under its new key, not its old one', () => {
+    // rejects: matching the key the question had before the save. Removing
+    // the first History question renumbers the rest: the cipher question was
+    // c001#003, and once saved c001#003 is the Bundy question.
+    const [killer, green, stalker] = makeRows();
+    const cipher = trivia('c001#003', { title: 'Whose cipher was solved in 2020?', category: 'History' });
+    const bundy = trivia('c001#004', { title: 'Who was Ted Bundy?', category: 'History' });
+    const working = [{ ...killer, removed: true }, stalker, cipher, bundy, green];
+    const { rerender } = render(<QuestionPreview rows={working} gameType="trivia" setId={SET_ID} />);
+    fireEvent.click(options()[1]);
+    expect(cardTitle()).toBe('Whose cipher was solved in 2020?');
+
+    const back = editableRows({ questions: [
+      wire(stalker, 'c001#001'), wire(cipher, 'c001#002'), wire(bundy, 'c001#003'), wire(green, 'c002#001'),
+    ] });
+    rerender(<QuestionPreview rows={back} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Whose cipher was solved in 2020?');
+    expect(position()).toBe('2 / 4');
+  });
+
+  test('a set read back without the question keeps the place by position, the last place at most', () => {
+    // A replace from a CSV, say: nothing of the old working copy is left to
+    // find. rejects: jumping to the top when the question is gone.
+    const { rerender } = render(<QuestionPreview rows={makeRows()} gameType="trivia" setId={SET_ID} />);
+    fireEvent.click(options()[1]);
+    const other = (n) => toRow({ id: `c001#00${n}`, title: `Replaced ${n}`, category: 'Other', optionA: 'A', optionB: 'B', correctAnswer: 'OptionA' });
+    rerender(<QuestionPreview rows={[other(1), other(2), other(3)]} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Replaced 2');
+
+    fireEvent.click(options()[2]);
+    rerender(<QuestionPreview rows={[other(1), other(2)].map((r) => ({ ...r, uid: `${r.uid}-again` }))} gameType="trivia" setId={SET_ID} />);
+    expect(cardTitle()).toBe('Replaced 2');
+    expect(position()).toBe('2 / 2');
+  });
+});
+
+describe('savedKeys — the key the importer will store each row under', () => {
+  // lambda-functions/admin/upload-questions.js numbers categories in the order
+  // they first appear and questions within their category, over the rows it
+  // accepts. tests/question-set-roundtrip.js holds this mirror to the real
+  // importer; these are its rules, one at a time.
+  const row = (title, category, extra = {}) => toRow({ title, category }, extra);
+
+  test('categories by first appearance, questions counted within their category', () => {
+    const rows = [row('a', 'History'), row('b', 'Method'), row('c', 'History')];
+    const keys = savedKeys(rows);
+    expect(rows.map((r) => keys.get(r.uid))).toEqual(['c001#001', 'c002#001', 'c001#002']);
+  });
+
+  test('a category is one category whatever its case or spacing, as the importer folds it', () => {
+    const rows = [row('a', 'World Series'), row('b', 'world  series ')];
+    const keys = savedKeys(rows);
+    expect(rows.map((r) => keys.get(r.uid))).toEqual(['c001#001', 'c001#002']);
+  });
+
+  test('a removed row, and one the importer would skip, take no key and shift nothing', () => {
+    const rows = [row('a', 'History', { removed: true }), row('', 'History'), row('c', ''), row('d', 'History')];
+    const keys = savedKeys(rows);
+    expect(rows.map((r) => keys.get(r.uid))).toEqual([undefined, undefined, undefined, 'c001#001']);
   });
 });
 

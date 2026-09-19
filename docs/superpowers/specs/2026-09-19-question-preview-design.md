@@ -60,6 +60,24 @@ A **Preview** mode of the set editor's **Questions** tab. Two panes side by side
 4. **Phases: ASK and Reveal.** Reveal is the stage's trivia RESULTS option treatment — the
    correct option highlighted, the rest dimmed — without the vote percentages, because there were
    no votes.
+
+   **Correction, 2026-09-19: Reveal is offered wherever there is something to reveal.** This
+   spec first gated `[ASK] [Reveal]` on trivia, because "for every other format there is nothing
+   to reveal" (§4.4). That was false. Art sets are call-and-answer, and they keep the artwork's
+   real title in `answerDetails`, so the preview could never show an art answer. The rule is still
+   "gate the control on there being something behind it". It is now worked out correctly, and for
+   the whole set, so the control does not come and go while paging: the toggle is offered when the
+   set is trivia, or when any question not marked for removal has `answerDetails`. In Reveal, a
+   trivia question shows the treatment above. Any other question shows its card exactly as in ASK,
+   plus its reveal note below the card (§4.4) when it has one. The stage's RESULTS never draws
+   `answerDetails`, so nothing on the card changes.
+
+   **Correction, 2026-09-19: Reveal keeps the question above its answer.** The branch's final
+   review changed Reveal to draw the question in ASK's own lines (the heading, the picture and
+   the full prompt) above the revealed options, as the §1 sketch has it. Reveal is sticky, so
+   with the options alone every question you moved to showed four answers and nothing saying what
+   was asked. The how-to-answer line stays ASK's: in Reveal the answering is over. The stage never
+   asks for any of this (§4.2).
 5. **One row action.** Clicking a row shows it in the card. The card pane owns the
    `[ASK] [Reveal]` toggle, and the toggle is **sticky**: flip to Reveal once, and every question
    you move to shows its answer.
@@ -156,6 +174,14 @@ classes, same attributes (`data-drop`, `data-drop-note`, `data-expandable`), sam
   `span.pct`, **exactly** as the RESULTS branch does today — including 0% when `answers` is an
   empty array. When `answers` is **absent** (the preview), no `.fill` and no `.pct` are rendered:
   a 0% bar in a preview would claim nobody chose it.
+
+  **Correction, 2026-09-19:** REVEAL has an opt-in `withQuestion` prop, and only the preview
+  passes it. With it, the card draws ASK's question lines (`h1.q`, `img.stage-art`, and the
+  `data-drop="4"` full prompt) above the `div.opts` block. It draws them from the same block ASK
+  uses, so the two cannot drift. It leaves out the how-to-answer line. The stage never passes the
+  prop, so its RESULTS DOM is unchanged, and `questionCardDom.test.jsx` holds it to that (§2.4).
+  The card's REVEAL is still trivia only. For any other format the preview asks the card for ASK,
+  and its Reveal is the note below the card (§4.4).
 - **The expand affordance is gated on its handler.** The stage passes `onExpand`; the `h1` then
   carries `data-expandable="1"`, `title="Show the full question"` and `onClick`. With no handler
   (the preview), none of the three render. A control that does nothing is not rendered.
@@ -197,6 +223,11 @@ exactly the way the host maps it — verify the mapping, pin it), the set-level
 - Two different empty states (never one that lies): the set has **no questions** (then the
   `[Preview]` segment is **disabled**, with a `title` saying there is nothing to preview yet), versus **nothing matches** the search
   or chip (with a "Clear search" exit).
+  **Correction, 2026-09-19:** there is a third. When every question is **marked for removal**,
+  the set has questions, and "no questions yet" was false. That case gets its own line: "Every
+  question is marked for removal, so there is nothing to preview." It names the way back, which is
+  Restore in the Table or discarding the changes, not adding a question. The disabled
+  `[Preview]` segment's `title` says the same.
 - If the selected row is filtered out, the selection moves to the first visible row; if nothing is
   visible, the card pane says nothing is selected.
 
@@ -205,6 +236,12 @@ exactly the way the host maps it — verify the mapping, pin it), the set-level
   like the screen in a paper editor as well as a dusk one.
 - The `[ASK] [Reveal]` toggle renders **only for trivia**; for every other format there is nothing
   to reveal, so there is no control. Sticky across selection changes.
+  **Correction, 2026-09-19:** the toggle renders when the set is trivia, or when any question not
+  marked for removal has `answerDetails` (§2.4). An art set keeps the artwork's real title there.
+  It is worked out over the set, not the question on the card, so it does not come and go while
+  paging. In Reveal, a trivia question shows the card's REVEAL with its question above the
+  options (§4.2). Any other question shows its ASK card unchanged, with its reveal note below the
+  card when it has one; a question with no reveal written shows no note.
 - Position `3 / 30` counts the visible list.
 - In Reveal, when the row has `answerDetails`, it renders **below and outside** the card, labelled
   with the editor's own wording for that field — **"Reveal — shown only after the round"** —
@@ -264,7 +301,9 @@ jsdom, which is the reason the card is extracted.
    selects; ↑/↓ move and skip text inputs; Reveal only for trivia; the toggle sticks across
    selection; removed rows excluded; an unsaved edit in `rows` shows in the card; both empty
    states and their exits; the answer-details note only in Reveal and only when present; Edit
-   calls `onEditQuestion` with the selected row.
+   calls `onEditQuestion` with the selected row. (**Correction, 2026-09-19:** "Reveal only for
+   trivia" is now Reveal wherever there is something to reveal, tested with an art-style
+   call-and-answer set, §2.4.)
 10. **`.qprev` palette** — a `QuestionPreviewPalette.test.js` in the repo's pattern (never
     `*Token*` in the name — `.gitignore` hides it): AA on every pairing composited up the real
     ancestor chain, tokens only outside the scope's token block, nothing below 12px, every selector

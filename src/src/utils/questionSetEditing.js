@@ -382,3 +382,25 @@ export function selectableSummaryPrompts(prompts = [], engagementType) {
     return gt === wanted || p.gameType === 'all';
   });
 }
+
+/* ------------------------------------------------ a new set, from the copy --- */
+
+/**
+ * THE QUESTIONS A NEW SET IS MADE FROM — or null when there are none, which is
+ * a refusal and never a set of no questions.
+ *
+ * The Questions tab makes a set two ways from its working copy
+ * (QuestionsPanel.jsx `handleSaveAsNewSet`): a FORK takes the whole copy
+ * (`dialog.rows` is null), a SUBSET takes the questions ticked in the table
+ * (`dialog.rows`). It read them as `(dialog.rows || rows)`, and an empty choice
+ * is an empty array, which is truthy — so a subset of nothing was posted as a
+ * set of 0 questions. A subset never falls back to the whole copy either: that
+ * would make a set of every question when none was chosen.
+ *
+ * A question marked for removal is not in the copy, so it is never carried.
+ */
+export function rowsForNewSet(dialog, rows = []) {
+  const source = dialog && dialog.mode === 'subset' ? (dialog.rows || []) : rows;
+  const chosen = source.filter((row) => row && !row.removed);
+  return chosen.length ? chosen : null;
+}

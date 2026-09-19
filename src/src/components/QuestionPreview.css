@@ -205,6 +205,11 @@
   min-height: 30px;
   cursor: pointer;
 }
+/* Edit is held while a Save is written and read back (its title says why).
+   Restated because .qprev-btn sets its own colour, which outranks the
+   browser's greyed text for a disabled button: without this the held Edit
+   looks exactly like the live one. --muted on its white is 6.2. */
+.qprev-btn:disabled { color: var(--muted); cursor: not-allowed; }
 .qprev-edit { margin-left: auto; }
 .qprev-chip:focus-visible,
 .qprev-seg-btn:focus-visible,
@@ -223,7 +228,12 @@
 /* The ground and the box. The inheritable typography is restated because the
    editor around this pane is not the stage's body: stage.css's `body` gives the
    card Inter, antialiasing and tabular figures, and styles.css's `body` its
-   1.6 line height. */
+   1.6 line height.
+   THE WRAPPING TOO. On the host shelf the editor renders inside `.qsets-modal`,
+   which sets `overflow-wrap: anywhere` for a 98-character set title
+   (QuestionSetsPanel.css), and the card's heading and prompt inherited it and
+   broke long words anywhere. Nothing between the stage's body and its card sets
+   any of these three, so the stage's value is `normal`. */
 .qprev-screen {
   min-width: 0;
   padding: 24px 28px;
@@ -234,6 +244,9 @@
   letter-spacing: normal;
   text-align: start;
   text-transform: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
 }

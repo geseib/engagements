@@ -182,8 +182,29 @@ const getQuestions = require(path.join(REPO, 'lambda-functions', 'admin', 'get-q
  */
 const {
   editableRows, rowsToCsv, blankRow, copiedRow, moveRow,
-  summarizeRowChanges, versionNote, rowProblems,
+  summarizeRowChanges, versionNote, rowProblems, savedKeys,
 } = require(path.join(REPO, 'src', 'src', 'utils', 'questionRows.js'));
+
+/**
+ * THE KEY EACH QUESTION WAS STORED UNDER, AS THE BROWSER PREDICTED IT.
+ *
+ * A Save reads the set back and every row arrives with a new uid, so the set
+ * editor's question preview finds the question it was showing by the key the
+ * importer gave it — which `savedKeys` works out before the save lands. The
+ * importer renumbers on every save (categories by first appearance, questions
+ * within their category), so a key the question had before the save is not
+ * its key after: this holds the prediction to the keys the real importer wrote.
+ */
+function assertKeysPredicted(working, stored) {
+  const keys = savedKeys(working);
+  const live = working.filter((r) => !r.removed);
+  assert.strictEqual(stored.length, live.length, `stored ${stored.length} questions, the working copy had ${live.length}`);
+  for (const r of live) {
+    const row = stored.find((s) => s.Title === r.title.trim());
+    assert.ok(row, `nothing was stored for "${r.title}"`);
+    assert.strictEqual(row.SK, `QUESTION#${keys.get(r.uid)}`, `"${r.title}"`);
+  }
+}
 
 if (!process.env.DEBUG) console.log = () => {};
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -697,6 +718,11 @@ const WAVELENGTH_CSV = [
     // rejects: a validation gate that only checks the server's answer. The
     // importer SKIPS a row with no Category or Title — 200, cheerful message,
     // silently one question short — so the editor has to refuse it first.
+    // rejects: a preview that loses its question on Save, or finds a different
+    // one — the key it predicts is the key it looks for once the set is read back.
+    check('savedKeys predicts the key the importer gave every question in this save', () =>
+      assertKeysPredicted(next, saved.rows));
+
     check('a half-filled row is refused before it can be silently skipped', () => {
       const problems = rowProblems({ ...blankRow(), title: 'NO CATEGORY' }, 'trivia');
       assert.ok(problems.some((p) => /category/i.test(p)), problems.join('; '));
@@ -734,6 +760,11 @@ const WAVELENGTH_CSV = [
     // worse than no label.
     check('question numbers are rewritten to match the new order', () =>
       assert.deepStrictEqual(saved.rows.map((r) => r.QuestionNumber), [1, 2, 3, 4]));
+
+    // Four categories folded into one and the last row moved first: every key
+    // moves, and the prediction has to move with it.
+    check('savedKeys predicts every key after a reorder that renumbers the set', () =>
+      assertKeysPredicted(moved, saved.rows));
   }
 
   // ==== copying a question out of another set ==============================
