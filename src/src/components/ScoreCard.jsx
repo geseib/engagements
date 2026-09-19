@@ -141,8 +141,12 @@ function setTextState(tally) {
 /**
  * The tally's one line. "Every question clean" is `spotless === questions`,
  * never "no observations": a question the guardrail could not read has none
- * either, and is not clean — it is `unread`. A check stopped by its budget
- * checked fewer questions than the set holds, and says "of".
+ * either, and is not clean — it is `unread`.
+ *
+ * Only a check its budget stopped reached fewer questions than the set holds,
+ * and it says "of". The TALLY says which check that was — the set's own text,
+ * judged last, `unreached` — never a count beside it: a complete check of a
+ * past version would otherwise read as one that skipped questions.
  */
 function summaryLine(tally, questionCount, setClean) {
   const n = Number(tally.questions) || 0;
@@ -150,19 +154,21 @@ function summaryLine(tally, questionCount, setClean) {
   const unread = Number(tally.unread) || 0;
   const total = Number(questionCount) || 0;
   const setText = setTextState(tally);
-  const of = total > n ? ` of ${total}` : '';
+  const cutShort = setText === 'unreached';
+  const of = cutShort && total > n ? ` of ${total}` : '';
   const parts = [`${n}${of} ${n === 1 && !of ? 'question' : 'questions'}${setText === 'checked' ? " and the set's own text" : ''} checked`];
   if (n > 0 && spotless === n) {
     // "all" is every question AND the set's own text, which the first clause
-    // has just named; with only the questions clean, it says only that.
-    if (of) parts.push(`all ${n} clean in every category`);
+    // has just named; with only the questions clean, it says only that. A
+    // check cut short counts what it reached, never "every question".
+    if (cutShort) parts.push(`all ${n} clean in every category`);
     else parts.push(setClean ? 'all clean in every category' : 'every question clean in every category');
   } else {
     parts.push(`${spotless} with nothing in any category`);
   }
   if (unread) parts.push(`${unread} could not be read`);
   if (setText === 'unread') parts.push("the set's own text could not be read");
-  if (setText === 'unreached') parts.push("the set's own text was not reached");
+  if (cutShort) parts.push("the set's own text was not reached");
   return parts.join(' · ');
 }
 

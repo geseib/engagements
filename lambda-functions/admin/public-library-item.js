@@ -114,7 +114,12 @@ async function standing(meta, publicSetId) {
     sourceSetId: source.setId,
     sourceVersion: version,
     publicVersion: Number(meta.activeVersion) || 0,
-    questionCount: Number(meta.questionCount) || Number(latest.questionCount) || 0,
+    // The public copy's OWN count: publish records the question rows it
+    // copied on the version entry (shared/publish-set.js). The row's top-level
+    // `questionCount` is the organisation's, spread across at publish, and so
+    // counts the org's ACTIVE version — not the one shared, whenever a past
+    // version is. Only a row whose version carries no count falls back to it.
+    questionCount: Number(latest.questionCount) || Number(meta.questionCount) || 0,
     contentHash: meta.contentHash || '',
     sensitivity: Array.isArray(meta.sensitivity) ? meta.sensitivity : [],
     promptDropped: meta.promptDropped === true,

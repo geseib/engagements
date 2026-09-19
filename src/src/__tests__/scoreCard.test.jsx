@@ -287,13 +287,36 @@ test('the set\'s own text the check could not read is never named as checked, no
   expect(summary).not.toHaveTextContent(/own text checked|all clean|not reached/);
 });
 test('a check its budget stopped says how far it got, and claims nothing about the rest', async () => {
-  await open(withReview({
-    reasons: ['timeout'], findings: [], observed: [],
-    tally: { scope: 'full', questions: 25, setTextChecked: false, setTextUnread: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
-  }));
+  const stopped = { scope: 'full', questions: 25, setTextChecked: false, setTextUnread: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+  const view = await open(withReview({ reasons: ['timeout'], findings: [], observed: [], tally: stopped }));
   const summary = screen.getByTestId('scard-summary');
   expect(summary).toHaveTextContent("25 of 30 questions checked · all 25 clean in every category · the set's own text was not reached");
   expect(summary).not.toHaveTextContent(/every question/);
+  view.unmount();
+  // With no count to set it against, it still says only what it checked.
+  await open(withReview({ reasons: ['timeout'], findings: [], observed: [], tally: stopped }, { questionCount: 0 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("25 questions checked · all 25 clean in every category · the set's own text was not reached");
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/every question/);
+});
+/*
+  A past version shared while a bigger one is active: the check reached every
+  question it was given. Only a check its budget stopped reached fewer than
+  the set holds, and only the tally can say it was one — never a question
+  count beside it.
+*/
+test('a complete check is never read as cut short, whatever question count sits beside it', async () => {
+  const complete = { scope: 'full', questions: 25, setTextChecked: true, setTextUnread: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+  const view = await open(withReview({ reasons: [], findings: [], observed: [], tally: complete }, { questionCount: 30 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("25 questions and the set's own text checked · all clean in every category");
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/ of \d/);
+  view.unmount();
+  await open(withReview({
+    reasons: [], findings: [],
+    observed: [{ questionId: 'c001#003', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Bow Street\nWho founded the Bow Street Runners?' }],
+    tally: { ...complete, spotless: 24, categories: { ...complete.categories, VIOLENCE: { worst: 'LOW', low: 1, medium: 0, high: 0 } } },
+  }, { questionCount: 30 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("25 questions and the set's own text checked · 24 with nothing in any category");
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/ of \d/);
 });
 test('a band seen only in the set\'s own text leaves every question clean, and is listed on its own', async () => {
   await open(withReview({

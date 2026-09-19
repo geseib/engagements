@@ -22,12 +22,18 @@ const assert = require('assert');
 const H = require('./helpers/moderation-harness');
 H.install();
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const { S3Client } = require('@aws-sdk/client-s3');
+const { BedrockRuntimeClient } = require('@aws-sdk/client-bedrock-runtime');
 const db = DynamoDBDocumentClient.from({});
 const T = 'engage-test';
 const V = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-version.js'));
 const R = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-review.js'));
+const C = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
+const J = require(path.join(H.REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
+const W = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-check-worker.js'));
 const { publicSetIdFor } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
 const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/public-library-item.js'));
+const deps = { db, tableName: T, s3: new S3Client({}), bucket: 'prompts-test', bedrock: new BedrockRuntimeClient({}) };
 
 const SRC = { scope: 'org', orgId: 'org_acme', setId: 'crime' };
 const PUB = publicSetIdFor('org_acme', 'crime');
@@ -60,11 +66,12 @@ const OBSERVED = [
  * one — and the org's own version 3 behind it, whose rows have been edited
  * since and must never be what the card shows.
  */
-function seedPublic() {
+function seedPublic(overrides = {}) {
   H.seedRow({
     ...V.setMetadataKey(PUBREF), name: 'True crime', description: 'Infamous cases, solved and not.', engagementType: 'trivia',
     activeVersion: 2, versions: [{ version: 1, createdAt: '2026-09-01T10:00:00.000Z', questionCount: 1 }, { version: 2, createdAt: '2026-09-18T10:00:00.000Z', questionCount: 3 }],
     sourceOrgId: 'org_acme', sourceOrgName: 'Acme', sourceSetId: 'crime', sourceVersion: 3, contentHash: HASH, questionCount: 3,
+    ...overrides,
   });
   H.seedRow({ PK: V.setPartition(PUBREF, 1), SK: 'QUESTION#c001#001', Title: 'An older wording', Detail: 'From the first share.' });
   const v2 = V.setPartition(PUBREF, 2);
@@ -77,9 +84,9 @@ function seedPublic() {
   H.seedRow({ PK: org, SK: 'QUESTION#c001#002', Title: 'Edited by the organisation since', Detail: '' });
 }
 /** Escalated for a declared notice, seen at MEDIUM and LOW, approved by staff: the shape production writes. */
-async function seedApproved({ observed = OBSERVED } = {}) {
+async function seedApproved({ observed = OBSERVED, publicRow = {} } = {}) {
   H.reset();
-  seedPublic();
+  seedPublic(publicRow);
   await R.writeReview(db, T, SRC, 3, {
     status: R.STATUS.ESCALATED, findings: [], note: '4/4 clean', reasons: ['declared'], declaredNotice: ['graphic-violence'],
     contentHash: HASH, checkedBy: 'sub-amara', tally: TALLY, observed,
@@ -94,6 +101,43 @@ const get = async () => {
   return JSON.parse(res.body);
 };
 const observedRow = (card, id, category) => card.review.observed.find((o) => o.questionId === id && o.category === category);
+
+/**
+ * The organisation's set before it is shared, encrypted the way upload writes
+ * it: one partition per version, `counts` questions in each. Its row's
+ * `questionCount` is the ACTIVE version's — upload and promote both set it
+ * so (upload-questions.js, promote-set-version.js) — and publish spreads that
+ * row onto the public one.
+ */
+async function seedOrgVersions(counts, active) {
+  H.reset();
+  H.seedRow({ PK: `ORG#${SRC.orgId}`, SK: 'METADATA', orgId: SRC.orgId, name: 'Acme' });
+  H.seedRow(await C.encryptItem(SRC.orgId, 'set', {
+    ...V.setMetadataKey(SRC), name: 'True crime', description: 'Infamous cases.', engagementType: 'trivia', scope: 'org', orgId: SRC.orgId,
+    activeVersion: active, versions: Object.entries(counts).map(([v, n]) => ({ version: Number(v), questionCount: n })),
+    questionCount: counts[active], createdBy: 'sub-amara',
+  }));
+  for (const [v, n] of Object.entries(counts)) {
+    const pk = V.setPartition(SRC, Number(v));
+    H.seedRow({ PK: pk, SK: 'CATEGORY#c001', Name: 'Cases', QuestionCount: n });
+    for (let i = 1; i <= n; i += 1) {
+      H.seedRow(await C.encryptItem(SRC.orgId, 'question', { // eslint-disable-line no-await-in-loop
+        PK: pk, SK: `QUESTION#c001#${String(i).padStart(3, '0')}`, Title: `Case ${i}`, Detail: `From version ${v}.`,
+        optionA: 'A', optionB: 'B', correctAnswer: 'A', Category: 'c001', Image: '', Active: true,
+      }));
+    }
+  }
+}
+/** The check job a "Share publicly" on version `version` writes. */
+async function shareJob(version) {
+  const jobId = J.newJobId();
+  await J.createJob(db, T, {
+    jobId, kind: 'set-check', requested: 3,
+    request: { setId: SRC.setId, version, publish: true, declaredNotice: [] },
+    caller: { userId: 'sub-amara', username: 'amara', orgId: SRC.orgId, orgRole: 'owner' },
+  });
+  return jobId;
+}
 
 (async () => {
   console.log('\nthe score card\'s data\n');
@@ -141,6 +185,29 @@ const observedRow = (card, id, category) => card.review.observed.find((o) => o.q
     assert.deepStrictEqual(card.review.reasons, []);
     assert.strictEqual(card.review.status, 'passed');
     assert.strictEqual(card.review.note, '30/30 clean');
+  });
+
+  // rejects: the card's question count being the organisation's ACTIVE
+  // version's. Every version row in the editor can be shared, and publish
+  // spreads the org row onto the public one, so sharing v2 (25 questions)
+  // while v3 (30) is active made a complete check read "25 of 30 checked".
+  await H.test('a past version shared while a larger one is active: the card counts the public copy\'s own questions', async () => {
+    await seedOrgVersions({ 2: 25, 3: 30 }, 3);
+    H.state.guardrailReplies = Array.from({ length: 26 }, () => H.guardrailFull());
+    await W.runSetCheck(deps, { jobId: await shareJob(2) }, H.ctx());
+    const card = await get();
+    assert.strictEqual(card.review.status, 'passed', `the share did not publish: ${card.review.status}`);
+    assert.strictEqual(card.sourceVersion, 2);
+    assert.strictEqual(card.review.tally.questions, 25);
+    assert.strictEqual(card.questionCount, 25, `the card counts ${card.questionCount} questions in a 25-question public copy`);
+  });
+  // rejects: a public version recorded without a count of its own reading as
+  // a set of no questions.
+  await H.test('a public version with no count of its own falls back to the row\'s', async () => {
+    await seedApproved({
+      publicRow: { versions: [{ version: 1, createdAt: '2026-09-01T10:00:00.000Z' }, { version: 2, createdAt: '2026-09-18T10:00:00.000Z' }] },
+    });
+    assert.strictEqual((await get()).questionCount, 3);
   });
 
   H.summary();
