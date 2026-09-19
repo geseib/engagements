@@ -30,7 +30,7 @@ const CARD = {
       { questionId: 'c001#014', category: 'VIOLENCE', band: 'MEDIUM', intervened: true, explanation: 'Injuries in detail.', text: 'After a fall\nDescribe the injuries a fall from height causes.' },
       { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Safety walkthrough\nSite safety' },
     ],
-    tally: { scope: 'full', questions: 30, setTextChecked: true, spotless: 28, unread: 0, categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 1, high: 0 }, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } } },
+    tally: { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 28, unread: 0, categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 1, high: 0 }, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } } },
   log: [
     { event: 'checked', at: '2026-08-19T09:00:00.000Z', version: 2, outcome: 'escalated' },
     { event: 'decided', at: '2026-08-19T10:00:00.000Z', version: 2, decision: 'approve', reviewer: 'dai', note: 'Clinical, not gratuitous.' },
@@ -166,7 +166,7 @@ const TRUE_CRIME = {
       { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'True crime\nInfamous cases, solved and not.' },
     ],
     tally: {
-      scope: 'full', questions: 30, setTextChecked: true, spotless: 25, unread: 0,
+      scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 25, unread: 0,
       categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 2, high: 0 }, SEXUAL: NONE, HATE: { worst: 'LOW', low: 1, medium: 0, high: 0 }, INSULTS: NONE, MISCONDUCT: { worst: 'LOW', low: 1, medium: 0, high: 0 } },
     },
   },
@@ -249,7 +249,7 @@ test('only a row that held the set says so: a near-miss at the same band was let
 test('a measured check that saw nothing says every question was clean — never that it had nothing to say', async () => {
   await open(withReview({
     reasons: [], findings: [], observed: [], reviewer: '', decidedAt: null, note: '13/13 clean',
-    tally: { scope: 'full', questions: 12, setTextChecked: true, spotless: 12, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+    tally: { scope: 'full', questions: 12, setTextChecked: true, setTextUnread: false, spotless: 12, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
   }, { questionCount: 12 }));
   expect(screen.getByTestId('scard-summary')).toHaveTextContent("12 questions and the set's own text checked · all clean in every category");
   const cats = screen.getAllByTestId('scard-cat');
@@ -264,16 +264,32 @@ test('a measured check that saw nothing says every question was clean — never 
 test('a question the check could not read is never counted clean', async () => {
   await open(withReview({
     reasons: ['error'], findings: [], observed: [],
-    tally: { scope: 'full', questions: 10, setTextChecked: true, spotless: 8, unread: 2, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+    tally: { scope: 'full', questions: 10, setTextChecked: true, setTextUnread: false, spotless: 8, unread: 2, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
   }, { questionCount: 10 }));
   const summary = screen.getByTestId('scard-summary');
   expect(summary).toHaveTextContent("10 questions and the set's own text checked · 8 with nothing in any category · 2 could not be read");
   expect(summary).not.toHaveTextContent(/every question|all clean/);
 });
+/*
+  The same rule for the set's own text. The guardrail threw on it (a throttle,
+  or no guardrail configured) and staff approved the set anyway: the check
+  reached the text and read nothing, so the card neither names it as checked
+  nor counts it in "all clean" — and it is not "not reached" either, which is
+  a check its budget stopped.
+*/
+test('the set\'s own text the check could not read is never named as checked, nor called clean', async () => {
+  await open(withReview({
+    reasons: [], findings: [{ questionId: '(set)', category: 'ERROR', band: 'NONE' }], observed: [],
+    tally: { scope: 'full', questions: 3, setTextChecked: false, setTextUnread: true, spotless: 3, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+  }, { questionCount: 3 }));
+  const summary = screen.getByTestId('scard-summary');
+  expect(summary).toHaveTextContent("3 questions checked · every question clean in every category · the set's own text could not be read");
+  expect(summary).not.toHaveTextContent(/own text checked|all clean|not reached/);
+});
 test('a check its budget stopped says how far it got, and claims nothing about the rest', async () => {
   await open(withReview({
     reasons: ['timeout'], findings: [], observed: [],
-    tally: { scope: 'full', questions: 25, setTextChecked: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+    tally: { scope: 'full', questions: 25, setTextChecked: false, setTextUnread: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
   }));
   const summary = screen.getByTestId('scard-summary');
   expect(summary).toHaveTextContent("25 of 30 questions checked · all 25 clean in every category · the set's own text was not reached");
@@ -283,7 +299,7 @@ test('a band seen only in the set\'s own text leaves every question clean, and i
   await open(withReview({
     reasons: [], findings: [],
     observed: [{ questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'True crime\nInfamous cases, solved and not.' }],
-    tally: { scope: 'full', questions: 30, setTextChecked: true, spotless: 30, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+    tally: { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 30, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
   }));
   expect(screen.getByTestId('scard-summary')).toHaveTextContent("30 questions and the set's own text checked · every question clean in every category");
   expect(screen.getAllByTestId('scard-obs').map((r) => cells(r)[0].textContent)).toEqual(["The set's own text"]);

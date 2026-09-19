@@ -35,7 +35,7 @@ const OBSERVED = [
 ];
 const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
 const tallyFor = (questions) => ({
-  scope: 'full', questions, setTextChecked: true, spotless: questions - 2, unread: 0,
+  scope: 'full', questions, setTextChecked: true, setTextUnread: false, spotless: questions - 2, unread: 0,
   categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 1, high: 0 }, SEXUAL: NONE_SEEN, HATE: NONE_SEEN, INSULTS: NONE_SEEN, MISCONDUCT: NONE_SEEN },
 });
 async function seed({ versions = 5, questions = 200 } = {}) {

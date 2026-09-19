@@ -170,10 +170,11 @@ const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
   // rejects: a category left out because nothing was seen in it — the card's
   // five rows must each say "none", not vanish.
   await H.test('all five categories are always present, and nothing seen reads as none', async () => {
-    assert.deepStrictEqual(G.tallyOf({ observed: [], findings: [], questions: 30, setTextChecked: true }), {
+    assert.deepStrictEqual(G.tallyOf({ observed: [], findings: [], questions: 30, setTextReached: true }), {
       scope: 'full',
       questions: 30,
       setTextChecked: true,
+      setTextUnread: false,
       spotless: 30,
       unread: 0,
       categories: { VIOLENCE: NONE_SEEN, SEXUAL: NONE_SEEN, HATE: NONE_SEEN, INSULTS: NONE_SEEN, MISCONDUCT: NONE_SEEN },
@@ -193,7 +194,7 @@ const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
       { questionId: '(set)', category: 'SEXUAL', band: 'MEDIUM', intervened: false },
     ];
     const findings = [{ questionId: 'c002#001', category: 'HATE', band: 'HIGH' }];
-    const t = G.tallyOf({ observed, findings, questions: 10, setTextChecked: true });
+    const t = G.tallyOf({ observed, findings, questions: 10, setTextReached: true });
     assert.deepStrictEqual(t.categories, {
       VIOLENCE: { worst: 'MEDIUM', low: 2, medium: 1, high: 0 },
       SEXUAL: NONE_SEEN,
@@ -213,10 +214,34 @@ const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
       { questionId: null, category: 'TIMEOUT', band: 'NONE' },
     ];
     const observed = [{ questionId: 'c001#001', category: 'INSULTS', band: 'LOW', intervened: false }];
-    const t = G.tallyOf({ observed, findings, questions: 5, setTextChecked: false });
+    const t = G.tallyOf({ observed, findings, questions: 5, setTextReached: false });
     assert.strictEqual(t.unread, 1);
     assert.strictEqual(t.spotless, 3);
     assert.strictEqual(t.setTextChecked, false);
+    // Stopped before it: never tried is not "could not be read".
+    assert.strictEqual(t.setTextUnread, false);
+  });
+  // rejects: the set's own text recorded as checked when the guardrail never
+  // read it (a throttle, or no guardrail configured) — the score card then
+  // named it checked and called it clean. It is not a question, so it moves
+  // neither `unread` nor `spotless`.
+  await H.test('the set\'s own text the guardrail could not read is unread, never checked', async () => {
+    for (const category of ['ERROR', 'UNCONFIGURED']) {
+      const t = G.tallyOf({ observed: [], findings: [{ questionId: '(set)', category, band: 'NONE' }], questions: 3, setTextReached: true });
+      assert.strictEqual(t.setTextChecked, false, `${category}: the unread text was recorded as checked`);
+      assert.strictEqual(t.setTextUnread, true, `${category}: the unread text was not recorded as unread`);
+      assert.strictEqual(t.unread, 0, `${category}: the set's text was counted as a question`);
+      assert.strictEqual(t.spotless, 3, `${category}: the set's text was taken from the questions`);
+    }
+    // A finding in a judged category is the guardrail having READ the text.
+    const held = G.tallyOf({
+      observed: [{ questionId: '(set)', category: 'HATE', band: 'MEDIUM', intervened: true }],
+      findings: [{ questionId: '(set)', category: 'HATE', band: 'MEDIUM' }],
+      questions: 3,
+      setTextReached: true,
+    });
+    assert.strictEqual(held.setTextChecked, true);
+    assert.strictEqual(held.setTextUnread, false);
   });
 
   H.summary();

@@ -85,6 +85,7 @@ const NEAR_MISS_TALLY = {
   scope: 'full',
   questions: 3,
   setTextChecked: true,
+  setTextUnread: false,
   spotless: 1,
   unread: 0,
   categories: {
@@ -189,6 +190,30 @@ const NEAR_MISS_TALLY = {
     assert.deepStrictEqual(row.uncertainQuestionIds, ['q001']);
     assert.deepStrictEqual(r.tally.categories.INSULTS, { worst: 'LOW', low: 1, medium: 0, high: 0 });
   });
+  // rejects: the tally saying the set's own text was checked when the
+  // guardrail threw on it — the card then printed "and the set's own text
+  // checked · all clean in every category" for text nothing read. The verdict
+  // is untouched: the unread text escalates exactly as it did.
+  await H.test('the set\'s own text the guardrail could not read is recorded as unread, and decides as before', async () => {
+    await seed(3);
+    H.state.guardrailReplies = [H.guardrailFull(), H.guardrailFull(), H.guardrailFull(), new Error('ThrottlingException')];
+    await W.runSetCheck(deps, { jobId: await job() }, H.ctx());
+    const r = await review();
+    assert.strictEqual(r.status, R.STATUS.ESCALATED);
+    assert.deepStrictEqual(r.findings, [{ questionId: '(set)', category: 'ERROR', band: 'NONE', detail: 'ThrottlingException' }]);
+    assert.deepStrictEqual(r.reasons, []);
+    assert.strictEqual(r.note, '3/4 clean');
+    assert.strictEqual(r.tally.setTextChecked, false, 'the unread set text was recorded as checked');
+    assert.strictEqual(r.tally.setTextUnread, true);
+    assert.strictEqual(r.tally.questions, 3);
+    assert.strictEqual(r.tally.spotless, 3);
+    assert.strictEqual(r.tally.unread, 0);
+    // Approved by staff, it is still text the check never read.
+    await R.transitionReview(db, T, SRC, 2, R.STATUS.ESCALATED, { status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-19T10:00:00.000Z', note: 'Read it myself.' });
+    const approved = await review();
+    assert.strictEqual(approved.tally.setTextChecked, false);
+    assert.strictEqual(approved.tally.setTextUnread, true);
+  });
   // rejects: the log row growing by the observation list on every check, or
   // losing the tally the brief allows it.
   await H.test('the checked log event carries the tally and never the observations', async () => {
@@ -276,6 +301,8 @@ const NEAR_MISS_TALLY = {
     assert.deepStrictEqual(r.observed, [{ questionId: 'q001', category: 'VIOLENCE', band: 'LOW', intervened: false }]);
     assert.strictEqual(r.tally.questions, 1);
     assert.strictEqual(r.tally.setTextChecked, false);
+    // Never reached, which is not the same as reached and unreadable.
+    assert.strictEqual(r.tally.setTextUnread, false);
   });
   // rejects: twelve calls started on a budget that can only afford one — now
   // that PASSED sets are explained too, a check that finishes late would be

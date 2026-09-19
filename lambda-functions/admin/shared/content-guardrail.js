@@ -254,19 +254,32 @@ async function checkText(text, subject = SET_SUBJECT) {
  * Counted in QUESTIONS, not observations: each band's number is how many
  * distinct questions were seen at it. The set's own prose is judged as well,
  * but it is not a question: its observations stay in `observed` under '(set)'
- * and count here nowhere but `setTextChecked`.
+ * and count here nowhere but the two set-text flags.
  *
- *   categories  all five, always — nothing seen is `worst: null` and zeros,
- *               which the card writes out as "none" rather than omitting
- *   worst       the worst band any QUESTION was seen at in that category
- *   spotless    questions read and seen at nothing, in any category
- *   unread      questions the guardrail could not read (an error, or no
- *               guardrail configured): neither spotless nor observed, because
- *               nothing looked. questions = spotless + observed ones + unread.
- *   scope       'full' — the marker. A review carrying a tally was measured
- *               this way; one without was checked before measuring existed.
+ *   categories      all five, always — nothing seen is `worst: null` and
+ *                   zeros, which the card writes out as "none", never omits
+ *   worst           the worst band any QUESTION was seen at in that category
+ *   spotless        questions read and seen at nothing, in any category
+ *   unread          questions the guardrail could not read (an error, or no
+ *                   guardrail configured): neither spotless nor observed,
+ *                   because nothing looked. questions = spotless + observed
+ *                   ones + unread.
+ *   setTextChecked  the guardrail READ the set's own text
+ *   setTextUnread   the check reached the set's own text and the guardrail
+ *                   could not read it — the same error, or no guardrail — so
+ *                   it is neither checked nor clean, however the verdict went
+ *   (neither)       the check never reached it: the budget stopped it first.
+ *                   The set's text is judged last, so this is also the one way
+ *                   a check reaches fewer questions than the set holds.
+ *   scope           'full' — the marker. A review carrying a tally was
+ *                   measured this way; one without was checked before
+ *                   measuring existed.
+ *
+ * `setTextReached` is the caller's to say — only the worker knows whether its
+ * budget stopped it before the set's text. Whether that text was READ is told
+ * here, from the findings, the same way an unread question is.
  */
-function tallyOf({ observed = [], findings = [], questions = 0, setTextChecked = false } = {}) {
+function tallyOf({ observed = [], findings = [], questions = 0, setTextReached = false } = {}) {
   const isQuestion = (id) => typeof id === 'string' && id !== '' && id !== SET_SUBJECT;
   const seen = Object.fromEntries(SET_CATEGORIES.map((c) => [c, { LOW: new Set(), MEDIUM: new Set(), HIGH: new Set() }]));
   const observedIds = new Set();
@@ -277,10 +290,11 @@ function tallyOf({ observed = [], findings = [], questions = 0, setTextChecked =
     if (ids) ids.add(o.questionId);
   }
   // A finding outside the judged categories is the check's own (ERROR,
-  // UNCONFIGURED): that question was never measured.
-  const unreadIds = new Set(findings
-    .filter((f) => f && isQuestion(f.questionId) && !SET_CATEGORIES.includes(f.category))
-    .map((f) => f.questionId));
+  // UNCONFIGURED): that subject — a question, or the set's own text — was
+  // never measured.
+  const unmeasured = findings.filter((f) => f && !SET_CATEGORIES.includes(f.category));
+  const unreadIds = new Set(unmeasured.filter((f) => isQuestion(f.questionId)).map((f) => f.questionId));
+  const setTextUnread = setTextReached === true && unmeasured.some((f) => f.questionId === SET_SUBJECT);
   const categories = {};
   for (const c of SET_CATEGORIES) {
     const { LOW, MEDIUM, HIGH } = seen[c];
@@ -292,7 +306,8 @@ function tallyOf({ observed = [], findings = [], questions = 0, setTextChecked =
   return {
     scope: 'full',
     questions: total,
-    setTextChecked: setTextChecked === true,
+    setTextChecked: setTextReached === true && !setTextUnread,
+    setTextUnread,
     spotless: Math.max(0, total - touched),
     unread: unreadIds.size,
     categories,

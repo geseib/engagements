@@ -38,6 +38,7 @@ const TALLY = {
   scope: 'full',
   questions: 3,
   setTextChecked: true,
+  setTextUnread: false,
   spotless: 1,
   unread: 0,
   categories: {

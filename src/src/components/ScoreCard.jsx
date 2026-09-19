@@ -126,6 +126,19 @@ const countsWords = (c) => ['HIGH', 'MEDIUM', 'LOW']
   .join(' · ');
 
 /**
+ * How far the check got with the set's own text, which it judges last
+ * (content-guardrail.js tallyOf): `checked`, the guardrail read it;
+ * `unread`, the check reached it and the guardrail could not read it — so it
+ * is never named as checked, nor clean; `unreached`, the budget stopped the
+ * check before it.
+ */
+function setTextState(tally) {
+  if (tally.setTextChecked) return 'checked';
+  if (tally.setTextUnread) return 'unread';
+  return 'unreached';
+}
+
+/**
  * The tally's one line. "Every question clean" is `spotless === questions`,
  * never "no observations": a question the guardrail could not read has none
  * either, and is not clean — it is `unread`. A check stopped by its budget
@@ -136,8 +149,9 @@ function summaryLine(tally, questionCount, setClean) {
   const spotless = Number(tally.spotless) || 0;
   const unread = Number(tally.unread) || 0;
   const total = Number(questionCount) || 0;
+  const setText = setTextState(tally);
   const of = total > n ? ` of ${total}` : '';
-  const parts = [`${n}${of} ${n === 1 && !of ? 'question' : 'questions'}${tally.setTextChecked ? " and the set's own text" : ''} checked`];
+  const parts = [`${n}${of} ${n === 1 && !of ? 'question' : 'questions'}${setText === 'checked' ? " and the set's own text" : ''} checked`];
   if (n > 0 && spotless === n) {
     // "all" is every question AND the set's own text, which the first clause
     // has just named; with only the questions clean, it says only that.
@@ -147,7 +161,8 @@ function summaryLine(tally, questionCount, setClean) {
     parts.push(`${spotless} with nothing in any category`);
   }
   if (unread) parts.push(`${unread} could not be read`);
-  if (!tally.setTextChecked) parts.push("the set's own text was not reached");
+  if (setText === 'unread') parts.push("the set's own text could not be read");
+  if (setText === 'unreached') parts.push("the set's own text was not reached");
   return parts.join(' · ');
 }
 
@@ -287,6 +302,8 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
   const observed = (Array.isArray(review.observed) ? review.observed : []).filter((o) => o && typeof o === 'object');
   // Stored in question order; the card puts the worst first, stably.
   const rows = observed.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o) || a.i - b.i).map(({ o }) => o);
+  // Clean only if the guardrail READ the set's own text and saw nothing there;
+  // text it could not read is `setTextUnread`, never `setTextChecked`.
   const setClean = Boolean(tally && tally.setTextChecked) && !observed.some((o) => o.questionId === SET_SUBJECT);
   /*
     The note beside a pre-tally verdict is the CHECK's ("30/30 clean") — all

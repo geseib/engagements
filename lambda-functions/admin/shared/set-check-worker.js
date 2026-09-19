@@ -127,8 +127,10 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     findings = [...result.findings, ...setResult.findings];
     observed = [...result.observed, ...setResult.observed];
     // What was MEASURED — every band seen, per category, in questions. It
-    // decides nothing: the status below is computed from findings alone.
-    tally = tallyOf({ observed, findings, questions: result.checked, setTextChecked: !result.stopped });
+    // decides nothing: the status below is computed from findings alone. The
+    // set's own text was reached unless the budget stopped the check first;
+    // whether the guardrail READ it, tallyOf tells from the findings.
+    tally = tallyOf({ observed, findings, questions: result.checked, setTextReached: !result.stopped });
     checked = result.checked + setResult.checked;
     clean = result.clean + setResult.clean;
     const note = `${clean}/${checked} clean`;
