@@ -1,3 +1,5 @@
+import { browserRow } from './setupPanel';
+
 /**
  * THE SET EDITOR'S PREVIEW, AS DATA — how an editor row becomes what the card
  * is given. The card is components/QuestionCard.jsx (the stage renders it
@@ -72,4 +74,45 @@ export function stagedQuestion(row, { setId = '' } = {}) {
     image: storedImage(row.image, setId),
     correctAnswer: revealedAnswer(row.correctAnswer || '', row),
   };
+}
+
+/**
+ * The list's rows: the in-session browser's own projection (config/setupPanel.js
+ * `browserRow`, an allow-list that carries no option and no answer), keyed by
+ * the editor row's `uid`.
+ *
+ * browserRow reads identity from `id` / `Id` / `questionId`, and a toRow row has
+ * none of them — only `uid`, and a stored `sk` that is empty for every question
+ * added or copied in this session (questionRows.js:151, 175). Handed in raw,
+ * every row comes back `id: undefined`. The uid is the key that survives an
+ * edit: startEdit clones the row and commitEdit writes it back under the same
+ * uid (QuestionsPanel.jsx:361, 387-392).
+ *
+ * Tombstones are dropped: a removed row will not exist once the set is saved.
+ */
+export function previewRows(rows = []) {
+  return rows
+    .filter((row) => row && !row.removed)
+    .map((row) => browserRow({ ...row, id: row.uid }));
+}
+
+/** The categories the rows actually use, in the order they first appear. */
+export function previewCategories(listRows = []) {
+  const seen = [];
+  for (const row of listRows) {
+    if (row.category && !seen.includes(row.category)) seen.push(row.category);
+  }
+  return seen;
+}
+
+/**
+ * The id `delta` steps from `currentId` through `ids`, wrapping at both ends.
+ * An id that is not in the list steps from the top. `null` when there is
+ * nothing to step through.
+ */
+export function stepSelection(ids = [], currentId = null, delta = 1) {
+  if (!ids.length) return null;
+  const at = ids.indexOf(currentId);
+  if (at < 0) return ids[0];
+  return ids[(at + delta + ids.length) % ids.length];
 }
