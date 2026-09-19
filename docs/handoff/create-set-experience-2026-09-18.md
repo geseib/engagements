@@ -166,6 +166,10 @@ the dimmed text falls below the contrast bar.
 ## 5. THE TWO FEATURES THAT ARE NOT YET DESIGNED
 
 ### Preview — "flash through all or some questions"
+**2026-09-19: BUILT — see `docs/handoff/scorecard-and-preview-2026-09-19.md` §2.** Question 5 was
+answered "extract"; the stage and the preview now render one `QuestionCard`. What follows is the
+pre-build analysis, kept for its reasoning.
+
 **Nothing like it exists today.** The public library's "Preview" is wired straight to the full
 editable editor, despite a comment calling it read-only.
 
@@ -234,7 +238,7 @@ enough to be a chip — but that is the author's read, not a decision.
 4. **How much does "add more questions" matter, given it needs a backend route?** It is the only
    item with real server cost and it decides whether this is one project or two.
 5. **Does preview justify extracting a shared question card**, or is the `RoundReport` interim
-   enough to start?
+   enough to start? — **ANSWERED 2026-09-19: extract. Built and on dev.**
 6. **The interview's answered-turn detail** (§4) — live chips or collapse.
 
 ## 9. SUGGESTED SEQUENCE, IF IT ALL GOES AHEAD
