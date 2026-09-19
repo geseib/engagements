@@ -429,7 +429,15 @@ describe('ASK shows the term and NOTHING about it — the AI Jargon report', () 
   test('no screen renders the retired topic field', () => {
     // rejects: reintroducing `currentQuestion.topic` — it printed the
     // subject's framing on the projector and on phones.
+    //
+    // THE CARD IS SCANNED TOO. The projector's ASK lines are
+    // components/QuestionCard.jsx now, and its full-prompt line is exactly
+    // where `.topic` used to ride (`questionDetail || detail || topic`). A
+    // negative scan cannot fail once its subject has moved out from under it,
+    // so reading GameHostPage alone would let the field back onto the wall
+    // with this test still green.
     expect(host).not.toMatch(/\.topic\b/);
+    expect(card).not.toMatch(/\.topic\b/);
     expect(player).not.toMatch(/\.topic\b/);
   });
 
