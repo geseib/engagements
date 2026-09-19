@@ -5,6 +5,7 @@ import StatusMessage from './StatusMessage';
 import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
+import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
@@ -205,6 +206,12 @@ export default function QuestionsPanel({
   const [newSetDialog, setNewSetDialog] = useState(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
+  /* ---------------------------------------------------------------- view -- */
+  // TABLE OR PREVIEW — how the working copy is shown, never what it holds.
+  // Named `viewMode`, not anything with "preview" in it: `preview` below is the
+  // replace-from-a-CSV diff, a different thing that happens to share the word.
+  const [viewMode, setViewMode] = useState('table');
+
   /* ------------------------------------------------------------- replace -- */
   const [replaceFile, setReplaceFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -264,6 +271,7 @@ export default function QuestionsPanel({
     closeForm();
     setStatus({ text: '', tone: '' });
     setCategoryFilter('');
+    setViewMode('table');
     load();
   }, [setId, load, closeForm]);
 
@@ -863,6 +871,14 @@ export default function QuestionsPanel({
 
   /* -------------------------------------------------------------- render --- */
 
+  // Why Preview cannot be pressed right now, or '' when it can. The switch
+  // prints it as the disabled button's title — a control that says why.
+  const previewBlocked = loadState === 'loading' ? 'The questions are still loading.'
+    : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
+      : summary.questionCount === 0 ? 'This set has no questions yet, so there is nothing to preview.'
+        : '';
+  const previewing = viewMode === 'preview' && !previewBlocked;
+
   const kindLabel = (id) => ROUND_KINDS[id]?.label || id;
   const showKind = roundKindApplies(engagementType);
   const saveLabel = canManage
@@ -928,7 +944,9 @@ export default function QuestionsPanel({
             Save {selected.length} selected as a new set…
           </button>
         )}
-        {categories.length > 1 && (
+        {/* The table's own filter. Preview has chips of its own, and a select
+            that filters a table nobody can see is a control that does nothing. */}
+        {categories.length > 1 && !previewing && (
           <label className="qs-filter">
             Filter by category:{' '}
             <select
@@ -941,6 +959,11 @@ export default function QuestionsPanel({
             </select>
           </label>
         )}
+        <QuestionViewSwitch
+          mode={previewing ? 'preview' : 'table'}
+          onChange={setViewMode}
+          previewBlocked={previewBlocked}
+        />
       </div>
 
       {loadState === 'loading' && <p className="qs-empty">Loading questions…</p>}
@@ -948,7 +971,21 @@ export default function QuestionsPanel({
         <StatusMessage message={`${loadError} Nothing has been changed.`} tone="error" />
       )}
 
-      {loadState === 'ready' && visibleRows.length === 0 && (
+      {/* PREVIEW REPLACES THE TABLE, and nothing else on this panel. The dirty
+          bar, Add, Pull, Save and the CSV controls stay where they are: they act
+          on the working copy, which is the thing being previewed. Edit opens the
+          same question dialog the table's Edit does — no second container. */}
+      {previewing && (
+        <QuestionPreview
+          rows={rows}
+          gameType={engagementType}
+          setInstruction={questionSet?.customInstruction || ''}
+          setId={setId}
+          onEditQuestion={startEdit}
+        />
+      )}
+
+      {loadState === 'ready' && !previewing && visibleRows.length === 0 && (
         <p className="qs-empty">
           {rows.length
             ? 'No questions in that category.'
@@ -956,7 +993,7 @@ export default function QuestionsPanel({
         </p>
       )}
 
-      {loadState === 'ready' && visibleRows.length > 0 && (
+      {loadState === 'ready' && !previewing && visibleRows.length > 0 && (
         <ol className="qs-question-list">
           {visibleRows.map((row) => {
             const rowIndex = rows.indexOf(row);
