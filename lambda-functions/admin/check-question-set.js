@@ -357,6 +357,11 @@ exports.handler = async (event, context) => {
      * unfiled set gets a SUGGESTED shelf out of the check (shared/
      * topic-suggestion.js), which a refusal here would make unreachable.
      *
+     * AND IT IS REACHED: `src/src/utils/topicSuggestion.js`, behind the shelf
+     * field's own control in the set editor, is what sends that flag. Nothing
+     * else in the product does, so this exemption is not a hypothetical —
+     * narrow it and the one journey that needs a proposal loses it again.
+     *
      * READ STRAIGHT OFF THE ROW, like toggle-question-set.js and unlike
      * publish-question-set.js: `topic` is not in `ENCRYPTED_FIELDS.set` and
      * tests/set-topic-carry.js pins that an org set's shelf is stored readable.
