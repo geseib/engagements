@@ -7,6 +7,7 @@ import RoundKindPicker from './RoundKindPicker';
 import QuestionsPanel from './QuestionsPanel';
 import SetMediaPanel from './SetMediaPanel';
 import SetReviewBanner from './SetReviewBanner';
+import SetTopicField from './SetTopicField';
 import { authFetch } from '../auth/authFetch';
 import { versionChip } from '../utils/shareState';
 import { startHouseCheck } from '../utils/houseCheck';
@@ -20,8 +21,10 @@ import {
   normalizeVersions,
   nextVersionNumber,
   interpretVersionDelete,
-  versionDeleteTone
+  versionDeleteTone,
+  latestTopicSuggestion
 } from '../utils/questionSetEditing';
+import { setTopicRefusal } from '../config/setTopics';
 import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 import { editableRows } from '../utils/questionRows';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
@@ -199,6 +202,13 @@ export default function QuestionSetEditor({
   // predate the field. See config/roundKinds.js.
   const [roundKind, setRoundKind] = useState('');
   const [roundKindBrief, setRoundKindBrief] = useState('');
+  // WHICH SHELF THIS SET SITS ON, and the author's own words beside it. '' is
+  // Unfiled — what the forty sets predating the field really carry — and it is
+  // kept as '' rather than resolved, for the same reason roundKind is: the save
+  // is a diff, and a resolved default would file them all on the catch-all one
+  // accidental Save at a time. See config/setTopics.js.
+  const [topic, setTopic] = useState('');
+  const [setTags, setSetTags] = useState([]);
   // Snapshot of the set as it was when the editor opened; the save payload is a
   // diff against this. Rebaselined on every successful save, so "dirty" always
   // means "differs from what the server now holds", not "differs from open".
@@ -408,6 +418,8 @@ export default function QuestionSetEditor({
     setPersonaId(snapshot.personaId);
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
+    setTopic(snapshot.topic);
+    setSetTags(snapshot.tags);
     setOriginal(snapshot);
     setSavedTitle(questionSet?.name || '');
     setSaveStatus('');
@@ -702,11 +714,20 @@ export default function QuestionSetEditor({
     // Only meaningful for `custom`; cleared when the kind moves off it, so a
     // set cannot keep steering the generator with a brief for a direction it
     // no longer has.
-    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : ''
+    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : '',
+    topic,
+    tags: setTags
   };
 
+  // The body this form would send right now. Built here as well as in the save
+  // so "dirty" and "has something to send" can never disagree: the two filing
+  // fields are NOT in EDITABLE_SET_FIELDS — one cannot be cleared and the other
+  // is a list, so neither survives that whitelist's `!==` loop.
+  const pendingEdit = buildEditPayload(title, currentDetails, original);
+
   const detailsDirty = title.trim() !== savedTitle.trim()
-    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''));
+    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''))
+    || 'topic' in pendingEdit || 'tags' in pendingEdit;
 
   /*
    * WHAT THE WAY OUT IS CALLED. Reported by the owner: after replacing the
@@ -752,6 +773,34 @@ export default function QuestionSetEditor({
     if (!title.trim()) {
       setSaveOk(false);
       setSaveStatus('Title is required');
+      return;
+    }
+
+    /*
+      A SET HAS TO SIT ON A SHELF, AND THIS IS WHERE THAT BITES.
+
+      The owner asked for a topic on every set, not only the public ones, and a
+      set that is never asked is a set the library filter cannot show. So the
+      FORM requires one — here, with the picker and, often, the check's own
+      proposal already on screen one click away.
+
+      THE ROUTE DELIBERATELY DOES NOT. `edit-question-set.js` refuses a BLANK
+      topic and requires nothing when the key is absent, because that route also
+      carries a rename from the host's shelf, a Workie re-point and a copy
+      rebind — a requirement reaching backwards into those would be a wall in
+      front of an unrelated edit. Nothing about the forty unfiled sets changes:
+      they list, play and host exactly as they did. This is the one screen that
+      asks, and it asks the person who opened the set to edit it.
+
+      Refused HERE rather than by letting the 400 come back, because this form
+      saves a dozen fields at once and a bounced PUT leaves nobody sure which of
+      them landed. `setTopicRefusal` is the same sentence both writers answer
+      with, so the product says it in one voice.
+    */
+    const refusal = setTopicRefusal(topic);
+    if (refusal) {
+      setSaveOk(false);
+      setSaveStatus(refusal);
       return;
     }
 
@@ -1247,6 +1296,22 @@ export default function QuestionSetEditor({
               rows="3"
             />
           </div>
+
+          {/*
+            WHERE THIS SET SITS IN THE LIBRARY. Directly under the description
+            because it answers the same question — what is this about — and the
+            proposal it can offer is drawn from the check that read those very
+            questions. The picker is a closed fifteen; see SetTopicField.jsx for
+            why it is not CategoryPicker's combobox.
+          */}
+          <SetTopicField
+            idPrefix="edit-set"
+            topic={topic}
+            onTopicChange={setTopic}
+            tags={setTags}
+            onTagsChange={setSetTags}
+            suggestion={latestTopicSuggestion(versions)}
+          />
 
           {/*
             Engagement type was loaded into state but never rendered and never

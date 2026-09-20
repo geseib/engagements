@@ -32,6 +32,9 @@ const ENGAGE_SET = {
   description: 'A shared set.',
   scope: 'platform',
   canManage: false,
+  // Filed, because the Details save now requires a shelf before it will send —
+  // and a copy carries whatever the original was filed under.
+  topic: 'music',
   engagementType: 'trivia',
   totalQuestions: 10,
 };

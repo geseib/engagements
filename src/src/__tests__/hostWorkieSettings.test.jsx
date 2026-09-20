@@ -50,6 +50,8 @@ const jsonResponse = (status, body) => ({
 const HOST_VIEW = [
   {
     id: 'ivy-retro', name: 'Ivy Retro', description: 'Made last Tuesday',
+    // Filed, because the Details save requires a shelf before it will send.
+    topic: 'business-work',
     engagementType: 'call-and-answer', totalQuestions: 12, categoryCount: 2,
     active: true, hasImages: false, canManage: true, mine: true, createdByName: 'ivy',
   },
