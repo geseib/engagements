@@ -20,6 +20,16 @@
  * does everything else against the function's 900s. `checking` older than
  * fifteen minutes reads as unfinished (`set-review.isUnfinished`).
  *
+ * ── AND A SET THAT IS NOT ON A SHELF YET ───────────────────────────────
+ *
+ * A check that would publish IS the share, so an unfiled set is refused here,
+ * above the quota — the owner's *"req at least 1 pretty broad for public ones"*,
+ * said at the first place it can be said instead of after the spend. The worker
+ * then makes the same question easier to answer next time: while it has the
+ * content in hand it proposes a shelf and a few words for the set
+ * (`shared/topic-suggestion.js`), which it records beside the review and which
+ * changes nothing on its own.
+ *
  * ── AND STAFF RE-RUNNING ONE THE LIBRARY ALREADY SERVES ────────────────
  *
  *   POST /question-sets/{publicSetId}/check   { recheck: true }
@@ -92,6 +102,7 @@ const tenant = require('./shared/tenant');
 const { callerUserId } = require('./shared/question-set-access');
 const { callerUsername } = require('./shared/require-admin');
 const { beginCheck, abandonCheck, readReview, decisionOf, declarationOf } = require('./shared/set-review');
+const { resolveSetTopic, setTopicRefusal, UNFILED } = require('./shared/set-topics');
 const { reserveSubmit, DEFAULT_DAILY_CAP } = require('./shared/check-quota');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { newJobId, createJob, getJob, jobToResponse, failJob } = require('./shared/generation-jobs');
@@ -325,6 +336,40 @@ exports.handler = async (event, context) => {
     if (!meta) return fail(404, 'That set is not one of yours.');
     const resolved = resolvePartitionFromMeta(source, meta, toVersion(body.version));
     const version = resolved.version;
+
+    /*
+     * THE SHELF GATE, AT THE STEP BEFORE THE ONE THAT ENFORCES IT.
+     *
+     * publish-question-set.js already refuses to put an unfiled set in the
+     * public library. This is the same rule, said early: a check that would
+     * publish is the SHARE — it is what ShareSetDialog.jsx posts — so a set that
+     * cannot be published must not be able to spend a check finding that out.
+     *
+     * BEFORE ANYTHING IS SPENT is the whole point of the placement. One line
+     * down is `reserveSubmit`, which takes one of the organisation's twenty
+     * daily checks; below that is the lock, the job row and every guardrail
+     * call. A refusal that arrived after any of those would charge an
+     * organisation for a "no" it could have been told at once.
+     *
+     * ONLY A SHARE. A check asked for with `publish: false` measures content
+     * and puts nothing anywhere, and refusing one would be exactly the
+     * retro-refusal this design rules out — it is also the route by which an
+     * unfiled set gets a SUGGESTED shelf out of the check (shared/
+     * topic-suggestion.js), which a refusal here would make unreachable.
+     *
+     * READ STRAIGHT OFF THE ROW, like toggle-question-set.js and unlike
+     * publish-question-set.js: `topic` is not in `ENCRYPTED_FIELDS.set` and
+     * tests/set-topic-carry.js pins that an org set's shelf is stored readable.
+     * Decrypting here would add a KMS call to every share purely to read a
+     * closed-list id; if that boundary ever moved, this would refuse a FILED set
+     * loudly and that test would fail first.
+     *
+     * 409, as publish-question-set.js answers the same rule: the request is well
+     * formed, the SET is not ready.
+     */
+    if (body.publish !== false && resolveSetTopic(meta.topic) === UNFILED) {
+      return fail(409, setTopicRefusal(meta.topic));
+    }
 
     const cap = Number(process.env.CHECK_DAILY_CAP) || DEFAULT_DAILY_CAP;
     const quota = await reserveSubmit(db, TABLE(), orgId, { cap });

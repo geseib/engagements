@@ -31,6 +31,7 @@ const { writeReview, readReview, decisionOf, STATUS } = require('./set-review');
 const { checkQuestions, checkText, tallyOf, OUTCOME } = require('./content-guardrail');
 const { buildSnapshot, contentHash, questionText, setText, snapshotHasImages } = require('./publishable');
 const { explainFindings } = require('./finding-explanations');
+const { suggestSetTopic } = require('./topic-suggestion');
 const { publishSnapshot, platformPromptExists } = require('./publish-set');
 const { writeShareStamp } = require('./share-stamp');
 const { appendReviewEvent } = require('./review-log');
@@ -280,6 +281,32 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       findings = withExplanations(findings, observed);
     }
 
+    /*
+      AND WHICH SHELF THIS SET LOOKS LIKE — the owner's *"maybe when saving or
+      making public the tag can get verified, or recommended as well."*
+
+      LAST of the model calls, and last for a reason: the explanations are what
+      a person is owed about a set being held, and this is a convenience. Asked
+      after them, it spends what is left of the allowance rather than any of it.
+
+      It DECIDES NOTHING. `status`, `reasons`, `findings`, `observed` and
+      `tally` are all computed above and none of them is touched here; the
+      record goes onto the review row and the set's own `topic` is not written
+      by a check at all. A contradiction — the shelf the author chose against
+      the content the check just read — is recorded in that one place and
+      nowhere else: not in `reasons`, not on the queue, not in the log, so it
+      is said once and holds nothing up. topic-suggestion.js answers null for
+      every failure there is, which is why this is not wrapped in anything.
+
+      NOT HOISTED, unlike `tally` and `observed`: those are what the check
+      MEASURED and are worth recording out of the failure path below, and this
+      is a convenience offered to somebody about to choose a shelf. A check
+      that fell over is not the moment to make that offer.
+    */
+    const topicSuggestion = result.stopped
+      ? null
+      : await suggestSetTopic(bedrock, InvokeModelCommand, snapshot, { budget: inBudget });
+
     // A re-check is Engage's own work: the calls are recorded beside the
     // organisation's ledger rather than in it (check-quota.js), and its daily
     // cap was never reserved.
@@ -293,7 +320,7 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     await writeReview(db, tableName, source, version, {
       status, findings, note, jobId,
       contentHash: snapshot.contentHash, snapshotKey, checkedBy: job.callerUserId || null,
-      promptDropped, tally, observed,
+      promptDropped, tally, observed, topicSuggestion,
       reasons: reasonsOnRow(reasons), declaredNotice: declaredOnRow(),
       // LAST, so a person's decision outlives the count this check would
       // otherwise write over their words.

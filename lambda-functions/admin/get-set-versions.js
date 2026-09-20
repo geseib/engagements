@@ -195,6 +195,19 @@ exports.handler = async (event) => {
         */
         reviewTally: measured.tally,
         reviewObserved: measured.observed,
+        /*
+          AND THE SHELF THE CHECK WOULD HAVE FILED IT ON (shared/
+          topic-suggestion.js), which is the author's in a way none of the
+          fields above are: it exists to be offered to the person choosing a
+          topic, and this list is what that person's editor reads.
+
+          Inside the gate with the rest of the row, because it names the shelf
+          the AUTHOR chose and may say it does not fit the content — a sentence
+          about somebody's judgement of their own set, not a public fact about
+          it. `null` where no check proposed one, the same shape `reviewTally`
+          uses for a version checked before any of this existed.
+        */
+        reviewTopicSuggestion: review.topicSuggestion || null,
         unfinished: isUnfinished(review),
       };
     };
