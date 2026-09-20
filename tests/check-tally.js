@@ -235,7 +235,10 @@ const NEAR_MISS_TALLY = {
     const realSend = db.send.bind(db);
     let tripped = false;
     db.send = async (cmd) => {
-      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD units')) {
+      // recordUnits names its counter (`ADD #counter :n`, check-quota.js) so a
+      // staff re-check can spend on `staffUnits` without interpolating an
+      // attribute name into the expression: the trap matches the alias.
+      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD #counter')) {
         tripped = true;
         throw new Error('quota store down');
       }

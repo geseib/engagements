@@ -34,14 +34,28 @@ async function reserveSubmit(db, tableName, orgId, { cap = DEFAULT_DAILY_CAP, no
     throw e;
   }
 }
-async function recordUnits(db, tableName, orgId, units, { now = new Date() } = {}) {
+/**
+ * `field` is which counter the calls land on. Engage staff re-running the check
+ * on a version the public library already serves spend real guardrail calls, and
+ * the spend must be recorded — but not on the organisation's own ledger, which
+ * would bill them for work they never asked for and cannot see. `staffUnits`
+ * keeps the record beside theirs instead of inside it. The CAP (`submits`) is
+ * not touched by such a run at all: `reserveSubmit` is simply not called.
+ */
+const UNIT_FIELDS = Object.freeze(['units', 'staffUnits']);
+async function recordUnits(db, tableName, orgId, units, { now = new Date(), field = 'units' } = {}) {
   const n = Math.max(0, Math.trunc(Number(units) || 0));
   if (!n) return;
+  if (!UNIT_FIELDS.includes(field)) throw new Error(`check-quota: refusing to count units on ${JSON.stringify(field)}`);
   await db.send(new UpdateCommand({
     TableName: tableName,
     Key: key(orgId, now),
-    UpdateExpression: 'ADD units :n',
+    // The counter is NAMED, not interpolated into the expression: an attribute
+    // that comes from a variable can never collide with a reserved word this
+    // way, which is the same trap `#day` above is dodging.
+    UpdateExpression: 'ADD #counter :n',
+    ExpressionAttributeNames: { '#counter': field },
     ExpressionAttributeValues: { ':n': n },
   }));
 }
-module.exports = { DEFAULT_DAILY_CAP, reserveSubmit, recordUnits };
+module.exports = { DEFAULT_DAILY_CAP, UNIT_FIELDS, reserveSubmit, recordUnits };
