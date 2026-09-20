@@ -17,8 +17,18 @@ import './SampleReport.css';
  * the standings heading. A pin is only meaningful against the full view; if
  * the given view's round lacks the answer a pin targets, that pin is simply
  * not rendered rather than left orphaned on the wrong block.
+ *
+ * `footerLinks` (default true) renders the fixture's `footer.links` as the
+ * real `<a href>` elements Task 7 built. Every `href` in both fixture views
+ * is `/reports` (task-7-report.md ruling: "no export or copy behaviour
+ * implied on this page"), which is a real navigation from the home page but
+ * a dead click on `/reports` itself, where clicking one of these links would
+ * go nowhere. Rather than change the fixture's shared `href` (which the home
+ * page also reads) or hand-roll inert-vs-live markup here, /reports passes
+ * `footerLinks={false}` to skip the links and keep only `footer.note` if the
+ * given view has one.
  */
-export default function SampleReport({ report = SAMPLE_REPORT, callouts = false }) {
+export default function SampleReport({ report = SAMPLE_REPORT, callouts = false, footerLinks = true }) {
   const r = report;
   const answers = r.round.answers || [];
   const hasDiscussion = Boolean(r.round.discussionQuestions && r.round.discussionQuestions.length);
@@ -94,7 +104,7 @@ export default function SampleReport({ report = SAMPLE_REPORT, callouts = false 
       </div>
 
       <div className="mk-report-foot">
-        {r.footer.links.map((link) => (
+        {footerLinks && r.footer.links.map((link) => (
           <a key={link.label} className="mk-report-btn" href={link.href}>{link.label}</a>
         ))}
         {r.footer.note && <span className="mk-report-note">{r.footer.note}</span>}

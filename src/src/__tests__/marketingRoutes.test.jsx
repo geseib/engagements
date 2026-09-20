@@ -19,6 +19,7 @@ jest.mock('../components/RootPage', () => () => <div data-testid="root-page" />)
 jest.mock('../marketing/HomePage', () => () => <div data-testid="home-page" />);
 jest.mock('../marketing/HowItWorksPage', () => () => <div data-testid="how-page" />);
 jest.mock('../marketing/UseCasesPage', () => () => <div data-testid="cases-page" />);
+jest.mock('../marketing/ReportsPage', () => () => <div data-testid="reports-page" />);
 
 import App from '../App';
 
@@ -31,6 +32,7 @@ const PUBLIC = [
   ['/join', 'root-page'],
   ['/how-it-works', 'how-page'],
   ['/use-cases', 'cases-page'],
+  ['/reports', 'reports-page'],
 ];
 
 test.each(PUBLIC)('%s is public: a signed-out visitor gets the page, not the sign-in form', async (path, testId) => {
