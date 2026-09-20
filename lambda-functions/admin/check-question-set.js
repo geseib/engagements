@@ -48,6 +48,37 @@
  * The organisation's daily cap is not reserved for it either: the work is
  * Engage's, and twenty re-checks would otherwise lock an author out of sharing
  * for the day. The guardrail calls are still counted, on `staffUnits`.
+ *
+ * ── AND ENGAGE'S OWN SETS, WHICH NOTHING HAS EVER CHECKED ──────────────────
+ *
+ *   POST /question-sets/{setId}/check          as Engage, with no org
+ *
+ * A PLATFORM set is served to every organisation, so it reaches further than
+ * anything in the public library, and it is the one library with no measurement
+ * at all (spec §10.5, parked since). It is checked the same way — the same
+ * worker, the same guardrail, the same REVIEW row — and differs in what it must
+ * not do, which is everything an organisation's share does afterwards:
+ *
+ *   nothing publishes    `publish: false`. There is no public copy of an Engage
+ *                        set to mint: the set already IS what every
+ *                        organisation reads.
+ *   nothing is stamped   `stamp: false`. A share stamp is an author's account of
+ *                        where their set went, and this set has no author
+ *                        outside Engage and has gone nowhere.
+ *   nobody is charged    `reserveSubmit` is not called and no units are
+ *                        recorded: there is no organisation whose cap could be
+ *                        spent, and `staffUnits` lives on an organisation's own
+ *                        row. The set's review log carries what was checked.
+ *   only staff may ask   `tenant.canManageScope(PLATFORM)` — the `admins` group
+ *                        AND no active organisation. No flag in the body selects
+ *                        this branch, because none could: a caller inside an
+ *                        organisation always has an orgId and is answered by the
+ *                        branch below, and one without an orgId who is not staff
+ *                        is refused exactly as before.
+ *
+ * An outcome worse than `passed` — `flagged` included, since unlike an
+ * organisation's submission there is no author being told to fix it — raises a
+ * queue row on `PLATFORM#<setId>`, the key §3.2 reserves for Engage's own set.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
@@ -76,10 +107,13 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/
 const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stringify(body) });
 const fail = (statusCode, error) => json(statusCode, { error });
 
+/** Whose content this is, for a log line: an org id, or the library's name. */
+const sourceLabel = (source) => source.orgId || source.scope;
+
 /**
- * TAKE THE LOCK, WRITE THE JOB, DISPATCH THE WORKER — for both callers.
+ * TAKE THE LOCK, WRITE THE JOB, DISPATCH THE WORKER — for all three callers.
  *
- * One routine rather than two because each of the three failure paths has to
+ * One routine rather than three because each of the three failure paths has to
  * undo exactly what the step before it did: a lock somebody else holds is a 409
  * and nothing more, a job row that would not write releases the lock, and a
  * dispatch that would not go releases the lock AND fails the job so the client
@@ -123,9 +157,14 @@ async function startCheck({
       console.warn(`⚠️ share stamp not written for ${source.orgId}/${source.setId} v${version} (${error.message}); the worker will write the outcome`);
     }
   }
-  console.log(`🔎 dispatched check ${jobId} for ${source.orgId}/${source.setId} v${version}${request.recheck ? ' (staff re-check)' : ''}`);
-  return json(202, { jobId, version, status: 'queued', ...(request.recheck ? { recheck: true } : {}) });
+  console.log(`🔎 dispatched check ${jobId} for ${sourceLabel(source)}/${source.setId} v${version}${request.recheck ? ' (staff re-check)' : ''}${request.platform ? ' (Engage\'s own set)' : ''}`);
+  return json(202, {
+    jobId, version, status: 'queued',
+    ...(request.recheck ? { recheck: true } : {}),
+    ...(request.platform ? { platform: true } : {}),
+  });
 }
+
 
 /**
  * THE PLATFORM RE-CHECK. Everything about which set and which version is read
@@ -182,6 +221,46 @@ async function recheckPublished(event, publicSetId, body, context) {
   }, context);
 }
 
+/**
+ * ENGAGE'S OWN SET. Reached only by staff acting as Engage, and only for a set
+ * that is really in the platform library — the metadata read below is against
+ * the platform partition and nothing else, so this branch cannot be steered at
+ * an organisation's content by the id in the path.
+ *
+ * The version is resolved the ordinary way (`resolvePartitionFromMeta`) rather
+ * than pinned the way a re-check pins one: a re-check exists to judge what the
+ * library is ALREADY serving, which may not be the active version, while an
+ * Engage set's active version IS what every organisation plays. A caller may
+ * still name one explicitly, which is how a version that is not active gets
+ * looked at before it is promoted.
+ */
+async function checkPlatformSet(event, setId, body, context) {
+  const source = setRef({ scope: tenant.PLATFORM, orgId: '', setId });
+  const meta = (await db.send(new GetCommand({ TableName: TABLE(), Key: setMetadataKey(source) }))).Item;
+  if (!meta) return fail(404, 'That set is not one of Engage\'s.');
+  const { version } = resolvePartitionFromMeta(source, meta, toVersion(body.version));
+
+  // ACROSS THE LOCK, for the same reason the re-check carries them: `beginCheck`
+  // replaces the row, so a decision a person made about this version — and a
+  // notice declared on it — would be gone the moment a second check started,
+  // and gone for good if the dispatch then failed.
+  const previous = await readReview(db, TABLE(), source, version);
+  return startCheck({
+    source,
+    version,
+    requested: Number(meta.questionCount) || 0,
+    request: {
+      setId, version, publish: false, declaredNotice: [], platform: true,
+    },
+    // WHO: the staff member. WHOSE CONTENT: nobody's — there is no orgId here,
+    // and the worker reads that absence as "platform, and plaintext".
+    caller: { userId: callerUserId(event), username: callerUsername(event) },
+    keep: { ...decisionOf(previous), ...declarationOf(previous) },
+    restore: previous,
+    stamp: false,
+  }, context);
+}
+
 exports.handler = async (event, context) => {
   // The worker: invoked with InvocationType 'Event', against the full 900s.
   if (event && event.__workerMode === true) {
@@ -207,8 +286,9 @@ exports.handler = async (event, context) => {
     if (!jobIdParam) return fail(400, 'jobId is required');
     if (!orgId && !asEngage) return fail(400, 'Choose an organisation before checking a question set.');
     const job = await getJob(db, TABLE(), jobIdParam);
+    const staffJob = (job && job.request && (job.request.recheck === true || job.request.platform === true)) === true;
     const mine = Boolean(job) && job.kind === 'set-check'
-      && ((orgId && job.callerOrgId === orgId) || (asEngage && job.request && job.request.recheck === true));
+      && ((orgId && job.callerOrgId === orgId) || (asEngage && staffJob));
     if (!mine) return fail(404, 'Job not found or expired');
     return json(200, jobToResponse(job));
   }
@@ -227,7 +307,15 @@ exports.handler = async (event, context) => {
       return await recheckPublished(event, setId, body, context);
     }
 
-    if (!orgId) return fail(400, 'Choose an organisation before checking a question set.');
+    // ENGAGE'S OWN LIBRARY. Staff acting as Engage have no active organisation
+    // by definition (tenant.canManageScope's interlock), so this is where they
+    // land — and this used to be the sentence that turned them away. A caller
+    // with no org who is NOT staff is still told exactly what they were told
+    // before, which is the whole of the change to this path.
+    if (!orgId) {
+      if (asEngage) return await checkPlatformSet(event, setId, body, context);
+      return fail(400, 'Choose an organisation before checking a question set.');
+    }
     // The same bar as publishing: this is the step before it.
     if (!tenant.canManageScope(event, tenant.ORG, orgId, 'admin')) {
       return fail(403, 'Only an owner or admin of this organisation can submit a set for review.');

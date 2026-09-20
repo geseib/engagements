@@ -19,6 +19,7 @@ const { queueKey } = require('./shared/moderation-queue');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog } = require('./shared/review-log');
 const { readSnapshot } = require('./shared/snapshot-store');
+const { toVersion } = require('./shared/set-version');
 const { questionText, SET_FIELDS } = require('./shared/publishable');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -132,7 +133,26 @@ exports.handler = async (event) => {
     if (!row || !row.Item) return json(404, { error: 'Nothing is waiting under that entry — it may already be decided.' });
     const pointer = { ...row.Item, sk: row.Item.SK };
     delete pointer.PK; delete pointer.SK;
-    const review = parsed.ref.scope === 'org' ? await readReview(db, TABLE(), parsed.ref, parsed.version) : { status: 'unreviewed' };
+    /*
+      WHERE THE CHECK'S OWN ACCOUNT IS.
+
+      An org row names its version in the key, so the REVIEW row is at the key
+      the sk parses to. ENGAGE'S OWN SET names no version there — `PLATFORM#
+      <setId>` is the whole shape §3.2 reserves — so the version comes off the
+      pointer, which `upsertQueueRow` records on every row whatever keys it. A
+      `0` there is the unversioned partition, which is where most of Engage's
+      library still lives, and `toVersion` turns it back into the null that
+      `setPartition` reads as "no `#v` suffix".
+
+      A PUBLIC# row is left alone: its REVIEW row belongs to the organisation
+      the listing came from, is reached through that organisation's ref rather
+      than this key, and is read on the score card instead.
+    */
+    const scope = parsed.ref.scope;
+    const reviewVersion = scope === 'platform' ? toVersion(pointer.version) : parsed.version;
+    const review = scope === 'org' || scope === 'platform'
+      ? await readReview(db, TABLE(), parsed.ref, reviewVersion)
+      : { status: 'unreviewed' };
     const findings = Array.isArray(review.findings) ? review.findings : [];
     const snapshot = pointer.snapshotKey ? await readSnapshot(s3, BUCKET(), pointer.snapshotKey) : null;
     const log = await readReviewLog(db, TABLE(), parsed.ref);
