@@ -20,17 +20,31 @@
  *   `X-Engage-Org` — an organisation read out of THIS BROWSER's localStorage.
  *   With a token the same guard becomes `callerOrgId(event) === gameOrg`, and a
  *   phone that never chose an organisation sends no header at all.
- *   `auth/pick-active-org.js` then has nothing to go on: rule 2 needs a single
- *   membership, and rule 3's `defaultOrgId` is written by NOTHING today —
- *   `auth/authorizer.js:getDefaultOrgId` says so in terms — so a host in more
- *   than one organisation falls to rule 4 and resolves to NO org. `'' ===
- *   'org_…'` is false, and every authenticated host route answers 404 "Game
- *   not found".
+ *   `auth/pick-active-org.js` then falls through to rule 3, the caller's
+ *   `defaultOrgId` — which names their HOME, written with `if_not_exists` when
+ *   an approved account's personal space is provisioned
+ *   (`admin/orgs/shared/personal-org.js`). So a host in more than one team
+ *   drives the room as their PERSONAL org, `'org_personal' === 'org_teamg'` is
+ *   false, and every authenticated host route answers 404 "Game not found". An
+ *   account with a single membership is unaffected, because rule 2 answers
+ *   first — which is why this is reproducible for some hosts and invisible to
+ *   others.
  *
- *   The same blank org drops ORG from `tenant.readableScopes`, so
- *   `set-version.js:findSetMetadata` never probes the org library at all and the
- *   session's own question set is ABSENT — 404, "Could not read the question
- *   set". Same cause, different route.
+ *   The wrong org points `tenant.readableScopes` and
+ *   `set-version.js:findSetMetadata` at the wrong org library, so the session's
+ *   own question set is ABSENT — 404, "Could not read the question set". Same
+ *   cause, different route.
+ *
+ *   NOTE WHAT THIS MEANS FOR THE FIX BELOW: resolving an organisation is
+ *   necessary and not sufficient. `ActiveOrgSwitcher` reconciles to the
+ *   PERSONAL org when nothing is remembered, which is the same org rule 3 was
+ *   already choosing — so for a session run for a team, the chip's value is
+ *   what the host has to change. The phone cannot pick the session's org for
+ *   them: no route it may call names it. `game/get-game-state.js` publishes the
+ *   set's SCOPE and withholds the org id on purpose ("Not a secret: it is one
+ *   of platform/org/public and names no organisation"), and that route is
+ *   public. So the honest shape today is: resolve one, NAME it on screen, and
+ *   let the host correct it in one tap without leaving the session.
  *
  * ── WHY THE PHONE AND NOT THE LAPTOP ───────────────────────────────────────
  *

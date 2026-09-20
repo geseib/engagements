@@ -346,3 +346,31 @@
   line-height: 1.4;
   color: var(--muted);
 }
+
+/* ------------------------------------------------ the refusal, and the way out
+
+   `.hr-flash--error` (HostRemote.css) already owns the colour, the ground and
+   the hairline; only the LAYOUT is this sheet's business, because that flash is
+   a single row and this one carries a sentence plus a control. At 390px they
+   cannot share a line: the message runs to three lines on the longest case and
+   a button beside it would be 40px wide. */
+.hrq-failure {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.hrq-failure-line {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* Left-aligned rather than full-width: a retry is not the primary action on
+   this pane, and a button spanning the flash would read as one. `flex: none`
+   stops the stretched column from making it the height of the message. */
+.hrq-retry {
+  flex: none;
+  align-self: flex-start;
+}

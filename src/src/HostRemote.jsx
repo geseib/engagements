@@ -20,6 +20,8 @@ import {
   phaseSummary,
   waitingOn,
   fieldNotesFrom,
+  sessionActionMessage,
+  questionSetFailure,
 } from './config/hostRemote';
 
 /**
@@ -155,6 +157,9 @@ function HostRemote() {
   const [panelTab, setPanelTab] = useState(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categories, setCategories] = useState([]);
+  /* Why the category list is empty, when it is empty for a reason. `null` means
+     nothing went wrong — see the load below. */
+  const [categoriesFailure, setCategoriesFailure] = useState(null);
   const [togglingCategory, setTogglingCategory] = useState(false);
 
   // A poll must never stack on a slow reply, and a reply for a game the host has
@@ -441,7 +446,15 @@ function HostRemote() {
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        setError(payload.error || 'Could not change what the room is seeing.');
+        // stage-focus is one of the routes `callerMayDriveSession` guards, so
+        // it answers the same false "Game not found" for a scope mismatch.
+        setError(sessionActionMessage({
+          status: res.status,
+          payload: payload.error || payload.message
+            ? payload
+            : { error: 'Could not change what the room is seeing.' },
+          live: !!snapshot,
+        }));
         return;
       }
       // Re-read rather than patching locally. The state poll is the phone's
@@ -463,19 +476,29 @@ function HostRemote() {
   // timer. Ordered as the set stores them, which is what makes the row index a
   // bitmask position — see categoryRows().
   useEffect(() => {
-    if (!setId) { setCategories([]); return undefined; }
+    if (!setId) { setCategories([]); setCategoriesFailure(null); return undefined; }
 
     let cancelled = false;
+    setCategoriesFailure(null);
     (async () => {
       try {
         // authFetch: this route now carries the Cognito authorizer. The remote
         // is a signed-in host surface, so the token is available here.
         const res = await authFetch(`${apiBase()}question-sets/${setId}/categories`);
-        if (cancelled || !res.ok) return;
+        if (cancelled) return;
+        /*
+          IT USED TO RETURN HERE AND SAY NOTHING, which is the same silent shape
+          the question browser had and the same lie: `get-categories.js` searches
+          the caller's READABLE libraries, so a device acting for no organisation
+          (or the wrong one) gets a 404 — and the disclosure then reported "No
+          categories in this set" about a set that has plenty. An empty state
+          that lies is the one this repo's rules name outright.
+        */
+        if (!res.ok) { setCategoriesFailure(questionSetFailure({ status: res.status })); return; }
         const data = await res.json();
         if (!cancelled) setCategories(Array.isArray(data.categories) ? data.categories : []);
       } catch {
-        /* the Categories disclosure says "no categories" rather than throwing */
+        if (!cancelled) setCategoriesFailure(questionSetFailure({ status: 0 }));
       }
     })();
 
@@ -532,7 +555,14 @@ function HostRemote() {
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(payload.message || payload.error || `That did not go through (${res.status}).`);
+        /*
+          `live` IS THE WHOLE POINT OF THIS CALL, and it is a fact rather than a
+          flag: the state poll is answering for this very session, so a 404
+          saying "Game not found" cannot mean the session is missing. It means
+          `tenant.callerMayDriveSession` refused this device's organisation. See
+          config/hostRemote.js:sessionActionMessage for the deduction.
+        */
+        setError(sessionActionMessage({ status: res.status, payload, live: !!snapshot }));
         return;
       }
 
@@ -555,7 +585,7 @@ function HostRemote() {
     } finally {
       setBusyAction(null);
     }
-  }, [gameId, round, disarm, pollState]);
+  }, [gameId, round, snapshot, disarm, pollState]);
 
   const onPrimary = useCallback(() => {
     if (!action || blocked) return;
@@ -610,7 +640,7 @@ function HostRemote() {
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(payload.error || payload.message || `That did not go through (${res.status}).`);
+        setError(sessionActionMessage({ status: res.status, payload, live: !!snapshot }));
         return;
       }
 
@@ -652,7 +682,13 @@ function HostRemote() {
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        setError(payload.error || `Could not change ${row.name}.`);
+        setError(sessionActionMessage({
+          status: res.status,
+          payload: payload.error || payload.message
+            ? payload
+            : { error: `Could not change ${row.name}.` },
+          live: !!snapshot,
+        }));
         return;
       }
       // The masks live on the state payload the remote already polls, so the
@@ -664,7 +700,7 @@ function HostRemote() {
     } finally {
       setTogglingCategory(false);
     }
-  }, [gameId, togglingCategory, pollState]);
+  }, [gameId, togglingCategory, snapshot, pollState]);
 
   /* -------------------------------------------- display-only, needs page */
 
@@ -1050,16 +1086,18 @@ function HostRemote() {
                   that ever writes it is `ActiveOrgSwitcher`'s mount effect —
                   which lived solely on `WelcomeScreen`. A phone opening
                   `/remote?gameId=…` never passes through that screen, so it
-                  sent no organisation; `auth/pick-active-org.js` then resolved
-                  NONE for a host in more than one, because rule 2 needs a
-                  single membership and rule 3's `defaultOrgId` is written by
-                  nothing today (`auth/authorizer.js:getDefaultOrgId` says so).
-                  With no organisation resolved, `tenant.callerMayDriveSession`
-                  refuses every host control on a session that HAS one — 404,
-                  "Game not found" — and `tenant.readableScopes` drops the org
-                  library, so the session's own question set is never looked for
-                  at all. Meanwhile the unauthenticated polls sail through the
-                  same guard on its "anonymous participant" line, which is why
+                  sent no organisation. `auth/pick-active-org.js` then fell
+                  through to rule 3, the caller's `defaultOrgId` — which names
+                  their HOME, written when their personal space was provisioned
+                  (`admin/orgs/shared/personal-org.js`). A host in more than one
+                  team therefore drove the room as their PERSONAL org, which is
+                  not the team the session belongs to, so
+                  `tenant.callerMayDriveSession` refused every host control on
+                  it — 404, "Game not found" — and `tenant.readableScopes`
+                  pointed `findSetMetadata` at the wrong org library, so the
+                  session's own question set was never looked for at all.
+                  Meanwhile the unauthenticated polls sail through the same
+                  guard on its "anonymous participant" line, which is why
                   the phone could watch a session it could not drive.
 
                   Mounting the same component here resolves one on arrival and
@@ -1145,12 +1183,23 @@ function HostRemote() {
 
               {categoriesOpen && (
                 <div className="hr-card-panel">
-                  <RemoteCategoryList
-                    rows={catRows}
-                    live={categoriesLive}
-                    busy={togglingCategory}
-                    onToggle={toggleCategory}
-                  />
+                  {/* THE REFUSAL COMES BEFORE THE LIST, and replaces it. A list
+                      that is empty because the server would not answer is not an
+                      empty list, and drawing "No categories in this set" under a
+                      404 is the empty state that lies. */}
+                  {categoriesFailure ? (
+                    <p className="hr-flash hr-flash--error" role="alert">
+                      <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                      {categoriesFailure.message}
+                    </p>
+                  ) : (
+                    <RemoteCategoryList
+                      rows={catRows}
+                      live={categoriesLive}
+                      busy={togglingCategory}
+                      onToggle={toggleCategory}
+                    />
+                  )}
                 </div>
               )}
 

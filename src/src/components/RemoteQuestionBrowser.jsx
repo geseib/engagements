@@ -6,6 +6,7 @@ import { remoteQuestionRow, questionForCard, filterRemoteRows } from '../config/
 import { canReveal, revealText, stepSelection } from '../config/questionPreview';
 import { resolveInstruction } from '../config/instructions';
 import { normalizeGameType } from '../config/gameTypes';
+import { questionSetFailure } from '../config/hostRemote';
 import { authFetch } from '../auth/authFetch';
 
 /**
@@ -112,7 +113,21 @@ export default function RemoteQuestionBrowser({
   const [questions, setQuestions] = useState(null);
   const [setName, setSetName] = useState('');
   const [search, setSearch] = useState('');
-  const [failed, setFailed] = useState(false);
+  /*
+    WHAT WENT WRONG, NOT MERELY THAT SOMETHING DID.
+
+    This was a boolean, and the one sentence it rendered — "Could not read the
+    question set" — is what the owner reported from a live session. It covered
+    an expired token, a set in a library this device is not acting for, a 500
+    and a dead radio with the same seven words, none of which a host can act on
+    mid-round. `questionSetFailure` (config/hostRemote.js) splits it, and `null`
+    is the only value that means nothing has gone wrong.
+  */
+  const [failure, setFailure] = useState(null);
+  /* Bumped by Try again. The load is keyed on it so a retry re-runs the effect
+     rather than needing a reload — which mid-session would cost the host the
+     round they are reading. */
+  const [reloadKey, setReloadKey] = useState(0);
   const [asking, setAsking] = useState(null);
   // Which question the preview is showing, or null for the list.
   const [previewId, setPreviewId] = useState(null);
@@ -123,25 +138,41 @@ export default function RemoteQuestionBrowser({
     if (!setId) return undefined;
 
     let cancelled = false;
+    // Back to "Reading the question set…" while a retry is in the air, so the
+    // host sees the attempt rather than the previous failure sitting still.
+    setQuestions(null);
+    setFailure(null);
     (async () => {
       try {
         // authFetch: this route now carries the Cognito authorizer. The phone
         // remote is a host surface and is signed in, so the token is there —
         // a plain fetch here would 401 the browser and render 'unavailable'.
+        //
+        // authFetch ALSO attaches `X-Engage-Org` from this browser's
+        // localStorage, and the server resolves the readable libraries from it
+        // (tenant.js:readableScopes). A device that has never chosen an
+        // organisation therefore cannot see an org-owned set at all, and the
+        // 404 that produces is what `questionSetFailure` has to describe
+        // without claiming the set is gone.
         const res = await authFetch(`${apiBase()}question-sets/${setId}/questions`);
         if (cancelled) return;
-        if (!res.ok) { setFailed(true); setQuestions([]); return; }
+        if (!res.ok) {
+          setFailure(questionSetFailure({ status: res.status }));
+          setQuestions([]);
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
         setQuestions(Array.isArray(data.questions) ? data.questions : []);
         setSetName(data.setName || '');
       } catch {
-        if (!cancelled) { setFailed(true); setQuestions([]); }
+        // No response at all: a status would be a number nobody sent.
+        if (!cancelled) { setFailure(questionSetFailure({ status: 0 })); setQuestions([]); }
       }
     })();
 
     return () => { cancelled = true; };
-  }, [setId]);
+  }, [setId, reloadKey]);
 
   /*
     THE ROWS AND THE QUESTIONS THEY CAME FROM, in one pass.
@@ -433,14 +464,33 @@ export default function RemoteQuestionBrowser({
 
       {questions === null && <p className="hr-hint">Reading the question set…</p>}
 
-      {failed && (
-        <p className="hr-flash hr-flash--error" role="alert">
-          <Icon name="Warning" weight="fill" size={18} color="currentColor" />
-          Could not read the question set.
-        </p>
+      {/* SAY WHICH REFUSAL IT WAS, AND OFFER THE WAY OUT OF IT.
+
+          The retry is the half that matters mid-session: the only recovery
+          this surface had was reloading the page, which on a phone in a host's
+          hand means losing the round they were reading to find out whether a
+          500 was a blip. `.hr-flash--error` is worn rather than repainted —
+          the colour, the ground and the hairline all come from HostRemote.css;
+          `.hrq-failure` adds a column and nothing else, because the message
+          and the button cannot sit on one line at 390px. */}
+      {failure && (
+        <div className="hr-flash hr-flash--error hrq-failure" role="alert">
+          <p className="hrq-failure-line">
+            <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+            {failure.message}
+          </p>
+          <button
+            className="hr-btn hr-btn--ghost hrq-retry"
+            type="button"
+            onClick={() => setReloadKey((n) => n + 1)}
+          >
+            <Icon name="ArrowClockwise" weight="bold" size={16} color="currentColor" />
+            Try again
+          </button>
+        </div>
       )}
 
-      {questions !== null && !failed && shown.length === 0 && (
+      {questions !== null && !failure && shown.length === 0 && (
         <p className="hr-hint">
           {rows.length === 0 ? 'This set has no questions.' : 'Nothing matches that search.'}
         </p>
