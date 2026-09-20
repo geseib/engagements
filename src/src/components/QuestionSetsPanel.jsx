@@ -7,6 +7,10 @@ import useListControls from '../hooks/useListControls';
 import {
   setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
 } from '../utils/setOwnerTag';
+import {
+  isUnreadableSet, unreadableSetName,
+  UNREADABLE_LABEL, UNREADABLE_REASON, UNREADABLE_SUB,
+} from '../utils/unreadableSet';
 import { matchesListFilters } from '../config/listControls';
 import {
   GAME_TYPE_LIST,
@@ -515,13 +519,25 @@ export default function QuestionSetsPanel({
                     clipped line with one `title` carrying the whole of it.
                   */
                   const publisher = set.sourceOrgName ? `by ${set.sourceOrgName}` : '';
-                  const blurb = truncate(set.description, 110);
+                  // The description slot says WHY it is blank rather than showing
+                  // the em dash this column uses for a set that genuinely has no
+                  // description — same glyph, opposite meaning.
+                  const blurb = isUnreadableSet(set) ? UNREADABLE_SUB : truncate(set.description, 110);
                   const subLine = [publisher, blurb].filter(Boolean).join(' · ') || '—';
                   return (
                     <tr key={set.id}>
                       <td>
+                        {/*
+                          A SET NOBODY NAMED AND A SET NOBODY CAN READ LOOK
+                          IDENTICAL IF YOU JUST RENDER THE FIELD. `name` comes
+                          back null on a row the server could not decrypt, and
+                          `{set.name}` for null is an empty cell — which cannot
+                          be told from a rendering failure, and leaves nothing on
+                          the row to quote when reporting it. The id was never
+                          encrypted, so it is the handle that survives.
+                        */}
                         <span className="qsets-nm">
-                          {set.name}
+                          {isUnreadableSet(set) ? unreadableSetName(set) : set.name}
                           <SetImageBadge hasImages={set.hasImages} />
                         </span>
                         <span className="qsets-sub" title={subLine}>{subLine}</span>
@@ -561,6 +577,20 @@ export default function QuestionSetsPanel({
                               </span>
                             )}
                             {!set.totalQuestions && <span className="qsets-chip qsets-chip--bad">Empty</span>}
+                            {/*
+                              THE STATE NOBODY CAN FIX FROM THIS SCREEN, NAMED
+                              ANYWAY. Every other column on this row still renders
+                              — the count, the type, Active — so without a marker
+                              an unreadable set reads as a healthy one somebody
+                              forgot to title. The `title` carries the consequence
+                              rather than the severity: what cannot be shown, and
+                              that it cannot be played until it is restored.
+                            */}
+                            {isUnreadableSet(set) && (
+                              <span className="qsets-chip qsets-chip--bad" title={UNREADABLE_REASON}>
+                                {UNREADABLE_LABEL}
+                              </span>
+                            )}
                             {/*
                               AI, AND WHETHER ANYONE HAS READ IT. A generated set
                               arrives switched OFF and unreviewed
@@ -647,32 +677,49 @@ export default function QuestionSetsPanel({
                           {rowActions ? rowActions(set) : (set.canManage !== false ? (
                             <>
                               {/*
-                                THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. On an
-                                unreviewed generation the task is to READ it and
-                                then decide; "Edit" is the label for a set you
-                                already trust. It is also the row's primary
-                                action in that state, because it is the only
-                                thing anyone should be doing to it.
+                                EDIT, OPEN, COPY AND SHARE ALL NEED THE ROW'S
+                                CONTENT — to render into the editor, to submit
+                                for the content check, or to duplicate. None of
+                                those can happen on a row the server could not
+                                decrypt: the editor would open on nulled fields
+                                and a save would write them back over whatever
+                                is still recoverable, and a share would submit
+                                nothing for the check to read. Delete alone
+                                needs no content and stays offered, because it
+                                is the one control a staff member can actually
+                                use to clear a row that will never recover.
                               */}
-                              <button
-                                type="button"
-                                className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false ? ' qsets-btn--primary' : ''}`}
-                                onClick={() => onEdit && onEdit(set)}
-                                title={set.isAIGenerated && set.active === false
-                                  ? 'Read what the generator wrote, then switch it on'
-                                  : 'Edit this question set'}
-                              >
-                                {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
-                              </button>
-                              {rowCanShare(set) && (
-                                <button
-                                  type="button"
-                                  className="qsets-btn qsets-btn--sm"
-                                  onClick={() => onShare(set)}
-                                  title="Submit the active version for the content check; it goes public if it passes"
-                                >
-                                  Share
-                                </button>
+                              {!isUnreadableSet(set) && (
+                                <>
+                                  {/*
+                                    THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. On an
+                                    unreviewed generation the task is to READ it and
+                                    then decide; "Edit" is the label for a set you
+                                    already trust. It is also the row's primary
+                                    action in that state, because it is the only
+                                    thing anyone should be doing to it.
+                                  */}
+                                  <button
+                                    type="button"
+                                    className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false ? ' qsets-btn--primary' : ''}`}
+                                    onClick={() => onEdit && onEdit(set)}
+                                    title={set.isAIGenerated && set.active === false
+                                      ? 'Read what the generator wrote, then switch it on'
+                                      : 'Edit this question set'}
+                                  >
+                                    {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
+                                  </button>
+                                  {rowCanShare(set) && (
+                                    <button
+                                      type="button"
+                                      className="qsets-btn qsets-btn--sm"
+                                      onClick={() => onShare(set)}
+                                      title="Submit the active version for the content check; it goes public if it passes"
+                                    >
+                                      Share
+                                    </button>
+                                  )}
+                                </>
                               )}
                               <button
                                 type="button"
@@ -693,24 +740,32 @@ export default function QuestionSetsPanel({
                                   duplicate or nothing, and the reported flow was
                                   somebody wanting to look, adjust and then
                                   keep. Delete stays absent: that one has no
-                                  copy-on-write equivalent. */}
-                              <button
-                                type="button"
-                                className="qsets-btn qsets-btn--sm"
-                                onClick={() => onEdit && onEdit(set)}
-                                title="Open it. Saving makes your organisation its own copy."
-                              >
-                                Open
-                              </button>
-                              {onCopy && (
-                                <button
-                                  type="button"
-                                  className="qsets-btn qsets-btn--sm"
-                                  onClick={() => onCopy(set)}
-                                  title="Take a copy now, without opening it"
-                                >
-                                  Copy
-                                </button>
+                                  copy-on-write equivalent. Neither Open nor Copy
+                                  is offered on a row the server could not
+                                  decrypt — there is no content behind either
+                                  one, for the same reason Edit and Share are
+                                  withheld above. */}
+                              {!isUnreadableSet(set) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="qsets-btn qsets-btn--sm"
+                                    onClick={() => onEdit && onEdit(set)}
+                                    title="Open it. Saving makes your organisation its own copy."
+                                  >
+                                    Open
+                                  </button>
+                                  {onCopy && (
+                                    <button
+                                      type="button"
+                                      className="qsets-btn qsets-btn--sm"
+                                      onClick={() => onCopy(set)}
+                                      title="Take a copy now, without opening it"
+                                    >
+                                      Copy
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </>
                           ))}

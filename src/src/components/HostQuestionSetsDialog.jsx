@@ -10,6 +10,10 @@ import QuestionSetUploadPanel from './QuestionSetUploadPanel';
 import QuestionSetDeleteDialog from './QuestionSetDeleteDialog';
 import QuestionSetEditor from './QuestionSetEditor';
 import { authFetch } from '../auth/authFetch';
+import {
+  isUnreadableSet, unreadableSetName,
+  UNREADABLE_LABEL, UNREADABLE_REASON, UNREADABLE_SUB,
+} from '../utils/unreadableSet';
 import { recallAllGenerationJobs } from '../utils/generationJob';
 import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
 import { adminApiUrl } from '../utils/adminApi';
@@ -569,10 +573,28 @@ export default function HostQuestionSetsDialog({
                 ) : (
                   <tr key={set.id}>
                     <td>
+                      {/*
+                        THESE ARE THE ORG'S OWN SETS, WHICH IS THE ONLY CONTENT
+                        THAT IS ENCRYPTED AT ALL — so this table is where a row
+                        the server could not decrypt actually lands. `{set.name}`
+                        on a nulled name leaves the row's only identifier blank
+                        while Rename and Delete stay pointed at it. The house
+                        table below already fell back to the id for a nameless
+                        row; this one gets the same handle, and is told apart
+                        from a set nobody titled.
+                      */}
                       <span className="qsets-nm">
-                        {set.name}
+                        {isUnreadableSet(set) ? unreadableSetName(set) : set.name}
                         <SetImageBadge hasImages={set.hasImages} />
                       </span>
+                      {isUnreadableSet(set) && (
+                        <>
+                          <span className="qsets-chip qsets-chip--bad" title={UNREADABLE_REASON}>
+                            {UNREADABLE_LABEL}
+                          </span>
+                          <span className="qsets-sub">{UNREADABLE_SUB}</span>
+                        </>
+                      )}
                       {/*
                         WHAT IT IS, THEN WHAT FOLLOWS FROM THAT. "Not offered in
                         the picker" is a consequence phrased as a setting, and on

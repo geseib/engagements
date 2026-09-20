@@ -590,3 +590,107 @@ describe('rowActions', () => {
     expect(screen.getByRole('columnheader', { name: /^state$/i })).toBeInTheDocument();
   });
 });
+
+/* ------------------------------------------------- a row that cannot be read */
+
+describe('a set whose content could not be decrypted', () => {
+  /*
+    THIS ROW IS NEW, AND SO IS THE STATE IT DESCRIBES. Until admin/get-question-
+    sets.js learned to degrade per row, one unreadable ciphertext threw out of
+    the handler's Promise.all and the whole response was a 500 — so this shape
+    reached the client exactly never, and the panel had no rendering for it.
+
+    What arrives now: every encrypted field nulled (never the raw envelope, never
+    a fabricated title) and `decryptFailed` saying why. The panel's job is to
+    keep those two facts distinguishable — "nobody named this" and "nobody can
+    read this" are different situations with different owners.
+  */
+  const UNREADABLE = {
+    id: 'q3retro',
+    name: null,
+    description: null,
+    engagementType: 'call-and-answer',
+    totalQuestions: 42,
+    categoryCount: 6,
+    active: true,
+    quickstart: false,
+    decryptFailed: true,
+    createdAt: '2026-08-01T10:00:00.000Z',
+    updatedAt: '2026-08-07T10:00:00.000Z',
+  };
+  const mountWithUnreadable = () =>
+    render(<QuestionSetsPanel questionSets={[...SETS, UNREADABLE]} />);
+
+  // rejects: rendering `set.name` straight through. A nulled name is an empty
+  // cell, which cannot be told from a row that failed to render and gives
+  // nobody anything to quote when they report it. The set id was never
+  // encrypted — it is half the key — so it is the one handle left.
+  test('the row is still identifiable, by the one field that was never encrypted', () => {
+    mountWithUnreadable();
+    expect(screen.getByText('q3retro')).toBeInTheDocument();
+  });
+
+  // rejects: letting it pass as an ordinary row. Every other column still
+  // renders — 42 questions, Active, Call & Answer — so without a marker the row
+  // reads as a healthy set that someone forgot to name.
+  test('it is marked unreadable, not left looking like an ordinary set', () => {
+    mountWithUnreadable();
+    const row = screen.getByText('q3retro').closest('tr');
+    expect(within(row).getByText(/unreadable/i)).toBeInTheDocument();
+  });
+
+  // rejects: a bare chip. "A reduction with no recovery is a deletion" — the
+  // word alone tells a host nothing about whether they broke it, whether it is
+  // coming back, or whether they should stop trying to use it.
+  test('the marker carries its explanation, because the word alone is not an action', () => {
+    mountWithUnreadable();
+    const row = screen.getByText('q3retro').closest('tr');
+    const chip = within(row).getByText(/unreadable/i);
+    expect(chip).toHaveAttribute('title', expect.stringMatching(/decrypt/i));
+  });
+
+  // rejects: reusing the em-dash placeholder the description column shows for a
+  // set that genuinely has none. Same glyph, opposite meaning.
+  test('the description slot says why it is blank instead of showing the "none" glyph', () => {
+    mountWithUnreadable();
+    const row = screen.getByText('q3retro').closest('tr');
+    expect(within(row).queryByText('—')).toBeNull();
+  });
+
+  // rejects: a change that reads `decryptFailed` as "hide it". A row nobody can
+  // see is a row nobody restores; the handler deliberately keeps it listed.
+  test('it is still listed and still counted, not quietly dropped', () => {
+    mountWithUnreadable();
+    expect(screen.getByText('6 sets')).toBeInTheDocument();
+  });
+
+  /*
+    EXTENDED BEYOND THE ROW THIS FEATURE SHIPPED WITH. Edit, Open, Copy and
+    Share all need the row's content — to render into the editor, to submit
+    for the content check, or to duplicate — and none of them can do anything
+    useful with `name: null, description: null`. Delete needs none of that, so
+    it is the one control left: the row that will never recover is the row a
+    staff member most needs to be able to clear.
+  */
+  test('Edit and Share are withheld on a manageable row that cannot be read', () => {
+    const { container } = render(<QuestionSetsPanel
+      questionSets={[...SETS, { ...UNREADABLE, canManage: true }]}
+      showVisibility onShare={jest.fn()}
+    />);
+    const row = within(container).getByText('q3retro').closest('tr');
+    expect(within(row).queryByRole('button', { name: /^edit$|^review$/i })).toBeNull();
+    expect(within(row).queryByRole('button', { name: /^share$/i })).toBeNull();
+    expect(within(row).getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
+  });
+
+  test('Open and Copy are withheld on a read-only row that cannot be read', () => {
+    const onCopy = jest.fn();
+    const { container } = render(<QuestionSetsPanel
+      questionSets={[...SETS, { ...UNREADABLE, canManage: false }]}
+      onCopy={onCopy}
+    />);
+    const row = within(container).getByText('q3retro').closest('tr');
+    expect(within(row).queryByRole('button', { name: /^open$/i })).toBeNull();
+    expect(within(row).queryByRole('button', { name: /^copy$/i })).toBeNull();
+  });
+});
