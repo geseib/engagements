@@ -1,9 +1,10 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, DeleteCommand, PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { resolveSetPartition } = require('./set-version');
+const { refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
-const { encryptItem } = require('./tenant-crypto');
+const { encryptItem, decryptItem } = require('./tenant-crypto');
+const { ORG } = require('./tenant');
 const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
@@ -395,19 +396,41 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
           // Read the VERSION this round was served from (the REF row records
           // it). Scoring against a different version's correctAnswer than the
           // one the player was shown is the worst possible drift.
+          //
+          // Resolved with the PAIR the REF row pins, never the bare id: a bare
+          // id reads as PLATFORM (set-version.js `setRef`), so for a session
+          // played from an organisation's own set or from a public copy this
+          // read missed, the block below was skipped without a sound, and the
+          // whole room was stored with no IsCorrect and no PointsEarned
+          // (tests/trivia-scoring-set-scope.js).
           const resolvedSet = await resolveSetPartition(
-            db, process.env.TABLE_NAME, questionSetId, questionRef.Item.SetVersion
+            db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
           );
 
           // Get the actual question to check correct answer
-          const question = await db.send(new GetCommand({
+          const questionRow = await db.send(new GetCommand({
             TableName: process.env.TABLE_NAME,
             Key: {
               PK: resolvedSet.pk,
               SK: sourceQuestionId
             }
           }));
-          
+
+          // An org's optionA..optionF are encrypted at rest, and an envelope is
+          // not a string: trivia-answer.js draws no option from one, so every
+          // answer in the room resolves to no slot and is marked WRONG —
+          // whichever way the set spells the right one. Decrypted from the
+          // SET's org (the pinned pair above), not the session's: a host in
+          // org A may be running a platform or public set, which was never
+          // encrypted and passes through. A failure to decrypt lands in the
+          // catch below and the answer is stored unscored, as it always was.
+          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+          const question = {
+            Item: questionRow.Item && setOrgId
+              ? await decryptItem(setOrgId, 'question', questionRow.Item)
+              : questionRow.Item
+          };
+
           if (question.Item) {
             const correctAnswer = question.Item.correctAnswer;
             const points = question.Item.points || 10;
