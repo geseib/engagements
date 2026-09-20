@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Engagements — turn your team's own material into decisions</title>
+<link rel="stylesheet" href="mk.css">
+</head>
+<body class="mk-anno-on">
+<div class="mk-root">
+
+<!-- ======================================================== the ridge scene
+     Four layers, inline SVG, no file fetched: sky (with the one amber glow),
+     back, mid, front. The dashed route climbs the mid ridge from base camp to
+     the summit; the amber dot is the climber, and the flag is the report.
+     The glow is clamped to the bottom 40% of the hero band — #F4EDE4 measures
+     2.84:1 on #C77B4A, so nothing warm may rise into the headline's half.
+     ====================================================================== -->
+<div class="mk-ridge" aria-hidden="true">
+  <div class="mk-ridge-sky"></div>
+  <svg class="mk-ridge-stars" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMin slice">
+    <circle cx="88" cy="54" r="1.5"/><circle cx="212" cy="122" r="1.1"/>
+    <circle cx="318" cy="40" r="1.7"/><circle cx="404" cy="150" r="1"/>
+    <circle cx="512" cy="76" r="1.3"/><circle cx="596" cy="34" r="1"/>
+    <circle cx="688" cy="118" r="1.6"/><circle cx="770" cy="58" r="1.1"/>
+    <circle cx="866" cy="142" r="1.2"/><circle cx="944" cy="46" r="1.5"/>
+    <circle cx="1042" cy="104" r="1"/><circle cx="1136" cy="66" r="1.4"/>
+    <circle cx="150" cy="196" r="1"/><circle cx="1004" cy="180" r="1.1"/>
+  </svg>
+  <div class="mk-ridge-glow"></div>
+  <div class="mk-ridge-haze"></div>
+
+  <svg class="mk-ridge-layer mk-ridge-back" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 300 L120 236 L230 268 L360 176 L470 232 L600 108 L720 196 L840 150 L960 224 L1080 180 L1200 246 L1200 420 L0 420 Z"/>
+  </svg>
+
+  <svg class="mk-ridge-layer mk-ridge-mid" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 352 L150 300 L280 330 L420 244 L540 292 L600 214 L680 270 L810 226 L940 300 L1060 262 L1200 318 L1200 420 L0 420 Z"/>
+    <path class="mk-ridge-route" d="M92 418 C 196 398 238 352 328 338 S 468 302 520 270 S 572 236 600 216"/>
+    <circle class="mk-ridge-climber-halo" cx="520" cy="270" r="15"/>
+    <circle class="mk-ridge-climber" cx="520" cy="270" r="6.5"/>
+    <line class="mk-ridge-mast" x1="600" y1="216" x2="600" y2="186"/>
+    <path class="mk-ridge-flag" d="M601 186 L628 195 L601 204 Z"/>
+  </svg>
+
+  <svg class="mk-ridge-layer mk-ridge-front" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 400 L110 360 L240 388 L380 322 L500 364 L600 300 L700 348 L830 310 L980 368 L1110 336 L1200 372 L1200 420 L0 420 Z"/>
+  </svg>
+</div>
+
+<div class="mk-page">
+
+<!-- ==================================================================== nav -->
+<header class="mk-nav">
+  <div class="mk-shell mk-nav-in">
+    <a class="mk-brand" href="01-home.html">
+      <svg class="mk-brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M2 27 L11 13 L16 20 L22 6 L30 27 Z"/>
+      </svg>
+      Engagements
+    </a>
+    <nav class="mk-nav-links" aria-label="Main">
+      <a class="mk-nav-link" href="02-how-it-works.html">How it works</a>
+      <a class="mk-nav-link" href="03-use-cases.html">Use cases</a>
+      <a class="mk-nav-link" href="04-reports.html">Reports</a>
+      <a class="mk-nav-link" href="05-help.html">Help</a>
+    </nav>
+    <div class="mk-nav-acts">
+      <a class="mk-btn mk-btn-quiet" href="#">Sign in</a>
+      <a class="mk-btn mk-btn-primary" href="#">Create a host account</a>
+      <button class="mk-nav-burger" type="button" aria-label="Menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- =================================================================== hero -->
+<section class="mk-hero">
+  <div class="mk-shell mk-hero-top">
+    <p class="mk-kicker">Base camp</p>
+    <h1 class="mk-display mk-hero-copy" style="margin-top:18px">
+      Turn your team&rsquo;s own material into decisions everyone climbed toward.
+    </h1>
+    <p class="mk-lead mk-hero-sub">
+      Build question sets from what your team already has. Run them as trivia to warm the
+      room up, or as call and answer to collect every idea and put it to a vote. Everyone
+      plays from their phone. The session ends with a report.
+    </p>
+  </div>
+
+  <div class="mk-shell mk-hero-foot">
+    <div class="mk-hero-ctas">
+      <a class="mk-btn mk-btn-primary mk-btn-lg" href="#">Create a host account</a>
+      <a class="mk-btn mk-btn-ghost mk-btn-lg" href="#">Sign in</a>
+    </div>
+
+    <!-- The compact join entry. `/join` keeps the full-page version; this is the
+         same component at variant="compact". -->
+    <form class="jce" onsubmit="return false">
+      <label class="jce-label" for="jce-code">Have a code?</label>
+      <div class="jce-row">
+        <div class="jce-cells" aria-hidden="true">
+          <div class="jce-cell">4</div><div class="jce-cell">8</div>
+          <div class="jce-cell">2</div><div class="jce-cell jce-next"></div>
+        </div>
+        <button class="mk-btn mk-btn-primary jce-go" type="submit">Join</button>
+      </div>
+      <input id="jce-code" type="text" inputmode="numeric" maxlength="4" hidden
+             aria-label="Session code, 4 digits">
+      <p class="jce-hint">No account and no app. The code is on the screen at the front of the room.</p>
+    </form>
+  </div>
+</section>
+
+<!-- ================================================================ problem -->
+<section class="mk-section mk-section--a mk-problem">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The climb starts here</p>
+      <h2 class="mk-title">Most sessions lose the thing they were for.</h2>
+    </div>
+    <div class="mk-problem-grid">
+      <article class="mk-stmt">
+        <span class="mk-stmt-n">01</span>
+        <h3>A few voices decide</h3>
+        <p>The same three people talk. The quiet half of the room has the answer and no
+           way into the conversation.</p>
+      </article>
+      <article class="mk-stmt">
+        <span class="mk-stmt-n">02</span>
+        <h3>Ideas leave with the people</h3>
+        <p>Written on a whiteboard, photographed by two of them, typed up by nobody.</p>
+      </article>
+      <article class="mk-stmt">
+        <span class="mk-stmt-n">03</span>
+        <h3>Nobody remembers what was decided</h3>
+        <p>Six weeks later the decision is folklore, and the reasoning that produced it
+           is gone.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================== two modes -->
+<section class="mk-section mk-section--b mk-modes">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">Two ways to play</p>
+      <h2 class="mk-title">One set of questions, two shapes of round.</h2>
+      <p class="mk-lead">Both run on the screen at the front of the room while everyone
+        answers on their own phone.</p>
+    </div>
+
+    <!-- Mode 1 — trivia -->
+    <div class="mk-mode">
+      <div class="mk-mode-copy">
+        <span class="mk-mode-tag">Trivia</span>
+        <h3>Warm the room up, or check what landed.</h3>
+        <p>A question, four options, one right answer. The room answers, the answer is
+           revealed with its explanation, and the standings move.</p>
+        <ul class="mk-mode-list">
+          <li>Ask, then results. Trivia has no vote phase.</li>
+          <li>Each question carries its own category, difficulty and explanation.</li>
+          <li>Running standings after every question.</li>
+        </ul>
+      </div>
+      <div class="mk-mode-screens">
+        <figure class="mk-device mk-device--tv" style="margin:0">
+          <div class="mk-device-bezel">
+            <div class="mk-device-screen">
+              <div class="mk-clip">
+                <span class="mk-clip-badge">Clip slot</span>
+                <div class="mk-ss">
+                  <div class="mk-ss-top">
+                    <span class="mk-ss-dot"></span>
+                    <span class="mk-ss-chip">Trivia &middot; Question 4 of 10</span>
+                    <span class="mk-ss-code">4821</span>
+                  </div>
+                  <p class="mk-ss-q">Which of these did the 2025 retro name as the single
+                     biggest cause of rework?</p>
+                  <div class="mk-ss-opts">
+                    <div class="mk-ss-opt"><b>A</b> Unclear acceptance criteria</div>
+                    <div class="mk-ss-opt"><b>B</b> Late design changes</div>
+                    <div class="mk-ss-opt mk-ss-right"><b>C</b> Requirements agreed in a call and never written down</div>
+                    <div class="mk-ss-opt"><b>D</b> Environment drift</div>
+                  </div>
+                  <div class="mk-ss-foot">
+                    <span class="mk-ss-chip">18 of 20 answered</span>
+                    <span class="mk-ss-grow"></span>
+                    <span class="mk-ss-chip">Reveal</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mk-device-foot"></div>
+          <figcaption class="mk-device-cap"><b>trivia-host</b> — question, answers lock,
+            the right answer and the standings.</figcaption>
+        </figure>
+
+        <figure class="mk-device mk-device--phone" style="margin:0">
+          <div class="mk-device-bezel">
+            <div class="mk-device-screen">
+              <div class="mk-device-notch"></div>
+              <div class="mk-clip">
+                <span class="mk-clip-badge">Clip</span>
+                <div class="mk-ss">
+                  <div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Priya</span></div>
+                  <p class="mk-ss-q">Biggest cause of rework?</p>
+                  <div class="mk-ss-opts">
+                    <div class="mk-ss-opt"><b>A</b> Criteria</div>
+                    <div class="mk-ss-opt"><b>B</b> Design</div>
+                    <div class="mk-ss-opt mk-ss-right"><b>C</b> Never written</div>
+                    <div class="mk-ss-opt"><b>D</b> Drift</div>
+                  </div>
+                  <div class="mk-ss-cta">Locked in</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption class="mk-device-cap"><b>trivia-player</b> — answering.</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <!-- Mode 2 — call and answer -->
+    <div class="mk-mode mk-mode--flip">
+      <div class="mk-mode-copy">
+        <span class="mk-mode-tag">Call and answer</span>
+        <h3>Pose a prompt, collect every idea, then vote.</h3>
+        <p>Everyone writes at once, so the room hears from the people it usually does not.
+           Then the room reads the answers and votes on them.</p>
+        <ul class="mk-mode-list">
+          <li>Ask, vote, results &mdash; three phases you move through.</li>
+          <li>Every answer is kept, not only the ones that won votes.</li>
+          <li>The vote breakdown is kept per answer and goes into the report.</li>
+        </ul>
+      </div>
+      <div class="mk-mode-screens">
+        <figure class="mk-device mk-device--tv" style="margin:0">
+          <div class="mk-device-bezel">
+            <div class="mk-device-screen">
+              <div class="mk-clip">
+                <span class="mk-clip-badge">Clip slot</span>
+                <div class="mk-ss">
+                  <div class="mk-ss-top">
+                    <span class="mk-ss-dot"></span>
+                    <span class="mk-ss-chip">Call and answer &middot; Vote</span>
+                    <span class="mk-ss-code">4821</span>
+                  </div>
+                  <p class="mk-ss-q">What should we stop doing in the next quarter?</p>
+                  <div class="mk-ss-bars">
+                    <div class="mk-ss-bar"><span>Parallel discovery on three products</span><em>9</em>
+                      <span class="mk-ss-track"><i style="width:82%"></i></span></div>
+                    <div class="mk-ss-bar"><span>Weekly status meeting nobody reads</span><em>7</em>
+                      <span class="mk-ss-track"><i style="width:64%"></i></span></div>
+                    <div class="mk-ss-bar"><span>Hand-built release notes</span><em>4</em>
+                      <span class="mk-ss-track mk-ss-cool"><i style="width:36%"></i></span></div>
+                  </div>
+                  <div class="mk-ss-foot">
+                    <span class="mk-ss-chip">20 votes cast</span>
+                    <span class="mk-ss-grow"></span>
+                    <span class="mk-ss-chip">Results</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mk-device-foot"></div>
+          <figcaption class="mk-device-cap"><b>poll-host</b> — prompt, answers arriving,
+            the vote, results revealed.</figcaption>
+        </figure>
+
+        <figure class="mk-device mk-device--phone" style="margin:0">
+          <div class="mk-device-bezel">
+            <div class="mk-device-screen">
+              <div class="mk-device-notch"></div>
+              <div class="mk-clip">
+                <span class="mk-clip-badge">Clip</span>
+                <div class="mk-ss">
+                  <div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Your idea</span></div>
+                  <p class="mk-ss-q">What should we stop doing?</p>
+                  <div class="mk-ss-field">Parallel discovery on three products at once</div>
+                  <div class="mk-ss-doc">
+                    <span class="mk-ss-line"></span>
+                    <span class="mk-ss-line mk-ss-short"></span>
+                  </div>
+                  <div class="mk-ss-cta">Send</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption class="mk-device-cap"><b>poll-player</b> — writing, then voting.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================= your material -->
+<section class="mk-section mk-section--a mk-material">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">Your own material</p>
+      <h2 class="mk-title">The questions come from your work, not from a quiz pack.</h2>
+      <p class="mk-lead">Hand the builder the strategy document, the retro notes, the
+        deck you are about to present. It drafts a set. You decide what runs.</p>
+    </div>
+
+    <div class="mk-flow">
+      <article class="mk-flow-step">
+        <div class="mk-flow-n">1</div>
+        <h3>Supply the material</h3>
+        <p>Documents and topics you already have. Or write the questions yourself &mdash;
+           the builder is a convenience, not a requirement.</p>
+      </article>
+      <article class="mk-flow-step">
+        <div class="mk-flow-n">2</div>
+        <h3>A set is drafted</h3>
+        <p>The AI builders turn it into trivia questions or call-and-answer prompts, each
+           with its category and its detail.</p>
+      </article>
+      <article class="mk-flow-step">
+        <div class="mk-flow-n">3</div>
+        <h3>You review and edit</h3>
+        <p>Preview the set as a player will see it, change anything, drop anything.
+           Nothing runs until you start a session with it.</p>
+      </article>
+      <article class="mk-flow-step">
+        <div class="mk-flow-n">4</div>
+        <h3>It is stored where it belongs</h3>
+        <p>In your organisation&rsquo;s private library, encrypted. Or take a starting
+           point from the moderated public library.</p>
+      </article>
+    </div>
+
+    <div class="mk-flow" style="margin-top:26px;grid-template-columns:minmax(0,1fr)">
+      <figure class="mk-device mk-device--laptop" style="margin:0;max-width:560px">
+        <div class="mk-device-bezel">
+          <div class="mk-device-screen">
+            <div class="mk-clip">
+              <span class="mk-clip-badge">Clip slot</span>
+              <div class="mk-ss">
+                <div class="mk-ss-top">
+                  <span class="mk-ss-dot"></span>
+                  <span class="mk-ss-chip">Builder &middot; drafting</span>
+                  <span class="mk-ss-code">14 / 20</span>
+                </div>
+                <div class="mk-ss-doc">
+                  <span class="mk-ss-line"></span><span class="mk-ss-line"></span>
+                  <span class="mk-ss-line mk-ss-warm"></span><span class="mk-ss-line mk-ss-short"></span>
+                </div>
+                <div class="mk-ss-opts">
+                  <div class="mk-ss-opt"><b>Q12</b> Which constraint did the plan name first?</div>
+                  <div class="mk-ss-opt"><b>Q13</b> What does &ldquo;done&rdquo; mean for a discovery spike?</div>
+                </div>
+                <div class="mk-ss-foot">
+                  <span class="mk-ss-chip">Review before anything runs</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mk-device-foot"></div>
+        <figcaption class="mk-device-cap"><b>builder</b> — a set being drafted from
+          supplied material.</figcaption>
+      </figure>
+    </div>
+
+    <p class="mk-material-note">
+      <b>Private stays private.</b> An organisation&rsquo;s sets are encrypted and are
+      readable only inside that organisation. The public library is separate, moderated,
+      and nothing reaches it without being published on purpose.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================= the room reacts -->
+<section class="mk-section mk-section--b mk-react">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The room reacts</p>
+      <h2 class="mk-title">Answers arrive live. The team votes. The strongest ideas rise.</h2>
+    </div>
+
+    <div class="mk-react-grid">
+      <div class="mk-tally">
+        <div class="mk-tally-head">
+          <h3>What should we stop doing?</h3>
+        </div>
+        <p class="mk-muted" style="margin-top:10px">20 people answered. 20 votes cast.</p>
+        <div class="mk-tally-rows">
+          <div class="mk-tally-row">
+            <div class="mk-tally-top"><b>Parallel discovery on three products at once</b>
+              <span class="mk-tally-n">9 votes</span></div>
+            <div class="mk-tally-track"><i style="width:82%"></i></div>
+          </div>
+          <div class="mk-tally-row">
+            <div class="mk-tally-top"><b>The weekly status meeting nobody reads</b>
+              <span class="mk-tally-n">7 votes</span></div>
+            <div class="mk-tally-track"><i style="width:64%"></i></div>
+          </div>
+          <div class="mk-tally-row mk-tally-row--cool">
+            <div class="mk-tally-top"><b>Hand-built release notes</b>
+              <span class="mk-tally-n">4 votes</span></div>
+            <div class="mk-tally-track"><i style="width:36%"></i></div>
+          </div>
+          <div class="mk-tally-row mk-tally-row--cool">
+            <div class="mk-tally-top"><b>Two-week estimates on unscoped work</b>
+              <span class="mk-tally-n">0 votes</span></div>
+            <div class="mk-tally-track"><i style="width:2%"></i></div>
+          </div>
+        </div>
+        <p class="mk-tally-note">The answer with no votes is kept too. A session that
+          quietly discards it is a session you cannot go back to.</p>
+      </div>
+
+      <div>
+        <p class="mk-lead">Everyone writes at the same time, so the room does not have to
+          take turns to be heard.</p>
+        <ul class="mk-mode-list" style="margin-top:22px">
+          <li>Answers appear on the front screen as they are submitted.</li>
+          <li>The room reads them, then votes &mdash; on what was actually said, not on
+              who said it loudest.</li>
+          <li>The count is a vote count. It is not a quality score and the report never
+              calls it one.</li>
+          <li>Names can be hidden for a whole session if the subject needs it.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== summit: the report -->
+<section class="mk-section mk-section--a mk-summit">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The summit</p>
+      <h2 class="mk-title">Everyone leaves with the same page.</h2>
+      <p class="mk-lead">The report is written as the session runs. Nobody has to type
+        the whiteboard up afterwards.</p>
+    </div>
+
+    <!-- The only paper surface on the page. Markup and theme convert together. -->
+    <div class="mk-report" data-theme="light" style="margin-top:40px">
+      <div class="mk-report-head">
+        <p class="mk-report-kicker">Session report</p>
+        <h3>Q3 planning &mdash; what we stop, what we start</h3>
+        <p class="mk-report-meta">Thursday 18 September &middot; 20 participants &middot;
+          6 questions &middot; code 4821</p>
+      </div>
+
+      <div class="mk-report-body">
+        <section class="mk-report-block">
+          <h4>Question 3 &middot; call and answer</h4>
+          <p class="mk-report-q">What should we stop doing in the next quarter?</p>
+          <ul class="mk-report-answers">
+            <li>
+              <span>Parallel discovery on three products at once</span>
+              <span class="mk-report-votes">9 votes</span>
+              <span class="mk-report-meter"><i style="width:82%"></i></span>
+              <span class="mk-report-by">Priya N. &middot; &ldquo;We are three deep on
+                everything and finished on nothing.&rdquo;</span>
+            </li>
+            <li>
+              <span>The weekly status meeting nobody reads</span>
+              <span class="mk-report-votes">7 votes</span>
+              <span class="mk-report-meter"><i style="width:64%"></i></span>
+              <span class="mk-report-by">Tomas B.</span>
+            </li>
+            <li>
+              <span>Hand-built release notes</span>
+              <span class="mk-report-votes">4 votes</span>
+              <span class="mk-report-meter"><i style="width:36%"></i></span>
+              <span class="mk-report-by">Alina K. &middot; &ldquo;Forty minutes a week,
+                every week.&rdquo;</span>
+            </li>
+            <li>
+              <span>Two-week estimates on unscoped work</span>
+              <span class="mk-report-votes">0 votes</span>
+              <span class="mk-report-meter"><i style="width:2%"></i></span>
+              <span class="mk-report-by">Sam O.</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="mk-report-block">
+          <h4>Summary and next steps</h4>
+          <div class="mk-report-summary">
+            <p>The room agreed on one thing far more strongly than on anything else:
+               too much discovery is running at once. Two of the four answers describe
+               recurring process cost rather than product work, which suggests the
+               quarter&rsquo;s real constraint is attention, not capacity.</p>
+            <ol class="mk-report-list">
+              <li>Name one product as the discovery focus before the next planning session.</li>
+              <li>Decide who owns release notes, or decide to stop writing them.</li>
+              <li>Revisit the status meeting with the four people who said they read it.</li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="mk-report-block">
+          <h4>Final standings &mdash; trivia rounds</h4>
+          <table class="mk-report-standings">
+            <thead><tr><th style="width:56px">#</th><th>Player</th><th style="width:96px">Correct</th><th style="width:88px">Points</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Alina K.</td><td>9 of 10</td><td>1,340</td></tr>
+              <tr><td>2</td><td>Tomas B.</td><td>8 of 10</td><td>1,205</td></tr>
+              <tr><td>3</td><td>Priya N.</td><td>8 of 10</td><td>1,118</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <div class="mk-report-foot">
+        <a class="mk-report-btn" href="04-reports.html">Export PDF</a>
+        <a class="mk-report-btn" href="04-reports.html">Copy shareable link</a>
+        <span class="mk-report-note">Every answer, every vote and every comment is kept
+          &mdash; not only the ones that won.</span>
+      </div>
+    </div>
+
+    <p class="mk-muted" style="margin-top:22px">
+      <a href="04-reports.html">See a full report, annotated &rarr;</a>
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================= closing CTA -->
+<section class="mk-cta">
+  <div class="mk-shell mk-cta-in">
+    <p class="mk-kicker">Ready when you are</p>
+    <h2 class="mk-title">Bring your own material. Leave with a decision.</h2>
+    <div class="mk-cta-row">
+      <a class="mk-btn mk-btn-primary mk-btn-lg" href="#">Create a host account</a>
+      <a class="mk-btn mk-btn-ghost mk-btn-lg" href="02-how-it-works.html">See how it works</a>
+    </div>
+    <p class="mk-cta-fine">Players never need an account. Hosts sign in once.</p>
+  </div>
+</section>
+
+<footer class="mk-foot">
+  <div class="mk-shell mk-foot-in">
+    <span class="mk-foot-legal">Engagements</span>
+    <nav class="mk-foot-links" aria-label="Footer">
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="05-help.html">Help</a>
+      <a href="#">Join with a code</a>
+    </nav>
+  </div>
+</footer>
+
+</div><!-- /.mk-page -->
+</div><!-- /.mk-root -->
+
+<aside class="mk-anno-rail" aria-label="Design notes">
+  <h6>Design notes — 01 home</h6>
+  <div class="mk-anno"><b>The hero is a place, not a banner</b>The scene is
+    <code>position:fixed</code>, so the sections wash over the same mountain rather than
+    scrolling past a picture. The route and the climber are the page&rsquo;s own spine:
+    base camp at the hero, the flag at the report.</div>
+  <div class="mk-anno"><b>Why the glow stops where it does</b>The art brief measures
+    <code>#F4EDE4</code> at <b>2.84:1</b> on <code>#C77B4A</code>. So the amber is boxed
+    into the bottom 40% of the hero band and the headline lives in the top 55%. Nothing
+    warm may rise into it.</div>
+  <div class="mk-anno"><b>Join stays in the hero</b><code>/</code> becomes marketing, so
+    the four-digit entry had to go somewhere a player arriving mid-session can find it in
+    one look. The full page survives at <code>/join</code>; this is the same component at
+    <code>variant="compact"</code>.</div>
+  <div class="mk-anno"><b>Only <code>--mk-text</code> inside the join card</b>The card is
+    <code>rgba(27,41,66,0.82)</code> over the glow. Composited on pure amber that leaves
+    <code>--mk-muted</code> at <b>4.26:1</b> — under AA. So the label and the hint are
+    full-strength warm white.</div>
+  <div class="mk-anno"><b>The stills are drawn, not photographed</b>Every clip slot is
+    plain divs: no image file, no other origin. Sub-project 2 drops a muted looping clip
+    behind the same frame; the drawing stays as the poster.</div>
+  <div class="mk-anno"><b>The zero-vote answer is on purpose</b>An answer nobody voted for
+    is still in the tally and still in the report. The count is described as a vote count
+    everywhere it appears, and never as a rating or a preference.</div>
+  <div class="mk-anno"><b>Trivia has no vote phase</b>Its list says &ldquo;ask, then
+    results&rdquo; because saying otherwise is the easiest untrue sentence to write about
+    this product.</div>
+  <div class="mk-anno"><b>The paper sheet</b>Markup and <code>data-theme="light"</code>
+    convert in the same change — dusk copy on paper measures 1.2:1. Amber draws the meter
+    bars and never carries text here; <code>--mk-amber-ink</code> says the numbers.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script src="notes.js"></script>
+</body>
+</html>

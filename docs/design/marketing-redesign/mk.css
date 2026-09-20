@@ -1,0 +1,726 @@
+/* ===========================================================================
+   mk.css — the marketing surface.
+
+   Everything here is namespaced `.mk-*` (the compact join entry is `.jce-*`).
+   The removed scene's class names are banned by three suites; this one is `.mk-ridge*`
+   throughout, and no rule here reuses a name from it.
+
+   No raster images, no webfonts, no third-party origins, no http(s) URLs.
+   The ridge is inline SVG; the screen stills are plain divs.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   THE TOKEN BLOCK. Copied verbatim into MarketingShell.css in Task 4.
+   Do not edit a value here without editing it there.
+   --------------------------------------------------------------------------- */
+.mk-root {
+  --mk-bg: #0F1A2E;
+  --mk-surface: #1B2942;
+  --mk-surface-2: #25375A;
+  --mk-text: #F4EDE4;
+  --mk-muted: #9BA8BE;
+  --mk-amber: #F6A94C;
+  --mk-amber-deep: #C77B4A;
+  --mk-blue: #7CA7E6;
+  --mk-ridge-front: #16233B;
+  --mk-ridge-mid: #22344F;
+  --mk-ridge-back: #2E4262;
+  --mk-paper: #FBF7F1;
+  --mk-paper-surface: #FFFFFF;
+  --mk-paper-text: #1B2942;
+  --mk-paper-muted: #5E6167;
+  --mk-amber-ink: #8a5300;
+  --mk-hair: rgba(244, 237, 228, 0.14);
+
+  --mk-t-floor: 12px;
+  --mk-t-label: 13px;
+  --mk-t-body: 17px;
+  --mk-t-lead: 21px;
+  --mk-t-head: 30px;
+  --mk-t-title: 44px;
+  --mk-t-display: 68px;
+
+  --mk-shell: 1160px;
+  --mk-gutter: 24px;
+  background: var(--mk-bg);
+  color: var(--mk-text);
+  font-size: var(--mk-t-body);
+  line-height: 1.55;
+}
+@media (max-width: 720px) {
+  .mk-root { --mk-t-head: 25px; --mk-t-title: 32px; --mk-t-display: 42px; --mk-gutter: 16px; }
+}
+/* --------------------------------------------------------------------------- */
+
+/* Second rule, deliberately separate so the block above stays byte-identical
+   to the one Task 4 copies. System stack only — no font is fetched from
+   anywhere, so the named faces are a preference, not a dependency. */
+.mk-root {
+  --mk-font-display: "Archivo Expanded", "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mk-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --mk-rule: var(--mk-hair);
+  --mk-rule-strong: rgba(244, 237, 228, 0.26);
+  --mk-radius: 16px;
+  --mk-radius-sm: 10px;
+  --mk-tap: 48px;
+
+  /* The hero's height. The scene reads it so the glow can be clamped to the
+     bottom 40% of the hero band and nothing else has to know the number. */
+  --mk-ridge-band: 88vh;
+
+  /* The four translucent washes. A later suite pins these exact strings. */
+  --mk-wash-nav: rgba(15, 26, 46, 0.86);
+  --mk-wash-card: rgba(27, 41, 66, 0.82);
+  --mk-wash-a: rgba(15, 26, 46, 0.9);
+  --mk-wash-b: rgba(27, 41, 66, 0.92);
+
+  font-family: var(--mk-font-ui);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: #0F1A2E; }
+[hidden] { display: none !important; }
+
+.mk-root :focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 2px; border-radius: 6px; }
+.mk-root ::selection { background: var(--mk-amber); color: #0F1A2E; }
+
+/* ------------------------------------------------------------------ layout */
+.mk-shell { width: 100%; max-width: var(--mk-shell); margin-inline: auto; padding-inline: var(--mk-gutter); }
+.mk-prose { max-width: 62ch; }
+
+/* ================================================================= the ridge
+   Four layers, fixed behind the page: sky, back, mid, front. The amber glow is
+   its own element and is clamped to the bottom 40% of the hero band, because
+   #F4EDE4 measures 2.84:1 on #C77B4A and the headline sits in the top 55%.
+   ========================================================================== */
+.mk-ridge { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.mk-ridge-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 70% at 50% 108%, rgba(199,123,74,0.30) 0%, rgba(199,123,74,0) 62%),
+    linear-gradient(180deg, #101A2E 0%, #16233B 34%, #22344F 74%, #2A3A57 100%);
+}
+/* The one warm light in the frame. `--mk-ridge-band` is the hero height; the
+   glow's box starts at 60% of it and is gone by its foot. */
+.mk-ridge-glow {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  /* The box starts at 60% of the hero band — the top of the bottom 40% — and the
+     bloom's focal point sits near ITS top, so the light gathers just behind the
+     central summit instead of sinking out of sight behind the front ridge. It
+     still cannot reach the headline: the box never starts above the 60% line. */
+  top: calc(var(--mk-ridge-band, 88vh) * 0.60);
+  height: calc(var(--mk-ridge-band, 88vh) * 0.46);
+  width: min(1700px, 165%);
+  background: radial-gradient(48% 78% at 50% 34%,
+    rgba(246,169,76,0.82) 0%, rgba(246,169,76,0.42) 22%, rgba(199,123,74,0.24) 44%,
+    rgba(199,123,74,0.08) 66%, rgba(199,123,74,0) 82%);
+  filter: blur(6px);
+  /* The box has to stop dead on the 60% line, and a dead stop reads as a seam.
+     The mask fades the first sixth of it so the light arrives rather than
+     switches on — without ever painting a pixel above the line. */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, #000 17%);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, #000 17%);
+}
+/* Art brief §5's optional fourth layer: a thin valley fog between mid and front.
+   Without it the three silhouettes read as flat cut paper — this is what makes
+   the scene a place with air in it rather than a logo. */
+.mk-ridge-haze {
+  position: absolute; left: 0; right: 0;
+  top: calc(var(--mk-ridge-band, 88vh) * 0.74);
+  height: calc(var(--mk-ridge-band, 88vh) * 0.22);
+  background: linear-gradient(180deg,
+    rgba(42,58,87,0) 0%, rgba(58,78,110,0.34) 46%, rgba(42,58,87,0) 100%);
+  filter: blur(8px);
+}
+.mk-ridge-stars { position: absolute; inset: 0 0 auto; height: 52%; opacity: 0.5; }
+.mk-ridge-stars circle { fill: #F4EDE4; }
+
+.mk-ridge-layer { position: absolute; left: -5%; width: 110%; bottom: 0; display: block; }
+.mk-ridge-back  { height: 62%; opacity: 0.92; transform: translateX(-1.2%); }
+.mk-ridge-mid   { height: 50%; transform: translateX(-2.6%); }
+.mk-ridge-front { height: 38%; transform: translateX(-4.4%); }
+.mk-ridge-back  path.mk-ridge-body { fill: var(--mk-ridge-back); }
+.mk-ridge-mid   path.mk-ridge-body { fill: var(--mk-ridge-mid); }
+.mk-ridge-front path.mk-ridge-body { fill: var(--mk-ridge-front); }
+
+/* The route is the page's spine: base camp at the foot, the summit where the
+   report is. Dashed because it is a plan, not a path already walked. */
+.mk-ridge-route {
+  fill: none; stroke: var(--mk-amber); stroke-width: 3.2;
+  stroke-dasharray: 11 12; stroke-linecap: round; opacity: 0.78;
+}
+.mk-ridge-climber { fill: var(--mk-amber); stroke: #0F1A2E; stroke-width: 2.5; }
+.mk-ridge-climber-halo { fill: rgba(246,169,76,0.22); }
+.mk-ridge-flag { fill: var(--mk-amber); }
+.mk-ridge-mast { stroke: var(--mk-amber); stroke-width: 2.4; }
+
+/* Everything above the scene. */
+.mk-page { position: relative; z-index: 1; }
+
+/* ==================================================================== nav == */
+.mk-nav {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--mk-wash-nav);
+  backdrop-filter: blur(9px);
+  border-bottom: 1px solid var(--mk-rule);
+}
+.mk-nav-in { display: flex; align-items: center; gap: 18px; min-height: 66px; padding-block: 10px; }
+.mk-brand {
+  display: flex; align-items: center; gap: 10px; margin-right: auto;
+  font-family: var(--mk-font-display); font-weight: 800; font-size: 19px;
+  letter-spacing: -0.01em; color: var(--mk-text); text-decoration: none; white-space: nowrap;
+}
+.mk-brand-mark { flex: none; width: 26px; height: 26px; }
+.mk-brand-mark path { fill: var(--mk-amber); }
+.mk-nav-links { display: flex; align-items: center; gap: 4px; }
+.mk-nav-link {
+  display: inline-flex; align-items: center; min-height: var(--mk-tap);
+  padding: 0 12px; border-radius: var(--mk-radius-sm);
+  color: var(--mk-muted); text-decoration: none; font-weight: 600; font-size: var(--mk-t-body);
+}
+.mk-nav-link:hover { color: var(--mk-text); }
+.mk-nav-link[aria-current="page"] { color: var(--mk-text); box-shadow: inset 0 -2px 0 var(--mk-amber); }
+.mk-nav-acts { display: flex; align-items: center; gap: 10px; }
+.mk-nav-burger { display: none; }
+
+/* ================================================================ buttons == */
+.mk-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: var(--mk-tap); padding: 12px 20px; border-radius: var(--mk-radius-sm);
+  font: 700 var(--mk-t-body)/1.2 var(--mk-font-ui);
+  border: 2px solid transparent; text-decoration: none; cursor: pointer; text-align: center;
+}
+.mk-btn-primary { background: var(--mk-amber); color: #0F1A2E; border-color: var(--mk-amber); }
+.mk-btn-primary:hover { background: #FFBB63; border-color: #FFBB63; }
+.mk-btn-ghost { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-btn-ghost:hover { border-color: var(--mk-text); }
+.mk-btn-quiet { background: transparent; color: var(--mk-text); border-color: transparent; font-weight: 600; }
+.mk-btn-quiet:hover { color: var(--mk-amber); }
+.mk-btn-lg { min-height: 56px; padding: 15px 28px; font-size: var(--mk-t-lead); }
+
+/* ============================================================== typography = */
+/* Headings set their own leading. Inheriting the 1.55 body line-height put a
+   whole blank line inside a two-line card title and swallowed the margin under
+   it — "one / plan" on the use-cases page read as two separate headings. */
+.mk-root h1, .mk-root h2, .mk-root h3 {
+  margin: 0; font-family: var(--mk-font-display); font-weight: 800; line-height: 1.14;
+}
+/* The ones that are UI labels rather than display type keep a readable leading. */
+.mk-flow-step h3, .mk-callout h3, .mk-export-card h3, .mk-help-role > h3 { line-height: 1.35; }
+.mk-root p { margin: 0; }
+.mk-display { font-size: var(--mk-t-display); line-height: 1.03; letter-spacing: -0.022em; }
+.mk-title { font-size: var(--mk-t-title); line-height: 1.08; letter-spacing: -0.018em; }
+.mk-head { font-size: var(--mk-t-head); line-height: 1.16; letter-spacing: -0.012em; }
+.mk-lead { font-size: var(--mk-t-lead); line-height: 1.45; color: var(--mk-text); }
+.mk-body { font-size: var(--mk-t-body); }
+.mk-muted { color: var(--mk-muted); }
+.mk-kicker {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--mk-amber);
+}
+.mk-micro { font-size: var(--mk-t-floor); color: var(--mk-muted); letter-spacing: 0.02em; }
+.mk-stack > * + * { margin-top: var(--mk-s, 16px); }
+.mk-s8 { --mk-s: 8px } .mk-s12 { --mk-s: 12px } .mk-s20 { --mk-s: 20px }
+.mk-s24 { --mk-s: 24px } .mk-s32 { --mk-s: 32px }
+/* The generic link colour is scoped to PROSE, not to every `a` in the surface.
+   `.mk-root a` is 0,1,1 and every component rule here is 0,1,0, so a blanket
+   rule wins against all of them regardless of order — it painted the primary
+   button's label, the nav links and the report's buttons blue (1.25:1 on amber),
+   which is exactly what audit A4 caught. */
+.mk-root p a, .mk-root li a, .mk-root dd a { color: var(--mk-blue); }
+.mk-root p a:hover, .mk-root li a:hover, .mk-root dd a:hover { color: var(--mk-amber); }
+
+/* ==================================================================== hero = */
+.mk-hero {
+  min-height: var(--mk-ridge-band); display: grid; grid-template-rows: 55fr 45fr;
+  padding-block: clamp(36px, 7vh, 76px) clamp(30px, 6vh, 64px);
+}
+/* Row one is the top 55% of the hero and is the only place headline text lands.
+   Row two carries the CTAs and the join card, both on their own washes. */
+.mk-hero-top { align-self: start; }
+.mk-hero-foot { align-self: end; display: flex; flex-wrap: wrap; gap: 22px 30px; align-items: flex-end; }
+.mk-hero-copy { max-width: 19ch; }
+.mk-hero-sub { max-width: 46ch; margin-top: 20px; }
+.mk-hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* ------------------------------------------------- the compact join entry -- */
+/* Only `--mk-text` carries copy in here: the card's 0.82 wash over the amber
+   glow leaves --mk-muted at 4.26:1, which is under AA. */
+.jce {
+  background: var(--mk-wash-card);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--mk-rule-strong);
+  border-radius: var(--mk-radius);
+  padding: 18px 20px 20px; min-width: 288px;
+}
+.jce-label {
+  display: block; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-text); margin-bottom: 12px;
+}
+.jce-row { display: flex; gap: 10px; align-items: center; }
+.jce-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1 1 auto; }
+.jce-cell {
+  height: 54px; display: grid; place-items: center; border-radius: var(--mk-radius-sm);
+  background: rgba(15,26,46,0.55); border: 2px solid var(--mk-rule-strong);
+  font: 800 28px/1 var(--mk-font-display); color: var(--mk-text);
+}
+.jce-cell.jce-next { border-color: var(--mk-amber); }
+.jce-go { flex: none; padding-inline: 20px; height: 54px; min-height: 54px; }
+.jce-hint { margin-top: 10px; font-size: var(--mk-t-label); color: var(--mk-text); opacity: 0.86; }
+
+/* ================================================================ sections = */
+.mk-section { position: relative; padding-block: clamp(56px, 8vw, 104px); }
+.mk-section--a { background: var(--mk-wash-a); }
+.mk-section--b { background: var(--mk-wash-b); }
+.mk-section--a + .mk-section--a, .mk-section--b + .mk-section--b { border-top: 1px solid var(--mk-rule); }
+.mk-section-head { max-width: 68ch; }
+.mk-section-head .mk-lead { max-width: 58ch; }
+.mk-section-head .mk-title { margin-top: 12px; }
+.mk-section-head .mk-lead { margin-top: 18px; color: var(--mk-muted); }
+
+/* --------------------------------------------------------------- problem -- */
+.mk-problem-grid { display: grid; gap: 18px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); }
+.mk-stmt {
+  border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  background: var(--mk-surface); padding: 30px 26px 32px;
+  border-top: 3px solid var(--mk-amber-deep);
+}
+.mk-stmt-n {
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display); letter-spacing: 0.1em;
+  color: var(--mk-amber); display: block; margin-bottom: 12px;
+}
+.mk-stmt h3 { font-size: var(--mk-t-head); line-height: 1.14; }
+.mk-stmt p { margin-top: 12px; color: var(--mk-muted); }
+
+/* ----------------------------------------------------------------- modes -- */
+.mk-mode {
+  display: grid; gap: 30px 44px; margin-top: 46px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  padding-top: 46px; border-top: 1px solid var(--mk-rule);
+}
+.mk-mode:first-of-type { border-top: 0; padding-top: 0; }
+.mk-mode--flip .mk-mode-copy { order: 2; }
+.mk-mode-tag {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px; border-radius: 999px;
+  border: 1px solid var(--mk-amber); color: var(--mk-amber);
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.mk-mode-copy h3 { font-size: var(--mk-t-title); line-height: 1.08; margin-top: 16px; letter-spacing: -0.018em; }
+.mk-mode-copy > p { margin-top: 16px; color: var(--mk-muted); max-width: 44ch; }
+.mk-mode-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 10px; }
+.mk-mode-list li { display: flex; gap: 11px; align-items: flex-start; color: var(--mk-text); }
+.mk-mode-list li::before {
+  content: ""; flex: none; width: 9px; height: 9px; margin-top: 9px; border-radius: 2px;
+  background: var(--mk-amber); transform: rotate(45deg);
+}
+.mk-mode-screens { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 18px; align-items: end; }
+
+/* =================================================== devices and clip slots */
+.mk-device { position: relative; }
+.mk-device-bezel {
+  border-radius: 14px; background: #0B1322; border: 1px solid var(--mk-rule-strong);
+  padding: 10px; box-shadow: 0 18px 40px rgba(6, 11, 20, 0.5);
+}
+.mk-device--tv .mk-device-bezel { border-radius: 12px; padding: 11px 11px 13px; }
+.mk-device--laptop .mk-device-bezel { border-radius: 12px; padding: 12px 12px 14px; }
+.mk-device--phone .mk-device-bezel { border-radius: 26px; padding: 8px; }
+.mk-device-screen { position: relative; overflow: hidden; border-radius: 6px; background: var(--mk-bg); }
+.mk-device--phone .mk-device-screen { border-radius: 19px; }
+.mk-device--tv .mk-device-screen { aspect-ratio: 16 / 9; }
+.mk-device--laptop .mk-device-screen { aspect-ratio: 16 / 10; }
+.mk-device--phone .mk-device-screen { aspect-ratio: 9 / 19; }
+.mk-device-foot {
+  height: 8px; width: 34%; margin: 7px auto 0; border-radius: 0 0 6px 6px;
+  background: #0B1322; border: 1px solid var(--mk-rule); border-top: 0;
+}
+.mk-device--phone .mk-device-notch {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  width: 38%; height: 5px; border-radius: 999px; background: rgba(244,237,228,0.18); z-index: 2;
+}
+.mk-device-cap { margin-top: 12px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-device-cap b { color: var(--mk-text); font-weight: 700; }
+
+/* A clip slot is a poster still today and a muted looping video later. The
+   still is drawn in CSS: no file is fetched, from here or anywhere. */
+.mk-clip { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.mk-clip-badge {
+  position: absolute; right: 8px; top: 8px; z-index: 3;
+  font-size: var(--mk-t-floor); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-text); background: rgba(15,26,46,0.9);
+  border: 1px solid var(--mk-rule-strong); border-radius: 999px; padding: 3px 9px;
+}
+
+/* ------------------------------------------------ the sketched product UI -- */
+/* Plain divs at a deliberately small scale. This is a recognisable drawing of
+   the real screen, not a screenshot and not an empty grey rectangle. */
+.mk-ss { position: absolute; inset: 0; padding: 4.4% 4.6%; display: flex; flex-direction: column; gap: 3.2%;
+  background: linear-gradient(180deg, #14213A 0%, #0F1A2E 100%); }
+/* The slot badge is pinned to the top right of the screen, so the sketched
+   header reserves that corner rather than drawing the session code underneath
+   it — the code chip and the badge were landing on each other. */
+.mk-ss-top { display: flex; align-items: center; gap: 8px; padding-right: 74px; }
+.mk-device--phone .mk-ss-top { padding-right: 44px; }
+.mk-ss-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-amber); flex: none; }
+.mk-ss-chip {
+  font-size: var(--mk-t-floor); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-muted); border: 1px solid var(--mk-rule); border-radius: 999px; padding: 2px 8px;
+}
+.mk-ss-code { margin-left: auto; font: 800 var(--mk-t-label)/1 var(--mk-font-display); color: var(--mk-amber); letter-spacing: 0.08em; }
+.mk-ss-q { font-weight: 700; color: var(--mk-text); font-size: var(--mk-t-label); line-height: 1.3; }
+.mk-ss-opts { display: grid; gap: 6px; }
+.mk-ss-opt {
+  display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px;
+  background: var(--mk-surface); border: 1px solid var(--mk-rule);
+  font-size: var(--mk-t-floor); color: var(--mk-text);
+}
+.mk-ss-opt b { flex: none; color: var(--mk-amber); font-weight: 800; }
+.mk-ss-opt.mk-ss-right { border-color: var(--mk-amber); background: rgba(246,169,76,0.12); }
+.mk-ss-bars { display: grid; gap: 7px; }
+.mk-ss-bar { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center;
+  font-size: var(--mk-t-floor); color: var(--mk-text); }
+.mk-ss-bar span { grid-column: 1; }
+.mk-ss-bar em { grid-column: 2; font-style: normal; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.mk-ss-track { grid-column: 1 / -1; height: 7px; border-radius: 4px; background: rgba(244,237,228,0.1); overflow: hidden; }
+.mk-ss-track i { display: block; height: 100%; background: var(--mk-amber); border-radius: 4px; }
+.mk-ss-track.mk-ss-cool i { background: var(--mk-blue); }
+.mk-ss-qr { width: 42%; aspect-ratio: 1; align-self: center; margin-top: auto; margin-bottom: auto;
+  background:
+    repeating-linear-gradient(90deg, #F4EDE4 0 12%, transparent 12% 20%),
+    repeating-linear-gradient(0deg, #F4EDE4 0 12%, transparent 12% 20%),
+    #0F1A2E;
+  border: 5px solid #F4EDE4; border-radius: 4px; }
+.mk-ss-people { display: flex; flex-wrap: wrap; gap: 5px; }
+.mk-ss-person { font-size: var(--mk-t-floor); color: var(--mk-text); background: var(--mk-surface-2);
+  border-radius: 999px; padding: 2px 9px; }
+.mk-ss-field { border: 1px solid var(--mk-rule-strong); border-radius: 7px; padding: 8px 9px;
+  font-size: var(--mk-t-floor); color: var(--mk-text); background: rgba(15,26,46,0.6); }
+.mk-ss-cta { margin-top: auto; text-align: center; background: var(--mk-amber); color: #0F1A2E;
+  border-radius: 7px; padding: 8px; font: 800 var(--mk-t-floor)/1.2 var(--mk-font-ui); }
+.mk-ss-foot { margin-top: auto; display: flex; gap: 8px; align-items: center; }
+.mk-ss-grow { flex: 1 1 auto; }
+.mk-ss-doc { display: grid; gap: 5px; }
+.mk-ss-line { height: 6px; border-radius: 3px; background: rgba(244,237,228,0.16); }
+.mk-ss-line.mk-ss-short { width: 56%; }
+.mk-ss-line.mk-ss-warm { background: rgba(246,169,76,0.5); width: 72%; }
+
+/* ---------------------------------------------------------- your material -- */
+.mk-flow { display: grid; gap: 16px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); }
+.mk-flow-step {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 22px 20px; position: relative;
+}
+.mk-flow-step h3 { font-size: var(--mk-t-body); margin-top: 12px; font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-flow-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+.mk-flow-n {
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: rgba(246,169,76,0.14); border: 1px solid var(--mk-amber);
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display); color: var(--mk-amber);
+}
+.mk-material-note {
+  margin-top: 26px; padding: 18px 20px; border-radius: var(--mk-radius);
+  border: 1px solid var(--mk-rule); border-left: 3px solid var(--mk-amber);
+  background: rgba(246,169,76,0.07); color: var(--mk-text); max-width: 74ch;
+}
+.mk-material-note b { color: var(--mk-amber); }
+
+/* ------------------------------------------------------------ the reaction */
+.mk-react-grid { display: grid; gap: 34px 44px; margin-top: 44px; grid-template-columns: minmax(0,1.05fr) minmax(0,1fr); align-items: center; }
+.mk-tally {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 24px 22px 26px;
+}
+.mk-tally-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mk-tally-head h3 { font-size: var(--mk-t-head); }
+.mk-tally-rows { display: grid; gap: 16px; margin-top: 22px; }
+.mk-tally-row { display: grid; gap: 6px; }
+.mk-tally-top { display: flex; gap: 12px; align-items: baseline; }
+.mk-tally-top b { font-weight: 700; }
+.mk-tally-n { margin-left: auto; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-tally-track { height: 10px; border-radius: 5px; background: rgba(244,237,228,0.1); overflow: hidden; }
+.mk-tally-track i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-tally-row--cool .mk-tally-track i { background: var(--mk-blue); }
+.mk-tally-note { margin-top: 20px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+
+/* ============================================================ the report ==
+   The one paper surface. `data-theme="light"` and paper markup convert in the
+   same change — dusk copy on this sheet would measure 1.2:1.
+   ========================================================================== */
+.mk-summit .mk-shell { position: relative; }
+/* On the home page the sheet is narrower than the shell and centred, so the dusk
+   page shows all the way round it: paper laid on a dark desk, not a light band
+   across the page. On /reports it fills its grid column beside the callouts. */
+.mk-summit .mk-report { max-width: 920px; margin-inline: auto; }
+.mk-report {
+  position: relative;
+  background: var(--mk-paper); color: var(--mk-paper-text);
+  border-radius: 14px;
+  /* The two sheets under the sheet, drawn as offset shadows with negative
+     spread so only their bottom edge shows. Two millimetres of a second page is
+     the whole difference between "a light panel" and "something you could pick
+     up". Outer shadows paint behind the element, so no stacking games. */
+  box-shadow:
+    0 7px 0 -2px #EFE7DA,
+    0 13px 0 -5px #E2D8C8,
+    0 38px 80px rgba(3, 7, 15, 0.7),
+    0 8px 20px rgba(3, 7, 15, 0.45);
+  font-size: var(--mk-t-body);
+}
+.mk-report > :first-child { border-radius: 14px 14px 0 0; }
+.mk-report > :last-child { border-radius: 0 0 14px 14px; }
+.mk-report * { border-color: rgba(27, 41, 66, 0.14); }
+.mk-report-head { padding: 26px 30px 22px; border-bottom: 1px solid rgba(27,41,66,0.14); background: var(--mk-paper-surface); }
+.mk-report-kicker {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mk-amber-ink);
+}
+.mk-report-head h3 { font-size: var(--mk-t-head); margin-top: 8px; color: var(--mk-paper-text); font-family: var(--mk-font-display); }
+.mk-report-meta { margin-top: 10px; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+.mk-report-body { padding: 26px 30px 30px; display: grid; gap: 26px; }
+.mk-report-block h4 {
+  margin: 0; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-paper-muted);
+}
+.mk-report-block > * + * { margin-top: 12px; }
+.mk-report-q { font-weight: 700; color: var(--mk-paper-text); }
+.mk-report-answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.mk-report-answers li {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: baseline;
+  padding-bottom: 10px; border-bottom: 1px solid rgba(27,41,66,0.12);
+}
+.mk-report-answers li:last-child { border-bottom: 0; padding-bottom: 0; }
+.mk-report-answers .mk-report-votes {
+  color: var(--mk-amber-ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mk-report-answers .mk-report-by { grid-column: 1 / -1; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+/* Amber never carries text on paper — #F6A94C is 1.84:1 on #FBF7F1. It draws
+   the bar; --mk-amber-ink says the number. */
+.mk-report-meter { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: rgba(27,41,66,0.10); overflow: hidden; }
+.mk-report-meter i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-report-summary {
+  background: var(--mk-paper-surface); border: 1px solid rgba(27,41,66,0.14);
+  border-left: 3px solid var(--mk-amber); border-radius: 0 10px 10px 0; padding: 18px 20px;
+}
+.mk-report-summary p { color: var(--mk-paper-text); }
+.mk-report-list { margin: 10px 0 0; padding-left: 20px; color: var(--mk-paper-text); }
+.mk-report-list li + li { margin-top: 6px; }
+.mk-report-standings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.mk-report-standings th {
+  text-align: left; font-size: var(--mk-t-label); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-paper-muted); padding: 0 10px 7px; border-bottom: 1px solid rgba(27,41,66,0.18); font-weight: 800;
+}
+.mk-report-standings td { padding: 8px 10px; border-bottom: 1px solid rgba(27,41,66,0.1); color: var(--mk-paper-text); }
+.mk-report-standings tr:last-child td { border-bottom: 0; }
+.mk-report-foot {
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+  padding: 18px 30px 22px; border-top: 1px solid rgba(27,41,66,0.14); background: var(--mk-paper-surface);
+}
+.mk-report-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px;
+  border-radius: 8px; border: 1.5px solid rgba(27,41,66,0.3); color: var(--mk-paper-text);
+  font: 700 var(--mk-t-label)/1 var(--mk-font-ui); text-decoration: none; background: transparent;
+}
+.mk-report-note { margin-left: auto; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+/* Dusk link colours must not reach the paper subtree: #7CA7E6 is 2.46:1 on it. */
+.mk-root .mk-report p a, .mk-root .mk-report li a { color: var(--mk-amber-ink); }
+
+/* ================================================================ big CTA = */
+.mk-cta { position: relative; padding-block: clamp(64px, 9vw, 116px); background: var(--mk-wash-a); border-top: 1px solid var(--mk-rule); }
+.mk-cta-in { display: grid; gap: 26px; justify-items: center; text-align: center; }
+.mk-cta-in .mk-title { max-width: 20ch; }
+.mk-cta-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.mk-cta-fine { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ================================================================== footer = */
+.mk-foot { background: var(--mk-wash-a); border-top: 1px solid var(--mk-rule); padding-block: 34px 44px; }
+.mk-foot-in { display: flex; flex-wrap: wrap; gap: 16px 30px; align-items: center; }
+.mk-foot-links { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-left: auto; }
+.mk-foot-links a { color: var(--mk-muted); text-decoration: none; font-size: var(--mk-t-label); }
+.mk-foot-links a:hover { color: var(--mk-text); text-decoration: underline; }
+.mk-foot-legal { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ========================================================== /how-it-works = */
+.mk-steps { display: grid; gap: 0; margin-top: 46px; }
+.mk-step {
+  display: grid; gap: 26px 48px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  padding-block: clamp(34px, 5vw, 54px); border-top: 1px solid var(--mk-rule);
+}
+.mk-step:first-child { border-top: 0; padding-top: 0; }
+.mk-step--flip .mk-step-copy { order: 2; }
+.mk-step-n {
+  display: inline-grid; place-items: center; width: 46px; height: 46px; border-radius: 12px;
+  background: rgba(246,169,76,0.13); border: 1px solid var(--mk-amber);
+  font: 800 var(--mk-t-lead)/1 var(--mk-font-display); color: var(--mk-amber);
+}
+.mk-step-copy h3 { font-size: var(--mk-t-head); margin-top: 16px; }
+.mk-step-copy p { margin-top: 14px; color: var(--mk-muted); max-width: 48ch; }
+.mk-step-copy p + p { margin-top: 10px; }
+.mk-profiles { display: grid; gap: 12px; margin-top: 26px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.mk-profile {
+  border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm); padding: 14px 16px;
+  background: var(--mk-surface);
+}
+.mk-profile b { display: block; }
+.mk-profile span { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ============================================================== /use-cases = */
+.mk-cases { display: grid; gap: 22px; margin-top: 46px; }
+.mk-case {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 28px 26px 26px; display: grid; gap: 22px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
+.mk-case-head h3 { font-size: var(--mk-t-head); }
+.mk-case-head .mk-kicker { display: block; margin-bottom: 10px; }
+.mk-case-set { margin-top: 16px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-case-set b { color: var(--mk-text); }
+.mk-case-ba { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.mk-case-panel { border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm); padding: 16px 17px; background: rgba(15,26,46,0.5); }
+.mk-case-panel h4 {
+  margin: 0 0 9px; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-muted);
+}
+.mk-case-panel--with { border-left: 3px solid var(--mk-amber); }
+.mk-case-panel--with h4 { color: var(--mk-amber); }
+.mk-case-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; padding-top: 4px; border-top: 1px solid var(--mk-rule); margin-top: 2px; padding-top: 20px; }
+
+/* ================================================================ /reports = */
+.mk-annot { display: grid; gap: 30px; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); margin-top: 44px; align-items: start; }
+.mk-callouts { display: grid; gap: 14px; position: sticky; top: 90px; }
+.mk-callout {
+  display: grid; grid-template-columns: 34px 1fr; gap: 12px;
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm);
+  padding: 15px 16px;
+}
+.mk-callout-n {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--mk-amber); color: #0F1A2E; font: 800 var(--mk-t-label)/1 var(--mk-font-display);
+}
+.mk-callout h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-callout p { margin-top: 5px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+/* The marker pinned into the paper sheet. Amber field, ink-dark numeral — the
+   one place a number sits on amber, and #0F1A2E on #F6A94C is 8.9:1. */
+.mk-pin {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--mk-amber); color: #0F1A2E; font: 800 var(--mk-t-floor)/1 var(--mk-font-display);
+  vertical-align: 2px; margin-right: 8px;
+}
+.mk-export { display: grid; gap: 16px; margin-top: 30px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.mk-export-card { background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius); padding: 22px 20px; }
+.mk-export-card h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-export-card p { margin-top: 9px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+
+/* =================================================================== /help = */
+.mk-help { display: grid; gap: 34px; grid-template-columns: 272px minmax(0, 1fr); margin-top: 38px; align-items: start; }
+.mk-help-side { background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius); padding: 18px 16px 22px; position: sticky; top: 90px; }
+.mk-help-role + .mk-help-role { margin-top: 20px; }
+.mk-help-role > h3 {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--mk-amber); margin-bottom: 8px; font-family: var(--mk-font-ui);
+}
+.mk-help-guides { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.mk-help-guides a {
+  display: block; padding: 9px 11px; border-radius: 8px; color: var(--mk-muted);
+  text-decoration: none; font-size: var(--mk-t-body); line-height: 1.35;
+}
+.mk-help-guides a:hover { background: var(--mk-surface-2); color: var(--mk-text); }
+.mk-help-guides a[aria-current="page"] { background: var(--mk-surface-2); color: var(--mk-text); font-weight: 700; box-shadow: inset 3px 0 0 var(--mk-amber); }
+.mk-help-body { max-width: 72ch; }
+.mk-help-crumb { font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-help-crumb a { color: var(--mk-muted); }
+.mk-help-body h2 { font-size: var(--mk-t-title); margin-top: 10px; letter-spacing: -0.018em; line-height: 1.1; }
+.mk-help-body h3 { font-size: var(--mk-t-head); margin-top: 34px; }
+.mk-help-body p { margin-top: 14px; color: var(--mk-text); }
+.mk-help-body p.mk-muted { color: var(--mk-muted); }
+.mk-help-body ol, .mk-help-body ul { margin: 14px 0 0; padding-left: 22px; }
+.mk-help-body li + li { margin-top: 8px; }
+.mk-help-kbd {
+  display: inline-block; padding: 1px 7px; border-radius: 5px; border: 1px solid var(--mk-rule-strong);
+  background: var(--mk-surface-2); font: 700 var(--mk-t-label)/1.6 var(--mk-font-mono); color: var(--mk-text);
+}
+.mk-help-search {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--mk-tap);
+  padding: 10px 14px; border-radius: var(--mk-radius-sm); background: var(--mk-bg);
+  border: 1px solid var(--mk-rule-strong); color: var(--mk-muted); margin-bottom: 18px;
+  font-size: var(--mk-t-body);
+}
+
+/* ================================================================ responsive */
+@media (max-width: 980px) {
+  .mk-mode, .mk-step, .mk-case, .mk-annot, .mk-help, .mk-react-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-mode--flip .mk-mode-copy, .mk-step--flip .mk-step-copy { order: 0; }
+  .mk-callouts, .mk-help-side { position: static; }
+  .mk-mode-screens { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .mk-mode-screens .mk-device--phone { width: 190px; }
+}
+@media (max-width: 860px) {
+  .mk-nav-links { display: none; }
+  .mk-nav-burger {
+    display: inline-grid; place-items: center; width: var(--mk-tap); height: var(--mk-tap);
+    border-radius: var(--mk-radius-sm); background: transparent; color: var(--mk-text);
+    border: 1px solid var(--mk-rule-strong); cursor: pointer;
+  }
+  .mk-nav-burger svg { width: 20px; height: 20px; }
+  .mk-nav-burger path { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .mk-nav-acts .mk-btn-primary { display: none; }
+}
+@media (max-width: 720px) {
+  .mk-root { --mk-ridge-band: 92vh; }
+  /* Under 720 the hero is one column and the route, the climber and the flag
+     land underneath the buttons — a dashed line crossing a call to action is
+     noise, not atmosphere. The mountain stays; the waypoints go. */
+  .mk-ridge-route, .mk-ridge-climber, .mk-ridge-climber-halo,
+  .mk-ridge-mast, .mk-ridge-flag { display: none; }
+  .mk-hero-foot { flex-direction: column; align-items: stretch; }
+  .mk-hero-copy { max-width: none; }
+  .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
+  .jce { min-width: 0; }
+  .mk-report-head, .mk-report-body, .mk-report-foot { padding-inline: 18px; }
+  .mk-report-note { margin-left: 0; }
+  .mk-case { padding: 22px 18px; }
+}
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
