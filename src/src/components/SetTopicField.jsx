@@ -57,6 +57,11 @@ import { normalizeTag } from '../utils/tags';
  * The sentence goes quiet the moment the shelf it argued with is no longer the
  * one chosen (`filedAs` is what the set carried when it was checked).
  *
+ * That sentence REPLACES the one-click offer rather than sitting under it. A
+ * contradiction is by construction a proposal the set is not already on, so
+ * both conditions are true together, and drawing both named the same shelf
+ * twice six lines apart — once as a convenience, once as an argument.
+ *
  * ── TWO WORDS THIS PRODUCT ALREADY OWNS ────────────────────────────────────
  *
  * CATEGORY is the IN-SET grouping (c001…c005, the host's 24-bit mask). Nothing
@@ -107,13 +112,16 @@ export default function SetTopicField({
   };
 
   const proposed = suggestion ? normalizeSetTopic(suggestion.topic) : null;
-  // Nothing to accept when the set is already there — a button that changes
-  // nothing is the control people press twice wondering why.
-  const offerShelf = proposed && proposed !== chosen ? proposed : null;
   // Two things have to be true for the contradiction to still be worth saying:
   // the check flagged one, and the set is still on the shelf it flagged.
   const contradicts = !!(suggestion && suggestion.mismatch && proposed
     && resolveSetTopic(suggestion.filedAs) === chosen && chosen !== UNFILED);
+  // Nothing to accept when the set is already there — a button that changes
+  // nothing is the control people press twice wondering why. And nothing to
+  // offer quietly when the sentence below is about to name the same shelf:
+  // `contradicts` implies this condition, so the two are written as one
+  // decision here rather than left to paint over each other in the markup.
+  const offerShelf = proposed && proposed !== chosen && !contradicts ? proposed : null;
 
   /* ------------------------------------------------------------- the tags */
 

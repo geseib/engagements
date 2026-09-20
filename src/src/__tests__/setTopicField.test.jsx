@@ -129,6 +129,17 @@ describe('a shelf the content contradicts is said once, and blocks nothing', () 
     expect(screen.getByTestId('t-mismatch')).toHaveTextContent(/science & technology/i);
   });
 
+  it('does not also offer the same shelf as a plain suggestion above it', () => {
+    // rejects: both rows painting at once. A contradiction is BY CONSTRUCTION a
+    // proposal the set is not already on (`mismatch` needs topic !== filedAs),
+    // so the offer's own condition is true wherever this sentence is — and the
+    // person would read the same shelf named twice, six lines apart, once as a
+    // convenience and once as an argument. One fact about one object, once.
+    render(<Host topic="music" suggestion={MISMATCH} />);
+    expect(screen.queryByTestId('t-suggestion')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /file it under/i })).not.toBeInTheDocument();
+  });
+
   it('leaves the shelf the person chose exactly where it is', () => {
     // rejects: a check that re-files somebody's set. It is a helper, never a
     // gate — the library does not rearrange itself behind its owner.

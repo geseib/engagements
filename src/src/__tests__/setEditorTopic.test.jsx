@@ -205,6 +205,9 @@ describe('the proposal the check recorded', () => {
 
     expect(await screen.findByTestId('edit-set-mismatch')).toBeInTheDocument();
     expect(screen.getAllByTestId('edit-set-mismatch')).toHaveLength(1);
+    // ...and not ALSO as the plain offer, which names the same shelf: the two
+    // are mutually exclusive by construction (SetTopicField.jsx).
+    expect(screen.queryByTestId('edit-set-suggestion')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^title/i), { target: { value: '80s Trivia II' } });
     save();
