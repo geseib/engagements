@@ -4,6 +4,9 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
 const { encryptItem } = require('./tenant-crypto');
+const {
+  isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
+} = require('./trivia-answer');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -409,18 +412,22 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
             const correctAnswer = question.Item.correctAnswer;
             const points = question.Item.points || 10;
             
-            // Check if player's answer is correct
-            // Handle both single correct answers and multiple correct answers
-            let isCorrect = false;
-            if (Array.isArray(correctAnswer)) {
-              // Multiple correct answers: check if player's option ID is in the array
-              isCorrect = correctAnswer.includes(`Option${answer}`);
-            } else if (typeof correctAnswer === 'string') {
-              // Single correct answer: check if it matches the option ID
-              isCorrect = correctAnswer === `Option${answer}`;
-            }
-            
-            console.log(`🔍 TRIVIA CHECK: Player answered "${answer}" -> "Option${answer}", correct answer(s): ${JSON.stringify(correctAnswer)}, isCorrect: ${isCorrect}`);
+            // Check if player's answer is correct.
+            //
+            // `answer` is the letter the phone drew, NOT the slot the set
+            // stores. They differ on any question that skips a slot, because
+            // PlayerPage letters only the FILLED options: for optionA/C/D the
+            // room sees A, B, C. This used to compare `Option${answer}`
+            // directly, which read the drawn letter as a slot id and so paid
+            // the player who picked the option one place further down. Both
+            // sides are resolved to SLOTS in trivia-answer.js before they meet,
+            // and every spelling a set records for the answer is read there —
+            // the exact same set the host's phone has always read.
+            const isCorrect = isAnswerCorrect(question.Item, answer);
+            const drawn = drawnOptions(question.Item);
+            const picked = slotForSubmitted(question.Item, answer);
+
+            console.log(`🔍 TRIVIA CHECK: Player answered "${answer}" -> slot ${picked || 'none'} (drawn: ${drawn.map((o) => `${o.letter}=${o.slot}`).join(' ')}), correct answer(s): ${JSON.stringify(correctAnswer)} -> slot(s) ${correctSlots(question.Item).join(',') || 'none'}, isCorrect: ${isCorrect}`);
             
             // Calculate response time and speed bonus
             let responseTimeMs = 0;
