@@ -80,6 +80,13 @@ exports.handler = async (event) => {
         // not a spread, so a field create-report.js stores is invisible to the
         // host until it is named here.
         roundNoun: report.roundNoun || null,
+        // Whether this report is everything the session produced, and what it
+        // was assembled from. Named here for the reason the comment above
+        // gives: this branch is a whitelist, so a field create-report.js stores
+        // faithfully is invisible to the host until it appears in this list —
+        // and a completeness warning nothing renders is not a warning.
+        // Absent on reports written before report-merge.js existed.
+        reportCompleteness: report.reportCompleteness || null,
         gameStats: report.gameStats,
         playerPerformance: report.playerPerformance,
         
