@@ -403,6 +403,19 @@ const TRIVIA_GAP = {
   correctAnswer: 'OptionC',
 };
 
+/* The same answer, recorded as a LOWERCASE bare letter. `correctOptionIndex`
+   has always matched `/^[A-F]$/i` on purpose, so the PHONE has always read this
+   spelling; the ROOM's card could not, and marked nothing at all, until
+   config/questionCard.js case-folded the bare letter. */
+const TRIVIA_LOWER = {
+  id: '005',
+  title: 'Which lever moved the margin?',
+  optionA: 'Raised list price',
+  optionB: 'Bundled onboarding',
+  optionC: 'Cut the entry tier',
+  correctAnswer: 'c',
+};
+
 /*
  * THE LIST AND THE CARD ARE ONE TAP APART, so a host can read out whichever of
  * them they happen to be looking at. The room's card is the truth — the stage
@@ -444,6 +457,28 @@ describe('the list letters and marks exactly as the room does', () => {
     expect(marked).toHaveLength(1);
     expect(marked[0].querySelector('.ltr')).toHaveTextContent('B');
     expect(marked[0].querySelector('.txt')).toHaveTextContent(TRIVIA_GAP.optionC);
+  });
+
+  // rejects: the phone and the projector disagreeing about one question. The
+  // phone marked a lowercase bare letter even while the room's card could not,
+  // because `questionForCard` resolves the spelling to the option's own TEXT
+  // before the card sees it — so this half stayed green through the bug and
+  // cannot prove the fix on its own. It pins the agreement; the room's half is
+  // pinned next door in __tests__/questionCardDom.test.jsx, against the stored
+  // spelling the stage is really handed.
+  it('marks a lowercase bare letter, on the list and on the card alike', async () => {
+    await mount([TRIVIA_LOWER]);
+    const flagged = cardFor(TRIVIA_LOWER.title).querySelectorAll('.hrq-opts li.is-right');
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].querySelector('b')).toHaveTextContent('C');
+
+    openPreview(TRIVIA_LOWER.title);
+    fireEvent.click(screen.getByRole('button', { name: /^reveal$/i }));
+
+    const marked = [...screenPane().querySelectorAll('.opt.correct')];
+    expect(marked).toHaveLength(1);
+    expect(marked[0].querySelector('.ltr')).toHaveTextContent('C');
+    expect(marked[0].querySelector('.txt')).toHaveTextContent(TRIVIA_LOWER.optionC);
   });
 });
 
