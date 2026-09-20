@@ -64,6 +64,50 @@ describe('the list — the in-session browser\'s mechanics', () => {
     expect(first.querySelector('.qprev-row-meta')).toHaveAttribute('title', 'History · easy');
   });
 
+  test('a row carries the question\'s detail, between the title and the meta', () => {
+    // The owner, on the shipped preview: "the question list could be wider and
+    // the preview narrower. so that you can read the questions from the list. i
+    // like a bit of how the list looks in the session questions menu" — the
+    // in-session browser's `.setup-qb__row` (styles.css), which is a title,
+    // then the detail, then the meta. The detail is what the preview's row did
+    // not have, and the width the list was given is what makes room for it.
+    renderPreview();
+    const first = options()[0];
+    expect(first.querySelector('.qprev-row-detail')).toHaveTextContent('New York, 1977.');
+    expect([...first.children].map((el) => el.className)).toEqual([
+      'qprev-row-title', 'qprev-row-detail', 'qprev-row-meta',
+    ]);
+  });
+
+  test('a long detail is clamped rather than cut, and carries its whole text on title=', () => {
+    // A reduction with no recovery is a deletion (engage-design hard rule 7).
+    // Clamped in CSS with the stage's own idiom (`-webkit-line-clamp`,
+    // styles/stage.css), never sliced in JS: the whole string stays in the DOM,
+    // so the title= and the text agree and what a reader copies out of the row
+    // is the detail rather than a fragment of it.
+    const long = 'The ticket was written beside a hydrant in Yonkers on the night of the last '
+      + 'shooting, and the car it was written for belonged to a man the task force had already '
+      + 'interviewed twice without ever asking him where he had been.';
+    const rows = makeRows();
+    rows[0] = { ...rows[0], detail: long };
+    renderPreview({ rows });
+    const line = options()[0].querySelector('.qprev-row-detail');
+    expect(line).toHaveAttribute('title', long);
+    expect(line).toHaveTextContent(long);
+    expect(Number(declared(['.qprev-row-detail'], '-webkit-line-clamp'))).toBe(2);
+  });
+
+  test('a question with no detail gets no empty line where the detail would be', () => {
+    // rejects: an always-rendered span. An empty one leaves a blank line, and a
+    // set whose questions have details unevenly then reads as ragged rows with
+    // nothing on screen saying why. The in-session browser renders the detail
+    // the same way, only when there is one (SessionSetupPanel.jsx:759).
+    renderPreview();
+    const nightStalker = options()[2];
+    expect(nightStalker).toHaveTextContent('Who was dubbed the Night Stalker?');
+    expect(nightStalker.querySelector('.qprev-row-detail')).toBeNull();
+  });
+
   test('no row carries an answer — the answer appears only in the card, in Reveal', () => {
     renderPreview();
     const list = listbox().textContent;
@@ -718,10 +762,15 @@ describe('what the sheet does to the markup', () => {
   });
 
   test('every line the sheet cuts short carries its whole string on title=', () => {
-    // rejects: an ellipsis with no recovery, which is a deletion (engage-design
+    // rejects: a reduction with no recovery, which is a deletion (engage-design
     // hard rule 7). The meta line shared the title's cut and not its title=.
+    // BOTH WAYS THE SHEET SHORTENS A LINE count: the one-line ellipsis, and the
+    // multi-line clamp the row's detail is drawn with — a clamp hides its tail
+    // exactly as an ellipsis does, and the first cut of the detail line had no
+    // title= at all.
     renderEverything();
-    const cutBy = RULES.filter((rule) => /text-overflow\s*:\s*ellipsis/.test(rule.body))
+    const cutBy = RULES
+      .filter((rule) => /text-overflow\s*:\s*ellipsis|-webkit-line-clamp\s*:\s*[1-9]/.test(rule.body))
       .flatMap((rule) => rule.selectors);
     const cut = cutBy.flatMap((selector) => [...document.querySelectorAll(selector)]);
     // the premise: the sheet does cut something the preview renders

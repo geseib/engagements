@@ -190,6 +190,74 @@ describe('the list and its controls, on the editor\'s paper panel', () => {
   ])('%s clears AA', (_label, fg, layers) => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
   });
+
+  /*
+   * THE ROW'S DETAIL LINE. The row grew a third line — title, detail, meta — so
+   * that the questions can be read from the list itself, and the detail is the
+   * line a reader actually reads in runs rather than glances at. Its ink is READ
+   * from the sheet's own rule, not retyped, so a later re-colouring is measured
+   * here too; each of the three grounds a row can be drawn on is measured under
+   * it, because the selected row and the hovered row both tint what it sits on.
+   */
+  test.each([
+    ['at rest', LIST],
+    ['on the selected row', [...LIST, P.rowSel]],
+    ['on a hovered row', [...LIST, P.rowHover]],
+  ])('the row\'s detail line, in the colour its own rule draws it, clears AA %s', (_label, layers) => {
+    const ink = ruleBody(QPREV_CSS, '.qprev-row-detail').match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
+    expect(ink).not.toBeNull();
+    expect(on(hexIn(PAPER, ink[1]), layers)).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+/*
+ * THE SPLIT. The owner, after using the preview on dev: *"the preview is great
+ * except for the width. the question list could be wider and the preview
+ * narrower. so that you can read the questions from the list."* The shipped
+ * split CAPPED the list at 300px — minmax(220px, 300px) — and gave the card
+ * every remaining pixel, so a question's title was cut in the one pane whose job
+ * is listing questions.
+ *
+ * Arithmetic on the declaration, not on a layout: jsdom lays nothing out, so a
+ * measured width here would be zero and would pass unconditionally
+ * (engage-design hard rule 13).
+ */
+describe('the split between the list and the card', () => {
+  const QPREV_RULE = ruleBody(QPREV_CSS, '.qprev');
+  const columns = (QPREV_RULE.match(/grid-template-columns:\s*([^;]+)/) || [])[1];
+  const tracks = String(columns).match(/minmax\([^)]*\)/g) || [];
+  const parse = (track) => {
+    const m = track.match(/minmax\(\s*([\d.]+)px\s*,\s*([\d.]+)fr\s*\)/);
+    if (!m) throw new Error(`"${track}" is not minmax(<px>, <fr>)`);
+    return { min: Number(m[1]), share: Number(m[2]) };
+  };
+
+  test('the list takes more of the width than the card', () => {
+    // rejects: the shipped minmax(220px, 300px) minmax(0, 1fr) — a list with a
+    // fixed cap, which is not a share of the width at all.
+    expect(tracks).toHaveLength(2);
+    const [list, card] = tracks.map(parse);
+    expect(list.share).toBeGreaterThan(card.share);
+    // and a real change, not a nudge: wider at its NARROWEST than the old cap.
+    expect(list.min).toBeGreaterThan(300);
+  });
+
+  test('neither pane can be squeezed to nothing, and both minimums fit above the stack', () => {
+    // rejects: minimums that do not fit side by side above the width where the
+    // panes stack — the row would overflow its container in the band between.
+    const [list, card] = tracks.map(parse);
+    expect(card.min).toBeGreaterThan(0);
+    const stackAt = Number(strip(QPREV_CSS).match(/@media \(max-width:\s*(\d+)px\)/)[1]);
+    const gap = Number(QPREV_RULE.match(/gap:\s*(\d+)px/)[1]);
+    expect(list.min + card.min + gap).toBeLessThanOrEqual(stackAt);
+  });
+
+  test('the narrow breakpoint still stacks to one column', () => {
+    // rejects: two tracks with 600px of minimums surviving onto a phone.
+    const narrow = strip(QPREV_CSS).match(/@media \(max-width:\s*\d+px\)\s*\{([\s\S]*?)\n\}/);
+    expect(narrow).not.toBeNull();
+    expect(narrow[1]).toMatch(/\.qprev\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  });
 });
 
 /*

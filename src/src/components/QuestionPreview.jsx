@@ -69,6 +69,13 @@ export function QuestionViewSwitch({ mode = 'table', onChange, previewBlocked = 
  * renders — components/QuestionCard.jsx, the same component — at the Table
  * profile on the stage's dusk ground.
  *
+ * THE LIST IS THE WIDER PANE, and its rows are the in-session browser's rows —
+ * title, detail, meta — because that is what the owner asked for after using the
+ * first cut: *"the question list could be wider and the preview narrower. so
+ * that you can read the questions from the list. i like a bit of how the list
+ * looks in the session questions menu."* The split and the row's treatment are
+ * both in QuestionPreview.css, which records the reasoning for each.
+ *
  * IT NEVER TOUCHES document.documentElement. The stage keeps its display
  * profile there (components/stage/Stage.jsx), and a preview that re-classed the
  * root would re-profile a projector. The Table ladder reaches the card through
@@ -288,10 +295,13 @@ export default function QuestionPreview({
             aria-activedescendant={selected ? optionDomId(selected.id) : undefined}
           >
             {visible.map((r) => {
-              // Both lines are cut to one line, so both carry their whole
-              // string on title= — a cut with no recovery is a deletion, and
-              // difficulty, written last, is the first thing the meta line loses.
+              // Every line the sheet shortens carries its whole string on
+              // title= — a reduction with no recovery is a deletion. The title
+              // and the meta are cut to one line each (difficulty, written
+              // last, is the first thing the meta line loses); the detail is
+              // clamped to two.
               const title = r.title || 'Untitled question';
+              const detail = String(r.detail || '').trim();
               const meta = [r.category || 'No category', r.difficulty].filter(Boolean).join(' · ');
               return (
                 <li
@@ -303,6 +313,7 @@ export default function QuestionPreview({
                   onClick={() => setSelectedId(r.id)}
                 >
                   <span className="qprev-row-title" title={title}>{title}</span>
+                  {detail && <span className="qprev-row-detail" title={detail}>{detail}</span>}
                   <span className="qprev-row-meta" title={meta}>{meta}</span>
                 </li>
               );
