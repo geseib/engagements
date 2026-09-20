@@ -147,33 +147,47 @@ const openAiPanel = async () => {
   fireEvent.click(aiButton());
   return screen.findByTestId('ai-details-panel');
 };
+/**
+ * ONE role query, held; and a budget clear of one real poll cycle. TWO
+ * SEPARATE FAILURES LIVE HERE and each fix is useless without the other.
+ *
+ * THE BUDGET (06d65c10, after f68b31b5 took the dev build down). Waiting for
+ * this button to come back enabled means waiting for a whole async job: start,
+ * then poll, then apply. `pollGenerationJob` polls immediately, so the happy
+ * path takes no `POLL_INTERVAL_MS` sleep — but that interval is 2000ms of REAL
+ * time (utils/aiBatchClient.js:108), so any run needing a second poll blows
+ * waitFor's 1000ms default outright, and even the single-poll path is several
+ * awaits and a re-render deep. Nothing here measures speed — the assertion is
+ * "the button comes back enabled" — so the budget is raised rather than the
+ * wait weakened. It must stay BELOW jest.config.js's `testTimeout`, or jest
+ * kills the test before this wait can ever reach its own limit.
+ *
+ * THE COST OF ASKING. `getByRole` with a `name` is O(the whole document): it
+ * resolves every node's role and calls `getComputedStyle` on each to decide
+ * accessibility-tree membership. Measured in this file: ~20ms against a
+ * three-question set (277 nodes), ~220ms against the 70-question set below
+ * (1,979 nodes), where `getByText` or a `within()` scope stays at 1-3ms.
+ * Re-querying inside `waitFor` paid that scan again on the first check and on
+ * every 50ms retry — 911ms of the 1,045ms of "says how many of the set's
+ * questions were sent" went into queries that assert nothing, and on a loaded
+ * machine that pushed the test past jest's 5000ms ceiling. It timed out once in
+ * four consecutive runs on 2026-09-20; nothing about it had failed. Raising the
+ * budget alone made this WORSE: a longer wait simply bought more repetitions of
+ * the expensive scan.
+ *
+ * Holding the node is not a weaker assertion. React keeps this button mounted
+ * for the whole round trip — only `disabled` and the label change, verified —
+ * so this IS the button the panel is showing. If it were ever remounted, the
+ * held node would stay disabled and this `waitFor` would fail loudly rather
+ * than pass on a stale reference.
+ *
+ * `questionAddModal.test.jsx` drives the same flow through `findByTestId` on
+ * the 1000ms default. It has not failed yet; if it starts to, this is why.
+ */
 const draftIt = async () => {
-  fireEvent.click(screen.getByRole('button', { name: /^Draft it$/i }));
-  /*
-    THE DEFAULT 1000ms BUDGET IS A RACE HERE, NOT A LIMIT.
-
-    Waiting for this button to come back enabled means waiting for a whole
-    async job: start, then poll, then apply. `pollGenerationJob` does its first
-    poll immediately, so the happy path takes no `POLL_INTERVAL_MS` sleep — but
-    that interval is 2000ms of REAL time (utils/aiBatchClient.js:108), so any
-    run that needs a second poll blows a one-second budget outright, and even
-    the single-poll path is several awaits and a re-render deep.
-
-    It is green on every developer machine and it took the whole dev build down
-    on f68b31b5, which is the signature of contention rather than of a defect.
-
-    Nothing here measures speed — the assertion is "the button comes back
-    enabled" — so the budget is raised clear of one poll cycle rather than the
-    wait being weakened.
-
-    `questionAddModal.test.jsx` drives the same flow through `findByTestId`,
-    which carries the same 1000ms default. It has not failed yet; if it starts
-    to, this is why.
-  */
-  await waitFor(
-    () => expect(screen.getByRole('button', { name: /^Draft it$/i })).toBeEnabled(),
-    { timeout: 8000 },
-  );
+  const button = screen.getByRole('button', { name: /^Draft it$/i });
+  fireEvent.click(button);
+  await waitFor(() => expect(button).toBeEnabled(), { timeout: 8000 });
 };
 
 /**
