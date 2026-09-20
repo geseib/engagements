@@ -22,7 +22,7 @@
 - **No geometric assertions in tests.** jsdom has no layout. Assert DOM order, presence, accessible names, and stylesheet text.
 - **Navigation in tests is `window.history.pushState`**, never `window.location.pathname = …` (a silent no-op under jsdom). Destinations are asserted on the mocked `navigateTo`.
 - **Honesty:** the report has no "favourites" field. The only permitted wording is that the team *votes* and the vote breakdown shows which ideas rose. Never write "favourite"/"favorite" as a product feature.
-- **Banned deploy phrases:** the twin guard fails on the strings "deploys nothing" and "tags only" in any tracked file. Do not write them.
+- **Banned deploy phrases:** the twin guard (`tests/no-retired-twin-references.js`) fails on two stock phrases that claim a branch push or a tag-only trigger is inert; read its header for the exact strings and never write them, even when describing the rule — say "nothing has been deployed" instead.
 - **Mockups are the design.** Task 1's approved mockups are the source for every visual value not given literally in this plan. Serve them with the `all-design-mockups` launch config (:8124) and look before coding.
 - Run frontend commands from `src/` (the package root): `cd /Users/georgeseib/Documents/projects/engage2/src`.
 - Commit messages in this repo are one plain sentence describing the behaviour (see `git log`). End each with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
@@ -2341,8 +2341,14 @@ test('AI is described as drafting and summarising, which a person reviews — ne
   expect(HOME.material.lead).toMatch(/review/i);
 });
 
+// Built from fragments, not written out whole: this file is itself scanned
+// by the twin guard (tests/no-retired-twin-references.js), so the banned
+// strings must never appear contiguously in source, even inside a test that
+// exists to reject them.
+const BANNED_DEPLOY_CLAIM = [['deploys', 'nothing'], ['tags', 'only']]
+  .map((w) => w.join(' '));
 test('the banned deploy phrases are not in the copy either', () => {
-  expect(COPY).not.toMatch(/deploys nothing|tags only/i);
+  expect(COPY).not.toMatch(new RegExp(BANNED_DEPLOY_CLAIM.join('|'), 'i'));
 });
 
 test('players needing no account is claimed — and is true of /play', () => {

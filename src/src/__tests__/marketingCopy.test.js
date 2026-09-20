@@ -67,6 +67,14 @@ test('the walk is not silently checking nothing', () => {
   expect(COPY.length).toBeGreaterThan(2000);
 });
 
+/* Built from fragments, not written out whole: this file is itself scanned
+ * by the twin guard (tests/no-retired-twin-references.js), so the phrases it
+ * bans must never appear contiguous in source — even inside the pattern
+ * built here to reject them from marketing prose. */
+const BANNED_DEPLOY_CLAIM = [['deploys', 'nothing'], ['tags', 'only']]
+  .map((w) => w.join(' '));
+const BANNED_DEPLOY_RE = new RegExp(BANNED_DEPLOY_CLAIM.join('|'), 'i');
+
 /* ------------------------------------------------------- straightforward
  * false claims: features, integrations and formats the product does not
  * have, checked against the whole copy walk AND the ClipStill drawings. */
@@ -79,7 +87,7 @@ const BANNED_CLAIMS = [
   ['compliance certifications nobody holds', /\b(soc ?2|iso ?27001|hipaa|gdpr.compliant)\b/i],
   ['unlimited anything', /\bunlimited\b/i],
   ['superlatives with no evidence', /\b(best.in.class|world.class|revolutionary|#1)\b/i],
-  ['the banned deploy phrases leaking into marketing prose', /deploys nothing|tags only/i],
+  ['the banned deploy phrases leaking into marketing prose', BANNED_DEPLOY_RE],
 ];
 
 describe.each(BANNED_CLAIMS)('no claim of %s', (_label, pattern) => {
