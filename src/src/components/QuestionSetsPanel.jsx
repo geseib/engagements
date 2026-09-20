@@ -201,29 +201,49 @@ export default function QuestionSetsPanel({
           chooser is not built (plan Part 5 puts it outside the constraint), and
           a link to a screen that does not exist is the same defect one level
           down, so it is not drawn here.
+
+          AND THE THREE VERBS ARE GATED ON `onCreate`, for the reason the header
+          button above is. They were written as `onCreate && onCreate('ai')`,
+          which is a click handler that quietly does nothing on any caller that
+          passes no `onCreate` — the same dead affordance the owner reported,
+          in the one state where there is nothing else on the screen to press.
+          Design rule 2: gate the affordance on the handler existing.
+
+          What is left when there is no way in still has to say something true
+          (rule 6), so the heading and the sentence that says what a question
+          set IS both stay; only the sentence that promises three ways to make
+          one goes, because on this mount there are none.
         */
         <div className="qsets-empty">
           <Icon name="Books" weight="duotone" size={40} color="var(--muted)" />
           <h3>No question sets yet</h3>
-          <p>
-            A question set is what a session plays. Every other screen in here — sessions,
-            archive, reports — is downstream of one. There are three ways to make the first,
-            and they are not equivalent.
-          </p>
-          <div className="qsets-paths">
-            <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate && onCreate('ai')}>
-              <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
-              Generate with AI
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate && onCreate('csv')}>
-              <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
-              Upload a CSV
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate && onCreate('template')}>
-              <Icon name="FileText" weight="bold" size={16} color="currentColor" />
-              Start from a template
-            </button>
-          </div>
+          {onCreate ? (
+            <>
+              <p>
+                A question set is what a session plays. Every other screen in here — sessions,
+                archive, reports — is downstream of one. There are three ways to make the first,
+                and they are not equivalent.
+              </p>
+              <div className="qsets-paths">
+                <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate('ai')}>
+                  <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
+                  Generate with AI
+                </button>
+                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('csv')}>
+                  <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
+                  Upload a CSV
+                </button>
+                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('template')}>
+                  <Icon name="FileText" weight="bold" size={16} color="currentColor" />
+                  Start from a template
+                </button>
+              </div>
+            </>
+          ) : (
+            <p>
+              A question set is what a session plays. There are none to show here yet.
+            </p>
+          )}
         </div>
       )}
 

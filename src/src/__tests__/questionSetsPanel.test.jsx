@@ -183,6 +183,37 @@ describe('nothing exists', () => {
   });
 
   /*
+    THE SAME RULE, ONE STATE FURTHER IN. The header button was gated on its
+    handler; these three were left rendering behind `onCreate && onCreate('ai')`
+    — the identical short-circuit, on the identical filled primary, in the state
+    where a person is pressing hardest because there is nothing else on screen.
+
+    This is the component's contract, not a screen's: a caller with no creation
+    path mounts this table today (PublicLibraryPanel, with `rowActions` and no
+    `onCreate`), and that caller happens to intercept its own empty case with
+    its own copy before this state is reached. "Unreachable through one caller
+    today" is not the same as "cannot render dead controls", and it is the
+    second half of the owner's report either way.
+  */
+  test('the three creation paths are not drawn when no caller can honour them', () => {
+    render(<QuestionSetsPanel questionSets={[]} loading={false} />);
+    expect(screen.queryByRole('button', { name: /generate with ai/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /upload a csv/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start from a template/i })).toBeNull();
+  });
+
+  test('and what is left still says what the thing is, without naming a way in that is not there', () => {
+    // rejects: deleting the empty state along with its buttons (design rule 6 —
+    // the reader still has to be told there is nothing here), and rejects
+    // keeping the sentence that promises three ways to make the first one when
+    // none of the three is on screen (rule 2, one sentence further down).
+    render(<QuestionSetsPanel questionSets={[]} loading={false} />);
+    expect(screen.getByText(/No question sets yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/A question set is what a session plays/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/three ways/i);
+  });
+
+  /*
     THE HEADER'S "New set" IS AN AFFORDANCE FOR `onCreate`, AND NOTHING ELSE.
 
     Reported by the owner against the Public library, which mounts this table
