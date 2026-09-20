@@ -240,6 +240,28 @@ describe('the phone question browser', () => {
     expect(posts[0].body).toEqual({ questionId: '004', action: 'skip_to_specific' });
   });
 
+  // Rejects: the preview reaching the phone without the session's game type.
+  // `gameType` travels HostRemote -> RemoteSessionPanel -> the browser, and a
+  // missing link anywhere on it draws a trivia question as free text — no
+  // options on the card, and another game's instruction line under it. The
+  // preview's own behaviour is held in hostRemotePreview.test.jsx; this is the
+  // one assertion that the chain is connected end to end.
+  it('previews the question as the room would see it, from the live remote', async () => {
+    serve();
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    await screen.findByText(TRIVIA.title);
+
+    fireEvent.click(screen.getByRole('button', { name: /^preview/i }));
+
+    const pane = screen.getByTestId('hrq-preview-screen');
+    expect(pane.querySelector('h1.q')).toHaveTextContent(TRIVIA.title);
+    expect([...pane.querySelectorAll('.opt .txt')].map((n) => n.textContent))
+      .toEqual([TRIVIA.optionA, TRIVIA.optionB, TRIVIA.optionC, TRIVIA.optionD]);
+    // and the answer is not on it until the host asks for it
+    expect(pane.querySelectorAll('.opt.correct')).toHaveLength(0);
+  });
+
   // Rejects: leaving the browser open after a choice. The host chose; what they
   // need next is the progress meter, not the list.
   it('returns to the round once the question is asked', async () => {

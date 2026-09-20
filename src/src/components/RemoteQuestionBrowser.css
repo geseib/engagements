@@ -143,9 +143,187 @@
   color: var(--danger);
 }
 
+/* TWO ACTIONS PER ROW, SIDE BY SIDE — `.hr-grid`'s shape, declared here because
+   this is a card's footer rather than a page-level pair. `minmax(0, 1fr)` and
+   not `1fr`: a track sized to its content refuses to shrink below the widest
+   label, and "Ask this next" beside "Preview" would push a 390px card sideways. */
+.hrq-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .hrq-ask {
   width: 100%;
   margin-top: 12px;
 }
 
 .hrq-private { margin: 4px 0 0; }
+
+/* ==========================================================================
+   THE PREVIEW — the room's screen, on the phone that drives it
+   ==========================================================================
+   One pane, two views: the list, or one question as the room will see it. The
+   card is components/QuestionCard.jsx and EVERY rule inside `.hrqp-screen` is
+   styles/stage.css's own, at the Table profile — this sheet paints the ground,
+   the box, and the typography the stage's own `body` would have supplied.
+   Nothing here restyles the card (hostRemotePreviewPalette.test.js holds that):
+   a card "fixed for the phone" is a card forked from the room.
+
+   The remote is already dusk (`.hr` carries data-theme="dark"), so the screen
+   needs no theme of its own — only `--muted`, which the stage LIFTS to #B6C2D4
+   against its field and dusk leaves at #9BA8BE. The dimmed options in Reveal are
+   drawn in it, so it is restated at the stage's value rather than left a shade
+   off the thing this pane exists to reproduce.
+
+   Measured at 390x844, and in hostRemotePreviewPalette.test.js. */
+
+.hrq--preview {
+  /* The pressed segment's tint. An explicit rgba rather than a color-mix, so a
+     palette test can composite it — which is the only honest way to measure the
+     accent that sits on top of it. */
+  --hrq-pressed: rgba(246, 169, 76, .16);
+}
+
+/* -- getting back, and what the card shows ---------------------------------- */
+/* WRAPS ON PURPOSE. The way back and the ASK/Reveal toggle ride one line while
+   there is room for both; below that the toggle takes a line of its own
+   (`flex: 1 1 200px`) rather than squeezing either control under the 44px
+   one-handed floor. */
+.hrqp-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.hrqp-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: .9375rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hrqp-pos {
+  text-align: center;
+  font-size: .8125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* overflow: hidden gives the pressed tint the group's rounded corners, and clips
+   whatever a segment draws outside itself — its focus ring included, which is
+   why that ring is drawn inside the segment below. */
+.hrqp-seg {
+  flex: 1 1 200px;
+  display: flex;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: var(--radius-sm, 8px);
+  overflow: hidden;
+}
+
+.hrqp-seg-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: .9375rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hrqp-seg-btn + .hrqp-seg-btn {
+  border-left: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.hrqp-seg-btn[aria-pressed="true"] {
+  color: var(--primary);
+  background: var(--hrq-pressed);
+}
+
+.hrqp-back:focus-visible,
+.hrqp-seg-btn:focus-visible { outline: 3px solid var(--secondary); outline-offset: 2px; }
+/* A SEGMENT'S RING IS DRAWN INSIDE IT: flush on a clipped edge, a ring offset
+   outward survives only as a bar inside the NEIGHBOURING segment. */
+.hrqp-seg-btn:focus-visible { outline-offset: -3px; }
+
+/* -- the screen ------------------------------------------------------------ */
+/* The stage's ground is `--bg`, which is also the remote's, so the frame is what
+   says where the room's screen starts and ends.
+   The inheritable typography is restated because the remote is not the stage's
+   body: stage.css's `body` gives the card Inter, antialiasing and tabular
+   figures, and styles.css's `body` its 1.6 line height. Nothing between the
+   stage's body and its card sets wrapping, so `normal` is the stage's value. */
+.hrqp-screen {
+  /* The stage LIFTS --muted against its field; dusk leaves it at #9BA8BE. The
+     dimmed options in Reveal are drawn in it, so it is restated at the stage's
+     own value rather than left a shade off the thing this pane reproduces. */
+  --muted: #B6C2D4;
+
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
+  border-radius: var(--radius, 16px);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.6 var(--font-ui);
+  letter-spacing: normal;
+  text-align: start;
+  text-transform: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* `.fitbox`'s gap (stage.css), without `.fitbox`: this pane runs no fitter. */
+.hrqp-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.5vh + 4px);
+  min-width: 0;
+}
+
+/* -- off the screen, and marked so ----------------------------------------- */
+.hrqp-note {
+  margin: 0;
+  font-size: .875rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.hrqp-note b {
+  display: block;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+
+/* -- paging ---------------------------------------------------------------- */
+/* The position sits between the two controls that move it. `minmax(0, 1fr)` on
+   the steps and not `1fr`: a track sized to its content refuses to shrink below
+   its label, and the two buttons plus "12 / 30" would push a 390px phone
+   sideways. The count takes only what it needs. */
+.hrqp-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
