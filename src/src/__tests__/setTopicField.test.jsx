@@ -158,8 +158,18 @@ describe('a shelf the content contradicts is said once, and blocks nothing', () 
 });
 
 describe('the set’s own tags', () => {
+  it('is labelled as the SET’s, because a question has tags of its own', () => {
+    // rejects: a bare "Tags". The question editor two panels down carries a
+    // field with that exact label, and a person told to "add a tag" would have
+    // no way to tell which list was meant — the two never meet, and the copy
+    // has to say so where the choice is made.
+    render(<Host topic="music" />);
+    expect(screen.getByLabelText(/tags for this set/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^tags$/i)).not.toBeInTheDocument();
+  });
+
   const typeTag = (text) => {
-    fireEvent.change(screen.getByLabelText(/^tags$/i), { target: { value: text } });
+    fireEvent.change(screen.getByLabelText(/tags for this set/i), { target: { value: text } });
     fireEvent.click(screen.getByRole('button', { name: /^add tag$/i }));
   };
 
@@ -173,7 +183,7 @@ describe('the set’s own tags', () => {
     // rejects: normalising on every keystroke. It eats the trailing hyphen out
     // of "remote-" the instant it is typed (utils/tags.js's editing note).
     render(<Host topic="music" />);
-    const input = screen.getByLabelText(/^tags$/i);
+    const input = screen.getByLabelText(/tags for this set/i);
     fireEvent.change(input, { target: { value: 'remote-' } });
     expect(input).toHaveValue('remote-');
   });
@@ -181,12 +191,12 @@ describe('the set’s own tags', () => {
   it('clears the box after an add, so the next tag starts empty', () => {
     render(<Host topic="music" />);
     typeTag('pop');
-    expect(screen.getByLabelText(/^tags$/i)).toHaveValue('');
+    expect(screen.getByLabelText(/tags for this set/i)).toHaveValue('');
   });
 
   it('adds on Enter without submitting anything around it', () => {
     render(<Host topic="music" />);
-    const input = screen.getByLabelText(/^tags$/i);
+    const input = screen.getByLabelText(/tags for this set/i);
     fireEvent.change(input, { target: { value: 'synth' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(within(screen.getByTestId('t-tag-list')).getByText('synth')).toBeInTheDocument();

@@ -82,7 +82,7 @@ describe('the builder asks which shelf the set will sit on', () => {
     await fillSet();
 
     fireEvent.change(picker(), { target: { value: 'history' } });
-    fireEvent.change(screen.getByLabelText(/^tags$/i), { target: { value: 'cold war' } });
+    fireEvent.change(screen.getByLabelText(/tags for this set/i), { target: { value: 'cold war' } });
     fireEvent.click(screen.getByRole('button', { name: /^add tag$/i }));
     saveSet();
 

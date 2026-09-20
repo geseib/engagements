@@ -113,7 +113,7 @@ describe('what the panel sends', () => {
     await chooseFile();
     fireEvent.change(screen.getByLabelText(/question set title/i), { target: { value: 'Retro' } });
     fireEvent.change(picker(), { target: { value: 'business-work' } });
-    fireEvent.change(screen.getByLabelText(/^tags$/i), { target: { value: 'onboarding' } });
+    fireEvent.change(screen.getByLabelText(/tags for this set/i), { target: { value: 'onboarding' } });
     fireEvent.click(screen.getByRole('button', { name: /^add tag$/i }));
 
     fireEvent.click(uploadButton());

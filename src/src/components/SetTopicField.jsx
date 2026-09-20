@@ -202,7 +202,10 @@ export default function SetTopicField({
       </div>
 
       <div className="form-group">
-        <label htmlFor={tagsId}>Tags</label>
+        {/* NAMED FOR WHAT IT BELONGS TO. A bare "Tags" is the label the QUESTION
+            editor two panels down already uses, and the two lists never meet —
+            so where both can be on one screen, this one says which it is. */}
+        <label htmlFor={tagsId}>Tags for this {noun}</label>
 
         <ul className="qs-topic-tags" data-testid={`${idPrefix}-tag-list`}>
           {list.map((tag) => (

@@ -145,7 +145,7 @@ describe('the set’s own tags ride along with the details save', () => {
     renderEditor();
     await waitFor(() => expect(picker()).toHaveValue('music'));
 
-    fireEvent.change(screen.getByLabelText(/^tags$/i), { target: { value: 'synth pop' } });
+    fireEvent.change(screen.getByLabelText(/tags for this set/i), { target: { value: 'synth pop' } });
     fireEvent.click(screen.getByRole('button', { name: /^add tag$/i }));
     save();
 
