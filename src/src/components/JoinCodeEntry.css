@@ -71,9 +71,48 @@
 }
 
 /*
+ * The real input is invisible (opacity: 0 below), so the visible focus ring
+ * has to be painted here, on the wrapper that carries `jce-focused` -- an
+ * amber outline with real offset, the same amber used for the "next" cell's
+ * border. Without this a keyboard user tabbing in gets only whatever default
+ * ring the browser paints on a transparent, sightless input.
+ */
+.jce-row.jce-focused {
+  outline: 2px solid var(--mk-amber, #F6A94C);
+  outline-offset: 2px;
+  border-radius: var(--mk-radius-sm, 10px);
+}
+
+/* The insertion point is marked whether or not the field has focus -- the
+   affordance is "typing goes here", which is true before you tap. The caret
+   only blinks once focus is real, because a caret in an unfocused field is a
+   lie about where the keystrokes are going. */
+.jce-row.jce-focused .jce-cell.jce-next::after {
+  content: "";
+  width: 2px;
+  height: 28px;
+  background: var(--mk-amber, #F6A94C);
+  animation: jce-caret 1.06s steps(1, end) infinite;
+}
+
+@keyframes jce-caret {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jce-row.jce-focused .jce-cell.jce-next::after {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/*
  * Overlaid on the cells, not display:none: it stays focusable, pasteable and
  * screen-reader operable. The mockup's `hidden` attribute is a static-mockup
- * shortcut, not a real interaction model.
+ * shortcut, not a real interaction model. Its own outline is suppressed so
+ * there is exactly one visible focus ring -- the amber one on `.jce-row`
+ * above, not a second default ring on an invisible box.
  */
 .jce-input {
   position: absolute;
@@ -82,6 +121,7 @@
   height: 100%;
   opacity: 0;
   border: 0;
+  outline: 0;
   background: transparent;
   color: transparent;
   caret-color: transparent;

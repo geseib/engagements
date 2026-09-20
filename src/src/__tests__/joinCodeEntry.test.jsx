@@ -1,4 +1,6 @@
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import JoinCodeEntry from '../components/JoinCodeEntry';
 import { navigateTo } from '../auth/navigate';
@@ -50,4 +52,32 @@ test('typing partial digits fills cells left to right and marks the next one', (
   expect(cells[2]).toHaveTextContent('');
   expect(cells[2].classList.contains('jce-next')).toBe(true);
   expect(cells[3].classList.contains('jce-next')).toBe(false);
+});
+
+// Fix round 1: the real input is invisible (opacity: 0), so the wrapper's
+// `jce-focused` modifier is the only thing that can paint a visible focus
+// state. A keyboard user tabbing in must see something react.
+test('focusing the field marks the wrapper focused, blurring clears it', () => {
+  const { container } = render(<JoinCodeEntry />);
+  const row = container.querySelector('.jce-row');
+  expect(row.classList.contains('jce-focused')).toBe(false);
+
+  fireEvent.focus(field());
+  expect(row.classList.contains('jce-focused')).toBe(true);
+
+  fireEvent.blur(field());
+  expect(row.classList.contains('jce-focused')).toBe(false);
+});
+
+// jsdom does not run a layout engine (no computed styles), so this is a
+// stylesheet-text check in the style of this repo's other CSS-contract tests:
+// it proves the rule and the reduced-motion guard exist in source, not that
+// they render correctly on screen.
+test('the stylesheet declares a visible focus rule and respects reduced motion', () => {
+  const css = fs.readFileSync(
+    path.join(__dirname, '..', 'components', 'JoinCodeEntry.css'),
+    'utf8',
+  );
+  expect(css).toMatch(/\.jce-focused\s*{|\.jce-row\.jce-focused\s*{/);
+  expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
 });
