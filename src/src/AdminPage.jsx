@@ -1929,6 +1929,12 @@ function AdminPage() {
               ? (
                 <ScoreCard
                   publicSetId={scoreCardId}
+                  /* As Engage, which is what unlocks re-running a published
+                     version's check. ScoreCard defaults to the org's reading,
+                     the same fail-closed default PublicLibraryPanel's `mode`
+                     takes: a staff-only control must not appear because a
+                     caller forgot to say who is looking. */
+                  mode="platform"
                   onBack={() => setScoreCardId('')}
                   onTakenDown={() => { setScoreCardId(''); fetchQuestionSets(); }}
                 />
