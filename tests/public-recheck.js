@@ -52,6 +52,10 @@ const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/check-ques
 // everything the queue row it raises can reach. The review dialog is the only
 // other surface that acts on a queue row, so its route is driven from here.
 const { handler: decideHandler } = require(path.join(H.REPO, 'lambda-functions/admin/moderation-decide.js'));
+// R3 reaches the AUTHOR too: a FLAGGED re-check leaves their REVIEW row in the
+// one state the appeal route takes, and an appeal writes the share stamp a
+// re-check must never write.
+const { handler: appealHandler } = require(path.join(H.REPO, 'lambda-functions/admin/appeal-question-set.js'));
 
 const ORG = 'org_acme'; const SET = 'crime';
 const SRC = { scope: 'org', orgId: ORG, setId: SET };
@@ -65,6 +69,8 @@ const parse = (res) => JSON.parse(res.body || '{}');
 const post = (body = { recheck: true }, publicSetId = PUB) => handler(H.platformEvent({ method: 'POST', path: { setId: publicSetId }, body }), H.ctx());
 /** The review dialog's route, against a queue row the re-check raised. */
 const decide = (body) => decideHandler(H.platformEvent({ method: 'POST', body }), H.ctx());
+/** The author, asking a person to look at what the re-check made of their set. */
+const appeal = (body) => appealHandler(H.orgEvent({ orgId: ORG, role: 'owner', method: 'POST', setId: SET, body }), H.ctx());
 const poll = (jobId) => handler(H.platformEvent({ method: 'GET', path: { setId: PUB, jobId } }), H.ctx());
 const review = (version) => R.readReview(db, T, SRC, version);
 const stampOf = async () => S.readShareStamp(await C.decryptItem(ORG, 'set', H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`)));
@@ -420,6 +426,61 @@ async function recheck(body = { recheck: true }) {
     assert.strictEqual((await stampOf()).status, 'published');
     assert.ok(H.state.s3.has(`prompts-test/${row.snapshotKey}`), 'the snapshot a person still needs was deleted');
     assert.strictEqual(queue().length, 1);
+  });
+
+  /*
+    …AND PAST THE AUTHOR, who is the one person the re-check never told.
+
+    A FLAGGED re-check leaves the organisation's REVIEW row reading `flagged`,
+    and `flagged` is exactly the state the appeal route takes. Down that route
+    the author reached every outcome R1 and R3 forbid without staff touching
+    anything: the share stamp went to `appealed`, moving their own live set out
+    of the published state R3 promises them; the queue row was bumped, which
+    cleared the `recheck` flag moderation-decide.js refuses on; and Approve then
+    minted a second public version of content already live.
+
+    Two locks, because the door has two sides. The appeal is refused for a
+    version the library is serving, and a raising that says nothing about
+    `recheck` — which is every appeal and every report — no longer clears it.
+  */
+  await H.test('the author cannot appeal a re-check\'s verdict, and their set is untouched by the refusal', async () => {
+    await seedOrg({ versions: [2], active: 2 });
+    await seedPublished({ sourceVersion: 2 });
+    const before = libraryState();
+    H.state.guardrailReplies = [H.guardrailFull({ VIOLENCE: 'HIGH' }, { VIOLENCE: true }), ...clean(2)];
+    await recheck();
+    assert.strictEqual((await review(2)).status, R.STATUS.FLAGGED, 'not the state an appeal is taken from');
+    const res = await appeal({ version: 2, message: 'Nobody told us about this.' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /public library/i, 'the refusal did not say why');
+    assert.strictEqual((await stampOf()).status, 'published', 'the appeal moved the author out of published');
+    assert.strictEqual((await review(2)).status, R.STATUS.FLAGGED, 'the refusal appealed it anyway');
+    assert.strictEqual(libraryState(), before, 'the refusal changed what the library serves');
+    assert.strictEqual(queue()[0].recheck, true, 'the guard on the re-check\'s row was cleared');
+  });
+
+  // rejects: leaning on the appeal route alone. The queue row's flag is what
+  // moderation-decide actually consults, so it has to survive a bump from any
+  // raising that does not state it — an appeal, a report — on its own.
+  await H.test('a bump that says nothing about the re-check leaves the row undecidable', async () => {
+    await seedOrg({ versions: [2], active: 2 });
+    await seedPublished({ sourceVersion: 2 });
+    H.state.guardrailReplies = [H.guardrailFull({ HATE: 'MEDIUM' }, { HATE: true }), ...clean(2)];
+    await recheck();
+    const [raised] = queue();
+    const before = libraryState();
+    // Exactly the shape appeal-question-set.js raises, were it ever reached.
+    await Q.upsertQueueRow(db, T, {
+      ref: SRC, version: 2, reason: 'appealed', appealMessage: 'Nobody told us about this.',
+    });
+    const [row] = queue();
+    assert.strictEqual(row.SK, raised.SK, 'the bump re-keyed the row instead of bumping it');
+    assert.strictEqual(row.recheck, true, 'the bump cleared the guard');
+    assert.strictEqual(row.appealMessage, 'Nobody told us about this.', 'the guard swallowed the raising\'s own fields');
+    const res = await decide({ sk: row.SK, decision: 'approve', note: 'Looks fine to me.' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /score card/i);
+    assert.strictEqual(libraryState(), before, 'an appealed re-check row published a second time');
   });
 
   // rejects: the refusal above catching every queue row. An organisation's own

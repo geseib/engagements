@@ -81,6 +81,40 @@ const post = (body, role = 'owner') => H.orgEvent({ orgId: ORG, role, method: 'P
       db.send = realSend;
     }
   });
+  /*
+    THERE IS NOTHING TO APPEAL ABOUT A SET THE LIBRARY IS SERVING, and letting
+    one through re-opens the publish path a staff re-check exists to keep shut.
+
+    Engage staff can re-run the content check on the version the public library
+    already serves. A HIGH band writes FLAGGED onto this very REVIEW row — and
+    from FLAGGED this route would take the appeal, write the author a share stamp
+    reading `appealed` (knocking their own live set out of its published state),
+    and bump the queue row the re-check raised. That bump used to clear the
+    `recheck` flag moderation-decide.js refuses on, so Approve then minted a
+    SECOND public version of content already live.
+
+    The refusal is right on its own terms too: the library serves this version,
+    so approving an appeal of it could only ever publish it twice.
+  */
+  await H.test('a version the library is serving cannot be appealed', async () => {
+    await seed();
+    H.seedRow({ ...R.publishedKey(SRC, 2), publicSetId: 'orgacme-safety', publicVersion: 1, at: '2026-09-18T10:00:00.000Z' });
+    const res = await handler(post({ version: 2, message: 'Please look again.' }), H.ctx());
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /public library/i, 'the refusal did not say why');
+    assert.strictEqual((await R.readReview(db, T, SRC, 2)).status, R.STATUS.FLAGGED, 'the refusal moved the review anyway');
+    assert.strictEqual(H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`).share, undefined, 'the refusal stamped the author anyway');
+    assert.strictEqual(H.rowsWhere((x) => x.PK === 'MODERATION').length, 0, 'the refusal queued it anyway');
+    assert.strictEqual(H.rowsWhere((x) => x.PK === `REVIEWLOG#org#${ORG}#${SET}`).length, 0, 'the refusal logged it anyway');
+  });
+  // rejects: refusing every appeal once the set has ever been published. The
+  // marker is deleted when a listing is taken down (publish-set.unpublishSet),
+  // and a later version of the same set never had one.
+  await H.test('a version the library is not serving is appealed as before', async () => {
+    await seed();
+    H.seedRow({ ...R.publishedKey(SRC, 1), publicSetId: 'orgacme-safety', publicVersion: 1 });
+    assert.strictEqual((await handler(post({ version: 2 }), H.ctx())).statusCode, 200);
+  });
   await H.test('a member cannot appeal; the message is capped at 500 characters', async () => {
     await seed();
     assert.strictEqual((await handler(post({ version: 2 }, 'member'), H.ctx())).statusCode, 403);

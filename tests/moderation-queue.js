@@ -39,23 +39,42 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     assert.strictEqual((await Q.listQueue(db, 'engage-test')).length, 1);
   });
   /*
-    `recheck` is THIS raising's provenance, never the last one's.
+    `recheck` IS SAID BY THE CHECK, AND ONLY BY THE CHECK.
 
     A row staff's re-check of a live listing raised is not a publish request and
     moderation-decide.js refuses to decide it. The organisation's OWN later
-    submission of the same version IS one — and it comes through here carrying
-    no `recheck`, so an inherited flag would leave their share undecidable for
-    good. Everything else on a pointer is deliberately carried forward; this is
-    the one field that must not be.
+    submission of the same version IS one, and must clear the flag — otherwise
+    their share is undecidable for good. Only set-check-worker.js knows which of
+    the two it is running, and it says so on EVERY raising it makes: `recheck`
+    there is `request.recheck === true`, a boolean, passed whichever way it came
+    out.
+
+    So a caller that states the field is believed, and a caller that does not —
+    an APPEAL, a report — leaves it as it stands. Written fresh on every upsert
+    instead, an appeal cleared the guard: the author appeals the FLAGGED a staff
+    re-check wrote, the bump silently turns `recheck` off, and Approve in the
+    review dialog publishes a SECOND public version of content already live.
+    (The appeal route now refuses that version outright — tests/appeal-question-
+    set.js — and this is the second lock on the same door.)
   */
-  await H.test('recheck is written fresh on every upsert, never inherited from the row it bumps', async () => {
+  await H.test('an organisation\'s own submission clears the re-check flag the staff raising set', async () => {
     H.reset();
     await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing', recheck: true });
     assert.strictEqual(H.rowsWhere((r) => r.PK === 'MODERATION')[0].recheck, true);
-    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing' });
+    // As set-check-worker.js raises it: the field is stated, and it is false.
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing', recheck: false });
     const [row] = H.rowsWhere((r) => r.PK === 'MODERATION');
     assert.strictEqual(row.recheck, false, 'the organisation\'s own submission inherited the re-check flag');
     assert.strictEqual(row.title, 'Pricing', 'clearing the flag dropped the pointer fields');
+  });
+  await H.test('a raising that says nothing about it — an appeal, a report — leaves the flag as it stands', async () => {
+    H.reset();
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing', recheck: true });
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'appealed', appealMessage: 'It is a history set.' });
+    const [row] = H.rowsWhere((r) => r.PK === 'MODERATION');
+    assert.strictEqual(row.recheck, true, 'an appeal cleared the guard on a listing the library is already serving');
+    assert.strictEqual(row.appealMessage, 'It is a history set.', 'inheriting the flag dropped this raising\'s own fields');
+    assert.deepStrictEqual(row.reasons, ['escalated', 'appealed']);
   });
   await H.test('an ordinary row says plainly that it is not a re-check', async () => {
     H.reset();
