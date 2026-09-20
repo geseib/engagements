@@ -15,5 +15,6 @@ export const HELP_PAGE = {
   lead: 'The same guides the in-app help button shows, at an address you can send to somebody.',
   searchLabel: 'Search the guides',
   searchEmpty: 'No guides match that search.',
+  guidesToggle: 'All guides',
   guideFooter: 'Still stuck? The help button inside a session shows this same guide without losing your place.',
 };

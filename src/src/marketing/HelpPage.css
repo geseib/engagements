@@ -87,6 +87,12 @@
 .mk-help-search-input::placeholder { color: var(--mk-muted); }
 .mk-help-search-input:focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 2px; }
 
+/* Fix round 1, finding 1: the guide-list toggle. Hidden above 720px, where
+   `.mk-help-list` always shows -- the same open-class pattern
+   `.mk-nav-links`/`.mk-nav--open` uses in MarketingShell.css, mirrored here
+   as `.mk-help-list`/`.mk-help-side--open`. */
+.mk-help-toggle { display: none; }
+
 .mk-help-body { max-width: 72ch; }
 
 .mk-help-crumb { font-size: var(--mk-t-label); color: var(--mk-muted); }
@@ -111,7 +117,27 @@
 
 @media (max-width: 720px) {
   .mk-help { grid-template-columns: minmax(0, 1fr); }
+  /* A sticky sidebar taller than the viewport traps scrolling on a phone. */
   .mk-help-side { position: static; }
+
+  /* The list of ~20 guide links folds behind the toggle; the search field
+     above it (outside `.mk-help-list`) stays visible either way. Closed by
+     default -- `open` starts `false` in `Sidebar`. */
+  .mk-help-toggle {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: var(--mk-radius-sm);
+    background: var(--mk-surface-2);
+    border: 1px solid var(--mk-rule-strong);
+    color: var(--mk-text);
+    font: 700 var(--mk-t-body)/1.2 var(--mk-font-ui);
+    text-align: left;
+  }
+  .mk-help-list { display: none; }
+  .mk-help-side--open .mk-help-list { display: grid; gap: 20px; }
 }
 
 /* ===========================================================================
@@ -122,6 +148,13 @@
    modal itself. Each rule names the corpus block type it fixes; block types
    with no rule here were checked and read fine as shipped (see the task
    report for the full block-by-block judgment).
+
+   The mockup (05-help.html) also has generic `.mk-help-body h2/h3/p/ul/ol`
+   type rules of its own -- those are deliberately NOT copied here.
+   `documentation.css` already sets `DocRenderer`'s type scale (its own
+   `.help-doc-section h2/h3/p/ul/ol` sizes/spacing), and duplicating the
+   mockup's numbers under `.mk-help-body` would fight that scale rather than
+   just recolour it. Only colour/background/border are overridden below.
    =========================================================================== */
 
 /* 'p' / the guide header: dark ink and a light border, both invisible on

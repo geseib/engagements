@@ -1,9 +1,11 @@
 // src/src/__tests__/helpPage.test.jsx
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import HelpPage, { helpTargetFromPath, helpHref } from '../marketing/HelpPage';
 import {
-  HELP_ROLES, HELP_ALIASES, ROLE_ID_BY_GUIDE_ID, GUIDE_BY_ID, resolveHelpTarget,
+  HELP_ROLES, HELP_ALIASES, ROLE_ID_BY_GUIDE_ID, resolveHelpTarget,
 } from '../config/help';
 import { HELP_PAGE } from '../marketing/content/help';
 
@@ -113,4 +115,65 @@ test('exactly one h1 on the home view', () => {
   goTo('/help');
   render(<HelpPage />);
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+});
+
+// --- Fix round 1 -----------------------------------------------------------
+
+test('exactly one h1 while a search term is present', () => {
+  goTo(`/help/${role.id}/${guide.id}`);
+  render(<HelpPage />);
+  const input = screen.getByLabelText(HELP_PAGE.searchLabel);
+  fireEvent.change(input, { target: { value: guide.title } });
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(HELP_PAGE.title);
+});
+
+test('the guide-list toggle starts closed, its label comes from HELP_PAGE, and it controls the list', () => {
+  goTo('/help');
+  render(<HelpPage />);
+  const toggle = screen.getByRole('button', { name: HELP_PAGE.guidesToggle });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  const controlsId = toggle.getAttribute('aria-controls');
+  expect(controlsId).toBeTruthy();
+  const list = document.getElementById(controlsId);
+  expect(list).toBeTruthy();
+  expect(list.className).toMatch(/mk-help-list/);
+});
+
+test('clicking the guide-list toggle opens it, and the sidebar carries the open class; clicking again closes it', () => {
+  goTo('/help');
+  render(<HelpPage />);
+  const toggle = screen.getByRole('button', { name: HELP_PAGE.guidesToggle });
+  const sidebar = toggle.closest('.mk-help-side');
+
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(sidebar.className).toMatch(/mk-help-side--open/);
+
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(sidebar.className).not.toMatch(/mk-help-side--open/);
+});
+
+describe('HelpPage.css: the narrow-width guide-list toggle (stylesheet text)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../marketing/HelpPage.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ''); // strip comments so a mention in prose can't fake a match
+
+  const narrowBlock = css.match(/@media \(max-width: 720px\) \{([\s\S]*?)\n\}/)[1];
+
+  test('the toggle is hidden outside the narrow media block', () => {
+    const outsideNarrow = css.slice(0, css.indexOf('@media (max-width: 720px)'));
+    expect(outsideNarrow).toMatch(/\.mk-help-toggle\s*\{[^}]*display:\s*none/);
+  });
+
+  test('inside the narrow block, the closed list is hidden and the open one is not', () => {
+    expect(narrowBlock).toMatch(/\.mk-help-list\s*\{[^}]*display:\s*none/);
+    const openRule = narrowBlock.match(/\.mk-help-side--open \.mk-help-list\s*\{([^}]*)\}/);
+    expect(openRule).toBeTruthy();
+    expect(openRule[1]).not.toMatch(/display:\s*none/);
+  });
+
+  test('the sidebar is not sticky inside the narrow block', () => {
+    expect(narrowBlock).toMatch(/\.mk-help-side\s*\{[^}]*position:\s*static/);
+  });
 });

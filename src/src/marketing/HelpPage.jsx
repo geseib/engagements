@@ -76,9 +76,20 @@ function Breadcrumb({ target }) {
  * list is labelled by its (non-heading) role name via `aria-labelledby`
  * instead.
  */
+const GUIDES_LIST_ID = 'help-guides-list';
+
 function Sidebar({ activeGuide, term, onTermChange }) {
+  // Closed by default on every view (fix round 1, finding 1): at ≤720px the
+  // list of ~20 guide links used to stack above the article, so a deep link
+  // opened on a wall of navigation with the guide several screens down. The
+  // search field stays visible; only the list folds behind this button. At
+  // >720px the toggle is hidden and the list always shows, regardless of
+  // `open` -- see the `.mk-help-toggle`/`.mk-help-list` rules in
+  // HelpPage.css, which follow the same open-class pattern MarketingShell
+  // uses for `.mk-nav--open`.
+  const [open, setOpen] = useState(false);
   return (
-    <nav className="mk-help-side" aria-label="Guides">
+    <nav className={`mk-help-side${open ? ' mk-help-side--open' : ''}`} aria-label="Guides">
       <form className="mk-help-search" role="search" onSubmit={(e) => e.preventDefault()}>
         <label className="mk-help-search-label" htmlFor="help-search-input">
           {HELP_PAGE.searchLabel}
@@ -93,28 +104,40 @@ function Sidebar({ activeGuide, term, onTermChange }) {
         />
       </form>
 
-      {HELP_ROLES.map((role) => {
-        const headingId = `help-role-${role.id}`;
-        return (
-          <div key={role.id} className="mk-help-role">
-            <a className="mk-help-role-name" id={headingId} href={helpHref({ kind: 'role', id: role.id })}>
-              {role.title}
-            </a>
-            <ul className="mk-help-guides" aria-labelledby={headingId}>
-              {role.guides.map((g) => (
-                <li key={g.id}>
-                  <a
-                    href={helpHref({ kind: 'guide', id: g.id })}
-                    aria-current={g.id === activeGuide ? 'page' : undefined}
-                  >
-                    {g.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
+      <button
+        type="button"
+        className="mk-help-toggle"
+        aria-expanded={open}
+        aria-controls={GUIDES_LIST_ID}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {HELP_PAGE.guidesToggle}
+      </button>
+
+      <div id={GUIDES_LIST_ID} className="mk-help-list">
+        {HELP_ROLES.map((role) => {
+          const headingId = `help-role-${role.id}`;
+          return (
+            <div key={role.id} className="mk-help-role">
+              <a className="mk-help-role-name" id={headingId} href={helpHref({ kind: 'role', id: role.id })}>
+                {role.title}
+              </a>
+              <ul className="mk-help-guides" aria-labelledby={headingId}>
+                {role.guides.map((g) => (
+                  <li key={g.id}>
+                    <a
+                      href={helpHref({ kind: 'guide', id: g.id })}
+                      aria-current={g.id === activeGuide ? 'page' : undefined}
+                    >
+                      {g.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </nav>
   );
 }
@@ -162,7 +185,13 @@ export default function HelpPage() {
         <Sidebar activeGuide={guide ? guide.id : null} term={term} onTermChange={setTerm} />
         <article className="mk-help-body">
           {searching ? (
-            <SearchResults term={term} />
+            <>
+              {/* Fix round 1, finding 2: a search used to render no h1 at
+                  all. Every state keeps exactly one -- the page-level title
+                  stands in above the results while a term is present. */}
+              <h1 className="mk-title">{HELP_PAGE.title}</h1>
+              <SearchResults term={term} />
+            </>
           ) : (
             <>
               <Breadcrumb target={target} />
