@@ -100,19 +100,43 @@ export function shareStateOf(set, nowMs = Date.now(), { canShare = false } = {})
         title: 'The public library has a copy of this set. Anyone using Engage can read and copy it.',
       };
     }
+    /*
+     * EVERY STATUS BELOW SPEAKS OF THE VERSION, NEVER OF THE LIBRARY.
+     *
+     * A re-share does not withdraw what is already out there. Pressing Share on
+     * v3 of a set whose v2 is published replaces the whole stamp with
+     * `{version: 3, status: 'checking', jobId}` (check-question-set.js:153 —
+     * the map is REPLACED, never merged, and no non-published writer carries
+     * `publicSetId` forward), while the v2 copy goes on being served: publishing
+     * happens only on a pass (set-check-worker.js:374), and nothing here
+     * unpublishes. The same is true through a refusal and through an appeal.
+     *
+     * So these rows said "Not published." and "…and not published" about sets
+     * every organisation could read. This row cannot know whether a copy is
+     * live — the pointer is gone from the stamp, and get-question-sets.js
+     * projects the public row's sourceOrgId but not its sourceSetId, so there
+     * is nothing to match against either. A state that cannot know must not
+     * claim, in either direction.
+     */
     case 'checking': {
       const age = share.at ? nowMs - Date.parse(share.at) : 0;
       return age > STALE_CHECK_MS
         ? { key: 'unfinished', label: "Didn't finish", title: `The content check did not finish.${canShare ? ' Submit it again.' : ''}` }
-        : { key: 'checking', label: 'Checking…', title: 'The content check is running.' };
+        : { key: 'checking', label: 'Checking…', title: 'The content check is running on this version. Whatever the library is serving is unchanged until it finishes.' };
     }
     case 'flagged':
-      return { key: 'flagged', label: 'Needs changes', title: 'Not published. Open the set to see exactly what was flagged.' };
+      // Two real situations wear this stamp: a version the check or a reviewer
+      // refused (an earlier one may still be in the library), and a takedown
+      // (public-library-item.js:217, on a version that WAS published). The one
+      // sentence true of both is where the reason is written down.
+      return { key: 'flagged', label: 'Needs changes', title: 'Open the set to see exactly what was flagged.' };
     case 'escalated':
     case 'appealed':
       return { key: 'waiting', label: 'Waiting for Engage', title: 'A person at Engage is looking at this version. The outcome will show here.' };
     case 'passed':
-      return { key: 'passed', label: 'Checked', title: 'Passed the content check and not published.' };
+      // Safe to say of the version and only of the version: one that had been
+      // published would carry `published`, not this.
+      return { key: 'passed', label: 'Checked', title: 'This version passed the content check and has not been published.' };
     default:
       return PRIVATE;
   }

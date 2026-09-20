@@ -104,6 +104,71 @@ describe('shareStateOf — the "Who can see it" column', () => {
     expect(shareStateOf({ share: { status: 'checking', version: 2, at: at(16) } }, NOW)).toMatchObject({ key: 'unfinished', label: "Didn't finish" });
     expect(STALE_CHECK_MS).toBe(15 * 60 * 1000);
   });
+  /*
+    THE TAG AFTER A FAILED OR IN-FLIGHT RE-SHARE, WHICH WAS THE LIE.
+
+    The stamp is REPLACED, never merged (shared/share-stamp.js: "Each writer
+    knows the whole truth of the moment it writes"), and not one of the writers
+    for a non-published status carries `publicSetId` forward —
+    check-question-set.js:153 writes `{version, status:'checking', jobId}`,
+    set-check-worker.js:384 `{version, status, contentHash, jobId}`,
+    appeal-question-set.js:124 `{version, status:'appealed', contentHash}`.
+
+    So: share v2 (published, live in the library) → edit → press Share on v3 →
+    the stamp is now `checking` on v3, and NOTHING removed the v2 copy. The
+    library is still serving it through the check, through a refusal, through an
+    appeal — publishing only ever happens on a pass (set-check-worker.js:374).
+    The row said "Not published." about a set every organisation could read.
+
+    What this row cannot know is whether a copy is live: the pointer is gone
+    from the stamp and `get-question-sets.js` projects the public row's
+    `sourceOrgName`/`sourceOrgId` but not its `sourceSetId`, so there is nothing
+    to match on either. A state that cannot know must not claim. Each of these
+    says what is true OF THE VERSION and asserts nothing about the library.
+  */
+  describe('a set whose public copy is still being served does not read as though it is not', () => {
+    /* Every status shared/share-stamp.js will write (SHARE_STATUSES). */
+    const EVERY_STATUS = ['checking', 'passed', 'published', 'flagged', 'escalated', 'appealed', 'unpublished'];
+    test.each(EVERY_STATUS)('%s says nothing about the set being absent from the library', (status) => {
+      const s = shareStateOf({ activeVersion: 2, share: { status, version: 2, at: at(1) } }, NOW);
+      expect(s.key).toBeTruthy();
+      expect(s.title).toMatch(/\S/);
+      // rejects: the two sentences that used to be here — "Not published. Open
+      // the set…" on a refusal and "…and not published" on a pass — either of
+      // which is false while an earlier version is still in the library.
+      expect(s.title).not.toMatch(/\bnot published\b/i);
+      expect(s.title).not.toMatch(/\bnot in the (public )?library\b/i);
+    });
+    test('a refusal names the exit and drops the claim it could not make', () => {
+      const s = shareStateOf({ share: { status: 'flagged', version: 3 } }, NOW);
+      expect(s.label).toBe('Needs changes');
+      expect(s.title).toBe('Open the set to see exactly what was flagged.');
+    });
+    test('a pass says of THE VERSION that it has not gone out', () => {
+      // True in every case: a version that had been published would carry the
+      // `published` status, not this one.
+      const s = shareStateOf({ share: { status: 'passed', version: 3 } }, NOW);
+      expect(s.label).toBe('Checked');
+      expect(s.title).toMatch(/this version/i);
+      expect(s.title).toMatch(/has not been published/i);
+    });
+    test('a check in flight says what it will and will not disturb', () => {
+      const s = shareStateOf({ activeVersion: 3, share: { status: 'checking', version: 3, at: at(2) } }, NOW);
+      expect(s.label).toBe('Checking…');
+      expect(s.title).toMatch(/this version/i);
+      // Publishing happens only on a pass, so whatever the library has now, it
+      // keeps until then — which is the fact the old words contradicted.
+      expect(s.title).toMatch(/until it finishes/i);
+    });
+    test('and an appeal still speaks only of the version a person is holding', () => {
+      expect(shareStateOf({ share: { status: 'appealed', version: 3 } }, NOW).title).toMatch(/this version/i);
+    });
+    test('an unpublished stamp is the one that DOES know: the copy was removed first', () => {
+      // publish-question-set.js:189 writes it after unpublishSet has removed the
+      // rows, so "only your organisation can see this" is true there.
+      expect(shareStateOf({ share: { status: 'unpublished' } }, NOW)).toMatchObject({ key: 'private', label: 'Private' });
+    });
+  });
   test('flagged is needs changes; escalated and appealed are waiting for Engage; passed is checked', () => {
     expect(shareStateOf({ share: { status: 'flagged', version: 2 } }).label).toBe('Needs changes');
     expect(shareStateOf({ share: { status: 'escalated', version: 2 } }).label).toBe('Waiting for Engage');
