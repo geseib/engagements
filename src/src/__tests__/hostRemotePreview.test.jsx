@@ -627,6 +627,27 @@ describe('what the row could already do, it can still do', () => {
     expect(within(preview()).getByRole('button', { name: /ask this next/i })).toBeDisabled();
   });
 
+  /*
+   * BOTH OF A ROW'S BUTTONS NAME ITS QUESTION, or neither should. Preview names
+   * it and Ask did not, so a set of thirty read to a screen reader as thirty
+   * distinct Previews beside thirty identical "Ask this next"s — and Ask is the
+   * one that moves the room.
+   */
+  it('names the question on both of a row\'s buttons', async () => {
+    await mount([TRIVIA_A, TRIVIA_B]);
+
+    const buttons = [...cardFor(TRIVIA_B.title).querySelectorAll('.hrq-actions button')];
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      expect(button).toHaveAttribute('aria-label', expect.stringContaining(TRIVIA_B.title));
+      // and the visible label still opens the name, so what a reader hears starts
+      // with what a looker sees
+      expect(button.getAttribute('aria-label')).toMatch(
+        new RegExp(`^${button.textContent.trim()}`),
+      );
+    }
+  });
+
   // rejects: dropping the line that says why this surface may show the answer.
   it('keeps the private-to-this-phone note beside the answer', async () => {
     await mount([TRIVIA_A]);

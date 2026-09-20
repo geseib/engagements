@@ -491,10 +491,17 @@ export default function RemoteQuestionBrowser({
               <Icon name="Eye" weight="bold" size={16} color="currentColor" />
               Preview
             </button>
+            {/* AND SO DOES THIS ONE, which is the half that was missing: Preview
+                named its question and Ask did not, so thirty rows read out as
+                thirty distinct Previews beside thirty identical "Ask this
+                next"s — and Ask is the one that moves the room. The name opens
+                with the words on the button, in both of its states, so what a
+                reader hears starts with what a looker sees. */}
             <button
               className="hr-btn hr-btn--ghost"
               type="button"
               disabled={busy || asking !== null}
+              aria-label={`${asking === row.id ? 'Working…' : 'Ask this next'} “${row.title}”`}
               onClick={() => ask(row)}
             >
               {asking === row.id ? 'Working…' : 'Ask this next'}
