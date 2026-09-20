@@ -491,17 +491,63 @@ const save = (setId, patch) => editSet({
     );
   });
 
-  // rejects: editing one copy of the shelf and not the other, which would let
-  // a picker offer a shelf the importer refuses. The two are duplicated
-  // because lambda bundles are per-directory, not because either is the truth.
-  await check('the lambda copy and the frontend copy have not drifted', () => {
+  /*
+    rejects: editing one copy of the shelf and not the other. The two are
+    duplicated because lambda bundles are per-directory, not because either is
+    the truth.
+
+    BOTH DIRECTIONS, WHICH IS THE WHOLE POINT. This walked the LAMBDA's fifteen
+    and asked whether each appeared in the frontend file, so it caught a shelf
+    the picker had lost — and could not catch a shelf the picker had GAINED,
+    which is the failure its own comment described: a sixteenth id in
+    `config/setTopics.js` would be offered by every picker and refused by
+    `upload-questions.js` and `edit-question-set.js` with "Unknown topic", and
+    the suite would stay green through the whole of it. A one-way guard on a
+    mirrored pair checks the half that is already safe.
+
+    So the frontend's own entries are PARSED out of the file — not merely
+    searched for — and the two lists are compared as lists. That also fixes a
+    second softness: `front.includes(label)` passed on a substring, so a
+    frontend that renamed History to "History & Myth" satisfied it, and a
+    label read off a picker is what a person uses to choose.
+
+    ORDER IS PART OF IT. Both modules say the order is the order a picker
+    renders them in, alphabetical with the catch-all last, so two copies that
+    hold the same fifteen in different orders have still drifted.
+
+    Parsed with a regex rather than imported because the frontend copy is ESM
+    and this suite is CommonJS. Safe here, and checked: every label and blurb
+    in both files is a plain single-quoted literal with no apostrophe in it —
+    the entry count assertion below is what fails loudly if that ever stops
+    being true, rather than the parse silently skipping an entry.
+  */
+  await check('the lambda copy and the frontend copy have not drifted, in either direction', () => {
     const front = fs.readFileSync(path.join(REPO, 'src/src/config/setTopics.js'), 'utf8');
-    for (const id of T.SET_TOPIC_IDS) {
-      const topic = T.SET_TOPICS[id];
-      assert.ok(front.includes(`id: '${id}'`), `the frontend copy is missing the ${id} shelf`);
-      assert.ok(front.includes(topic.label), `the frontend copy is missing ${id}'s label "${topic.label}"`);
-      assert.ok(front.includes(topic.blurb), `the frontend copy is missing ${id}'s blurb`);
+    const parsed = [...front.matchAll(
+      /\n\s+id: '([a-z0-9-]+)',\n\s+label: '([^']*)',\n\s+blurb: '([^']*)',\n/g
+    )].map(([, id, label, blurb]) => ({ id, label, blurb }));
+
+    // A parse that quietly found fewer entries than the file declares would
+    // turn every assertion below into a tautology over a short list.
+    assert.strictEqual(
+      parsed.length,
+      (front.match(/\n\s+id: '[a-z0-9-]+',\n/g) || []).length,
+      'the frontend copy has entries this test could not parse — check for an apostrophe in a label or blurb',
+    );
+
+    assert.deepStrictEqual(
+      parsed.map((entry) => entry.id),
+      T.SET_TOPIC_IDS,
+      'the two copies hold different shelves, or hold them in different orders — a picker that '
+        + 'offers one the writers refuse answers "Unknown topic" on save',
+    );
+
+    for (const entry of parsed) {
+      const topic = T.SET_TOPICS[entry.id];
+      assert.strictEqual(entry.label, topic.label, `the two copies disagree about ${entry.id}'s label`);
+      assert.strictEqual(entry.blurb, topic.blurb, `the two copies disagree about ${entry.id}'s blurb`);
     }
+
     assert.ok(front.includes(`MAX_SET_TAGS = ${T.MAX_SET_TAGS}`), 'the two copies disagree about the tag cap');
     assert.ok(front.includes(`UNFILED_LABEL = '${T.UNFILED_LABEL}'`), 'the two copies disagree about what unfiled is called');
   });
