@@ -82,11 +82,27 @@ exports.handler = async (event) => {
       set arrive unfiled when it arrives switched OFF — an AI draft, a legacy
       archive restore — because it is servable to nobody and refusing it would
       throw away a generation run nobody can repeat. That exemption is only
-      honest if something asks later, and this route is the only one that flips
-      a set's `active`, so this is the whole of "later". Before this existed a
-      generated set went live unfiled and was never asked again: a save is not
-      the gate, because edit-question-set.js validates only a save that MENTIONS
-      the topic and switching a set on mentions nothing.
+      honest if something asks later, and this is where it asks: every way a
+      PERSON switches a set on comes through here, so for anything anybody does
+      in a console this is the whole of "later". Before it existed a generated
+      set went live unfiled and was never asked again — and a save is not the
+      gate either, because edit-question-set.js validates only a save that
+      MENTIONS the topic and switching a set on mentions nothing.
+
+      IT IS NOT THE ONLY WRITER OF `active`, WHICH THIS COMMENT USED TO CLAIM.
+      shared/archive-restore.js assigns `active` straight from the snapshot
+      onto the row it lands on — `if (snapshotActive !== null) assign('active',
+      snapshotActive)` — without reading the topic at all, and it can create a
+      live set the same way. So restoring a backup that recorded a set as live
+      is the one route by which an unfiled set becomes servable without meeting
+      the refusal below.
+
+      That gap is narrow and visible rather than forgotten: archive-snapshot.js
+      exempts the topic from removal precisely because every envelope already in
+      the archive predates the field, and import-from-archive.js hands back a
+      `becameActive` list so the person restoring is told which sets went live.
+      tests/archive-restore.js §9 pins it, and if it is ever closed it is closed
+      there rather than here.
 
       EVERY LIBRARY, NOT JUST ENGAGE'S. `becameServable` below is deliberately
       narrower — the content check is about Engage's own shared content — but a

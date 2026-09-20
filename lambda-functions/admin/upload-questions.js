@@ -195,10 +195,15 @@ exports.handler = async (event) => {
       restore (`startInactive`) are servable to nobody, and refusing those would
       throw away a generation run nobody can repeat. SWITCHING ONE ON is where
       the requirement lands — toggle-question-set.js refuses to make an unfiled
-      set servable, and it is the only route that flips `active`. Not a later
-      SAVE: edit-question-set.js validates only a save that mentions the topic,
-      and switching a set on mentions nothing, so a save-shaped promise here
-      would be a gate that does not exist.
+      set servable, and every way a PERSON switches one on comes through there.
+      One writer does not: shared/archive-restore.js assigns `active` from the
+      snapshot without reading the topic, so a restored backup that recorded a
+      set as live is the one way past that refusal. This comment used to call
+      the toggle route the only one that flips `active`, which was never true;
+      toggle-question-set.js carries why the gap is narrow and how it is
+      reported. Not a later SAVE either: edit-question-set.js validates only a
+      save that mentions the topic, and switching a set on mentions nothing, so
+      a save-shaped promise here would be a gate that does not exist.
 
       AN UNKNOWN TOPIC IS REFUSED WHEREVER IT IS OFFERED — create, replace or
       draft. Off the shelf is off the shelf, and a typo must never become a

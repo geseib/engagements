@@ -312,5 +312,39 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
     assert.deepStrictEqual(metaRow('pulse').tags, ['synths']);
   });
 
+  /*
+    AND THE ONE WAY PAST THE FILING GATE, PINNED WHERE IT LIVES.
+
+    `toggle-question-set.js` refuses to switch an unfiled set on: that refusal
+    is what makes upload-questions.js's draft exemption honest, because a set
+    that may arrive unfiled while switched OFF is asked before it can serve
+    anybody. Both of those files used to say that route was the ONLY one that
+    flips a set's `active`. It is not. This one assigns `active` straight from
+    the snapshot without reading the topic at all, so a backup that recorded a
+    set as live switches an unfiled row on and never meets the refusal.
+
+    Asserted rather than left implicit because both comments now state it, and
+    a fact stated in two places with nothing holding it is how they drifted in
+    the first place. It is narrow and it is visible — `import-from-archive.js`
+    reports every set that `becameActive` — and if it is ever closed, it is
+    closed in shared/archive-restore.js and this is the test that says so.
+  */
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    // An AI draft: unfiled, and switched off, which is exactly the pair the
+    // upload route is allowed to create and the toggle route must then ask about.
+    meta: { name: 'Draft', active: false, isAIGenerated: true, versions: [{ version: 1 }, { version: 2 }] },
+  });
+  outcome = await restoreSetSnapshot(deps, setEnvelope({
+    media: [], metadata: { ...META, active: true },
+  }), ctx);
+  await check('a restore can switch an UNFILED set on, which is the one route the filing gate does not cover', () => {
+    const row = metaRow('pulse');
+    assert.strictEqual(row.active, true, 'the restore did not apply the snapshot’s status');
+    assert.strictEqual(row.topic, undefined, 'the row under test has to still be unfiled for this to mean anything');
+    assert.strictEqual(outcome.wasActive, false, 'and it has to have been switched off before');
+  });
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });
