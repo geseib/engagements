@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Home at 390px — Engagements</title>
+<link rel="stylesheet" href="mk.css">
+<style>
+/* ---------------------------------------------------------------------------
+   This file is 01-home at 390px. The page is the SAME markup and the SAME
+   `.mk-*` classes; the only thing this block does is force mk.css's narrow
+   branches on inside a 390px column, so the phone composition can be reviewed
+   side by side with the desktop one instead of only by resizing a window.
+
+   Nothing here becomes React. The real breakpoints live in mk.css.
+   --------------------------------------------------------------------------- */
+/* The outer body carries `mk-root` ONLY so this block can paint from tokens —
+   `--mk-*` live on `.mk-root` and nothing above it can read them. The frame
+   itself is `.mk-frame .mk-root`, so these rules never reach the outer one. */
+body { padding: 26px 16px 60px; }
+.mk-frame { width: min(390px, 100%); margin-inline: auto; }
+.mk-frame-cap {
+  width: min(390px, 100%); margin: 0 auto 12px; color: var(--mk-muted);
+  font-family: var(--mk-font-ui); font-size: var(--mk-t-label); font-weight: 700;
+  line-height: 1.4; letter-spacing: .12em; text-transform: uppercase;
+}
+.mk-frame .mk-root {
+  width: 100%; max-width: 390px; min-height: 0; overflow: hidden;
+  border-radius: 26px; border: 1px solid var(--mk-rule-strong);
+  box-shadow: 0 30px 70px rgba(4, 9, 18, .6);
+  /* the ≤720px token overrides, applied unconditionally */
+  --mk-t-head: 25px; --mk-t-title: 32px; --mk-t-display: 42px; --mk-gutter: 16px;
+  --mk-ridge-band: 780px;
+}
+/* The scene is fixed on the real page. Inside this frame it is absolute, and it
+   is clipped to the hero band — otherwise the bottom-anchored ridge layers
+   would anchor to the foot of the whole scrolling page and never be seen. */
+.mk-frame .mk-ridge { position: absolute; inset: 0 0 auto; height: 780px; }
+.mk-frame .mk-hero { min-height: 780px; }
+
+/* ≤980 */
+.mk-frame .mk-mode, .mk-frame .mk-react-grid { grid-template-columns: minmax(0,1fr); }
+.mk-frame .mk-mode--flip .mk-mode-copy { order: 0; }
+/* the phone clip stacks UNDER the TV clip */
+.mk-frame .mk-mode-screens { grid-template-columns: minmax(0,1fr); justify-items: stretch; }
+.mk-frame .mk-mode-screens .mk-device--phone { width: 190px; justify-self: center; }
+/* ≤860 */
+.mk-frame .mk-nav-links { display: none; }
+.mk-frame .mk-nav-burger {
+  display: inline-grid; place-items: center; width: var(--mk-tap); height: var(--mk-tap);
+  border-radius: var(--mk-radius-sm); background: transparent; color: var(--mk-text);
+  border: 1px solid var(--mk-rule-strong); cursor: pointer;
+}
+.mk-frame .mk-nav-burger svg { width: 20px; height: 20px; }
+.mk-frame .mk-nav-burger path { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.mk-frame .mk-nav-acts .mk-btn-primary { display: none; }
+/* ≤720 */
+.mk-frame .mk-ridge-route, .mk-frame .mk-ridge-climber, .mk-frame .mk-ridge-climber-halo,
+.mk-frame .mk-ridge-mast, .mk-frame .mk-ridge-flag { display: none; }
+.mk-frame .mk-hero-foot { flex-direction: column; align-items: stretch; }
+.mk-frame .mk-hero-copy { max-width: none; }
+.mk-frame .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
+.mk-frame .jce { min-width: 0; }
+.mk-frame .mk-report-head, .mk-frame .mk-report-body,
+.mk-frame .mk-report-foot { padding-inline: 18px; }
+.mk-frame .mk-report-note { margin-left: 0; }
+.mk-frame .mk-problem-grid, .mk-frame .mk-flow { grid-template-columns: minmax(0,1fr); }
+.mk-frame .mk-nav { position: static; }
+</style>
+</head>
+<body class="mk-root mk-anno-on">
+
+<p class="mk-frame-cap">01m — home at 390&nbsp;px</p>
+<div class="mk-frame">
+<div class="mk-root">
+
+<div class="mk-ridge" aria-hidden="true">
+  <div class="mk-ridge-sky"></div>
+  <svg class="mk-ridge-stars" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMin slice">
+    <circle cx="88" cy="54" r="1.5"/><circle cx="212" cy="122" r="1.1"/>
+    <circle cx="318" cy="40" r="1.7"/><circle cx="404" cy="150" r="1"/>
+    <circle cx="512" cy="76" r="1.3"/><circle cx="596" cy="34" r="1"/>
+    <circle cx="688" cy="118" r="1.6"/><circle cx="770" cy="58" r="1.1"/>
+    <circle cx="866" cy="142" r="1.2"/><circle cx="944" cy="46" r="1.5"/>
+    <circle cx="1042" cy="104" r="1"/><circle cx="1136" cy="66" r="1.4"/>
+    <circle cx="150" cy="196" r="1"/><circle cx="1004" cy="180" r="1.1"/>
+  </svg>
+  <div class="mk-ridge-glow"></div>
+  <div class="mk-ridge-haze"></div>
+  <svg class="mk-ridge-layer mk-ridge-back" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 300 L120 236 L230 268 L360 176 L470 232 L600 108 L720 196 L840 150 L960 224 L1080 180 L1200 246 L1200 420 L0 420 Z"/>
+  </svg>
+  <svg class="mk-ridge-layer mk-ridge-mid" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 352 L150 300 L280 330 L420 244 L540 292 L600 214 L680 270 L810 226 L940 300 L1060 262 L1200 318 L1200 420 L0 420 Z"/>
+    <path class="mk-ridge-route" d="M92 418 C 196 398 238 352 328 338 S 468 302 520 270 S 572 236 600 216"/>
+    <circle class="mk-ridge-climber-halo" cx="520" cy="270" r="15"/>
+    <circle class="mk-ridge-climber" cx="520" cy="270" r="6.5"/>
+    <line class="mk-ridge-mast" x1="600" y1="216" x2="600" y2="186"/>
+    <path class="mk-ridge-flag" d="M601 186 L628 195 L601 204 Z"/>
+  </svg>
+  <svg class="mk-ridge-layer mk-ridge-front" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 400 L110 360 L240 388 L380 322 L500 364 L600 300 L700 348 L830 310 L980 368 L1110 336 L1200 372 L1200 420 L0 420 Z"/>
+  </svg>
+</div>
+
+<div class="mk-page">
+
+<!-- Nav collapsed: brand, Sign in, menu button. -->
+<header class="mk-nav">
+  <div class="mk-shell mk-nav-in">
+    <a class="mk-brand" href="01-home.html">
+      <svg class="mk-brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 27 L11 13 L16 20 L22 6 L30 27 Z"/></svg>
+      Engagements
+    </a>
+    <nav class="mk-nav-links" aria-label="Main">
+      <a class="mk-nav-link" href="02-how-it-works.html">How it works</a>
+      <a class="mk-nav-link" href="03-use-cases.html">Use cases</a>
+      <a class="mk-nav-link" href="04-reports.html">Reports</a>
+      <a class="mk-nav-link" href="05-help.html">Help</a>
+    </nav>
+    <div class="mk-nav-acts">
+      <a class="mk-btn mk-btn-quiet" href="#">Sign in</a>
+      <a class="mk-btn mk-btn-primary" href="#">Create a host account</a>
+      <button class="mk-nav-burger" type="button" aria-label="Menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="mk-hero">
+  <div class="mk-shell mk-hero-top">
+    <p class="mk-kicker">Base camp</p>
+    <h1 class="mk-display mk-hero-copy" style="margin-top:14px">
+      Turn your team&rsquo;s own material into decisions everyone climbed toward.
+    </h1>
+    <p class="mk-lead mk-hero-sub">
+      Build question sets from what your team already has. Run them as trivia, or as call
+      and answer to collect every idea and put it to a vote. Everyone plays from their
+      phone.
+    </p>
+  </div>
+  <div class="mk-shell mk-hero-foot">
+    <div class="mk-hero-ctas">
+      <a class="mk-btn mk-btn-primary mk-btn-lg" href="#">Create a host account</a>
+      <a class="mk-btn mk-btn-ghost" href="#">Sign in</a>
+    </div>
+    <form class="jce" onsubmit="return false">
+      <label class="jce-label" for="jce-code">Have a code?</label>
+      <div class="jce-row">
+        <div class="jce-cells" aria-hidden="true">
+          <div class="jce-cell">4</div><div class="jce-cell">8</div>
+          <div class="jce-cell">2</div><div class="jce-cell jce-next"></div>
+        </div>
+        <button class="mk-btn mk-btn-primary jce-go" type="submit">Join</button>
+      </div>
+      <input id="jce-code" type="text" inputmode="numeric" maxlength="4" hidden
+             aria-label="Session code, 4 digits">
+      <p class="jce-hint">No account and no app.</p>
+    </form>
+  </div>
+</section>
+
+<section class="mk-section mk-section--a mk-problem">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The climb starts here</p>
+      <h2 class="mk-title">Most sessions lose the thing they were for.</h2>
+    </div>
+    <div class="mk-problem-grid">
+      <article class="mk-stmt"><span class="mk-stmt-n">01</span>
+        <h3>A few voices decide</h3>
+        <p>The same three people talk. The quiet half of the room has the answer and no
+           way into the conversation.</p></article>
+      <article class="mk-stmt"><span class="mk-stmt-n">02</span>
+        <h3>Ideas leave with the people</h3>
+        <p>Written on a whiteboard, photographed by two of them, typed up by nobody.</p></article>
+      <article class="mk-stmt"><span class="mk-stmt-n">03</span>
+        <h3>Nobody remembers what was decided</h3>
+        <p>Six weeks later the decision is folklore, and the reasoning that produced it
+           is gone.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--b mk-modes">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">Two ways to play</p>
+      <h2 class="mk-title">One set of questions, two shapes of round.</h2>
+    </div>
+
+    <div class="mk-mode">
+      <div class="mk-mode-copy">
+        <span class="mk-mode-tag">Trivia</span>
+        <h3>Warm the room up, or check what landed.</h3>
+        <p>A question, four options, one right answer &mdash; revealed with its
+           explanation.</p>
+        <ul class="mk-mode-list">
+          <li>Ask, then results. Trivia has no vote phase.</li>
+          <li>Running standings after every question.</li>
+        </ul>
+      </div>
+      <!-- phone clip stacked UNDER the TV clip -->
+      <div class="mk-mode-screens">
+        <figure class="mk-device mk-device--tv" style="margin:0">
+          <div class="mk-device-bezel"><div class="mk-device-screen">
+            <div class="mk-clip"><span class="mk-clip-badge">Clip slot</span>
+              <div class="mk-ss">
+                <div class="mk-ss-top"><span class="mk-ss-dot"></span>
+                  <span class="mk-ss-chip">Trivia</span><span class="mk-ss-code">4821</span></div>
+                <p class="mk-ss-q">Biggest cause of rework?</p>
+                <div class="mk-ss-opts">
+                  <div class="mk-ss-opt"><b>A</b> Unclear criteria</div>
+                  <div class="mk-ss-opt mk-ss-right"><b>C</b> Agreed in a call, never written</div>
+                </div>
+                <div class="mk-ss-foot"><span class="mk-ss-chip">18 of 20 answered</span></div>
+              </div>
+            </div>
+          </div></div>
+          <div class="mk-device-foot"></div>
+          <figcaption class="mk-device-cap"><b>trivia-host</b> — the front screen.</figcaption>
+        </figure>
+        <figure class="mk-device mk-device--phone" style="margin:0">
+          <div class="mk-device-bezel"><div class="mk-device-screen">
+            <div class="mk-device-notch"></div>
+            <div class="mk-clip"><span class="mk-clip-badge">Clip</span>
+              <div class="mk-ss">
+                <div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Priya</span></div>
+                <p class="mk-ss-q">Biggest cause of rework?</p>
+                <div class="mk-ss-opts">
+                  <div class="mk-ss-opt"><b>A</b> Criteria</div>
+                  <div class="mk-ss-opt"><b>B</b> Design</div>
+                  <div class="mk-ss-opt mk-ss-right"><b>C</b> Never written</div>
+                  <div class="mk-ss-opt"><b>D</b> Drift</div>
+                </div>
+                <div class="mk-ss-cta">Locked in</div>
+              </div>
+            </div>
+          </div></div>
+          <figcaption class="mk-device-cap"><b>trivia-player</b> — answering.</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <div class="mk-mode mk-mode--flip">
+      <div class="mk-mode-copy">
+        <span class="mk-mode-tag">Call and answer</span>
+        <h3>Pose a prompt, collect every idea, then vote.</h3>
+        <p>Everyone writes at once. Then the room reads the answers and votes on them.</p>
+        <ul class="mk-mode-list">
+          <li>Ask, vote, results.</li>
+          <li>Every answer is kept, with its vote count.</li>
+        </ul>
+      </div>
+      <div class="mk-mode-screens">
+        <figure class="mk-device mk-device--tv" style="margin:0">
+          <div class="mk-device-bezel"><div class="mk-device-screen">
+            <div class="mk-clip"><span class="mk-clip-badge">Clip slot</span>
+              <div class="mk-ss">
+                <div class="mk-ss-top"><span class="mk-ss-dot"></span>
+                  <span class="mk-ss-chip">Vote</span><span class="mk-ss-code">4821</span></div>
+                <div class="mk-ss-bars">
+                  <div class="mk-ss-bar"><span>Parallel discovery</span><em>9</em>
+                    <span class="mk-ss-track"><i style="width:82%"></i></span></div>
+                  <div class="mk-ss-bar"><span>Status meeting</span><em>7</em>
+                    <span class="mk-ss-track"><i style="width:64%"></i></span></div>
+                </div>
+                <div class="mk-ss-foot"><span class="mk-ss-chip">20 votes cast</span></div>
+              </div>
+            </div>
+          </div></div>
+          <div class="mk-device-foot"></div>
+          <figcaption class="mk-device-cap"><b>poll-host</b> — the vote.</figcaption>
+        </figure>
+        <figure class="mk-device mk-device--phone" style="margin:0">
+          <div class="mk-device-bezel"><div class="mk-device-screen">
+            <div class="mk-device-notch"></div>
+            <div class="mk-clip"><span class="mk-clip-badge">Clip</span>
+              <div class="mk-ss">
+                <div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Your idea</span></div>
+                <p class="mk-ss-q">What should we stop doing?</p>
+                <div class="mk-ss-field">Parallel discovery on three products at once</div>
+                <div class="mk-ss-cta">Send</div>
+              </div>
+            </div>
+          </div></div>
+          <figcaption class="mk-device-cap"><b>poll-player</b> — writing, then voting.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--a mk-material">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">Your own material</p>
+      <h2 class="mk-title">The questions come from your work.</h2>
+    </div>
+    <div class="mk-flow">
+      <article class="mk-flow-step"><div class="mk-flow-n">1</div>
+        <h3>Supply the material</h3>
+        <p>Documents and topics you already have &mdash; or write the questions yourself.</p></article>
+      <article class="mk-flow-step"><div class="mk-flow-n">2</div>
+        <h3>A set is drafted</h3>
+        <p>The AI builders turn it into trivia questions or call-and-answer prompts.</p></article>
+      <article class="mk-flow-step"><div class="mk-flow-n">3</div>
+        <h3>You review and edit</h3>
+        <p>Preview it as a player will see it. Nothing runs until you start a session.</p></article>
+      <article class="mk-flow-step"><div class="mk-flow-n">4</div>
+        <h3>It is stored where it belongs</h3>
+        <p>Your organisation&rsquo;s private library, encrypted &mdash; or the moderated
+           public one.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--b mk-react">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The room reacts</p>
+      <h2 class="mk-title">Answers arrive live. The team votes.</h2>
+    </div>
+    <div class="mk-react-grid">
+      <div class="mk-tally">
+        <div class="mk-tally-head"><h3>What should we stop doing?</h3></div>
+        <p class="mk-muted" style="margin-top:10px">20 people answered. 20 votes cast.</p>
+        <div class="mk-tally-rows">
+          <div class="mk-tally-row">
+            <div class="mk-tally-top"><b>Parallel discovery on three products</b>
+              <span class="mk-tally-n">9 votes</span></div>
+            <div class="mk-tally-track"><i style="width:82%"></i></div></div>
+          <div class="mk-tally-row">
+            <div class="mk-tally-top"><b>The weekly status meeting</b>
+              <span class="mk-tally-n">7 votes</span></div>
+            <div class="mk-tally-track"><i style="width:64%"></i></div></div>
+          <div class="mk-tally-row mk-tally-row--cool">
+            <div class="mk-tally-top"><b>Two-week estimates on unscoped work</b>
+              <span class="mk-tally-n">0 votes</span></div>
+            <div class="mk-tally-track"><i style="width:2%"></i></div></div>
+        </div>
+        <p class="mk-tally-note">The answer with no votes is kept too.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--a mk-summit">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The summit</p>
+      <h2 class="mk-title">Everyone leaves with the same page.</h2>
+    </div>
+    <div class="mk-report" data-theme="light" style="margin-top:28px">
+      <div class="mk-report-head">
+        <p class="mk-report-kicker">Session report</p>
+        <h3>Q3 planning</h3>
+        <p class="mk-report-meta">18 September &middot; 20 participants &middot; code 4821</p>
+      </div>
+      <div class="mk-report-body">
+        <section class="mk-report-block">
+          <h4>Question 3 &middot; call and answer</h4>
+          <p class="mk-report-q">What should we stop doing in the next quarter?</p>
+          <ul class="mk-report-answers">
+            <li><span>Parallel discovery on three products at once</span>
+              <span class="mk-report-votes">9 votes</span>
+              <span class="mk-report-meter"><i style="width:82%"></i></span>
+              <span class="mk-report-by">Priya N.</span></li>
+            <li><span>The weekly status meeting nobody reads</span>
+              <span class="mk-report-votes">7 votes</span>
+              <span class="mk-report-meter"><i style="width:64%"></i></span>
+              <span class="mk-report-by">Tomas B.</span></li>
+            <li><span>Two-week estimates on unscoped work</span>
+              <span class="mk-report-votes">0 votes</span>
+              <span class="mk-report-meter"><i style="width:2%"></i></span>
+              <span class="mk-report-by">Sam O.</span></li>
+          </ul>
+        </section>
+        <section class="mk-report-block">
+          <h4>Summary and next steps</h4>
+          <div class="mk-report-summary">
+            <p>The room agreed far more strongly on one thing than on anything else: too
+               much discovery is running at once.</p>
+            <ol class="mk-report-list">
+              <li>Name one product as the discovery focus.</li>
+              <li>Decide who owns release notes.</li>
+            </ol>
+          </div>
+        </section>
+      </div>
+      <div class="mk-report-foot">
+        <a class="mk-report-btn" href="04-reports.html">Export PDF</a>
+        <a class="mk-report-btn" href="04-reports.html">Copy link</a>
+        <span class="mk-report-note">Every answer and every vote is kept.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-cta">
+  <div class="mk-shell mk-cta-in">
+    <p class="mk-kicker">Ready when you are</p>
+    <h2 class="mk-title">Bring your own material. Leave with a decision.</h2>
+    <div class="mk-cta-row">
+      <a class="mk-btn mk-btn-primary mk-btn-lg" href="#">Create a host account</a>
+      <a class="mk-btn mk-btn-ghost" href="02-how-it-works.html">See how it works</a>
+    </div>
+    <p class="mk-cta-fine">Players never need an account.</p>
+  </div>
+</section>
+
+<footer class="mk-foot">
+  <div class="mk-shell mk-foot-in">
+    <span class="mk-foot-legal">Engagements</span>
+    <nav class="mk-foot-links" aria-label="Footer">
+      <a href="#">Privacy</a><a href="#">Terms</a>
+      <a href="05-help.html">Help</a><a href="#">Join with a code</a>
+    </nav>
+  </div>
+</footer>
+
+</div>
+</div>
+</div>
+
+<aside class="mk-anno-rail" aria-label="Design notes">
+  <h6>Design notes — 01m home at 390px</h6>
+  <div class="mk-anno"><b>The phone clip goes UNDER the TV clip</b>Not beside it at a
+    quarter of the size. At 390px the front-room screen is the thing being explained and
+    the player&rsquo;s phone is the follow-up, so they are read in that order.</div>
+  <div class="mk-anno"><b>The nav keeps Sign in, drops Create</b>A returning host signs
+    in from a phone; nobody fills in a registration form standing in a corridor. Create a
+    host account is still one tap away inside the menu, and it is the hero&rsquo;s first
+    button.</div>
+  <div class="mk-anno"><b>The join card is the whole width</b>Four 54px cells plus a Join
+    button fit 390 &minus; 2&times;16 with room to spare, so the compact entry does not
+    need a second layout.</div>
+  <div class="mk-anno"><b>The hero still splits 55/45</b>The headline stays in the upper
+    band and the glow in the lower one at this width too. The band is 620px here rather
+    than 92vh so the frame can be reviewed on a desktop.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script src="notes.js"></script>
+</body>
+</html>
