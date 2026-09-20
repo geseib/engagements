@@ -88,6 +88,22 @@ export default function SetTopicField({
    * stale sentence tells itself apart from a live one.
    */
   suggestion = null,
+  /**
+   * ASK FOR ONE. Optional, and the control is drawn only where it is given:
+   * most surfaces that file a set are filing one that does not exist yet (the
+   * CSV upload, the builder, the dialog that carves a set out of a working
+   * copy), and there are no questions to read until it does.
+   *
+   * Everything about the request — what it costs, what it publishes, where the
+   * answer lands — is the caller's (utils/topicSuggestion.js). This owns the
+   * button, the disabled state and the sentence that says what pressing it
+   * spends.
+   */
+  onAskForSuggestion = null,
+  /** True while that request is in flight: the button says so and refuses a second press. */
+  asking = false,
+  /** Whatever the caller has to report about the last one. One sentence, its words. */
+  askNote = '',
   /** Prefixes every id, so two of these can share a screen. */
   idPrefix = 'set-topic',
   /** A word for what is being filed, for the copy. */
@@ -205,6 +221,37 @@ export default function SetTopicField({
             content check read its questions as <strong>{setTopicLabel(proposed)}</strong>.
             It may well be right about a {noun} that spans both — this changes nothing and
             stops nothing, it is said once so the choice is a deliberate one.
+          </p>
+        )}
+
+        {/*
+          ASKING FOR ONE. Left in place after a proposal arrives rather than
+          swapped away: the questions move on, and the shelf the check read out
+          of them last month is not a reason to refuse to read them again.
+
+          THE COST IS ON THE BUTTON'S OWN ROW, not behind it. This is not a
+          local guess — it is the same content check a share runs, and it takes
+          one of the organisation's twenty for the day and records a verdict on
+          the version. A control that spends something says so before it is
+          pressed.
+        */}
+        {onAskForSuggestion && (
+          <p className="qs-topic-offer" data-testid={`${idPrefix}-ask`}>
+            <button
+              type="button"
+              className="btn-secondary btn-small"
+              onClick={() => onAskForSuggestion()}
+              disabled={asking}
+            >
+              Suggest a shelf from the questions
+            </button>
+            <span>
+              {asking
+                ? 'Reading the questions. This takes about a minute.'
+                : (askNote || `It runs the content check on this ${noun} and comes back with the shelf `
+                  + "it reads out of the questions. It publishes nothing, and it uses one of this "
+                  + "organisation's checks for today.")}
+            </span>
           </p>
         )}
       </div>

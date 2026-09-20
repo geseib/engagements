@@ -168,6 +168,59 @@ describe('a shelf the content contradicts is said once, and blocks nothing', () 
   });
 });
 
+describe('asking the check for a proposal, when the surface offers that', () => {
+  const ask = () => screen.getByRole('button', { name: /suggest a shelf/i });
+
+  it('is not drawn at all where no caller wired it', () => {
+    // rejects: a control on the CSV upload, the builder and the new-set dialog,
+    // where the set does not exist yet and there are no questions to read.
+    render(<Host topic="" />);
+    expect(screen.queryByTestId('t-ask')).not.toBeInTheDocument();
+  });
+
+  it('asks, once, on one press', () => {
+    const onAsk = jest.fn();
+    render(<Host topic="" onAskForSuggestion={onAsk} />);
+    fireEvent.click(ask());
+    expect(onAsk).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what it spends before it is pressed, not after', () => {
+    // rejects: a bare button. This runs the same content check a share runs —
+    // one of the organisation's twenty for the day, and a verdict recorded on
+    // the version — so the person decides knowing that, not on finding out.
+    render(<Host topic="" onAskForSuggestion={jest.fn()} />);
+    const row = screen.getByTestId('t-ask');
+    expect(row).toHaveTextContent(/content check/i);
+    expect(row).toHaveTextContent(/publishes nothing/i);
+    expect(row).toHaveTextContent(/one of/i);
+  });
+
+  it('cannot be pressed twice while it is running, and says it is running', () => {
+    const onAsk = jest.fn();
+    render(<Host topic="" onAskForSuggestion={onAsk} asking />);
+    expect(ask()).toBeDisabled();
+    expect(screen.getByTestId('t-ask')).toHaveTextContent(/reading the questions/i);
+  });
+
+  it('carries whatever the caller has to report back, in the caller’s words', () => {
+    render(<Host topic="" onAskForSuggestion={jest.fn()} askNote="The check could not run: no." />);
+    expect(screen.getByTestId('t-ask')).toHaveTextContent('The check could not run: no.');
+  });
+
+  it('is still there once a proposal has arrived, because the questions move on', () => {
+    render(
+      <Host
+        topic=""
+        onAskForSuggestion={jest.fn()}
+        suggestion={{ topic: 'history', tags: [], filedAs: '', mismatch: false }}
+      />,
+    );
+    expect(screen.getByTestId('t-suggestion')).toBeInTheDocument();
+    expect(screen.getByTestId('t-ask')).toBeInTheDocument();
+  });
+});
+
 describe('the set’s own tags', () => {
   it('is labelled as the SET’s, because a question has tags of its own', () => {
     // rejects: a bare "Tags". The question editor two panels down carries a

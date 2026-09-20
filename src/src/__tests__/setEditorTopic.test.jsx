@@ -216,3 +216,92 @@ describe('the proposal the check recorded', () => {
     await waitFor(() => expect(putBodies()).toHaveLength(1));
   });
 });
+
+/**
+ * ── ASKING FOR ONE, WHICH IS THE ONLY WAY AN UNFILED ORG SET EVER GETS ONE ──
+ *
+ * A share of an unfiled set is refused before a check is spent, so the check
+ * that would have proposed a shelf never runs for exactly the set whose author
+ * is being asked to choose cold. An Engage set has the Versions panel's
+ * on-demand check and needs no second control; an organisation's own set had
+ * nothing at all.
+ */
+describe('an organisation can ask the check which shelf its set looks like', () => {
+  const ORG_SET = { ...UNFILED_SET, scope: 'org' };
+  const suggested = () => ([{
+    ...VERSIONS[0],
+    reviewTopicSuggestion: { topic: 'science-technology', tags: [], filedAs: '', mismatch: false },
+  }]);
+  const askButton = () => screen.getByRole('button', { name: /suggest a shelf from the questions/i });
+  const posts = () => authFetch.mock.calls
+    .filter(([u, o]) => (o?.method || '').toUpperCase() === 'POST' && u.includes('/check'))
+    .map(([, o]) => JSON.parse(o.body || '{}'));
+
+  /** Versions answer differently once the job has been polled, as they do in life. */
+  function mockCheck({
+    after = suggested(),
+    post = () => jsonResponse(202, { jobId: 'job-1' }),
+    job = { status: 'complete', jobId: 'job-1', meta: { outcome: 'passed' } },
+  } = {}) {
+    let polled = false;
+    authFetch.mockImplementation(async (url, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/versions')) return jsonResponse(200, polled ? after : VERSIONS);
+      if (method === 'POST' && url.includes('/check')) return post();
+      if (method === 'GET' && url.includes('/check/')) { polled = true; return jsonResponse(200, job); }
+      if (method === 'PUT' && url.includes('edit-question-set')) return jsonResponse(200, { updated: {} });
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+  }
+
+  it('offers the control on the organisation’s own set', async () => {
+    mockCheck();
+    renderEditor(ORG_SET, { canShare: true });
+    expect(await screen.findByTestId('edit-set-ask')).toBeInTheDocument();
+  });
+
+  it('does not offer it on one of Engage’s, which already has one', async () => {
+    // rejects: two controls for one thing. A platform set's check is in the
+    // Versions panel, costs no organisation anything, and proposes a shelf on
+    // exactly the same path.
+    mockCheck();
+    renderEditor({ ...UNFILED_SET, scope: 'platform' }, { canShare: false });
+    await waitFor(() => expect(picker()).toBeInTheDocument());
+    expect(screen.queryByTestId('edit-set-ask')).not.toBeInTheDocument();
+  });
+
+  it('does not offer it to somebody who could not submit the set anyway', async () => {
+    // The route behind it is the same one a share submits to, admin-gated.
+    mockCheck();
+    renderEditor(ORG_SET, { canShare: false });
+    await waitFor(() => expect(picker()).toBeInTheDocument());
+    expect(screen.queryByTestId('edit-set-ask')).not.toBeInTheDocument();
+  });
+
+  it('asks for a check that publishes nothing, and then shows what it proposed', async () => {
+    // rejects: sending no flag. The server reads `publish !== false`, so an
+    // absent one is a SHARE — which for an unfiled set is refused outright,
+    // and for a filed one would publish a set nobody offered to publish.
+    mockCheck();
+    renderEditor(ORG_SET, { canShare: true });
+    await screen.findByTestId('edit-set-ask');
+    fireEvent.click(askButton());
+
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0].publish).toBe(false);
+
+    const accept = await screen.findByRole('button', { name: /file it under science & technology/i });
+    fireEvent.click(accept);
+    expect(picker()).toHaveValue('science-technology');
+  });
+
+  it('says a refusal in the row it was pressed from, and stays pressable', async () => {
+    mockCheck({ post: () => jsonResponse(429, { error: "This organisation has used today's 20 checks." }) });
+    renderEditor(ORG_SET, { canShare: true });
+    await screen.findByTestId('edit-set-ask');
+    fireEvent.click(askButton());
+
+    expect(await screen.findByText(/used today's 20 checks/i)).toBeInTheDocument();
+    expect(askButton()).toBeEnabled();
+  });
+});
