@@ -37,6 +37,10 @@ const project = (row) => ({
   reasons: Array.isArray(row.reasons) ? row.reasons : [],
   bands: row.bands && typeof row.bands === 'object' ? row.bands : {},
   uncertainQuestionIds: Array.isArray(row.uncertainQuestionIds) ? row.uncertainQuestionIds : [],
+  // What a check escalation was for. An appeal carries none, and neither does a
+  // row written before the check named them; the queue's words then read as before.
+  checkReasons: Array.isArray(row.checkReasons) ? row.checkReasons : [],
+  declaredNotice: Array.isArray(row.declaredNotice) ? row.declaredNotice : [],
   appealMessage: row.appealMessage || '',
   reports: row.reports && typeof row.reports === 'object' ? row.reports : null,
   waitingSince: row.waitingSince || null,

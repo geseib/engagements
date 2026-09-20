@@ -11,7 +11,9 @@ const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/moderation
 const parse = (res) => JSON.parse(res.body || '{}');
 async function seed() {
   H.reset();
-  await Q.upsertQueueRow(db, T, { ref: { scope: 'org', orgId: 'org_acme', setId: 'safety' }, version: 2, reason: 'escalated', orgName: 'Acme', title: 'Safety walkthrough', gameType: 'trivia', questionCount: 30, bands: { HIGH: 0, MEDIUM: 2 }, uncertainQuestionIds: ['q014', 'q022'] }, { now: new Date('2026-09-15T10:00:00.000Z') });
+  // `bands` in the shape set-check-worker.js writes — one band per category
+  // (spec §3.2) — which src/src/utils/moderationRow.js reads.
+  await Q.upsertQueueRow(db, T, { ref: { scope: 'org', orgId: 'org_acme', setId: 'safety' }, version: 2, reason: 'escalated', orgName: 'Acme', title: 'Safety walkthrough', gameType: 'trivia', questionCount: 30, bands: { HATE: 'MEDIUM', VIOLENCE: 'MEDIUM' }, uncertainQuestionIds: ['q014', 'q022'], checkReasons: ['guardrail', 'declared'], declaredNotice: ['graphic-medical'] }, { now: new Date('2026-09-15T10:00:00.000Z') });
   await Q.upsertQueueRow(db, T, { ref: { scope: 'org', orgId: 'org_beta', setId: 'onboarding' }, version: 1, reason: 'appealed', orgName: 'Beta', title: 'Onboarding', gameType: 'poll', questionCount: 12, appealMessage: 'It is a clinical set.' }, { now: new Date('2026-09-17T09:00:00.000Z') });
 }
 (async () => {
@@ -26,7 +28,15 @@ async function seed() {
     assert.strictEqual(body.oldestWaitingSince, '2026-09-15T10:00:00.000Z');
     assert.strictEqual(body.items[0].sk, 'org_acme#safety#v2');
     assert.deepStrictEqual(body.items[0].reasons, ['escalated']);
+    assert.deepStrictEqual(body.items[0].bands, { HATE: 'MEDIUM', VIOLENCE: 'MEDIUM' }, 'the bands reach the reader as written');
+    assert.deepStrictEqual(body.items[0].uncertainQuestionIds, ['q014', 'q022']);
+    assert.deepStrictEqual(body.items[0].checkReasons, ['guardrail', 'declared'], 'what the escalation was for did not reach the reader');
+    assert.deepStrictEqual(body.items[0].declaredNotice, ['graphic-medical']);
     assert.strictEqual(body.items[1].appealMessage, 'It is a clinical set.');
+    // A row that carries none — an appeal, or a row written before the check
+    // named its reasons on it — is sent as empty lists, which reads as it always did.
+    assert.deepStrictEqual(body.items[1].checkReasons, []);
+    assert.deepStrictEqual(body.items[1].declaredNotice, []);
   });
   await H.test('an empty queue is an empty list, not an error', async () => {
     H.reset();

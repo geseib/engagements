@@ -137,6 +137,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(row.title, 'Safety walkthrough');
     assert.strictEqual(row.orgName, 'Acme Learning');
     assert.deepStrictEqual(row.bands, { HATE: 'MEDIUM' });
+    assert.deepStrictEqual(row.checkReasons, ['guardrail'], 'the queue row does not say what the escalation was for');
     assert.ok(row.snapshotKey, 'the queue row does not point at the snapshot');
     assert.ok(!JSON.stringify(row).includes('Question 2 title'), 'question text on the queue row');
     assert.strictEqual(stamp().status, 'escalated');
@@ -144,17 +145,38 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.deepStrictEqual(publicRows(), []);
   });
 
+  // The queue row names the reason too: without it the queue could only say
+  // "Uncertain" of a set the guardrail had nothing against (moderationRow.js).
   await H.test('a declared notice, or an image, sends a clean set to a person with the reason named', async () => {
     await seed();
     H.state.guardrailReplies = clean(4);
     await W.runSetCheck(deps, { jobId: await job({ declaredNotice: ['graphic-medical'] }) }, H.ctx());
     assert.strictEqual((await review()).status, R.STATUS.ESCALATED);
     assert.deepStrictEqual((await review()).reasons, ['declared']);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['declared']);
+    assert.deepStrictEqual(queue()[0].declaredNotice, ['graphic-medical']);
+    assert.deepStrictEqual(queue()[0].bands, {});
     await seed({ image: true });
     H.state.guardrailReplies = clean(4);
     await W.runSetCheck(deps, { jobId: await job() }, H.ctx());
     assert.deepStrictEqual((await review()).reasons, ['images']);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['images']);
+    assert.deepStrictEqual(queue()[0].declaredNotice, []);
     assert.deepStrictEqual(publicRows(), []);
+  });
+
+  // rejects: the author's notices copied onto the pointer as sent. The entry
+  // point caps them at eight but not their length, and a pointer is ≤4KB
+  // (spec §3.2) because the whole queue is one Query. A notice id is at most
+  // 40 characters wherever one is checked (moderation-decide.js NOTICE_ID).
+  await H.test('a declared notice cannot grow the queue row past a pointer', async () => {
+    await seed();
+    H.state.guardrailReplies = clean(4);
+    await W.runSetCheck(deps, { jobId: await job({ declaredNotice: Array.from({ length: 8 }, (_, i) => `${i}${'x'.repeat(5000)}`) }) }, H.ctx());
+    const [row] = queue();
+    assert.strictEqual(row.declaredNotice.length, 8);
+    assert.ok(row.declaredNotice.every((n) => n.length <= 40), `a notice was carried at ${Math.max(...row.declaredNotice.map((n) => n.length))} characters`);
+    assert.ok(JSON.stringify(row).length < 4096, `the queue row is ${JSON.stringify(row).length} bytes`);
   });
 
   await H.test('an org Workie is dropped from the public copy; the dialog was told in advance', async () => {
@@ -192,6 +214,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     await W.runSetCheck({ ...deps, s3: failingS3 }, { jobId: await job() }, H.ctx());
     assert.strictEqual((await review()).status, R.STATUS.ESCALATED);
     assert.deepStrictEqual((await review()).reasons, ['snapshot']);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['snapshot']);
     assert.deepStrictEqual(publicRows(), []);
   });
 
@@ -203,9 +226,31 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(r.status, R.STATUS.ESCALATED);
     assert.deepStrictEqual(r.reasons, ['error']);
     assert.strictEqual(queue().length, 1);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['error']);
+    assert.deepStrictEqual(queue()[0].bands, {});
     const j = await J.getJob(db, T, jobId);
     assert.strictEqual(j.status, 'error');
     assert.match(j.errorMessage, /no longer exists/);
+  });
+
+  // rejects: a re-check that throws leaving the last check's questions and
+  // notices beside its own error — "1 uncertain question · Error" of a check
+  // that decided nothing. An escalated version can be checked again
+  // (set-review.js beginCheck refuses only one being checked), and the upsert
+  // keeps any field it is not given.
+  await H.test('a re-check that throws replaces everything the last check put on the queue row', async () => {
+    H.reset();
+    H.seedRow({
+      PK: 'MODERATION', SK: `${ORG}#${SET}#v2`, scope: 'org', orgId: ORG, setId: SET, version: 2, reasons: ['escalated'],
+      waitingSince: '2026-09-18T10:00:00.000Z', bands: { HATE: 'MEDIUM' }, uncertainQuestionIds: ['q002'],
+      checkReasons: ['declared', 'guardrail'], declaredNotice: ['graphic-medical'],
+    });
+    await W.runSetCheck(deps, { jobId: await job() }, H.ctx()); // no set rows: the check throws
+    const [row] = queue();
+    assert.deepStrictEqual(row.checkReasons, ['error']);
+    assert.deepStrictEqual(row.bands, {});
+    assert.deepStrictEqual(row.uncertainQuestionIds, [], 'the last check\'s questions stayed on the row');
+    assert.deepStrictEqual(row.declaredNotice, [], 'the last check\'s notices stayed on the row');
   });
 
   await H.test('a failure after the upload still leaves the reviewer a pointer', async () => {

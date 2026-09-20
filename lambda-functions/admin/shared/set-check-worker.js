@@ -40,6 +40,11 @@ const { recordUnits } = require('./check-quota');
 const { getJob, updateJobProgress, completeJob, failJob } = require('./generation-jobs');
 
 const BUDGET_FLOOR_MS = 20000;
+// A declared notice on the queue row is an id ("graphic-medical"), at most 40
+// characters wherever one is checked (moderation-decide.js NOTICE_ID). The
+// entry point caps how many (check-question-set.js) but not how long, and the
+// row is a pointer: ≤4KB, because the whole queue is read in one Query (spec §3.2).
+const NOTICE_CHARS = 40;
 const AS_STATUS = { [OUTCOME.PASSED]: STATUS.PASSED, [OUTCOME.FLAGGED]: STATUS.FLAGGED, [OUTCOME.ESCALATED]: STATUS.ESCALATED };
 const worstOf = (a, b) => {
   const rank = { [OUTCOME.FLAGGED]: 0, [OUTCOME.ESCALATED]: 1, [OUTCOME.PASSED]: 2 };
@@ -365,6 +370,9 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     if (toAPerson && await subjectStillThere()) {
       const bands = {};
       for (const f of findings) if (f.band && f.band !== 'NONE') bands[f.category] = f.band;
+      // The queue's reason is only 'escalated'; `checkReasons` says what for,
+      // so the queue can say "Images" or "Declared: …" of a set the guardrail
+      // had nothing against, rather than "Uncertain" (moderationRow.js).
       await upsertQueueRow(db, tableName, {
         ref: queueRef, version, reason: 'escalated',
         // Named only when there is one to name: `orgId: ''` on Engage's own row
@@ -373,6 +381,7 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         setId: source.setId, title: plainMeta.name || source.setId,
         gameType: plainMeta.engagementType || '', questionCount: questions.length, bands,
         uncertainQuestionIds: findings.filter((f) => f.questionId && f.questionId !== '(set)').map((f) => f.questionId),
+        checkReasons: reasons, declaredNotice: declaredNotice.map((n) => String(n).slice(0, NOTICE_CHARS)),
         snapshotKey, contentHash: snapshot.contentHash,
         // WHERE IT IS DECIDED. A row raised over a version the library already
         // serves is not a publish request: approving it would mint a second
@@ -457,7 +466,10 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
           // row would otherwise say nothing about what kind of set this is.
           gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
           questionCount: snapshot ? snapshot.questions.length : 0,
-          bands: {}, ...(orgId ? { orgName: await orgName(db, tableName, orgId) } : {}),
+          // Every field a check puts on the pointer, given again: an escalated
+          // version can be checked again, and the upsert keeps what it is not given.
+          bands: {}, uncertainQuestionIds: [], checkReasons: ['error'], declaredNotice: [],
+          ...(orgId ? { orgName: await orgName(db, tableName, orgId) } : {}),
           snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
           recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
         });
