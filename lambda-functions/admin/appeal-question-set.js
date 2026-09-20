@@ -49,6 +49,18 @@ exports.handler = async (event) => {
       A VERSION THE LIBRARY IS SERVING HAS NOTHING TO APPEAL — and it comes
       BEFORE the status check below, because that is the true reason.
 
+      THE LISTING SAYS SO, NOT THE MARKER. `PUBLISHED` is a fact about where a
+      publish WENT, and it can outlive the listing: `unpublishSet` finds the
+      source's markers through the set's own `versions` array, and a set shared
+      before versioning existed has none, so its unsuffixed marker survived every
+      takedown (fixed in publish-set.js, but a marker already orphaned on dev is
+      not going to un-write itself, and delete-set-version leaves its own). Read
+      as the answer, that orphan refused a legacy author's appeal FOR EVER and
+      told them the library was serving a set it had removed. So the marker is
+      the cheap hint — usually absent, one Get — and the public row it names is
+      the answer: it must exist and still name this organisation, this set and
+      THIS version.
+
       Engage staff can re-run the content check on the version the public library
       already serves (check-question-set.js `{ recheck: true }`). A HIGH band
       writes FLAGGED onto this REVIEW row while publishing nothing, taking
@@ -65,11 +77,21 @@ exports.handler = async (event) => {
       listing is taken down (publish-set.unpublishSet), which is the state that
       genuinely has something to say — and it says it through the takedown note.
     */
-    const served = (await db.send(new GetCommand({ TableName: TABLE(), Key: publishedKey(source, version) }))).Item;
+    const marker = (await db.send(new GetCommand({ TableName: TABLE(), Key: publishedKey(source, version) }))).Item;
+    const listing = marker && marker.publicSetId
+      ? (await db.send(new GetCommand({
+        TableName: TABLE(),
+        Key: setMetadataKey(setRef({ scope: tenant.PUBLIC, orgId: '', setId: String(marker.publicSetId) })),
+      }))).Item
+      : null;
+    const served = Boolean(listing)
+      && String(listing.sourceOrgId || '') === orgId
+      && String(listing.sourceSetId || '') === setId
+      && toVersion(listing.sourceVersion) === version;
     if (served) {
       return json(409, {
         error: 'That version is in the public library right now, so there is nothing to appeal.',
-        publicSetId: served.publicSetId || '',
+        publicSetId: marker.publicSetId || '',
       });
     }
     const current = await readReview(db, TABLE(), source, version);
