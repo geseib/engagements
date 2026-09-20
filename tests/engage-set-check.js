@@ -382,11 +382,13 @@ const toggle = (event) => toggleHandler(event, H.ctx());
 
   // ── SWITCHED ON ──────────────────────────────────────────────────────────
 
-  // P6. The dispatch itself is NOT made here and cannot be: the toggle
-  // function's role carries DynamoDBCrudPolicy and nothing else, so it may not
-  // invoke the check function (template-clean.yaml, AdminToggleQuestionSetFunction).
-  // What the route can do without a template change is SAY that a check is now
-  // due — the shape import-from-archive.js already uses for `becameActive`.
+  // P6. The toggle route starts the check itself, with the narrow
+  // `lambda:InvokeFunction` grant template-clean.yaml gives it — and starts it
+  // AFTER the row has moved, with `InvocationType: 'Event'`, so the activation
+  // neither waits for the check nor can be failed by it. The review row is
+  // still UNREVIEWED when the activation answers, which is the proof: an
+  // Event-type send returns the moment the request is accepted and nothing has
+  // run yet.
   await H.test('switching an Engage set on says its check is due, and the set is active either way', async () => {
     seedEngageSet({ active: false });
     const res = await toggle(H.platformEvent({ method: 'POST', path: { setId: SET }, body: { active: true } }));
@@ -394,6 +396,43 @@ const toggle = (event) => toggleHandler(event, H.ctx());
     assert.strictEqual(parse(res).checkDue, true, 'switching Engage\'s set on asked for no check');
     assert.strictEqual(metaRow(REF).active, true, 'the set was not switched on');
     assert.strictEqual((await review()).status, R.STATUS.UNREVIEWED, 'the activation waited on a check');
+  });
+
+  // rejects: the console being the only thing that fires it, which left a set
+  // live and unchecked whenever the tab was closed between the two calls. What
+  // the activation dispatches is a real request to the check route, so it is
+  // played back here through the handler that would have received it — and the
+  // whole check runs off it, on Engage's own set, with nobody charged.
+  await H.test('and what it dispatched really starts the check, end to end', async () => {
+    seedEngageSet({ active: false });
+    H.state.guardrailReplies = clean(3);
+    const res = await toggle(H.platformEvent({ method: 'POST', path: { setId: SET }, body: { active: true } }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(H.state.dispatched.length, 1, `${H.state.dispatched.length} checks were dispatched by one activation`);
+    const [sent] = H.state.dispatched;
+    assert.strictEqual(sent.InvocationType, 'Event', 'the activation waits on the check');
+    assert.strictEqual(sent.FunctionName, 'engagetest-check-question-set');
+
+    const started = await handler(sent.payload, H.ctx());
+    assert.strictEqual(started.statusCode, 202, started.body);
+    assert.strictEqual(parse(started).platform, true, 'the activation\'s request was not read as Engage\'s own');
+    await handler({ __workerMode: true, jobId: parse(started).jobId }, H.ctx());
+    const r = await review();
+    assert.strictEqual(r.status, R.STATUS.PASSED, `review is ${r.status}: ${r.note}`);
+    assert.strictEqual(publicRows().length, 0, 'the activation\'s check published something');
+  });
+
+  // rejects: an activation that fails, or half-completes, because the check
+  // could not be started. The grant may not be deployed yet, the invoke may be
+  // throttled — the set still goes live, and the Versions panel can run the
+  // check by hand.
+  await H.test('an activation whose dispatch is refused still switches the set on', async () => {
+    seedEngageSet({ active: false });
+    H.state.lambdaShouldFail = true;
+    const res = await toggle(H.platformEvent({ method: 'POST', path: { setId: SET }, body: { active: true } }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(metaRow(REF).active, true, 'a dispatch that would not go undid the activation');
+    H.state.lambdaShouldFail = false;
   });
 
   await H.test('switching an Engage set off asks for no check', async () => {
@@ -411,7 +450,9 @@ const toggle = (event) => toggleHandler(event, H.ctx());
     assert.strictEqual(parse(res).checkDue, false, 'nothing became servable, so nothing is due');
   });
 
-  // X1. rejects: an organisation's own set acquiring a platform trigger.
+  // X1. rejects: an organisation's own set acquiring a platform trigger, and
+  // Engage starting to check customer content on its own. Theirs is checked
+  // when they share it, on their own quota, by their own action.
   await H.test('switching an organisation\'s own set on asks for nothing new', async () => {
     H.reset();
     await seedOrgSet();
@@ -420,6 +461,7 @@ const toggle = (event) => toggleHandler(event, H.ctx());
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(parse(res).checkDue, false, 'an organisation\'s set was given Engage\'s trigger');
     assert.strictEqual(metaRow(ORGREF).active, true);
+    assert.strictEqual(H.state.dispatched.length, 0, 'a check was started on an organisation\'s own content');
   });
 
   // ── X1 ───────────────────────────────────────────────────────────────────

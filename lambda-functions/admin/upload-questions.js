@@ -23,6 +23,7 @@ const {
 const { ORG, PLATFORM } = require('./shared/tenant');
 const { encryptItem } = require('./shared/tenant-crypto');
 const { resolvePromptRef, refusal } = require('./shared/workie-refs');
+const { dispatchHouseCheck } = require('./shared/house-check');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1172,6 +1173,30 @@ exports.handler = async (event) => {
       : `✅ Successfully created question set "${setName}"`);
     console.log(`📊 Final stats: ${questions.length} questions, ${categoriesByKey.size} categories`);
 
+    /*
+      REPLACING THE QUESTIONS OF ONE OF ENGAGE'S SETS WHILE IT IS ON is the
+      second of the owner's three triggers for the content check — the same
+      content change an organisation's share would have had checked, on a set
+      every organisation is already playing. The others are the activation
+      (toggle-question-set.js) and the promote (promote-set-version.js), and all
+      three start the check the same way; `shared/house-check.js` carries why
+      that is here and not in the console.
+
+      A REPLACE, not a create: a brand-new set is served to nobody until
+      somebody switches it on, and that activation is the other trigger. Read
+      off the row as it was BEFORE this save, and `active !== false` because a
+      platform row written before `active` existed carries no attribute and IS
+      active — the rule every reader of these rows applies.
+    */
+    const checkDue = Boolean(isReplace
+      && targetRef && targetRef.scope === PLATFORM
+      && existingMeta && existingMeta.active !== false);
+
+    // AFTER the content rows and the activeVersion flip, and it cannot undo
+    // either: a dispatch that will not go is logged inside and swallowed, and
+    // this save still answers success.
+    if (checkDue) await dispatchHouseCheck(event, setId);
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -1184,33 +1209,11 @@ exports.handler = async (event) => {
         snapshottedLegacyRows: snapshotted || undefined,
         questionCount: questions.length,
         categoryCount: categoriesByKey.size,
-        /*
-          REPLACING THE QUESTIONS OF ONE OF ENGAGE'S SETS WHILE IT IS ON is the
-          second half of the owner's trigger for the content check — the same
-          content change an organisation's share would have had checked, on a
-          set every organisation is already playing. The first half is the
-          activation (toggle-question-set.js, which states this same field).
-
-          THIS ROUTE CANNOT RUN THAT CHECK either, for the same reason and with
-          the same refusal to pretend: a check is a job, dispatching one needs
-          `lambda:InvokeFunction` on the check function, and this function's
-          role is DynamoDBCrudPolicy and nothing else (template-clean.yaml,
-          AdminUploadQuestionsFunction). So the save answers with the fact and
-          the console runs it (src/utils/houseCheck.js) once the save has
-          already returned — a check can then neither delay the save nor fail
-          it. Wiring the dispatch here is a four-line grant in the template.
-
-          A REPLACE, not a create: a brand-new set is served to nobody until
-          somebody switches it on, and that activation is the other trigger.
-          Read off the row as it was BEFORE this save, and `active !== false`
-          because a platform row written before `active` existed carries no
-          attribute and IS active — the rule every reader of these rows applies.
-          Always stated, so a client never has to tell "not due" from "this
-          build does not say".
-        */
-        checkDue: Boolean(isReplace
-          && targetRef && targetRef.scope === PLATFORM
-          && existingMeta && existingMeta.active !== false),
+        // Always stated, so a client never has to tell "not due" from "this
+        // build does not say". It states what this save MADE TRUE — the check
+        // it asked for above may still have failed to start, which is not
+        // something a save reports on.
+        checkDue,
         // Rows the importer could not use. Reported so an import that quietly
         // drops half a file is visible instead of looking like a clean success.
         skippedRowCount: skippedRows.length,
