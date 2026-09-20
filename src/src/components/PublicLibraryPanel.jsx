@@ -151,7 +151,11 @@ function SharePickerDialog({ sets, onClose, onPick }) {
         ) : (
           <ul className="publib-list">
             {sets.map((set) => {
-              const vis = shareStateOf(set);
+              /* `canShare` is true here and nowhere conditionally: every row
+                 this dialog draws has the Share button two lines down, so the
+                 drift chip's "Click Share to share the latest version" names a
+                 control the reader is looking at. */
+              const vis = shareStateOf(set, undefined, { canShare: true });
               return (
                 <li key={set.id} className="publib-item">
                   {/* ONE TEXT NODE, so text-overflow is not inert on it (design

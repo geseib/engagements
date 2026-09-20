@@ -479,7 +479,7 @@ describe('who can see it', () => {
     expect(visOf('Theirs public')).not.toHaveTextContent(/Shared/);
   });
   test('the drifted one carries its own colour and the sentence that says what to press', () => {
-    mount({ questionSets: THREE, showVisibility: true });
+    mount({ questionSets: THREE, showVisibility: true, onShare: jest.fn() });
     const stale = within(visOf('Ours moved on')).getByText(/yours is v3/);
     expect(stale).toHaveClass('qsets-chip--vis-behind');
     expect(stale).toHaveAttribute('title', 'An older version is shared. Click Share to share the latest version.');
@@ -491,6 +491,35 @@ describe('who can see it', () => {
     // rejects: telling somebody to "click Share" from a row that has no Share.
     mount({ questionSets: THREE, showVisibility: true, onShare: jest.fn() });
     expect(within(rowFor('Ours moved on')).getByRole('button', { name: /^share$/i })).toBeInTheDocument();
+  });
+  /*
+    …AND WHEN IT IS NOT, THE SENTENCE IS NOT EITHER.
+
+    "Click Share to share the latest version" was written unconditionally, and
+    this table draws the Share action only when the caller passed `onShare` AND
+    the server said `canManage` for that row. Both cases are ordinary on the org
+    console: a host sees a colleague's set with `canManage: false`
+    (admin/shared/question-set-access.js — "a host may edit or delete ONLY the
+    ones they created"), and the same drift chip renders there beside an Open
+    button. Naming an exit that is not on the surface is the defect the header
+    button's ruling exists to prevent, one attribute down.
+  */
+  test('a row whose Share this caller never passed is told the fact without the instruction', () => {
+    mount({ questionSets: THREE, showVisibility: true });
+    expect(within(rowFor('Ours moved on')).queryByRole('button', { name: /^share$/i })).toBeNull();
+    const stale = within(visOf('Ours moved on')).getByText(/yours is v3/);
+    expect(stale).toHaveAttribute('title', expect.stringMatching(/an older version is shared/i));
+    expect(stale).toHaveAttribute('title', expect.not.stringMatching(/click share/i));
+  });
+  test("and neither is a colleague's set this reader may not manage, on a console that does have Share", () => {
+    const theirs = { ...THREE[2], id: 'colleague', name: 'A colleague’s set', canManage: false };
+    mount({ questionSets: [...THREE, theirs], showVisibility: true, onShare: jest.fn() });
+    expect(within(rowFor('A colleague’s set')).queryByRole('button', { name: /^share$/i })).toBeNull();
+    expect(within(visOf('A colleague’s set')).getByText(/yours is v3/))
+      .toHaveAttribute('title', expect.not.stringMatching(/click share/i));
+    // …while the row on the same screen that DOES have the button keeps the words.
+    expect(within(visOf('Ours moved on')).getByText(/yours is v3/))
+      .toHaveAttribute('title', expect.stringMatching(/click share/i));
   });
   test('each row says who can see it, from the share stamp', () => {
     mount({ questionSets: VIS, showVisibility: true });

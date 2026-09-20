@@ -12,7 +12,25 @@ export const STALE_CHECK_MS = 15 * 60 * 1000;
 
 const PRIVATE = { key: 'private', label: 'Private', title: 'Only your organisation can see this set.' };
 
-export function shareStateOf(set, nowMs = Date.now()) {
+/*
+ * WHETHER THE READER HAS THE CONTROL THE WORDS NAME (`canShare`).
+ *
+ * Two of the hovers below tell somebody to press something: "Click Share to
+ * share the latest version" and "Submit it again". Whether that button is on
+ * the row is not a fact about the stamp — it is the caller's fact.
+ * QuestionSetsPanel draws Share only when it was given `onShare` AND the server
+ * said `canManage` for that row, and both halves fail routinely on the org
+ * console: a host sees a colleague's set with `canManage: false`
+ * (admin/shared/question-set-access.js — a host manages only what they created)
+ * and gets Open, not Share, beside the very same amber chip.
+ *
+ * So the caller states it and this module still owns the words. The default is
+ * the reader WITHOUT the exit, deliberately: an instruction that names a
+ * control which is not there is the defect (design rule 2, and the reason the
+ * dead "New set" button was removed); leaving the instruction off a reader who
+ * happens to have the button costs them nothing but a sentence.
+ */
+export function shareStateOf(set, nowMs = Date.now(), { canShare = false } = {}) {
   /*
    * AN ENGAGE-LIBRARY OR PUBLIC-LIBRARY ROW IS THE PUBLISHED COPY ITSELF —
    * checked BEFORE the stamp is read, and regardless of whether one exists.
@@ -66,10 +84,11 @@ export function shareStateOf(set, nowMs = Date.now()) {
         return {
           key: 'behind',
           label: `Shared v${shared}, yours is v${active}`,
-          // The owner's own words, and they name the exit — which is on this
-          // same row, because `onShare` renders Share on everything the list
-          // says `canManage` for.
-          title: 'An older version is shared. Click Share to share the latest version.',
+          // The owner's own words where the exit exists, and the same fact with
+          // nothing to press where it does not — see `canShare` above.
+          title: canShare
+            ? 'An older version is shared. Click Share to share the latest version.'
+            : 'An older version is shared. The latest version has not been shared.',
         };
       }
       // A legacy unversioned set's share carries no version number
@@ -84,7 +103,7 @@ export function shareStateOf(set, nowMs = Date.now()) {
     case 'checking': {
       const age = share.at ? nowMs - Date.parse(share.at) : 0;
       return age > STALE_CHECK_MS
-        ? { key: 'unfinished', label: "Didn't finish", title: 'The content check did not finish. Submit it again.' }
+        ? { key: 'unfinished', label: "Didn't finish", title: `The content check did not finish.${canShare ? ' Submit it again.' : ''}` }
         : { key: 'checking', label: 'Checking…', title: 'The content check is running.' };
     }
     case 'flagged':

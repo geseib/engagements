@@ -166,6 +166,17 @@ export default function QuestionSetsPanel({
 
   const nothingExists = questionSets.length === 0;
 
+  /*
+    DOES THIS ROW CARRY A SHARE BUTTON? Written once, because two things read
+    it: the button itself, and the words on the "Who can see it" chip, one of
+    which tells the reader to click Share. Two copies of this condition would
+    let the chip instruct somebody the row gives nothing to press — which is
+    what it did. `canManage !== false`, not a bare truthiness test, for the
+    reason the row actions below give: surfaces that project no ownership carry
+    no `canManage` at all.
+  */
+  const rowCanShare = (set) => Boolean(!rowActions && showVisibility && onShare && set.canManage !== false);
+
   return (
     <div className="qsets">
       {notice && notice.text ? (
@@ -516,7 +527,11 @@ export default function QuestionSetsPanel({
                         </td>
                       )}
                       {showVisibility && (() => {
-                        const vis = shareStateOf(set);
+                        /* THE WORDS AND THE BUTTON, DECIDED ONCE. `rowCanShare`
+                           is the same predicate the Share action below renders
+                           on, so the amber drift chip cannot tell this reader to
+                           click a Share that this row does not carry. */
+                        const vis = shareStateOf(set, undefined, { canShare: rowCanShare(set) });
                         return (
                           <td className="qsets-vis">
                             <span className={`qsets-chip qsets-chip--vis-${vis.key}`} title={vis.title}>{vis.label}</span>
@@ -565,7 +580,7 @@ export default function QuestionSetsPanel({
                               >
                                 {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
                               </button>
-                              {showVisibility && onShare && (
+                              {rowCanShare(set) && (
                                 <button
                                   type="button"
                                   className="qsets-btn qsets-btn--sm"

@@ -64,8 +64,34 @@ describe('shareStateOf — the "Who can see it" column', () => {
     expect(s.label).toBe('Shared v2, yours is v3');
   });
   test('and its hover is the sentence that says which button fixes it', () => {
-    const s = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } });
+    const s = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } }, NOW, { canShare: true });
     expect(s.title).toBe('An older version is shared. Click Share to share the latest version.');
+  });
+  /*
+    …FOR THE READER WHO HAS THAT BUTTON, AND ONLY THEM.
+
+    The sentence names a control, and whether the control is on the row is the
+    CALLER's fact, not the stamp's: QuestionSetsPanel draws Share only when it
+    was given `onShare` and the server said `canManage` for that row, and a host
+    reading a colleague's set gets neither (question-set-access.js). So the
+    caller states it and this module chooses the words; the default is the
+    reader WITHOUT the exit, because inventing a control is the failure and
+    omitting an instruction is not.
+  */
+  test('a reader with no Share on that row gets the same fact and no instruction they cannot follow', () => {
+    const drifted = { activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } };
+    const s = shareStateOf(drifted, NOW);
+    expect(s.key).toBe('behind');
+    expect(s.label).toBe('Shared v2, yours is v3');
+    expect(s.title).toMatch(/an older version is shared/i);
+    expect(s.title).not.toMatch(/click share/i);
+  });
+  test('the same rule for the check that did not finish, whose hover says to submit it again', () => {
+    // "Submit it again" is the same instruction naming the same control.
+    const stale = { share: { status: 'checking', version: 2, at: at(16) } };
+    expect(shareStateOf(stale, NOW, { canShare: true }).title).toMatch(/submit it again/i);
+    expect(shareStateOf(stale, NOW).title).toMatch(/did not finish/i);
+    expect(shareStateOf(stale, NOW).title).not.toMatch(/submit it again/i);
   });
   test('the three states are three different keys, so one style cannot paint two of them', () => {
     const ours = shareStateOf({ activeVersion: 2, share: { status: 'published', version: 2, at: at(60) } }).key;

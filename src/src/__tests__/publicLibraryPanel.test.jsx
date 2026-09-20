@@ -96,6 +96,25 @@ describe('the way into the public library', () => {
   });
 
   /*
+    AND HERE THE DRIFT CHIP *MAY* NAME SHARE, because this dialog puts one on
+    every row it draws. The same chip on the question sets list says so only
+    when that row carries the button (utils/shareState.js `canShare`), which is
+    the distinction — not "the words are always safe" and not "the words are
+    never used".
+  */
+  test('a drifted set in the picker keeps the sentence naming Share, which is beside it', async () => {
+    const drifted = {
+      id: 'drift', name: 'Moved on since', engagementType: 'trivia', totalQuestions: 6, canManage: true, scope: 'org', activeVersion: 3, share: { status: 'published', version: 2, publicSetId: 'orgacme-drift', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' },
+    };
+    render(<PublicLibraryPanel questionSets={[...ROWS, drifted]} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    const dialog = await screen.findByRole('dialog');
+    const row = within(dialog).getByText('Moved on since').closest('li');
+    expect(within(row).getByText(/yours is v3/)).toHaveAttribute('title', expect.stringMatching(/click share/i));
+    expect(within(row).getByRole('button', { name: /^share$/i })).toBeInTheDocument();
+  });
+
+  /*
     ENGAGE'S OWN LIBRARY DOES NOT SHARE, so the staff console gets no way in
     rather than a second one that would be refused. check-question-set.js:62
     is explicit: for a platform set `publish` is false, always — "There is no
