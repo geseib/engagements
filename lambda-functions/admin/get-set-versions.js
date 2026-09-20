@@ -8,6 +8,7 @@ const {
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
 const { readReviews, publishedKey, isUnfinished } = require('./shared/set-review');
+const { measurementOf } = require('./shared/review-card');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -107,6 +108,32 @@ exports.handler = async (event) => {
     */
     const reviews = await readReviews(db, tableName, found.ref, entries.map((e) => e.version));
 
+    /*
+      MAY THIS CALLER SEE WHAT THE CHECK MEASURED?
+
+      A status and a decision note are what every reader of a set gets, and that
+      is unchanged. The MEASUREMENT — the per-category tally, and every band the
+      check saw named by the question it saw it on — is the author's own account
+      of their own content, and it goes to the library the row is really in:
+
+        org        this organisation's members. `findSetForCaller` only ever
+                   probes the CALLER's org partition, so another organisation's
+                   set was already absent rather than forbidden; asking the
+                   scope again is the second lock, and the one that survives a
+                   later change to how a set is found.
+        platform   Engage acting as Engage — the authors of the shared library.
+                   `canManageScope` requires the `admins` group AND no active
+                   organisation, so staff standing inside a customer get exactly
+                   what that customer gets and nothing more.
+        public     nobody. A public copy is somebody's published set; the staff
+                   score card is where its measurement is read.
+
+      A reader outside that gets no field AT ALL rather than an empty one: an
+      absent tally means "not measured", and handing a reader who may not see it
+      the same answer would quietly teach them to read "nothing was found".
+    */
+    const mayReadMeasurement = tenant.canManageScope(event, found.ref.scope, found.ref.orgId);
+
     // WHERE EACH VERSION WENT. One GetItem per version: this is the editor's
     // Versions panel, not the list, and a set has a handful of versions.
     const published = new Map();
@@ -119,6 +146,7 @@ exports.handler = async (event) => {
 
     const versions = entries.map((entry) => {
       const review = reviews.get(entry.version) || {};
+      const measured = mayReadMeasurement ? measurementOf(review) : null;
       return {
         version: entry.version,
         createdAt: entry.createdAt || null,
@@ -138,6 +166,22 @@ exports.handler = async (event) => {
         checkedAt: review.checkedAt || null,
         reasons: review.reasons || [],
         reviewNote: review.note || '',
+        /*
+          WHAT THE CHECK MEASURED — the same projection the staff score card
+          reads (shared/review-card.js measurementOf), and NOTHING ELSE OFF
+          THAT ROW. The REVIEW item also carries the reviewer, when they ruled,
+          the notices they attached and the snapshot key; all four are staff's,
+          and none of them is named here or anywhere else in this map.
+
+          No question TEXT beside the ids, unlike the card. The card names each
+          observation because staff cannot decrypt an organisation's rows, so it
+          reads the public copy instead; this function has no kms:Decrypt grant
+          (and tests/kms-grants-match-code.js is what would tell you, loudly, if
+          it ever reached tenant-crypto). It does not need one: the surface that
+          renders this is the set editor, which is already holding the plaintext
+          questions these ids name.
+        */
+        ...(measured ? { reviewTally: measured.tally, reviewObserved: measured.observed } : {}),
         unfinished: isUnfinished(review),
         published: published.get(entry.version) || null,
         pinnedByGames: pinnedBySet

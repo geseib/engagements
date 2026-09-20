@@ -57,12 +57,16 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('./shared/tenant');
-const { setMetadataKey, setPartition, queryPartition, toVersion } = require('./shared/set-version');
+const { setMetadataKey, setPartition, toVersion } = require('./shared/set-version');
 const { unpublishSet } = require('./shared/publish-set');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { queueSk, queueKey, deleteQueueRow } = require('./shared/moderation-queue');
+// The measurement half of this projection is shared with the AUTHOR's version
+// list (admin/get-set-versions.js), so "what a check measured" is one list
+// rather than two that drift. Everything a reviewer owns stays here.
+const { lines, measurementOf, withText } = require('./shared/review-card');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -81,31 +85,16 @@ async function readPublicMeta(publicSetId) {
   return res && res.Item ? res.Item : null;
 }
 
-const SET_SUBJECT = '(set)';
-const QUESTION_PREFIX = 'QUESTION#';
-const lines = (...values) => values.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean).join('\n');
-
 /**
  * Name each row of each list by its text (see the header), from ONE read of
- * the public copy however many lists name a question. A question reads as a
- * room sees it asked — title, then detail, one per line; the set's own
- * subject by the public set's title and description. An id the active public
- * copy does not hold, and a row that names no subject at all, get '' rather
- * than a guess. A list that is not an array comes back empty.
+ * the public copy however many lists name a question — `withText` in
+ * shared/review-card.js, pointed at the ACTIVE PUBLIC VERSION's partition and
+ * given the public set's own title and description as the set's subject.
  */
-async function withText(lists, meta, publicSetId) {
-  const rowsOf = (list) => (Array.isArray(list) ? list : []).filter((o) => o && typeof o === 'object');
-  const all = lists.map(rowsOf);
-  const texts = new Map();
-  if (all.some((rows) => rows.some((o) => o.questionId && o.questionId !== SET_SUBJECT))) {
-    const pk = setPartition(pubRefOf(publicSetId), meta.activeVersion);
-    const { items } = await queryPartition(db, TABLE(), pk, QUESTION_PREFIX);
-    for (const row of items) texts.set(String(row.SK).slice(QUESTION_PREFIX.length), lines(row.Title, row.Detail));
-  }
-  const setName = lines(meta.name, meta.description);
-  const named = (o) => ({ ...o, text: o.questionId === SET_SUBJECT ? setName : (texts.get(o.questionId) || '') });
-  return all.map((rows) => rows.map(named));
-}
+const named = (lists, meta, publicSetId) => withText(db, TABLE(), lists, {
+  partitionPk: setPartition(pubRefOf(publicSetId), meta.activeVersion),
+  setName: lines(meta.name, meta.description),
+});
 
 async function standing(meta, publicSetId) {
   const source = sourceOf(meta);
@@ -118,7 +107,8 @@ async function standing(meta, publicSetId) {
   // names a source at all.
   const version = toVersion(meta.sourceVersion);
   const review = source.orgId && source.setId ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
-  const [observed, findings] = await withText([review.observed, review.findings], meta, publicSetId);
+  const measured = measurementOf(review);
+  const [observed, findings] = await named([measured.observed, review.findings], meta, publicSetId);
   const log = source.orgId && source.setId ? await readReviewLog(db, TABLE(), source) : [];
   const versions = Array.isArray(meta.versions) ? meta.versions : [];
   const latest = versions.find((v) => Number(v.version) === Number(meta.activeVersion)) || versions[versions.length - 1] || {};
@@ -168,7 +158,7 @@ async function standing(meta, publicSetId) {
       declaredNotice: Array.isArray(review.declaredNotice) ? review.declaredNotice : [],
       // null, not {}: "checked before measuring existed" is not "measured,
       // and nothing seen" (content-guardrail.js tallyOf, `scope: 'full'`).
-      tally: review.tally && typeof review.tally === 'object' ? review.tally : null,
+      tally: measured.tally,
       observed,
     },
     // The row itself is never sent — the card needs the key it answers on, and
