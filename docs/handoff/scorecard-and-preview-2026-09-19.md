@@ -157,3 +157,67 @@ down. `leave` clears the row and changes nothing else.
   sits above the card for that reason. A phone-sized ladder is the fix if it grates.
 - Sets shared with no version number at all (the snapshot key reads `vnull`) — filed separately, and
   the reason this whole thread started.
+
+---
+
+## 5. 2026-09-20: the remote, the dark editor, sharing, and topics
+
+Seven more builds, all on dev. Dev deploys took 18–24 minutes each; **never push again while one is
+running** — both executions hit the same CloudFormation stack.
+
+| Dev | What |
+|---|---|
+| `98bf2e73` | The remote names the team it is acting as, and a refusal explains itself |
+| `18a4ec17` | An author can read what the check measured on their own set; Engage's sets get checked; **a cross-tenant leak closed** |
+| `741a074b` | Session control by MEMBERSHIP, and a session's surfaces read the set the session pinned |
+| `6f9c6716` | The content check starts server-side (the first template change: three narrow `lambda:InvokeFunction` grants) |
+| `c8a5b21d` | The public library has a real way in; a set says Shared / Public / behind, and every share state says something true |
+| `219a1d21` | The editor and its preview are on the product's dark ground |
+| `524a47e5` | Topics: one shelf of fifteen plus free tags, required, filterable, searchable, suggested by the check |
+
+### The leak, closed
+
+`publishSnapshot` had **always** written a public copy's REVIEW row carrying the SOURCE
+organisation's per-question findings — question ids, categories, bands, the model's sentences — and
+the Engage reviewer's note. Any signed-in caller could read them by naming the public set id. A
+public copy's version list now answers with the **status alone**; a copy is public because it
+passed, so that much is already a public fact.
+
+### Why the remote could not drive a session
+
+`/remote` renders inside `ProtectedRoute` and nothing else, and `ActiveOrgSwitcher` — the only
+writer of the stored active organisation — was mounted only by the welcome screen. So the phone sent
+no organisation header, the server fell back to `defaultOrgId` (the host's PERSONAL organisation),
+and `callerMayDriveSession` refused with **404 "Game not found"**. The unauthenticated polls were
+waved through by the same function, which is why watching worked and acting did not. **Signing in
+was what broke it.**
+
+The owner's decision: judge session control by MEMBERSHIP, because a session NAMES its own owning
+organisation — there is nothing for an active-org choice to resolve. Content writes keep the
+active-org rule untouched, and a platform admin who is not a member is still refused. The set read
+is anchored on the session (`?gameId=`), resolving the pinned scope, the way `up-next` already did.
+
+### Two green branches, one red tree
+
+The dark editor's guard forbids a raw colour in any `.qs-*` rule; topics had shipped five literal
+greys there. Each branch was green alone. The tokens went on `.qs-topic` — the field's own root —
+because `SetTopicField` mounts in three places and only one has `.qs-editor` overhead, and an
+undefined custom property invalidates the whole declaration. The field's own palette test read only
+literals and so measured nothing once they were tokens; it resolves the token now.
+
+### Known open, beyond §4's list
+
+- **Sessions never expire.** `websocket/create-game.js` writes no `ttl` of any kind, so a session
+  from August is still listed. CLAUDE.md claimed 90 days; corrected. Whether they SHOULD expire is
+  an open product question.
+- **Nothing caps a staff check or re-check** — each press spends real guardrail and Haiku calls on
+  Engage's account.
+- **The automatic topic requirement bites on any Details save** of an unfiled legacy set, including
+  a rename. The one-click suggestion makes it cheap; softening it to bite only on share is a
+  decision away.
+- **The remote is phone-shaped at every width.** `HostRemote.css`'s only `@media` is
+  `prefers-reduced-motion`, so an iPad or laptop gets a stretched phone column. The owner's queue,
+  category filters and hide-the-answer-by-default requests are NOT built and want that layout first.
+- One frontend test flakes on a 5s timeout under load (`questionSetDetailsAi.test.jsx`). **The
+  pipeline runs no tests at all**, so the local gate is the only gate — which makes a random failure
+  more dangerous here than usual.
