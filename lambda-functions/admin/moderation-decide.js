@@ -7,6 +7,10 @@
  *            published · log published · queue row deleted · snapshot kept (D9)
  *   reject   REVIEW ← flagged (reviewer, note) · log decided · share stamp
  *            flagged with the note · snapshot deleted · queue row deleted
+ *   leave    log left-serving on the organisation's set · queue row deleted.
+ *            NOTHING else: the answer to a row a staff RE-CHECK raised over a
+ *            listing the library already serves, which is not a publish request
+ *            and which neither decision above can answer. See `leaveServing`.
  *
  * The REVIEW move is a conditional Put on the row's current status
  * (transitionReview), so two reviewers cannot both decide: the loser is told
@@ -104,7 +108,9 @@
  * went, not a claim that the content is still there.
  *
  * dismiss / take down / keep-with-a-notice are answers to REPORTED rows and
- * arrive with reports (Stage 3); a reported-row sk is refused here.
+ * arrive with reports (Stage 3). A listing-shaped sk (`PUBLIC#<publicSetId>`) is
+ * accepted for `leave` alone, and `leaveServing` refuses one carrying a report:
+ * a report is somebody's complaint, not this check's finding.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
@@ -116,7 +122,7 @@ const { publishSnapshot, platformPromptExists } = require('./shared/publish-set'
 const { writeShareStamp } = require('./shared/share-stamp');
 const { appendReviewEvent, readReviewLog } = require('./shared/review-log');
 const { readSnapshot, deleteSnapshot } = require('./shared/snapshot-store');
-const { setMetadataKey } = require('./shared/set-version');
+const { setMetadataKey, toVersion } = require('./shared/set-version');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
@@ -129,7 +135,13 @@ const NOTE_MAX = 500;
 const NOTICE_ID = /^[a-z0-9-]{1,40}$/;
 // Matches declaredNotice's own cap (check-question-set.js `slice(0, 8)`).
 const NOTICE_MAX = 8;
-const DECISIONS = ['approve', 'reject'];
+/**
+ * `leave` is the third answer, and the only one that is not about a publish
+ * request: see `leaveServing` below. It is listed here so an unknown decision
+ * still reads as "not one of ours" rather than falling into approve's branch.
+ */
+const LEAVE = 'leave';
+const DECISIONS = ['approve', 'reject', LEAVE];
 const OPEN = [STATUS.ESCALATED, STATUS.APPEALED];
 
 const reviewerOf = (event) => String(event?.requestContext?.authorizer?.lambda?.username || event?.requestContext?.authorizer?.lambda?.userId || 'engage').trim();
@@ -149,13 +161,29 @@ function parseOrgSk(raw) {
   return m ? { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) } : null;
 }
 
+/**
+ * A LISTING's queue row: `PUBLIC#<publicSetId>`, which is where a staff
+ * re-check raises one (set-check-worker.js). Only `leave` addresses one — it is
+ * not a publish request, so there is nothing there for approve or reject to
+ * answer. Stage 3's reports land on this same shape and are refused inside
+ * `leaveServing` by what the row SAYS, not by its key.
+ */
+function parsePublicSk(raw) {
+  const m = /^PUBLIC#([A-Za-z0-9_-]+)$/.exec(String(raw || '').trim());
+  return m ? { sk: m[0], publicSetId: m[1] } : null;
+}
+
 function parseBody(event) {
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return { error: 'The request body is not JSON.' }; }
-  const parsed = parseOrgSk(body.sk);
-  if (!parsed) return { error: 'That is not a queue entry this screen decides.' };
   const decision = String(body.decision || '').trim();
-  if (!DECISIONS.includes(decision)) return { error: 'The decision must be approve or reject.' };
+  if (!DECISIONS.includes(decision)) return { error: 'The decision must be approve, reject or leave.' };
+  const parsed = parseOrgSk(body.sk);
+  // The listing shape is offered to `leave` alone, and only when the org shape
+  // did not match: a re-check of a VERSIONED entry could carry the flag on
+  // either key, historically on the organisation's own.
+  const listing = !parsed && decision === LEAVE ? parsePublicSk(body.sk) : null;
+  if (!parsed && !listing) return { error: 'That is not a queue entry this screen decides.' };
   // Minor #4: a non-string note (an object, an array, a number...) must be
   // refused, not silently coerced -- String({}) is '[object Object]'.
   if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') {
@@ -169,7 +197,8 @@ function parseBody(event) {
   if (notice.length > NOTICE_MAX || notice.some((n) => !NOTICE_ID.test(n))) {
     return { error: 'A content notice id is lowercase letters, digits and dashes, up to 40 characters, and there are at most 8 of them.' };
   }
-  return { ...parsed, decision, note, notice };
+  if (listing) return { sk: listing.sk, publicSetId: listing.publicSetId, ref: null, version: 0, decision, note, notice };
+  return { ...parsed, publicSetId: '', decision, note, notice };
 }
 
 /**
@@ -183,6 +212,78 @@ function parseBody(event) {
 const sameSet = (source, ref) => Boolean(source)
   && String(source.orgId || '') === String(ref.orgId || '')
   && String(source.setId || '') === String(ref.setId || '');
+
+/**
+ * "LEAVE IT SERVING" — the other answer to a row a staff re-check raised, and
+ * the one the queue could not give.
+ *
+ * A re-check of a listing the library already serves records what it measured
+ * and, when that is worse than the decision on record, raises a row so a person
+ * looks (R7: nothing is taken down automatically). Neither ordinary decision
+ * applies to it — approve would publish content already live a second time,
+ * reject would tell an author off for a check nobody asked them for — so the
+ * only control staff had left was TAKE DOWN: the destructive one, on content a
+ * person had already approved. The refusal above even says "or leave it
+ * serving", which was not a thing anybody could do: the row stayed in the
+ * worklist and in the nav badge for ever, ageing.
+ *
+ * The likely outcome of exactly the re-checks the owner wants is a MEDIUM band a
+ * person has already ruled on (content-guardrail.js maps MEDIUM to escalate), so
+ * "the approval stands" is not an edge case — it is the common one, and this is
+ * how it is said.
+ *
+ * It deletes the QUEUE ROW and nothing else: not the review row (the
+ * measurement stays, and so does the human decision), not the S3 snapshot, not
+ * one row of the library. The organisation's log records it, because that log is
+ * where they see what Engage did to their set and a re-check that changed
+ * nothing is still something Engage did.
+ */
+async function leaveServing({
+  sk, pointer, ref, version, publicSetId, note, reviewer,
+}) {
+  if (pointer.recheck !== true) {
+    return json(409, {
+      error: 'Only an entry a staff re-check raised can be left serving — this one is a request waiting for a decision.',
+    });
+  }
+  const reasons = Array.isArray(pointer.reasons) ? pointer.reasons : [];
+  // Stage 3's reports land on the listing's key too, and a report is somebody's
+  // complaint rather than this check's finding: dropping the row would drop it.
+  if (reasons.includes('reported')) {
+    return json(409, { error: 'This entry also carries a report, which is answered on the report itself.' });
+  }
+  // WHOSE LOG. For a listing's row the provenance is the LISTING's, read from
+  // the public row the way every other path here reads it — never from the
+  // pointer, whose own `setId` is the public set id. A listing that has gone
+  // leaves nothing to write to, and the row is simply an orphan to remove.
+  let logRef = ref;
+  let logVersion = version;
+  if (!logRef && publicSetId) {
+    const meta = (await db.send(new GetCommand({
+      TableName: TABLE(),
+      Key: setMetadataKey({ scope: tenant.PUBLIC, orgId: '', setId: publicSetId }),
+    }))).Item;
+    if (meta && meta.sourceOrgId && meta.sourceSetId) {
+      logRef = { scope: tenant.ORG, orgId: String(meta.sourceOrgId), setId: String(meta.sourceSetId) };
+      logVersion = toVersion(meta.sourceVersion);
+    } else {
+      logRef = null;
+    }
+  }
+  if (logRef) {
+    await appendReviewEvent(db, TABLE(), logRef, 'left-serving', {
+      version: logVersion === undefined ? null : logVersion,
+      publicSetId: publicSetId || pointer.publicSetId || '',
+      reviewer,
+      ...(note ? { note } : {}),
+    });
+  }
+  // LAST, as on every other path here: the queue row is the completion marker,
+  // so a crash before this leaves the row for the next click rather than a
+  // cleared worklist with nothing in the customer's log.
+  await deleteQueueRow(db, TABLE(), sk);
+  return json(200, { decision: LEAVE, leftServing: publicSetId || pointer.publicSetId || '' });
+}
 
 async function writeSensitivity(pubRef, notice) {
   await db.send(new UpdateCommand({
@@ -202,12 +303,17 @@ exports.handler = async (event) => {
   }
   const input = parseBody(event);
   if (input.error) return json(400, { error: input.error });
-  const { sk, ref, version, decision, note, notice } = input;
+  const { sk, ref, version, decision, note, notice, publicSetId } = input;
   const reviewer = reviewerOf(event);
   try {
     const row = await db.send(new GetCommand({ TableName: TABLE(), Key: queueKey(sk) }));
     if (!row || !row.Item) return json(404, { error: 'Nothing is waiting under that entry — it may already be decided.' });
     const pointer = row.Item;
+    // The one answer that is not about a publish request, so it comes before
+    // every read and every branch that assumes one.
+    if (decision === LEAVE) {
+      return await leaveServing({ sk, pointer, ref, version, publicSetId, note, reviewer });
+    }
     /*
       A ROW STAFF'S RE-CHECK RAISED IS NOT DECIDED HERE, and the refusal comes
       before every branch below because both buttons are wrong on it.

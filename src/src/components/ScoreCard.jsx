@@ -67,6 +67,17 @@ import './ScoreCard.css';
  * decides whether the control is offered, and defaults to the organisation's
  * reading — a staff-only control must not appear because a caller said nothing.
  * `RecheckDialog` below is where those promises are written down.
+ *
+ * ── AND ANSWERING WHAT IT FOUND ───────────────────────────────────────────
+ *
+ * A re-check worse than the decision on record takes nothing down: it puts the
+ * listing in the queue for a person, and this card is the only surface that can
+ * answer that row — the review dialog's two buttons would publish it a second
+ * time or tell its author off. So the card carries BOTH answers: Take down, and
+ * "Leave it serving", which clears the queue entry and changes nothing else. The
+ * server sends the row as `queued` so the card can say that anybody is waiting
+ * at all; without it Take down was the only exit from a worklist row, on content
+ * a person had already approved.
  */
 const SET_SUBJECT = '(set)';
 const BAND_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
@@ -340,6 +351,10 @@ const EVENT_WORDS = {
   published: (e) => `Published${e.publicVersion ? ` as public v${e.publicVersion}` : ''}`,
   unpublished: () => 'Unpublished by the organisation',
   'taken-down': (e) => `Taken down${e.reviewer ? ` by ${e.reviewer}` : ''}`,
+  // Staff looked at what a re-check found and left the listing serving. Its own
+  // event, never `decided`: nobody ruled on a version here (moderation-decide.js
+  // reads the log for `decided` when it resumes a crashed decision).
+  'left-serving': (e) => `Left in the library${e.reviewer ? ` by ${e.reviewer}` : ''}`,
   reported: (e) => `Reported${e.type ? ` — ${e.type}` : ''}`,
   'notice-set': () => 'Content notice set',
   'notice-cleared': () => 'Content notice cleared',
@@ -505,6 +520,8 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
   // The re-check's own job while this card is watching it: null when none is.
   const [job, setJob] = useState(null);
   const [recheckError, setRecheckError] = useState(null);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState(null);
   // The job outlives the card — closing this place keeps the check running — so
   // every write after an await is guarded rather than cancelled.
   const mounted = useRef(true);
@@ -601,6 +618,42 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
     await reread();
   };
 
+  /*
+    ── LEAVING IT SERVING ─────────────────────────────────────────────────────
+
+    A re-check that came out worse than the decision on record puts the listing
+    in the moderation queue, because nothing is taken down automatically. Neither
+    review-dialog button answers that row, so until now the only control left was
+    Take down — the destructive one, on content a person had already approved.
+    The likely outcome of exactly the re-checks this card offers is a medium band
+    somebody already ruled on, so "the approval stands" is the common answer and
+    this is where it is said.
+
+    It clears the queue entry and nothing else. No dialog: there is nothing to
+    warn about and nothing to undo — a later re-check raises the row again — so a
+    confirmation step would only be ceremony. A refusal is reported here rather
+    than by unmounting the card, exactly as the re-check's is.
+  */
+  const leaveServing = async () => {
+    setLeaving(true); setLeaveError(null);
+    try {
+      const res = await authFetch(adminApiUrl('admin/moderation/decide'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sk: card.queued.sk, decision: 'leave' }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `It could not be cleared from the queue (${res.status}).`);
+      // The card is re-read rather than patched: the queue row is the server's
+      // fact, and the same GET is what will say it has gone.
+      await reread();
+    } catch (e) {
+      safe(() => setLeaveError(e.message || 'It could not be cleared from the queue.'));
+    } finally {
+      safe(() => setLeaving(false));
+    }
+  };
+
   const startRecheck = async () => {
     setRecheckError(null);
     let body;
@@ -669,6 +722,15 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
   const canRecheck = mode === 'platform' && Boolean(card)
     && Boolean(card.sourceOrgId) && Boolean(card.sourceSetId)
     && !inFlight && !job;
+  /*
+    IS ANYBODY WAITING ON THIS LISTING, and is it staff's own re-check they are
+    waiting on? A row raised by anything else — Stage 3's reports — is answered
+    on that thing, not here, and the route refuses it. Not while a re-check of
+    this card's own is running either: that check is about to write the row this
+    would clear.
+  */
+  const queued = card && card.queued && card.queued.recheck ? card.queued : null;
+  const canLeave = mode === 'platform' && Boolean(queued) && !job && !inFlight;
 
   return (
     <section className="scard" data-theme="dark">
@@ -683,8 +745,27 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
           </header>
           <div className="scard-acts">
             <button type="button" className="scard-btn scard-btn--danger" onClick={() => setAsking(true)}>Take down</button>
-            {/* Stage 4: the content-notice editor sits beside Take down. */}
+            {/* THE REVERSIBLE NEIGHBOUR, and the reason Take down is no longer
+                the only answer to a re-check's queue row. Same size as it: these
+                are the two answers to one question, not a control and its
+                footnote. Stage 4: the content-notice editor joins them. */}
+            {canLeave && (
+              <button type="button" className="scard-btn" onClick={leaveServing} disabled={leaving}>
+                {leaving ? 'Leaving it…' : 'Leave it serving'}
+              </button>
+            )}
           </div>
+          {/* WHY THERE IS A SECOND BUTTON. Without this the queue row is
+              invisible here and "Leave it serving" answers a question the reader
+              was never asked. */}
+          {canLeave && (
+            <p className="scard-fine" data-testid="scard-waiting">
+              A re-check came out worse than the decision on record, so this is waiting for a person
+              {queued.waitingSince ? ` — since ${day(queued.waitingSince)}` : ''}. Nothing was taken down;
+              leaving it serving clears that entry and changes nothing else.
+            </p>
+          )}
+          {leaveError && <div className="scard-outage" data-testid="scard-leave-error" role="alert">{leaveError}</div>}
           <h3 className="scard-h">Timeline</h3>
           <ol className="scard-timeline">
             {timeline.map((e, i) => (

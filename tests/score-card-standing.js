@@ -31,6 +31,7 @@ const R = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-review.js
 const C = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
 const J = require(path.join(H.REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
 const W = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-check-worker.js'));
+const Q = require(path.join(H.REPO, 'lambda-functions/admin/shared/moderation-queue.js'));
 const { publicSetIdFor } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
 const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/public-library-item.js'));
 const deps = { db, tableName: T, s3: new S3Client({}), bucket: 'prompts-test', bedrock: new BedrockRuntimeClient({}) };
@@ -302,6 +303,35 @@ async function shareJob(version) {
       publicRow: { versions: [{ version: 1, createdAt: '2026-09-01T10:00:00.000Z' }, { version: 2, createdAt: '2026-09-18T10:00:00.000Z' }] },
     });
     assert.strictEqual((await get()).questionCount, 3);
+  });
+
+  /*
+    WHETHER ANYBODY IS WAITING ON THIS LISTING.
+
+    A staff re-check that came out worse than the decision on record raises a
+    queue row under the listing's own key, and this card is the only surface that
+    can answer it: Take down, or "Leave it serving". A card that cannot see the
+    row cannot offer the second, which left the destructive control as the only
+    exit from a worklist row — on content a person had already approved.
+  */
+  await H.test('the card says when a re-check has left something waiting, and on which key', async () => {
+    await seedApproved();
+    assert.strictEqual((await get()).queued, null, 'a listing nobody is waiting on reports one');
+    await Q.upsertQueueRow(db, T, {
+      ref: PUBREF, version: 3, reason: 'escalated', orgId: 'org_acme', orgName: 'Acme', title: 'True crime',
+      publicSetId: PUB, recheck: true,
+    }, { now: new Date('2026-09-19T08:00:00.000Z') });
+    const card = await get();
+    assert.strictEqual(card.queued.sk, `PUBLIC#${PUB}`);
+    assert.strictEqual(card.queued.recheck, true);
+    assert.strictEqual(card.queued.waitingSince, '2026-09-19T08:00:00.000Z');
+  });
+  // rejects: every waiting row reading as a re-check's. Stage 3's reports land
+  // on the same key, and "Leave it serving" is not the answer to one.
+  await H.test('a row nobody re-checked says so', async () => {
+    await seedApproved();
+    await Q.upsertQueueRow(db, T, { ref: PUBREF, version: 3, reason: 'reported', publicSetId: PUB });
+    assert.strictEqual((await get()).queued.recheck, false);
   });
 
   H.summary();

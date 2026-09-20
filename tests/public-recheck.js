@@ -471,6 +471,70 @@ async function recheck(body = { recheck: true }) {
     assert.strictEqual((await stampOf()).status, 'published');
   });
 
+  /*
+    R7's OTHER HALF: THE EXIT THAT IS NOT A TAKEDOWN.
+
+    Nothing is taken down automatically, so a re-check that comes out worse
+    raises a row for a person. Neither ordinary decision answers it, and before
+    "Leave it serving" existed the only control left was Take down — the
+    destructive one, on content a person had already approved. The likely outcome
+    of exactly the re-checks the owner wants is a MEDIUM band somebody already
+    ruled on (content-guardrail.js escalates on MEDIUM), so "the approval stands"
+    is the COMMON case, and with no way to say it the row and the nav badge it
+    feeds aged for ever.
+  */
+  await H.test('a re-check\'s row can be left serving: the row goes, and nothing else moves', async () => {
+    await seedOrg();
+    await seedPublished();
+    H.state.guardrailReplies = [H.guardrailFull({ HATE: 'MEDIUM' }, { HATE: true }), ...clean(2)];
+    await recheck();
+    const raised = listingRow();
+    assert.ok(raised, 'fixture: the re-check raised a row');
+    const before = libraryState();
+    const reviewBefore = JSON.stringify(await review(null));
+    const res = await decide({ sk: raised.SK, decision: 'leave', note: 'Historical, as the approval says.' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(parse(res).leftServing, PUB);
+    assert.strictEqual(queue().length, 0, 'the row a person has now answered is still in the worklist');
+    assert.strictEqual(JSON.stringify(await review(null)), reviewBefore, 'leaving it serving rewrote the review row');
+    assert.strictEqual(libraryState(), before, 'leaving it serving changed what the library serves');
+    assert.strictEqual((await stampOf()).status, 'published', 'leaving it serving moved the author\'s stamp');
+    assert.ok(H.state.s3.has(`prompts-test/${raised.snapshotKey}`), 'the snapshot was deleted');
+    // The customer's log: what Engage did to their set, and who did it.
+    const left = (await logOf()).filter((e) => e.event === 'left-serving');
+    assert.strictEqual(left.length, 1, 'the organisation\'s log does not record it');
+    assert.strictEqual(left[0].reviewer, 'dai');
+    assert.strictEqual(left[0].publicSetId, PUB);
+    assert.strictEqual(left[0].version, null, 'the log named a version this set does not have');
+    assert.strictEqual(left[0].note, 'Historical, as the approval says.');
+  });
+  // rejects: a general-purpose delete button. An organisation's own escalated
+  // publish request is a decision somebody owes them, not a row to sweep away.
+  await H.test('an organisation\'s own waiting row cannot be left serving', async () => {
+    await seedOrg({ versions: [2], active: 2 });
+    H.state.guardrailReplies = [H.guardrailFull({ HATE: 'MEDIUM' }, { HATE: true }), ...clean(2)];
+    const theirs = await handler(H.orgEvent({ orgId: ORG, role: 'owner', method: 'POST', setId: SET, body: { version: 2 } }), H.ctx());
+    await handler({ __workerMode: true, jobId: parse(theirs).jobId }, H.ctx());
+    const [row] = queue();
+    const res = await decide({ sk: row.SK, decision: 'leave' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /re-check/i, 'the refusal did not say why');
+    assert.strictEqual(queue().length, 1, 'the refusal cleared their row anyway');
+  });
+  await H.test('only Engage staff, acting as Engage, can leave one serving', async () => {
+    await seedOrg();
+    await seedPublished();
+    H.state.guardrailReplies = [H.guardrailFull({ HATE: 'MEDIUM' }, { HATE: true }), ...clean(2)];
+    await recheck();
+    const sk = listingRow().SK;
+    const res = await decideHandler(H.orgEvent({ orgId: ORG, role: 'owner', method: 'POST', body: { sk, decision: 'leave' } }), H.ctx());
+    assert.strictEqual(res.statusCode, 403, res.body);
+    assert.strictEqual(queue().length, 1);
+    // …and a row that is no longer there is not an error to fix, it is gone.
+    assert.strictEqual((await decide({ sk: `PUBLIC#${PUB}`, decision: 'leave' })).statusCode, 200);
+    assert.strictEqual((await decide({ sk: `PUBLIC#${PUB}`, decision: 'leave' })).statusCode, 404);
+  });
+
   // rejects: a row keyed where the takedown does not look. Taking the listing
   // down is one of the two exits from a re-check's row, and it clears exactly
   // this key (public-library-item.js) — for a legacy entry included, which the

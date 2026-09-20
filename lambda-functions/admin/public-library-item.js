@@ -62,7 +62,7 @@ const { unpublishSet } = require('./shared/publish-set');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
 const { writeShareStamp } = require('./shared/share-stamp');
-const { queueSk, deleteQueueRow } = require('./shared/moderation-queue');
+const { queueSk, queueKey, deleteQueueRow } = require('./shared/moderation-queue');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -122,6 +122,17 @@ async function standing(meta, publicSetId) {
   const log = source.orgId && source.setId ? await readReviewLog(db, TABLE(), source) : [];
   const versions = Array.isArray(meta.versions) ? meta.versions : [];
   const latest = versions.find((v) => Number(v.version) === Number(meta.activeVersion)) || versions[versions.length - 1] || {};
+  /*
+    IS ANYBODY WAITING ON THIS LISTING? A staff re-check that came out worse than
+    the decision on record raises a queue row under the listing's own key
+    (set-check-worker.js), and this card is where it is answered: Take down, or
+    "Leave it serving" (moderation-decide.js `leave`). Without this the card could
+    not tell that anybody was waiting at all, and the only exit from the row was
+    the destructive one — take down content a person had already approved.
+  */
+  const waiting = (await db.send(new GetCommand({
+    TableName: TABLE(), Key: queueKey(queueSk(pubRefOf(publicSetId), 0)),
+  }))).Item;
   return {
     publicSetId,
     name: meta.name || '',
@@ -160,6 +171,14 @@ async function standing(meta, publicSetId) {
       tally: review.tally && typeof review.tally === 'object' ? review.tally : null,
       observed,
     },
+    // The row itself is never sent — the card needs the key it answers on, and
+    // whether this is a re-check's row (which is what "Leave it serving"
+    // answers) or somebody else's business.
+    queued: waiting ? {
+      sk: waiting.SK,
+      recheck: waiting.recheck === true,
+      waitingSince: waiting.waitingSince || null,
+    } : null,
     log,
   };
 }

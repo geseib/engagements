@@ -321,5 +321,69 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     const orgAdmin = await handler(H.orgEvent({ orgId: 'org_acme', role: 'owner', groups: 'admins', method: 'POST', body: { sk: 'org_acme#safety#v2', decision: 'approve' } }), H.ctx());
     assert.strictEqual(orgAdmin.statusCode, 403);
   });
+  /*
+    `leave` — "LEAVE IT SERVING", the answer to a row a staff RE-CHECK raised.
+    It is the only decision that addresses a listing-shaped sk, because it is the
+    only one that is not about a publish request, and it must stay that narrow:
+    a row an organisation is waiting on is a decision somebody owes them, and
+    Stage 3's reports land on the same key.
+  */
+  await H.test('leave clears a re-check\'s row, logs it on the organisation\'s set, and touches nothing else', async () => {
+    await seed();
+    // The state a re-check leaves: the listing, and a row under its own key.
+    H.seedRow({
+      ...V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }), name: 'Safety walkthrough', scope: 'public', orgId: '',
+      activeVersion: 1, versions: [{ version: 1, questionCount: 2 }],
+      sourceOrgId: 'org_acme', sourceSetId: 'safety', sourceVersion: 2,
+    });
+    await Q.upsertQueueRow(db, T, {
+      ref: { scope: 'public', orgId: '', setId: PUB }, version: 2, reason: 'escalated',
+      orgId: 'org_acme', title: 'Safety walkthrough', publicSetId: PUB, snapshotKey: KEY, recheck: true,
+    });
+    const reviewBefore = JSON.stringify(await R.readReview(db, T, SRC, 2));
+    const res = await decide({ sk: `PUBLIC#${PUB}`, decision: 'leave', note: 'The approval stands.' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(parse(res).leftServing, PUB);
+    // Only that row: the organisation's own escalated row is still waiting.
+    assert.deepStrictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).map((r) => r.SK), ['org_acme#safety#v2']);
+    assert.strictEqual(JSON.stringify(await R.readReview(db, T, SRC, 2)), reviewBefore, 'the review row moved');
+    assert.ok(H.state.s3.has(`prompts-test/${KEY}`), 'the snapshot was deleted');
+    assert.strictEqual(S.readShareStamp((await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey(SRC) }))).Item).status, 'escalated', 'the author\'s stamp moved');
+    const [left] = (await L.readReviewLog(db, T, SRC)).filter((e) => e.event === 'left-serving');
+    assert.ok(left, 'the organisation\'s log does not record it');
+    assert.strictEqual(left.reviewer, 'dai');
+    assert.strictEqual(left.version, 2);
+    assert.strictEqual(left.note, 'The approval stands.');
+  });
+  await H.test('leave is refused for a row no re-check raised, for a reported row, and for the wrong sk shape', async () => {
+    await seed();
+    // The organisation's own escalated publish request, under its version key.
+    const theirs = await decide({ sk: 'org_acme#safety#v2', decision: 'leave' });
+    assert.strictEqual(theirs.statusCode, 409, theirs.body);
+    assert.match(parse(theirs).error, /re-check/i);
+    // A listing's row carrying a report: Stage 3 answers that on the report.
+    await Q.upsertQueueRow(db, T, {
+      ref: { scope: 'public', orgId: '', setId: PUB }, version: 2, reason: 'reported', publicSetId: PUB, recheck: true,
+    });
+    const reported = await decide({ sk: `PUBLIC#${PUB}`, decision: 'leave' });
+    assert.strictEqual(reported.statusCode, 409, reported.body);
+    assert.match(parse(reported).error, /report/i);
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 2, 'a refusal deleted a row anyway');
+    // Approve and reject do not reach a listing's row at all.
+    assert.strictEqual((await decide({ sk: `PUBLIC#${PUB}`, decision: 'reject' })).statusCode, 400);
+    assert.strictEqual((await decide({ sk: 'not a key', decision: 'leave' })).statusCode, 400);
+  });
+  // rejects: an orphan row — its listing taken down while it stood — being
+  // unclearable because there is no organisation left to write the log to.
+  await H.test('a row whose listing has gone is still cleared', async () => {
+    await seed();
+    await Q.upsertQueueRow(db, T, {
+      ref: { scope: 'public', orgId: '', setId: PUB }, version: 2, reason: 'escalated', publicSetId: PUB, recheck: true,
+    });
+    const res = await decide({ sk: `PUBLIC#${PUB}`, decision: 'leave' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).map((r) => r.SK), ['org_acme#safety#v2']);
+    assert.strictEqual((await L.readReviewLog(db, T, SRC)).filter((e) => e.event === 'left-serving').length, 0, 'a log entry was written for a listing that is gone');
+  });
   H.summary();
 })();

@@ -846,3 +846,73 @@ test('the re-check is not offered where there is nothing to re-check, and is off
   expect(screen.getByTestId('scard-verdict')).toHaveTextContent("didn't finish");
   expect(screen.getByRole('button', { name: RECHECK })).toBeInTheDocument();
 });
+
+/*
+  ANSWERING WHAT THE RE-CHECK FOUND, WITHOUT TAKING ANYTHING DOWN.
+
+  A re-check worse than the decision on record takes nothing down: it queues the
+  listing for a person, and this card is the only surface that can answer that
+  row — the review dialog's two buttons would publish it a second time or tell
+  its author off, and the route refuses both. So Take down used to be the ONLY
+  exit from the row, on content a person had already approved. The likely outcome
+  of exactly the re-checks this card offers is a medium band somebody has already
+  ruled on, so "the approval stands" is the common answer.
+*/
+const LEAVE = /leave it serving/i;
+const decideUrl = 'https://api.test/admin/moderation/decide';
+const WAITING = { sk: 'PUBLIC#orgacme-crime', recheck: true, waitingSince: '2026-09-19T08:00:00.000Z' };
+const waiting = (queued) => ({ ...DECIDED, queued });
+
+test('a re-check\'s queue entry is answered on the card: it says who is waiting, and clears without taking anything down', async () => {
+  // The second read is the card after the entry has been answered.
+  const calls = server({
+    card: (read) => (read === 1 ? waiting(WAITING) : waiting(null)),
+    post: () => json({ decision: 'leave', leftServing: 'orgacme-crime' }),
+  });
+  await openPlatform(DECIDED);
+  expect(screen.getByTestId('scard-waiting')).toHaveTextContent(/waiting for a person/i);
+  expect(screen.getByTestId('scard-waiting')).toHaveTextContent(/nothing was taken down/i);
+  fireEvent.click(screen.getByRole('button', { name: LEAVE }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: decideUrl, body: { sk: 'PUBLIC#orgacme-crime', decision: 'leave' } },
+  ]));
+  // Re-read, and the row is gone from the card with it.
+  await waitFor(() => expect(screen.queryByTestId('scard-waiting')).toBeNull());
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(calls.reads).toBe(2);
+  // Take down is untouched by any of it: the destructive answer is still there.
+  expect(screen.getByRole('button', { name: /take down/i })).toBeInTheDocument();
+});
+
+// rejects: one control for every waiting row. Stage 3's reports land on the same
+// key and are answered on the report, not by leaving the listing alone.
+test('a waiting row no re-check raised is not this card\'s to clear', async () => {
+  server({ card: waiting({ ...WAITING, recheck: false }), post: () => json({}) });
+  await openPlatform(DECIDED);
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(screen.queryByTestId('scard-waiting')).toBeNull();
+});
+
+// rejects: a staff control appearing because a caller said nothing about who is
+// looking — the same fail-closed default the re-check's `mode` takes.
+test('leaving it serving is offered to Engage staff and to nobody else', async () => {
+  server({ card: waiting(WAITING), post: () => json({}) });
+  render(<ScoreCard publicSetId={DECIDED.publicSetId} onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(screen.queryByTestId('scard-waiting')).toBeNull();
+});
+
+// rejects: a refusal swallowed, or the row reported as answered when it was not.
+test('a refusal leaves the entry where it was and says so on the card', async () => {
+  const calls = server({
+    card: waiting(WAITING),
+    post: () => json({ error: 'This entry also carries a report, which is answered on the report itself.' }, 409),
+  });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: LEAVE }));
+  expect(await screen.findByTestId('scard-leave-error')).toHaveTextContent(/carries a report/i);
+  expect(screen.getByTestId('scard-waiting')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: LEAVE })).toBeEnabled();
+  expect(calls.reads).toBe(1);
+});
