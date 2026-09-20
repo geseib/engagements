@@ -233,6 +233,9 @@ describe('the chrome around the card', () => {
     ['the accent on the pressed segment', () => on(S.primary, [...CONTROL, S.pressed])],
     ['the reveal note', () => on(S.text, REMOTE)],
     ['the reveal note\'s label', () => on(S.chromeMuted, REMOTE)],
+    // The line that says why Previous and Next are held. Same pairing as the
+    // position it sits under, and read from its own rule so a retint is measured.
+    ['the reason the steps are held', () => on(hexIn(DUSK, colourOf('.hrqp-held')), REMOTE)],
   ])('%s clears AA', (_label, measure) => {
     expect(measure()).toBeGreaterThanOrEqual(AA);
   });

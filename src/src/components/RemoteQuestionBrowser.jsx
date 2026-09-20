@@ -237,6 +237,8 @@ export default function RemoteQuestionBrowser({
     const question = sources.get(open.id) || null;
     const note = revealText(question);
     const single = shown.length <= 1;
+    // What the held steps point at with aria-describedby, below.
+    const heldId = 'hrq-preview-only-one';
 
     return (
       <div className="hrq hrq--preview" data-testid="hrq-preview">
@@ -288,6 +290,7 @@ export default function RemoteQuestionBrowser({
             type="button"
             disabled={single}
             title={single ? ONLY_ONE : undefined}
+            aria-describedby={single ? heldId : undefined}
             onClick={() => step(-1)}
           >
             <Icon name="CaretLeft" weight="bold" size={16} color="currentColor" />
@@ -301,12 +304,27 @@ export default function RemoteQuestionBrowser({
             type="button"
             disabled={single}
             title={single ? ONLY_ONE : undefined}
+            aria-describedby={single ? heldId : undefined}
             onClick={() => step(1)}
           >
             Next
             <Icon name="CaretRight" weight="bold" size={16} color="currentColor" />
           </button>
         </div>
+
+        {/* PRINTED, NOT HOVERED. `title=` is the one channel a mouse has and the
+            one a finger does not, so on the surface this feature is FOR the reason
+            the two steps are held reached nobody. It is a line of copy rather
+            than a change to the controls: the doc block above argues for leaving
+            them in place and saying why, and a line appearing as a search narrows
+            to one result is information, where a control vanishing under the
+            thumb is a moving target. `aria-describedby` carries the same words to
+            a screen reader that is on the button rather than reading past it. */}
+        {single && (
+          <p className="hrqp-held" id={heldId} data-testid="hrq-preview-only">
+            {ONLY_ONE}
+          </p>
+        )}
 
         {/* THE ROOM'S SCREEN. The stage's own card, at the Table profile, on the
             stage's own ground — and not one rule of it is this sheet's

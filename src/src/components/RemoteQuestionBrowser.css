@@ -337,3 +337,15 @@
   gap: 10px;
   align-items: center;
 }
+
+/* WHY THE TWO STEPS ARE HELD, in text rather than in a hover title — `title=` is
+   the one channel a finger does not have, and this is a phone. Centred under the
+   pair it describes, in the same `--muted` as the position between them: it is a
+   caption on the chrome, not a warning. */
+.hrqp-held {
+  margin: 0;
+  text-align: center;
+  font-size: .8125rem;
+  line-height: 1.4;
+  color: var(--muted);
+}

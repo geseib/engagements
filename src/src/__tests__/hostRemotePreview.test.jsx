@@ -481,6 +481,34 @@ describe('paging without leaving the card', () => {
   });
 
   /*
+   * A HOVER TITLE REACHES NOBODY ON A PHONE. `title=` is the only channel a
+   * mouse has and the only one a finger does not, so the reason the two steps are
+   * held is printed where every reader gets it — and pointed at from the buttons
+   * with aria-describedby, which is the half a screen reader gets.
+   */
+  it('prints why the steps are held, and points both buttons at it', async () => {
+    await mount([TRIVIA_A]);
+    openPreview(TRIVIA_A.title);
+
+    const why = screen.getByTestId('hrq-preview-only');
+    expect(why).toHaveTextContent(/only question in the list/i);
+    expect(why.id).toBeTruthy();
+    for (const name of [/^previous$/i, /^next$/i]) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-describedby', why.id);
+    }
+  });
+
+  // rejects: a line that stays behind once the list can be paged. It would read
+  // as "the only question" beside a live Next.
+  it('prints nothing of the kind once the list holds more than one', async () => {
+    await mount([TRIVIA_A, TRIVIA_B]);
+    openPreview(TRIVIA_A.title);
+
+    expect(screen.queryByTestId('hrq-preview-only')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^next$/i })).not.toHaveAttribute('aria-describedby');
+  });
+
+  /*
    * EVERYTHING THE HOST OPERATES IS ABOVE THE CARD, and on a phone that is
    * load-bearing rather than cosmetic: a stage composition in a 390px column
    * runs past the fold, so a step control placed under the card would be reached
