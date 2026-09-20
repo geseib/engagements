@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { navigateTo } from '../auth/navigate';
 import { rememberReturnPath } from '../auth/returnPath';
+import useScrollProgress from './useScrollProgress';
+import RidgeScene from './components/RidgeScene';
 import './MarketingShell.css';
 
 const LINKS = [
@@ -47,8 +49,9 @@ class PageBoundary extends React.Component {
   }
 }
 
-export default function MarketingShell({ title, current, children }) {
+export default function MarketingShell({ title, current, scene = true, children }) {
   const [open, setOpen] = useState(false);
+  const progress = useScrollProgress();
 
   useEffect(() => {
     document.title = title ? `${title} · Engagements` : 'Engagements';
@@ -56,6 +59,16 @@ export default function MarketingShell({ title, current, children }) {
 
   return (
     <div className="mk-root">
+      {/*
+        The ridge scene, moved here from HomePage so every inner page carries
+        it too (mockups 02-05 all draw the identical `.mk-ridge` block as the
+        first child of `.mk-root`). It renders OUTSIDE `PageBoundary` below on
+        purpose: the scene is decoration (`aria-hidden`, and RidgeScene has its
+        own defensive math), so a page crashing should not also lose it, and a
+        broken scene is not this boundary's problem to catch — keeping it
+        simple beats handling a failure mode nothing here can actually cause.
+      */}
+      {scene && <RidgeScene progress={progress} />}
       <header className="mk-nav">
         <div className="mk-shell mk-nav-in">
           <a className="mk-brand" href="/">

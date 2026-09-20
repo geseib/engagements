@@ -6,10 +6,10 @@
    RidgeScene.css, DeviceFrame.css, ClipFrame.css or ClipStill.css.
    =========================================================================== */
 
-/* `<RidgeScene>` is `position: fixed` on its own (RidgeScene.css); this only
-   has to put the page's own content in a stacking context above it. */
-.mk-home { position: relative; }
-.mk-home > section { position: relative; z-index: 1; }
+/* The scene now renders from MarketingShell (task 9), as a sibling of <main>
+   rather than a child of this page's own wrapper, and MarketingShell.css
+   gives <main> itself the stacking context that used to live here per-section.
+   `.mk-home` needs nothing of its own for that any more. */
 
 /* ==================================================================== hero = */
 .mk-hero {

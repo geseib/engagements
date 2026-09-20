@@ -16,6 +16,8 @@ import RootPage from './components/RootPage';
 // Marketing is lazy so that a player on /play and a host on the stage never
 // download a brochure. One chunk per page; AuthLoading is the fallback.
 const HomePage = lazy(() => import('./marketing/HomePage'));
+const HowItWorksPage = lazy(() => import('./marketing/HowItWorksPage'));
+const UseCasesPage = lazy(() => import('./marketing/UseCasesPage'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
 // the whole point of it), so both need this and neither should own it.
@@ -302,6 +304,16 @@ function AppRouter() {
   // Exact match, like `/` below.
   if (path === '/join') {
     return <RootPage />;
+  }
+
+  // The six-step tour and the four facilitator use cases. Exact match, like
+  // /join above, and public for the same reason: a prospect reading either
+  // page has no account yet.
+  if (path === '/how-it-works') {
+    return <MarketingRoute page={HowItWorksPage} />;
+  }
+  if (path === '/use-cases') {
+    return <MarketingRoute page={UseCasesPage} />;
   }
 
   /*

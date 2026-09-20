@@ -5,8 +5,14 @@ import { CLIPS } from '../content/clips';
 import { prefersReducedMotion } from '../useScrollProgress';
 import './ClipFrame.css';
 
-/** `clip` overrides the manifest entry — for tests, and for the capture script's preview. */
-export default function ClipFrame({ slot, clip: override }) {
+/**
+ * `clip` overrides the manifest entry — for tests, and for the capture script's
+ * preview. `still` overrides which ClipStill drawing renders while there is no
+ * recording (e.g. the /how-it-works tour draws a step-specific still inside a
+ * device whose manifest slot is shared with another page) — it never affects
+ * `alt`, which always comes from the manifest entry `slot` names.
+ */
+export default function ClipFrame({ slot, still, clip: override }) {
   const clip = override || CLIPS[slot];
   const ref = useRef(null);
   const playable = Boolean(clip && (clip.webm || clip.mp4)) && !prefersReducedMotion();
@@ -35,7 +41,7 @@ export default function ClipFrame({ slot, clip: override }) {
       ) : clip.poster ? (
         <img className="mk-clip-media" src={clip.poster} alt={clip.alt} loading="lazy" />
       ) : (
-        <ClipStill slot={slot} alt={clip.alt} />
+        <ClipStill slot={still || slot} alt={clip.alt} />
       )}
     </DeviceFrame>
   );

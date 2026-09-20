@@ -1,7 +1,5 @@
 import React from 'react';
 import MarketingShell, { goToAuth } from './MarketingShell';
-import useScrollProgress from './useScrollProgress';
-import RidgeScene from './components/RidgeScene';
 import ClipFrame from './components/ClipFrame';
 import SampleReport from './components/SampleReport';
 import JoinCodeEntry from '../components/JoinCodeEntry';
@@ -28,14 +26,11 @@ const Doors = ({ primary, secondary }) => (
 );
 
 export default function HomePage() {
-  const progress = useScrollProgress();
   const { hero, problem, modes, material, room, summit, start } = HOME;
 
   return (
     <MarketingShell title="" current="home">
       <div className="mk-home">
-        <RidgeScene progress={progress} />
-
         <section id="top" className="mk-hero">
           <div className="mk-shell mk-hero-top">
             <p className="mk-kicker">{hero.kicker}</p>

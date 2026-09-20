@@ -17,6 +17,8 @@ jest.mock('../WordCloudTest', () => () => <div data-testid="wordcloud" />);
 jest.mock('../auth/AuthPage', () => () => <div data-testid="auth-page" />);
 jest.mock('../components/RootPage', () => () => <div data-testid="root-page" />);
 jest.mock('../marketing/HomePage', () => () => <div data-testid="home-page" />);
+jest.mock('../marketing/HowItWorksPage', () => () => <div data-testid="how-page" />);
+jest.mock('../marketing/UseCasesPage', () => () => <div data-testid="cases-page" />);
 
 import App from '../App';
 
@@ -27,6 +29,8 @@ afterEach(() => goTo('/'));
 // Tasks 9–11 append their rows here.
 const PUBLIC = [
   ['/join', 'root-page'],
+  ['/how-it-works', 'how-page'],
+  ['/use-cases', 'cases-page'],
 ];
 
 test.each(PUBLIC)('%s is public: a signed-out visitor gets the page, not the sign-in form', async (path, testId) => {

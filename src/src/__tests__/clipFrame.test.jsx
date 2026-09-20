@@ -80,6 +80,26 @@ test('the design-annotation badge never ships', () => {
   expect(container.querySelector('.mk-clip-badge')).toBeNull();
 });
 
+test('a `still` prop selects which drawing renders, independent of the slot', () => {
+  const { container } = render(<ClipFrame slot="trivia-host" still="tour-ask" />);
+  expect(screen.getByText(/single biggest cause of rework/i)).toBeInTheDocument();
+  // The trivia-host slot's OWN still (a different question, a Reveal chip)
+  // must not also be on the page.
+  expect(container.querySelector('.mk-ss-cta')).toBeNull();
+});
+
+test("a still's alt text still comes from the slot's manifest entry, not the still name", () => {
+  render(<ClipFrame slot="trivia-host" still="tour-ask" />);
+  expect(screen.getByRole('img', { name: CLIPS['trivia-host'].alt })).toBeInTheDocument();
+});
+
+test('a `still` prop is ignored once a recording exists', () => {
+  const clip = { ...CLIPS['trivia-host'], poster: '/assets/marketing/trivia-host.jpg' };
+  const { container } = render(<ClipFrame slot="trivia-host" still="tour-ask" clip={clip} />);
+  expect(container.querySelector('.mk-ss')).toBeNull();
+  expect(screen.getByRole('img', { name: clip.alt })).toBeInTheDocument();
+});
+
 test('reduced motion keeps the poster image even when a full recording is supplied', () => {
   prefersReducedMotion.mockReturnValue(true);
   const clip = { ...CLIPS['poll-host'], poster: '/assets/marketing/poll-host.jpg', webm: '/assets/marketing/poll-host.webm', mp4: '/assets/marketing/poll-host.mp4' };

@@ -113,6 +113,17 @@
 /* ------------------------------------------------------------------ layout */
 .mk-shell { width: 100%; max-width: var(--mk-shell); margin-inline: auto; padding-inline: var(--mk-gutter); }
 
+/* `<RidgeScene>` (RidgeScene.css) is `position: fixed` with `z-index: 0` and
+   renders as `.mk-root`'s first child (see MarketingShell.jsx) — matching
+   where every inner mockup places `.mk-ridge`, ahead of `.mk-page`. Giving
+   `<main>` and the footer their own stacking context here, with no explicit
+   z-index, puts them in the same paint group as the scene; because they come
+   AFTER it in the DOM they paint on top of it. `.mk-nav` already carries its
+   own `z-index: 30` below and needs nothing added. This replaces the
+   per-section `z-index: 1` that used to live in HomePage.css, now that the
+   scene is a shell-level sibling rather than a child of one page's wrapper. */
+.mk-root > main, .mk-root > .mk-foot { position: relative; }
+
 /* ==================================================================== nav = */
 .mk-nav {
   position: sticky; top: 0; z-index: 30;

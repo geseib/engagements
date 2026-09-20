@@ -38,6 +38,14 @@ test('it sets the document title', () => {
   expect(document.title).toBe('How it works · Engagements');
 });
 
+test('the ridge scene renders once by default, and not at all with scene={false}', () => {
+  const { container: withScene } = render(<MarketingShell title="T" current="home"><p>body</p></MarketingShell>);
+  expect(withScene.querySelectorAll('.mk-ridge')).toHaveLength(1);
+
+  const { container: withoutScene } = render(<MarketingShell title="T" current="home" scene={false}><p>body</p></MarketingShell>);
+  expect(withoutScene.querySelectorAll('.mk-ridge')).toHaveLength(0);
+});
+
 test('a page that throws leaves the doors standing', () => {
   const Boom = () => { throw new Error('chunk'); };
   const spy = jest.spyOn(console, 'error').mockImplementation(() => {});

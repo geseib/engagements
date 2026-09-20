@@ -127,6 +127,74 @@ const REPORT = (
   </div>
 );
 
+/*
+ * The three stills the /how-it-works tour draws that exist nowhere else —
+ * lifted from docs/design/marketing-redesign/02-how-it-works.html steps 3-5,
+ * the same way the seven above were lifted. `ClipFrame`'s `still` prop
+ * selects one of these independently of the manifest `slot` it is drawn into.
+ */
+
+const TOUR_ASK = (
+  <>
+    <div className="mk-ss-top">
+      <span className="mk-ss-dot" />
+      <span className="mk-ss-chip">Trivia · Ask</span>
+      <span className="mk-ss-code">4821</span>
+    </div>
+    <p className="mk-ss-q">Which of these did the 2025 retro name as the single biggest cause of rework?</p>
+    <div className="mk-ss-opts">
+      <div className="mk-ss-opt"><b>A</b> Unclear acceptance criteria</div>
+      <div className="mk-ss-opt"><b>B</b> Late design changes</div>
+      <div className="mk-ss-opt"><b>C</b> Requirements agreed in a call and never written down</div>
+      <div className="mk-ss-opt"><b>D</b> Environment drift</div>
+    </div>
+    <div className="mk-ss-foot"><span className="mk-ss-chip">14 of 20 answered</span></div>
+  </>
+);
+
+const TOUR_VOTE = (
+  <>
+    <div className="mk-ss-top"><span className="mk-ss-dot" /><span className="mk-ss-chip">Vote</span></div>
+    <p className="mk-ss-q">Pick the ones worth carrying.</p>
+    <div className="mk-ss-opts">
+      <div className="mk-ss-opt mk-ss-right"><b>✓</b> Parallel discovery on three products</div>
+      <div className="mk-ss-opt"><b>{' '}</b> Weekly status meeting</div>
+      <div className="mk-ss-opt"><b>{' '}</b> Hand-built release notes</div>
+      <div className="mk-ss-opt"><b>{' '}</b> Two-week estimates</div>
+    </div>
+    <div className="mk-ss-cta">Cast vote</div>
+  </>
+);
+
+const TOUR_RESULTS = (
+  <>
+    <div className="mk-ss-top">
+      <span className="mk-ss-dot" />
+      <span className="mk-ss-chip">Call and answer · Results</span>
+      <span className="mk-ss-code">4821</span>
+    </div>
+    <div className="mk-ss-bars">
+      <div className="mk-ss-bar">
+        <span>Parallel discovery on three products</span><em>9</em>
+        <span className="mk-ss-track"><i style={{ width: '82%' }} /></span>
+      </div>
+      <div className="mk-ss-bar">
+        <span>Weekly status meeting nobody reads</span><em>7</em>
+        <span className="mk-ss-track"><i style={{ width: '64%' }} /></span>
+      </div>
+      <div className="mk-ss-bar">
+        <span>Hand-built release notes</span><em>4</em>
+        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '36%' }} /></span>
+      </div>
+      <div className="mk-ss-bar">
+        <span>Two-week estimates on unscoped work</span><em>0</em>
+        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '2%' }} /></span>
+      </div>
+    </div>
+    <div className="mk-ss-foot"><span className="mk-ss-chip">Next question</span></div>
+  </>
+);
+
 const STILLS = {
   'trivia-host': { content: TRIVIA_HOST, extraClass: '' },
   'trivia-player': { content: TRIVIA_PLAYER, extraClass: '' },
@@ -135,6 +203,9 @@ const STILLS = {
   'join-qr': { content: JOIN_QR, extraClass: '' },
   builder: { content: BUILDER, extraClass: '' },
   report: { content: REPORT, extraClass: ' mk-ss--paper' },
+  'tour-ask': { content: TOUR_ASK, extraClass: '' },
+  'tour-vote': { content: TOUR_VOTE, extraClass: '' },
+  'tour-results': { content: TOUR_RESULTS, extraClass: '' },
 };
 
 export default function ClipStill({ slot, alt }) {
