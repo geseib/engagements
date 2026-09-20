@@ -366,13 +366,35 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
               // one place in the console where three separate strings on one
               // line can all be clipped by table-layout: fixed at once.
               const subLine = `${gameTypeLabel(item.gameType)} · ${item.questionCount || 0} questions · v${item.version}`;
+              /*
+                ONE OF ENGAGE'S OWN SETS. Its row is keyed `PLATFORM#<setId>`
+                and carries `recheck: false` and no `publicSetId`, so without
+                this branch it fell through to Review — whose Approve and
+                Reject the decide route refuses outright, while `leave`, the
+                one decision it accepts for this shape, was never drawn. The
+                row could then be cleared by nobody and aged for ever, here and
+                in the nav badge.
+              */
+              const house = item.scope === 'platform';
               return (
                 <tr key={item.sk} className="modq-row">
                   <td>
                     <span className="modq-nm" title={item.title}>{item.title || item.setId}</span>
                     <span className="modq-sub" title={subLine}>{subLine}</span>
                   </td>
-                  <td><span className="modq-nm" title={item.orgName}>{item.orgName || item.orgId}</span></td>
+                  {/*
+                    WHOSE SET IT IS. A PLATFORM row has no organisation at all —
+                    `moderation-list.js` sends `scope` precisely because a blank
+                    orgId cannot tell that apart from a listing's row, whose
+                    organisation is behind the public entry — so naming Engage
+                    is the honest cell. Everything else keeps the name, or the
+                    id when the org row could not be read.
+                  */}
+                  <td>
+                    <span className="modq-nm" data-testid="modq-org" title={house ? "Engage's own shared library" : item.orgName}>
+                      {house ? 'Engage' : (item.orgName || item.orgId)}
+                    </span>
+                  </td>
                   <td><span className="modq-why-cell" title={whyLabel(item)}>{whyLabel(item)}</span></td>
                   <td className="modq-wait">{waitedLabel(item.waitingSince, now)}</td>
                   <td>
@@ -392,7 +414,7 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
                       {onOpenScoreCard && item.publicSetId && (
                         <button type="button" className={`modq-btn modq-btn--sm${item.recheck ? ' modq-btn--primary' : ''}`} onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
                       )}
-                      {item.recheck ? (
+                      {item.recheck || house ? (
                         <button type="button" className="modq-btn modq-btn--sm" onClick={() => leaveServing(item.sk)} disabled={leaving === item.sk}>
                           {leaving === item.sk ? 'Leaving it…' : 'Leave it serving'}
                         </button>

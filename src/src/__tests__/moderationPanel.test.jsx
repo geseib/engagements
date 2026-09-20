@@ -419,3 +419,60 @@ test('a refusal is said on its own line and the queue stays on the screen', asyn
   expect(screen.getByText('True crime')).toBeInTheDocument();
   expect(within(screen.getByText('True crime').closest('tr')).getByRole('button', { name: LEAVE })).toBeEnabled();
 });
+
+/*
+  ── ENGAGE'S OWN SET, WHICH BELONGS TO NO ORGANISATION ────────────────────
+
+  A check of one of Engage's shared sets raises `PLATFORM#<setId>` (spec §3.2's
+  third shape; set-check-worker.js). It is `recheck: false` and carries no
+  `publicSetId`, so before this the row offered Review — whose Approve and
+  Reject the server refuses outright ("That is not a queue entry this screen
+  decides"), while the ONE decision it accepts, `leave`, was never drawn. The
+  row could not be cleared by anybody, and aged for ever in the queue and in
+  the nav badge: the failure "Leave it serving" was built to fix, reappearing
+  for a different key.
+*/
+const HOUSE = { count: 1, oldestWaitingSince: '2026-09-19T10:00:00.000Z', items: [
+  {
+    sk: 'PLATFORM#icebreakers', scope: 'platform', orgId: '', orgName: '', setId: 'icebreakers',
+    title: 'Icebreakers', version: 1, gameType: 'poll', questionCount: 12,
+    reasons: ['escalated'], uncertainQuestionIds: ['c001#003'],
+    waitingSince: '2026-09-19T10:00:00.000Z', recheck: false,
+  },
+  ...QUEUE.items,
+] };
+
+test("a check of Engage's own set is answered from the row, not sent to a dialog that refuses it", async () => {
+  const left = [];
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST' && u.endsWith('/admin/moderation/decide')) { left.push(JSON.parse(options.body)); return json({ decision: 'leave', leftServing: 'icebreakers' }); }
+    if (u.endsWith('/admin/moderation')) return json(left.length ? QUEUE : HOUSE);
+    return json(ITEM);
+  });
+  render(<ModerationPanel onOpenScoreCard={() => {}} />);
+  const row = (await screen.findByText('Icebreakers')).closest('tr');
+  // rejects: the Review button, whose only outcome on this row is a 400.
+  expect(within(row).queryByRole('button', { name: /^review$/i })).toBeNull();
+  // rejects: a Score card button keyed by a publicSetId an Engage set has not got.
+  expect(within(row).queryByRole('button', { name: /score card/i })).toBeNull();
+  fireEvent.click(within(row).getByRole('button', { name: LEAVE }));
+  await waitFor(() => expect(left).toEqual([{ sk: 'PLATFORM#icebreakers', decision: 'leave' }]));
+  await waitFor(() => expect(screen.queryByText('Icebreakers')).toBeNull());
+});
+
+// rejects: a blank Organisation cell on a set that HAS no organisation, which
+// reads as a customer whose name the console could not find.
+test("Engage's own row names Engage in the Organisation column", async () => {
+  global.fetch = jest.fn(async (url) => (String(url).endsWith('/admin/moderation') ? json(HOUSE) : json(ITEM)));
+  render(<ModerationPanel onOpenScoreCard={() => {}} />);
+  const row = (await screen.findByText('Icebreakers')).closest('tr');
+  expect(within(row).getByTestId('modq-org')).toHaveTextContent(/^Engage$/);
+  // rejects: writing "Engage" over every row. A customer's row is unchanged.
+  const ordinary = screen.getByText('Safety walkthrough').closest('tr');
+  expect(within(ordinary).getByTestId('modq-org')).toHaveTextContent('Acme');
+  // The why cell does not borrow the re-check's words: this set is not "already
+  // in the library" in the sense that phrase carries, which is a PUBLIC copy.
+  expect(within(row).queryByText(/already in the library/i)).toBeNull();
+  expect(within(row).getByText(/1 uncertain question/i)).toBeInTheDocument();
+});

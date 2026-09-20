@@ -22,6 +22,7 @@ import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import QuestionSetsPanel from './components/QuestionSetsPanel';
+import { checkIsDue, startHouseCheck, houseCheckNotice } from './utils/houseCheck';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
 import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
@@ -912,6 +913,23 @@ function AdminPage() {
           )
         );
         console.log(`Question set ${setId} ${newActive ? 'activated' : 'deactivated'}`);
+        /*
+          SWITCHING ON ONE OF ENGAGE'S OWN SETS IS THE MOMENT IT BECOMES
+          SERVABLE TO EVERY ORGANISATION, and the owner's trigger for the
+          content check. The activation route cannot dispatch the job itself —
+          it holds no lambda:InvokeFunction, so the invoke would be an
+          AccessDenied it had to swallow — so it answers `checkDue` and the
+          console runs it. See utils/houseCheck.js.
+
+          AFTER the toggle has returned and the row above has already moved, so
+          this cannot delay the activation and cannot fail it: the worst
+          outcome is a set that is live and a sentence saying the check did not
+          start, with the Versions panel named as the way to run it by hand.
+        */
+        if (checkIsDue(result)) {
+          const name = (questionSets.find((s) => s.id === setId) || {}).name || '';
+          setNotice(houseCheckNotice(await startHouseCheck(setId), name));
+        }
       } else {
         // Was `alert()`, in a console that has imported StatusMessage since it
         // was written. A modal browser dialog on a failed toggle stops the

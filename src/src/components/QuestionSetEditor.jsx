@@ -9,6 +9,7 @@ import SetMediaPanel from './SetMediaPanel';
 import SetReviewBanner from './SetReviewBanner';
 import { authFetch } from '../auth/authFetch';
 import { versionChip } from '../utils/shareState';
+import { startHouseCheck } from '../utils/houseCheck';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
@@ -844,6 +845,31 @@ export default function QuestionSetEditor({
 
   /* ----------------------------------------------------------- versions --- */
 
+  /**
+   * RUN THE CONTENT CHECK ON ONE OF ENGAGE'S OWN SETS, ON DEMAND.
+   *
+   * The owner's trigger is the moment a platform set is switched on, and the
+   * console fires it there (AdminPage `handleToggleActive`). This is the other
+   * half of the same rule: a set that was already on when checking arrived, one
+   * whose questions were replaced since, and any activation whose console was
+   * closed before the dispatch went, all need a way to ask. It is the only
+   * control an Engage set has for this — there is no public listing to open a
+   * score card on, because the set already IS what every organisation reads.
+   *
+   * It publishes nothing, moves no share stamp and charges no organisation
+   * (check-question-set.js `checkPlatformSet`); an outcome worse than passed
+   * raises a queue row, which is answered in Moderation.
+   */
+  const runHouseCheck = async (version) => {
+    setBusyVersion(version);
+    setVersionStatus({ text: `Checking version ${version}...`, tone: 'pending' });
+    const out = await startHouseCheck(setId, { version });
+    setVersionStatus(out.ok
+      ? { text: `The content check is running on version ${version}. Reload the versions in a minute to see what it made of it.`, tone: 'success' }
+      : { text: `The content check could not be started: ${out.error}`, tone: 'error' });
+    setBusyVersion(null);
+  };
+
   const handlePromote = async (version) => {
     setBusyVersion(version);
     setVersionStatus({ text: `Promoting version ${version}...`, tone: 'pending' });
@@ -1660,6 +1686,23 @@ export default function QuestionSetEditor({
                   {v.createdAt && <span>{new Date(v.createdAt).toLocaleString()}</span>}
                 </div>
                 <div className="qs-version-actions">
+                  {/*
+                    ENGAGE'S OWN SET NEVER SHARES — it is already what every
+                    organisation reads — so "Share publicly" is not its control
+                    and `canShare` is false for it. What it has instead is the
+                    check itself, which is the whole of what sharing would have
+                    run.
+                  */}
+                  {setScope === 'platform' && (
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => runHouseCheck(v.version)}
+                      disabled={busyVersion === v.version || v.review === 'checking'}
+                      title={v.review === 'checking' ? 'A check is already running on this version' : `Run the content check on version ${v.version}`}
+                    >
+                      <Icon name="ShieldCheck" weight="bold" size={14} color="currentColor" /> Run the content check
+                    </button>
+                  )}
                   {canShare && onShare && (
                     <button
                       className="btn-secondary btn-small"
