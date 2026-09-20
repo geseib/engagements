@@ -275,6 +275,17 @@ export function normalizeVersions(payload, activeVersion) {
         checkedAt: v.checkedAt || null,
         reasons: Array.isArray(v.reasons) ? v.reasons : [],
         reviewNote: v.reviewNote || '',
+        /*
+          WHAT THE CHECK MEASURED, and the one field here that is deliberately
+          not defaulted. `reviewTally` is null when the check ran before
+          measuring existed and ABSENT when this reader may not see it
+          (get-set-versions.js gates the whole review row to the library it is
+          in) — and both mean "there is no measurement to draw", which is what
+          `null` says. An empty object in its place would draw a block reading
+          "measured, and nothing found", on a set that was never measured.
+        */
+        reviewTally: v.reviewTally && typeof v.reviewTally === 'object' ? v.reviewTally : null,
+        reviewObserved: Array.isArray(v.reviewObserved) ? v.reviewObserved : [],
         unfinished: v.unfinished === true,
         published: v.published && typeof v.published === 'object' ? v.published : null
       };

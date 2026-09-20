@@ -7,6 +7,18 @@ import { interpretCheckJob } from '../utils/checkJob';
 import { gameTypeLabel } from '../config/gameTypes';
 import { versionChip, STALE_CHECK_MS } from '../utils/shareState';
 import { whyLabel } from '../utils/moderationRow';
+/*
+  THE MEASUREMENT'S VOCABULARY, SHARED. The category words, the band words, the
+  per-category arithmetic and the summary line used to live in this file, and
+  the handoff that added them named the drift as a risk. The author's own
+  banner (components/SetReviewBanner.jsx) now reads the same tally off their own
+  set, so the risk has a second reader: one file owns the words.
+*/
+import {
+  SET_SUBJECT, BAND_RANK, bandOf, bandWord, CATEGORIES, CATEGORY_WORDS, isJudged,
+  humanise, categoryWords, capitalised, held, worstFirst, rowsOf, categoryRow,
+  summaryLine, measuredTally, setTextClean,
+} from '../utils/reviewMeasurement';
 import './ScoreCard.css';
 
 /**
@@ -79,37 +91,8 @@ import './ScoreCard.css';
  * at all; without it Take down was the only exit from a worklist row, on content
  * a person had already approved.
  */
-const SET_SUBJECT = '(set)';
-const BAND_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-const bandOf = (row) => String((row && row.band) || '').toUpperCase();
-// A band is a confidence — high, medium, low — never a verdict word: most rows
-// on a public card were seen at a band and let through.
-const bandWord = (b) => String(b || '').toLowerCase();
-/*
-  The five categories a set is judged on (content-guardrail.js SET_CATEGORIES),
-  in the words the explanations use (finding-explanations.js CATEGORY_WORDS),
-  so a row, its "why" and the category block all say the same thing.
-*/
-const CATEGORIES = [
-  ['VIOLENCE', 'violence or injury'],
-  ['SEXUAL', 'sexual content'],
-  ['HATE', 'hateful content'],
-  ['INSULTS', 'insulting or harassing language'],
-  ['MISCONDUCT', 'dangerous or criminal instructions'],
-];
-const CATEGORY_WORDS = Object.fromEntries(CATEGORIES);
-/**
- * Judged in one of the five? Anything else in `findings` is the check's own —
- * a subject the guardrail could not read, a check its budget stopped, a set
- * with nothing in it — and has no band to show (see `noTallyLine`).
- */
-const JUDGED = new Set(CATEGORIES.map(([id]) => id));
-const isJudged = (row) => JUDGED.has(String(row.category || '').toUpperCase());
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
-const humanise = (id) => String(id || '').replace(/[-_]+/g, ' ');
-const categoryWords = (c) => CATEGORY_WORDS[String(c || '').toUpperCase()] || humanise(String(c || '').toLowerCase());
-const capitalised = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const itemUrl = (id) => adminApiUrl(`admin/public-library/${encodeURIComponent(id)}`);
 /**
  * The check's own route, and NOT under `/admin`: the template mounts it at
@@ -145,8 +128,6 @@ function statusChip(status, checkedAt, nowMs = Date.now()) {
   return versionChip({ review: status, unfinished: unfinishedCheck({ status, checkedAt }, nowMs) });
 }
 
-/** Did this row hold the set? Only an intervention can (finding-explanations.js `held`). */
-const held = (row) => row.intervened !== false;
 /**
  * …and only at HIGH, which flags it, or MEDIUM, which sends it to a person. A
  * LOW never held a set. A flag reads as the app says it (shareState.js), the
@@ -159,16 +140,6 @@ function heldWords(row) {
   if (bandOf(row) === 'MEDIUM') return 'sent to a person';
   return 'no';
 }
-/** Worst band first; within a band, what held before what was let through (finding-explanations.js `rank`). */
-const rank = (row) => (BAND_RANK[bandOf(row)] ?? 3) * 2 + (held(row) ? 0 : 1);
-/** Stored in question order; the card puts the worst first, stably. */
-const worstFirst = (list) => list.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o) || a.i - b.i).map(({ o }) => o);
-/** The worst of some bands, or null when none of them is HIGH, MEDIUM or LOW. */
-const worstBand = (bands) => bands
-  .map((b) => String(b || '').toUpperCase())
-  .filter((b) => BAND_RANK[b] !== undefined)
-  .sort((a, b) => BAND_RANK[a] - BAND_RANK[b])[0] || null;
-const rowsOf = (list) => (Array.isArray(list) ? list : []).filter((o) => o && typeof o === 'object');
 /**
  * The "why" where there is no explanation — the set's own subject never has
  * one, nor does a check whose budget ran out. The words are
@@ -196,35 +167,6 @@ function subjectOf(row) {
   if (!text) return { label: 'Not in the public copy', title: `The public copy has no question ${row.questionId}.`, missing: true };
   return { label: text.split(/\s*\n\s*/).filter(Boolean).join(' — '), title: text, missing: false };
 }
-/** "2 at medium · 1 at low" — distinct questions per band, worst first, zeros left out. */
-const countsWords = (c) => ['HIGH', 'MEDIUM', 'LOW']
-  .map((b) => [b, Number(c[b.toLowerCase()]) || 0])
-  .filter(([, n]) => n > 0)
-  .map(([b, n]) => `${n} at ${bandWord(b)}`)
-  .join(' · ');
-
-/**
- * One row of the category block: the worst band ANYTHING was seen at in the
- * category, and where. The tally counts questions (content-guardrail.js
- * tallyOf) and leaves the set's own text out of every count — it is one
- * subject, not a question — so that text is read from `observed` and named
- * beside the counts. Reading the tally alone, a category seen only in the
- * set's own text read "none", one line above that text's own row sending the
- * set to a person; and one seen lower in a question named the lower band.
- */
-function categoryRow(id, tally, observed) {
-  const seen = (tally.categories && tally.categories[id]) || {};
-  const inQuestions = worstBand([seen.worst]);
-  const inSetText = worstBand(observed
-    .filter((o) => o.questionId === SET_SUBJECT && String(o.category || '').toUpperCase() === id)
-    .map(bandOf));
-  const where = [
-    inQuestions ? countsWords(seen) : '',
-    inSetText ? `the set's own text at ${bandWord(inSetText)}` : '',
-  ].filter(Boolean).join(' · ');
-  return { worst: worstBand([inQuestions, inSetText]), where };
-}
-
 /**
  * Did the check stop before it finished? The worker keeps a tally only once
  * measuring has finished, and a check that throws writes its review from the
@@ -286,53 +228,6 @@ function checkNoteOf(review, log, version) {
     .filter((e) => e && e.event === 'checked' && Number(e.version) === Number(version))
     .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))[0];
   return latest && Number.isInteger(latest.checked) && Number.isInteger(latest.clean) ? `${latest.clean}/${latest.checked} clean` : '';
-}
-
-/**
- * How far the check got with the set's own text, which it judges last
- * (content-guardrail.js tallyOf): `checked`, the guardrail read it;
- * `unread`, the check reached it and the guardrail could not read it — so it
- * is never named as checked, nor clean; `unreached`, the budget stopped the
- * check before it.
- */
-function setTextState(tally) {
-  if (tally.setTextChecked) return 'checked';
-  if (tally.setTextUnread) return 'unread';
-  return 'unreached';
-}
-
-/**
- * The tally's one line. "Every question clean" is `spotless === questions`,
- * never "no observations": a question the guardrail could not read has none
- * either, and is not clean — it is `unread`.
- *
- * Only a check its budget stopped reached fewer questions than the set holds,
- * and it says "of". The TALLY says which check that was — the set's own text,
- * judged last, `unreached` — never a count beside it: a complete check of a
- * past version would otherwise read as one that skipped questions.
- */
-function summaryLine(tally, questionCount, setClean) {
-  const n = Number(tally.questions) || 0;
-  const spotless = Number(tally.spotless) || 0;
-  const unread = Number(tally.unread) || 0;
-  const total = Number(questionCount) || 0;
-  const setText = setTextState(tally);
-  const cutShort = setText === 'unreached';
-  const of = cutShort && total > n ? ` of ${total}` : '';
-  const parts = [`${n}${of} ${n === 1 && !of ? 'question' : 'questions'}${setText === 'checked' ? " and the set's own text" : ''} checked`];
-  if (n > 0 && spotless === n) {
-    // "all" is every question AND the set's own text, which the first clause
-    // has just named; with only the questions clean, it says only that. A
-    // check cut short counts what it reached, never "every question".
-    if (cutShort) parts.push(`all ${n} clean in every category`);
-    else parts.push(setClean ? 'all clean in every category' : 'every question clean in every category');
-  } else {
-    parts.push(`${spotless} with nothing in any category`);
-  }
-  if (unread) parts.push(`${unread} could not be read`);
-  if (setText === 'unread') parts.push("the set's own text could not be read");
-  if (cutShort) parts.push("the set's own text was not reached");
-  return parts.join(' · ');
 }
 
 const EVENT_WORDS = {
@@ -696,7 +591,7 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
   const running = Boolean(verdict) && review.status === 'checking';
   // Only a tally the card understands is a measurement; one without the
   // marker was never measured (decision C), which is not "measured, clean".
-  const tally = review.tally && review.tally.scope === 'full' ? review.tally : null;
+  const tally = measuredTally(review.tally);
   const observed = rowsOf(review.observed);
   // What held the set, as findings: all a check before measuring kept. Only
   // those judged in a category have a band to show; the check's own are words.
@@ -704,7 +599,7 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
   const heldRows = worstFirst(findings.filter((f) => isJudged(f) && BAND_RANK[bandOf(f)] !== undefined));
   // Clean only if the guardrail READ the set's own text and saw nothing there;
   // text it could not read is `setTextUnread`, never `setTextChecked`.
-  const setClean = Boolean(tally && tally.setTextChecked) && !observed.some((o) => o.questionId === SET_SUBJECT);
+  const setClean = setTextClean(tally, observed);
   const checkNote = card && !tally ? checkNoteOf(review, card.log, card.sourceVersion) : '';
   // Why a person was needed, under any verdict a check reached, in the queue's
   // words — and nothing at all when it needed none, never whyLabel's "Waiting".

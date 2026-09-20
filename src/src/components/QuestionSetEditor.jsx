@@ -739,6 +739,13 @@ export default function QuestionSetEditor({
     obvious.
   */
   const isSomebodyElses = questionSet?.canManage === false;
+  /*
+    The library the SET is in, as the list projects it (get-question-sets.js
+    always sends a concrete scope — `setScopeOf(item) || ref.scope` — so an
+    absent one here is a set the editor was handed without a list row, and
+    reads as '' rather than being guessed at as platform).
+  */
+  const setScope = String(questionSet?.scope || '');
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -1547,6 +1554,15 @@ export default function QuestionSetEditor({
             {appealStatus && <StatusMessage message={appealStatus.text} tone={appealStatus.tone} />}
             <SetReviewBanner
               entry={entry}
+              /*
+                WHICH LIBRARY THIS SET IS IN. The banner's whole vocabulary is a
+                SHARE's — published, not published, your own private copy — and
+                none of it is true of one of Engage's own sets, which is served
+                to every organisation and submitted by nobody. The list row was
+                already honest about this (`shareStateOf` says "Everyone"); the
+                banner and the version chip were not.
+              */
+              scope={setScope}
               share={shared || null}
               busy={appealBusy}
               /*
@@ -1625,7 +1641,7 @@ export default function QuestionSetEditor({
                       Active
                     </span>
                   )}
-                  {(() => { const chip = versionChip(v); return (
+                  {(() => { const chip = versionChip(v, setScope); return (
                     <span className={`qs-version-chip qs-version-chip--${chip.key}`} title={chip.key === 'public' ? `Public as ${v.published.publicSetId} v${v.published.publicVersion}` : undefined}>
                       {chip.label}
                     </span>

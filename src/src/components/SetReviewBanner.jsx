@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
 import Icon from './Icon';
+/*
+  ONE VOCABULARY FOR ONE CHECK. The staff score card and this banner now both
+  render `tally` and `observed`, so the category words, the band words and the
+  summary line live in utils/reviewMeasurement.js rather than twice.
+*/
+import {
+  CATEGORIES, SET_SUBJECT, bandWord, capitalised, categoryRow, categoryWords,
+  measuredTally, rowsOf, setTextClean, summaryLine, worstFirst,
+} from '../utils/reviewMeasurement';
 import './SetReviewBanner.css';
 
 /**
@@ -33,7 +42,76 @@ const byQuestion = (findings) => {
 // be noise, not a label.
 const label = (id) => (/^q0*\d+$/i.test(String(id)) ? `Q${String(id).replace(/^q0*/i, '')}` : String(id));
 
-export default function SetReviewBanner({ entry, share, busy = false, onResubmit, onAppeal, onFocusQuestion }) {
+/**
+ * WHAT THE CHECK MEASURED — the half `findings` has never carried.
+ *
+ * `findings` is what HELD the set. `tally` and `observed` are everything the
+ * check saw, at every band, whether or not it intervened, so this block is the
+ * answer to "how much of my set was looked at, and what did it nearly catch?"
+ * — the question a status and a sentence cannot answer.
+ *
+ * Only a tally with the FULL scope marker is a measurement; a check made before
+ * measuring existed has none, and an empty block in its place would read as
+ * "measured, and nothing found" (`measuredTally`). So the block is absent for
+ * such a version rather than blank.
+ *
+ * Each observation is named by the QUESTION LABEL, not its text. The score
+ * card names them by text because staff cannot decrypt an organisation's rows
+ * and read the public copy instead; the route feeding this banner has no
+ * kms:Decrypt grant and does not need one — this banner lives in the set
+ * editor, which is already holding the plaintext questions these ids name, and
+ * "Edit Q14" is the control that takes the author to one.
+ */
+function Measured({ entry }) {
+  const tally = measuredTally(entry.reviewTally);
+  if (!tally) return null;
+  const observed = rowsOf(entry.reviewObserved);
+  // What held the set is named above, question by question, with its sentence.
+  // Repeating it here would state one fact about one question twice in one
+  // view; this list is what the check saw and LET THROUGH.
+  const heldIds = new Set((entry.reviewFindings || []).map((f) => f.questionId));
+  const letThrough = worstFirst(observed.filter((o) => o.intervened === false && !heldIds.has(o.questionId)));
+  return (
+    <>
+      <h3 className="srev-h">What the check measured</h3>
+      <p className="srev-summary" data-testid="srev-summary">
+        {summaryLine(tally, entry.questionCount, setTextClean(tally, observed))}
+      </p>
+      <ul className="srev-cats">
+        {CATEGORIES.map(([id, words]) => {
+          const { worst, where } = categoryRow(id, tally, observed);
+          return (
+            <li key={id} className="srev-cat" data-testid="srev-cat">
+              <span className="srev-cat-name">{capitalised(words)}</span>
+              {worst
+                ? <span className={`srev-band srev-band--${bandWord(worst)}`}>{bandWord(worst)}</span>
+                : <span className="srev-none">none</span>}
+              <span className="srev-cat-where">{where}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {letThrough.length > 0 && (
+        <>
+          <h3 className="srev-h">Seen and let through</h3>
+          <ul className="srev-list" data-testid="srev-seen">
+            {letThrough.map((o, i) => (
+              <li key={`${o.questionId}-${i}`} className="srev-item">
+                <div className="srev-item-head">
+                  <strong>{o.questionId === SET_SUBJECT ? "The set's own text" : label(o.questionId)}</strong>
+                  <span className="srev-none">{bandWord(o.band)} · {categoryWords(o.category)} · let through</span>
+                </div>
+                {o.explanation && <p className="srev-why">{o.explanation}</p>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
+  );
+}
+
+export default function SetReviewBanner({ entry, scope = '', share, busy = false, onResubmit, onAppeal, onFocusQuestion }) {
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState('');
   const review = entry && entry.review;
@@ -67,11 +145,62 @@ export default function SetReviewBanner({ entry, share, busy = false, onResubmit
   const flagged = review === 'flagged' || (share && share.status === 'flagged');
   if (!waiting && !flagged) return null;
 
-  if (waiting) {
+  /*
+    ── ENGAGE'S OWN SHARED SET SAYS NONE OF THIS ─────────────────────────────
+
+    Every sentence below is about a SUBMISSION: a version an organisation sent
+    to Engage, which was or was not published, leaving their own private copy
+    untouched. A PLATFORM set is none of those things. It is served to every
+    organisation already, it belongs to no organisation, and its check
+    (check-question-set.js `checkPlatformSet`) publishes nothing, unpublishes
+    nothing and moves no share stamp — so "this set was not published",
+    "nothing was shared" and "your copy is still private to your organisation"
+    would be three false statements in one paragraph, and Resubmit and the
+    appeal two controls with nobody to press them and nothing to ask for.
+
+    What is true of it is the measurement, which is the same measurement, and
+    the fact that the library has gone on serving the set throughout. Where a
+    worse-than-passed outcome is ANSWERED is the moderation queue
+    (set-check-worker.js raises `PLATFORM#<setId>`); switching the set off is
+    the console's own control and stays there.
+  */
+  const house = scope === 'platform';
+  if (house) {
     return (
-      <section className="srev srev--waiting" role="status">
-        <Icon name="UserCircle" weight="fill" size={18} color="var(--primary)" />
-        <p>Waiting for a person at Engage to look at version {entry.version}. The outcome will show here.</p>
+      <section className="srev" role="status">
+        <div className="srev-lead">
+          <Icon name={waiting ? 'UserCircle' : 'Warning'} weight="fill" size={18} color={waiting ? 'var(--primary)' : 'var(--srev-flag-ink)'} />
+          <p>
+            <strong>
+              {waiting
+                ? `The check sent version ${entry.version} of this Engage set to a person.`
+                : `The check flagged version ${entry.version} of this Engage set.`}
+            </strong>{' '}
+            It is still being served to every organisation{entry.checkedAt ? `; checked on ${day(entry.checkedAt)}` : ''}.
+            The moderation queue is where this is answered.
+          </p>
+        </div>
+        <Measured entry={entry} />
+      </section>
+    );
+  }
+
+  if (waiting) {
+    /*
+      One line and no tint while there is nothing else to say — the shape this
+      state has always had. A version that WAS measured has a block under that
+      line, and a one-row flex box centred on its icon cannot hold one, so the
+      modifier turns the row back into a column. Both are `.srev--waiting`, so
+      the transparent ground is stated once.
+    */
+    const measured = Boolean(measuredTally(entry.reviewTally));
+    return (
+      <section className={`srev srev--waiting${measured ? ' srev--waiting-wide' : ''}`} role="status">
+        <div className="srev-lead">
+          <Icon name="UserCircle" weight="fill" size={18} color="var(--primary)" />
+          <p>Waiting for a person at Engage to look at version {entry.version}. The outcome will show here.</p>
+        </div>
+        <Measured entry={entry} />
       </section>
     );
   }
@@ -117,6 +246,7 @@ export default function SetReviewBanner({ entry, share, busy = false, onResubmit
           </li>
         )}
       </ul>
+      <Measured entry={entry} />
       <div className="srev-acts">
         {onResubmit && (
           <button type="button" className="srev-btn srev-btn--primary" disabled={busy} onClick={() => onResubmit(entry.version)}>Resubmit</button>

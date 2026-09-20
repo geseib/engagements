@@ -26,6 +26,11 @@
 }
 [data-theme="light"] .srev { --srev-flag-ink: var(--srev-flag-ink-paper); }
 .srev--waiting { display: flex; align-items: center; gap: 10px; background: transparent; }
+/* A waiting version that WAS measured carries a block under its one line, and a
+   one-row flex box centred on its icon cannot hold one. Both states keep the
+   transparent ground above; only the axis changes. */
+.srev--waiting-wide { display: block; }
+.srev--waiting-wide .srev-lead { align-items: center; }
 .srev p { margin: 0; }
 .srev-lead { display: flex; gap: 10px; align-items: flex-start; }
 .srev-h { margin: 14px 0 6px; font-size: var(--srev-t-head); font-weight: 700; }
@@ -44,3 +49,34 @@
 .srev-btn--sm { height: 28px; font-size: var(--srev-t-label); }
 .srev-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--srev-on-primary); }
 .srev-btn:disabled { opacity: .6; cursor: default; }
+
+/* WHAT THE CHECK MEASURED. A list, not a table: this sits inside an editor
+   column beside the flagged questions, where a third table would be the
+   fourth thing on one screen with column heads. Five rows, always five, so a
+   category left off cannot read as one the check did not look at.
+
+   THE BAND WORD CARRIES THE BAND — "high", "medium", "low" are the words
+   themselves, so colour here is reinforcement and not information. Only HIGH
+   takes an ink, and it takes --srev-flag-ink, the one already measured on both
+   grounds (__tests__/srevPalette.test.js); inventing a medium and a low ink
+   would be two more pairings to measure on paper AND dusk for a distinction
+   the text already makes. */
+.srev-summary { margin: 4px 0 10px; }
+.srev-cats { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.srev-cat {
+  display: flex; align-items: center; gap: 10px; min-height: 28px;
+  padding: 2px 0; border-bottom: 1px solid var(--srev-rule);
+}
+.srev-cat:last-child { border-bottom: 0; }
+/* A single text node with min-width: 0 — hard rule 8: text-overflow is inert on
+   a flex container with span children. */
+.srev-cat-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srev-cat-where { color: var(--muted); font-size: var(--srev-t-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.srev-band {
+  display: inline-flex; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--srev-rule); font-size: var(--srev-t-floor); font-weight: 600;
+  color: var(--text); white-space: nowrap;
+}
+.srev-band--high { color: var(--srev-flag-ink); }
+.srev-none { color: var(--muted); font-size: var(--srev-t-label); }
+.srev-item-head .srev-none { margin-left: auto; }

@@ -551,3 +551,29 @@ describe('rowsForNewSet', () => {
     expect(rowsForNewSet({ mode: 'fork', rows: null }, [row('ARE WE SHIPPING', true)])).toBeNull();
   });
 });
+
+/*
+  WHAT THE CHECK MEASURED reaches the author through this whitelist or not at
+  all: `normalizeVersions` is the sole consumer of
+  GET /admin/question-sets/{id}/versions, and a field it does not name does not
+  exist as far as the banner is concerned.
+*/
+describe('normalizeVersions — the measurement', () => {
+  const TALLY = { scope: 'full', questions: 30, spotless: 19, setTextChecked: true, categories: {} };
+  const OBSERVED = [{ questionId: 'q014', category: 'VIOLENCE', band: 'LOW', intervened: false }];
+  it('carries the tally and the observations through to the banner', () => {
+    const [v] = normalizeVersions([{ version: 1, reviewTally: TALLY, reviewObserved: OBSERVED }]);
+    expect(v.reviewTally).toEqual(TALLY);
+    expect(v.reviewObserved).toEqual(OBSERVED);
+  });
+  // rejects: defaulting the tally to {} the way every other field here defaults
+  // to its empty value. An empty tally draws a block that reads "measured, and
+  // nothing found" on a set that was never measured — and an ABSENT tally is
+  // also what a reader who may not see the measurement is sent
+  // (get-set-versions.js gates the review row to the library it is in).
+  it('a version with no measurement, and a reader who may not see one, both read as null', () => {
+    expect(normalizeVersions([{ version: 1 }])[0].reviewTally).toBeNull();
+    expect(normalizeVersions([{ version: 1, reviewTally: null }])[0].reviewTally).toBeNull();
+    expect(normalizeVersions([{ version: 1 }])[0].reviewObserved).toEqual([]);
+  });
+});
