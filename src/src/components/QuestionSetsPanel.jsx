@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
+import SetShelfBrowse from './SetShelfBrowse';
 import useListControls from '../hooks/useListControls';
 import {
   setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
@@ -344,6 +345,21 @@ export default function QuestionSetsPanel({
             count={`${questionSets.length} set${questionSets.length === 1 ? '' : 's'}${
               shown.length !== questionSets.length ? ` · ${shown.length} shown` : ''
             }`}
+          />
+
+          {/*
+            WHAT IS ACTUALLY ON THE SHELVES, and the words these sets carry —
+            the other half of the owner's ask, which a select cannot do because
+            a tag vocabulary is open. Closed by default, and OUTSIDE the
+            shown/empty branch below on purpose: on the screen that says
+            nothing matches, the one control showing what does exist is an exit.
+          */}
+          <SetShelfBrowse
+            sets={questionSets}
+            topic={topic}
+            search={search}
+            onPickTopic={(value) => set({ topic: value })}
+            onPickTag={(value) => set({ search: value })}
           />
 
           {shown.length === 0 ? (
