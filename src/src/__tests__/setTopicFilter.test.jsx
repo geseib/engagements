@@ -86,14 +86,43 @@ const rows = () => within(screen.getByRole('table')).getAllByRole('row').slice(1
 const names = () =>
   rows().map((row) => within(row).getAllByRole('cell')[0].firstElementChild.textContent);
 
+/**
+ * Choose a shelf BY THE LABEL A PERSON READS, and drive the control with that
+ * option's own value.
+ *
+ * Not decoration. `fireEvent.change(select, { target: { value: x } })` does not
+ * consult the options at all: when nothing matches, jsdom parks the select on
+ * value '' with selectedIndex -1, so React's handler receives '' either way.
+ * Unfiled's value IS '' — so driving it by its literal value passed with the
+ * option deleted from the control, and the backlog of sets that predate the
+ * field became unreachable with this suite green. `getByRole` throws when the
+ * option is gone, which is the whole point.
+ */
+const chooseTopic = (label) => {
+  const select = topicFilter();
+  const option = within(select).getByRole('option', { name: label });
+  fireEvent.change(select, { target: { value: option.value } });
+};
+
 describe('the shelf is a filter, on the same bar as the others', () => {
   test('it offers all fifteen shelves, not only the ones in use', () => {
     // The select is the VOCABULARY — a person filtering has to be able to see
     // what the fifteen are. What is actually on the shelves, with counts, is
     // the browse's job (SetShelfBrowse).
+    //
+    // The WHOLE list is pinned, not just the fifteen, because the two ends
+    // carry the sentinels: All topics is the way back out and Unfiled is the
+    // only route to the sets that predate the field. Neither comes from
+    // SET_TOPIC_IDS, so a loop over the fifteen alone lets either be deleted
+    // with this suite green. Adding a sixteenth shelf to the module updates
+    // this expectation on its own.
     mount();
     const labels = within(topicFilter()).getAllByRole('option').map((o) => o.textContent);
-    for (const id of SET_TOPIC_IDS) expect(labels).toContain(SET_TOPICS[id].label);
+    expect(labels).toEqual([
+      'All topics',
+      ...SET_TOPIC_IDS.map((id) => SET_TOPICS[id].label),
+      UNFILED_LABEL,
+    ]);
   });
 
   test('choosing a shelf narrows the list to the sets on it', () => {
@@ -105,9 +134,11 @@ describe('the shelf is a filter, on the same bar as the others', () => {
   test('Unfiled is reachable, and finds the sets that predate the field', () => {
     // E2: around forty live sets are on no shelf. They must be findable AS
     // that — a filter that can only name the fifteen makes the backlog
-    // invisible. rejects: leaving Unfiled out of the options.
+    // invisible. rejects: leaving Unfiled out of the options — which it now
+    // genuinely does, because `chooseTopic` reaches the option by its label
+    // instead of assuming the value it would carry.
     mount();
-    fireEvent.change(topicFilter(), { target: { value: '' } });
+    chooseTopic(UNFILED_LABEL);
     expect(names()).toEqual(['Legacy Offsite Prompts', 'Drifted Row']);
   });
 
@@ -115,7 +146,7 @@ describe('the shelf is a filter, on the same bar as the others', () => {
     // rejects: filtering on the raw stored string, which would hide `junk`
     // from every option including Unfiled — a row nothing can reach.
     mount();
-    fireEvent.change(topicFilter(), { target: { value: '' } });
+    chooseTopic(UNFILED_LABEL);
     expect(names()).toContain('Drifted Row');
   });
 
