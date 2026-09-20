@@ -223,7 +223,7 @@ export default function QuestionsPanel({
   const [selected, setSelected] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showPull, setShowPull] = useState(false);
-  // { mode: 'fork' | 'subset', title, rows }
+  // { mode: 'fork' | 'subset', title, rows, topic, tags }
   const [newSetDialog, setNewSetDialog] = useState(null);
 
   /*

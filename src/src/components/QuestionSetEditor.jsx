@@ -208,7 +208,7 @@ export default function QuestionSetEditor({
   // is a diff, and a resolved default would file them all on the catch-all one
   // accidental Save at a time. See config/setTopics.js.
   const [topic, setTopic] = useState('');
-  const [setTags, setSetTags] = useState([]);
+  const [ownTags, setOwnTags] = useState([]);
   // Snapshot of the set as it was when the editor opened; the save payload is a
   // diff against this. Rebaselined on every successful save, so "dirty" always
   // means "differs from what the server now holds", not "differs from open".
@@ -419,7 +419,7 @@ export default function QuestionSetEditor({
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
     setTopic(snapshot.topic);
-    setSetTags(snapshot.tags);
+    setOwnTags(snapshot.tags);
     setOriginal(snapshot);
     setSavedTitle(questionSet?.name || '');
     setSaveStatus('');
@@ -716,7 +716,7 @@ export default function QuestionSetEditor({
     // no longer has.
     roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : '',
     topic,
-    tags: setTags
+    tags: ownTags
   };
 
   // The body this form would send right now. Built here as well as in the save
@@ -1308,8 +1308,8 @@ export default function QuestionSetEditor({
             idPrefix="edit-set"
             topic={topic}
             onTopicChange={setTopic}
-            tags={setTags}
-            onTagsChange={setSetTags}
+            tags={ownTags}
+            onTagsChange={setOwnTags}
             suggestion={latestTopicSuggestion(versions)}
           />
 
