@@ -62,11 +62,22 @@ import { normalizeTag } from '../utils/tags';
  * both conditions are true together, and drawing both named the same shelf
  * twice six lines apart — once as a convenience, once as an argument.
  *
- * ── TWO WORDS THIS PRODUCT ALREADY OWNS ────────────────────────────────────
+ * ── THREE WORDS THIS PRODUCT ALREADY OWNS ──────────────────────────────────
  *
  * CATEGORY is the IN-SET grouping (c001…c005, the host's 24-bit mask). Nothing
  * here is a category. TAGS also exist per QUESTION (`utils/questionRows.js`);
  * the list here is the SET's and the two never meet.
+ *
+ * SHELF IS THE THIRD, and it is why nothing below says it. The metaphor is the
+ * whole design of this field and it stays in these comments, where it explains
+ * the shape to whoever changes it — but the product already shows that word to
+ * a person for something else: `HostQuestionSetsDialog` draws a `Shelf` column
+ * for whether a set is on the host's own quickstart shelf. One word for two
+ * things on two screens of one product is how a reader stops trusting either,
+ * so the word on screen is the owner's — they asked for "topic tags for
+ * question sets" — and the host's drawer keeps the shelf.
+ * `setTopicField.test.jsx` pins it on the RENDERED text of every state,
+ * because a source grep cannot tell a comment from a caption.
  *
  * It owns no colour: this editor is mounted on the paper console AND inside the
  * host's dusk dialog, and a colour measured against one of those is how a 2.6:1
@@ -183,7 +194,7 @@ export default function SetTopicField({
           onChange={(e) => choose(e.target.value)}
         >
           {chosen === UNFILED && (
-            <option value="" disabled>{UNFILED_LABEL} — choose a shelf</option>
+            <option value="" disabled>{UNFILED_LABEL} — choose a topic</option>
           )}
           {SET_TOPIC_IDS.map((id) => (
             <option key={id} value={id}>{SET_TOPICS[id].label}</option>
@@ -192,8 +203,8 @@ export default function SetTopicField({
 
         {chosen === UNFILED ? (
           <p className="help-text" data-testid={`${idPrefix}-unfiled`}>
-            <strong>{UNFILED_LABEL}.</strong> This {noun} is on no shelf, so nobody browsing
-            or filtering by topic will find it. Choose the one shelf it belongs on — it is
+            <strong>{UNFILED_LABEL}.</strong> This {noun} has no topic, so nobody browsing
+            or filtering by topic will find it. Choose the one it belongs under — it is
             the only thing the library filter is built on, and it is not the in-{noun}
             category the questions are grouped by.
           </p>
@@ -243,12 +254,12 @@ export default function SetTopicField({
               onClick={() => onAskForSuggestion()}
               disabled={asking}
             >
-              Suggest a shelf from the questions
+              Suggest a topic from the questions
             </button>
             <span>
               {asking
                 ? 'Reading the questions. This takes about a minute.'
-                : (askNote || `It runs the content check on this ${noun} and comes back with the shelf `
+                : (askNote || `It runs the content check on this ${noun} and comes back with the topic `
                   + "it reads out of the questions. It publishes nothing, and it uses one of this "
                   + "organisation's checks for today.")}
             </span>
@@ -305,7 +316,7 @@ export default function SetTopicField({
           ? <p className="help-text" data-testid={`${idPrefix}-tag-refusal`} role="alert">{tagRefusal}</p>
           : (
             <p className="help-text">
-              Your own words, for the specifics a shelf of fifteen will never carry. Up to{' '}
+              Your own words, for the specifics a list of fifteen topics will never carry. Up to{' '}
               {MAX_SET_TAGS}, lower-cased and hyphenated as they are stored. These belong to
               the {noun}; a question&rsquo;s own tags are a separate list.
             </p>

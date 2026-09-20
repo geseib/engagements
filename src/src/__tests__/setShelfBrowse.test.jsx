@@ -141,6 +141,15 @@ describe('the two empty states, which are two different situations', () => {
     expect(screen.queryByTestId('shelf-browse-no-match')).toBeNull();
   });
 
+  test('and says it without the word “shelf”, which this product spends elsewhere', () => {
+    // setTopicField.test.jsx carries the whole of this rule: the host's own
+    // quickstart drawer is already a Shelf on screen, so a topic is a topic.
+    // This sentence is where the browse says the word out loud.
+    render(<SetShelfBrowse sets={[{ id: 'a', name: 'A', topic: 'history' }]} />);
+    fireEvent.click(toggle());
+    expect(screen.getByTestId('shelf-browse-no-tags').textContent).not.toMatch(/shel[fv]/i);
+  });
+
   test('tags that exist but do not match the box say something else, and offer the way back', () => {
     // rejects: one grey sentence for both — "no tags" when there are four of
     // them and the box is simply misspelt is the empty state that lies.

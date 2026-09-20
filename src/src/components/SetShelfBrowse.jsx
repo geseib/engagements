@@ -171,8 +171,8 @@ export default function SetShelfBrowse({
                one rather than to clear a box. */
             <p className="qsets-browse-none" data-testid="shelf-browse-no-tags">
               Nobody has tagged a set here yet. Tags are the author’s own words for the
-              specifics a shelf of fifteen will never carry — “1980s”, “onboarding” — and they
-              are set in the editor, beside the topic.
+              specifics a list of fifteen topics will never carry — “1980s”, “onboarding” — and
+              they are set in the editor, beside the topic.
             </p>
           ) : shownTags.length === 0 ? (
             /* NOTHING MATCHES, with the way back, exactly as the table's own

@@ -120,7 +120,7 @@ export const SET_TOPICS = {
   'general-knowledge': {
     id: 'general-knowledge',
     label: 'General Knowledge',
-    blurb: 'A genuine mix that spans the shelves — not the place to put a set you have not thought about.',
+    blurb: 'A genuine mix that spans the topics — not the place to put a set you have not thought about.',
   },
 };
 

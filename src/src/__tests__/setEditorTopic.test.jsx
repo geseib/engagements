@@ -232,7 +232,7 @@ describe('an organisation can ask the check which shelf its set looks like', () 
     ...VERSIONS[0],
     reviewTopicSuggestion: { topic: 'science-technology', tags: [], filedAs: '', mismatch: false },
   }]);
-  const askButton = () => screen.getByRole('button', { name: /suggest a shelf from the questions/i });
+  const askButton = () => screen.getByRole('button', { name: /suggest a topic from the questions/i });
   const posts = () => authFetch.mock.calls
     .filter(([u, o]) => (o?.method || '').toUpperCase() === 'POST' && u.includes('/check'))
     .map(([, o]) => JSON.parse(o.body || '{}'));

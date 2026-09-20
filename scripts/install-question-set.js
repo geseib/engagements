@@ -40,7 +40,7 @@ const flag = (name, fallback = null) => {
 const apply = argv.includes('--apply');
 
 if (!tableName || !file) {
-  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <shelf> [--description "..."] [--persona <id>] [--quickstart] [--apply]');
+  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--apply]');
   process.exit(2);
 }
 

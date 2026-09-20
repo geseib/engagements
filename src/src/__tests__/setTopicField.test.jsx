@@ -169,7 +169,7 @@ describe('a shelf the content contradicts is said once, and blocks nothing', () 
 });
 
 describe('asking the check for a proposal, when the surface offers that', () => {
-  const ask = () => screen.getByRole('button', { name: /suggest a shelf/i });
+  const ask = () => screen.getByRole('button', { name: /suggest a topic/i });
 
   it('is not drawn at all where no caller wired it', () => {
     // rejects: a control on the CSV upload, the builder and the new-set dialog,
@@ -324,5 +324,67 @@ describe('the words the check proposed beside the shelf', () => {
   it('draws nothing when every word it proposed is already there', () => {
     render(<Host topic="music" tags={['1980s', 'pop']} suggestion={WITH_TAGS} />);
     expect(screen.queryByTestId('t-suggested-tags')).not.toBeInTheDocument();
+  });
+});
+
+describe('the word on the screen is “topic”, because “shelf” is already taken', () => {
+  /*
+    ONE WORD, ONE THING. "Shelf" is the metaphor this feature was designed
+    from and it is vivid in the comments, but the product already shows the
+    word to a person for something else entirely: HostQuestionSetsDialog draws
+    a `Shelf` column for whether a set is on the host's own quickstart shelf.
+    Two meanings for one word on two screens of one product is how a reader
+    stops trusting either.
+
+    The owner's word is the one that survives — they asked for "topic tags for
+    question sets" — so "topic" is what every label, sentence, button and
+    placeholder says, and "shelf" stays in the comments and module names where
+    it explains the design to whoever is changing it.
+
+    ASSERTED ON THE RENDERED TEXT, not by reading the file: a source grep
+    cannot tell a comment from a caption, which is the exact distinction this
+    rule turns on.
+  */
+  const says = (node) => node.textContent + [...node.querySelectorAll('*')]
+    .flatMap((el) => [el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('placeholder')])
+    .filter(Boolean)
+    .join(' ');
+
+  it('never says it while a set is unfiled, which is the state with the most copy', () => {
+    const { container } = render(<Host topic="" />);
+    expect(says(container)).not.toMatch(/shel[fv]/i);
+  });
+
+  it('never says it on any of the fifteen, blurb included', () => {
+    // The blurbs are shown as the help text under the picker, and one of them
+    // — General Knowledge's — described "a genuine mix that spans the
+    // shelves". Every one is walked, so a blurb added later is covered too.
+    for (const id of SET_TOPIC_IDS) {
+      const { container, unmount } = render(<Host topic={id} />);
+      expect(says(container)).not.toMatch(/shel[fv]/i);
+      unmount();
+    }
+  });
+
+  it('never says it where the check proposes one, argues with one, or is offered', () => {
+    const { container } = render(
+      <Host
+        topic="music"
+        suggestion={{ topic: 'history', tags: ['1980s'], filedAs: 'music', mismatch: false }}
+        onAskForSuggestion={jest.fn()}
+      />
+    );
+    expect(says(container)).not.toMatch(/shel[fv]/i);
+  });
+
+  it('never says it while the check is arguing with the chosen one', () => {
+    const { container } = render(
+      <Host
+        topic="music"
+        suggestion={{ topic: 'history', tags: [], filedAs: 'music', mismatch: true }}
+        onAskForSuggestion={jest.fn()}
+      />
+    );
+    expect(says(container)).not.toMatch(/shel[fv]/i);
   });
 });
