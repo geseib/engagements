@@ -294,7 +294,10 @@ const save = (setId, patch) => editSet({
     }));
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.deepStrictEqual(metaOf('warmups').tags, ['team-offsite']);
-    const questions = h.rows('SET#warmups').filter((r) => String(r.SK).startsWith('QUESTION#'));
+    // A new set is born at v1 (e53db4b1), so its question rows live in the v1
+    // partition. Reading the unsuffixed one finds nothing and this check would
+    // stop saying anything about the rows it is named for.
+    const questions = h.rows('SET#warmups#v1').filter((r) => String(r.SK).startsWith('QUESTION#'));
     assert.strictEqual(questions.length, 1);
     assert.deepStrictEqual(questions[0].Tags, ['icebreaker', 'short'],
       "the question kept its own keywords and did not inherit the set's");
