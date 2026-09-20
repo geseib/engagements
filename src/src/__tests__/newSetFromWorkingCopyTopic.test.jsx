@@ -52,7 +52,7 @@ const jsonResponse = (status, body) => ({
   ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body),
 });
 
-function mockApi() {
+function mockApi({ uploadFails = null } = {}) {
   const posts = [];
   authFetch.mockImplementation(async (url, options = {}) => {
     const method = (options.method || 'GET').toUpperCase();
@@ -60,6 +60,7 @@ function mockApi() {
     if (method === 'GET' && url.includes('/versions')) return jsonResponse(200, []);
     if (method === 'POST' && url.includes('upload-questions')) {
       posts.push(JSON.parse(options.body));
+      if (uploadFails) return jsonResponse(uploadFails.status, { error: uploadFails.error });
       return jsonResponse(200, { setId: 'new-set', setName: 'Openers', questionCount: 1 });
     }
     throw new Error(`Unhandled request: ${method} ${url}`);
@@ -86,6 +87,8 @@ async function openDialog() {
 
 const dialogPicker = () => screen.getByLabelText(/topic/i);
 const create = () => fireEvent.click(screen.getByRole('button', { name: /Create the set/i }));
+/** The dialog box itself — `Modal` puts `role="dialog"` on the card, not the scrim. */
+const dialog = () => screen.getByRole('dialog');
 
 describe('the dialog asks where the new set will sit', () => {
   it('starts on the shelf the set it came from sits on', async () => {
@@ -146,7 +149,8 @@ describe('a set carved out of an unfiled one', () => {
     fireEvent.change(await openDialog(), { target: { value: 'Openers' } });
     create();
 
-    expect(await screen.findByText(/Give this set a topic/)).toBeInTheDocument();
+    await screen.findByText(/Give this set a topic/);
+    expect(within(dialog()).getByText(/Give this set a topic/)).toBeInTheDocument();
     expect(posts).toHaveLength(0);
     // Still open, with the name they typed still in it.
     expect(screen.getByLabelText(/Name the new set/i)).toHaveValue('Openers');
@@ -161,6 +165,77 @@ describe('a set carved out of an unfiled one', () => {
 
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].topic).toBe('history');
+  });
+});
+
+describe('a refusal is said where the dialog is', () => {
+  /*
+    THE PANEL'S STATUS LINE IS BEHIND THIS DIALOG. It renders outside the
+    `Modal`, and `.modal-overlay` is a fixed full-viewport scrim at z-index 9999
+    over a body whose scroll `Modal` has locked — so an answer written there
+    while the dialog is open is an answer nobody can see, and pressing Create
+    reads as a dead button. Every refusal this dialog can produce has to be a
+    DESCENDANT of the dialog.
+
+    Containment is asserted rather than mere presence because jsdom has no
+    layout engine: `findByText` passes identically whether the sentence is on
+    the card or behind the scrim, which is exactly the distinction that matters
+    here. This is a containment fact, not a geometric one, so jsdom can answer
+    it (see the design system's "no geometric assertions" rule).
+  */
+
+  it('says the missing shelf on the card, not behind it', async () => {
+    mockApi();
+    renderPanel({ questionSet: UNFILED });
+    fireEvent.change(await openDialog(), { target: { value: 'Openers' } });
+    create();
+
+    await screen.findByText(/Give this set a topic/);
+    expect(within(dialog()).getByText(/Give this set a topic/)).toBeInTheDocument();
+  });
+
+  it('says the missing name on the card, not behind it', async () => {
+    // Same defect, same function, one branch earlier — and it predates the
+    // shelf, so a person who cleared the name has been told nothing all along.
+    mockApi();
+    renderPanel();
+    fireEvent.change(await openDialog(), { target: { value: '  ' } });
+    create();
+
+    await screen.findByText(/needs a name/);
+    expect(within(dialog()).getByText(/needs a name/)).toBeInTheDocument();
+  });
+
+  it('says a refused create on the card, not behind it', async () => {
+    // The shelf is chosen and the write still fails: the dialog stays open, so
+    // the server's reason has to land on it too, or the 400 this whole path
+    // exists to pre-empt becomes invisible instead of merely late.
+    const posts = mockApi({ uploadFails: { status: 400, error: 'Set name already taken' } });
+    renderPanel();
+    fireEvent.change(await openDialog(), { target: { value: 'Openers' } });
+    create();
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    await screen.findByText(/Set name already taken/);
+    expect(within(dialog()).getByText(/Set name already taken/)).toBeInTheDocument();
+    // Still open, so the name is still there to change.
+    expect(screen.getByLabelText(/Name the new set/i)).toHaveValue('Openers');
+  });
+
+  it('drops a refusal once the create it refused succeeds', async () => {
+    // rejects: a refusal that outlives the thing it was about, still on the
+    // card while the set it refused is being made.
+    const posts = mockApi();
+    renderPanel({ questionSet: UNFILED });
+    fireEvent.change(await openDialog(), { target: { value: 'Openers' } });
+    create();
+    await screen.findByText(/Give this set a topic/);
+
+    fireEvent.change(dialogPicker(), { target: { value: 'history' } });
+    create();
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(screen.queryByText(/Give this set a topic/)).not.toBeInTheDocument();
   });
 });
 
