@@ -454,8 +454,35 @@ export default function QuestionsPanel({
     return seen;
   }, [rows]);
 
-  const visibleRows = categoryFilter
-    ? rows.filter((r) => r.category === categoryFilter)
+  // THE FILTER IS IN FORCE ONLY WHILE ITS SELECT CAN BE ON SCREEN, and only on
+  // a category some row of the table still carries. The select renders only
+  // while there is more than one category, and `categoryFilter` used to outlive
+  // it: filter to Method, move Method's only question to History, and the
+  // table went on filtering to a category that no longer existed — no rows,
+  // "No questions in that category.", Move up/down asking for a filter to be
+  // cleared, and nothing on screen that could clear it. So everything the table
+  // does with the filter reads `activeCategory`, never `categoryFilter`: the
+  // rows it lists, the move buttons, the select's own value, and the category
+  // an added question is seeded with.
+  //
+  // A category carried only by REMOVED questions still counts. The table lists
+  // a tombstone, struck through, with its Restore, until Save, so that category
+  // still has rows to show, and Remove then Restore leaves a filtered table as
+  // it was. (The preview lists no tombstones, so its chips do not count them.)
+  const activeCategory = categories.length > 1 && categories.includes(categoryFilter)
+    ? categoryFilter
+    : '';
+
+  // A filter that stops is DROPPED, not only unread, so it cannot come back on
+  // its own. Move Method's last question out and back again, and the select
+  // would otherwise return already on Method, filtering a table that a moment
+  // earlier listed every question: a filter nobody chose.
+  useEffect(() => {
+    if (categoryFilter && !activeCategory) setCategoryFilter('');
+  }, [categoryFilter, activeCategory]);
+
+  const visibleRows = activeCategory
+    ? rows.filter((r) => r.category === activeCategory)
     : rows;
 
   /**
@@ -501,7 +528,7 @@ export default function QuestionsPanel({
     // The seed is unchanged: whatever the list is filtered to, else the
     // category of the last row, so adding a run of questions to one category
     // does not mean retyping its name every time.
-    const seedCategory = categoryFilter || rows[rows.length - 1]?.category || '';
+    const seedCategory = activeCategory || rows[rows.length - 1]?.category || '';
     openForm(blankRow({ category: seedCategory }), 'add');
   };
 
@@ -1145,7 +1172,7 @@ export default function QuestionsPanel({
           <label className="qs-filter">
             Filter by category:{' '}
             <select
-              value={categoryFilter}
+              value={activeCategory}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="form-select"
             >
@@ -1187,12 +1214,10 @@ export default function QuestionsPanel({
         />
       )}
 
+      {/* The table's one empty state. A filter cannot empty the table: it is
+          only ever in force on a category some row carries (`activeCategory`). */}
       {loadState === 'ready' && !previewing && visibleRows.length === 0 && (
-        <p className="qs-empty">
-          {rows.length
-            ? 'No questions in that category.'
-            : 'This set has no questions yet. Add one, or pull some from another set.'}
-        </p>
+        <p className="qs-empty">This set has no questions yet. Add one, or pull some from another set.</p>
       )}
 
       {loadState === 'ready' && !previewing && visibleRows.length > 0 && (
@@ -1250,18 +1275,18 @@ export default function QuestionsPanel({
                         <button
                           className="btn-secondary btn-small"
                           onClick={() => move(row.uid, -1)}
-                          disabled={rowIndex === 0 || Boolean(categoryFilter)}
+                          disabled={rowIndex === 0 || Boolean(activeCategory)}
                           aria-label={`Move ${row.title || 'question'} up`}
-                          title={categoryFilter ? 'Clear the category filter to reorder' : 'Move up'}
+                          title={activeCategory ? 'Clear the category filter to reorder' : 'Move up'}
                         >
                           <Icon name="ArrowUp" weight="bold" size={14} color="currentColor" />
                         </button>
                         <button
                           className="btn-secondary btn-small"
                           onClick={() => move(row.uid, 1)}
-                          disabled={rowIndex === rows.length - 1 || Boolean(categoryFilter)}
+                          disabled={rowIndex === rows.length - 1 || Boolean(activeCategory)}
                           aria-label={`Move ${row.title || 'question'} down`}
-                          title={categoryFilter ? 'Clear the category filter to reorder' : 'Move down'}
+                          title={activeCategory ? 'Clear the category filter to reorder' : 'Move down'}
                         >
                           <Icon name="ArrowDown" weight="bold" size={14} color="currentColor" />
                         </button>
