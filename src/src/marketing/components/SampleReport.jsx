@@ -27,11 +27,31 @@ import './SampleReport.css';
  * page also reads) or hand-roll inert-vs-live markup here, /reports passes
  * `footerLinks={false}` to skip the links and keep only `footer.note` if the
  * given view has one.
+ *
+ * `headingLevel` (default 3, clamped to 2..5) sets the sheet's own title-level
+ * tag; its block headings (the question, summary and standings headings) are
+ * always one level below it. The home page renders under a section h2 and
+ * relies on the default (h3/h4) — do not change it. `/reports` (Task 10,
+ * fix round 1) passes `headingLevel={2}` so the sheet's headings sit directly
+ * under the page's own h1 without a level skip, and — unlike an earlier
+ * version of this page — without reordering the DOM to fake it: reading
+ * order and tab order must match the visual layout (WCAG 1.3.2 / 2.4.3), so
+ * the heading levels bend instead. `SampleReport.css` styles these by class
+ * (`.mk-report-title`, `.mk-report-block-h`), not by tag, so both levels look
+ * identical.
  */
-export default function SampleReport({ report = SAMPLE_REPORT, callouts = false, footerLinks = true }) {
+export default function SampleReport({
+  report = SAMPLE_REPORT,
+  callouts = false,
+  footerLinks = true,
+  headingLevel = 3,
+}) {
   const r = report;
   const answers = r.round.answers || [];
   const hasDiscussion = Boolean(r.round.discussionQuestions && r.round.discussionQuestions.length);
+  const level = Math.min(5, Math.max(2, headingLevel));
+  const H = `h${level}`;
+  const Sub = `h${level + 1}`;
 
   const Pin = ({ n, show }) => (callouts && show ? <span className="mk-pin">{n}</span> : null);
 
@@ -39,13 +59,13 @@ export default function SampleReport({ report = SAMPLE_REPORT, callouts = false,
     <article className="mk-report" data-theme="light" aria-label="Sample session report">
       <div className="mk-report-head">
         <p className="mk-report-kicker">{r.kicker}</p>
-        <h3>{r.event}</h3>
+        <H className="mk-report-title">{r.event}</H>
         <p className="mk-report-meta">{r.meta}</p>
       </div>
 
       <div className="mk-report-body">
         <section className="mk-report-block">
-          <h4><Pin n={1} show />{r.round.questionHeading}</h4>
+          <Sub className="mk-report-block-h"><Pin n={1} show />{r.round.questionHeading}</Sub>
           <p className="mk-report-q">{r.round.prompt}</p>
           <ul className="mk-report-answers">
             {answers.map((a, i) => (
@@ -60,7 +80,7 @@ export default function SampleReport({ report = SAMPLE_REPORT, callouts = false,
         </section>
 
         <section className="mk-report-block">
-          <h4><Pin n={5} show />{r.round.summaryHeading}</h4>
+          <Sub className="mk-report-block-h"><Pin n={5} show />{r.round.summaryHeading}</Sub>
           <div className="mk-report-summary">
             <p>{r.round.summary}</p>
             {hasDiscussion && (
@@ -79,7 +99,7 @@ export default function SampleReport({ report = SAMPLE_REPORT, callouts = false,
         </section>
 
         <section className="mk-report-block">
-          <h4><Pin n={6} show />{r.standingsHeading}</h4>
+          <Sub className="mk-report-block-h"><Pin n={6} show />{r.standingsHeading}</Sub>
           <table className="mk-report-standings">
             <thead>
               <tr>

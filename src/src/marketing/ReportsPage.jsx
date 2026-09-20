@@ -22,13 +22,15 @@ export default function ReportsPage() {
 
           <div className="mk-annot">
             {/*
-              The callout list is rendered FIRST so its h2s are the headings
-              immediately after this page's own h1 — SampleReport's sheet
-              carries its own h3 (the report title), and if the sheet came
-              first that h3 would follow the h1 directly and skip a level.
-              CSS `order` (ReportsPage.css) puts the sheet back on the left
-              and the list on the right, matching the mockup's layout without
-              the DOM needing to match it.
+              DOM order matches the mockup's visual order (sheet, then the
+              callout list) — reading order and tab order must match what is
+              seen (WCAG 1.3.2 / 2.4.3). Fix round 1: an earlier version
+              swapped this order and used CSS `order` to fake the visual
+              layout back, which made a screen-reader or keyboard user meet
+              the callouts before the report they annotate. Headings now
+              descend through `headingLevel={2}` below instead (the sheet's
+              own headings drop to h2/h3, one level under this page's h1),
+              not through DOM reordering.
 
               The mockup draws the callout list as a div of <article>s with
               no list semantics. Ruling: the pins on the sheet are numbered,
@@ -37,6 +39,8 @@ export default function ReportsPage() {
               div/article, same classes, so `.mk-callouts`/`.mk-callout` in
               ReportsPage.css draw the identical layout.
             */}
+            <SampleReport callouts footerLinks={false} headingLevel={2} />
+
             <ol className="mk-callouts">
               {REPORT_CALLOUTS.map((c) => (
                 <li key={c.n} className="mk-callout">
@@ -44,18 +48,15 @@ export default function ReportsPage() {
                       decoration, not the only place the order lives. */}
                   <div className="mk-callout-n" aria-hidden="true">{c.n}</div>
                   <div>
-                    {/* Mockup: h3. Promoted to h2 so headings descend
-                        without a skip after this page's own h1 (this is the
-                        first heading below it, same reasoning as
-                        UseCasesPage's case titles). */}
+                    {/* Mockup: h3. Kept at h2 here (below the sheet's own h2
+                        title and h3 block headings) so this page's headings
+                        keep descending without a skip. */}
                     <h2>{c.title}</h2>
                     <p>{c.text}</p>
                   </div>
                 </li>
               ))}
             </ol>
-
-            <SampleReport callouts footerLinks={false} />
           </div>
         </div>
       </section>

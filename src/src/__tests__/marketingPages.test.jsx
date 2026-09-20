@@ -139,3 +139,53 @@ test('one h1 on the reports page, headings descend without a skip', () => {
     expect(levels[i] - levels[i - 1]).toBeLessThanOrEqual(1);
   }
 });
+
+test('the sample sheet precedes the callout list in the document (reading/tab order matches the visual layout)', () => {
+  // Fix round 1: an earlier version put the callout <ol> first in the DOM
+  // and used CSS `order` to draw the sheet back on the left, which made
+  // reading/tab order diverge from what is seen (WCAG 1.3.2 / 2.4.3).
+  // compareDocumentPosition is a DOM-order question, not a geometry one —
+  // jsdom models it correctly.
+  const { container } = render(<ReportsPage />);
+  const sheet = container.querySelector('.mk-report');
+  const list = container.querySelector('.mk-callouts');
+  expect(sheet).not.toBeNull();
+  expect(list).not.toBeNull();
+  // eslint-disable-next-line no-bitwise
+  expect(sheet.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('ReportsPage.css declares no order: outside a @media block', () => {
+  // Fix round 1: `order` was used only to fake the sheet/callouts visual
+  // layout back after a DOM-order swap. That swap is gone; this guards
+  // against it (or anything like it) coming back silently. A breakpoint's
+  // own `order` (none exist here, but the mockup could add one) is fine —
+  // only a top-level declaration, which by construction exists purely to
+  // override normal document flow, is a violation.
+  const fs = require('fs');
+  const path = require('path');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'marketing', 'ReportsPage.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' '); // strip comments first
+
+  /** Depth of @media nesting at each character offset in `css`. */
+  function mediaDepthAt(text) {
+    const depthAtOffset = new Array(text.length).fill(0);
+    let depth = 0;
+    const mediaStartDepths = [];
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === '{') {
+        depth += 1;
+        if (/@media[^{]*$/.test(text.slice(Math.max(0, i - 60), i))) mediaStartDepths.push(depth);
+      } else if (text[i] === '}') {
+        if (mediaStartDepths[mediaStartDepths.length - 1] === depth) mediaStartDepths.pop();
+        depth -= 1;
+      }
+      depthAtOffset[i] = mediaStartDepths.length;
+    }
+    return depthAtOffset;
+  }
+
+  const depthAtOffset = mediaDepthAt(css);
+  const topLevelOrderDecls = [...css.matchAll(/\border\s*:/g)].filter((m) => depthAtOffset[m.index] === 0);
+  expect(topLevelOrderDecls).toEqual([]);
+});

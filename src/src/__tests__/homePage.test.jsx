@@ -63,6 +63,20 @@ test('the report is the one paper surface, and converts theme and markup togethe
   expect(within(paper[0]).getAllByText(/next steps/i).length).toBeGreaterThan(0);
 });
 
+test("the home sheet's own headings stay h3/h4 — SampleReport's default `headingLevel`", () => {
+  // Fix round 1 gave SampleReport a `headingLevel` prop (/reports passes 2)
+  // so its headings can drop under a page h1 without DOM reordering. The
+  // home page renders under its own section h2 and must keep the default
+  // (3), so this pins it: a change to the default would silently move the
+  // home sheet's headings and this is the only test that would catch it.
+  render(<HomePage />);
+  const sheet = document.querySelector('.mk-report');
+  expect(sheet.querySelector('.mk-report-title').tagName).toBe('H3');
+  const blockHeadings = sheet.querySelectorAll('.mk-report-block-h');
+  expect(blockHeadings.length).toBeGreaterThan(0);
+  for (const h of blockHeadings) expect(h.tagName).toBe('H4');
+});
+
 // Adapted from the brief: the mockup's own link text for these two links is
 // "See how it works" (closing CTA -> /how-it-works) and "See a full report,
 // annotated" (below the report -> /reports), not the brief's placeholder

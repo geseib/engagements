@@ -28,10 +28,15 @@
   font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--mk-amber-ink);
 }
-.mk-report-head h3 { font-size: var(--mk-t-head); margin-top: 8px; color: var(--mk-paper-text); font-family: var(--mk-font-display); }
+/* Fix round 1: was `.mk-report-head h3` (tag selector) — SampleReport's
+   title-level heading is now an h2 or h3 depending on `headingLevel`, so the
+   rule targets the class the element always carries instead, and both
+   levels look identical. */
+.mk-report-title { font-size: var(--mk-t-head); margin-top: 8px; color: var(--mk-paper-text); font-family: var(--mk-font-display); }
 .mk-report-meta { margin-top: 10px; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
 .mk-report-body { padding: 26px 30px 30px; display: grid; gap: 26px; }
-.mk-report-block h4 {
+/* Fix round 1: was `.mk-report-block h4` (tag selector) — same reasoning. */
+.mk-report-block-h {
   margin: 0; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
   text-transform: uppercase; color: var(--mk-paper-muted);
 }

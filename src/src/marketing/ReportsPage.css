@@ -5,15 +5,13 @@
    primitives are declared once in MarketingShell.css; `.mk-report*` and
    `.mk-pin` live in SampleReport.css and are not repeated here.
 
-   Heading levels are promoted from the mockup (h3 -> h2 for a callout's own
-   title) so the page's headings descend without a skip: h1 (page), h2 (each
-   callout, "Export and sharing", "Names can be hidden...").
+   Heading levels: the callout's own title stays h2 (mockup: h3); the sheet's
+   headings drop to h2/h3 via `<SampleReport headingLevel={2} />` instead —
+   see SampleReport.jsx. DOM order matches visual order (fix round 1: no
+   `order` declaration here restores a different DOM order — see
+   ReportsPage.jsx for why that was wrong).
    =========================================================================== */
 .mk-annot { display: grid; gap: 30px; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); margin-top: 44px; align-items: start; }
-/* Visual left/right order (sheet, then callouts) independent of DOM order
-   (callouts, then sheet — see ReportsPage.jsx for why the DOM is reversed). */
-.mk-annot .mk-report { order: 1; }
-.mk-annot .mk-callouts { order: 2; }
 
 /* The mockup's callout list is a div of <article>s; here it is an <ol> of
    <li>s instead (see ReportsPage.jsx), so the browser's own list semantics
