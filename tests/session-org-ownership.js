@@ -34,8 +34,15 @@ const check = (label, fn) => {
   }
 };
 
-const caller = (groups, orgId) => ({
-  requestContext: { authorizer: { lambda: { userId: 'u', groups, orgId } } },
+/**
+ * `orgIds` defaults to the ACTIVE org because that is what the authorizer
+ * really produces: `resolveOrgContext` picks the active organisation out of
+ * the memberships it just listed, so a caller acting for one is always a
+ * member of it. Pass the third argument to describe somebody who belongs to
+ * more than one, or who belongs somewhere while acting nowhere.
+ */
+const caller = (groups, orgId, orgIds = orgId) => ({
+  requestContext: { authorizer: { lambda: { userId: 'u', groups, orgId, orgIds } } },
 });
 const ORG_A = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
 const ORG_B = 'org_Tb2VnQ8sLxK4WmC7gRdYpF';
@@ -60,6 +67,53 @@ check('Engage staff are not exempt', () =>
 check('a host with no organisation may not drive an org\'s session', () =>
   assert.strictEqual(
     tenant.callerMayDriveSession(caller('hosts', ''), { orgId: ORG_A }), false));
+
+/*
+  ── MEMBERSHIP DECIDES, NOT THE LIBRARY THE BROWSER IS STANDING IN ────────
+
+  Reported from a live session: the owner drove a room from their phone and
+  every control answered "Game not found", while the same buttons worked from
+  the laptop sitting next to it. The phone had never chosen a team — `/remote`
+  mounted no library picker — so the authorizer fell back to the account's
+  DEFAULT organisation, the personal one, and the comparison above refused a
+  session owned by the team the same account belongs to.
+
+  A session NAMES its own owning organisation, on its own row. There is
+  nothing for an active-org choice to resolve, which is exactly what makes
+  this different from a content write: writing a set has to ask WHICH library
+  it lands in, and the answer has to be the one the person chose. Driving a
+  room does not — the room already said. So the question here is "are you one
+  of these people", and a member is a member whichever of their own libraries
+  they happen to be looking at.
+*/
+// rejects: comparing only the ACTIVE org, which refuses a member of the
+//          owning team for standing in another of their own libraries.
+check('a member of the owning org may drive it while acting for another', () =>
+  assert.strictEqual(
+    tenant.callerMayDriveSession(
+      caller('hosts', ORG_B, `${ORG_B},${ORG_A}`), { orgId: ORG_A }), true));
+
+/* Acting for NO organisation is a real state and not an absence: it is the
+   platform sentinel `canManageScope` requires before Engage's own library can
+   be written. Dropping the active org does not drop the memberships. */
+check('...and while acting for no organisation at all', () =>
+  assert.strictEqual(
+    tenant.callerMayDriveSession(caller('hosts', '', ORG_A), { orgId: ORG_A }), true));
+
+// rejects: reading `orgIds` as "has memberships" rather than as the list that
+//          must CONTAIN this session's org.
+check('a caller who belongs elsewhere is still refused', () =>
+  assert.strictEqual(
+    tenant.callerMayDriveSession(
+      caller('hosts', ORG_B, `${ORG_B},org_QmX2ldPvK9sNrT6hYwBzUc`), { orgId: ORG_A }),
+    false));
+
+// rejects: letting the staff group stand in for membership. Being Engage is
+//          not being in the customer's team, and this is the caller the
+//          widening is most likely to sweep up by accident.
+check('a platform admin who is not a member is refused', () =>
+  assert.strictEqual(
+    tenant.callerMayDriveSession(caller('admins,hosts', '', ''), { orgId: ORG_A }), false));
 
 console.log('\n2. what it deliberately does NOT refuse');
 

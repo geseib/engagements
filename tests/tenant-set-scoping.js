@@ -753,6 +753,128 @@ function seedPlatformSet() {
         { scope: 'org', orgId: 'org_9xK4Fq7Pz2mNbVc8dQwLxR', setId: 'newset' }));
   }
 
+  /* ── 10. THE SET A SESSION PLAYS, FOR THE PERSON DRIVING IT ─────────────
+
+     Reported from a live room: the owner drove a session from their phone,
+     and the Questions tab said "Could not read the question set" about a set
+     their own team owns. `callerMayDriveSession` now judges the CONTROLS by
+     membership, so the buttons work — but reading the set is a different
+     path. `/question-sets/{setId}/questions` and `/categories` resolve a bare
+     slug through `readableSetRefs`, which probes the caller's ACTIVE
+     organisation, and a phone that never picked a team is acting for the
+     personal one. So the set is absent and the surface 404s.
+
+     The fix keeps the active-org rule for every read a caller makes on their
+     own behalf, and adds ONE anchored route: `?gameId=` says "the set THIS
+     session plays". The session row names the library itself, so nothing is
+     chosen by the request — and the caller must be allowed to drive that
+     session, which is the same membership test the controls now use.
+
+     What must NOT follow from it: naming a session must not become a way to
+     read anything else the owning organisation has. */
+  say('\n10. the set a session plays is readable by whoever may drive it');
+
+  /* The session, in the shape create-game writes: the owning org on the row,
+     and the set pinned as a PAIR. `gameSetRef` is the reader that has to
+     agree with these field names. */
+  store.set('GAME#8888|METADATA', {
+    PK: 'GAME#8888', SK: 'METADATA', GameId: '8888',
+    Title: 'Org A offsite', orgId: 'org_a',
+    QuestionSetId: SET_ID, QuestionSetScope: 'org',
+  });
+
+  /* THE OWNER'S PHONE. The same person as HOST_A — a member of org A — but
+     acting for their PERSONAL organisation, because the device never chose a
+     team and the authorizer fell back to the account's default. */
+  const HOST_A_ON_PHONE = caller({
+    userId: 'sub-ada', username: 'ada', groups: 'hosts', status: 'enabled',
+    orgId: 'org_personal_ada', orgRole: 'owner', orgIds: 'org_personal_ada,org_a',
+  });
+  const onPhone = (h, extra) => h(withEvent(HOST_A_ON_PHONE, {
+    pathParameters: { setId: SET_ID }, ...extra,
+  }));
+
+  // The residual break, kept as an assertion so the anchored route below is
+  // not mistaken for something the active-org rule was already doing.
+  await check('the phone cannot find the set by id alone — the active org has no such set', async () => {
+    const res = await onPhone(setQuestions);
+    assert.strictEqual(res.statusCode, 404, `expected 404, got ${res.statusCode}: ${res.body}`);
+  });
+
+  // rejects: leaving the read on the caller's active organisation, which is
+  //          the owner's reported "Could not read the question set".
+  await check('naming the session it is driving, the phone reads org A\'s questions', async () => {
+    const res = await onPhone(setQuestions, { queryStringParameters: { gameId: '8888' } });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const q = parse(res);
+    assert.strictEqual(q.scope, 'org');
+    assert.strictEqual(q.orgId, 'org_a');
+    assert.ok(q.questions.length > 0 && q.questions.every((x) => /RETRO-A/i.test(x.title)),
+      `served ${JSON.stringify(q.questions.map((x) => x.title))} — not org A's questions`);
+  });
+
+  // The second surface the remote loads, and it failed the same way — the
+  // category NAMES beside the toggles came back empty about a set with two.
+  await check('...and the same session\'s categories', async () => {
+    const res = await onPhone(gameCategories, { queryStringParameters: { gameId: '8888' } });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const c = parse(res);
+    assert.strictEqual(c.scope, 'org');
+    assert.strictEqual(c.orgId, 'org_a');
+    assert.strictEqual(c.totalCategories, 2);
+  });
+
+  // rejects: trusting `gameId` on its own. A four-digit code is guessable —
+  //          9,000 values — so the anchor has to be gated by the SAME test
+  //          that gates the controls, or it is the hole they just closed.
+  await check('host B naming org A\'s session still never sees org A\'s questions', async () => {
+    const res = await setQuestions(withEvent(HOST_B, {
+      pathParameters: { setId: SET_ID }, queryStringParameters: { gameId: '8888' },
+    }));
+    const q = parse(res);
+    if (res.statusCode === 200) {
+      assert.strictEqual(q.orgId, 'org_b', 'host B was served another library');
+      assert.ok(q.questions.every((x) => /RETRO-B/i.test(x.title)),
+        'host B was served org A\'s questions by naming their session');
+    }
+  });
+
+  // rejects: the staff group standing in for membership. Engage can see that
+  //          the shared library exists; a customer's room is not theirs.
+  await check('Engage staff naming that session are refused too', async () => {
+    const res = await setQuestions(withEvent(STAFF, {
+      pathParameters: { setId: SET_ID }, queryStringParameters: { gameId: '8888' },
+    }));
+    assert.strictEqual(res.statusCode, 404, `expected 404, got ${res.statusCode}: ${res.body}`);
+  });
+
+  // rejects: letting the anchor widen past the one set the session pins —
+  //          "I can drive session X" must not read as "I can read org A".
+  await check('the anchor reads the session\'s OWN set and no other', async () => {
+    const res = await setQuestions(withEvent(HOST_A_ON_PHONE, {
+      pathParameters: { setId: PLATFORM_SET_ID }, queryStringParameters: { gameId: '8888' },
+    }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const q = parse(res);
+    assert.strictEqual(q.scope, 'platform', 'a mismatched setId resolved through the session');
+    assert.ok(q.questions.every((x) => /HOUSE/i.test(x.title)));
+  });
+
+  // rejects: the anchor becoming a WRITE path. Membership says who may drive
+  //          a room; it never says which library a change lands in.
+  await check('the anchor grants no write — org A is untouched by the phone', async () => {
+    const before = snapshot(ORG_A_META_PK) + snapshot(ORG_A_CONTENT_PK);
+    const res = await editSet(withEvent(HOST_A_ON_PHONE, {
+      pathParameters: { setId: SET_ID },
+      queryStringParameters: { gameId: '8888' },
+      body: body({ name: 'Renamed From The Phone' }),
+    }));
+    assert.ok(res.statusCode === 403 || res.statusCode === 404,
+      `expected a refusal, got ${res.statusCode}: ${res.body}`);
+    assert.strictEqual(snapshot(ORG_A_META_PK) + snapshot(ORG_A_CONTENT_PK), before,
+      'a session anchor let a write reach org A');
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

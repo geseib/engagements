@@ -1,6 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolvePartitionFromMeta } = require('./shared/set-version');
+const { resolvePartitionFromMeta, findSetForSession } = require('./shared/set-version');
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { ORG } = require('./shared/tenant');
 const { decryptItem, decryptItems } = require('./shared/tenant-crypto');
@@ -35,9 +35,31 @@ exports.handler = async (event) => {
     // requirement is that every org can read. `findSetForCaller` searches only
     // the caller's own org, platform and public, so another organisation's set
     // is absent and this 404s on it.
-    const found = await findSetForCaller(
-      db, process.env.TABLE_NAME, event, setId, requestedScope(event)
-    );
+    //
+    // ── ...OR IN THE SESSION THE CALLER IS DRIVING ──────────────────────────
+    //
+    // `?gameId=` means "the set THIS session plays", and it exists because the
+    // rule above has one case it answers wrongly. The host remote is a signed-in
+    // surface with no library picker of its own, so a phone acts for whatever
+    // organisation the account defaults to — the personal one — and asking for
+    // a team's set by slug finds nothing. That is the owner's reported "Could
+    // not read the question set", on a set their own team owns, in a session
+    // they were at that moment running.
+    //
+    // It widens nothing on its own: the session row names the library (so the
+    // request steers no part of it), the caller has to be entitled to drive
+    // that session, and the set has to be the one the session pins. See
+    // set-version.js:findSetForSession. A miss falls back to the caller's own
+    // libraries, so a stale or unknown gameId simply behaves as it did before.
+    const gameId = event.queryStringParameters?.gameId;
+    let found = gameId
+      ? await findSetForSession(db, process.env.TABLE_NAME, event, setId, gameId)
+      : null;
+    if (!found) {
+      found = await findSetForCaller(
+        db, process.env.TABLE_NAME, event, setId, requestedScope(event)
+      );
+    }
     const setRes = { Item: found && found.item };
 
     if (!setRes.Item) {
