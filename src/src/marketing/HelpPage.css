@@ -108,7 +108,14 @@
 
 .mk-help-doc-footer { margin-top: 34px; }
 
-/* Search results, replacing the body while a term is present. */
+/* Search results, replacing the body while a term is present. Fix round 1,
+   finding 3: `.mk-help-results` (the wrapper SearchResults always renders,
+   whether it holds the empty-search message or the list) was an undeclared
+   hook -- given the same top offset and grid the sibling `.mk-help-index`
+   uses, so the "no results" paragraph and the results list both sit the
+   same distance under the h1 that stands in for the page title while
+   searching. */
+.mk-help-results { display: grid; gap: 20px; margin-top: 32px; }
 .mk-help-results-list { list-style: none; padding: 0; margin-top: 24px; display: grid; gap: 20px; }
 .mk-help-results-list a { color: var(--mk-text); font-weight: 700; text-decoration: none; }
 .mk-help-results-list a:hover { color: var(--mk-amber); }

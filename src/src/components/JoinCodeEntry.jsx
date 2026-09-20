@@ -30,7 +30,6 @@ export default function JoinCodeEntry({ label = 'Have a code?' }) {
                 key={index}
                 className={[
                   'jce-cell',
-                  j.code[index] ? 'jce-filled' : '',
                   index === j.code.length ? 'jce-next' : '',
                 ].filter(Boolean).join(' ')}
               >

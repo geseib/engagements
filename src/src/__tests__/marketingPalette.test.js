@@ -98,6 +98,125 @@ const JCE = read('components', 'JoinCodeEntry.css');
 const ALL = Object.values(SHEETS).join('\n');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
+/* ==================================================================== §walk
+ * A PROPER CSS WALKER, tracking brace depth, so a rule nested inside
+ * `@media`/`@supports` is seen, and `@keyframes` is never mistaken for a
+ * family of selectors.
+ *
+ * FIX ROUND 1, FINDING 1: the namespace check below used to split the whole
+ * stylesheet on `}` and take each chunk's text up to its first `{` as one
+ * "head", skipping any head containing `@`. Because a `@media (...) {` brace
+ * and its FIRST nested rule's opening brace land in the same chunk (nothing
+ * splits between them), that first nested rule's own selector was silently
+ * skipped — every subsequent rule in the block was still seen (each gets its
+ * own chunk from then on), but the first was not. A mis-namespaced selector
+ * placed first inside a new `@media` block would never have been caught.
+ * Reproduced and pinned in the self-test below:
+ * `roots(".mk-ok{color:red} @media (max-width:720px){ .oops{color:blue} }")`
+ * used to return `['mk-ok']` only.
+ *
+ * AUDIT OF THE OTHER `.split('}')`/per-rule sites in this file, per the
+ * controller's request:
+ *   - `classesDeclared()` (class-coverage check, below) matches `/\.\w+/g`
+ *     directly against the whole stylesheet text with NO split and no `@`
+ *     filtering, so it has no equivalent blind spot — a class named inside a
+ *     nested `@media` rule is found exactly the same as one at the top
+ *     level. Left as-is.
+ *   - the "no hex literal outside a token block" scan strips `.mk-root {...}`
+ *     with a plain substring regex, not a per-rule split — the regex matches
+ *     the literal text `.mk-root { ... }` wherever it occurs, including
+ *     inside the `@media (max-width: 720px)` wrapper, because the match does
+ *     not depend on tracking outer nesting at all. No blind spot there
+ *     either (confirmed: the narrow-width `.mk-root` override already relies
+ *     on this and its declarations were never flagged as stray literals).
+ *   - `roots()` (namespace test) was the ONE site with the bug, fixed below.
+ *   - the new "amber never carries text on paper" structural check (finding
+ *     2) is written directly on top of this same walker, so it does not
+ *     re-introduce the bug in a second place.
+ */
+function walkRules(css, { onRule, onKeyframesName } = {}) {
+  const text = stripped(css);
+  const n = text.length;
+
+  function findMatchingClose(openBraceIdx) {
+    let depth = 0;
+    let i = openBraceIdx;
+    do {
+      if (text[i] === '{') depth += 1;
+      else if (text[i] === '}') depth -= 1;
+      i += 1;
+    } while (depth > 0 && i < n);
+    return i - 1; // index of the matching '}', or n - 1 if unbalanced
+  }
+
+  let i = 0;
+  while (i < n) {
+    const braceIdx = text.indexOf('{', i);
+    if (braceIdx === -1) break;
+    const head = text.slice(i, braceIdx).trim();
+
+    if (/^@(?:-\w+-)?keyframes\b/i.test(head)) {
+      // Opaque: `from`/`to`/`NN%` are not selectors, only the animation's own
+      // name is checked against the namespace.
+      const m = head.match(/^@(?:-\w+-)?keyframes\s+([\w-]+)/i);
+      if (m && onKeyframesName) onKeyframesName(m[1]);
+      i = findMatchingClose(braceIdx) + 1;
+    } else if (/^@(media|supports|document|-moz-document)\b/i.test(head)) {
+      // Descend: the content between its braces is walked exactly like a
+      // top-level stylesheet, so nested rules — including the FIRST one —
+      // are visited by the same code path as everything else.
+      const close = findMatchingClose(braceIdx);
+      const inner = text.slice(braceIdx + 1, close);
+      walkRules(inner, { onRule, onKeyframesName });
+      i = close + 1;
+    } else if (head.startsWith('@')) {
+      // Other at-rules with a block (@font-face, @page, ...): no selectors
+      // to collect, and not a keyframes name.
+      i = findMatchingClose(braceIdx) + 1;
+    } else if (head.length) {
+      const close = findMatchingClose(braceIdx);
+      const body = text.slice(braceIdx + 1, close);
+      if (onRule) onRule(head, body);
+      i = close + 1;
+    } else {
+      i = braceIdx + 1;
+    }
+  }
+}
+
+describe('the selector walker itself (self-test, so a broken walker cannot silently pass everything downstream)', () => {
+  test('the reproduction case: a mis-namespaced selector as the FIRST rule inside @media is seen', () => {
+    const found = [];
+    walkRules('.mk-ok{color:red} @media (max-width:720px){ .oops{color:blue} }', {
+      onRule: (head) => found.push(head),
+    });
+    expect(found).toEqual(['.mk-ok', '.oops']);
+  });
+
+  test('a nested rule AFTER the first is also seen', () => {
+    const found = [];
+    walkRules('@media (x){ .a{color:red} .b{color:blue} }', { onRule: (head) => found.push(head) });
+    expect(found).toEqual(['.a', '.b']);
+  });
+
+  test('a selector list inside @media yields both selectors', () => {
+    const found = [];
+    walkRules('@media (x){ .a, .b { color:red } }', { onRule: (head) => found.push(head) });
+    expect(found).toEqual(['.a, .b']);
+  });
+
+  test('a @keyframes block yields no selectors, only its name', () => {
+    const rules = [];
+    const names = [];
+    walkRules('@keyframes mk-drift { 0% { opacity: 0 } 50% { opacity: .5 } to { opacity: 1 } }', {
+      onRule: (head) => rules.push(head),
+      onKeyframesName: (name) => names.push(name),
+    });
+    expect(rules).toEqual([]);
+    expect(names).toEqual(['mk-drift']);
+  });
+});
+
 test('the suite cannot silently check nothing: the marketing sheet list is non-empty and covers the shell', () => {
   // rejects: a rename or a move that quietly drops every sheet out of ALL —
   // a suite iterating an empty list is a suite that passes on anything.
@@ -197,11 +316,56 @@ describe('every flat pairing these pages paint', () => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
   });
 
-  test('amber never carries text on paper — that is the premise --mk-amber-ink exists to fix', () => {
-    expect(ratio(parseHex(T.amber), parseHex(T.paperSurface))).toBeLessThan(AA); // the premise
-    const reportRules = stripped(SHEETS['SampleReport.css']).split('\n')
-      .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--mk-amber\)/.test(l));
-    expect(reportRules).toEqual([]);
+  /*
+   * FIX ROUND 1, FINDING 2: this used to scan only `SampleReport.css` for
+   * `color: var(--mk-amber)`, so `ClipStill.css`'s `.mk-ss--paper` rules —
+   * the OTHER paper surface the rule names — were never checked at all.
+   * Made structural instead: walk EVERY marketing stylesheet (the walker
+   * from above, so a rule nested in `@media` is covered too) and inspect
+   * every rule whose selector mentions `.mk-report` or `.mk-ss--paper`
+   * ANYWHERE in it (so `.mk-report-title`, `.mk-ss--paper .mk-ss-code`, etc.
+   * are all in scope, not only the bare class itself).
+   */
+  describe('amber never carries text on either paper surface (.mk-report*, .mk-ss--paper)', () => {
+    const PAPER_SELECTOR = /\.mk-report\b|\.mk-ss--paper\b/;
+    const paperRules = [];
+    for (const [file, css] of Object.entries(SHEETS)) {
+      walkRules(css, {
+        onRule: (head, body) => { if (PAPER_SELECTOR.test(head)) paperRules.push({ file, head, body }); },
+      });
+    }
+
+    test('the scan found the paper surface’s own rules (cannot silently check nothing)', () => {
+      expect(paperRules.length).toBeGreaterThan(10);
+      expect(paperRules.some((r) => r.file === 'SampleReport.css')).toBe(true);
+      expect(paperRules.some((r) => r.file === 'ClipStill.css')).toBe(true);
+    });
+
+    test('--mk-amber (the premise: too dark on paper) is less than AA on --mk-paper-surface', () => {
+      expect(ratio(parseHex(T.amber), parseHex(T.paperSurface))).toBeLessThan(AA);
+    });
+
+    test('no paper rule sets color: var(--mk-amber)', () => {
+      const offenders = paperRules.filter((r) => /(^|[^-])\bcolor\s*:\s*var\(--mk-amber\)/.test(r.body));
+      expect(offenders.map((r) => `${r.file}: ${r.head}`)).toEqual([]);
+    });
+
+    /* --mk-amber-hi / --mk-amber-deep are not banned outright — if a paper
+     * rule ever uses one as `color`, MEASURE it against every paper token
+     * rather than assuming failure, and only flag it if it actually fails. */
+    test('any use of --mk-amber-hi or --mk-amber-deep as paper text also clears AA on every paper token', () => {
+      const PAPER_TOKENS = { paper: T.paper, paperSurface: T.paperSurface };
+      const hiOrDeepUsers = paperRules.filter((r) => /(^|[^-])\bcolor\s*:\s*var\(--mk-amber-(hi|deep)\)/.test(r.body));
+      const failing = [];
+      for (const rule of hiOrDeepUsers) {
+        const m = rule.body.match(/(^|[^-])\bcolor\s*:\s*var\(--mk-amber-(hi|deep)\)/);
+        const tokenValue = m[2] === 'hi' ? T.amberHi : mk('--mk-amber-deep');
+        for (const [tokenName, bg] of Object.entries(PAPER_TOKENS)) {
+          if (ratio(parseHex(tokenValue), parseHex(bg)) < AA) failing.push(`${rule.file}: ${rule.head} on ${tokenName}`);
+        }
+      }
+      expect(failing).toEqual([]);
+    });
   });
 });
 
@@ -344,13 +508,18 @@ test('every custom property used is declared somewhere', () => {
    Both ways: every selector this surface declares is rooted at its own
    prefix, and styles.css declares nothing in either scope. */
 describe('the namespace, both ways', () => {
+  /** Every leading class this stylesheet declares a rule for, AND every
+   * `@keyframes` name it declares — via the brace-depth walker above, so a
+   * rule nested inside `@media`/`@supports` (including the first one in the
+   * block) is not silently skipped. */
   const roots = (css) => {
     const out = new Set();
-    for (const blk of stripped(css).split('}')) {
-      const head = blk.split('{')[0];
-      if (!head || head.includes('@')) continue;
-      for (const sel of head.split(',')) { const m = sel.trim().match(/^[a-zA-Z]*\.([\w-]+)/); if (m) out.add(m[1]); }
-    }
+    walkRules(css, {
+      onRule: (head) => {
+        for (const sel of head.split(',')) { const m = sel.trim().match(/^[a-zA-Z]*\.([\w-]+)/); if (m) out.add(m[1]); }
+      },
+      onKeyframesName: (name) => out.add(name),
+    });
     return [...out];
   };
   test('every marketing selector is rooted at mk-', () => expect(roots(ALL).filter((n) => !n.startsWith('mk-'))).toEqual([]));
@@ -475,20 +644,14 @@ describe('every class the marketing markup uses is a class some marketing styles
   });
 
   test('every mk-* class used in marketing JSX is declared in some marketing stylesheet', () => {
+    // FIX ROUND 1, FINDING 3 (controller ruling): no allow-list. The two
+    // gaps this test found in the first draft (`mk-home`/`mk-problem`/
+    // `mk-modes`/`mk-material`/`mk-react` in HomePage.jsx, dead and now
+    // removed there; `mk-help-results` in HelpPage.jsx, live and now
+    // declared in HelpPage.css) are both resolved in the shipped code, not
+    // excused here.
     const missing = [...usedFromFiles].filter((c) => !declaredInSomeSheet.has(c)).sort();
-    // KNOWN, PRE-EXISTING GAP (not introduced or hidden by this suite; see
-    // task-12-report.md): six bare `mk-*` classes that no stylesheet
-    // declares — `mk-home`, `mk-problem`, `mk-modes`, `mk-material`,
-    // `mk-react` (HomePage.jsx section wrappers, each duplicating the
-    // section's own `id`) and `mk-help-results` (HelpPage.jsx's results
-    // wrapper — only its `-list`/`-role` children are styled). All six are
-    // otherwise-unstyled hooks and cause no visible defect (nothing depends
-    // on the class existing), so they are named here rather than fixed
-    // blind. Left out of the assertion so this suite still fails the day a
-    // REAL undeclared class is introduced, without going red on a
-    // pre-existing, harmless one every run.
-    const KNOWN_UNSTYLED_HOOKS = ['mk-home', 'mk-problem', 'mk-modes', 'mk-material', 'mk-react', 'mk-help-results'];
-    expect(missing.filter((c) => !KNOWN_UNSTYLED_HOOKS.includes(c))).toEqual([]);
+    expect(missing).toEqual([]);
   });
 
   test('every jce* class used in JoinCodeEntry.jsx is declared in JoinCodeEntry.css', () => {
@@ -496,14 +659,12 @@ describe('every class the marketing markup uses is a class some marketing styles
     const used = classesUsedInJce(jceJsx);
     expect(used.length).toBeGreaterThan(0);
     const declared = classesDeclared(JCE);
+    // FIX ROUND 1, FINDING 3: `jce-filled` (found undeclared by this test's
+    // first draft) has been removed from JoinCodeEntry.jsx — RootPage.css's
+    // `.entry-cell` family has no `.is-filled` counterpart to port, so there
+    // was no real state being described. No allow-list.
     const missing = used.filter((c) => !declared.has(c));
-    // KNOWN, PRE-EXISTING GAP: `jce-filled` is applied to a cell that holds a
-    // digit (JoinCodeEntry.jsx) but JoinCodeEntry.css never declares it —
-    // filled and empty cells are visually identical today. Named rather than
-    // fixed blind: what a filled cell should look like is a design call this
-    // suite cannot make. See task-12-report.md.
-    const KNOWN_UNSTYLED_HOOKS = ['jce-filled'];
-    expect(missing.filter((c) => !KNOWN_UNSTYLED_HOOKS.includes(c))).toEqual([]);
+    expect(missing).toEqual([]);
   });
 
   describe('the scan can actually fail', () => {

@@ -9,7 +9,12 @@
 /* The scene now renders from MarketingShell (task 9), as a sibling of <main>
    rather than a child of this page's own wrapper, and MarketingShell.css
    gives <main> itself the stacking context that used to live here per-section.
-   `.mk-home` needs nothing of its own for that any more. */
+   Fix round 1, finding 3: the page's own outer wrapper and five of its
+   section elements carried a bare `mk-home`/`mk-problem`/`mk-modes`/
+   `mk-material`/`mk-react` class that no stylesheet, script or test ever
+   read — dead hooks duplicating each section's own `id`. Removed from
+   HomePage.jsx rather than declared here; the sections keep their ids and
+   their `.mk-section`/`.mk-section--a`/`.mk-section--b` classes. */
 
 /* ==================================================================== hero = */
 .mk-hero {

@@ -30,7 +30,7 @@ export default function HomePage() {
 
   return (
     <MarketingShell title="" current="home">
-      <div className="mk-home">
+      <div>
         <section id="top" className="mk-hero">
           <div className="mk-shell mk-hero-top">
             <p className="mk-kicker">{hero.kicker}</p>
@@ -43,7 +43,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="problem" className="mk-section mk-section--a mk-problem">
+        <section id="problem" className="mk-section mk-section--a">
           <div className="mk-shell">
             <div className="mk-section-head">
               <p className="mk-kicker">{problem.kicker}</p>
@@ -61,7 +61,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="modes" className="mk-section mk-section--b mk-modes">
+        <section id="modes" className="mk-section mk-section--b">
           <div className="mk-shell">
             <div className="mk-section-head">
               <p className="mk-kicker">{modes.kicker}</p>
@@ -93,7 +93,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="material" className="mk-section mk-section--a mk-material">
+        <section id="material" className="mk-section mk-section--a">
           <div className="mk-shell">
             <div className="mk-section-head">
               <p className="mk-kicker">{material.kicker}</p>
@@ -118,7 +118,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="room" className="mk-section mk-section--b mk-react">
+        <section id="room" className="mk-section mk-section--b">
           <div className="mk-shell">
             <div className="mk-section-head">
               <p className="mk-kicker">{room.kicker}</p>
