@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import AuthPage from './auth/AuthPage';
 import OAuthCallback from './auth/OAuthCallback';
@@ -12,6 +12,10 @@ import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
+
+// Marketing is lazy so that a player on /play and a host on the stage never
+// download a brochure. One chunk per page; AuthLoading is the fallback.
+const HomePage = lazy(() => import('./marketing/HomePage'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
 // the whole point of it), so both need this and neither should own it.
@@ -35,6 +39,18 @@ function AuthLoading() {
       }}></div>
       <p>Loading...</p>
     </div>
+  );
+}
+
+// Wraps a lazily-loaded marketing page in its own Suspense boundary, with the
+// same spinner ProtectedRoute and RootGate already use, so a slow chunk load
+// never shows a blank screen. Later tasks (9-11) reuse this for their own
+// public marketing routes.
+function MarketingRoute({ page: Page }) {
+  return (
+    <Suspense fallback={<AuthLoading />}>
+      <Page />
+    </Suspense>
   );
 }
 
@@ -153,7 +169,7 @@ function ProtectedRoute({ children, requireAdmin = false }) {
  *
  * | loading    | the same inline spinner ProtectedRoute shows |
  * | signed in  | the host page, exactly as before             |
- * | signed out | the join/host landing page                   |
+ * | signed out | the marketing home, with the join field in its hero |
  *
  * The signed-in case is deliberate: making the only repeat users click through
  * a landing page on every visit would be a real cost paid for a hypothetical.
@@ -170,7 +186,7 @@ function RootGate() {
   }
 
   if (!currentUser) {
-    return <RootPage />;
+    return <MarketingRoute page={HomePage} />;
   }
 
   return (
@@ -242,6 +258,13 @@ function AppRouter() {
   // Authentication route
   if (path.startsWith('/auth')) {
     return <AuthPage onAuthSuccess={() => window.location.href = '/'} />;
+  }
+
+  // The focused join page. `/` used to be this; it is now the marketing home
+  // with a compact join field, and this stays as the page to send a room to.
+  // Exact match, like `/` below.
+  if (path === '/join') {
+    return <RootPage />;
   }
 
   /*

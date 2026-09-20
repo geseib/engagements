@@ -39,6 +39,7 @@ jest.mock('../HostRemote', () => () => <div data-testid="host-remote" />);
 jest.mock('../WordCloudTest', () => () => <div data-testid="wordcloud" />);
 jest.mock('../auth/AuthPage', () => () => <div data-testid="auth-page" />);
 jest.mock('../components/RootPage', () => () => <div data-testid="root-page" />);
+jest.mock('../marketing/HomePage', () => () => <div data-testid="home-page" />);
 
 // Imported AFTER jest.mock above, which jest hoists — the order is required,
 // not accidental. (Was an `import/first` disable directive; see .eslintrc.js
@@ -58,12 +59,12 @@ beforeEach(() => {
 afterEach(() => goTo('/'));
 
 describe('the root gate at /', () => {
-  test('a signed-out arrival gets the join page, not a sign-in wall', () => {
+  test('a signed-out arrival gets the marketing home, not a sign-in wall', async () => {
     // rejects: today's code, where `/` is the catch-all fallthrough and
     // ProtectedRoute renders AuthPage in place -- a participant who types the
     // domain off a slide is asked to sign in to an account they will never have
     render(<App />);
-    expect(screen.getByTestId('root-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument();
     expect(screen.queryByTestId('auth-page')).not.toBeInTheDocument();
   });
 
@@ -73,7 +74,7 @@ describe('the root gate at /', () => {
     mockAuthValue = { currentUser: signedInHost, loading: false, signOut: jest.fn() };
     render(<App />);
     expect(screen.getByTestId('game-host-page')).toBeInTheDocument();
-    expect(screen.queryByTestId('root-page')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
   });
 
   test('while auth is still resolving, neither page is committed to', () => {
@@ -81,7 +82,7 @@ describe('the root gate at /', () => {
     // beat on every reload a signed-in host does before the token resolves
     mockAuthValue = { currentUser: null, loading: true, signOut: jest.fn() };
     render(<App />);
-    expect(screen.queryByTestId('root-page')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
     expect(screen.queryByTestId('game-host-page')).not.toBeInTheDocument();
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
@@ -91,7 +92,7 @@ describe('the root gate at /', () => {
     // case -- either swallows every route in the app
     goTo('/some/unknown/path');
     render(<App />);
-    expect(screen.queryByTestId('root-page')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
     expect(screen.getByTestId('auth-page')).toBeInTheDocument();
   });
 
