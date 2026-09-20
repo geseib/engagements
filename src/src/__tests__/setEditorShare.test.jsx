@@ -92,7 +92,11 @@ test('the needs-changes banner shows for the flagged version and Edit Q14 focuse
   mockApi();
   render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />);
   const banner = await screen.findByRole('status');
-  expect(banner).toHaveTextContent(/not published/i);
+  // The banner names the VERSION and claims nothing about the library on its
+  // behalf — v2 here has no PUBLISHED marker, and a set whose v1 is still
+  // being served would reach this same state (setReviewBanner.test.jsx).
+  expect(banner).toHaveTextContent(/version 2 needs changes/i);
+  expect(banner).not.toHaveTextContent(/this set was not published/i);
   // R22: the banner's button reads "Edit Q14" (label(), not the bare id).
   fireEvent.click(within(banner).getByRole('button', { name: /edit q14/i }));
   // R17: q014 is bare, and is the 14th row (index 13) once sorted by sk.
