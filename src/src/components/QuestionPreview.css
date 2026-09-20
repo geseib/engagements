@@ -285,11 +285,20 @@
    which sets `overflow-wrap: anywhere` for a 98-character set title
    (QuestionSetsPanel.css), and the card's heading and prompt inherited it and
    broke long words anywhere. Nothing between the stage's body and its card sets
-   any of these three, so the stage's value is `normal`. */
+   any of these three, so the stage's value is `normal`.
+   THE EDGE IS THIS SHEET'S NOW. The pane restates the stage's ground on
+   purpose — it is what the room sees — and while the editor was paper the
+   `.qs-panel` behind it was #F1EDE4, so that ground alone was a 14.9:1 boundary
+   and no line was needed. The panel moved to --bg with the rest of the editor
+   and the two became the same colour, leaving the radius and the padding with
+   nothing to draw them on while the list beside it kept its --surface card and
+   its hairline. The stronger of the two rules, not the list's own: the list is
+   told apart by a lighter fill as well, and this pane has only the line. */
 .qprev-screen {
   min-width: 0;
   padding: 24px 28px;
   border-radius: 12px;
+  border: 1px solid var(--qprev-rule-strong);
   background: var(--bg);
   color: var(--text);
   font: 400 16px/1.6 var(--font-ui);

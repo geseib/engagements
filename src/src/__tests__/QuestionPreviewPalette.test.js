@@ -348,6 +348,42 @@ describe('the screen: the stage\'s own card on the stage\'s own ground', () => {
     expect(groundOf('.qprev-screen', DUSK)).toBe(hexIn(STAGE, '--bg'));
   });
 
+  test('the screen still reads as a screen now that its ground is the panel\'s', () => {
+    /*
+      THE PANE HAD NO EDGE OF ITS OWN AND DID NOT NEED ONE WHILE THE EDITOR WAS
+      PAPER. `.qprev-screen` restates the stage's ground on purpose — it is what
+      the room sees — and the `.qs-panel` it sits in used to be the paper
+      --surface-2: a 14.9:1 boundary, unmistakable with no line drawn. The panel
+      moved to --bg with the rest of the editor and the two became the SAME
+      colour, so a 12px border-radius and 24px of padding were left with no edge
+      to draw them on, while the list beside it kept its --surface card and its
+      hairline. Half the preview framed and half of it dissolved is not a
+      re-tint, so the pane takes the edge the paper panel used to give it free.
+      rejects: a later repaint that dissolves it again.
+    */
+    const panel = parseHex(hexIn(DUSK, PANEL_TOKEN));
+    expect(ratio(parseHex(groundOf('.qprev-screen', DUSK)), panel)).toBeLessThan(1.05); // the premise
+
+    const edge = ruleBody(QPREV_CSS, '.qprev-screen')
+      .match(/(?:^|;)\s*border:\s*(\d+)px\s+solid\s+var\((--[\w-]+)\)/);
+    expect(edge).not.toBeNull();
+    expect(Number(edge[1])).toBeGreaterThan(0);
+
+    /* AND A LINE THAT CAN BE SEEN, measured where it is actually drawn: a
+       border paints over its own element's background box, so each hairline is
+       composited on the ground of the pane it encloses. The screen's must be
+       STRONGER than the list's, not merely present — the list is told apart by
+       a lighter fill as well as its hairline and this pane has only the line.
+       rejects: reaching for --qprev-rule, which lands under the list's own. */
+    const lineOn = (name, ground) => {
+      const parts = rgbaIn(SCOPE, name).match(/[\d.]+/g).map(Number);
+      return ratio(alphaOver(parts.slice(0, 3), ground, parts[3]), ground);
+    };
+    const list = ruleBody(QPREV_CSS, '.qprev-list').match(/border:\s*\d+px\s+solid\s+var\((--[\w-]+)\)/);
+    expect(lineOn(edge[2], parseHex(groundOf('.qprev-screen', DUSK))))
+      .toBeGreaterThan(lineOn(list[1], parseHex(groundOf('.qprev-list', DUSK))));
+  });
+
   test('the screen restates the stage\'s own text wrapping, which the host shelf\'s dialog changes', () => {
     // `.qsets-modal` sets `overflow-wrap: anywhere` (QuestionSetsPanel.css, for
     // a 98-character set title) and the host shelf renders the editor inside
