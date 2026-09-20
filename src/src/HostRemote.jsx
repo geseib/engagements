@@ -5,6 +5,7 @@ import Icon from './components/Icon';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
 import RemoteFocusPanel from './components/RemoteFocusPanel';
+import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import { authFetch } from './auth/authFetch';
 import { categoryRows } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
@@ -1039,6 +1040,36 @@ function HostRemote() {
                 not draw them is not an instruction to delete them. */}
             <section className="hr-card" aria-label="Session">
               <h2 className="hr-card-heading">Session</h2>
+
+              {/* WHICH TEAM THIS PHONE IS ACTING AS, and the only place it can
+                  be changed from.
+
+                  THIS IS THE FIX FOR THE REPORTED FAULT, not a label added
+                  beside it. `auth/authFetch.js` sends `X-Engage-Org` from THIS
+                  browser's localStorage, and the only thing in the codebase
+                  that ever writes it is `ActiveOrgSwitcher`'s mount effect —
+                  which lived solely on `WelcomeScreen`. A phone opening
+                  `/remote?gameId=…` never passes through that screen, so it
+                  sent no organisation; `auth/pick-active-org.js` then resolved
+                  NONE for a host in more than one, because rule 2 needs a
+                  single membership and rule 3's `defaultOrgId` is written by
+                  nothing today (`auth/authorizer.js:getDefaultOrgId` says so).
+                  With no organisation resolved, `tenant.callerMayDriveSession`
+                  refuses every host control on a session that HAS one — 404,
+                  "Game not found" — and `tenant.readableScopes` drops the org
+                  library, so the session's own question set is never looked for
+                  at all. Meanwhile the unauthenticated polls sail through the
+                  same guard on its "anonymous participant" line, which is why
+                  the phone could watch a session it could not drive.
+
+                  Mounting the same component here resolves one on arrival and
+                  heals a stored `~platform`, which this surface has no use for.
+                  It draws NOTHING for a host with a single organisation — the
+                  server resolves that case on its own — so it costs a phone
+                  column nothing in the common case, and in the uncommon one it
+                  is the only way to correct a wrong guess without leaving the
+                  session. */}
+              <ActiveOrgSwitcher />
               <div className="hr-grid">
                 {/* THE WAY IN TO THE THREE LISTS.
 
