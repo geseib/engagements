@@ -113,6 +113,19 @@ const GAPPED = {
   optionD: 'The Danube',
   correctAnswer: 'The Seine',
 };
+/* A set that records its answer as a LOWERCASE bare letter. Sets in the wild
+   do: the host phone's decoder matches `/^[A-F]$/i` on purpose
+   (config/hostRemote.js `correctOptionIndex`), and nothing upstream tidies the
+   spelling on the way to the stage — lambda-functions/game/get-question.js
+   rewrites an answer only when it startsWith('Option'). */
+const LOWERCASE_LETTER = {
+  id: 'q-11',
+  title: 'Which river runs through Rome?',
+  optionA: 'The Seine',
+  optionB: 'The Thames',
+  optionC: 'The Tiber',
+  correctAnswer: 'c',
+};
 const ART = {
   id: 'a-2', title: 'THE COMPANY STEPS OUT', detail: 'Oil on canvas.', image: '/assets/art/x.jpg',
 };
@@ -191,6 +204,26 @@ describe('REVEAL — the trivia RESULTS option treatment', () => {
     expect([...container.querySelectorAll('.ltr')].map((n) => n.textContent)).toEqual(['A', 'B', 'C']);
     expect([...container.querySelectorAll('.pct')].map((n) => n.textContent)).toEqual(['0%', '67%', '33%']);
     expect([...container.querySelectorAll('.opt')].map((n) => n.className)).toEqual(['opt dim', 'opt correct', 'opt dim']);
+  });
+
+  test('an answer recorded as a lowercase bare letter marks its option, and only it', () => {
+    // rejects: comparing the stored letter against the stage's uppercase
+    // positional letter as stored. Every option came back dim and the room was
+    // never told which answer was right.
+    //
+    // DELIBERATELY NOT COMPARED AGAINST OracleTriviaResults. The oracle calls
+    // the very `isCorrectTriviaOption` under test, so a card and an oracle that
+    // both mark nothing are equal — the innerHTML cases above stay green right
+    // through this bug, which is why it survived them.
+    const { container } = render(
+      <QuestionCard phase="REVEAL" question={LOWERCASE_LETTER} gameType="trivia" answers={[]} />
+    );
+    const marked = [...container.querySelectorAll('.opt.correct')];
+    expect(marked).toHaveLength(1);
+    expect(marked[0].querySelector('.ltr').textContent).toBe('C');
+    expect(marked[0].querySelector('.txt').textContent).toBe(LOWERCASE_LETTER.optionC);
+    expect([...container.querySelectorAll('.opt')].map((n) => n.className))
+      .toEqual(['opt dim', 'opt dim', 'opt correct']);
   });
 
   test('with no question, the stage\'s empty options block — as the inline markup drew it', () => {

@@ -8,10 +8,12 @@
  * (components/stage/Pager.jsx's header) — so every decision the card makes
  * lives here, where a test can reach it without mounting anything.
  *
- * NOTHING HERE MAY CHANGE WHAT THE STAGE SHOWS. `TRIVIA_OPTION_KEYS` and
- * `isCorrectTriviaOption` moved here verbatim from GameHostPage.jsx (lines
- * 77-107 at 29a055a7); `triviaOptions` and `optionShare` are the two inline
- * expressions its ASK and RESULTS markup computed, lifted unchanged.
+ * NOTHING HERE MAY CHANGE WHAT THE STAGE SHOWS WITHOUT A TEST SAYING SO.
+ * `TRIVIA_OPTION_KEYS` and `isCorrectTriviaOption` moved here verbatim from
+ * GameHostPage.jsx (lines 77-107 at 29a055a7); `triviaOptions` and
+ * `optionShare` are the two inline expressions its ASK and RESULTS markup
+ * computed, lifted unchanged. `isCorrectTriviaOption` has since been changed
+ * once, on purpose — see its own note.
  */
 
 /** Trivia answer slots, in display order. */
@@ -23,7 +25,17 @@ export const TRIVIA_OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', '
  * Question sets in the wild record `correctAnswer` four different ways —
  * "OptionA", "A", the option's own text, or an array of any of those — so the
  * comparison has to try all of them. Lifted verbatim out of the RESULTS render
- * when that moved onto the stage; the logic is unchanged.
+ * when that moved onto the stage.
+ *
+ * ONE DELIBERATE CHANGE SINCE THE LIFT: a bare letter is read whatever its
+ * case. The inline version compared 'c' only against the uppercase positional
+ * letter and guarded its bare-letter branch on `/[A-F]/` with no `i`, so a set
+ * storing a lowercase letter matched NOTHING and the stage's RESULTS marked no
+ * answer at all. The host's phone had always read those sets
+ * (config/hostRemote.js `correctOptionIndex` matches `/^[A-F]$/i` on purpose),
+ * so the phone marked an answer the room could not see. Nothing upstream
+ * closes the gap: lambda-functions/game/get-question.js rewrites an answer
+ * only when it startsWith('Option').
  */
 export function isCorrectTriviaOption(question, key, letter) {
   if (!question) return false;
@@ -39,8 +51,15 @@ export function isCorrectTriviaOption(question, key, letter) {
       const correctLetter = correct.replace('Option', '');
       if (`option${correctLetter}` === key || correctLetter === letter) return true;
     }
-    if (typeof correct === 'string' && correct.length === 1 && /[A-F]/.test(correct)) {
-      if (`option${correct}` === key || correct === letter) return true;
+    /* CASE-FOLDED ONCE, for the bare letter only. `letter` is always the
+       stage's uppercase positional letter, so a set recording 'c' matched
+       neither it nor the slot id, and the projector drew every option dimmed
+       with none marked — the room was never told which answer was right. The
+       option's own TEXT above is still compared exactly: an answer is only the
+       same answer if it is spelled the same way. */
+    if (typeof correct === 'string' && correct.length === 1 && /[A-F]/i.test(correct)) {
+      const bare = correct.toUpperCase();
+      if (`option${bare}` === key || bare === letter) return true;
     }
   }
   return false;

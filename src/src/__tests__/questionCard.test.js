@@ -21,12 +21,22 @@ const correctSlots = (correctAnswer) => ['A', 'B', 'C', 'D']
   .filter((letter) => isCorrectTriviaOption({ ...QUESTION, correctAnswer }, `option${letter}`, letter));
 
 describe('isCorrectTriviaOption — every way a set records the answer', () => {
+  /* A LOWERCASE bare letter is a spelling sets really use, and until it was
+     handled here the stage marked NOTHING for such a set — every option dimmed,
+     the room never told which answer was right. The host's phone read the same
+     sets correctly all along: config/hostRemote.js `correctOptionIndex` matches
+     `/^[A-F]$/i` deliberately. Nothing upstream closes the gap —
+     lambda-functions/game/get-question.js rewrites an answer only when it
+     startsWith('Option'), so a bare letter reaches the card exactly as stored. */
+
   test.each([
     ['the slot id', 'OptionB'],
     ['the bare letter', 'B'],
     ['the option\'s own text', QUESTION.optionB],
+    ['the bare letter in lower case', 'b'],
     ['an array of the slot id', ['OptionB']],
     ['an array of the bare letter', ['B']],
+    ['an array of the bare letter in lower case', ['b']],
     ['an array of the text', [QUESTION.optionB]],
   ])('%s marks B and only B', (_label, correctAnswer) => {
     expect(correctSlots(correctAnswer)).toEqual(['B']);
