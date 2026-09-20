@@ -90,6 +90,11 @@ async function chooseFile(text, name = 'questions.csv') {
 const typeSelect = () => screen.getByLabelText(/engagement type/i);
 const promptSelect = () => screen.getByLabelText(/AI summary prompt/i);
 const uploadButton = () => screen.getByRole('button', { name: /^upload question set$/i });
+/* A set names the shelf it will sit on before it can be made — see
+   uploadPanelTopic.test.jsx, which owns that behaviour. The tests below are
+   about other things, so they satisfy it and move on. */
+const chooseShelf = (id = 'business-work') =>
+  fireEvent.change(screen.getByLabelText(/topic/i), { target: { value: id } });
 
 const GOOD = 'Category,Title,Detail_lesson\nRetro,"What broke, and when?",Context\nRetro,And after?,Context';
 
@@ -266,6 +271,7 @@ describe('the file is read before it is sent', () => {
     // to a SUCCESS message. rejects: keeping it there.
     mount();
     await chooseFile('Category,Title\nRetro,Fine\n,Missing category\nRetro,Also fine');
+    chooseShelf();
     const table = screen.getByRole('table');
     expect(within(table).getByText('Missing Category')).toBeInTheDocument();
     expect(within(table).getByText('3')).toBeInTheDocument();
@@ -289,6 +295,7 @@ describe('the file is read before it is sent', () => {
     // reports this file clean because all of its rows parse.
     mount({ engagementType: 'poll' });
     await chooseFile('Category,Title,Option1,Option2\nOnboarding,How often?,Daily,Weekly');
+    chooseShelf();
     expect(screen.getByText(/wrong shape/i)).toBeInTheDocument();
     expect(uploadButton()).toBeEnabled();
   });
@@ -328,6 +335,7 @@ describe('the upload itself', () => {
     mount({ onUploaded });
     await chooseFile(GOOD, 'q3-retro.csv');
     fireEvent.change(screen.getByLabelText(/question set title/i), { target: { value: 'Q3 Retro' } });
+    chooseShelf();
     fireEvent.click(uploadButton());
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/Created "Q3 Retro"/));
@@ -337,6 +345,7 @@ describe('the upload itself', () => {
       fileName: 'q3-retro.csv',
       customTitle: 'Q3 Retro',
       engagementType: 'call-and-answer',
+      topic: 'business-work',
     });
     expect(onUploaded).toHaveBeenCalled();
   });
@@ -348,6 +357,7 @@ describe('the upload itself', () => {
     mount({ onUploaded }, { uploadStatus: 400 });
     await chooseFile(GOOD);
     fireEvent.change(screen.getByLabelText(/question set title/i), { target: { value: 'Q3 Retro' } });
+    chooseShelf();
     fireEvent.click(uploadButton());
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Missing required columns/);
