@@ -1,0 +1,132 @@
+/*
+ * The compact join entry for a page whose main job is something else. Visual
+ * values come from the approved `.jce` block in
+ * docs/design/marketing-redesign/01-home.html + mk.css, but this file styles
+ * `.jce-go` itself (rather than relying on `.mk-btn .mk-btn-primary`) because
+ * the component must render correctly outside `.mk-root` too. Every var()
+ * fallback below is the literal value mk.css's `.mk-root` rule assigns that
+ * token, so this stays visually identical whether or not the mk tokens are
+ * in scope.
+ */
+
+.jce {
+  display: grid;
+  gap: 12px;
+  min-width: 288px;
+  max-width: 320px;
+  background: var(--mk-wash-card, rgba(27, 41, 66, 0.82));
+  border: 1px solid var(--mk-rule-strong, rgba(244, 237, 228, 0.26));
+  border-radius: var(--mk-radius, 16px);
+  padding: 18px 20px 20px;
+}
+
+.jce-label {
+  display: block;
+  font-size: var(--mk-t-label, 13px);
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--mk-text, #F4EDE4);
+  margin: 0;
+}
+
+.jce-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.jce-codewrap {
+  position: relative;
+  flex: 1 1 auto;
+}
+
+.jce-cells {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  pointer-events: none;
+}
+
+.jce-cell {
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mk-radius-sm, 10px);
+  background: rgba(15, 26, 46, 0.55);
+  border: 2px solid var(--mk-rule-strong, rgba(244, 237, 228, 0.26));
+  font-family: var(--mk-font-display, "Archivo Expanded", "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif);
+  font-weight: 800;
+  font-size: var(--mk-t-head, 30px);
+  line-height: 1;
+  color: var(--mk-text, #F4EDE4);
+}
+
+.jce-cell.jce-next {
+  border-color: var(--mk-amber, #F6A94C);
+}
+
+.jce-bad .jce-cell {
+  border-color: var(--danger-text, #EF8C86);
+}
+
+/*
+ * Overlaid on the cells, not display:none: it stays focusable, pasteable and
+ * screen-reader operable. The mockup's `hidden` attribute is a static-mockup
+ * shortcut, not a real interaction model.
+ */
+.jce-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: var(--mk-t-body, 17px);
+  letter-spacing: 1em;
+  padding: 0;
+}
+
+.jce-go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 54px;
+  min-height: 54px;
+  padding-inline: 20px;
+  border: 2px solid var(--mk-amber, #F6A94C);
+  border-radius: var(--mk-radius-sm, 10px);
+  background: var(--mk-amber, #F6A94C);
+  color: var(--mk-bg, #0F1A2E);
+  font: 700 var(--mk-t-body, 17px)/1.2 var(--mk-font-ui, "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  cursor: pointer;
+}
+
+.jce-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.jce-hint {
+  margin: 0;
+  font-size: var(--mk-t-label, 13px);
+  color: var(--mk-text, #F4EDE4);
+  opacity: 0.86;
+}
+
+.jce-missing {
+  margin: 0;
+  font-size: var(--mk-t-label, 13px);
+  color: var(--danger-text, #EF8C86);
+}
+
+.jce-note {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: var(--mk-t-label, 13px);
+  color: var(--mk-muted, #9BA8BE);
+}
