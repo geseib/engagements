@@ -109,12 +109,24 @@ exports.handler = async (event) => {
     const reviews = await readReviews(db, tableName, found.ref, entries.map((e) => e.version));
 
     /*
-      MAY THIS CALLER SEE WHAT THE CHECK MEASURED?
+      MAY THIS CALLER READ THE CHECK'S ACCOUNT OF THIS SET?
 
-      A status and a decision note are what every reader of a set gets, and that
-      is unchanged. The MEASUREMENT — the per-category tally, and every band the
-      check saw named by the question it saw it on — is the author's own account
-      of their own content, and it goes to the library the row is really in:
+      THE WHOLE REVIEW ROW, not the measurement alone. This gate once covered
+      `tally` and `observed` and left the four fields beside them — the status,
+      the per-question findings, the reasons and the note — going to every
+      reader of the set. That was harmless only while nothing ever wrote a
+      REVIEW row outside an organisation's own partition, and two writers now
+      do: `checkPlatformSet` writes Engage's own verdict on Engage's own SHARED
+      set, and `publishSnapshot` writes a public copy's row carrying the SOURCE
+      organisation's per-question findings and the Engage reviewer's own
+      sentence. Both of those rows are readable by id from every signed-in
+      account (`readableScopes` gives everybody platform and public), so a
+      half-gate handed one customer another's questions, bands and
+      model-written explanations — and handed every customer Engage's internal
+      finding about the shared library, which the author banner then rendered
+      to them as a statement about their own content.
+
+      So the row goes to the library it is in:
 
         org        this organisation's members. `findSetForCaller` only ever
                    probes the CALLER's org partition, so another organisation's
@@ -128,39 +140,39 @@ exports.handler = async (event) => {
         public     nobody. A public copy is somebody's published set; the staff
                    score card is where its measurement is read.
 
-      A reader outside that gets no field AT ALL rather than an empty one: an
-      absent tally means "not measured", and handing a reader who may not see it
+      WHAT A READER OUTSIDE IT STILL GETS is what they were owed before either
+      of those rows existed, which is why nothing that worked yesterday reads
+      differently today:
+
+        platform   nothing. There was no row to read, so `unreviewed` is not a
+                   new silence — it is the unchanged one.
+        public     the STATUS alone. A copy is in the public library BECAUSE it
+                   passed, so "passed" is already a public fact about it; whose
+                   questions were seen, at what band, and what the reviewer
+                   wrote about them are not.
+
+      The measurement fields are ABSENT rather than empty for such a reader: an
+      absent tally means "not measured", and handing someone who may not see it
       the same answer would quietly teach them to read "nothing was found".
     */
-    const mayReadMeasurement = tenant.canManageScope(event, found.ref.scope, found.ref.orgId);
-
-    // WHERE EACH VERSION WENT. One GetItem per version: this is the editor's
-    // Versions panel, not the list, and a set has a handful of versions.
-    const published = new Map();
-    for (const e of entries) {
-      const res = await db.send(new GetCommand({ TableName: tableName, Key: publishedKey(found.ref, e.version) })); // eslint-disable-line no-await-in-loop
-      published.set(e.version, res && res.Item
-        ? { publicSetId: res.Item.publicSetId, publicVersion: res.Item.publicVersion, at: res.Item.at }
-        : null);
-    }
-
-    const versions = entries.map((entry) => {
-      const review = reviews.get(entry.version) || {};
-      const measured = mayReadMeasurement ? measurementOf(review) : null;
+    const mayReadReview = tenant.canManageScope(event, found.ref.scope, found.ref.orgId);
+    const publicCopy = found.ref.scope === tenant.PUBLIC;
+    const reviewFacts = (review) => {
+      if (!mayReadReview) {
+        // No `reviewTally` and no `reviewObserved` — absent, not empty, per the
+        // last paragraph above. Everything else is the default a version with
+        // no row has always produced.
+        return {
+          review: publicCopy ? (review.status || 'unreviewed') : 'unreviewed',
+          reviewFindings: [],
+          checkedAt: null,
+          reasons: [],
+          reviewNote: '',
+          unfinished: false,
+        };
+      }
+      const measured = measurementOf(review);
       return {
-        version: entry.version,
-        createdAt: entry.createdAt || null,
-        questionCount: entry.questionCount || 0,
-        categoryCount: entry.categoryCount || 0,
-        sourceFile: entry.sourceFile || '',
-        note: entry.note || '',
-        isActive: entry.version === activeVersion,
-        /*
-          PROJECTED EXPLICITLY, like every other field here. This map is a
-          whitelist: a field not named on it does not reach the client however
-          faithfully it is stored, which is why adding the row was only half the
-          work.
-        */
         review: review.status || 'unreviewed',
         reviewFindings: review.findings || [],
         checkedAt: review.checkedAt || null,
@@ -181,8 +193,41 @@ exports.handler = async (event) => {
           renders this is the set editor, which is already holding the plaintext
           questions these ids name.
         */
-        ...(measured ? { reviewTally: measured.tally, reviewObserved: measured.observed } : {}),
+        reviewTally: measured.tally,
+        reviewObserved: measured.observed,
         unfinished: isUnfinished(review),
+      };
+    };
+
+    // WHERE EACH VERSION WENT. One GetItem per version: this is the editor's
+    // Versions panel, not the list, and a set has a handful of versions.
+    const published = new Map();
+    for (const e of entries) {
+      const res = await db.send(new GetCommand({ TableName: tableName, Key: publishedKey(found.ref, e.version) })); // eslint-disable-line no-await-in-loop
+      published.set(e.version, res && res.Item
+        ? { publicSetId: res.Item.publicSetId, publicVersion: res.Item.publicVersion, at: res.Item.at }
+        : null);
+    }
+
+    const versions = entries.map((entry) => {
+      const review = reviews.get(entry.version) || {};
+      return {
+        version: entry.version,
+        createdAt: entry.createdAt || null,
+        questionCount: entry.questionCount || 0,
+        categoryCount: entry.categoryCount || 0,
+        sourceFile: entry.sourceFile || '',
+        note: entry.note || '',
+        isActive: entry.version === activeVersion,
+        /*
+          PROJECTED EXPLICITLY, like every other field here. This map is a
+          whitelist: a field not named on it does not reach the client however
+          faithfully it is stored, which is why adding the row was only half the
+          work. `reviewFacts` above is the same whitelist for everything that
+          comes off the REVIEW row, kept in one place because the answer to
+          "may this reader see it" is one answer for all of them.
+        */
+        ...reviewFacts(review),
         published: published.get(entry.version) || null,
         pinnedByGames: pinnedBySet
           .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)

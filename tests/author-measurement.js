@@ -49,6 +49,8 @@ const SET = 'safety';
 const SRC = { scope: 'org', orgId: ORG, setId: SET };
 const HOUSE = 'icebreakers';
 const HOUSEREF = { scope: 'platform', orgId: '', setId: HOUSE };
+const COPY = 'org_acme-safety';
+const COPYREF = { scope: 'public', orgId: '', setId: COPY };
 
 /** Facts that belong to the reviewer, not to the author. Distinctive on purpose. */
 const REVIEWER = 'dai-the-reviewer';
@@ -107,13 +109,38 @@ async function seed() {
   });
 }
 
-/** Engage's own shared set, checked. Nothing checks one yet; the rule is the point. */
-async function seedHouse() {
+/**
+ * Engage's own shared set, checked — which `checkPlatformSet` now really does
+ * (admin/check-question-set.js), so the outcome on this row is Engage's own
+ * account of Engage's own library and every organisation can ask for it by id.
+ */
+async function seedHouse(status = R.STATUS.PASSED) {
   H.seedRow({
     ...V.setMetadataKey(HOUSEREF), name: 'Icebreakers', engagementType: 'poll',
     activeVersion: 1, questionCount: 12, versions: [{ version: 1, questionCount: 12 }],
   });
-  await R.writeReview(db, T, HOUSEREF, 1, { status: R.STATUS.PASSED, findings: [], note: '12/12 clean', tally: TALLY, observed: OBSERVED });
+  await R.writeReview(db, T, HOUSEREF, 1, {
+    status, findings: status === R.STATUS.PASSED ? [] : FINDINGS, note: '11/12 clean',
+    reasons: ['guardrail'], tally: TALLY, observed: OBSERVED,
+  });
+}
+
+/**
+ * A PUBLIC copy: somebody else's published set, which `publishSnapshot` writes
+ * a REVIEW row for carrying THAT organisation's findings and the Engage
+ * reviewer's own sentence (admin/shared/publish-set.js). `readableScopes`
+ * probes public for every caller, so a rival can ask for it by id.
+ */
+async function seedCopy() {
+  H.seedRow({
+    ...V.setMetadataKey(COPYREF), name: 'Safety', engagementType: 'trivia', scope: 'public', orgId: '',
+    sourceOrgId: ORG, sourceSetId: SET, sourceVersion: 3,
+    activeVersion: 1, questionCount: 30, versions: [{ version: 1, questionCount: 30 }],
+  });
+  await R.writeReview(db, T, COPYREF, 1, {
+    status: R.STATUS.PASSED, findings: FINDINGS, note: 'Historical, not gratuitous.',
+    reasons: ['guardrail'], tally: TALLY, observed: OBSERVED,
+  });
 }
 
 (async () => {
@@ -213,29 +240,107 @@ async function seedHouse() {
   });
 
   /*
-    ENGAGE'S OWN LIBRARY IS READ BY EVERYBODY AND AUTHORED BY ENGAGE.
+    ── THE WHOLE REVIEW ROW BELONGS TO THE LIBRARY IT IS IN ─────────────────
 
-    The scope the row is really in decides, so the same rule that hands an
-    organisation its own measurement hands Engage its own — and hands an
-    organisation reading the shared library nothing, which is what a reader who
-    did not write the set is owed. Nothing checks a platform set yet; the rule
-    is what this pins.
+    The gate used to cover the measurement ALONE, and the four fields beside it
+    — the status, the findings, the reasons and the note — went to every reader
+    of the set. That was harmless only while nothing ever wrote a REVIEW row
+    outside an organisation's own partition, and two writers now do:
+
+      checkPlatformSet   Engage's internal check of Engage's own SHARED set.
+                         Read by every signed-in customer, it disclosed Engage's
+                         own finding — and the author banner rendered it to them
+                         as a statement about THEIR content, which it is not.
+      publishSnapshot    a public copy's row, which carries the SOURCE
+                         organisation's per-question findings and the Engage
+                         reviewer's own sentence. Read by any rival.
+
+    So the rule is the row, not two fields of it: a reader who may not manage
+    the library gets what they were owed BEFORE any of those rows existed.
+
+      platform   nothing. Before `checkPlatformSet` there was no row, so
+                 `unreviewed` is not a new silence — it is the unchanged one.
+      public     the STATUS and nothing else. A copy is in the public library
+                 BECAUSE it passed, so the status is already a public fact;
+                 whose questions were seen, at what band, and what the reviewer
+                 wrote about them are not.
   */
-  await H.test('an organisation reading Engage\'s shared library is not even told the fields exist', async () => {
+  await H.test('an organisation reading Engage\'s shared library is told nothing about Engage\'s own check', async () => {
     await seed();
-    await seedHouse();
-    const e = H.orgEvent({ orgId: ORG, role: 'member', method: 'GET', setId: HOUSE });
-    const [v1] = parse(await ask(e));
-    assert.strictEqual(v1.review, 'passed', 'the status is public to every reader, as it was');
+    await seedHouse(R.STATUS.FLAGGED);
+    const res = await ask(H.orgEvent({ orgId: ORG, role: 'member', method: 'GET', setId: HOUSE }));
+    const [v1] = parse(res);
+    assert.strictEqual(v1.review, 'unreviewed', 'Engage\'s own verdict on its own set reached a customer');
+    assert.deepStrictEqual(v1.reviewFindings, []);
+    assert.deepStrictEqual(v1.reasons, []);
+    assert.strictEqual(v1.reviewNote, '');
+    assert.strictEqual(v1.checkedAt, null);
+    assert.strictEqual(v1.unfinished, false);
     assert.ok(!('reviewTally' in v1), 'a reader who did not write the set is offered a measurement');
     assert.ok(!('reviewObserved' in v1), 'a reader who did not write the set is offered observations');
+    for (const leak of ['VIOLENCE', 'guardrail', '11/12 clean', 'The injury']) {
+      assert.ok(!res.body.includes(leak), `Engage's own check leaked ${JSON.stringify(leak)} to a customer`);
+    }
   });
+
+  // rejects: a check still running on one of Engage's sets reading, to a
+  // customer, as a check running on theirs.
+  await H.test('a check running on Engage\'s own set is not reported to a customer either', async () => {
+    await seed();
+    H.seedRow({
+      ...V.setMetadataKey(HOUSEREF), name: 'Icebreakers', engagementType: 'poll',
+      activeVersion: 1, questionCount: 12, versions: [{ version: 1, questionCount: 12 }],
+    });
+    await R.writeReview(db, T, HOUSEREF, 1, { status: R.STATUS.CHECKING, checkedAt: '2020-01-01T00:00:00.000Z' });
+    const [v1] = parse(await ask(H.orgEvent({ orgId: ORG, role: 'member', method: 'GET', setId: HOUSE })));
+    assert.strictEqual(v1.review, 'unreviewed');
+    assert.strictEqual(v1.unfinished, false, 'a customer was told Engage\'s check did not finish');
+  });
+
   await H.test('Engage acting as Engage is told what the check measured on Engage\'s own set', async () => {
     await seed();
-    await seedHouse();
+    await seedHouse(R.STATUS.FLAGGED);
     const [v1] = parse(await ask(H.platformEvent({ method: 'GET', path: { setId: HOUSE } })));
+    assert.strictEqual(v1.review, 'flagged');
+    assert.deepStrictEqual(v1.reviewFindings, FINDINGS);
+    assert.strictEqual(v1.reviewNote, '11/12 clean');
     assert.deepStrictEqual(v1.reviewTally, TALLY);
     assert.deepStrictEqual(v1.reviewObserved, OBSERVED);
+  });
+
+  // rejects: one organisation's questions, bands and model-written sentences —
+  // and the Engage reviewer's own note about them — reaching a rival through
+  // the public copy, which `readableScopes` lets everybody ask for by id.
+  await H.test('a public copy tells a reader it passed, and nothing about whose set it was', async () => {
+    await seed();
+    await seedCopy();
+    for (const caller of [H.orgEvent({ orgId: RIVAL, role: 'member', method: 'GET', setId: COPY }),
+      H.orgEvent({ orgId: ORG, role: 'owner', method: 'GET', setId: COPY }),
+      H.platformEvent({ method: 'GET', path: { setId: COPY } })]) {
+      const res = await ask(caller); // eslint-disable-line no-await-in-loop
+      const [v1] = parse(res);
+      assert.strictEqual(v1.review, 'passed', 'a copy in the public library still reads as checked');
+      assert.deepStrictEqual(v1.reviewFindings, [], 'the source organisation\'s findings reached a reader of the copy');
+      assert.strictEqual(v1.reviewNote, '', 'the reviewer\'s own sentence reached a reader of the copy');
+      assert.deepStrictEqual(v1.reasons, []);
+      assert.ok(!('reviewTally' in v1));
+      for (const leak of ['Historical', 'VIOLENCE', 'The injury']) {
+        assert.ok(!res.body.includes(leak), `the public copy leaked ${JSON.stringify(leak)}`);
+      }
+    }
+  });
+
+  // rejects: the gate growing a hole by a field being ADDED to the projection
+  // above it. The shape a non-manager gets is a whitelist too.
+  await H.test('the shape a reader outside the library gets is fixed, and holds no review facts', async () => {
+    await seed();
+    await seedHouse(R.STATUS.FLAGGED);
+    const [v1] = parse(await ask(H.orgEvent({ orgId: ORG, role: 'member', method: 'GET', setId: HOUSE })));
+    assert.deepStrictEqual(Object.keys(v1).sort(), [
+      'categoryCount', 'checkedAt', 'createdAt', 'isActive', 'note', 'pinnedByGames', 'published',
+      'questionCount', 'reasons', 'review', 'reviewFindings', 'reviewNote', 'sourceFile',
+      'unfinished', 'version',
+    ]);
   });
 
   H.summary();
