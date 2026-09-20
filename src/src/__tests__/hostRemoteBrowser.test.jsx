@@ -280,6 +280,35 @@ describe('the phone question browser', () => {
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
   });
 
+  /*
+    THE SET IS READ THROUGH THE SESSION, NOT THROUGH THIS DEVICE'S LIBRARY.
+
+    Reported from a live room: the Questions tab said "Could not read the
+    question set" about a set the host's own team owns. `/question-sets/{id}/…`
+    resolves a slug inside the organisation the browser is ACTING FOR, and a
+    phone that has never picked a team acts for the account's personal one, so
+    the team's set is simply absent. `?gameId=` lets the session name its own
+    library instead (set-version.js:findSetForSession) — the server still
+    checks that this caller may drive that session.
+
+    Rejects: dropping the gameId back out of either fetch, which reads as
+    "works on the laptop, 404s on the phone" and is invisible to every other
+    test here, because the mock answers both URLs the same way.
+  */
+  it('names the session it is driving when it reads the set', async () => {
+    serve();
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    await screen.findByText(TRIVIA.title);
+
+    const urls = global.fetch.mock.calls.map(([url]) => String(url));
+    const questions = urls.find((u) => u.includes('/questions'));
+    const categories = urls.find((u) => u.includes('/categories'));
+
+    expect(questions).toContain('gameId=4821');
+    expect(categories).toContain('gameId=4821');
+  });
+
   // Rejects: rendering rows through setupPanel's `browserRow`, or dropping the
   // CORRECT flag to "match the stage". This is the whole reason the surface
   // exists, and it is exactly the change a consistency pass would make.

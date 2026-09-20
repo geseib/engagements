@@ -105,6 +105,11 @@ const NO_RIGHT_ANSWER = 'This set does not say which option is right.';
 
 export default function RemoteQuestionBrowser({
   setId,
+  /* THE SESSION THIS SET IS BEING READ FOR, and not decoration: it is what
+     lets the server resolve the set out of the library the SESSION names
+     rather than the one this browser happens to be acting for. See the fetch
+     below. */
+  gameId = '',
   gameType = '',
   unaskedCount = null,
   busy = false,
@@ -154,7 +159,17 @@ export default function RemoteQuestionBrowser({
         // organisation therefore cannot see an org-owned set at all, and the
         // 404 that produces is what `questionSetFailure` has to describe
         // without claiming the set is gone.
-        const res = await authFetch(`${apiBase()}question-sets/${setId}/questions`);
+        //
+        // WHICH IS WHY THE SESSION COMES TOO. `?gameId=` asks the server for
+        // the set THIS SESSION PLAYS, resolved out of the library the session
+        // row names instead of the one this browser is standing in — the
+        // owner's phone, which had picked no team, is the case that made it
+        // necessary (set-version.js:findSetForSession). It is not a way in:
+        // the server still requires that this caller may drive that session,
+        // and a session it does not recognise falls back to the search above,
+        // so the team switcher remains a convenience rather than a condition.
+        const forSession = gameId ? `?gameId=${encodeURIComponent(gameId)}` : '';
+        const res = await authFetch(`${apiBase()}question-sets/${setId}/questions${forSession}`);
         if (cancelled) return;
         if (!res.ok) {
           setFailure(questionSetFailure({ status: res.status }));
@@ -172,7 +187,7 @@ export default function RemoteQuestionBrowser({
     })();
 
     return () => { cancelled = true; };
-  }, [setId, reloadKey]);
+  }, [setId, gameId, reloadKey]);
 
   /*
     THE ROWS AND THE QUESTIONS THEY CAME FROM, in one pass.

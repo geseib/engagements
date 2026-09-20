@@ -184,6 +184,61 @@ async function findSetMetadata(db, tableName, event, setId, requestedScope) {
   return null;
 }
 
+/**
+ * THE SET A SESSION PLAYS, for a caller who is entitled to drive that session.
+ *
+ * `findSetMetadata` above searches the libraries the CALLER IS ACTING FOR, and
+ * that is right for every read somebody makes on their own behalf: a slug names
+ * one set per scope, and only the person can say which of their libraries they
+ * mean.
+ *
+ * It is wrong for exactly one case, reported from a live room. A host drove a
+ * session from their phone and the Questions tab said "Could not read the
+ * question set" about a set their own team owns — the phone had chosen no team,
+ * so it was acting for the account's personal organisation, and the team's set
+ * is not in it. Fixing who may drive the room (`tenant.callerMayDriveSession`)
+ * made the BUTTONS work and left this read failing.
+ *
+ * Here the library is not the caller's to choose, because THE SESSION ROW
+ * NAMES IT (`gameSetRef`). There is nothing to resolve and nothing the request
+ * can steer; what the caller must bring is the right to drive that session,
+ * which is settled by membership of the organisation that owns it.
+ *
+ * Two deliberate narrownesses, because "I may drive session X" must never come
+ * to mean "I may read organisation A":
+ *
+ *   - THE SET MUST BE THE ONE THE SESSION PINS. A session is not a key to the
+ *     rest of its owner's library.
+ *   - NOTHING HERE DECIDES A WRITE. A handler that locates a row this way still
+ *     puts the caller through `requireSetManager`, which reads the single
+ *     active org exactly as it did before.
+ *
+ * @returns {Promise<{ref, item}|null>} null when there is no such session, the
+ *   caller may not drive it, or it plays some other set.
+ */
+async function findSetForSession(db, tableName, event, setId, gameId) {
+  const wantedSet = String(setId ?? '').trim();
+  const id = String(gameId ?? '').trim();
+  if (!wantedSet || !id) return null;
+
+  const meta = await db.send(new GetCommand({
+    TableName: tableName, Key: { PK: `GAME#${id}`, SK: 'METADATA' },
+  }));
+  const gameRow = meta && meta.Item;
+  if (!gameRow) return null;
+  if (!tenant.callerMayDriveSession(event, gameRow)) return null;
+
+  const ref = gameSetRef(gameRow);
+  if (ref.setId !== wantedSet) return null;
+
+  // scopePrefix throws on an org ref with no org id — a session that names a
+  // scope it did not record. A skip, not a failure of the request.
+  let key;
+  try { key = setMetadataKey(ref); } catch { return null; }
+  const res = await db.send(new GetCommand({ TableName: tableName, Key: key }));
+  return res && res.Item ? { ref, item: res.Item } : null;
+}
+
 /** The `versions[]` array, always an array. */
 function versionList(meta) {
   return Array.isArray(meta && meta.versions) ? meta.versions : [];
@@ -449,6 +504,7 @@ module.exports = {
   setRef,
   readableSetRefs,
   findSetMetadata,
+  findSetForSession,
   setPartition,
   setMetadataKey,
   versionList,

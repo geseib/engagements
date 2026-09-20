@@ -280,6 +280,9 @@ export default function RemoteSessionPanel({
               that had to be written. */}
           <RemoteQuestionBrowser
             setId={setId}
+            /* The session reads its OWN set: which library the slug belongs to
+               is the session's to say, not this device's. */
+            gameId={gameId}
             gameType={gameType}
             unaskedCount={unaskedCount}
             busy={busy}

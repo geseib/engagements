@@ -484,7 +484,16 @@ function HostRemote() {
       try {
         // authFetch: this route now carries the Cognito authorizer. The remote
         // is a signed-in host surface, so the token is available here.
-        const res = await authFetch(`${apiBase()}question-sets/${setId}/categories`);
+        //
+        // `?gameId=` for the same reason the question browser sends it: the
+        // library this slug lives in is the SESSION's to name, not this
+        // device's. Without it a phone acting for a personal organisation
+        // reads no categories at all for a team's set, which is what the
+        // paragraph below is describing.
+        const forSession = gameId ? `?gameId=${encodeURIComponent(gameId)}` : '';
+        const res = await authFetch(
+          `${apiBase()}question-sets/${setId}/categories${forSession}`
+        );
         if (cancelled) return;
         /*
           IT USED TO RETURN HERE AND SAY NOTHING, which is the same silent shape
@@ -503,7 +512,7 @@ function HostRemote() {
     })();
 
     return () => { cancelled = true; };
-  }, [setId]);
+  }, [setId, gameId]);
 
   const confirmNeeded = needsConfirmation(action, progress);
   const primaryArmed = armedAction === 'primary';
