@@ -165,7 +165,11 @@ const AA = 4.5;
    this pane that paints anything (`.hr-body` and `.hrq` paint nothing). */
 const REMOTE = [groundOf(HOST_CSS, '.hr', DUSK)];
 const CONTROL = [...REMOTE, groundOf(HRQ_CSS, '.hrqp-seg', DUSK)];
-const BACK = [...REMOTE, groundOf(HRQ_CSS, '.hrqp-back', DUSK)];
+/* The way back wears `.hr-btn--ghost`, so its ground is read from the rule that
+   really paints it. Reading `.hrqp-back` instead would find no background and
+   measure the button against the remote's field — a stack that is wrong in the
+   direction that passes. */
+const BACK = [...REMOTE, groundOf(HOST_CSS, '.hr-btn--ghost', DUSK)];
 const SCREEN_GROUND = [...REMOTE, groundOf(HRQ_CSS, '.hrqp-screen', DUSK)];
 const OPTION = [...SCREEN_GROUND, stageLayer('.opt')];
 
@@ -347,13 +351,48 @@ describe('the sheet itself', () => {
      rect zero, so a rendered assertion about a tap target passes against a
      deleted stylesheet. This pins that the contract has not been reverted, not
      that the surface works in a hand — only a phone can say that. */
-  test('every control the preview adds is at least the 44px one-handed floor', () => {
-    for (const selector of ['.hrqp-back', '.hrqp-seg-btn']) {
-      expect(ruleBody(HRQ_CSS, selector)).toMatch(/min-height:\s*44px/);
-    }
-    // Previous / Next / Ask are `.hr-btn`, which sets its own 48px floor.
+  test('every control the preview adds clears the remote\'s OWN 48px floor', () => {
+    // 48, not the bare 44 accessibility floor: `.hr-btn` is what every other
+    // button on this phone stands at, and a control 4px shorter than its
+    // neighbours is a control the thumb finds second.
     expect(ruleBody(HOST_CSS, '.hr-btn')).toMatch(/min-height:\s*48px/);
+    expect(ruleBody(HRQ_CSS, '.hrqp-seg-btn')).toMatch(/min-height:\s*48px/);
+    const shorter = [];
+    for (const { head, body } of PREVIEW_RULES) {
+      for (const m of body.matchAll(/min-height:\s*([\d.]+)px/g)) {
+        if (Number(m[1]) < 48) shorter.push(`${head} (${m[1]}px)`);
+      }
+    }
+    expect(shorter).toEqual([]);
   });
+
+  test('the way back wears the ghost button instead of repainting it', () => {
+    // rejects: a second hand-rolled ghost. `.hr-btn--ghost` owns the ground, the
+    // hairline, the colour, the radius and the floor; restating them is how this
+    // control ended up 4px short of every other button on the remote, and how a
+    // later change to the ghost would leave one button behind.
+    expect(read('components', 'RemoteQuestionBrowser.jsx'))
+      .toMatch(/className="hr-btn hr-btn--ghost hrqp-back"/);
+    const rule = ruleBody(HRQ_CSS, '.hrqp-back');
+    for (const prop of ['background', 'border', 'border-radius', 'color', 'min-height',
+      'font-size', 'font-weight', 'padding']) {
+      expect(rule).not.toMatch(new RegExp(`(^|;)\\s*${prop}\\s*:`));
+    }
+    // and no control the preview adds restates the shared focus ring either.
+    // `.hr :is(button, input):focus-visible` (HostRemote.css) draws it for every
+    // button on the remote — and, carrying a type selector, OUTWEIGHS a bare class
+    // selector, which is why the segment's inward offset has to be scoped to land
+    // at all. (`.hrq-search:focus-within` in the list keeps its own ring on
+    // purpose: the shared rule reaches the input, and the ring belongs on the
+    // label around it.)
+    const restated = PREVIEW_RULES
+      .filter(({ body }) => /outline:\s*3px solid var\(--secondary\)/.test(body))
+      .map(({ head }) => head);
+    expect(restated).toEqual([]);
+    expect(strip(HRQ_CSS))
+      .toMatch(/\.hrq--preview \.hrqp-seg-btn:focus-visible\s*\{[^}]*outline-offset:\s*-3px/);
+  });
+
 
   test('nothing the preview adds is below the 12px floor', () => {
     const px = [];

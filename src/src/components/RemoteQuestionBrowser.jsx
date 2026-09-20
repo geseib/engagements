@@ -251,7 +251,16 @@ export default function RemoteQuestionBrowser({
             could no longer see. Above it, the thumb stays put and the question
             changes where the eye already is. */}
         <div className="hrqp-bar">
-          <button className="hrqp-back" type="button" onClick={() => setPreviewId(null)}>
+          {/* `.hr-btn--ghost` IS THE GHOST TREATMENT, so this wears it rather
+              than repainting it: the ground, the hairline border, the colour, the
+              radius and the remote's own 48px touch floor all come from
+              HostRemote.css. `.hrqp-back` adds only `flex: none`, which is the one
+              thing about it that is this bar's business. */}
+          <button
+            className="hr-btn hr-btn--ghost hrqp-back"
+            type="button"
+            onClick={() => setPreviewId(null)}
+          >
             <Icon name="ArrowLeft" weight="bold" size={18} color="currentColor" />
             All questions
           </button>

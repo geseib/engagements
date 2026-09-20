@@ -203,22 +203,13 @@
   gap: 10px;
 }
 
-.hrqp-back {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 12px 0 10px;
-  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
-  border-radius: var(--radius-sm, 8px);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 600;
-  cursor: pointer;
-}
+/* THE GHOST BUTTON, WORN RATHER THAN REPAINTED. The markup carries
+   `hr-btn hr-btn--ghost` (HostRemote.css), which owns the ground, the hairline
+   border, the colour, the radius, the icon row and the remote's own 48px touch
+   floor. This used to restate all of it by hand and land on 44px — 4px under
+   every other button on this phone. The one thing left is the one thing this bar
+   owns: the way back does not stretch, the toggle beside it does. */
+.hrqp-back { flex: none; }
 
 .hrqp-pos {
   text-align: center;
@@ -239,10 +230,12 @@
   overflow: hidden;
 }
 
+/* 48px, not 44: the remote's floor is `.hr-btn`'s 48 (HostRemote.css), and this
+   segment shares a line with the way back, which wears it. */
 .hrqp-seg-btn {
   flex: 1;
   min-width: 0;
-  min-height: 44px;
+  min-height: 48px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -261,11 +254,15 @@
   background: var(--hrq-pressed);
 }
 
-.hrqp-back:focus-visible,
-.hrqp-seg-btn:focus-visible { outline: 3px solid var(--secondary); outline-offset: 2px; }
-/* A SEGMENT'S RING IS DRAWN INSIDE IT: flush on a clipped edge, a ring offset
-   outward survives only as a bar inside the NEIGHBOURING segment. */
-.hrqp-seg-btn:focus-visible { outline-offset: -3px; }
+/* THE RING ITSELF IS `.hr :is(button, input):focus-visible`'s (HostRemote.css) —
+   3px of `--secondary`, offset 2px — and is not restated here. Only the OFFSET
+   is this sheet's business: a segment's ring is drawn INSIDE it, because flush on
+   a clipped edge a ring offset outward survives only as a bar inside the
+   NEIGHBOURING segment.
+   SCOPED THROUGH `.hrq--preview` so it actually lands: the shared rule carries a
+   type selector and so outweighs a bare `.hrqp-seg-btn:focus-visible`, which is
+   why this override drew nothing at all while it was one. */
+.hrq--preview .hrqp-seg-btn:focus-visible { outline-offset: -3px; }
 
 /* -- the screen ------------------------------------------------------------ */
 /* The stage's ground is `--bg`, which is also the remote's, so the frame is what
