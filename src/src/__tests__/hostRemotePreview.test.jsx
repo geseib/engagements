@@ -84,6 +84,15 @@ const PLAIN = {
   category: 'Masterpieces',
 };
 
+/** Trivia whose stored answer matches none of its own options. */
+const TRIVIA_NO_ANSWER = {
+  id: '004',
+  title: 'Which of these did the board actually approve?',
+  optionA: 'A 5% list increase',
+  optionB: 'A new support tier',
+  correctAnswer: 'None of the above',
+};
+
 function serve(questions, setName = 'Strategic Pricing Plays') {
   authFetch.mockImplementation(() => Promise.resolve({
     ok: true,
@@ -315,6 +324,44 @@ describe('the answer, and the deliberate step to it', () => {
     fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
 
     expect(screen.getByTestId('hrq-preview-note')).toHaveTextContent(/no reveal of its own/i);
+  });
+
+  // rejects: a Reveal that dims all four options, marks none and prints nothing —
+  // a control that looks like it fired and said nothing. The LIST already handles
+  // this case in words (`.hrq-unresolved`), so the preview says the same thing in
+  // the same words rather than inventing a second sentence for one fact.
+  it('says the set names no right answer instead of dimming everything in silence', async () => {
+    await mount([TRIVIA_NO_ANSWER]);
+    const inTheList = cardFor(TRIVIA_NO_ANSWER.title)
+      .querySelector('.hrq-unresolved').textContent.trim();
+
+    openPreview(TRIVIA_NO_ANSWER.title);
+    fireEvent.click(screen.getByRole('button', { name: /^reveal$/i }));
+
+    // nothing marked on the card, and the reason printed off it
+    expect(screenPane().querySelectorAll('.opt.correct')).toHaveLength(0);
+    const said = screen.getByTestId('hrq-preview-unresolved');
+    expect(said).toHaveTextContent(inTheList);
+    expect(screenPane().contains(said)).toBe(false);
+  });
+
+  // rejects: printing the line whenever the answer is merely not on screen yet.
+  // ASK marks nothing on purpose; only Reveal promises a mark.
+  it('says nothing of the kind before Reveal is pressed', async () => {
+    await mount([TRIVIA_NO_ANSWER]);
+    openPreview(TRIVIA_NO_ANSWER.title);
+
+    expect(screen.queryByTestId('hrq-preview-unresolved')).not.toBeInTheDocument();
+  });
+
+  // rejects: showing the line on a question whose answer IS resolvable, which
+  // would say the set is broken when it is not.
+  it('says nothing of the kind when Reveal does mark an answer', async () => {
+    await mount([TRIVIA_A]);
+    openPreview(TRIVIA_A.title);
+    fireEvent.click(screen.getByRole('button', { name: /^reveal$/i }));
+
+    expect(screen.queryByTestId('hrq-preview-unresolved')).not.toBeInTheDocument();
   });
 
   // rejects: sending a non-trivia question to the card as REVEAL, which renders

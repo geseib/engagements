@@ -95,6 +95,13 @@ const apiBase = () => window.API_BASE || '';
 /** Why Previous and Next are held when the list holds one question. */
 const ONLY_ONE = 'This is the only question in the list.';
 
+/**
+ * WHAT THE SET FAILED TO SAY, in one place because two surfaces say it: the
+ * row in the list, and the preview's Reveal when it can mark nothing. One fact,
+ * one sentence — a second wording would read as a second problem.
+ */
+const NO_RIGHT_ANSWER = 'This set does not say which option is right.';
+
 export default function RemoteQuestionBrowser({
   setId,
   gameType = '',
@@ -328,6 +335,22 @@ export default function RemoteQuestionBrowser({
           </div>
         </div>
 
+        {/* THE THIRD THING REVEAL CAN MEAN, and the one it used to leave unsaid.
+            Trivia's answer is ON the card, so trivia normally needs no note — but
+            when the stored answer places against none of the options the card has
+            nothing to mark, and Reveal dimmed all four and printed nothing: a
+            control that looked like it fired. The row in the list already says
+            this in words, so the same sentence is said here (NO_RIGHT_ANSWER),
+            and it is one sentence because it is one fact.
+            OFF THE SCREEN, like every other note: it is about the card, not on it,
+            and the room's screen never carries an apology. */}
+        {reveal && type === 'trivia' && open.answerUnresolved && (
+          <p className="hrqp-note hrqp-note--unresolved" data-testid="hrq-preview-unresolved">
+            <b>Reveal</b>
+            {NO_RIGHT_ANSWER}
+          </p>
+        )}
+
         {/* NOT ON THE SCREEN, AND SAID SO. Two lines, because Reveal is offered
             for the set: on the one question of a call-and-answer set that
             carries no answer of its own, a Reveal that changed nothing would
@@ -421,11 +444,10 @@ export default function RemoteQuestionBrowser({
           )}
 
           {/* The set claims an answer that matches none of its own options.
-              Said out loud: the host is about to read these to a room. */}
+              Said out loud: the host is about to read these to a room. The
+              preview's Reveal says the same sentence when it can mark nothing. */}
           {row.answerUnresolved && (
-            <p className="hrq-unresolved">
-              This set does not say which option is right.
-            </p>
+            <p className="hrq-unresolved">{NO_RIGHT_ANSWER}</p>
           )}
 
           {/* TWO ACTIONS, AND THE COMMITTING ONE IS SECOND. Preview only changes

@@ -136,11 +136,16 @@
   vertical-align: baseline;
 }
 
+/* `--danger-text`, NOT `--danger`. styles.css:22-35 states the rule and the
+   measurement: #E5645E is 4.38:1 on `--surface`, under AA, and keeps borders,
+   rules and bar fills; `--danger-text` (#EF8C86, 6.08:1 here) is what copy is
+   for. This rule shipped with the list, before the preview, and drew its copy in
+   the wrong one of the two — measured in hostRemotePreviewPalette.test.js now. */
 .hrq-unresolved {
   margin: 10px 0 0;
   font-size: .75rem;
   line-height: 1.4;
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* TWO ACTIONS PER ROW, SIDE BY SIDE — `.hr-grid`'s shape, declared here because
@@ -315,6 +320,11 @@
   letter-spacing: .04em;
   color: var(--muted);
 }
+
+/* The set names no right answer, so Reveal had nothing to mark. Same token as
+   the list's own `.hrq-unresolved` — `--danger-text`, never `--danger`
+   (styles.css:22-35) — because it is the same sentence about the same fact. */
+.hrqp-note--unresolved { color: var(--danger-text); }
 
 /* -- paging ---------------------------------------------------------------- */
 /* The position sits between the two controls that move it. `minmax(0, 1fr)` on

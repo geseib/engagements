@@ -20,12 +20,13 @@
  * ground a sheet paints under its text — a stack that assumed a ground would go
  * on passing after the sheet stopped painting it.
  *
- * SCOPE: the PREVIEW's pairings. This sheet also carries the list, which shipped
- * before it, and one of the list's rules draws copy in `var(--danger)` —
- * `.hrq-unresolved`, which is 4.38:1 on `--surface` and under AA. That is a real
- * pre-existing defect and `--danger-text` is what it wants (styles.css:22-35);
- * it is named here rather than quietly folded into this change, and the guard
- * below holds the preview's own rules to the rule so it cannot spread.
+ * SCOPE: the PREVIEW's pairings, PLUS the one sentence the two halves share.
+ * `.hrq-unresolved` shipped with the list and drew its copy in `var(--danger)` —
+ * 4.38:1 on `--surface`, under AA, and against styles.css:22-35, where `--danger`
+ * keeps borders, rules and bar fills and `--danger-text` exists for exactly this.
+ * The preview's Reveal now says that same sentence, so the token is measured here
+ * for both, and the guard below holds the WHOLE sheet rather than the preview's
+ * half of it: with nothing left to grandfather there is nothing to spread to.
  *
  * jsdom has no layout engine and loads no stylesheet. Green here means the
  * palette clears AA on dusk; it cannot prove how a phone draws it.
@@ -111,6 +112,12 @@ function groundOf(css, selector, theme) {
   const bg = ruleBody(css, selector).match(/background:\s*var\((--[\w-]+)\)/);
   return bg ? hexIn(theme, bg[1]) : null;
 }
+/** The token a rule in THIS sheet draws its copy in. Throws when it names none. */
+function colourOf(selector) {
+  const m = ruleBody(HRQ_CSS, selector).match(/(^|;)\s*color:\s*var\((--[\w-]+)\)/);
+  if (!m) throw new Error(`"${selector}" names no colour token — retinted?`);
+  return m[2];
+}
 
 const ROOT = blockOf(GLOBAL_CSS, ':root {');
 const DUSK = blockOf(GLOBAL_CSS, '[data-theme="dark"] {');
@@ -127,6 +134,9 @@ const S = {
   screenMuted: hexIn(SCREEN, '--muted'), // the stage's lifted muted, on it
   primary: hexIn(ROOT, '--primary'),
   successText: hexIn(STAGE_ROOT, '--success-text'),
+  // The token destructive COPY is for. `--danger` is not, on either ground.
+  dangerText: hexIn(ROOT, '--danger-text'),
+  danger: hexIn(ROOT, '--danger'),
   pressed: rgbaIn(PREVIEW, '--hrq-pressed'),
 };
 
@@ -236,18 +246,22 @@ describe('the chrome around the card', () => {
   });
 });
 
-/* The preview's own rules, isolated: every rule whose whole selector list lives
-   under `.hrqp-*` or `.hrq--preview`. The list above them shipped first and is
-   not this change's to re-measure. */
-const PREVIEW_RULES = strip(HRQ_CSS)
+/* Every rule in the sheet, head and body. */
+const ALL_RULES = strip(HRQ_CSS)
   .replace(/@media[^{]*\{/g, '')
   .split('}')
   .map((block) => {
     const [head, body] = block.split('{');
     return { head: (head || '').trim(), body: body || '' };
   })
-  .filter(({ head, body }) => head && body
-    && head.split(',').every((s) => /^\.(hrqp-|hrq--preview)/.test(s.trim())));
+  .filter(({ head, body }) => head && body);
+
+/* The preview's own rules, isolated: every rule whose whole selector list lives
+   under `.hrqp-*` or `.hrq--preview`. Used where the measurement really is the
+   preview's — the raw-colour and floor guards. Contrast is measured for the whole
+   sheet where the two halves share a pairing. */
+const PREVIEW_RULES = ALL_RULES
+  .filter(({ head }) => head.split(',').every((s) => /^\.(hrqp-|hrq--preview)/.test(s.trim())));
 
 describe('the sheet itself', () => {
   test('the premise: the preview\'s rules were actually found', () => {
@@ -263,14 +277,28 @@ describe('the sheet itself', () => {
     expect(offenders).toEqual([]);
   });
 
-  test('the preview draws no copy in --danger', () => {
+  test('nothing in this sheet draws copy in --danger', () => {
     // styles.css:22-35: --danger is 4.38:1 on --surface and keeps borders, rules
-    // and bar fills; --danger-text is what copy wants. (`.hrq-unresolved` in the
-    // LIST breaks this and predates the preview — see the header.)
-    const offenders = PREVIEW_RULES
+    // and bar fills; --danger-text is what copy wants. Held over the WHOLE sheet,
+    // not the preview's half: `.hrq-unresolved` in the list was the last
+    // exception and it is fixed, so there is nothing left to grandfather.
+    const offenders = ALL_RULES
       .filter(({ body }) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(body))
       .map(({ head }) => head);
     expect(offenders).toEqual([]);
+  });
+
+  test('the sentence about an unplaceable answer clears AA in both places', () => {
+    // ONE FACT, ONE TOKEN, TWO GROUNDS: the row draws it on the list card's
+    // --surface, the preview's Reveal note on the remote's own --bg.
+    const ROW = [...REMOTE, groundOf(HRQ_CSS, '.hrq-card', DUSK)];
+    expect(colourOf('.hrq-unresolved')).toBe('--danger-text');
+    expect(colourOf('.hrqp-note--unresolved')).toBe('--danger-text');
+    expect(on(S.dangerText, ROW)).toBeGreaterThanOrEqual(AA);
+    expect(on(S.dangerText, REMOTE)).toBeGreaterThanOrEqual(AA);
+    // and the premise of the whole fix: the token it used to carry does NOT clear
+    // AA on the list card, so this is not a matter of taste.
+    expect(on(S.danger, ROW)).toBeLessThan(AA);
   });
 
   test('no raw colour in the preview outside its two token blocks', () => {
