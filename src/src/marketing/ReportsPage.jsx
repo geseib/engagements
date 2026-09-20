@@ -39,7 +39,7 @@ export default function ReportsPage() {
               div/article, same classes, so `.mk-callouts`/`.mk-callout` in
               ReportsPage.css draw the identical layout.
             */}
-            <SampleReport callouts footerLinks={false} headingLevel={2} />
+            <SampleReport callouts headingLevel={2} />
 
             <ol className="mk-callouts">
               {REPORT_CALLOUTS.map((c) => (

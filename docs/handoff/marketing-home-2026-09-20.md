@@ -129,12 +129,8 @@ Twelve new suites landed across Tasks 5–12, all still green:
 
 ## Known follow-ups, carried forward rather than fixed here
 
-- **A PNG share image.** `share.svg` (this task) covers the OG/Twitter tags, but some networks
-  (notably older link-unfurlers) do not render SVG share images at all — a PNG export is recorded
-  here as a follow-up, not a blocker.
 - **The hero lead's tight spacing under the headline** — flagged to the owner twice (Task 8
   review, `progress.md`) and left as the approved mockup renders it; an owner call, not a bug.
-- **The mobile menu does not close on Escape.**
 - **`phase-flow` CSS in `HelpPage.css` is hand-copied from `HelpSystem.css`**, not shared — a drift
   seam: a future change to one will not reach the other unless someone remembers both exist.
 - **The CSS-selector walker is naive outside `marketingPalette.test.js`.** Task 12 rewrote *this
@@ -143,10 +139,13 @@ Twelve new suites landed across Tasks 5–12, all still green:
   `orgSwitcherPalette`, `QuestionPreviewPalette`, and others) still do a plain `.split('}')`, which
   can misparse a nested rule or a `@media` block containing one. Not touched by this branch; a
   repo-wide follow-up if it matters.
-- **Two usage claims left as approved, not verified as claims about the product itself**: "See it
-  in a real session" (the tour's CTA) and "Four sessions people actually run." (`/use-cases` h1) —
-  per Task 8/9's ruling, these are claims the owner can personally vouch for, not claims about an
-  artifact on the page, and were surfaced to the owner rather than rewritten.
+- **One usage claim left as approved, not verified as a claim about the product itself**: "Four
+  sessions people actually run." (`/use-cases` h1) — per Task 8/9's ruling, this is a claim the
+  owner can personally vouch for, not a claim about an artifact on the page, and was surfaced to
+  the owner rather than rewritten. Its sibling, the tour's CTA "See it in a real session", was a
+  DIFFERENT kind of claim — that `/use-cases` itself is a recording of a real session, when its
+  four cases are written scenarios — and fix round 2 corrected it (see below); it does not belong
+  in this owner-vouched category and was never meant to.
 - **`questionSetDetailsAi.test.jsx` timed out once under a full parallel `npm test` run** (5s
   timeout on "says how many of the set's questions were sent") and passed clean in isolation both
   times it was checked. This branch has never touched the file —
@@ -179,10 +178,10 @@ Twelve new suites landed across Tasks 5–12, all still green:
   tags. The description and `og:description` were checked against `content/home.js` line by line
   before shipping — "the room votes" is scoped to call-and-answer rounds only (trivia has no vote
   phase, per `content/home.js`'s own copy: "Ask, then results. Trivia has no vote phase."), and
-  neither tag uses "favourite"/"favorite". `og:image` is `/assets/marketing/share.svg` — a
-  same-origin absolute path, never another host. No existing test pins the `<title>` text or these
-  meta tags (checked: every `index.html`/`<title>` hit in the test suites is about
-  `data-theme="light"`, unrelated).
+  neither tag uses "favourite"/"favorite". `og:image` was originally `/assets/marketing/share.svg`
+  — a same-origin absolute PATH, never another host, but see fix round 2 below: it is now a PNG at
+  an absolute PROD-ORIGIN URL, because a relative path breaks on a static file shipped by every
+  tier alike. `pageMetadata.test.js` (fix round 2) now pins this.
 - **`src/public/assets/marketing/share.svg`** — 1200×630, `#0F1A2E` field, the three ridge-layer
   paths from `RidgeScene.jsx` (unmodified geometry, translated to sit in the lower band), a low
   amber (`#F6A94C`) radial glow, and "Engagements" in `#F4EDE4` on the system display-font stack.
@@ -333,3 +332,122 @@ check for both.
 
 Commit: "The help route is a named exception to the single-segment rule, and nothing on this
 branch quotes the phrases the twin guard bans" (fix round 1, new commit after `2ab521ff`).
+
+## Fix round 2 (final whole-branch review)
+
+Findings from the final whole-branch review, all fixed in one commit.
+
+**1. Share image is now a PNG at an absolute prod-origin URL.** `share.svg` still exists and is
+still valid, but no longer carries `og:image`/`twitter:image` — several link-unfurlers never
+render an SVG share image at all. `share.svg`'s `<text>` font-family was switched to a pure system
+stack (`system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif`; it named "Archivo
+Expanded", a webfont no local rasteriser has) and rendered with headless Chrome
+(`--headless --window-size=1200,630 --screenshot`, already on this Mac) rather than `qlmanage`:
+`qlmanage -t` was tried first per the brief, but it does not respect the SVG's own aspect ratio —
+it produced a 1200×1200 square with the content stretched taller than the source and letterboxed
+with white, and even a `--cropOffset`-based crop back to 1200×630 still showed the distortion (the
+word "Engagements" ran off the right edge). Chrome's headless screenshot renders the SVG at its
+own declared 1200×630 with no distortion. Result: `src/public/assets/marketing/share.png`,
+1200×630, 57,639 bytes (~56 KiB, well under the 300 KiB ceiling). `index.html` now sets `og:image`
+and the new `twitter:image` to `https://engage.seibtribe.us/assets/marketing/share.png` (an HTML
+comment beside them explains why the URL is absolute and prod-specific: this `index.html` is one
+static file shipped by every tier), plus `og:image:width` (1200), `og:image:height` (630), `og:url`
+(`https://engage.seibtribe.us/`), and `og:site_name` (`Engagements`). `CREDITS.json` gained a
+`share.png` entry. New suite `pageMetadata.test.js` pins all of it, plus that the description never
+says "favourite"/"favorite" and no meta tag references another origin.
+
+**2. The tour's CTA promised a real session it does not show.** `howItWorks.js`'s closing CTA
+label changed from "See it in a real session" to "See four sessions in detail" (same target,
+`/use-cases`, whose four cases are written scenarios, not recordings). The approved mockup
+(`docs/design/marketing-redesign/02-how-it-works.html`) got the identical text change plus an HTML
+comment recording why and when. `marketingCopy.test.js`'s honesty suite, which already scanned
+`reports.js` and `sampleReport.js` for this exact claim, now scans `howItWorks.js` too — the old
+carve-out that left this CTA unscanned is gone; `useCases.js`'s "Four sessions people actually
+run." is the one usage claim still left alone, as the owner's personally-vouched-for claim rather
+than a claim about an on-page artifact.
+
+**3. The sample sheet's "Export PDF" / "Copy shareable link" were live-looking links that went
+nowhere.** `SampleReport.jsx` now renders every `footer.links` entry as an inert
+`<span className="mk-report-btn" aria-hidden="true">` — no `href`, no `onClick`, not focusable —
+on both pages the sheet appears on. The `footerLinks` prop (which used to let `/reports` opt out of
+rendering these as `<a href="/reports">`, a live link on home but a dead click back to itself on
+`/reports`) is gone entirely; the component's API is now `{ report, callouts, headingLevel }`.
+`content/sampleReport.js`'s `footer.links` fixture entries lost their `href`s (JSDoc updated).
+`SampleReport.css`'s `.mk-report-btn` gained `cursor: default` and a comment recording that it must
+never assume the pointer affordances a real link gets for free — it had no hover/cursor rule to
+remove, only the implicit assumption from being styled as if it were an `<a>`. New/updated tests:
+`homePage.test.jsx` and `marketingPages.test.jsx` each pin zero links/zero buttons inside the
+"Sample session report" article and that both labels are present but `aria-hidden`; `homePage`
+also re-pins the real `/reports` link living outside the sheet; `marketingPages` adds a check that
+`/reports` has no link to itself anywhere except the nav's own "Reports" item, which carries
+`aria-current="page"`.
+
+**4 (minor). `RootPage.jsx` destructured `checking` from `useJoinCode()` and never read it** —
+deleted the unused binding. `rootPage.test.jsx` untouched, still 15 tests, still green.
+
+**5 (minor). The mobile menu button had `aria-expanded` with no `aria-controls`, and Escape did
+not close it.** `MarketingShell.jsx`'s nav links container gained an `id`
+(`mk-nav-links`), the burger button's `aria-controls` now names it (mirroring `HelpPage.jsx`'s
+role-list toggle), and a `keydown` listener — attached only while the menu is open, torn down on
+close/unmount — closes the menu and returns focus to the button on Escape.
+`marketingShell.test.jsx` gained three tests: `aria-controls` names a real element, Escape closes
+an open menu and refocuses the button, and Escape while closed is a no-op.
+
+**6 (minor). `SampleReport.jsx`'s `headingLevel` rendered `<hnan>` for a non-numeric value.**
+Guarded with `Number.isInteger(headingLevel) ? clamp : 3` (the documented default). New
+`sampleReport.test.jsx` pins `headingLevel="x"` and `headingLevel={undefined}` both rendering the
+default h3, and that a valid numeric value still clamps as before.
+
+**7 (minor). `RidgeScene.css` pinned `will-change: transform` on three full-viewport layers even
+on pages where nothing drifts, plus a matching `will-change: auto` in the reduced-motion block.**
+Both removed; the reduced-motion `--mk-drift: 0px` rule and its `ridgeScene.test.jsx` coverage are
+unchanged (that test never asserted on `will-change`).
+
+**8 (minor). `useScrollProgress.js`'s `prefersReducedMotion()` was read once at mount and never
+reacted to the OS setting changing mid-visit.** `reduced` is now state, subscribed to the media
+query's own `change` event (guarding for `matchMedia`/`addEventListener` absence, since jsdom has
+neither); flipping to reduced pins progress to 1 and detaches the scroll/resize listeners (the
+existing early-return in the scroll effect, now keyed off state instead of a one-time read), and
+flipping back re-attaches them. New `useScrollProgress.test.js` uses a fake `matchMedia` to pin
+both directions.
+
+**9 (confirmed, no change).** `HomePage.css`'s `.mk-mode--flip` and `HowItWorksPage.css`'s
+`.mk-step--flip` both draw copy and a `role="img"` device still in DOM order regardless of the
+visual `order` swap; each file gained a one-paragraph comment explaining why this is fine here
+(neither half is interactive, both carry full alt text, so copy-then-picture is the better reading
+order on every row) and why `/reports` deliberately does not do the same (its callouts annotate
+the sheet and must follow it).
+
+**10 (confirmed, no change).** `useCases.js`'s closing "Back to the overview" link targets `/`,
+matching the approved mockup exactly — `docs/design/marketing-redesign/03-use-cases.html`'s own
+`href="01-home.html"` maps to `/`. Nothing to change.
+
+### Baselines (fix round 2)
+
+Run from `src/`, `.aws-sam` cleared first, judged by exit code and suite count together:
+
+```
+$ npx jest src/__tests__/marketing* src/__tests__/homePage.test.jsx src/__tests__/helpPage.test.jsx \
+    src/__tests__/clipFrame.test.jsx src/__tests__/ridgeScene.test.jsx src/__tests__/joinCodeEntry.test.jsx \
+    src/__tests__/useJoinCode.test.jsx src/__tests__/rootPage.test.jsx src/__tests__/rootGate.test.jsx \
+    src/__tests__/setMediaStorage.test.js src/__tests__/pageMetadata.test.js src/__tests__/useScrollProgress.test.js \
+    src/__tests__/sampleReport.test.jsx
+```
+(see the full report for the exact tail and exit code)
+
+```
+$ npm test        (full run, from src/)
+$ npm run lint
+$ npm run build
+```
+(see the full report for exact tails/exit codes; `share.png` is checked into `dist/assets/marketing/`)
+
+```
+$ node tests/no-retired-twin-references.js ; echo exit=$?
+$ node tests/no-global-partition-literals.js ; echo exit=$?
+```
+(run from the worktree root, new files staged first; see the full report for exit codes)
+
+Commit: "The share image is a PNG a network can render, the tour no longer promises a real
+session, and the sample sheet's buttons are a picture of buttons" (fix round 2, new commit after
+the fix-round-1 commit).

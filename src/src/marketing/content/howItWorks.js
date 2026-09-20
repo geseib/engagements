@@ -92,6 +92,6 @@ export const HOW_PAGE = {
   cta: {
     title: 'Try it with your next session.',
     primary: 'Create a host account',
-    secondary: { label: 'See it in a real session', href: '/use-cases' },
+    secondary: { label: 'See four sessions in detail', href: '/use-cases' },
   },
 };

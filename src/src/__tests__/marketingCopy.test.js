@@ -122,14 +122,18 @@ test('AI is described as drafting and summarising, which a person reviews — ne
 });
 
 /* ---------------------------------------------------- the sample is fixture
- * data, and must say so. Scoped ONLY to reports.js and sampleReport.js: the
- * home page's summit section links to /reports rather than claiming realism
- * itself, and two OTHER pages use the word "real" for a usage claim the
- * owner vouches for, not a claim about the sample sheet:
- *   - howItWorks.js's CTA "See it in a real session" (linking to /use-cases)
- *   - useCases.js's h1 "Four sessions people actually run."
- * Neither is about the fixture on /reports or /home, so the rule below does
- * not scan those two files' copy.
+ * data, and must say so. Scoped to reports.js, sampleReport.js AND
+ * howItWorks.js: fix round 2 found the tour's CTA making the same claim
+ * ("See it in a real session", linking to /use-cases — four written
+ * scenarios, not a recording of a session) that this suite already policed
+ * on the sample sheet, so the rule widens to cover it rather than leaving it
+ * as a carved-out exception. The CTA is now "See four sessions in detail",
+ * which claims only what /use-cases actually is.
+ *
+ * useCases.js's own h1, "Four sessions people actually run.", stays out of
+ * scope: it is the owner's personally-vouched-for usage claim, not a claim
+ * that an on-page artifact (the sample sheet, or the tour's CTA target) is
+ * real — the one usage claim this suite still leaves alone.
  */
 describe('the on-page sample report never claims to be a real session', () => {
   const reportsWords = [];
@@ -143,7 +147,12 @@ describe('the on-page sample report never claims to be a real session', () => {
   walk(sampleReportModule.SAMPLE_REPORT, sampleReportWords);
   const sampleReportCopy = sampleReportWords.join('\n');
 
-  const REAL_CLAIM = /\b(this is )?a real (one|report|session)\b/i;
+  const howItWorksWords = [];
+  walk(howItWorksModule.HOW_STEPS, howItWorksWords);
+  walk(howItWorksModule.HOW_PAGE, howItWorksWords);
+  const howItWorksCopy = howItWorksWords.join('\n');
+
+  const REAL_CLAIM = /\ba real (one|report|session)\b/i;
 
   test('reports.js makes no such claim', () => {
     expect(reportsCopy).not.toMatch(REAL_CLAIM);
@@ -151,16 +160,21 @@ describe('the on-page sample report never claims to be a real session', () => {
   test('sampleReport.js makes no such claim', () => {
     expect(sampleReportCopy).not.toMatch(REAL_CLAIM);
   });
+  test('howItWorks.js makes no such claim', () => {
+    expect(howItWorksCopy).not.toMatch(REAL_CLAIM);
+  });
   test('REPORTS_PAGE.lead says so instead', () => {
     expect(REPORTS_PAGE.lead).toMatch(/sample from an invented session/i);
   });
 
-  test('the two known, accepted usage claims elsewhere are unaffected (premise check)', () => {
-    // Not a defect: both are the owner's vouched-for usage claims, not a
-    // claim about the sample sheet's authenticity, which is why the rule
-    // above is scoped away from these two files rather than written as a
-    // blanket ban on the word "real".
-    expect(howItWorksModule.HOW_PAGE.cta.secondary.label).toBe('See it in a real session');
+  test('the tour CTA now claims only what /use-cases is (regression check)', () => {
+    expect(howItWorksModule.HOW_PAGE.cta.secondary.label).toBe('See four sessions in detail');
+  });
+
+  test('the one remaining owner-vouched usage claim is unaffected (premise check)', () => {
+    // Not a defect: this is the owner's personally-vouched-for usage claim,
+    // not a claim about an on-page artifact's authenticity, which is why it
+    // stays out of the REAL_CLAIM scan above.
     expect(useCasesModule.USE_CASES_PAGE.title).toBe('Four sessions people actually run.');
   });
 });

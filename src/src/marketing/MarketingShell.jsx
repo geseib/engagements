@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { navigateTo } from '../auth/navigate';
 import { rememberReturnPath } from '../auth/returnPath';
 import useScrollProgress from './useScrollProgress';
@@ -11,6 +11,8 @@ const LINKS = [
   { id: 'reports', label: 'Reports', href: '/reports' },
   { id: 'help', label: 'Help', href: '/help' },
 ];
+
+const NAV_LINKS_ID = 'mk-nav-links';
 
 /**
  * A host who signs in from a brochure page wants their host page, which is `/`.
@@ -52,10 +54,26 @@ class PageBoundary extends React.Component {
 export default function MarketingShell({ title, current, scene = true, children }) {
   const [open, setOpen] = useState(false);
   const progress = useScrollProgress();
+  const burgerRef = useRef(null);
 
   useEffect(() => {
     document.title = title ? `${title} · Engagements` : 'Engagements';
   }, [title]);
+
+  // Escape closes the mobile menu and gives focus back to the control that
+  // opened it, the same as HelpPage's role-list toggle. The listener is only
+  // attached while the menu is open, so it never intercepts Escape elsewhere
+  // on the page (a modal, a form) and is torn down on close/unmount.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      if (burgerRef.current) burgerRef.current.focus();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
 
   return (
     <div className="mk-root">
@@ -88,6 +106,7 @@ export default function MarketingShell({ title, current, scene = true, children 
             narrow widths never hides the control that reopens it.
           */}
           <nav
+            id={NAV_LINKS_ID}
             aria-label="Main"
             className={`mk-nav-links${open ? ' mk-nav--open' : ''}`}
           >
@@ -115,9 +134,11 @@ export default function MarketingShell({ title, current, scene = true, children 
 
           <div className="mk-nav-acts">
             <button
+              ref={burgerRef}
               type="button"
               className="mk-nav-burger"
               aria-expanded={open}
+              aria-controls={NAV_LINKS_ID}
               aria-label="Menu"
               onClick={() => setOpen((v) => !v)}
             >

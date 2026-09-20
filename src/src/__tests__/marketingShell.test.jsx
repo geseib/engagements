@@ -54,3 +54,38 @@ test('a page that throws leaves the doors standing', () => {
   expect(screen.getByRole('link', { name: /join a session/i })).toHaveAttribute('href', '/join');
   spy.mockRestore();
 });
+
+/* ------------------------------------------------------- fix round 2: the
+ * mobile menu button had aria-expanded but no aria-controls (the toggle it
+ * mirrors, HelpPage's role-list button, has both), and Escape did not close
+ * the menu at all. */
+test('the menu button names the links container it controls', () => {
+  render(<MarketingShell title="T" current="home"><p>body</p></MarketingShell>);
+  const button = screen.getByRole('button', { name: /menu/i });
+  const controlledId = button.getAttribute('aria-controls');
+  expect(controlledId).toBeTruthy();
+  expect(document.getElementById(controlledId)).not.toBeNull();
+});
+
+test('Escape closes an open menu and returns focus to the button', () => {
+  render(<MarketingShell title="T" current="home"><p>body</p></MarketingShell>);
+  const button = screen.getByRole('button', { name: /menu/i });
+  fireEvent.click(button);
+  expect(button).toHaveAttribute('aria-expanded', 'true');
+
+  fireEvent.keyDown(document, { key: 'Escape' });
+
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+  expect(button).toHaveFocus();
+});
+
+test('Escape while the menu is already closed does nothing', () => {
+  render(<MarketingShell title="T" current="home"><p>body</p></MarketingShell>);
+  const button = screen.getByRole('button', { name: /menu/i });
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+
+  fireEvent.keyDown(document, { key: 'Escape' });
+
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+  expect(button).not.toHaveFocus();
+});

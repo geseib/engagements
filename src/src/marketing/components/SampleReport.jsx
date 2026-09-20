@@ -18,15 +18,17 @@ import './SampleReport.css';
  * the given view's round lacks the answer a pin targets, that pin is simply
  * not rendered rather than left orphaned on the wrong block.
  *
- * `footerLinks` (default true) renders the fixture's `footer.links` as the
- * real `<a href>` elements Task 7 built. Every `href` in both fixture views
- * is `/reports` (task-7-report.md ruling: "no export or copy behaviour
- * implied on this page"), which is a real navigation from the home page but
- * a dead click on `/reports` itself, where clicking one of these links would
- * go nowhere. Rather than change the fixture's shared `href` (which the home
- * page also reads) or hand-roll inert-vs-live markup here, /reports passes
- * `footerLinks={false}` to skip the links and keep only `footer.note` if the
- * given view has one.
+ * The footer's `footer.links` entries (fixture: content/sampleReport.js) are
+ * rendered as inert `<span aria-hidden="true">` labels, never as `<a>` or
+ * `<button>`: neither this sheet nor the product behind it exports a PDF or
+ * copies a link from this exact click, so a real link here would promise a
+ * navigation ("Export PDF") that goes nowhere. Task 7 had these as `<a
+ * href="/reports">` — a live link on the home page, but a dead click back to
+ * the same page when the sheet renders on `/reports` itself; the fix-round-2
+ * ruling replaced the link with a picture of a button on both pages, rather
+ * than keep the link live on one page and dead on the other. `footerLinks`
+ * (the old prop that toggled this) is gone — the footer always renders this
+ * way, and `/reports` no longer needs to opt out of it.
  *
  * `headingLevel` (default 3, clamped to 2..5) sets the sheet's own title-level
  * tag; its block headings (the question, summary and standings headings) are
@@ -43,13 +45,16 @@ import './SampleReport.css';
 export default function SampleReport({
   report = SAMPLE_REPORT,
   callouts = false,
-  footerLinks = true,
   headingLevel = 3,
 }) {
   const r = report;
   const answers = r.round.answers || [];
   const hasDiscussion = Boolean(r.round.discussionQuestions && r.round.discussionQuestions.length);
-  const level = Math.min(5, Math.max(2, headingLevel));
+  // A non-numeric headingLevel (e.g. a typo'd prop) must not reach the tag
+  // name — `h${NaN}` renders `<hnan>`, an element no browser or test can
+  // reason about. Fall back to the documented default (3) instead of
+  // clamping NaN, which Math.min/Math.max would silently pass through.
+  const level = Number.isInteger(headingLevel) ? Math.min(5, Math.max(2, headingLevel)) : 3;
   const H = `h${level}`;
   const Sub = `h${level + 1}`;
 
@@ -124,8 +129,8 @@ export default function SampleReport({
       </div>
 
       <div className="mk-report-foot">
-        {footerLinks && r.footer.links.map((link) => (
-          <a key={link.label} className="mk-report-btn" href={link.href}>{link.label}</a>
+        {r.footer.links.map((link) => (
+          <span key={link.label} className="mk-report-btn" aria-hidden="true">{link.label}</span>
         ))}
         {r.footer.note && <span className="mk-report-note">{r.footer.note}</span>}
       </div>

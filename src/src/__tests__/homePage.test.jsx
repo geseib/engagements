@@ -132,3 +132,24 @@ test('the two report views share identical rows by reference, and neither uses "
   const everything = JSON.stringify(SAMPLE_REPORT_HOME) + JSON.stringify(SAMPLE_REPORT);
   expect(everything.toLowerCase()).not.toMatch(/favou?rite/);
 });
+
+/* ------------------------------------------------------- fix round 2: the
+ * sheet's "Export PDF" / "Copy shareable link" looked like live buttons but
+ * did nothing — SampleReport now renders them as inert, aria-hidden spans,
+ * and its `footerLinks` prop is gone entirely. */
+test('the sample sheet on home has no live links or buttons of its own', () => {
+  render(<HomePage />);
+  const article = screen.getByRole('article', { name: /sample session report/i });
+  expect(within(article).queryAllByRole('link')).toHaveLength(0);
+  expect(within(article).queryAllByRole('button')).toHaveLength(0);
+  expect(within(article).getByText('Export PDF')).toHaveAttribute('aria-hidden', 'true');
+  expect(within(article).getByText('Copy shareable link')).toHaveAttribute('aria-hidden', 'true');
+});
+
+test('the home page still has its own, real link to /reports outside the sheet', () => {
+  render(<HomePage />);
+  const article = screen.getByRole('article', { name: /sample session report/i });
+  const reportsLink = screen.getByRole('link', { name: /see a full report, annotated/i });
+  expect(reportsLink).toHaveAttribute('href', '/reports');
+  expect(article).not.toContainElement(reportsLink);
+});

@@ -53,7 +53,7 @@
  *   standingsCols: { rank, player, correct, points },
  *   standings: [{ rank, name, correct, points }],
  *   footer: {
- *     links: [{ label, href }],
+ *     links: [{ label }],            // rendered as inert labels, no href — see SampleReport.jsx
  *     note?: string,                 // home view only
  *   },
  * }
@@ -98,8 +98,10 @@ const STANDING_ALINA = { rank: 1, name: 'Alina K.', correct: '9 of 10', points: 
 const STANDING_TOMAS = { rank: 2, name: 'Tomas B.', correct: '8 of 10', points: '1,205' };
 const STANDING_PRIYA = { rank: 3, name: 'Priya N.', correct: '8 of 10', points: '1,118' };
 
-const EXPORT_LINK = { label: 'Export PDF', href: '/reports' };
-const SHARE_LINK = { label: 'Copy shareable link', href: '/reports' };
+// No `href`: these render as inert labels (a picture of a button), not real
+// links — see SampleReport.jsx's footer comment for why.
+const EXPORT_LINK = { label: 'Export PDF' };
+const SHARE_LINK = { label: 'Copy shareable link' };
 
 // ---- rows that differ between the two mockups --------------------------
 const ANSWER_STATUS_MEETING_HOME = {
@@ -172,6 +174,6 @@ export const SAMPLE_REPORT = {
     { rank: 5, name: 'Sam O.', correct: '7 of 10', points: '968' },
   ],
   footer: {
-    links: [EXPORT_LINK, { label: 'Print', href: '/reports' }, SHARE_LINK],
+    links: [EXPORT_LINK, { label: 'Print' }, SHARE_LINK],
   },
 };

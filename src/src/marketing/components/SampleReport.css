@@ -74,10 +74,14 @@
   display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
   padding: 18px 30px 22px; border-top: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface);
 }
+/* A picture of a button, not a control: fix round 2 made this element an
+   inert <span aria-hidden="true">, never an <a> or <button>, so no rule here
+   may assume the pointer affordances a real link would get for free. */
 .mk-report-btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px;
   border-radius: 8px; border: 1.5px solid rgba(27, 41, 66, 0.3); color: var(--mk-paper-text);
   font: 700 var(--mk-t-label)/1 var(--mk-font-ui); text-decoration: none; background: transparent;
+  cursor: default;
 }
 .mk-report-note { margin-left: auto; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
 /* Dusk link colours must not reach the paper subtree: --mk-blue is 2.46:1 on it. */

@@ -18,6 +18,13 @@
   padding-block: clamp(34px, 5vw, 54px); border-top: 1px solid var(--mk-rule);
 }
 .mk-step:first-child { border-top: 0; padding-top: 0; }
+/* Visual order differs from DOM order on alternating rows, on purpose. Each
+   row pairs copy with a `role="img"` device still that carries its own full
+   alt text, and neither half is interactive, so a screen-reader or keyboard
+   user reading copy-then-picture on every row (the DOM order, unchanged by
+   this CSS) gets the better reading order regardless of which side `order`
+   draws first. /reports deliberately does NOT do this: its callouts
+   annotate the sheet, so they must be read and tabbed to only after it. */
 .mk-step--flip .mk-step-copy { order: 2; }
 .mk-step-n {
   display: inline-grid; place-items: center; width: 46px; height: 46px; border-radius: 12px;

@@ -108,7 +108,10 @@ test('export and sharing say only what exists: PDF, print, a saved link', () => 
   // wording ("kept for a set time or kept permanently") per ruling 4 — same
   // intent: PDF is mentioned, and the temporary-or-permanent choice is too.
   render(<ReportsPage />);
-  expect(screen.getByText(/PDF/)).toBeInTheDocument();
+  // getByText(/PDF/) is ambiguous since fix round 2: the sheet's inert
+  // "Export PDF" footer label also matches "PDF", alongside this export
+  // card's own heading. getAllByText avoids the "found multiple" failure.
+  expect(screen.getAllByText(/PDF/).length).toBeGreaterThan(0);
   expect(screen.getByText(/kept for a set time or kept permanently/i)).toBeInTheDocument();
 });
 
@@ -188,4 +191,24 @@ test('ReportsPage.css declares no order: outside a @media block', () => {
   const depthAtOffset = mediaDepthAt(css);
   const topLevelOrderDecls = [...css.matchAll(/\border\s*:/g)].filter((m) => depthAtOffset[m.index] === 0);
   expect(topLevelOrderDecls).toEqual([]);
+});
+
+/* ------------------------------------------------------- fix round 2: the
+ * sheet's "Export PDF" / "Copy shareable link" looked like live buttons but
+ * did nothing — SampleReport now renders them as inert, aria-hidden spans,
+ * and its `footerLinks` prop is gone entirely. */
+test('the sample sheet on /reports has no live links or buttons of its own', () => {
+  render(<ReportsPage />);
+  const article = screen.getByRole('article', { name: /sample session report/i });
+  expect(within(article).queryAllByRole('link')).toHaveLength(0);
+  expect(within(article).queryAllByRole('button')).toHaveLength(0);
+  expect(within(article).getByText('Export PDF')).toHaveAttribute('aria-hidden', 'true');
+  expect(within(article).getByText('Copy shareable link')).toHaveAttribute('aria-hidden', 'true');
+});
+
+test('/reports has no link to itself, except the nav item that marks it current', () => {
+  render(<ReportsPage />);
+  const selfLinks = screen.getAllByRole('link').filter((a) => a.getAttribute('href') === '/reports');
+  expect(selfLinks).toHaveLength(1);
+  expect(selfLinks[0]).toHaveAttribute('aria-current', 'page');
 });

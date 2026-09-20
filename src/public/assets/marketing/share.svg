@@ -12,5 +12,5 @@
     <path d="M0 352 L150 300 L280 330 L420 244 L540 292 L600 214 L680 270 L810 226 L940 300 L1060 262 L1200 318 L1200 420 L0 420 Z" fill="#22344F" />
     <path d="M0 400 L110 360 L240 388 L380 322 L500 364 L600 300 L700 348 L830 310 L980 368 L1110 336 L1200 372 L1200 420 L0 420 Z" fill="#16233B" />
   </g>
-  <text x="600" y="210" text-anchor="middle" font-family="Archivo Expanded, Archivo, system-ui, -apple-system, Segoe UI, sans-serif" font-size="96" font-weight="800" fill="#F4EDE4">Engagements</text>
+  <text x="600" y="210" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="96" font-weight="800" fill="#F4EDE4">Engagements</text>
 </svg>

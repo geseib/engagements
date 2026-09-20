@@ -28,7 +28,7 @@ function envLabel() {
 
 export default function RootPage() {
   const {
-    code, note, missing, checking, focused, setFocused, canSubmit, cells,
+    code, note, missing, focused, setFocused, canSubmit, cells,
     handleChange, handlePaste, handleSubmit,
   } = useJoinCode();
 
