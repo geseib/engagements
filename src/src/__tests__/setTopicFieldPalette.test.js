@@ -107,9 +107,26 @@ describe('the ground the chips sit on carries the surface’s own ink', () => {
    * be arithmetic about a pixel that carries no letter. The hover tint counts:
    * the × glyph is read on it.
    */
+  /*
+    A GROUND MAY BE WRITTEN AS A TOKEN, AND SINCE 2026-09-20 IT IS. The five
+    literals these rules used to paint were tokenised onto `.qs-topic`'s own
+    root, because the editor's stylesheet guard forbids a raw colour in a
+    `.qs-*` rule and SetTopicField mounts in three places, only one of which
+    has `.qs-editor` overhead. Reading only literals here made this suite
+    measure nothing and say so; it now resolves the token first, so the
+    arithmetic still runs on the colour that actually paints.
+  */
+  const TOKEN_ALPHA = Object.fromEntries(
+    [...GLOBAL_CSS.matchAll(/--(qs-topic-[\w-]+)\s*:\s*rgba\(155,\s*168,\s*190,\s*([.\d]+)\)/g)]
+      .map((m) => [m[1], Number(m[2])]),
+  );
   const alphas = [...new Set(
-    blocks().flatMap(([, body]) => [...body.matchAll(/background(?:-color)?:\s*rgba\(155,\s*168,\s*190,\s*([.\d]+)\)/g)]
-      .map((m) => Number(m[1]))),
+    blocks().flatMap(([, body]) => [
+      ...[...body.matchAll(/background(?:-color)?:\s*rgba\(155,\s*168,\s*190,\s*([.\d]+)\)/g)]
+        .map((m) => Number(m[1])),
+      ...[...body.matchAll(/background(?:-color)?:\s*var\(--(qs-topic-[\w-]+)\)/g)]
+        .map((m) => TOKEN_ALPHA[m[1]]),
+    ].filter((a) => Number.isFinite(a))),
   )];
   const grey = [155, 168, 190];
 
