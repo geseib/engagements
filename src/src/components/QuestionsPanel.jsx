@@ -1045,7 +1045,7 @@ export default function QuestionsPanel({
       {dirty && (
         <div className="qs-dirty-bar" data-testid="unsaved-bar" role="status">
           <div className="qs-dirty-text">
-            <Icon name="Warning" weight="fill" size={16} color="#8a5300" />{' '}
+            <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
             <strong>Unsaved: {describeRowChanges(summary)}.</strong>{' '}
             Nothing has been written yet — {summary.questionCount} question
             {summary.questionCount === 1 ? '' : 's'} will be saved
@@ -1774,7 +1774,7 @@ function QuestionForm({
         // question that needs covering — the thing at risk is on screen.
         <div className="qs-form-discard" role="alert">
           <p>
-            <Icon name="Warning" weight="fill" size={16} color="#8a5300" />{' '}
+            <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
             <strong>Throw this {isAdding ? 'new question' : 'edit'} away?</strong>{' '}
             {isAdding
               ? 'It was never added to the set, so closing leaves nothing behind — including nothing half-typed to block the next Save.'

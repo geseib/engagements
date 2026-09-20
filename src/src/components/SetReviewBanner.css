@@ -1,10 +1,18 @@
 /* src/src/components/SetReviewBanner.css
    THE NEEDS-CHANGES STATE — 06-share-rejected.html. Scoped under .srev.
-   THEME-AGNOSTIC: no data-theme, tokens only, so it renders correctly inside the
-   part-paper editor and on dusk alike. The tint is --danger at --srev-tint-alpha
-   over whatever ground it lands on; both composites are asserted in
+   THEME-AGNOSTIC: no data-theme, tokens only, so it renders correctly on paper
+   and on dusk alike. The tint is --danger at --srev-tint-alpha over whatever
+   ground it lands on; both composites are asserted in
    __tests__/srevPalette.test.js. --danger-text (#EF8C86) is a dusk ink and fails
-   on paper, so the flagged ink is swapped under [data-theme="light"]. */
+   on paper, so the flagged ink is swapped under [data-theme="light"].
+
+   THAT SWAP ALWAYS MATCHES, AND A DUSK CONSUMER MUST UNDO IT. The swap below is
+   a DESCENDANT selector and public/index.html ships `<html data-theme="light">`,
+   so it matches every `.srev` in the product and, at 0,2,0, outranks the 0,1,0
+   declaration above it — the dusk branch here has never applied in a browser. A
+   scope that draws this banner on dusk has to re-point --srev-flag-ink itself,
+   more specifically than 0,2,0; components/QuestionSetEditor.css, this
+   component's only mount, is the worked example. */
 .srev {
   --srev-t-floor: 12px;
   --srev-t-label: 13px;

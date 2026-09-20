@@ -8,29 +8,35 @@
    its own paint moves in one piece; a block appended to the 10,700-line
    styles.css is a merge conflict with whoever is editing the same tail.
 
-   IT IS NOT A NEW DESIGN LANGUAGE. Every value below is lifted from the
-   question-set editor block already in styles.css (`.qs-panel`,
-   `.qs-question-row`, `.qs-dirty-bar`, `.qs-change-badge`), which is the idiom
-   this control sits inside:
+   IT IS NOT A NEW DESIGN LANGUAGE. It is the question-set editor's own idiom
+   (`.qs-panel`, `.qs-question-row`, `.qs-dirty-bar`, `.qs-change-badge`), and
+   `QuestionsPanel` is its only caller — so when the editor moved onto the
+   product's dark ground this control moved with it.
 
-     surface        #FFFFFF on the panel's #F1EDE4 paper
-     hairline       rgba(155, 168, 190, 0.28)
-     muted text     #5E6167
-     amber (paper)  #8a5300   — 6.33:1 on white, the one that can carry text.
-                                NOT --primary #F6A94C, which is 1.96:1.
-     amber wash     #FFFBF4 / rgba(138, 83, 0, 0.12)
-     alarm          #B04A45 / #FBF3F2, the tombstone red from .qs-question-row.removed
+   EVERY COLOUR IS NOW A TOKEN, WHERE IT USED TO BE A LITERAL. The original
+   comment here said the literals were deliberate, because an undefined custom
+   property invalidates the whole declaration and this control renders in
+   component tests where styles.css's :root is not loaded. That reasoning held
+   until the surface had to follow a theme: a hardcoded hex cannot. The tokens
+   it reads are the editor's own, declared on `.qs-editor` in
+   components/QuestionSetEditor.css — the scope this control only ever renders
+   inside — plus the global theme tokens the editor's `data-theme="dark"`
+   supplies. Both are asserted present in __tests__/questionSetEditorPalette
+   .test.js, which also measures every pairing below.
 
-   EVERY COLOUR IS A LITERAL, matching that block's own note: an undefined
-   custom property invalidates the whole declaration, and this control renders
-   in component tests where styles.css's :root is not loaded.
+   THE LIST IS `--surface`, ONE STEP OUT OF WHATEVER IT FLOATS OVER, and it
+   carries a `--qs-rule-strong` edge and a shadow so it reads as a menu rather
+   than as part of the form: it opens over a panel (`--bg`) in the form and over
+   the question dialog (`--surface`) in the modal, and a menu that matched one
+   of those would disappear into it.
 
    THE TWO IMPACT TONES ARE DELIBERATELY DIFFERENT PAINT. `--moved` is amber:
    bits shuffled, host toggles now point at the wrong category, recoverable by
-   putting the row somewhere else. `--evicted` is the tombstone red: a category
-   pushed past the 24th mask bit can never be toggled again, and it should not
-   look like a milder version of the amber one. The JSX makes the same
-   distinction to assistive technology with role="alert" against role="status".
+   putting the row somewhere else. `--evicted` is the tombstone red, the one
+   `.qs-question-row.removed` uses: a category pushed past the 24th mask bit can
+   never be toggled again, and it should not look like a milder version of the
+   amber one. The JSX makes the same distinction to assistive technology with
+   role="alert" against role="status".
    ========================================================================== */
 
 .qs-cat-picker {
@@ -54,10 +60,10 @@
   list-style: none;
   margin: 4px 0 0;
   padding: 4px;
-  background: #FFFFFF;
-  border: 1px solid rgba(155, 168, 190, 0.28);
+  background: var(--surface);
+  border: 1px solid var(--qs-rule-strong);
   border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(44, 62, 80, 0.12);
+  box-shadow: 0 6px 18px var(--qs-shadow);
 }
 
 .qs-cat-option {
@@ -74,23 +80,23 @@
    the only thing telling a sighted keyboard user where Enter will land —
    focus itself never leaves the input. */
 .qs-cat-option.active {
-  background: #FFFBF4;
-  box-shadow: inset 0 0 0 1px rgba(138, 83, 0, 0.35);
+  background: var(--qs-tint-warn);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .qs-cat-option:hover {
-  background: #F7F5F0;
+  background: var(--qs-row-hover);
 }
 
 .qs-cat-name {
-  color: #2c3e50;
+  color: var(--text);
 }
 
 /* Past the 24th bit: stored, counted, and untoggleable. Struck through for the
    same reason a tombstoned question row is — a state you cannot see is a state
    you cannot act on. */
 .qs-cat-option.unreachable .qs-cat-name {
-  color: #6B6E74;
+  color: var(--muted);
   text-decoration: line-through;
 }
 
@@ -101,13 +107,13 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: rgba(176, 74, 69, 0.12);
-  color: #B04A45;
+  background: var(--qs-tint-danger);
+  color: var(--danger-text);
 }
 
 .qs-cat-empty {
   padding: 7px 10px;
-  color: #5E6167;
+  color: var(--muted);
   font-style: italic;
 }
 
@@ -116,14 +122,14 @@
 .qs-cat-new {
   margin-top: 4px;
   padding-top: 10px;
-  border-top: 1px dashed rgba(155, 168, 190, 0.45);
-  color: #8a5300;
+  border-top: 1px dashed var(--qs-rule-strong);
+  color: var(--primary);
   font-weight: 600;
 }
 
 .qs-cat-new.refused {
   cursor: not-allowed;
-  color: #6B6E74;
+  color: var(--muted);
   font-weight: 400;
 }
 
@@ -132,7 +138,7 @@
    do instead. */
 .qs-cat-refusal {
   flex: 1 1 100%;
-  color: #4A3512;
+  color: var(--text);
   font-size: 0.86rem;
   font-weight: 400;
   line-height: 1.5;
@@ -146,12 +152,12 @@
   gap: 8px;
   margin-top: 4px;
   padding: 10px;
-  border-top: 1px dashed rgba(155, 168, 190, 0.45);
+  border-top: 1px dashed var(--qs-rule-strong);
 }
 
 .qs-cat-create-label {
   flex: 1 1 100%;
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.86rem;
 }
 
@@ -171,34 +177,34 @@
 }
 
 .qs-cat-error {
-  background: #FBF3F2;
-  border: 1px solid rgba(176, 74, 69, 0.35);
-  color: #7A2E2A;
+  background: var(--qs-tint-danger);
+  border: 1px solid var(--danger);
+  color: var(--danger-text);
 }
 
 /* A set that is already over the cap. Reported flatly rather than alarmingly:
    it is a fact about the set the owner inherited, not something they just did. */
 .qs-cat-overcap {
-  background: #F7F5F0;
-  border: 1px solid rgba(155, 168, 190, 0.28);
-  color: #5E6167;
+  background: var(--qs-tint-neutral);
+  border: 1px solid var(--qs-rule);
+  color: var(--muted);
 }
 
 /* Bits shuffled. Recoverable — put the row somewhere else. */
 .qs-cat-impact--moved {
-  background: #FFF8EC;
-  border: 1px solid rgba(138, 83, 0, 0.35);
-  border-left: 4px solid #8a5300;
-  color: #4A3512;
+  background: var(--qs-tint-warn);
+  border: 1px solid var(--qs-rule-strong);
+  border-left: 4px solid var(--primary);
+  color: var(--text);
 }
 
 /* A category pushed out of the masks. Not recoverable by a host: they simply
    lose the toggle. The tombstone red, because that is what it is. */
 .qs-cat-impact--evicted {
-  background: #FBF3F2;
-  border: 1px solid rgba(176, 74, 69, 0.45);
-  border-left: 4px solid #B04A45;
-  color: #7A2E2A;
+  background: var(--qs-tint-danger);
+  border: 1px solid var(--danger);
+  border-left: 4px solid var(--danger);
+  color: var(--danger-text);
 }
 
 .qs-cat-steer {

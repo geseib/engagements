@@ -359,12 +359,17 @@ describe('a request to show one question', () => {
 });
 
 describe('the card', () => {
-  test('it is the stage\'s card on a Table-ladder dusk screen, inside a paper preview', () => {
+  test('it is the stage\'s card on a Table-ladder dusk screen, inside a dusk preview', () => {
+    // The list around it used to be paper and the card the one dusk island in
+    // it. The editor moved onto the product's dark ground (the owner: *"we are
+    // entirely dark background throughout, except for question set editors and
+    // previews"*), so both are dusk now — and the card is dusk for the reason
+    // it always was, which is that it IS the stage.
     renderPreview();
     const pane = screen.getByTestId('preview-screen');
     expect(pane).toHaveClass('qprev-screen', 'stage-ladder-table');
     expect(pane).toHaveAttribute('data-theme', 'dark');
-    expect(screen.getByTestId('question-preview')).toHaveAttribute('data-theme', 'light');
+    expect(screen.getByTestId('question-preview')).toHaveAttribute('data-theme', 'dark');
     // The ASK DOM: heading, full prompt, options, how-to-answer.
     expect(pane.querySelector('h1.q')).not.toBeNull();
     expect(pane.querySelector('p.qdetail[data-drop="4"]')).toHaveTextContent('New York, 1977.');

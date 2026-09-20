@@ -13,41 +13,45 @@
    __tests__/setMediaPalette.test.js checks it BOTH ways — every selector here
    is rooted at `.smed`, and styles.css declares nothing in that scope.
 
-   PAPER, DECLARED, NOT INHERITED. The root element carries
-   `data-theme="light"` (SetMediaPanel.jsx). This panel is mounted from
-   QuestionSetEditor, which renders under `.qsets--onlight` on the host's shelf
-   and under AdminShell's `contentTheme="light"` in the console — two different
-   ancestors with two different token stacks. Declaring the theme on the root
-   makes the panel read the same in both, which is the rule the skill states
-   and the reason AdminShell, WelcomeScreen and AuthChrome all do it.
+   DUSK, DECLARED, NOT INHERITED. The root element carries `data-theme="dark"`
+   (SetMediaPanel.jsx). This panel is mounted from QuestionSetEditor, which
+   renders inside `.qsets--onlight` on the host's shelf and on AdminShell's work
+   body in the console — two different ancestors with two different token
+   stacks. Declaring the theme on the root makes the panel read the same in
+   both, which is the rule the skill states and the reason AdminShell,
+   WelcomeScreen and AuthChrome all do it.
 
-   THREE TOKENS ARE RE-POINTED FOR PAPER and they are the same three
-   `.qsets--onlight` re-points, with the same values, for the same measured
-   reasons (QuestionSetsPanel.css:585-604):
+   IT WAS PAPER, AND THE OWNER MOVED IT: *"the white background really contrasts
+   the rest of the site, as we are entirely dark background throughout, except
+   for question set editors and previews."* The architecture below is unchanged
+   — one token block, every value measured — only the values moved.
 
-     --primary      #F6A94C is 1.96:1 as text on white and this panel's
-                    counts, links and filled button all carry text. #9A5B18.
-     --danger-text  #EF8C86 is 2.0:1 on white. The missing-image report is the
-                    whole point of the panel, so its red has to be readable.
-                    #A32B25.
-     --danger-deep  filled destructive; same value, white label at 7.17:1.
+   THREE TOKENS ARE STILL RE-POINTED, for the mirror of the old reason. The host
+   shelf's `.qsets--onlight` pushes all three to its paper values on the overlay
+   above this panel, and `[data-theme="dark"]` does not restore them (they are
+   `:root`'s, not the theme's). Restating `:root`'s own values here is what stops
+   the host mount drawing #9A5B18 and #A32B25 on dusk.
 
    MEASURED, unlifted — there is no projector here, so no black-lift model.
-   The panel body sits on `.qs-panel`'s --surface-2 #F1EDE4; the file rows and
-   the report cards paint --surface #FFFFFF on top of it.
+   The panel body sits on `.qs-panel`'s --bg #0F1A2E; the file rows and the
+   report cards paint --surface #1B2942 on top of it.
 
-     --text        #1B2942 on --surface-2 #F1EDE4   12.46:1  headings, values
-     --muted       #5E6167 on --surface-2            5.32:1  notes, counts
-     --text        #1B2942 on --surface #FFFFFF     14.56:1  card copy
-     --muted       #5E6167 on --surface              6.21:1
-     --primary     #9A5B18 on --surface-2            4.63:1  totals, links
-     --primary     #9A5B18 on --surface              5.41:1
-     --danger-text #A32B25 on --surface-2            6.14:1  missing images
-     --danger-text #A32B25 on --surface              7.17:1
-     --smed-success-text #1C7350 on --surface-2      4.97:1  uploaded
-     --smed-success-text #1C7350 on --surface        5.81:1
-     #FFFFFF on --primary                            5.41:1  the filled button
-     #FFFFFF on --danger-deep                        7.17:1
+     --text        #F4EDE4 on --bg #0F1A2E          14.97:1  headings, values
+     --muted       #9BA8BE on --bg                   7.24:1  notes, counts
+     --text        #F4EDE4 on --surface #1B2942     12.53:1  card copy
+     --muted       #9BA8BE on --surface              6.06:1
+     --primary     #F6A94C on --bg                   8.86:1  totals, links
+     --primary     #F6A94C on --surface              7.42:1
+     --danger-text #EF8C86 on --bg                   7.26:1  missing images
+     --danger-text #EF8C86 on --surface              6.08:1
+     --smed-success-text #6FD0A4 on --bg             9.30:1  uploaded
+     --smed-success-text #6FD0A4 on --surface        7.79:1
+     --bg on --primary                               8.86:1  the filled button
+
+   --danger-deep IS NOT RE-POINTED, and that is the rule rather than an
+   oversight: nothing this panel renders reads it. The paper version carried it
+   because it was copied out of `.qsets--onlight`, which does render a filled
+   destructive. A token nobody reads is how a palette drifts.
 
    `--danger` carries no text here — it keeps borders and tints, per
    styles.css:22-35. Every pairing above and every tinted composite is asserted
@@ -65,21 +69,21 @@
   --smed-t-head: 19px;
   --smed-row-h: 36px;
 
-  /* Paper re-points. See the header — each of these is measured, not chosen. */
-  --primary: #9A5B18;
-  --danger-text: #A32B25;
-  --danger-deep: #A32B25;
+  /* Re-points against the host shelf's paper scope. See the header — each of
+     these is measured, not chosen. */
+  --primary: #F6A94C;
+  --danger-text: #EF8C86;
 
   /* Locals, declared here rather than borrowed from a stylesheet that merely
      happens to be in the bundle: an undefined custom property invalidates the
      whole declaration, so a borrowed token disappears the day an import moves. */
-  --smed-success-text: #1C7350;
-  --smed-rule: #E4DFD6;
-  --smed-rule-strong: #D2CBBE;
-  --smed-row-hover: rgba(30, 35, 45, .04);
-  --smed-tint-danger: rgba(163, 43, 37, .07);
-  --smed-tint-warn: rgba(154, 91, 24, .09);
-  --smed-tint-ok: rgba(28, 115, 80, .09);
+  --smed-success-text: #6FD0A4;
+  --smed-rule: rgba(155, 168, 190, .20);
+  --smed-rule-strong: rgba(155, 168, 190, .34);
+  --smed-row-hover: rgba(155, 168, 190, .055);
+  --smed-tint-danger: rgba(229, 100, 94, .09);
+  --smed-tint-warn: rgba(246, 169, 76, .09);
+  --smed-tint-ok: rgba(79, 178, 134, .10);
   --smed-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   color: var(--text);
@@ -159,12 +163,12 @@
 .smed-btn--primary {
   background: var(--primary);
   border-color: var(--primary);
-  color: #FFFFFF;         /* measured 5.41:1 on #9A5B18. Not a token: styles.css
+  color: var(--bg);       /* measured 8.86:1 on #F6A94C. The dusk palette's own
                              has no "on-primary" colour and inventing one here
                              would be a global class from a component sheet. */
 }
 
-.smed-btn--primary:hover:not(:disabled) { color: #FFFFFF; opacity: .92; }
+.smed-btn--primary:hover:not(:disabled) { color: var(--bg); opacity: .92; }
 
 .smed-btn--lg { min-height: 36px; padding: 0 16px; font-size: var(--smed-t-body); }
 
@@ -192,9 +196,9 @@
   white-space: nowrap;
 }
 
-.smed-chip--ok { color: var(--smed-success-text); border-color: rgba(28, 115, 80, .45); background: var(--smed-tint-ok); }
-.smed-chip--warn { color: var(--primary); border-color: rgba(154, 91, 24, .5); background: var(--smed-tint-warn); }
-.smed-chip--bad { color: var(--danger-text); border-color: rgba(163, 43, 37, .55); background: var(--smed-tint-danger); }
+.smed-chip--ok { color: var(--smed-success-text); border-color: var(--success); background: var(--smed-tint-ok); }
+.smed-chip--warn { color: var(--primary); border-color: var(--primary); background: var(--smed-tint-warn); }
+.smed-chip--bad { color: var(--danger-text); border-color: var(--danger); background: var(--smed-tint-danger); }
 
 /* ------------------------------------------------------------ the report -- */
 

@@ -251,7 +251,7 @@ export default function QuestionPullDialog({
 
           {carriesImages && (
             <p className="qs-pull-caveat">
-              <Icon name="Warning" weight="fill" size={14} color="#8a5300" />{' '}
+              <Icon name="Warning" weight="fill" size={14} color="var(--primary)" />{' '}
               One or more of these carries artwork. The image file lives with the set it came
               from, so the copy will point at a picture this set does not have until you upload it.
             </p>

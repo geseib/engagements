@@ -1,14 +1,18 @@
-/* R3 / Important #3: neither of the version chip's non-token inks carries the
-   editor's own paper theme. --success (#4FB286) is only 2.6:1 on the paper
-   editor's --bg for the "public" chip, and --secondary (#7CA7E6, 6.8:1 on the
-   dusk list where it was written) is only ~2.3:1 there for the "waiting for
-   Engage" chip — the exact same defect R3 already fixed once, missed the
-   second time because the list's own waiting chip sits on dusk and passes.
-   .qs-version-chip instead declares two scoped custom properties,
-   --qs-chip-public-ink: #1E7A52 and --qs-chip-waiting-ink: #2B5F9E, and the
-   flagged/unfinished chip carries --danger-deep. This asserts all three clear
-   AA on paper --bg AND on white, following srevPalette.test.js's method (the
-   helpers below are copied from there). */
+/* THE VERSION CHIP'S INKS, AND THE WORKIE GROUP'S REFUSAL TO HAVE ONE.
+ *
+ * R3 / Important #3: neither of the version chip's non-token inks carried the
+ * surface it was drawn on. The chip declares two scoped custom properties
+ * instead of reusing --success / --secondary, and that is still true — only the
+ * surface changed. The editor moved onto the product's dark ground (the owner:
+ * *"the white background really contrasts the rest of the site, as we are
+ * entirely dark background throughout, except for question set editors and
+ * previews"*), so the inks are the dusk pair and they are measured on the two
+ * grounds a version row can actually be drawn on: the row itself, and the row
+ * under the active version's tint.
+ *
+ * THE ORIGINAL DEFECT IS STILL PINNED, in the form it takes here: the ink each
+ * chip declines is measured too, so "it declares its own token" cannot become
+ * decorative. The helpers below are copied from srevPalette.test.js. */
 const fs = require('fs');
 const path = require('path');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
@@ -23,45 +27,86 @@ function token(css, block, name) {
   if (!m) throw new Error(`${name} not in ${block}`);
   return m[1];
 }
-const PAPER = '[data-theme="light"] {';
 const ROOT = ':root {';
-const WHITE = hex('#FFFFFF');
+const DUSK = '[data-theme="dark"] {';
 const AA = 4.5;
 
-const paperBg = hex(token(GLOBAL_CSS, PAPER, '--bg'));
+/* The scope's token block — where the editor's raw values live now. */
+const EDITOR_CSS = read('components', 'QuestionSetEditor.css');
+const SCOPE = '.qs-editor {';
+
+function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
+function tint(css, block, name) {
+  const start = css.indexOf(block); const body = css.slice(start, css.indexOf('}', start));
+  const m = body.match(new RegExp(`${name}\\s*:\\s*rgba\\(([^)]*)\\)`));
+  if (!m) throw new Error(`${name} is not an rgba in ${block}`);
+  const parts = m[1].split(',').map((n) => Number(n.trim()));
+  return { rgb: parts.slice(0, 3), a: parts[3] };
+}
+
+/* A version row is `background: var(--surface)`, read from the rule rather than
+   named here; the active one carries the ok tint on top of it. */
+const rowToken = GLOBAL_CSS
+  .slice(GLOBAL_CSS.indexOf('.qs-version-row {'))
+  .match(/background:\s*var\((--[\w-]+)\)/)[1];
+const row = hex(token(GLOBAL_CSS, DUSK, rowToken));
+const ok = tint(EDITOR_CSS, SCOPE, '--qs-tint-ok');
+const activeRow = alphaOver(ok.rgb, row, ok.a);
+
+const dangerText = hex(token(GLOBAL_CSS, ROOT, '--danger-text'));
 const dangerDeep = hex(token(GLOBAL_CSS, ROOT, '--danger-deep'));
+const success = hex(token(GLOBAL_CSS, ROOT, '--success'));
 const secondary = hex(token(GLOBAL_CSS, ROOT, '--secondary'));
-const publicInkHex = token(GLOBAL_CSS, '.qs-version-chip {', '--qs-chip-public-ink');
+const publicInkHex = token(EDITOR_CSS, SCOPE, '--qs-chip-public-ink');
 const publicInk = hex(publicInkHex);
-const waitingInkHex = token(GLOBAL_CSS, '.qs-version-chip {', '--qs-chip-waiting-ink');
+const waitingInkHex = token(EDITOR_CSS, SCOPE, '--qs-chip-waiting-ink');
 const waitingInk = hex(waitingInkHex);
 
 describe.each([
-  ['paper --bg', paperBg],
-  ['#FFFFFF', WHITE],
+  ['a version row', row],
+  ['the active version row', activeRow],
 ])('the version chip ink on %s', (_name, bg) => {
-  test('the public chip ink (#1E7A52) clears AA', () => {
+  test('the public chip ink clears AA', () => {
     expect(ratio(publicInk, bg)).toBeGreaterThanOrEqual(AA);
   });
-  test('the flagged/unfinished chip ink (--danger-deep) clears AA', () => {
-    expect(ratio(dangerDeep, bg)).toBeGreaterThanOrEqual(AA);
+  test('the flagged/unfinished chip ink (--danger-text) clears AA', () => {
+    expect(ratio(dangerText, bg)).toBeGreaterThanOrEqual(AA);
   });
-  test('the waiting-for-Engage chip ink (--qs-chip-waiting-ink) clears AA', () => {
+  test('the waiting-for-Engage chip ink clears AA', () => {
     expect(ratio(waitingInk, bg)).toBeGreaterThanOrEqual(AA);
   });
 });
 
-test('the public chip declares its own scoped token rather than reusing --success', () => {
-  // --success (#4FB286) is only 2.6:1 on paper --bg — the bug this token fixes.
-  expect(publicInkHex.toUpperCase()).toBe('#1E7A52');
-  expect(ratio(hex('#4FB286'), paperBg)).toBeLessThan(AA);
+test('the public chip ink is the one the SET LIST uses for the same state', () => {
+  // The reason for a scoped token has changed and this says so rather than
+  // keeping a premise that has stopped being true: on paper, --success
+  // (#4FB286) was 2.6:1 and the token existed because the global was
+  // unreadable. On dusk --success is 5.6:1 on this row and would pass — so the
+  // token now earns its place a different way. A version that reached the
+  // public library shows a chip in `.qsets` (the list this editor opens from)
+  // and a chip here, and they are the same fact about the same set; the ink is
+  // read out of QuestionSetsPanel.css so the two cannot drift apart.
+  expect(ratio(success, row)).toBeGreaterThanOrEqual(AA);
+  const list = read('components', 'QuestionSetsPanel.css');
+  expect(publicInkHex.toUpperCase()).toBe(token(list, '.qsets {', '--qsets-success-text').toUpperCase());
+});
+
+test('the flagged chip takes --danger-text, not the deep red under a white label', () => {
+  // --danger-deep (#B03A34) is the FILL a --text label sits on; as ink on the
+  // row it is 2.4:1. rejects: carrying the paper choice across unexamined.
+  expect(ratio(dangerDeep, row)).toBeLessThan(AA);
+  const rule = GLOBAL_CSS.match(/\.qs-version-chip--flagged[^{]*\{([^}]*)\}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/color:\s*var\(--danger-text\)/);
 });
 
 test('the waiting chip declares its own scoped token rather than reusing --secondary', () => {
-  // --secondary (#7CA7E6) is ~2.3:1 on paper --bg — text-safe only on dusk,
-  // where the list's own waiting chip lives (7.0:1, questionSetsPanel.css).
-  expect(waitingInkHex.toUpperCase()).toBe('#2B5F9E');
-  expect(ratio(secondary, paperBg)).toBeLessThan(AA);
+  // --secondary (#7CA7E6) IS text-safe on the row (5.9:1), so this one is a
+  // scoped token for consistency with its sibling rather than out of need —
+  // and the token being its own is what lets the pair move together the next
+  // time the surface does.
+  expect(waitingInkHex.toUpperCase()).toBe('#7CA7E6');
+  expect(ratio(secondary, row)).toBeGreaterThanOrEqual(AA);
 });
 
 /* ── THE WORKIE GROUP: THE SAME DEFECT, DECLINED RATHER THAN MEASURED ────────

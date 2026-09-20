@@ -37,7 +37,7 @@ const optionDomId = (id) => `qprev-opt-${id}`;
  */
 export function QuestionViewSwitch({ mode = 'table', onChange, previewBlocked = '' }) {
   return (
-    <div className="qprev-switch" data-theme="light" role="group" aria-label="How the questions are shown">
+    <div className="qprev-switch" data-theme="dark" role="group" aria-label="How the questions are shown">
       <button
         type="button"
         className="qprev-seg-btn"
@@ -219,7 +219,7 @@ export default function QuestionPreview({
   // No rows, or only tombstones: two different lines (config/questionPreview.js).
   if (listRows.length === 0) {
     return (
-      <div className="qprev qprev--empty" data-theme="light" data-testid="question-preview">
+      <div className="qprev qprev--empty" data-theme="dark" data-testid="question-preview">
         <p className="qprev-empty">{nothingToPreview(rows)}</p>
       </div>
     );
@@ -229,7 +229,7 @@ export default function QuestionPreview({
      own: the listbox inside is the focusable element, and the chips, the toggle
      and Edit keep ↑/↓ working when focus has moved onto them. */
   return (
-    <div className="qprev" data-theme="light" data-testid="question-preview" onKeyDown={onKeyDown}>
+    <div className="qprev" data-theme="dark" data-testid="question-preview" onKeyDown={onKeyDown}>
       <div className="qprev-list">
         {/* ESCAPE CLEARS THE SEARCH, AND STOPS HERE — while there is a search to
             clear. The editor can be a dialog (the host shelf), and components/
