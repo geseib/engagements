@@ -80,10 +80,21 @@ export function shareStateOf(set, nowMs = Date.now(), { canShare = false } = {})
        * public copy's own revisions, which start at 1 and have no relation to
        * the source set's numbering.
        */
-      if (active && shared && active > shared) {
+      /*
+       * A missing share version is not unknown, it is v1: every path that
+       * mints v1 from legacy content copies it verbatim
+       * (migrate-set-versions.js, and the snapshot a replace or a restore
+       * takes first). So a legacy share with no recorded version is not
+       * "behind" nothing — the comparison falls back to v1 rather than
+       * short-circuiting on a null `shared` and reading a flat "Shared"
+       * forever, even after the set has moved on.
+       */
+      if (active && active > (shared || 1)) {
         return {
           key: 'behind',
-          label: `Shared v${shared}, yours is v${active}`,
+          // `shared` is only ever null for that legacy case — never render
+          // "Shared vnull" or "Shared vundefined".
+          label: shared ? `Shared v${shared}, yours is v${active}` : `Shared earlier, yours is v${active}`,
           // The owner's own words where the exit exists, and the same fact with
           // nothing to press where it does not — see `canShare` above.
           title: canShare

@@ -128,9 +128,11 @@ const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 // which is the point: a replace never has to name one.
 const invoke = (body) => handler({ body: JSON.stringify({ topic: 'business-work', ...body }) });
 const parse = (res) => JSON.parse(res.body);
+// #v1: a new set is born at v1 (shared/set-version.js FIRST_VERSION), so that
+// is the partition an import writes its content to.
 const questionsOf = (setId) =>
   [...store.values()]
-    .filter((i) => i.PK === `SET#${setId}` && String(i.SK).startsWith('QUESTION#'))
+    .filter((i) => i.PK === `SET#${setId}#v1` && String(i.SK).startsWith('QUESTION#'))
     .sort((a, b) => a.SK.localeCompare(b.SK));
 const writeCount = () =>
   log.filter((c) => c.type === 'put' || c.type === 'batchWrite').length;
@@ -179,7 +181,7 @@ const TRIVIA_CSV = [
       assert.deepStrictEqual(sks, ['QUESTION#c001#001', 'QUESTION#c001#002', 'QUESTION#c002#001']);
     });
     check('Detail / School / CustomInstructions land on the item', () => {
-      const q = store.get('SET#greatesthits|QUESTION#c001#001');
+      const q = store.get('SET#greatesthits#v1|QUESTION#c001#001');
       assert.strictEqual(q.Detail, 'Inspiring others to achieve.');
       assert.strictEqual(q.School, 'School of Management');
       assert.strictEqual(q.CustomInstructions, 'How would you apply this?');
@@ -195,7 +197,7 @@ const TRIVIA_CSV = [
     });
     check('trivia CSV returns 200', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('both trivia rows imported', () => assert.strictEqual(parse(res).questionCount, 2));
-    const q = store.get('SET#techtrivia|QUESTION#c001#001');
+    const q = store.get('SET#techtrivia#v1|QUESTION#c001#001');
     check('trivia options survive', () => {
       assert.strictEqual(q.optionA, 'Evaluate strengths, weaknesses, opportunities, threats');
       assert.strictEqual(q.optionB, 'Calculate ratios');
@@ -218,7 +220,7 @@ const TRIVIA_CSV = [
       customTitle: 'Quotes', engagementType: 'call-and-answer',
     });
     check('quoted/comma CSV returns 200', () => assert.strictEqual(res.statusCode, 200, res.body));
-    const q = store.get('SET#quotes|QUESTION#c001#001');
+    const q = store.get('SET#quotes#v1|QUESTION#c001#001');
     check('escaped quotes survive in Title', () =>
       assert.strictEqual(q.Title, 'THE "RIGHT" CALL'));
     check('commas + escaped quotes survive in Detail', () =>
@@ -241,7 +243,7 @@ const TRIVIA_CSV = [
       customTitle: 'Intl Set', engagementType: 'call-and-answer',
     });
     check('non-ASCII CSV returns 200', () => assert.strictEqual(res.statusCode, 200, res.body));
-    const q = store.get('SET#intlset|QUESTION#c001#001');
+    const q = store.get('SET#intlset#v1|QUESTION#c001#001');
     check('non-ASCII detail survives byte-for-byte', () =>
       assert.strictEqual(q.Detail, 'Ça alors — 日本語 · Ελληνικά · emoji 🎯 · naïve résumé.'));
     check('non-ASCII category survives', () => assert.strictEqual(q.Category, 'Café Culture'));
@@ -263,7 +265,9 @@ const TRIVIA_CSV = [
       assert.ok(id && id.length > 0, `setId was ${JSON.stringify(id)} — SK would be bare "SET#"`);
     });
     check('questions hang off a non-empty partition key', () => {
-      const bad = [...store.values()].filter((i) => i.PK === 'SET#');
+      // With or without the version suffix: a setId that collapsed to '' gives
+      // 'SET#' before versioning and 'SET##v1' after it.
+      const bad = [...store.values()].filter((i) => /^SET#(#v\d+)?$/.test(String(i.PK)));
       assert.strictEqual(bad.length, 0, `${bad.length} items written under the bare "SET#" partition`);
     });
   }
@@ -411,7 +415,7 @@ const TRIVIA_CSV = [
       }
     });
     check('the last question is numbered correctly within its category', () =>
-      assert.ok(store.get('SET#bigset|QUESTION#c004#040'), 'QUESTION#c004#040 missing'));
+      assert.ok(store.get('SET#bigset#v1|QUESTION#c004#040'), 'QUESTION#c004#040 missing'));
   }
 
   // 9. UnprocessedItems must be retried, never dropped -----------------------
@@ -423,9 +427,9 @@ const TRIVIA_CSV = [
     }
     // Dynamo "throttles" three items the first time it sees them.
     deferOnce = new Set([
-      'SET#retryset|QUESTION#c001#005',
-      'SET#retryset|QUESTION#c001#030',
-      'SET#retryset|QUESTION#c001#058',
+      'SET#retryset#v1|QUESTION#c001#005',
+      'SET#retryset#v1|QUESTION#c001#030',
+      'SET#retryset#v1|QUESTION#c001#058',
     ]);
     const res = await invoke({
       fileName: 'retry.csv', fileContent: rows.join('\n'),
@@ -476,7 +480,7 @@ const TRIVIA_CSV = [
       assert.strictEqual(store.get('SETS|SET#boomset'), undefined,
         'metadata row survived a failed import — the set lists as importable but is incomplete'));
     check('a failed import leaves no orphan rows in the SET# partition', () => {
-      const orphans = [...store.values()].filter((i) => i.PK === 'SET#boomset');
+      const orphans = [...store.values()].filter((i) => String(i.PK).startsWith('SET#boomset'));
       assert.strictEqual(orphans.length, 0,
         `${orphans.length} orphan rows left behind: ${orphans.map((o) => o.SK).join(', ')}`);
     });
@@ -491,7 +495,7 @@ const TRIVIA_CSV = [
     });
     check('a CRLF CSV imports all rows', () => assert.strictEqual(parse(res).questionCount, 3, res.body));
     check('CRLF does not leave a stray CR on the last column', () => {
-      const q = store.get('SET#excelset|QUESTION#c001#001');
+      const q = store.get('SET#excelset#v1|QUESTION#c001#001');
       assert.strictEqual(q.CustomInstructions, 'How would you apply this?');
     });
   }

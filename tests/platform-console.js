@@ -557,8 +557,8 @@ const say = (s) => console.log(s);
     const out = bodyOf(res);
     assert.strictEqual(out.rowsCopied, 3);
     assert.ok(store.has(key(`ORG#${NW}#SETS`, `SET#${out.setId}`)), 'metadata must exist');
-    assert.ok(store.has(key(`ORG#${NW}#SET#${out.setId}`, 'QUESTION#q001')));
-    assert.ok(store.has(key(`ORG#${NW}#SET#${out.setId}`, 'CATEGORY#c001')));
+    assert.ok(store.has(key(`ORG#${NW}#SET#${out.setId}#v1`, 'QUESTION#q001')));
+    assert.ok(store.has(key(`ORG#${NW}#SET#${out.setId}#v1`, 'CATEGORY#c001')));
   });
 
   // rejects: copying plaintext straight into an org partition. The source has
@@ -573,12 +573,12 @@ const say = (s) => console.log(s);
       method: 'POST', ...HOST, orgId: NW, role: 'member',
       pathParams: { setId: '80strivia' }, body: { scope: 'platform' },
     })));
-    const raw = store.get(key(`ORG#${NW}#SET#${setId}`, 'QUESTION#q001'));
+    const raw = store.get(key(`ORG#${NW}#SET#${setId}#v1`, 'QUESTION#q001'));
     assert.notStrictEqual(raw.Title, 'Question q001', 'Title must not be stored in the clear');
     assert.strictEqual(plainRow(NW, raw).Title, 'Question q001', 'and must decrypt back');
     // The category NAME stays readable, exactly as an org's own sets do — it
     // carries the 24-bit mask ordering.
-    assert.strictEqual(store.get(key(`ORG#${NW}#SET#${setId}`, 'CATEGORY#c001')).Name, 'Pricing');
+    assert.strictEqual(store.get(key(`ORG#${NW}#SET#${setId}#v1`, 'CATEGORY#c001')).Name, 'Pricing');
   });
 
   // rejects: a copy that keeps a link to its source. An Engage admin editing

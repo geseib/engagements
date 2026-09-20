@@ -312,6 +312,31 @@ const replaceSet = (setId, csv, extra = {}) => upload({
   }),
 });
 
+/**
+ * Turn a freshly imported set back into a genuinely PRE-VERSIONING one:
+ * content in the unsuffixed partition, no `activeVersion`, no `versions[]`.
+ *
+ * An import is born at v1 now, so this is the only way left to build the state
+ * the sets already in dev/test/prod are in (15 of 21 platform sets and 5 of 6
+ * org sets on engagedev, 2026-09-19). The resolver's legacy branch must keep
+ * serving them, and the tests below must keep exercising it for real rather
+ * than through a set that quietly acquired a version.
+ */
+function makeLegacy(setId) {
+  const from = `ORG#${ORG}#SET#${setId}#v1`;
+  const to = `ORG#${ORG}#SET#${setId}`;
+  for (const [key, item] of [...store.entries()]) {
+    if (item.PK !== from) continue;
+    store.delete(key);
+    store.set(`${to}|${item.SK}`, { ...item, PK: to });
+  }
+  const metaKey = `ORG#${ORG}#SETS|SET#${setId}`;
+  const meta = { ...store.get(metaKey) };
+  delete meta.activeVersion;
+  delete meta.versions;
+  store.set(metaKey, meta);
+}
+
 /** Give a set the metadata fields a replace must not clobber. */
 function decorate(setId, fields) {
   const key = `ORG#${ORG}#SETS|SET#${setId}`;
@@ -372,18 +397,42 @@ function decorate(setId, fields) {
     });
   }
 
-  // ==== 2. a plain import stays on the legacy layout ========================
+  // ==== 2. a plain import is BORN AT v1 =====================================
   say('\n  -- import + replace --');
   resetDb();
   {
     const res = await importSet('Demo Set', csvV1);
+    const meta = () => plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`));
     check('a plain import succeeds', () => assert.strictEqual(res.statusCode, 200, res.body));
-    check('a plain import writes NO version (legacy layout, unchanged behaviour)', () =>
-      assert.strictEqual(parse(res).version, null));
-    check('its questions land in the legacy partition', () =>
-      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset`).length, 2));
-    check('the metadata row has no activeVersion', () =>
-      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion, undefined));
+    check('a plain import is born at v1', () =>
+      assert.strictEqual(parse(res).version, 1));
+    check('its questions land in the v1 partition', () =>
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset#v1`).length, 2));
+    check('a NEW set writes nothing to the legacy partition', () =>
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset`).length, 0));
+    check('the metadata row carries activeVersion 1', () =>
+      assert.strictEqual(meta().activeVersion, 1));
+    // THE JUNCTION THE PUBLIC LIBRARY READS THROUGH. check-question-set.js
+    // resolves the version with exactly this call and hands the result to the
+    // worker, the share stamp and publish-set.js's `sourceVersion`. While a new
+    // set was born unversioned this returned null, so a set shared as created —
+    // the ordinary case — published with `sourceVersion: NULL`, its snapshot
+    // key read `.../vnull/...`, and its REVIEW row sat in the unsuffixed
+    // partition. Three of the four public sets on engagedev are in that state.
+    check('a newly created set resolves to v1, not to the legacy partition', () => {
+      const meta = plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`));
+      const r = resolver.resolvePartitionFromMeta({ scope: 'org', orgId: ORG, setId: 'demoset' }, meta, undefined);
+      assert.strictEqual(r.version, 1, 'the share path would record a null version');
+      assert.strictEqual(r.source, 'active');
+      assert.strictEqual(r.pk, `ORG#${ORG}#SET#demoset#v1`);
+    });
+    check('versions[] records v1 with its counts', () => {
+      const versions = meta().versions;
+      assert.strictEqual(versions.length, 1, `versions[] has ${versions && versions.length} entries`);
+      assert.strictEqual(versions[0].version, 1);
+      assert.strictEqual(versions[0].questionCount, 2);
+      assert.strictEqual(versions[0].categoryCount, 1);
+    });
   }
 
   // ==== 3. replace: snapshot legacy -> v1, write v2, flip ===================
@@ -404,7 +453,7 @@ function decorate(setId, fields) {
     check('replace succeeds', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('replace reports the new version number', () => assert.strictEqual(body.version, 2));
     check('replace keeps the set id', () => assert.strictEqual(body.setId, 'demoset'));
-    check('the pre-versioning content is snapshotted to v1', () => {
+    check('the superseded content is still readable at v1', () => {
       const v1 = rowsIn(`ORG#${ORG}#SET#demoset#v1`);
       assert.strictEqual(v1.length, 2, `v1 has ${v1.length} question rows`);
       assert.strictEqual(v1[0].Title, 'THE SMILE');
@@ -414,8 +463,8 @@ function decorate(setId, fields) {
       assert.strictEqual(v2.length, 3);
       assert.strictEqual(v2[0].Title, 'THE SMILE (FIXED)');
     });
-    check('the LEGACY rows are left in place (rollback needs no restore)', () =>
-      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset`).length, 2));
+    check('a set born at v1 never grows legacy rows by being replaced', () =>
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#demoset`).length, 0));
     check('activeVersion is flipped to 2', () =>
       assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#demoset`)).activeVersion, 2));
     check('versions[] lists both v1 and v2', () => {
@@ -485,6 +534,40 @@ function decorate(setId, fields) {
       assert.strictEqual(missing.statusCode, 404, missing.body));
   }
 
+  // ==== 5b. replacing a set that IS genuinely legacy still snapshots =======
+  //
+  // New sets are born at v1, so this path no longer fires for anything created
+  // from today on. It is NOT dead: it is the only thing standing between the
+  // sets already sitting unversioned in dev/test/prod and a replace that would
+  // strand their content in a partition no version lists.
+  say('\n  -- replacing a pre-versioning set --');
+  resetDb();
+  {
+    await importSet('Old Set', csvV1);
+    makeLegacy('oldset');
+    check('the fixture really is unversioned before the replace', () => {
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#oldset`).length, 2);
+      assert.strictEqual(plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#oldset`)).activeVersion, undefined);
+    });
+
+    const res = await replaceSet('oldset', csvV2);
+    const meta = () => plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#oldset`));
+    check('replacing a legacy set writes v2, not v1', () =>
+      assert.strictEqual(parse(res).version, 2));
+    check('its pre-versioning content is snapshotted to v1', () => {
+      const v1 = rowsIn(`ORG#${ORG}#SET#oldset#v1`);
+      assert.strictEqual(v1.length, 2, `v1 has ${v1.length} question rows`);
+      assert.strictEqual(v1[0].Title, 'THE SMILE');
+    });
+    check('the new content is written to v2', () =>
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#oldset#v2`)[0].Title, 'THE SMILE (FIXED)'));
+    check('the LEGACY rows are left in place (rollback needs no restore)', () =>
+      assert.strictEqual(rowsIn(`ORG#${ORG}#SET#oldset`).length, 2));
+    check('activeVersion is flipped to 2', () => assert.strictEqual(meta().activeVersion, 2));
+    check('versions[] gains BOTH the snapshot and the new version', () =>
+      assert.deepStrictEqual(meta().versions.map((v) => v.version), [1, 2]));
+  }
+
   // ==== 6. the point of the whole design: a pinned game keeps its version ===
   say('\n  -- a pinned game is not disturbed by a replace --');
   resetDb();
@@ -543,7 +626,8 @@ function decorate(setId, fields) {
   say('\n  -- migration safety: an unversioned set still works --');
   resetDb();
   {
-    await importSet('Legacy Set', csvV1);     // never replaced, never migrated
+    await importSet('Legacy Set', csvV1);
+    makeLegacy('legacyset');                  // never replaced, never migrated
     store.set('GAME#3333|METADATA', { PK: 'GAME#3333', SK: 'METADATA', orgId: ORG, QuestionSetId: 'legacyset', SetScope: 'org', SetOrgId: ORG, QuestionSetScope: 'org' });
     store.set('GAME#3333|STATE', { PK: 'GAME#3333', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
     store.set('GAME#3333|QUESTION#001#REF', {
@@ -595,6 +679,7 @@ function decorate(setId, fields) {
 
     // A legacy set must not gain a spurious pin.
     await importSet('No Version', csvV1);
+    makeLegacy('noversion');
     await createGame('6666', { orgId: ORG, questionSetScope: 'org', title: 'T', engagementType: 'call-and-answer', questionSetId: 'noversion' });
     check('a game on an unversioned set gets NO QuestionSetVersion attribute', () =>
       assert.strictEqual(store.get('GAME#6666|METADATA').QuestionSetVersion, undefined));
@@ -838,7 +923,7 @@ function decorate(setId, fields) {
       '"Art",6,"HTTP URL","d","s","i","http://example.test/legacy.png"',
     ].join('\n');
     await importSet('Media Set', csv);
-    const q = rowsIn(`ORG#${ORG}#SET#mediaset`);
+    const q = rowsIn(`ORG#${ORG}#SET#mediaset#v1`);
 
     check('a bare filename becomes sets/<setId>/<filename>', () =>
       assert.strictEqual(q[0].Image, 'sets/mediaset/the-enigmatic-smile.jpg'));
@@ -891,6 +976,7 @@ function decorate(setId, fields) {
     });
     await checkAsync('an unversioned set reports activeVersion null and versions []', async () => {
       await importSet('Plain', csvV1);
+      makeLegacy('plain');
       const res = await adminListSets(asOwner());
       const set = parse(res).questionSets.find((s) => s.id === 'plain');
       assert.strictEqual(set.activeVersion, null);

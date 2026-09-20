@@ -235,8 +235,11 @@ const snapshot = (pk) => JSON.stringify(rowsIn(pk).sort((a, b) => a.SK.localeCom
 const SET_ID = 'teamretro';
 const ORG_A_META_PK = 'ORG#org_a#SETS';
 const ORG_B_META_PK = 'ORG#org_b#SETS';
-const ORG_A_CONTENT_PK = `ORG#org_a#SET#${SET_ID}`;
-const ORG_B_CONTENT_PK = `ORG#org_b#SET#${SET_ID}`;
+// #v1 — both orgs create their set by importing it, and a new set is born at
+// v1 (shared/set-version.js FIRST_VERSION). The scope prefix is what this file
+// is about; the version suffix just follows the content.
+const ORG_A_CONTENT_PK = `ORG#org_a#SET#${SET_ID}#v1`;
+const ORG_B_CONTENT_PK = `ORG#org_b#SET#${SET_ID}#v1`;
 
 /** A platform set, seeded in the PRE-TENANCY shape: PK 'SETS', no scope
  *  attribute, no orgId, no createdBy — which is what all ~41 live sets are. */
@@ -659,7 +662,7 @@ function seedPlatformSet() {
     assert.strictEqual(row.scope, undefined, 'a platform row must carry no scope attribute');
     assert.strictEqual(row.orgId, undefined);
     assert.strictEqual(row.createdBy, 'sub-eve', 'the creator is still recorded');
-    assert.strictEqual(rowsIn('SET#houserules').filter((r) => r.SK.startsWith('QUESTION#')).length, 3);
+    assert.strictEqual(rowsIn('SET#houserules#v1').filter((r) => r.SK.startsWith('QUESTION#')).length, 3);
   });
 
   // rejects: a `ttl` creeping onto set metadata. `ttl` is for SESSION data only

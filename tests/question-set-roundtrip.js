@@ -238,8 +238,7 @@ const rowsIn = (pk) =>
 /**
  * Create -> export -> re-import as a replace, all through the real handlers.
  *
- * A plain create lands in the legacy `SET#<id>` partition; the replace
- * snapshots that to v1 and writes v2. So `before` is the legacy partition and
+ * A plain create is born at v1; the replace writes v2. So `before` is v1 and
  * `after` is v2 — the same rows a game would be served, on both sides.
  */
 async function roundTrip(title, engagementType, csv) {
@@ -254,7 +253,7 @@ async function roundTrip(title, engagementType, csv) {
   });
   assert.strictEqual(created.statusCode, 200, `create failed: ${created.body}`);
   const setId = parse(created).setId;
-  const before = rowsIn(`ORG#org_nw#SET#${setId}`);
+  const before = rowsIn(`ORG#org_nw#SET#${setId}#v1`);
 
   // The download needs the caller too. The set is created by adminContext(),
   // which since tenancy belongs to an ORGANISATION — so an anonymous export is
@@ -277,7 +276,7 @@ async function roundTrip(title, engagementType, csv) {
   return { setId, before, after, csv: exportedCsv, header: exportedCsv.split('\n')[0] };
 }
 
-/** Compare question rows field for field. PK differs by design (legacy vs #v2). */
+/** Compare question rows field for field. PK differs by design (#v1 vs #v2). */
 function assertSameQuestions(before, after) {
   assert.strictEqual(after.length, before.length,
     `question count changed: ${before.length} -> ${after.length}`);
@@ -931,7 +930,7 @@ const WAVELENGTH_CSV = [
     // It is the same working copy through the same serialiser, so the rows must
     // match field for field apart from the provenance stamp.
     check('the forked set carries the same questions, with provenance', () => {
-      const forkedRows = rowsIn(`ORG#org_nw#SET#${parse(forked).setId}`);
+      const forkedRows = rowsIn(`ORG#org_nw#SET#${parse(forked).setId}#v1`);
       assert.deepStrictEqual(forkedRows.map((r) => r.Title), original.after.map((r) => r.Title));
       assert.ok(forkedRows.every((r) => r.SourceSetId === original.setId),
         'a forked row lost its provenance');

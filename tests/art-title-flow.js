@@ -179,7 +179,7 @@ function check(label, fn) {
   });
   check('upload returns 200', () =>
     assert.strictEqual(plainRes.statusCode, 200, `got ${plainRes.statusCode}: ${plainRes.body}`));
-  const plainQ = [...store.values()].find((i) => i.PK === 'SET#plainset' && String(i.SK).startsWith('QUESTION#'));
+  const plainQ = [...store.values()].find((i) => i.PK === 'SET#plainset#v1' && String(i.SK).startsWith('QUESTION#'));
   check('stored with empty Image (not undefined/crash)', () =>
     assert.strictEqual(plainQ.Image, '', `got ${JSON.stringify(plainQ.Image)}`));
   check('its Detail still populated as before', () =>
@@ -187,8 +187,10 @@ function check(label, fn) {
 
   // ---------- 3. Read path: does image reach the player? ----------
   console.log('\n3. get-game-state: image reaches the player payload');
-  const artQ = questionItems.find((i) => i.PK === 'SET#famousarttitles');
-  const setId = artQ.PK.replace('SET#', '');
+  // #v1 — a new set is born there. The id is taken from the constant rather
+  // than sliced back off the PK, which now carries the version suffix too.
+  const setId = 'famousarttitles';
+  const artQ = questionItems.find((i) => i.PK === `SET#${setId}#v1`);
 
   store.set(key('GAME#1234', 'METADATA'), {
     PK: 'GAME#1234', SK: 'METADATA', GameId: '1234',

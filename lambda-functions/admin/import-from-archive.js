@@ -185,7 +185,11 @@ async function restoreLegacySet(event, archiveId, item, csv) {
   if (response.statusCode !== 200) throw new Error(body.error || `The legacy restore was refused (${response.statusCode}).`);
   return {
     archiveId, kind: 'set', id: body.setId, name: body.setName || name, mode: 'created',
-    version: null, active: false, legacy: true, questionCount: body.questionCount,
+    // The version the import actually wrote, not a hardcoded null. A pre-snapshot
+    // CSV carries no version OF ITS OWN — that is what `legacy: true` says — but
+    // the set it is restored INTO is created at v1 like any other, and reporting
+    // null here told the restore screen otherwise.
+    version: body.version ?? null, active: false, legacy: true, questionCount: body.questionCount,
   };
 }
 

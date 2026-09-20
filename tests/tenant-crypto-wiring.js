@@ -212,7 +212,11 @@ const CSV = [
 const GAME_ID = '4821';
 const SET_ID = 'teamretro';
 const ORG_SETS = `ORG#${ORG}#SETS`;
+// The UNVERSIONED partition, kept for the deliberately pre-versioning,
+// pre-encryption fixture at the bottom of this file. Content written by an
+// import lands in ORG_CONTENT_V1: a new set is born at v1.
 const ORG_CONTENT = `ORG#${ORG}#SET#${SET_ID}`;
+const ORG_CONTENT_V1 = `${ORG_CONTENT}#v1`;
 
 /**
  * Mint the org exactly as create-org does: ONE GenerateDataKey, and the wrapped
@@ -287,7 +291,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   await check('…and produced the org-scoped set', () =>
     assert.strictEqual(parse(created).setId, SET_ID));
 
-  const questionRows = rowsIn(ORG_CONTENT).filter((i) => String(i.SK).startsWith('QUESTION#'));
+  const questionRows = rowsIn(ORG_CONTENT_V1).filter((i) => String(i.SK).startsWith('QUESTION#'));
   await check('two question rows landed in the org partition', () =>
     assert.strictEqual(questionRows.length, 2, `got ${questionRows.length}`));
 
@@ -306,7 +310,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   // The substring sweep is the assertion that catches the field nobody thought
   // to name — the same reasoning as the leak check in player-question-payload.
   await check('the question text appears NOWHERE in the raw org partition', () => {
-    const raw = JSON.stringify(rowsIn(ORG_CONTENT));
+    const raw = JSON.stringify(rowsIn(ORG_CONTENT_V1));
     assert.ok(!raw.includes('THE THING NOBODY SAID'), 'a question title is readable at rest');
     assert.ok(!raw.includes('Say it now.'), 'a per-question instruction is readable at rest');
   });
@@ -329,7 +333,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
     assert.strictEqual(meta.createdBy, 'sub-ada');
   });
   await check('the CATEGORY row is deliberately untouched (the mask depends on its order)', () => {
-    const cat = rowsIn(ORG_CONTENT).find((i) => String(i.SK).startsWith('CATEGORY#'));
+    const cat = rowsIn(ORG_CONTENT_V1).find((i) => String(i.SK).startsWith('CATEGORY#'));
     assert.ok(cat, 'no category row');
     assert.strictEqual(cat.Name, 'Leadership', `Name stored as ${JSON.stringify(cat.Name)}`);
   });
@@ -448,10 +452,10 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   });
   await check('staff with no org wrote a platform set', () =>
     assert.strictEqual(platformCreated.statusCode, 200, platformCreated.body));
-  await check('…at the legacy keys, byte for byte', () =>
+  await check('…with its metadata row still at PK=SETS, byte for byte', () =>
     assert.ok(store.get(`SETS|SET#${SET_ID}`), 'no platform metadata row at PK=SETS'));
   await check('its questions are READABLE at rest', () => {
-    const rows = rowsIn(`SET#${SET_ID}`).filter((i) => String(i.SK).startsWith('QUESTION#'));
+    const rows = rowsIn(`SET#${SET_ID}#v1`).filter((i) => String(i.SK).startsWith('QUESTION#'));
     assert.strictEqual(rows.length, 2, `got ${rows.length}`);
     assert.strictEqual(rows[0].Title, 'THE THING NOBODY SAID',
       `a platform title was stored as ${JSON.stringify(rows[0].Title)}`);
@@ -464,7 +468,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   });
   await check('a participant can still play it with no org anywhere in sight', async () => {
     seedSession({ orgId: '' });
-    const platformQuestion = rowsIn(`SET#${SET_ID}`)
+    const platformQuestion = rowsIn(`SET#${SET_ID}#v1`)
       .filter((i) => String(i.SK).startsWith('QUESTION#'))
       .sort((a, b) => a.SK.localeCompare(b.SK))[0];
     seedRef({ scope: 'platform', orgId: '', sourceQuestionId: platformQuestion.SK });

@@ -86,6 +86,29 @@ describe('shareStateOf — the "Who can see it" column', () => {
     expect(s.title).toMatch(/an older version is shared/i);
     expect(s.title).not.toMatch(/click share/i);
   });
+  /*
+    A LEGACY SHARE — one written before per-set versioning shipped — carries no
+    `share.version` at all. `active > shared` alone short-circuits on that null
+    and reads a flat "Shared" forever, even once the set has moved on: the bug
+    the owner reported live on `serialmurdersthroughouttimetriviaforcrimebuffs`.
+    A missing share version is not unknown, it is v1 — every path that mints v1
+    from legacy content copies it verbatim — so the comparison falls back to 1.
+  */
+  test('a legacy share (no recorded version) since replaced reads behind, not flat Shared', () => {
+    const s = shareStateOf({ activeVersion: 2, share: { status: 'published', version: null, at: at(60) } });
+    expect(s.key).toBe('behind');
+    expect(s.label).toBe('Shared earlier, yours is v2');
+  });
+  test('a legacy share only migrated to v1 (not actually replaced) does not read behind', () => {
+    const s = shareStateOf({ activeVersion: 1, share: { status: 'published', version: null, at: at(60) } });
+    expect(s.key).toBe('shared');
+    expect(s.label).toBe('Shared');
+  });
+  test('the behind label and hover never say vnull or vundefined', () => {
+    const s = shareStateOf({ activeVersion: 2, share: { status: 'published', version: null, at: at(60) } }, NOW, { canShare: true });
+    expect(s.label).not.toMatch(/null|undefined/i);
+    expect(s.title).not.toMatch(/null|undefined/i);
+  });
   test('the same rule for the check that did not finish, whose hover says to submit it again', () => {
     // "Submit it again" is the same instruction naming the same control.
     const stale = { share: { status: 'checking', version: 2, at: at(16) } };

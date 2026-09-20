@@ -73,6 +73,13 @@ const RETRY_BASE_MS = Number(process.env.BATCH_RETRY_BASE_MS || 50);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Where a set's version history starts. A NEW set is born here; `nextVersion`
+ * counts up from it. Named rather than spelled `1` at each writer so that
+ * "which version does a set start at" has one answer and one place to read it.
+ */
+const FIRST_VERSION = 1;
+
+/**
  * A usable version number, or null for anything that is not a positive integer.
  * Deliberately strict: "", null, undefined, 0, "abc" and 1.5 all mean "no
  * version", which is what makes the legacy fallback fire.
@@ -495,6 +502,7 @@ function refSetRef(refRow, setId) {
 }
 
 module.exports = {
+  FIRST_VERSION,
   gameSetRef,
   refSetRef,
   BATCH_LIMIT,
