@@ -229,13 +229,27 @@ export default function QuestionSetsPanel({
 
       {!nothingExists && (
         <>
-          <div className="qsets-head">
-            <span className="qsets-head-grow" />
-            <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate && onCreate('new')}>
-              <Icon name="Plus" weight="bold" size={14} color="currentColor" />
-              {createOpen ? 'Hide new set' : 'New set'}
-            </button>
-          </div>
+          {/*
+            THE HEADER IS AN AFFORDANCE FOR `onCreate`, SO IT IS GATED ON IT.
+
+            It used to render unconditionally with `onCreate && onCreate('new')`
+            behind it, and the Public library mounts this table with `rowActions`
+            and no `onCreate` — so the button people reach for first sat there,
+            filled and primary, doing nothing at all in either console. That is
+            the owner's report, and design rule 2's exact case: gate the
+            affordance on the handler existing, never render one that does
+            nothing. The public library's own way in is a different verb and
+            lives in PublicLibraryPanel, where there is something to honour it.
+          */}
+          {onCreate && (
+            <div className="qsets-head">
+              <span className="qsets-head-grow" />
+              <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate('new')}>
+                <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+                {createOpen ? 'Hide new set' : 'New set'}
+              </button>
+            </div>
+          )}
 
           {/*
             The bar renders through the shared ListControls under this screen's

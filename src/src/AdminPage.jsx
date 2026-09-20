@@ -560,6 +560,13 @@ function AdminPage() {
    * before handing the set to the dialog.
    */
   const promptScopeOf = (set) => ((availablePrompts || []).find((p) => p.promptId === set.promptId) || {}).scope || null;
+  /* ONE SHARE PATH, TWO WAYS IN. The question sets list's row action and the
+     Public library's "Share a set" picker both land here, so the two cannot
+     drift into handing the dialog differently-shaped sets. Undefined off the
+     org console, which is what gates both affordances. */
+  const handleShareSet = orgConsole
+    ? (set) => setSharing({ set: { ...set, promptScope: promptScopeOf(set) }, version: null })
+    : undefined;
   // The persona library, read from GET /admin/personas. Personas live under
   // SK='PERSONA#' which get-ai-prompts.js hard-filters out, so they need their
   // own endpoint — this is the list that used to be unreachable (D8).
@@ -1833,7 +1840,7 @@ function AdminPage() {
                  library never goes through it, so platform mode gets neither
                  the "Who can see it" column nor the row action. */
               showVisibility={orgConsole}
-              onShare={orgConsole ? (set) => setSharing({ set: { ...set, promptScope: promptScopeOf(set) }, version: null }) : undefined}
+              onShare={handleShareSet}
               createOpen={isCreateOpen}
             >
               {(isCreateOpen || visibleSets.length === 0) && (
@@ -1934,6 +1941,10 @@ function AdminPage() {
               loading={questionSetsLoading}
               onCopy={handleCopySet}
               onPreview={handleEditQuestionSet}
+              /* The way INTO the library, from the library. Same handler as the
+                 question sets list's row action, so the picker's Share opens
+                 the same dialog on the same set. */
+              onShare={handleShareSet}
             />
           )}
 

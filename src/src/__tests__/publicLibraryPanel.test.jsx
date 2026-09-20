@@ -8,6 +8,124 @@ const ROWS = [
   { id: 'engage', name: 'Engage one', engagementType: 'poll', totalQuestions: 9, canManage: false, scope: 'platform', activeVersion: 1 },
 ];
 
+/*
+  THE WAY IN — the owner's first report: *"there is a new set button on the
+  admin page for public library. it does not seem to do anything."*
+
+  It really did nothing. `QuestionSetsPanel`'s header renders a primary button
+  wired to `onCreate && onCreate('new')`, and this panel mounts that table with
+  no `onCreate` at all, so the guard short-circuited on every click, in both
+  consoles. The design system's rule 2 is exactly this case: a dead control is
+  the one people reach for first, so gate the affordance on the handler.
+
+  What replaces it is not a rename. The verb the rest of this flow already uses
+  is Share (QuestionSetsPanel's row action, title "Submit the active version for
+  the content check; it goes public if it passes"), and the way into the public
+  library from the public library is to offer THIS ORGANISATION'S OWN sets with
+  that same action beside each.
+*/
+describe('the way into the public library', () => {
+  const SHAREABLE = [
+    ...ROWS,
+    { id: 'mine-2', name: 'Onboarding week one', engagementType: 'poll', totalQuestions: 8, canManage: true, scope: 'org', activeVersion: 3 },
+  ];
+
+  test('there is no dead New set button left on either console', () => {
+    for (const mode of ['org', 'platform']) {
+      const { unmount } = render(
+        <PublicLibraryPanel questionSets={SHAREABLE} mode={mode} onCopy={() => {}} onPreview={() => {}} onShare={() => {}} onOpenScoreCard={() => {}} onUnpublish={() => {}} />,
+      );
+      expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
+      unmount();
+    }
+  });
+
+  test('the org console offers Share a set, and it lists this organisation\'s own sets rather than the public rows', async () => {
+    render(<PublicLibraryPanel questionSets={SHAREABLE} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    const dialog = await screen.findByRole('dialog');
+    // The sets this organisation can actually submit — the same rows whose own
+    // list row offers Share (`canManage !== false`).
+    expect(within(dialog).getByText('Mine')).toBeInTheDocument();
+    expect(within(dialog).getByText('Onboarding week one')).toBeInTheDocument();
+    // Not a set that is already public, and not Engage's.
+    expect(within(dialog).queryByText('Safety walkthrough')).toBeNull();
+    expect(within(dialog).queryByText('Engage one')).toBeNull();
+  });
+
+  test('Share inside it runs the same callback the list row action runs, and closes the picker so two dialogs never stack', async () => {
+    const onShare = jest.fn();
+    render(<PublicLibraryPanel questionSets={SHAREABLE} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={onShare} />);
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    const dialog = await screen.findByRole('dialog');
+    const row = within(dialog).getByText('Onboarding week one').closest('li');
+    fireEvent.click(within(row).getByRole('button', { name: /^share$/i }));
+    expect(onShare).toHaveBeenCalledWith(expect.objectContaining({ id: 'mine-2' }));
+    // Never a modal opened from inside a modal (admin-container-rule.md): the
+    // picker is gone by the time the share dialog its caller opens arrives.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  test('the picker has both exits, and its per-row Share carries the row action\'s own words', async () => {
+    render(<PublicLibraryPanel questionSets={SHAREABLE} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    let dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getAllByRole('button', { name: /^share$/i })[0])
+      .toHaveAttribute('title', expect.stringMatching(/content check/i));
+    fireEvent.click(within(dialog).getByRole('button', { name: /^close$/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  test('the way in is there when the public library is still empty, which is when it matters most', () => {
+    render(<PublicLibraryPanel questionSets={SHAREABLE.filter((r) => r.scope !== 'public')} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={() => {}} />);
+    expect(screen.getByText(/nobody has published a set yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /share a set/i })).toBeInTheDocument();
+  });
+
+  test('an organisation with nothing of its own is told so rather than shown an empty box', async () => {
+    render(<PublicLibraryPanel questionSets={ROWS.filter((r) => r.scope !== 'org')} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/no sets of your own/i);
+    expect(within(dialog).queryByRole('button', { name: /^share$/i })).toBeNull();
+  });
+
+  /*
+    ENGAGE'S OWN LIBRARY DOES NOT SHARE, so the staff console gets no way in
+    rather than a second one that would be refused. check-question-set.js:62
+    is explicit: for a platform set `publish` is false, always — "There is no
+    public copy of an Engage set."
+  */
+  test('the staff console offers no way in, because Engage has nothing to submit', () => {
+    render(<PublicLibraryPanel questionSets={SHAREABLE} mode="platform" onOpenScoreCard={() => {}} onUnpublish={() => {}} />);
+    expect(screen.queryByRole('button', { name: /share a set/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
+  });
+
+  /*
+    THE CROSS-SCOPE CLASS TRAP, which QuestionSetsPanel.css:58-63 records: an
+    undefined custom property invalidates the WHOLE declaration, and every
+    `.qsets-chip--vis-*` colour is `var(--qsets-…)`, declared on `.qsets`.
+    Modal renders no portal, so the picker's card is a child of `.publib` —
+    which declares none of them. The card opts into the `.qsets` scope the same
+    way QuestionSetUploadPanel and QuestionSetDeleteDialog do, by carrying the
+    class itself.
+  */
+  test('the picker opts into the .qsets scope the chips it draws take their colours from', async () => {
+    render(<PublicLibraryPanel questionSets={SHAREABLE} mode="org" onCopy={() => {}} onPreview={() => {}} onShare={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /share a set/i }));
+    const dialog = await screen.findByRole('dialog');
+    const chip = dialog.querySelector('[class*="qsets-chip"]');
+    expect(chip).not.toBeNull();
+    expect(chip.closest('.qsets')).not.toBeNull();
+  });
+});
+
 test('the org library lists only public sets, says who published each, and offers Preview and Copy', () => {
   const onCopy = jest.fn(); const onPreview = jest.fn();
   render(<PublicLibraryPanel questionSets={ROWS} mode="org" onCopy={onCopy} onPreview={onPreview} />);

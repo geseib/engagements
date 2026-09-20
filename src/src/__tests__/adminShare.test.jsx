@@ -272,3 +272,42 @@ test('the Public library section renders the real panel, not the retired placeho
   expect(screen.queryByText(/is not built/i)).toBeNull();
   expect(await screen.findByText(/nobody has published a set yet/i)).toBeInTheDocument();
 });
+
+/*
+  THE WAY IN, END TO END. The owner reported the Public library's "New set"
+  button as doing nothing; it was QuestionSetsPanel's header button with no
+  `onCreate` behind it. What replaces it has to reach the SAME dialog the
+  question sets list's Share row action reaches, or it is a second share —
+  which is the one thing the change is not allowed to be. Only a full AdminPage
+  mount can show that, because the wiring is this page's.
+*/
+test('Share a set in the Public library opens the same share dialog the list row action opens', async () => {
+  mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
+  serve();
+  render(<AdminPage />);
+  await screen.findByRole('columnheader', { name: /who can see it/i });
+  const nav = screen.getByRole('navigation', { name: /sections/i });
+  fireEvent.click(within(nav).getByText('Public library'));
+  await screen.findByRole('heading', { level: 1, name: /public library/i });
+
+  fireEvent.click(await screen.findByRole('button', { name: /share a set/i }));
+  const picker = await screen.findByRole('dialog');
+  const row = within(picker).getByText('Clean one').closest('li');
+  fireEvent.click(within(row).getByRole('button', { name: /^share$/i }));
+
+  expect(await screen.findByRole('heading', { name: /share “Clean one” publicly/i })).toBeInTheDocument();
+  // One dialog, not two: the picker closed as the share dialog arrived.
+  expect(screen.queryByRole('heading', { name: /which set do you want to share/i })).toBeNull();
+});
+
+test('and the staff console has no way in there either, because Engage publishes nothing', async () => {
+  mockActiveOrg = '~platform'; mockGroups = ['admins', 'hosts'];
+  serve();
+  render(<AdminPage />);
+  await screen.findByRole('table');
+  const nav = screen.getByRole('navigation', { name: /sections/i });
+  fireEvent.click(within(nav).getByText('Public library'));
+  await screen.findByRole('heading', { level: 1, name: /public library/i });
+  expect(screen.queryByRole('button', { name: /share a set/i })).toBeNull();
+  expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
+});

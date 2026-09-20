@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
 import QuestionSetsPanel from './QuestionSetsPanel';
+import { shareStateOf } from '../utils/shareState';
 import './PublicLibraryPanel.css';
 
 /**
@@ -100,9 +101,100 @@ function UnpublishDialog({ set, onClose, onConfirm }) {
   );
 }
 
-export default function PublicLibraryPanel({ questionSets = [], mode = 'org', onCopy, onPreview, onOpenScoreCard, onUnpublish, loading = false }) {
+/*
+  THE WAY IN — the owner's report: *"there is a new set button on the admin page
+  for public library. it does not seem to do anything. im thinking it should say
+  add or share. and when you click it it brings up a list of all your (whichever
+  view you are in) with a share button next to it."*
+
+  What was there was QuestionSetsPanel's header "New set", wired to an
+  `onCreate` this panel has never passed — a filled primary button whose click
+  handler short-circuited. That button is now gated on its handler (see
+  QuestionSetsPanel), and this is what replaces it.
+
+  IT IS A MODAL, AND THE CONTAINER RULE SAYS SO. Choosing one of your own sets
+  is doing one thing, and the thing being judged — your organisation's sets — is
+  not the thing on screen, which is the public library's rows. That is exactly
+  the case docs/design/admin-container-rule.md sends to a dialog rather than
+  inline, and both exits are here: the X and the footer Cancel, one
+  `onClose`. There is nothing unsaved to guard, so neither is gated.
+
+  IT NEVER OPENS A MODAL FROM INSIDE A MODAL. `pick` closes this dialog in the
+  same handler that calls `onShare`, so the share dialog the caller opens
+  replaces it rather than stacking on it.
+
+  IT CARRIES `qsets` ON THE CARD, DELIBERATELY. Modal renders no portal, so this
+  card is a child of `.publib`, and every `.qsets-chip--vis-*` colour is
+  `var(--qsets-…)` — locals declared on `.qsets` and nowhere else. An undefined
+  custom property invalidates the whole declaration (QuestionSetsPanel.css:58),
+  so a share chip drawn outside that scope would silently lose its colour and
+  its border. QuestionSetUploadPanel and QuestionSetDeleteDialog solve it the
+  same way: carry the scope class on your own root.
+*/
+function SharePickerDialog({ sets, onClose, onPick }) {
+  return (
+    <Modal overlayClassName="publib publib-scrim" contentClassName="publib-dialog qsets" labelledBy="publib-pick-title" onClose={onClose}>
+      <header className="publib-head">
+        <h2 id="publib-pick-title">Which set do you want to share?</h2>
+        <button type="button" className="publib-x" onClick={onClose} aria-label="Close" title="Close">×</button>
+      </header>
+      <div className="publib-body">
+        <p>
+          Sharing submits a set&rsquo;s active version for the content check. If it passes, a copy
+          of it joins the library below — yours stays yours, and editing it later changes nothing
+          out here until you share again.
+        </p>
+        {sets.length === 0 ? (
+          <p className="publib-empty">
+            You have no sets of your own yet. Ones you make on the Question sets screen appear here.
+          </p>
+        ) : (
+          <ul className="publib-list">
+            {sets.map((set) => {
+              const vis = shareStateOf(set);
+              return (
+                <li key={set.id} className="publib-item">
+                  {/* ONE TEXT NODE, so text-overflow is not inert on it (design
+                      rule 8), and the `title` is the recovery the truncation
+                      owes the reader (rule 7). */}
+                  <span className="publib-item-nm" title={set.name}>{set.name}</span>
+                  <span className={`qsets-chip qsets-chip--vis-${vis.key}`} title={vis.title}>{vis.label}</span>
+                  <button
+                    type="button"
+                    className="publib-btn publib-btn--sm"
+                    onClick={() => onPick(set)}
+                    /* The row action's own words, because it is the row action's
+                       own path — QuestionSetsPanel's Share and this one both
+                       call the caller's `onShare`. */
+                    title="Submit the active version for the content check; it goes public if it passes"
+                  >
+                    Share
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      <footer className="publib-foot">
+        <button type="button" className="publib-btn" onClick={onClose}>Cancel</button>
+      </footer>
+    </Modal>
+  );
+}
+
+export default function PublicLibraryPanel({ questionSets = [], mode = 'org', onCopy, onPreview, onShare, onOpenScoreCard, onUnpublish, loading = false }) {
   const [unpublishing, setUnpublishing] = useState(null);
+  const [picking, setPicking] = useState(false);
   const rows = questionSets.filter((s) => (s.scope || 'platform') === 'public');
+  /*
+    THE SETS THIS ORGANISATION MAY SUBMIT — the same predicate the list row's
+    own Share button uses (`canManage !== false`, from
+    admin/shared/question-set-access.js via get-question-sets.js), so the picker
+    can never offer a set whose own row would not, and never offers a row that
+    is already somebody else's public copy.
+  */
+  const mine = questionSets.filter((s) => s.canManage !== false && (s.scope || 'platform') === 'org');
 
   const rowActions = (set) => (mode === 'platform' ? (
     <div className="qsets-rowact">
@@ -135,15 +227,41 @@ export default function PublicLibraryPanel({ questionSets = [], mode = 'org', on
     setUnpublishing(null);
   };
 
+  /*
+    Closing FIRST, then calling out: the caller's `onShare` opens ShareSetDialog,
+    and two dialogs over one another is the pattern admin-container-rule.md
+    forbids. React commits both state changes together, so the picker is gone in
+    the same paint the share dialog arrives in.
+  */
+  const pick = (set) => { setPicking(false); if (onShare) onShare(set); };
+
   return (
     <section className="publib" data-theme="dark">
       <p className="publib-note">{COPY[mode] || COPY.org}</p>
+      {/*
+        ORG CONSOLES ONLY, and gated on the handler rather than on `mode`.
+        Engage's own library does not go through this pipeline at all —
+        admin/check-question-set.js is explicit that a platform set publishes
+        nothing ("There is no public copy of an Engage set") — so the staff
+        console gets no way in rather than one that would be refused.
+
+        ABOVE the table, so it is still there when the library is empty, which
+        is the moment somebody most wants to put the first set into it.
+      */}
+      {onShare && (
+        <div className="publib-bar">
+          <button type="button" className="publib-btn publib-btn--primary" onClick={() => setPicking(true)}>
+            Share a set
+          </button>
+        </div>
+      )}
       {rows.length === 0 && !loading ? (
         <p className="publib-empty">Nobody has published a set yet. When an organisation shares one and it passes review, it appears here.</p>
       ) : (
         <QuestionSetsPanel questionSets={rows} loading={loading} rowActions={rowActions} />
       )}
       {unpublishing && <UnpublishDialog set={unpublishing} onClose={() => setUnpublishing(null)} onConfirm={confirmUnpublish} />}
+      {picking && <SharePickerDialog sets={mine} onClose={() => setPicking(false)} onPick={pick} />}
     </section>
   );
 }

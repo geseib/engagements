@@ -182,6 +182,28 @@ describe('nothing exists', () => {
     expect(onCreate).toHaveBeenLastCalledWith('csv');
   });
 
+  /*
+    THE HEADER'S "New set" IS AN AFFORDANCE FOR `onCreate`, AND NOTHING ELSE.
+
+    Reported by the owner against the Public library, which mounts this table
+    with `rowActions` and no `onCreate`: the button rendered as a filled primary
+    on every visit and did precisely nothing when pressed, because its handler
+    is `onCreate && onCreate('new')`. Design rule 2 — "a dead X is the control
+    people reach for first, so gate the affordance on the handler existing,
+    never render one that does nothing".
+  */
+  test('the header button is not drawn at all when there is no creation path to take', () => {
+    render(<QuestionSetsPanel questionSets={SETS} loading={false} />);
+    expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
+  });
+
+  test('and it is drawn, and works, the moment a caller can honour it', () => {
+    const onCreate = jest.fn();
+    render(<QuestionSetsPanel questionSets={SETS} loading={false} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole('button', { name: /new set/i }));
+    expect(onCreate).toHaveBeenCalledWith('new');
+  });
+
   test('while the list is still loading it says so instead of "none exist"', () => {
     // rejects: an empty state that lies (host §7.9) one level down — the first
     // paint of a console with 41 sets would otherwise offer to create the first.
