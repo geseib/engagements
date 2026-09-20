@@ -197,3 +197,87 @@ test("Engage's own set waiting on a person says the library is still serving it"
   expect(banner).toHaveTextContent(/still being served to every organisation/i);
   expect(banner).not.toHaveTextContent(/waiting for a person at Engage to look at version/i);
 });
+
+/*
+  ── A REFUSAL WITH NO FINDINGS HAS NOTHING TO COUNT ────────────────────────
+
+  The count sentence was read from `reviewFindings` alone, and two refusals
+  reach this branch carrying none:
+
+  A TAKEDOWN writes a `flagged` share stamp (public-library-item.js) for a
+  version whose own check PASSED — the set was in the library, so nothing held
+  it — leaving `reviewFindings` empty. A REVIEWER'S REFUSAL writes the same
+  stamp (moderation-decide.js, both the plain and the resumed reject), and a
+  person's reason is a NOTE, not per-question findings.
+
+  So the author read "0 of 30 questions were flagged" directly under the
+  mandatory staff note explaining that their set had just been removed from
+  the public library — a sentence that answers the note with a number meaning
+  the opposite of what happened.
+*/
+const TAKEDOWN_NOTE = 'A player reported Q7. The set is out of the public library while we look at it.';
+const TAKEN_DOWN = {
+  version: 2, review: 'passed', checkedAt: '2026-08-19T10:00:00.000Z', questionCount: 30, reasons: [], reviewFindings: [],
+};
+
+test('a refusal carrying no findings counts nothing, and says when the version was checked', () => {
+  render(<SetReviewBanner entry={TAKEN_DOWN} share={{ status: 'flagged', version: 2, note: TAKEDOWN_NOTE }} onResubmit={() => {}} onAppeal={() => {}} />);
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(TAKEDOWN_NOTE);
+  expect(banner).not.toHaveTextContent(/0 of 30/);
+  expect(banner).not.toHaveTextContent(/questions were flagged/i);
+  expect(banner).toHaveTextContent(/checked on 19 Aug/i);
+});
+
+// rejects: swapping one wrong sentence for another. With no date to give,
+// the count's place is empty — "checked on" with nothing after it, or a bare
+// "—", would both be worse than the silence.
+test('a refusal carrying neither findings nor a check date says nothing in the count’s place', () => {
+  render(<SetReviewBanner entry={{ ...TAKEN_DOWN, checkedAt: '' }} share={{ status: 'flagged', version: 2, note: TAKEDOWN_NOTE }} onResubmit={() => {}} />);
+  const banner = screen.getByRole('status');
+  expect(banner).not.toHaveTextContent(/of 30/);
+  expect(banner).not.toHaveTextContent(/checked on/i);
+  // The sentences that ARE true of a refusal are untouched.
+  expect(banner).toHaveTextContent(/this set was not published/i);
+  expect(banner).toHaveTextContent(/nothing was shared, and your copy is untouched/i);
+});
+
+/*
+  The same emptiness one line down. "What was flagged" over an empty list, and
+  "The other 30 questions passed" with nothing for those thirty to be OTHER
+  than, are the count sentence's defect wearing a heading: a refusal that named
+  no question was answered with a section about named questions.
+*/
+test('a refusal carrying no findings draws no "What was flagged" section', () => {
+  render(<SetReviewBanner entry={TAKEN_DOWN} share={{ status: 'flagged', version: 2, note: TAKEDOWN_NOTE }} onResubmit={() => {}} onAppeal={() => {}} />);
+  const banner = screen.getByRole('status');
+  expect(banner).not.toHaveTextContent(/what was flagged/i);
+  expect(banner).not.toHaveTextContent(/questions passed/i);
+  // The refusal itself, and the way out of it, are the whole point of the banner.
+  expect(banner).toHaveTextContent(TAKEDOWN_NOTE);
+  expect(screen.getByRole('button', { name: /resubmit/i })).toBeInTheDocument();
+});
+
+// rejects: standing the section down on the QUESTION count alone. A finding
+// against the set's own name, description or category names carries the id
+// '(set)', which byQuestion() drops — so a set held for its own text has zero
+// flagged questions and everything to say.
+test("a finding against the set's own text is named, and is not called a flagged question", () => {
+  render(
+    <SetReviewBanner
+      entry={{
+        ...TAKEN_DOWN,
+        review: 'flagged',
+        reviewFindings: [{ questionId: '(set)', category: 'INSULTS', band: 'HIGH', explanation: 'The set description names a rival company.' }],
+      }}
+      share={{ status: 'flagged', version: 2 }}
+      onResubmit={() => {}}
+    />,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(/what was flagged/i);
+  expect(banner).toHaveTextContent(/the set's own text/i);
+  expect(banner).toHaveTextContent(/names a rival company/i);
+  expect(banner).not.toHaveTextContent(/0 of 30/);
+  expect(banner).toHaveTextContent(/checked on 19 Aug/i);
+});
