@@ -36,6 +36,8 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const SET = {
   id: 'lessons-learned',
   name: 'Lessons Learned',
+  // Filed, because the Details save now requires a shelf before it will send.
+  topic: 'business-work',
   engagementType: 'call-and-answer',
   description: '',
   customInstruction: '',

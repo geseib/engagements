@@ -10757,6 +10757,137 @@ body {
   font-size: 13px;
 }
 
+/* --- WHICH SHELF THIS SET SITS ON (components/SetTopicField.jsx) -----------
+
+   One shelf from a closed fifteen, and the author's own words beside it, drawn
+   as one group for the same reason `.qs-workie` is: they are one question —
+   where does this sit, and what is it about — and rendering them as two
+   unrelated rows two fields apart is what made the Workie pair unreadable.
+
+   IT DECLARES NO INK, on purpose and by the same argument. This control renders
+   on the paper console, inside the host's dusk dialog, and on the CSV upload
+   panel, which is both again. The only colour below is --primary on a BORDER,
+   where no contrast ratio applies, and the hueless hairline grey the rest of
+   this sheet already tints with — it darkens paper and lightens dusk by the
+   same small amount instead of tinting either. Both composites, and the bare
+   buttons' `color: inherit`, are measured in setTopicFieldPalette.test.js.
+
+   NOT A CATEGORY. In this app a category is the IN-SET grouping (c001…c005,
+   the host's 24-bit mask), and nothing here is one. */
+.qs-topic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+/* The rows inside carry the group's gap, not their own 20px stack margin —
+   otherwise the box reads as two fields that happen to share a border. */
+.qs-topic .form-group {
+  margin-bottom: 0;
+}
+
+/* What the check would have filed it under, offered as one click. A quiet rule
+   rather than the warm one below: this is a convenience, not a decision the
+   person owes anybody. */
+.qs-topic-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(155, 168, 190, 0.45);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+/* The shelf the content contradicts. Said once, answered by nothing — so it
+   takes the warm rule that means "this wants a decision" and no danger ink:
+   nothing is broken, the set plays, and the author may simply be right. */
+.qs-topic-mismatch {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.qs-topic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.qs-topic-tags:empty {
+  margin: 0;
+}
+
+.qs-topic-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: rgba(155, 168, 190, 0.14);
+  font-size: 13px;
+}
+
+/* A 24px target, per audit A5 — a chip carrying an action is an action. */
+.qs-topic-tagx {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.qs-topic-tagx:hover {
+  background: rgba(155, 168, 190, 0.3);
+}
+
+.qs-topic-tagadd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+}
+
+/* The input is the part that must not shrink to nothing beside its button. */
+.qs-topic-tagadd .form-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* A word the check read out of the questions: dashed, because it is a proposal
+   and not yet one of this set's own. */
+.qs-topic-tagadd-one {
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px dashed rgba(155, 168, 190, 0.5);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.qs-topic-tagadd-one:hover {
+  background: rgba(155, 168, 190, 0.14);
+}
+
 .qs-ai-toggle {
   align-self: flex-start;
   margin-top: 6px;

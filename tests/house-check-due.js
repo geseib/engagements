@@ -50,7 +50,9 @@ const HOUSE = { scope: 'platform', setId: 'warmups' };
 const ORG = 'org_acme';
 const body = (res) => JSON.parse(res.body || '{}');
 
-const create = (extra) => upload(h.adminEvent({ fileName: 'warm.csv', fileContent: CSV, customTitle: 'Warm Ups', ...extra }));
+// `topic` because a live set is created with a shelf now (shared/set-topics.js);
+// `extra` still overrides it, so a caller may drop or change it.
+const create = (extra) => upload(h.adminEvent({ fileName: 'warm.csv', fileContent: CSV, customTitle: 'Warm Ups', topic: 'everyday-life', ...extra }));
 const replace = () => upload(h.adminEvent({ fileName: 'edit.csv', fileContent: CSV2, replaceSetId: 'warmups' }));
 const setActive = (active) => toggle({
   ...h.adminEvent({ active }),
@@ -219,7 +221,13 @@ const checksSent = () => h.dispatched.filter((d) => d.payload?.pathParameters?.s
   h.reset();
   h.seedSet({
     scope: 'org', orgId: ORG, setId: 'teamwarm', version: 1,
-    meta: { name: 'Team Warm Ups', scope: 'org', orgId: ORG, active: false, createdBy: 'staff-1', questionCount: 2 },
+    // FILED, because this set is switched on below and toggle-question-set.js
+    // refuses to make an unfiled one servable. Which shelf does not matter to
+    // what is pinned here — that the check is Engage's trigger, not an org's.
+    meta: {
+      name: 'Team Warm Ups', scope: 'org', orgId: ORG, active: false,
+      createdBy: 'staff-1', questionCount: 2, topic: 'business-work',
+    },
   });
   const orgToggle = await toggle({ ...h.orgAdminEvent(ORG, { active: true }), pathParameters: { setId: 'teamwarm' } });
   await check('switching an organisation\'s own set on is never due a check here', () => {

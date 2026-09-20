@@ -135,6 +135,14 @@ exports.handler = async (event) => {
       // (config/roundKinds.js resolveRoundKind).
       roundKind: item.roundKind || '',
       roundKindBrief: item.roundKindBrief || '',
+      // THE SHELF THIS SET SITS ON, and the author's own words beside it.
+      // Projected RAW for the same reason roundKind is: the editor has to tell
+      // "chose General Knowledge" from "was never asked", because its save
+      // payload is a diff and a resolved default would make every open-and-save
+      // file a set on a shelf nobody picked. '' is the unfiled state and every
+      // reader resolves it themselves (config/setTopics.js resolveSetTopic).
+      topic: item.topic || '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
       engagementType: item.engagementType,
       questionCount: item.questionCount || 0,
       totalQuestions: item.questionCount || 0, // Add for frontend compatibility

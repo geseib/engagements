@@ -300,6 +300,8 @@ const importSet = (title, csv, extra = {}) => upload({
   ...adminContext(),
   body: JSON.stringify({
     fileName: `${title}.csv`, fileContent: csv,
+    // A live set is created with a shelf now (shared/set-topics.js).
+    topic: 'business-work',
     customTitle: title, engagementType: 'call-and-answer', ...extra,
   }),
 });

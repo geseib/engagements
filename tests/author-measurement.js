@@ -57,6 +57,16 @@ const REVIEWER = 'dai-the-reviewer';
 const SNAPSHOT = 'snapshots/org_acme/safety/v3.json';
 const NOTICE = 'graphic-violence';
 
+/**
+ * The shelf the check would have filed this set on (admin/shared/
+ * topic-suggestion.js). Unlike everything above it this is the AUTHOR's — it
+ * exists to be offered to the person choosing a topic — so it travels with the
+ * measurement rather than with the reviewer's facts.
+ */
+const SUGGESTION = {
+  topic: 'health-medicine', tags: ['near-misses', 'site-safety'], filedAs: 'business-work', mismatch: true,
+};
+
 const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
 const TALLY = {
   scope: 'full',
@@ -106,6 +116,7 @@ async function seed() {
     status: R.STATUS.FLAGGED, findings: FINDINGS, note: '19/30 clean', reasons: ['guardrail'],
     tally: TALLY, observed: OBSERVED, snapshotKey: SNAPSHOT, declaredNotice: [NOTICE],
     reviewer: REVIEWER, decidedAt: '2026-09-18T09:55:00.000Z', notice: [NOTICE],
+    topicSuggestion: SUGGESTION,
   });
 }
 
@@ -156,6 +167,33 @@ async function seedCopy() {
     assert.deepStrictEqual(v3.reviewObserved, OBSERVED);
     assert.strictEqual(v2.reviewTally, null, 'a version checked before measuring existed must not read as "measured, nothing seen"');
     assert.deepStrictEqual(v2.reviewObserved, []);
+  });
+
+  // rejects: the shelf the check proposed being written to a row nothing
+  // renders. It is recorded for exactly one purpose — to be offered to the
+  // person choosing a topic — and the set editor is where that person is.
+  await H.test('the shelf the check proposed reaches the author who has to choose one', async () => {
+    await seed();
+    const [v2, v3] = parse(await ask(ev(ORG)));
+    assert.deepStrictEqual(v3.reviewTopicSuggestion, SUGGESTION);
+    assert.strictEqual(v2.reviewTopicSuggestion, null, 'a version nobody proposed a shelf for reads as though one had been');
+  });
+
+  // rejects: a proposal about somebody else's set reaching a reader. It names
+  // the shelf the AUTHOR chose (`filedAs`) and disagrees with it, which is a
+  // sentence about their judgement and belongs to the library it is in — the
+  // same rule the measurement follows two cases below.
+  await H.test('a reader who did not write the set is offered no proposal about it', async () => {
+    await seed();
+    await seedHouse(R.STATUS.FLAGGED);
+    await R.writeReview(db, T, HOUSEREF, 1, {
+      status: R.STATUS.FLAGGED, findings: FINDINGS, note: '11/12 clean', tally: TALLY, observed: OBSERVED,
+      topicSuggestion: { ...SUGGESTION, topic: 'everyday-life' },
+    });
+    const res = await ask(H.orgEvent({ orgId: ORG, role: 'member', method: 'GET', setId: HOUSE }));
+    const [v1] = parse(res);
+    assert.ok(!('reviewTopicSuggestion' in v1), 'a reader who did not write the set is offered a proposal');
+    assert.ok(!res.body.includes('everyday-life'), 'the proposal leaked to a reader of somebody else\'s library');
   });
 
   // rejects: naming another organisation's set, by id or by scope, and being
@@ -228,7 +266,7 @@ async function seedCopy() {
     assert.deepStrictEqual(Object.keys(v3).sort(), [
       'categoryCount', 'checkedAt', 'createdAt', 'isActive', 'note', 'pinnedByGames', 'published',
       'questionCount', 'reasons', 'review', 'reviewFindings', 'reviewNote', 'reviewObserved',
-      'reviewTally', 'sourceFile', 'unfinished', 'version',
+      'reviewTally', 'reviewTopicSuggestion', 'sourceFile', 'unfinished', 'version',
     ]);
     assert.strictEqual(v3.review, 'flagged', 'review is still the status STRING the banner switches on');
     assert.deepStrictEqual(v3.reviewFindings, FINDINGS, 'findings keep their meaning and their rows');

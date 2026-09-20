@@ -105,6 +105,22 @@ exports.handler = async (event) => {
         promptId: item.promptId || null,
         personaId: item.personaId || null,
         roundNoun: item.roundNoun || null,
+        // The shelf and the author's own words, carried so both list routes
+        // describe the same set — NOT because anything here reads them yet.
+        // Nothing on the host surface does: its picker shows a set's name,
+        // format, question count and whether it is on the host's quickstart
+        // shelf, and carries no topic filter and no tag anywhere in it. (The
+        // library filter and the browse that DO read these two are the admin
+        // console's, on admin/get-question-sets.js.)
+        //
+        // The three fields directly above are why they are projected anyway:
+        // they were missing from this route while the admin one carried them,
+        // and the cost was host and player surfaces that could not badge an
+        // art set or name its persona until somebody noticed the two shapes
+        // had diverged. Raw, and '' / [] for the sets that predate the field:
+        // an unfiled set is offered here exactly as it always was.
+        topic: item.topic || '',
+        tags: Array.isArray(item.tags) ? item.tags : [],
         hasImages: item.hasImages === true,
         // The version a game created from this set right now would pin to.
         // null on an unmigrated set, which reads its legacy partition.

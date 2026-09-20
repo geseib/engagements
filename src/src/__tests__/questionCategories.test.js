@@ -467,6 +467,11 @@ async function importedCategories(rows, engagementType = 'call-and-answer') {
       fileContent: rowsToCsv(rows, engagementType),
       customTitle: 'Anchor Set',
       engagementType,
+      // A live set is created with a shelf now
+      // (lambda-functions/admin/shared/set-topics.js). Which shelf is nothing
+      // to do with in-set CATEGORIES, which is what this file is about — the
+      // two words are deliberately kept apart.
+      topic: 'general-knowledge',
     }),
   });
 

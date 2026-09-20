@@ -96,6 +96,11 @@ async function seedOrg({ versions = [null], active = null, questions = 2 } = {})
   const numbered = versions.filter((v) => v !== null);
   H.seedRow(await C.encryptItem(ORG, 'set', {
     ...V.setMetadataKey(SRC), name: 'True crime', description: 'Infamous cases.', engagementType: 'trivia',
+    // FILED. The control cases below are the organisation's OWN share, and
+    // check-question-set.js refuses to share a set that is on no shelf. The
+    // shelf is incidental to what this suite is about — a staff re-check — but
+    // a set that reaches a share has one.
+    topic: 'history',
     scope: 'org', orgId: ORG, questionCount: questions, createdBy: 'sub-amara',
     ...(active ? { activeVersion: active } : {}),
     ...(numbered.length ? { versions: numbered.map((v) => ({ version: v, questionCount: questions })) } : {}),

@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
+import SetShelfBrowse from './SetShelfBrowse';
 import useListControls from '../hooks/useListControls';
 import {
   setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
@@ -17,6 +18,10 @@ import {
 } from '../config/gameTypes';
 import { truncate } from '../utils/questionSetEditing';
 import { shareStateOf } from '../utils/shareState';
+import {
+  resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
+} from '../config/setTopics';
+import { setCarriesTag } from '../config/setShelfIndex';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
 
@@ -81,8 +86,37 @@ const SORTS = {
   `polls`).
 */
 const LIST_CONFIG = {
-  searchFields: ['name', 'description', 'customInstruction'],
+  // The SET's own tags join the haystack (config/setTopics.js: not the list a
+  // QUESTION carries, which lives on a different row and never meets this one).
+  // A word somebody can write and never find again is not a tag.
+  searchFields: ['name', 'description', 'customInstruction', (set) => set.tags],
   axes: {
+    // THE SHELF, first because it is the axis a library is browsed by. Only
+    // the ITEM side is resolved: the options come from the closed vocabulary,
+    // so the filter's own value is already an id — and `resolveSetTopic` folds
+    // a row with no shelf, or a shelf nothing recognises, onto UNFILED, which
+    // is a real option here rather than a row that cannot be reached.
+    topic: { get: (set) => resolveSetTopic(set.topic) },
+    /*
+      ONE OF THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed
+      into the search box — which is what the browse's tag pills used to do.
+
+      The pill carries a COUNT, and a count has to be the number of rows the
+      click produces. The search box cannot give it that: it OR-matches a
+      substring across the name, the description, the custom instruction and
+      the tags, so `empire` also returned "The British Empire" (which carries
+      no such tag) and `ancient` also returned every `ancient-egypt` set.
+      Matching through `setCarriesTag` — the same function config/
+      setShelfIndex.js counts with — makes the two agree by construction.
+
+      `all: ''` rather than the usual `all` sentinel: a set tagged `all` is
+      not a hypothetical, and the empty string is the one value `normalizeTag`
+      can never produce, so it cannot collide with a real word.
+
+      The row itself is handed to `eq`, not a field of it, because carrying a
+      tag is a question about the set rather than a value to compare.
+    */
+    tag: { all: '', get: (set) => set, eq: (set, wanted) => setCarriesTag(set, wanted) },
     type: { get: (set) => normalizeGameType(set.engagementType) },
     status: { get: (set) => (set.active ? 'active' : 'inactive') },
     // WHOSE IT IS — the same four values as the chip on every row, from the
@@ -148,7 +182,7 @@ export default function QuestionSetsPanel({
     contract, on the same predicate the list itself uses.
   */
   const {
-    state: { search, type, status, owner, sort },
+    state: { search, topic, tag, type, status, owner, sort },
     set,
     shown,
     drops,
@@ -158,6 +192,11 @@ export default function QuestionSetsPanel({
   } = useListControls(questionSets, LIST_CONFIG, {
     labels: {
       search: (needle) => `Search “${needle}”`,
+      // setTopicLabel answers "Unfiled" for the empty id, so the exit out of
+      // that filter names itself the same way the option does.
+      topic: (value) => `Topic: ${setTopicLabel(value)}`,
+      // A tag is already the word a person clicked, so it names itself.
+      tag: (value) => `Tag: ${value}`,
       type: (value) => `Type: ${gameTypeLabel(value)}`,
       owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
       status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
@@ -295,10 +334,40 @@ export default function QuestionSetsPanel({
             search={{
               value: search,
               onChange: (value) => set({ search: value }),
-              ariaLabel: 'Search name, description',
-              placeholder: 'Search name, description',
+              /*
+                IT NAMES THE TAGS BECAUSE IT READS THE TAGS. `searchFields`
+                above put a set's own words into the haystack; this said
+                "name, description" for a while after, which is the shape of
+                defect the owner's ask was about — "ability to see/search all
+                tags" is not delivered by a box that can do it and never says
+                so. A control's label is the only documentation anybody reads.
+              */
+              ariaLabel: 'Search name, description, tags',
+              placeholder: 'Search name, description, tags',
             }}
             selects={[
+              {
+                /*
+                  THE SHELF. All fifteen are offered whether or not anything
+                  sits on them, exactly as the type filter offers every type:
+                  this control is the closed vocabulary, and a person filtering
+                  has to be able to read what the vocabulary is. What is
+                  ACTUALLY on the shelves, with counts, is the browse below.
+
+                  Unfiled is last and is a real destination, not a placeholder:
+                  the sets that predate the field are on no shelf, and a filter
+                  that can only name the fifteen makes that backlog invisible.
+                */
+                key: 'topic',
+                value: topic,
+                onChange: (value) => set({ topic: value }),
+                ariaLabel: 'Filter by topic',
+                options: [
+                  { value: 'all', label: 'All topics' },
+                  ...SET_TOPIC_IDS.map((id) => ({ value: id, label: SET_TOPICS[id].label })),
+                  { value: UNFILED, label: UNFILED_LABEL },
+                ],
+              },
               {
                 key: 'type',
                 value: type,
@@ -352,6 +421,21 @@ export default function QuestionSetsPanel({
             count={`${questionSets.length} set${questionSets.length === 1 ? '' : 's'}${
               shown.length !== questionSets.length ? ` · ${shown.length} shown` : ''
             }`}
+          />
+
+          {/*
+            WHAT IS ACTUALLY ON THE SHELVES, and the words these sets carry —
+            the other half of the owner's ask, which a select cannot do because
+            a tag vocabulary is open. Closed by default, and OUTSIDE the
+            shown/empty branch below on purpose: on the screen that says
+            nothing matches, the one control showing what does exist is an exit.
+          */}
+          <SetShelfBrowse
+            sets={questionSets}
+            topic={topic}
+            tag={tag}
+            onPickTopic={(value) => set({ topic: value })}
+            onPickTag={(value) => set({ tag: value })}
           />
 
           {shown.length === 0 ? (

@@ -260,5 +260,91 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
     assert.deepStrictEqual(h.writes, []);
   });
 
+  /*
+   * 9. A BACKUP TAKEN BEFORE THE SHELF EXISTED CANNOT TAKE A LIVE SET OFF ITS OWN.
+   *
+   * // rejects: the REMOVE branch above stripping `topic` and `tags` from a live row
+   * //          because the snapshot has no value for them. That branch is right about
+   * //          every other setting — a snapshot with no personaId describes a set that
+   * //          had none — and wrong about these two: an envelope exported before the
+   * //          field existed says nothing about filing, and a set unfiled by a restore
+   * //          falls out of every topic filter and has its next share refused.
+   */
+  console.log('\n9. a restore can put a set on a shelf, and can never take it off one');
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    meta: {
+      name: 'Live', topic: 'history', tags: ['1980s'], personaId: 'persona-live',
+      active: true, versions: [{ version: 1 }, { version: 2 }],
+    },
+  });
+  // META predates the field: it carries neither attribute, exactly like the envelopes
+  // already sitting in the archive.
+  outcome = await restoreSetSnapshot(deps, setEnvelope({ media: [] }), ctx);
+  await check('a pre-feature snapshot leaves the live set filed where it was', () => {
+    const row = metaRow('pulse');
+    assert.strictEqual(outcome.mode, 'new-version');
+    assert.strictEqual(row.topic, 'history', 'the restore unfiled a live set');
+    assert.deepStrictEqual(row.tags, ['1980s'], "the restore dropped the set's own words");
+    assert.strictEqual(row.personaId, undefined, 'every OTHER absent setting must still be removed');
+  });
+
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    meta: { name: 'Live', topic: 'history', tags: ['1980s'], active: true, versions: [{ version: 1 }, { version: 2 }] },
+  });
+  await restoreSetSnapshot(deps, setEnvelope({
+    media: [], metadata: { ...META, topic: 'music', tags: ['synths'] },
+  }), ctx);
+  await check('a snapshot that carries a shelf still restores it over the live one', () => {
+    assert.strictEqual(metaRow('pulse').topic, 'music');
+    assert.deepStrictEqual(metaRow('pulse').tags, ['synths']);
+  });
+
+  h.reset();
+  await restoreSetSnapshot(deps, setEnvelope({
+    media: [], metadata: { ...META, topic: 'music', tags: ['synths'] },
+  }), ctx);
+  await check('a set created by a restore arrives on the shelf the snapshot named', () => {
+    assert.strictEqual(metaRow('pulse').topic, 'music');
+    assert.deepStrictEqual(metaRow('pulse').tags, ['synths']);
+  });
+
+  /*
+    AND THE ONE WAY PAST THE FILING GATE, PINNED WHERE IT LIVES.
+
+    `toggle-question-set.js` refuses to switch an unfiled set on: that refusal
+    is what makes upload-questions.js's draft exemption honest, because a set
+    that may arrive unfiled while switched OFF is asked before it can serve
+    anybody. Both of those files used to say that route was the ONLY one that
+    flips a set's `active`. It is not. This one assigns `active` straight from
+    the snapshot without reading the topic at all, so a backup that recorded a
+    set as live switches an unfiled row on and never meets the refusal.
+
+    Asserted rather than left implicit because both comments now state it, and
+    a fact stated in two places with nothing holding it is how they drifted in
+    the first place. It is narrow and it is visible — `import-from-archive.js`
+    reports every set that `becameActive` — and if it is ever closed, it is
+    closed in shared/archive-restore.js and this is the test that says so.
+  */
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    // An AI draft: unfiled, and switched off, which is exactly the pair the
+    // upload route is allowed to create and the toggle route must then ask about.
+    meta: { name: 'Draft', active: false, isAIGenerated: true, versions: [{ version: 1 }, { version: 2 }] },
+  });
+  outcome = await restoreSetSnapshot(deps, setEnvelope({
+    media: [], metadata: { ...META, active: true },
+  }), ctx);
+  await check('a restore can switch an UNFILED set on, which is the one route the filing gate does not cover', () => {
+    const row = metaRow('pulse');
+    assert.strictEqual(row.active, true, 'the restore did not apply the snapshot’s status');
+    assert.strictEqual(row.topic, undefined, 'the row under test has to still be unfiled for this to mean anything');
+    assert.strictEqual(outcome.wasActive, false, 'and it has to have been switched off before');
+  });
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

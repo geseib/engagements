@@ -217,6 +217,8 @@ const csvFor = (label) => [
 const uploadAs = (who, title, label) => uploadQuestions(withEvent(who, {
   body: body({
     fileName: `${label}.csv`, fileContent: csvFor(label),
+    // A live set is created with a shelf now (shared/set-topics.js).
+    topic: 'business-work',
     customTitle: title, engagementType: 'call-and-answer',
   }),
 }));

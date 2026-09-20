@@ -14,6 +14,10 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const SET = {
   id: 'lessons-learned',
   name: 'Lessons Learned',
+  // The shelf it sits on. Present because the Details form requires one before
+  // it will save — the owner asked for a topic on every set, not only the
+  // shared ones (components/SetTopicField.jsx, and the refusal in handleSave).
+  topic: 'business-work',
   engagementType: 'call-and-answer',
   totalQuestions: 42,
   categoryCount: 5,

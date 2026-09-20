@@ -158,6 +158,10 @@ async function copyAPassedPublicSet() {
     name: 'Pricing mechanics', engagementType: 'call-and-answer', scope: 'org', orgId: ACME,
     activeVersion: 2, versions: [{ version: 1 }, { version: 2 }],
     createdBy: `sub-owner-${ACME}`,
+    // FILED, because this fixture is SHARED below and an unfiled set does not
+    // reach the public library — publish-question-set.js's shelf gate. Which
+    // shelf is immaterial here; that it has one is not.
+    topic: 'business-work',
   });
   const v2 = `ORG#${ACME}#SET#${SET}#v2`;
   store.set(key(v2, 'CATEGORY#c001'), { PK: v2, SK: 'CATEGORY#c001', Name: 'Pricing', QuestionCount: 2 });
