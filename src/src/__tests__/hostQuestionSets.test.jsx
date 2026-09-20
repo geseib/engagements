@@ -270,6 +270,9 @@ describe('a host sees their own sets, and only controls they can use', () => {
       HOST_VIEW[0],
       {
         id: 'house-retro', name: 'House Retro', description: 'House content',
+        // Filed: the copy this test makes is a CREATE, and it starts on the
+        // shelf the set it was copied from sits on.
+        topic: 'business-work',
         engagementType: 'call-and-answer', totalQuestions: 12, categoryCount: 2,
         active: true, hasImages: false, canManage: false, mine: false, createdByName: null,
       },

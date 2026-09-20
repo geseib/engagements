@@ -6,10 +6,12 @@ import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
 import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
+import SetTopicField from './SetTopicField';
 import { nothingToPreview } from '../config/questionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
+import { resolveSetTopic, normalizeSetTags, setTopicRefusal } from '../config/setTopics';
 import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/questionSetEditing';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
@@ -223,6 +225,19 @@ export default function QuestionsPanel({
   const [showPull, setShowPull] = useState(false);
   // { mode: 'fork' | 'subset', title, rows }
   const [newSetDialog, setNewSetDialog] = useState(null);
+
+  /*
+    A FORK AND A SUBSET ARE CREATES, so the importer requires a shelf for both —
+    and the shelf it should start on is the one the set being copied sits on. A
+    fork of an 80s trivia set is still Music, and asking again would be asking a
+    question the screen already knows the answer to. An UNFILED source seeds
+    nothing: inheriting '' is the honest starting point, and the dialog says so.
+  */
+  const openNewSetDialog = (dialog) => setNewSetDialog({
+    topic: resolveSetTopic(questionSet?.topic),
+    tags: normalizeSetTags(questionSet?.tags),
+    ...dialog,
+  });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   /* ---------------------------------------------------------------- view -- */
@@ -761,7 +776,7 @@ export default function QuestionsPanel({
     // Not mine to replace: the save forks instead, and the person is told which
     // it will be before they press anything.
     if (!canManage) {
-      setNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
+      openNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
       return;
     }
 
@@ -797,7 +812,7 @@ export default function QuestionsPanel({
         // The handler's refusal, surfaced as the offer it implies. Reaching
         // here means the list said this set was manageable and the server
         // disagreed — the server is right, and the work is not lost.
-        setNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
+        openNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
         setStatus({
           text: 'This set belongs to someone else, so it cannot be replaced. '
             + 'Your changes are still here — save them as your own copy.',
@@ -837,6 +852,15 @@ export default function QuestionsPanel({
       setStatus({ text: 'The new set needs a name.', tone: 'error' });
       return;
     }
+    /* A CREATE THAT LANDS LIVE NAMES ITS SHELF. `upload-questions.js` answers
+       400 without one; refused here instead so the dialog stays open with the
+       name still in it and the picker one gesture away, rather than the person
+       reading the importer's refusal about a field they were never shown. */
+    const topicRefusal = setTopicRefusal(newSetDialog.topic);
+    if (topicRefusal) {
+      setStatus({ text: topicRefusal, tone: 'error' });
+      return;
+    }
     // Provenance, write-once: a row copied in from a third set keeps ITS
     // origin, because that is the truer answer to "where did this come from".
     const stamped = chosen.map((r) => ({
@@ -853,6 +877,11 @@ export default function QuestionsPanel({
         {
           customTitle: title,
           customDescription: `Adapted from "${setName}".`,
+          // The shelf and the author's own words. Only on THIS target: a
+          // replace rewrites no set prose, so the importer stores neither, and
+          // sending them would be values that go nowhere.
+          topic: newSetDialog.topic,
+          ...(newSetDialog.tags && newSetDialog.tags.length ? { tags: newSetDialog.tags } : {}),
         },
         summarizeRowChanges(stamped, [])
       );
@@ -1082,7 +1111,7 @@ export default function QuestionsPanel({
         {selected.length > 0 && !previewing && (
           <button
             className="btn-secondary btn-small"
-            onClick={() => setNewSetDialog({
+            onClick={() => openNewSetDialog({
               mode: 'subset',
               title: `${setName} — selection`,
               rows: rows.filter((r) => selected.includes(r.uid)),
@@ -1468,6 +1497,17 @@ export default function QuestionsPanel({
                 onChange={(e) => setNewSetDialog({ ...newSetDialog, title: e.target.value })}
               />
             </div>
+
+            {/* Where the new set will sit. Seeded from the set it came from,
+                and changeable — a subset carved out of a mixed set is often
+                about one thing, which is exactly when that matters. */}
+            <SetTopicField
+              idPrefix="new-set"
+              topic={newSetDialog.topic}
+              onTopicChange={(value) => setNewSetDialog({ ...newSetDialog, topic: value })}
+              tags={newSetDialog.tags || []}
+              onTagsChange={(value) => setNewSetDialog({ ...newSetDialog, tags: value })}
+            />
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setNewSetDialog(null)} disabled={saving}>
                 Cancel
