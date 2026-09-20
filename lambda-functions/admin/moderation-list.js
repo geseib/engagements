@@ -19,6 +19,14 @@ const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stri
 
 const project = (row) => ({
   sk: row.SK,
+  /*
+    WHICH LIBRARY THE ROW IS ABOUT. `orgId` alone cannot say: it is blank both
+    for a listing's row (a staff re-check, where the organisation is behind the
+    public entry) and for ENGAGE'S OWN SET, which has no organisation at all —
+    so without this the queue drew Engage's own rows as belonging to a customer
+    whose name it could not find. `moderation-queue.js` writes it on every row.
+  */
+  scope: row.scope || '',
   orgId: row.orgId || '',
   orgName: row.orgName || '',
   setId: row.setId || '',

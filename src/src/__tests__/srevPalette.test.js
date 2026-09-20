@@ -43,3 +43,33 @@ test('every selector is rooted at .srev and no --danger carries text', () => {
   for (const sel of stripped.matchAll(/(^|\})\s*([^{@}]+)\{/g)) for (const part of sel[2].split(',')) expect(part.trim()).toMatch(/^(\.srev(\b|-)|\[data-theme="light"\] \.srev)/);
   expect(GLOBAL_CSS).not.toMatch(/\.srev(\b|-)/);
 });
+
+/*
+  THE MEASUREMENT BLOCK. Five category rows and a band word each; the words
+  themselves carry high/medium/low, so only HIGH takes an ink and it takes the
+  one already measured above. These pin that no second ink crept in and that
+  the two greys the block leans on still clear AA on the tint, on both grounds.
+*/
+describe.each(Object.entries(grounds))('the measurement block on %s', (_name, g) => {
+  const tinted = over(hex(token(GLOBAL_CSS, ROOT, '--danger')), g.bg, tintAlpha);
+  test('the band word and the counts beside it clear AA on the tint', () => {
+    expect(CSS).toMatch(/\.srev-band\b[^}]*color:\s*var\(--text\)/);
+    expect(CSS).toMatch(/\.srev-band--high\s*\{\s*color:\s*var\(--srev-flag-ink\)/);
+    expect(CSS).toMatch(/\.srev-cat-where\b[^}]*color:\s*var\(--muted\)/);
+    expect(ratio(g.text, tinted)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(g.muted, tinted)).toBeGreaterThanOrEqual(AA);
+  });
+  test('no band ink is declared that the tests above do not composite', () => {
+    const bands = [...CSS.matchAll(/\.srev-band--(\w+)\s*\{\s*color:\s*var\((--[\w-]+)\)/g)];
+    expect(bands.map((m) => m[1])).toEqual(['high']);
+    expect(bands.map((m) => m[2])).toEqual(['--srev-flag-ink']);
+  });
+});
+test('the measurement block stays on the ladder and declares every token it uses', () => {
+  // Nothing below the 12px floor, and the floor is where the band word sits.
+  expect(CSS).toMatch(/\.srev-band\b[^}]*font-size:\s*var\(--srev-t-floor\)/);
+  const declared = new Set([...CSS.matchAll(/(--srev-[\w-]+)\s*:/g)].map((m) => m[1]));
+  for (const used of CSS.matchAll(/var\((--srev-[\w-]+)\)/g)) {
+    expect(declared.has(used[1])).toBe(true);
+  }
+});

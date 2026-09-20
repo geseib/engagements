@@ -44,7 +44,14 @@ const worstOf = (a, b) => {
   const rank = { [OUTCOME.FLAGGED]: 0, [OUTCOME.ESCALATED]: 1, [OUTCOME.PASSED]: 2 };
   return rank[a] <= rank[b] ? a : b;
 };
-const snapshotKeyFor = (source, version, checkedAt) => `moderation/${source.orgId}/${source.setId}/v${version}/${String(checkedAt).replace(/[:.]/g, '-')}.json`;
+/**
+ * Where the judged content is kept. The first segment is WHOSE it is, and an
+ * Engage set is nobody's: `source.orgId` is '' there, which would key it under
+ * `moderation//<setId>/…`. The scope names it instead, so every existing org
+ * key is unchanged (an org ref always has an orgId) and the platform library
+ * gets a segment that reads.
+ */
+const snapshotKeyFor = (source, version, checkedAt) => `moderation/${source.orgId || source.scope}/${source.setId}/v${version}/${String(checkedAt).replace(/[:.]/g, '-')}.json`;
 const minimalFinding = ({ questionId, category, band }) => ({ questionId: questionId === undefined ? null : questionId, category, band });
 
 /**
@@ -67,9 +74,27 @@ function withExplanations(findings, observed) {
 async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, context) {
   const job = await getJob(db, tableName, jobId);
   if (!job) { console.error(`🔎 check job ${jobId}: no job row`); return; }
-  const orgId = job.callerOrgId;
+  // ABSENT, not empty, when the POST carried no organisation (generation-jobs.js
+  // writes `callerOrgId` only when there was one). That is exactly the case a
+  // platform check is: Engage acting as Engage has no active org.
+  const orgId = job.callerOrgId || '';
   const request = job.request || {};
-  const source = setRef({ scope: tenant.ORG, orgId, setId: request.setId });
+  /*
+    ENGAGE'S OWN SET (check-question-set.js `checkPlatformSet`). The same check,
+    on the library every organisation reads, and it differs in four places that
+    all follow from there being no organisation behind it:
+
+      the ROWS are plaintext        tenant-crypto is per-organisation and throws
+                                    without an orgId; a platform row was never
+                                    encrypted because there is no tenant to key
+                                    it to.
+      nothing is PUBLISHED          there is no public copy of an Engage set.
+      nothing is STAMPED            and no author to read a stamp.
+      nobody is CHARGED             `staffUnits` lives on an organisation's own
+                                    row, and there is no organisation here.
+  */
+  const platform = request.platform === true;
+  const source = setRef({ scope: platform ? tenant.PLATFORM : tenant.ORG, orgId, setId: request.setId });
   const version = toVersion(request.version);
   // STAFF RE-RUNNING THE CHECK ON A VERSION THE PUBLIC LIBRARY ALREADY SERVES
   // (check-question-set.js). It publishes nothing, moves no share stamp, and
@@ -96,20 +121,28 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   const listingRef = recheck && request.publicSetId
     ? setRef({ scope: tenant.PUBLIC, orgId: '', setId: String(request.publicSetId) })
     : null;
+  // An Engage set's row is keyed by the SET, which is `PLATFORM#<setId>` —
+  // §3.2's third shape, and the only one that names content with no
+  // organisation and no public copy behind it.
   const queueRef = listingRef || source;
   /**
-   * Is that listing still in the library? A takedown can land while the check
-   * runs, and a row raised after one points at nothing: its `Score card` button
-   * would open a 404, and the takedown that clears this key ran before the key
-   * existed. Nothing to look at, so nothing is raised. A read that FAILS answers
-   * yes — a person looking at a live listing is the safe direction.
+   * Is there still something for a person to look at? A takedown can land while
+   * a re-check runs, and a row raised after one points at nothing: its `Score
+   * card` button would open a 404, and the takedown that clears this key ran
+   * before the key existed. An Engage set can be DELETED under a check in the
+   * same way. Nothing to look at, so nothing is raised.
+   *
+   * A read that FAILS answers yes — a person looking at a live listing is the
+   * safe direction — and an organisation's own check does not read at all,
+   * because the row it raises is about a version, not about a listing.
    */
-  const listingStillServed = async () => {
-    if (!listingRef) return true;
+  const subjectRef = listingRef || (platform ? source : null);
+  const subjectStillThere = async () => {
+    if (!subjectRef) return true;
     try {
-      return Boolean((await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(listingRef) }))).Item);
+      return Boolean((await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(subjectRef) }))).Item);
     } catch (error) {
-      console.warn(`⚠️ could not confirm ${request.publicSetId} is still listed: ${error.message}`);
+      console.warn(`⚠️ could not confirm ${subjectRef.scope}/${subjectRef.setId} is still there: ${error.message}`);
       return true;
     }
   };
@@ -162,13 +195,22 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     // substitute the organisation's active version for one since deleted, or for
     // the legacy partition of a set since versioned — judging content nobody
     // published while the review row claimed to describe the published one.
-    const pk = recheck ? setPartition(source, version) : resolvePartitionFromMeta(source, meta, version).pk;
+    // A platform check pins its partition for a different reason: the version
+    // was resolved on the POST, off the metadata this worker has just re-read,
+    // and re-resolving here would silently follow a promote that landed in
+    // between — the review row would then describe content the check never saw.
+    const pk = (recheck || platform) ? setPartition(source, version) : resolvePartitionFromMeta(source, meta, version).pk;
     const { items: rows } = await queryPartition(db, tableName, pk);
-    const plainMeta = await decryptItem(orgId, 'set', meta);
+    // PLAINTEXT FOR ENGAGE'S OWN LIBRARY. `decryptItem` requires an orgId and
+    // throws without one, which is the right refusal — there is no tenant key
+    // for content that belongs to no tenant, and a platform row was never
+    // encrypted under one.
+    const plain = (entity, row) => (platform ? row : decryptItem(orgId, entity, row));
+    const plainMeta = await plain('set', meta);
     const questions = []; const categories = [];
     for (const row of rows) {
       const sk = String(row.SK || '');
-      if (sk.startsWith('QUESTION#')) questions.push(await decryptItem(orgId, 'question', row)); // eslint-disable-line no-await-in-loop
+      if (sk.startsWith('QUESTION#')) questions.push(await plain('question', row)); // eslint-disable-line no-await-in-loop
       else if (sk.startsWith('CATEGORY#')) categories.push(row);
     }
     snapshot = buildSnapshot({ source, version, meta: plainMeta, categories, questions, checkedAt });
@@ -241,7 +283,13 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     // A re-check is Engage's own work: the calls are recorded beside the
     // organisation's ledger rather than in it (check-quota.js), and its daily
     // cap was never reserved.
-    await recordUnits(db, tableName, orgId, checked, recheck ? { field: 'staffUnits' } : {});
+    //
+    // A check of ENGAGE'S OWN SET is recorded nowhere here, because there is
+    // nowhere it belongs: every counter this module writes is keyed `ORG#<id>`,
+    // and an orgId of '' would mint an organisation-shaped row for a set no
+    // organisation owns. What was checked is on the set's own review log below,
+    // which is where an Engage set's history lives.
+    if (orgId) await recordUnits(db, tableName, orgId, checked, recheck ? { field: 'staffUnits' } : {});
     await writeReview(db, tableName, source, version, {
       status, findings, note, jobId,
       contentHash: snapshot.contentHash, snapshotKey, checkedBy: job.callerUserId || null,
@@ -278,14 +326,24 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       clears it, and a set shared before versioning existed raises one that can
       actually be opened and cleared. Its two exits are Take down and "Leave it
       serving", both on the score card.
+
+      AN ENGAGE SET HAS NO AUTHOR AT ALL, so the same rule applies to it for the
+      same reason: a `flagged` platform set that queued nothing would be a
+      finding thrown away while every organisation went on playing the set. Its
+      row is `PLATFORM#<setId>`, and its one exit is "Leave it serving" —
+      approve has nothing to publish and reject has nobody to tell. Switching
+      the set off is the console's, and stays there.
     */
-    const toAPerson = status === STATUS.ESCALATED || (recheck && status !== STATUS.PASSED);
-    if (toAPerson && await listingStillServed()) {
+    const toAPerson = status === STATUS.ESCALATED || ((recheck || platform) && status !== STATUS.PASSED);
+    if (toAPerson && await subjectStillThere()) {
       const bands = {};
       for (const f of findings) if (f.band && f.band !== 'NONE') bands[f.category] = f.band;
       await upsertQueueRow(db, tableName, {
         ref: queueRef, version, reason: 'escalated',
-        orgId, orgName: await orgName(db, tableName, orgId), setId: source.setId, title: plainMeta.name || source.setId,
+        // Named only when there is one to name: `orgId: ''` on Engage's own row
+        // would read as an organisation whose id nobody can look up.
+        ...(orgId ? { orgId, orgName: await orgName(db, tableName, orgId) } : {}),
+        setId: source.setId, title: plainMeta.name || source.setId,
         gameType: plainMeta.engagementType || '', questionCount: questions.length, bands,
         uncertainQuestionIds: findings.filter((f) => f.questionId && f.questionId !== '(set)').map((f) => f.questionId),
         snapshotKey, contentHash: snapshot.contentHash,
@@ -301,13 +359,15 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       });
       await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons });
     } else if (toAPerson) {
-      console.log(`🔎 ${request.publicSetId} is no longer in the library: ${status} recorded, nothing queued`);
+      console.log(`🔎 ${subjectRef.scope}/${subjectRef.setId} is no longer there: ${status} recorded, nothing queued`);
     }
-    if (recheck) {
+    if (recheck || platform) {
       // NOTHING ELSE. No publish (R1: the library is left exactly as it is,
       // including its active version), and no share stamp (R3: the author's set
       // goes on reading `published`, because as far as they are concerned it is).
-      console.log(`🔎 re-check only: ${orgId}/${source.setId} v${version} → ${status}, nothing published`);
+      // An Engage set has neither to begin with: there is no public copy of it
+      // and nobody outside Engage to tell.
+      console.log(`🔎 ${recheck ? 're-check' : 'Engage set'} only: ${orgId || source.scope}/${source.setId} v${version} → ${status}, nothing published`);
     } else if (status === STATUS.ESCALATED) {
       await writeShareStamp(db, tableName, source, { version, status: 'escalated', contentHash: snapshot.contentHash, reasons, jobId });
     } else if (status === STATUS.PASSED && request.publish !== false) {
@@ -332,7 +392,7 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         publicVersion: published ? published.publicVersion : null,
       },
     });
-    console.log(`🔎 ${orgId}/${source.setId} v${version}: ${status} (${clean}/${checked} clean)${published ? ` → public ${published.publicSetId} v${published.publicVersion}` : ''}`);
+    console.log(`🔎 ${orgId || source.scope}/${source.setId} v${version}: ${status} (${clean}/${checked} clean)${published ? ` → public ${published.publicSetId} v${published.publicVersion}` : ''}`);
   } catch (error) {
     console.error(`❌ check job ${jobId} failed:`, error);
     try {
@@ -354,21 +414,23 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message, snapshotKey, ...(tally ? { tally } : {}),
         ...(recheck ? { recheck: true, reviewer: job.callerUsername || '', publicSetId: request.publicSetId || '' } : {}),
       });
-      // The listing's key for a re-check, the version's for an ordinary check —
-      // the same choice the success path makes, for the same reasons, and the
-      // same silence when the listing it would point at has gone. A read that
-      // cannot answer here answers yes, which is why a failure like "the table
-      // went away" still reaches a person.
-      if (await listingStillServed()) {
+      // The listing's key for a re-check, the set's for an Engage set, the
+      // version's for an ordinary check — the same choice the success path
+      // makes, for the same reasons, and the same silence when whatever it
+      // would point at has gone. A read that cannot answer here answers yes,
+      // which is why a failure like "the table went away" still reaches a
+      // person.
+      if (await subjectStillThere()) {
         await upsertQueueRow(db, tableName, {
-          ref: queueRef, version, reason: 'escalated', orgId,
+          ref: queueRef, version, reason: 'escalated',
+          ...(orgId ? { orgId } : {}),
           setId: source.setId,
           title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
           // The snapshot is already in hand here — free to carry, and the queue
           // row would otherwise say nothing about what kind of set this is.
           gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
           questionCount: snapshot ? snapshot.questions.length : 0,
-          bands: {}, orgName: await orgName(db, tableName, orgId),
+          bands: {}, ...(orgId ? { orgName: await orgName(db, tableName, orgId) } : {}),
           snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
           recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
         });
@@ -376,7 +438,8 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       }
       // R3 holds through a failure too: a re-check that could not finish is not
       // news the author's set should carry. The queue row above is who looks.
-      if (!recheck) await writeShareStamp(db, tableName, source, { version, status: 'escalated', reasons: ['error'], jobId });
+      // An Engage set has no stamp to write at all.
+      if (!recheck && !platform) await writeShareStamp(db, tableName, source, { version, status: 'escalated', reasons: ['error'], jobId });
     } catch (inner) {
       console.error(`❌ and could not record the failure: ${inner.message}`);
     }
@@ -384,6 +447,8 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   }
 }
 async function orgName(db, tableName, orgId) {
+  // There is no `ORG#` row to read for content that belongs to no organisation.
+  if (!orgId) return '';
   try {
     const row = (await db.send(new GetCommand({ TableName: tableName, Key: { PK: tenant.orgPk(orgId), SK: 'METADATA' } }))).Item;
     return (row && row.name) || '';

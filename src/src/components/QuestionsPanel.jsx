@@ -13,6 +13,7 @@ import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKi
 import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/questionSetEditing';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
+import { checkIsDue, startHouseCheck } from '../utils/houseCheck';
 import {
   editableRows,
   blankRow,
@@ -771,11 +772,25 @@ export default function QuestionsPanel({
       if (response.ok) {
         const version = result.version != null ? `Version ${result.version}` : 'A new version';
         const skipped = Number(result.skippedRowCount || 0);
+        /*
+          NEW QUESTIONS UNDER ONE OF ENGAGE'S SETS WHILE IT IS ON is the second
+          half of the owner's trigger for the content check: the same content
+          change an organisation's share would have had checked, on a set every
+          organisation is already playing. The save says so (`checkDue`,
+          upload-questions.js) and the console runs it, because the save route
+          holds no lambda:InvokeFunction to dispatch a job with — see
+          utils/houseCheck.js. AFTER the save has returned, so the version is
+          already live and the check can neither delay it nor fail it; a check
+          that will not start is a clause on the end of the same sentence.
+        */
+        const check = checkIsDue(result) ? await startHouseCheck(setId) : null;
         setStatus({
           text: `${version} of "${setName}" is now live with ${result.questionCount} questions `
             + `(${describeRowChanges(summary) || 'no changes'}). `
             + (skipped ? `${skipped} row${skipped === 1 ? '' : 's'} could not be read and ${skipped === 1 ? 'was' : 'were'} skipped. ` : '')
-            + 'The previous version is kept and can be promoted back.',
+            + 'The previous version is kept and can be promoted back.'
+            + (check && check.ok ? ' The content check is running on it — every organisation reads this set.' : '')
+            + (check && !check.ok ? ` The content check could not be started: ${check.error}. Run it from the Versions panel.` : ''),
           tone: 'success'
         });
         await load();

@@ -64,8 +64,32 @@ export function shareStateOf(set, nowMs = Date.now()) {
   }
 }
 
-/** The chip beside a version in the editor's Versions panel. */
-export function versionChip(entry) {
+/**
+ * The chip beside a version in the editor's Versions panel.
+ *
+ * `scope` is the library the SET is in, and only `platform` changes anything.
+ * The words below are a SHARE's vocabulary — "needs changes" is a submission
+ * that was not published, "waiting for Engage" is one a person is deciding
+ * about, "not shared" is one nobody sent. None of those is true of Engage's own
+ * set: it never shares, it is already served to every organisation, and a check
+ * of it (check-question-set.js `checkPlatformSet`) publishes and unpublishes
+ * nothing. `shareStateOf` above already has this branch — it says "Everyone" —
+ * so the list row was honest while this chip was not.
+ */
+export function versionChip(entry, scope = '') {
+  if (scope === 'platform') {
+    switch (entry && entry.review) {
+      case 'flagged': return { key: 'flagged', label: 'check flagged it' };
+      case 'checking': return entry.unfinished ? { key: 'unfinished', label: "didn't finish" } : { key: 'checking', label: 'checking…' };
+      case 'escalated':
+      case 'appealed': return { key: 'waiting', label: 'with a person' };
+      case 'passed': return { key: 'passed', label: 'checked' };
+      // Engage's own sets were never checked at all until now, so "not
+      // checked" is the honest word — not "not shared", which invites the
+      // reader to go and share a set that is already served to everybody.
+      default: return { key: 'unshared', label: 'not checked' };
+    }
+  }
   if (entry && entry.published) return { key: 'public', label: 'public' };
   switch (entry && entry.review) {
     case 'flagged': return { key: 'flagged', label: 'needs changes' };

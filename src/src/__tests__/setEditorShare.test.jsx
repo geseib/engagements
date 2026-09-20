@@ -241,3 +241,102 @@ test('a fresh check finishing inside the editor (a new share.at) reloads the ver
   );
   await waitFor(() => expect(versionGets()).toBeGreaterThan(before));
 });
+
+/*
+  ── ENGAGE'S OWN SET IN THE SAME EDITOR ───────────────────────────────────
+
+  A platform set is what every organisation reads, so it has no public listing
+  to open a score card on, no share to submit and no author to tell. The one
+  thing it does have is the check itself — the whole of what sharing would have
+  run — and until this there was no way to ask for one except by hand-rolling a
+  POST. The owner's trigger fires on activation (AdminPage), and this is the
+  control for every set that was already on, whose questions were replaced
+  since, or whose activation happened with the console closed.
+*/
+const HOUSE_VERSIONS = [
+  { version: 1, createdAt: '2026-09-01T10:00:00.000Z', questionCount: 12, categoryCount: 2, isActive: true, review: 'unreviewed', reviewFindings: [], published: null, pinnedByGames: [], unfinished: false, reasons: [] },
+];
+const HOUSE = { id: 'icebreakers', name: 'Icebreakers', engagementType: 'poll', activeVersion: 1, canManage: true, scope: 'platform' };
+
+test("Engage's own set offers the content check instead of a share, and says so in its chip", async () => {
+  mockApi({ 'GET /versions': () => jsonResponse(200, HOUSE_VERSIONS) });
+  render(<QuestionSetEditor questionSet={HOUSE} onCancel={() => {}} />);
+  const v1 = await screen.findByTestId('version-1');
+  // rejects: "not shared", a share's word for a set that is already served to
+  // every organisation and can never be shared.
+  expect(within(v1).getByText('not checked')).toBeInTheDocument();
+  expect(within(v1).queryByRole('button', { name: /share publicly/i })).toBeNull();
+  expect(within(v1).getByRole('button', { name: /run the content check/i })).toBeInTheDocument();
+});
+
+test('running it posts the set\'s own check route for that version, and says what happened', async () => {
+  const posted = [];
+  mockApi({
+    'GET /versions': () => jsonResponse(200, HOUSE_VERSIONS),
+    'POST /check': (url, options) => { posted.push([url, JSON.parse(options.body)]); return jsonResponse(202, { jobId: 'j9', version: 1, status: 'queued', platform: true }); },
+  });
+  render(<QuestionSetEditor questionSet={HOUSE} onCancel={() => {}} />);
+  const v1 = await screen.findByTestId('version-1');
+  fireEvent.click(within(v1).getByRole('button', { name: /run the content check/i }));
+  await waitFor(() => expect(posted).toHaveLength(1));
+  expect(posted[0][0]).toBe('https://api.test/question-sets/icebreakers/check');
+  expect(posted[0][1]).toEqual({ version: 1 });
+  expect(await screen.findByText(/content check is running on version 1/i)).toBeInTheDocument();
+});
+
+// rejects: a refusal that leaves the panel silent, or that throws out of the
+// click handler and takes the editor with it.
+test('a refused check says why and leaves the version list alone', async () => {
+  mockApi({
+    'GET /versions': () => jsonResponse(200, HOUSE_VERSIONS),
+    'POST /check': () => jsonResponse(409, { error: 'A check is already running for this version.' }),
+  });
+  render(<QuestionSetEditor questionSet={HOUSE} onCancel={() => {}} />);
+  const v1 = await screen.findByTestId('version-1');
+  fireEvent.click(within(v1).getByRole('button', { name: /run the content check/i }));
+  expect(await screen.findByText(/could not be started: A check is already running/i)).toBeInTheDocument();
+  expect(screen.getByTestId('version-1')).toBeInTheDocument();
+});
+
+// rejects: drawing the control on an organisation's set, where "Share publicly"
+// is the control and the check is the step inside it.
+test("an organisation's own set is not offered the Engage control", async () => {
+  mockApi();
+  render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />);
+  const v2 = await screen.findByTestId('version-2');
+  expect(within(v2).queryByRole('button', { name: /run the content check/i })).toBeNull();
+  expect(within(v2).getByRole('button', { name: /share publicly/i })).toBeInTheDocument();
+});
+
+/*
+  AND THE SETS THAT MOST NEED A FIRST MEASUREMENT HAVE NO VERSIONS AT ALL.
+
+  Most of Engage's library predates versioning: its content is in the legacy
+  unsuffixed partition and `GET .../versions` answers `[]` for it, so there is
+  no version row to hang a control on. The check does not need one — the worker
+  reads the partition a null version resolves to, and the queue row it may
+  raise is keyed by the SET (`PLATFORM#<setId>`), not by a version.
+*/
+test("an unversioned Engage set can still be checked, and is named as a set not a version", async () => {
+  const posted = [];
+  mockApi({
+    'GET /versions': () => jsonResponse(200, []),
+    'POST /check': (url, options) => { posted.push(JSON.parse(options.body)); return jsonResponse(202, { jobId: 'j0', version: null, status: 'queued' }); },
+  });
+  render(<QuestionSetEditor questionSet={HOUSE} onCancel={() => {}} />);
+  await screen.findByText(/no version history for this set yet/i);
+  fireEvent.click(screen.getByRole('button', { name: /run the content check/i }));
+  // rejects: sending `version: null`, which the route would read as a named
+  // version and refuse, and rejects "Checking version null…" on the screen.
+  await waitFor(() => expect(posted).toEqual([{}]));
+  expect(await screen.findByText(/content check is running on this set/i)).toBeInTheDocument();
+});
+
+// rejects: drawing it on an organisation's unversioned set, where the control
+// is "Share publicly" and the check is the step inside it.
+test("an organisation's unversioned set is not offered it", async () => {
+  mockApi({ 'GET /versions': () => jsonResponse(200, []) });
+  render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />);
+  await screen.findByText(/no version history for this set yet/i);
+  expect(screen.queryByRole('button', { name: /run the content check/i })).toBeNull();
+});

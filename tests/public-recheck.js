@@ -733,14 +733,26 @@ async function recheck(body = { recheck: true }) {
     assert.match(parse(res).error, /acting as Engage/, 'refused for some other reason than the interlock');
     assert.strictEqual(H.state.dispatched.length, 0);
   });
-  // rejects: platform mode alone being read as a re-check. Staff acting as
-  // Engage with no org must still be told to choose one for an ordinary check.
-  await H.test('staff who do not ask for a re-check still get the old answer', async () => {
+  /*
+    rejects: platform mode alone being read as a re-check.
+
+    A POST with no `recheck` from staff acting as Engage is a check of ENGAGE'S
+    OWN set now (tests/engage-set-check.js) — it used to be the sentence "choose
+    an organisation". Either way it is NOT this route: `crime` is an
+    organisation's set id, there is no set of that name in Engage's library, and
+    the answer is that there is nothing to check. What must never happen is the
+    one asserted below: platform mode quietly re-checking the public entry this
+    org's set is behind.
+  */
+  await H.test('staff who do not ask for a re-check do not get one', async () => {
     await seedOrg();
     await seedPublished();
     const res = await handler(H.platformEvent({ method: 'POST', path: { setId: SET }, body: { version: 2 } }), H.ctx());
-    assert.strictEqual(res.statusCode, 400, res.body);
-    assert.match(parse(res).error, /organisation/i);
+    assert.notStrictEqual(res.statusCode, 202, `a re-check was started without being asked for: ${res.body}`);
+    assert.strictEqual(res.statusCode, 404, res.body);
+    assert.strictEqual(H.state.dispatched.length, 0, 'a worker was dispatched');
+    assert.strictEqual((await review(null)).status, R.STATUS.PASSED, 'the published entry was re-checked');
+    assert.strictEqual((await review(2)).status, R.STATUS.UNREVIEWED);
   });
 
   // rejects: the re-check quietly changing what an organisation's own submit

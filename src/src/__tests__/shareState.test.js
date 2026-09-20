@@ -57,3 +57,30 @@ describe('versionChip — the Versions panel', () => {
     expect(versionChip({ review: 'unreviewed', published: null })).toEqual({ key: 'unshared', label: 'not shared' });
   });
 });
+
+/*
+  ENGAGE'S OWN LIBRARY NEVER SHARES, so none of the words above is true of it.
+  `shareStateOf` has had this branch since tenancy — it says "Everyone" — and
+  the chip did not, so a checked platform set was labelled "needs changes" and
+  "waiting for Engage" in the one panel staff use to look at it.
+*/
+describe('versionChip — Engage\'s own set', () => {
+  test('a platform set is never labelled with a share word', () => {
+    expect(versionChip({ review: 'flagged', published: null }, 'platform')).toEqual({ key: 'flagged', label: 'check flagged it' });
+    expect(versionChip({ review: 'escalated', published: null }, 'platform')).toEqual({ key: 'waiting', label: 'with a person' });
+    expect(versionChip({ review: 'appealed', published: null }, 'platform').label).toBe('with a person');
+    expect(versionChip({ review: 'passed', published: null }, 'platform')).toEqual({ key: 'passed', label: 'checked' });
+    // "not shared" invites the reader to go and share a set every organisation
+    // already reads. Nothing checked Engage's sets until now, so this is the
+    // label most of the shared library wears.
+    expect(versionChip({ review: 'unreviewed', published: null }, 'platform')).toEqual({ key: 'unshared', label: 'not checked' });
+  });
+  test('the check states keep their own words, which are not share words', () => {
+    expect(versionChip({ review: 'checking', unfinished: false }, 'platform')).toEqual({ key: 'checking', label: 'checking…' });
+    expect(versionChip({ review: 'checking', unfinished: true }, 'platform')).toEqual({ key: 'unfinished', label: "didn't finish" });
+  });
+  test('an organisation\'s own set is unchanged by the new argument', () => {
+    expect(versionChip({ review: 'flagged', published: null })).toEqual(versionChip({ review: 'flagged', published: null }, ''));
+    expect(versionChip({ review: 'flagged', published: null }, 'org').label).toBe('needs changes');
+  });
+});

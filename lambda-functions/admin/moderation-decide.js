@@ -7,10 +7,12 @@
  *            published · log published · queue row deleted · snapshot kept (D9)
  *   reject   REVIEW ← flagged (reviewer, note) · log decided · share stamp
  *            flagged with the note · snapshot deleted · queue row deleted
- *   leave    log left-serving on the organisation's set · queue row deleted.
- *            NOTHING else: the answer to a row a staff RE-CHECK raised over a
- *            listing the library already serves, which is not a publish request
- *            and which neither decision above can answer. See `leaveServing`.
+ *   leave    log left-serving on the set · queue row deleted. NOTHING else:
+ *            the answer to a row that is not a publish request and which
+ *            neither decision above can answer — a staff RE-CHECK of a listing
+ *            the library already serves, or the check of one of ENGAGE'S OWN
+ *            sets, which has no public copy to approve into and no author to
+ *            reject. See `leaveServing`.
  *
  * The REVIEW move is a conditional Put on the row's current status
  * (transitionReview), so two reviewers cannot both decide: the loser is told
@@ -108,9 +110,10 @@
  * went, not a claim that the content is still there.
  *
  * dismiss / take down / keep-with-a-notice are answers to REPORTED rows and
- * arrive with reports (Stage 3). A listing-shaped sk (`PUBLIC#<publicSetId>`) is
- * accepted for `leave` alone, and `leaveServing` refuses one carrying a report:
- * a report is somebody's complaint, not this check's finding.
+ * arrive with reports (Stage 3). The two keyless shapes —
+ * `PUBLIC#<publicSetId>` for a listing and `PLATFORM#<setId>` for Engage's own
+ * set — are accepted for `leave` alone, and `leaveServing` refuses one carrying
+ * a report: a report is somebody's complaint, not this check's finding.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
@@ -173,16 +176,31 @@ function parsePublicSk(raw) {
   return m ? { sk: m[0], publicSetId: m[1] } : null;
 }
 
+/**
+ * ENGAGE'S OWN SET: `PLATFORM#<setId>`, §3.2's third shape and where the check
+ * of a platform set raises its row (set-check-worker.js). `leave` is the only
+ * answer it can have, and for a sharper reason than the listing's: approve
+ * would publish Engage's own set into the public library, which is a library
+ * for customers' content, and reject would stamp an author who does not exist.
+ * Switching the set off is the console's job and stays there.
+ */
+function parsePlatformSk(raw) {
+  const m = /^PLATFORM#([A-Za-z0-9_-]+)$/.exec(String(raw || '').trim());
+  return m ? { sk: m[0], platformSetId: m[1] } : null;
+}
+
 function parseBody(event) {
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return { error: 'The request body is not JSON.' }; }
   const decision = String(body.decision || '').trim();
   if (!DECISIONS.includes(decision)) return { error: 'The decision must be approve, reject or leave.' };
   const parsed = parseOrgSk(body.sk);
-  // The listing shape is offered to `leave` alone, and only when the org shape
-  // did not match: a re-check of a VERSIONED entry could carry the flag on
-  // either key, historically on the organisation's own.
-  const listing = !parsed && decision === LEAVE ? parsePublicSk(body.sk) : null;
+  // The listing and platform shapes are offered to `leave` alone, and only when
+  // the org shape did not match: a re-check of a VERSIONED entry could carry
+  // the flag on either key, historically on the organisation's own.
+  const listing = !parsed && decision === LEAVE
+    ? (parsePublicSk(body.sk) || parsePlatformSk(body.sk))
+    : null;
   if (!parsed && !listing) return { error: 'That is not a queue entry this screen decides.' };
   // Minor #4: a non-string note (an object, an array, a number...) must be
   // refused, not silently coerced -- String({}) is '[object Object]'.
@@ -197,8 +215,15 @@ function parseBody(event) {
   if (notice.length > NOTICE_MAX || notice.some((n) => !NOTICE_ID.test(n))) {
     return { error: 'A content notice id is lowercase letters, digits and dashes, up to 40 characters, and there are at most 8 of them.' };
   }
-  if (listing) return { sk: listing.sk, publicSetId: listing.publicSetId, ref: null, version: 0, decision, note, notice };
-  return { ...parsed, publicSetId: '', decision, note, notice };
+  if (listing) {
+    return {
+      sk: listing.sk,
+      publicSetId: listing.publicSetId || '',
+      platformSetId: listing.platformSetId || '',
+      ref: null, version: 0, decision, note, notice,
+    };
+  }
+  return { ...parsed, publicSetId: '', platformSetId: '', decision, note, notice };
 }
 
 /**
@@ -239,9 +264,21 @@ const sameSet = (source, ref) => Boolean(source)
  * nothing is still something Engage did.
  */
 async function leaveServing({
-  sk, pointer, ref, version, publicSetId, note, reviewer,
+  sk, pointer, ref, version, publicSetId, platformSetId, note, reviewer,
 }) {
-  if (pointer.recheck !== true) {
+  /*
+    IS ANYBODY WAITING ON A DECISION HERE? That is the whole of the gate, and
+    `recheck` is how a row keyed by a VERSION says no — the organisation's own
+    submission of that same version says nothing and is a publish request that
+    is owed an answer.
+
+    A row keyed `PLATFORM#<setId>` cannot be a publish request whatever it
+    carries: there is no version in the key to publish and no organisation
+    waiting on one. Engage's own set raises exactly that row, so it is admitted
+    by its shape rather than by a flag — and the report check below still
+    applies to it, because a report IS somebody waiting.
+  */
+  if (!platformSetId && pointer.recheck !== true) {
     return json(409, {
       error: 'Only an entry a staff re-check raised can be left serving — this one is a request waiting for a decision.',
     });
@@ -258,6 +295,12 @@ async function leaveServing({
   // leaves nothing to write to, and the row is simply an orphan to remove.
   let logRef = ref;
   let logVersion = version;
+  // ENGAGE'S OWN SET is its own provenance: the log is the set's, and the
+  // version is the one the check recorded on the row it raised.
+  if (!logRef && platformSetId) {
+    logRef = { scope: tenant.PLATFORM, orgId: '', setId: platformSetId };
+    logVersion = toVersion(pointer.version);
+  }
   if (!logRef && publicSetId) {
     const meta = (await db.send(new GetCommand({
       TableName: TABLE(),
@@ -270,10 +313,13 @@ async function leaveServing({
       logRef = null;
     }
   }
+  // What was left serving: a public listing, or Engage's own set. Named the
+  // same way in the log and in the answer, so neither has to be guessed at.
+  const leftServing = platformSetId || publicSetId || pointer.publicSetId || '';
   if (logRef) {
     await appendReviewEvent(db, TABLE(), logRef, 'left-serving', {
       version: logVersion === undefined ? null : logVersion,
-      publicSetId: publicSetId || pointer.publicSetId || '',
+      ...(platformSetId ? { setId: platformSetId } : { publicSetId: publicSetId || pointer.publicSetId || '' }),
       reviewer,
       ...(note ? { note } : {}),
     });
@@ -282,7 +328,7 @@ async function leaveServing({
   // so a crash before this leaves the row for the next click rather than a
   // cleared worklist with nothing in the customer's log.
   await deleteQueueRow(db, TABLE(), sk);
-  return json(200, { decision: LEAVE, leftServing: publicSetId || pointer.publicSetId || '' });
+  return json(200, { decision: LEAVE, leftServing });
 }
 
 async function writeSensitivity(pubRef, notice) {
@@ -303,7 +349,7 @@ exports.handler = async (event) => {
   }
   const input = parseBody(event);
   if (input.error) return json(400, { error: input.error });
-  const { sk, ref, version, decision, note, notice, publicSetId } = input;
+  const { sk, ref, version, decision, note, notice, publicSetId, platformSetId } = input;
   const reviewer = reviewerOf(event);
   try {
     const row = await db.send(new GetCommand({ TableName: TABLE(), Key: queueKey(sk) }));
@@ -312,7 +358,7 @@ exports.handler = async (event) => {
     // The one answer that is not about a publish request, so it comes before
     // every read and every branch that assumes one.
     if (decision === LEAVE) {
-      return await leaveServing({ sk, pointer, ref, version, publicSetId, note, reviewer });
+      return await leaveServing({ sk, pointer, ref, version, publicSetId, platformSetId, note, reviewer });
     }
     /*
       A ROW STAFF'S RE-CHECK RAISED IS NOT DECIDED HERE, and the refusal comes

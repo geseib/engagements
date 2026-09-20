@@ -9,6 +9,7 @@ import SetMediaPanel from './SetMediaPanel';
 import SetReviewBanner from './SetReviewBanner';
 import { authFetch } from '../auth/authFetch';
 import { versionChip } from '../utils/shareState';
+import { startHouseCheck } from '../utils/houseCheck';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
@@ -739,6 +740,13 @@ export default function QuestionSetEditor({
     obvious.
   */
   const isSomebodyElses = questionSet?.canManage === false;
+  /*
+    The library the SET is in, as the list projects it (get-question-sets.js
+    always sends a concrete scope — `setScopeOf(item) || ref.scope` — so an
+    absent one here is a set the editor was handed without a list row, and
+    reads as '' rather than being guessed at as platform).
+  */
+  const setScope = String(questionSet?.scope || '');
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -836,6 +844,36 @@ export default function QuestionSetEditor({
   };
 
   /* ----------------------------------------------------------- versions --- */
+
+  /**
+   * RUN THE CONTENT CHECK ON ONE OF ENGAGE'S OWN SETS, ON DEMAND.
+   *
+   * The owner's trigger is the moment a platform set is switched on, and the
+   * console fires it there (AdminPage `handleToggleActive`). This is the other
+   * half of the same rule: a set that was already on when checking arrived, one
+   * whose questions were replaced since, and any activation whose console was
+   * closed before the dispatch went, all need a way to ask. It is the only
+   * control an Engage set has for this — there is no public listing to open a
+   * score card on, because the set already IS what every organisation reads.
+   *
+   * It publishes nothing, moves no share stamp and charges no organisation
+   * (check-question-set.js `checkPlatformSet`); an outcome worse than passed
+   * raises a queue row, which is answered in Moderation.
+   */
+  const runHouseCheck = async (version) => {
+    // `null` is a set that has never been versioned — most of Engage's library
+    // — whose content is in the legacy partition. It is named as "this set"
+    // rather than "version null", and `startHouseCheck` sends no version, so
+    // the server resolves the same partition the room plays.
+    const which = version ? `version ${version}` : 'this set';
+    setBusyVersion(version);
+    setVersionStatus({ text: `Checking ${which}...`, tone: 'pending' });
+    const out = await startHouseCheck(setId, version ? { version } : {});
+    setVersionStatus(out.ok
+      ? { text: `The content check is running on ${which}. Reload the versions in a minute to see what it made of it.`, tone: 'success' }
+      : { text: `The content check could not be started: ${out.error}`, tone: 'error' });
+    setBusyVersion(null);
+  };
 
   const handlePromote = async (version) => {
     setBusyVersion(version);
@@ -1547,6 +1585,15 @@ export default function QuestionSetEditor({
             {appealStatus && <StatusMessage message={appealStatus.text} tone={appealStatus.tone} />}
             <SetReviewBanner
               entry={entry}
+              /*
+                WHICH LIBRARY THIS SET IS IN. The banner's whole vocabulary is a
+                SHARE's — published, not published, your own private copy — and
+                none of it is true of one of Engage's own sets, which is served
+                to every organisation and submitted by nobody. The list row was
+                already honest about this (`shareStateOf` says "Everyone"); the
+                banner and the version chip were not.
+              */
+              scope={setScope}
               share={shared || null}
               busy={appealBusy}
               /*
@@ -1606,9 +1653,30 @@ export default function QuestionSetEditor({
         </div>
 
         {versions.length === 0 ? (
-          <p className="qs-empty">
-            No version history for this set yet. The next CSV upload creates one.
-          </p>
+          <>
+            <p className="qs-empty">
+              No version history for this set yet. The next CSV upload creates one.
+            </p>
+            {/*
+              AND MOST OF ENGAGE'S LIBRARY IS EXACTLY THIS — unversioned, its
+              content in the legacy partition, and therefore with no version row
+              to hang a control on. The check does not need one: the worker
+              reads the partition a null version resolves to, and the queue row
+              it may raise is keyed by the SET rather than by a version
+              (`PLATFORM#<setId>`). Without this the sets that most need a first
+              measurement are the ones with no way to ask for it.
+            */}
+            {setScope === 'platform' && (
+              <button
+                className="btn-secondary btn-small"
+                onClick={() => runHouseCheck(null)}
+                disabled={busyVersion === null && versionStatus.tone === 'pending'}
+                title="Run the content check on this set's current questions"
+              >
+                <Icon name="ShieldCheck" weight="bold" size={14} color="currentColor" /> Run the content check
+              </button>
+            )}
+          </>
         ) : (
           <ul className="qs-version-list">
             {versions.map((v) => (
@@ -1625,7 +1693,7 @@ export default function QuestionSetEditor({
                       Active
                     </span>
                   )}
-                  {(() => { const chip = versionChip(v); return (
+                  {(() => { const chip = versionChip(v, setScope); return (
                     <span className={`qs-version-chip qs-version-chip--${chip.key}`} title={chip.key === 'public' ? `Public as ${v.published.publicSetId} v${v.published.publicVersion}` : undefined}>
                       {chip.label}
                     </span>
@@ -1644,6 +1712,23 @@ export default function QuestionSetEditor({
                   {v.createdAt && <span>{new Date(v.createdAt).toLocaleString()}</span>}
                 </div>
                 <div className="qs-version-actions">
+                  {/*
+                    ENGAGE'S OWN SET NEVER SHARES — it is already what every
+                    organisation reads — so "Share publicly" is not its control
+                    and `canShare` is false for it. What it has instead is the
+                    check itself, which is the whole of what sharing would have
+                    run.
+                  */}
+                  {setScope === 'platform' && (
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => runHouseCheck(v.version)}
+                      disabled={busyVersion === v.version || v.review === 'checking'}
+                      title={v.review === 'checking' ? 'A check is already running on this version' : `Run the content check on version ${v.version}`}
+                    >
+                      <Icon name="ShieldCheck" weight="bold" size={14} color="currentColor" /> Run the content check
+                    </button>
+                  )}
                   {canShare && onShare && (
                     <button
                       className="btn-secondary btn-small"
