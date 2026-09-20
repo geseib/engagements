@@ -260,5 +260,57 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
     assert.deepStrictEqual(h.writes, []);
   });
 
+  /*
+   * 9. A BACKUP TAKEN BEFORE THE SHELF EXISTED CANNOT TAKE A LIVE SET OFF ITS OWN.
+   *
+   * // rejects: the REMOVE branch above stripping `topic` and `tags` from a live row
+   * //          because the snapshot has no value for them. That branch is right about
+   * //          every other setting — a snapshot with no personaId describes a set that
+   * //          had none — and wrong about these two: an envelope exported before the
+   * //          field existed says nothing about filing, and a set unfiled by a restore
+   * //          falls out of every topic filter and has its next share refused.
+   */
+  console.log('\n9. a restore can put a set on a shelf, and can never take it off one');
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    meta: {
+      name: 'Live', topic: 'history', tags: ['1980s'], personaId: 'persona-live',
+      active: true, versions: [{ version: 1 }, { version: 2 }],
+    },
+  });
+  // META predates the field: it carries neither attribute, exactly like the envelopes
+  // already sitting in the archive.
+  outcome = await restoreSetSnapshot(deps, setEnvelope({ media: [] }), ctx);
+  await check('a pre-feature snapshot leaves the live set filed where it was', () => {
+    const row = metaRow('pulse');
+    assert.strictEqual(outcome.mode, 'new-version');
+    assert.strictEqual(row.topic, 'history', 'the restore unfiled a live set');
+    assert.deepStrictEqual(row.tags, ['1980s'], "the restore dropped the set's own words");
+    assert.strictEqual(row.personaId, undefined, 'every OTHER absent setting must still be removed');
+  });
+
+  h.reset();
+  h.seedSet({
+    setId: 'pulse', version: 2, rows: [{ SK: 'QUESTION#c001#001', Title: 'Live v2' }],
+    meta: { name: 'Live', topic: 'history', tags: ['1980s'], active: true, versions: [{ version: 1 }, { version: 2 }] },
+  });
+  await restoreSetSnapshot(deps, setEnvelope({
+    media: [], metadata: { ...META, topic: 'music', tags: ['synths'] },
+  }), ctx);
+  await check('a snapshot that carries a shelf still restores it over the live one', () => {
+    assert.strictEqual(metaRow('pulse').topic, 'music');
+    assert.deepStrictEqual(metaRow('pulse').tags, ['synths']);
+  });
+
+  h.reset();
+  await restoreSetSnapshot(deps, setEnvelope({
+    media: [], metadata: { ...META, topic: 'music', tags: ['synths'] },
+  }), ctx);
+  await check('a set created by a restore arrives on the shelf the snapshot named', () => {
+    assert.strictEqual(metaRow('pulse').topic, 'music');
+    assert.deepStrictEqual(metaRow('pulse').tags, ['synths']);
+  });
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

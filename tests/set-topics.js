@@ -475,11 +475,20 @@ const save = (setId, patch) => editSet({
 
   say('\n7. the shelf travels');
 
-  // rejects: a restore silently unfiling a set, which is what happens when an
-  // attribute is missing from the list the restore carries across.
-  await check('an archive restore carries the topic and the tags', () => {
+  // rejects: a restore that carries a snapshot's shelf and leaves the live
+  // set's own behind — and, the other way round, one that takes a live set OFF
+  // its shelf because the snapshot predates the field. The second is the sharp
+  // edge: the restore REMOVES any listed attribute the snapshot has no value
+  // for, so these two have to be listed AND exempted from that half. The
+  // behaviour is drilled against the real restore in tests/archive-restore.js.
+  await check('an archive restore carries the topic and the tags, and can never strip them', () => {
     assert.ok(snap.SET_SETTINGS.includes('topic'), 'a restore would leave the topic behind');
     assert.ok(snap.SET_SETTINGS.includes('tags'), 'a restore would leave the tags behind');
+    assert.deepStrictEqual(
+      [...snap.SET_SETTINGS_NEVER_REMOVED].sort(),
+      ['tags', 'topic'],
+      'a pre-feature backup would unfile a live set',
+    );
   });
 
   // rejects: editing one copy of the shelf and not the other, which would let

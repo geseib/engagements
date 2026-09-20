@@ -203,7 +203,12 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
   for (const attr of snap.SET_SETTINGS) {
     if (Object.prototype.hasOwnProperty.call(settings, attr)) {
       assign(attr, settings[attr]);
-    } else {
+    } else if (!snap.SET_SETTINGS_NEVER_REMOVED.includes(attr)) {
+      // An attribute the snapshot has no value for is REMOVED, because the
+      // snapshot is the description: a backup with no personaId describes a set
+      // that had none. The exemptions are the filing — every envelope already
+      // in the archive predates it, and taking a live set off its shelf on that
+      // evidence would drop it out of every filter (archive-snapshot.js).
       names[`#${attr}`] = attr;
       removes.push(`#${attr}`);
     }
