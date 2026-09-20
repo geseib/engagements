@@ -46,6 +46,20 @@
   color: var(--mk-text);
   font-size: var(--mk-t-body);
   line-height: 1.55;
+
+  /* additional tokens
+     Every colour this stylesheet needs that the block above does not already
+     name. Nothing below this line paints from a literal. Four candidates were
+     MERGED into an existing token rather than added, because they sat within a
+     hair of one: the screen still's gradient top and the sky gradient's top
+     stop, the mobile page's surround, and every restatement of the background
+     colour that had been written out by hand. See RATIONALE.md §9. */
+  --mk-amber-hi: #FFBB63;        /* the primary button under the pointer */
+  --mk-sky-low: #2A3A57;         /* the sky gradient's lowest stop (art brief §3) */
+  --mk-device-bezel: #0B1322;    /* the frame and foot around a device screen */
+  --mk-paper-edge: #EFE7DA;      /* the second sheet showing under the report */
+  --mk-paper-edge-deep: #E2D8C8; /* and the third */
+  --mk-paper-rule: rgba(27, 41, 66, 0.14); /* the hairline on a paper surface */
 }
 @media (max-width: 720px) {
   .mk-root { --mk-t-head: 25px; --mk-t-title: 32px; --mk-t-display: 42px; --mk-gutter: 16px; }
@@ -85,11 +99,14 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: #0F1A2E; }
+/* `body` is an ANCESTOR of `.mk-root`, so it cannot read a `--mk-*` token.
+   `.mk-root` paints the canvas itself (it already carries `background:
+   var(--mk-bg)` and `min-height: 100dvh`); body only clears its margin. */
+body { margin: 0; }
 [hidden] { display: none !important; }
 
 .mk-root :focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 2px; border-radius: 6px; }
-.mk-root ::selection { background: var(--mk-amber); color: #0F1A2E; }
+.mk-root ::selection { background: var(--mk-amber); color: var(--mk-bg); }
 
 /* ------------------------------------------------------------------ layout */
 .mk-shell { width: 100%; max-width: var(--mk-shell); margin-inline: auto; padding-inline: var(--mk-gutter); }
@@ -98,14 +115,15 @@ body { margin: 0; background: #0F1A2E; }
 /* ================================================================= the ridge
    Four layers, fixed behind the page: sky, back, mid, front. The amber glow is
    its own element and is clamped to the bottom 40% of the hero band, because
-   #F4EDE4 measures 2.84:1 on #C77B4A and the headline sits in the top 55%.
+   --mk-text measures 2.84:1 on --mk-amber-deep and the headline is in the top 55%.
    ========================================================================== */
 .mk-ridge { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .mk-ridge-sky {
   position: absolute; inset: 0;
   background:
     radial-gradient(120% 70% at 50% 108%, rgba(199,123,74,0.30) 0%, rgba(199,123,74,0) 62%),
-    linear-gradient(180deg, #101A2E 0%, #16233B 34%, #22344F 74%, #2A3A57 100%);
+    linear-gradient(180deg, var(--mk-bg) 0%, var(--mk-ridge-front) 34%,
+      var(--mk-ridge-mid) 74%, var(--mk-sky-low) 100%);
 }
 /* The one warm light in the frame. `--mk-ridge-band` is the hero height; the
    glow's box starts at 60% of it and is gone by its foot. */
@@ -125,8 +143,8 @@ body { margin: 0; background: #0F1A2E; }
   /* The box has to stop dead on the 60% line, and a dead stop reads as a seam.
      The mask fades the first sixth of it so the light arrives rather than
      switches on — without ever painting a pixel above the line. */
-  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, #000 17%);
-  mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, #000 17%);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 17%);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 17%);
 }
 /* Art brief §5's optional fourth layer: a thin valley fog between mid and front.
    Without it the three silhouettes read as flat cut paper — this is what makes
@@ -140,7 +158,7 @@ body { margin: 0; background: #0F1A2E; }
   filter: blur(8px);
 }
 .mk-ridge-stars { position: absolute; inset: 0 0 auto; height: 52%; opacity: 0.5; }
-.mk-ridge-stars circle { fill: #F4EDE4; }
+.mk-ridge-stars circle { fill: var(--mk-text); }
 
 .mk-ridge-layer { position: absolute; left: -5%; width: 110%; bottom: 0; display: block; }
 .mk-ridge-back  { height: 62%; opacity: 0.92; transform: translateX(-1.2%); }
@@ -156,7 +174,7 @@ body { margin: 0; background: #0F1A2E; }
   fill: none; stroke: var(--mk-amber); stroke-width: 3.2;
   stroke-dasharray: 11 12; stroke-linecap: round; opacity: 0.78;
 }
-.mk-ridge-climber { fill: var(--mk-amber); stroke: #0F1A2E; stroke-width: 2.5; }
+.mk-ridge-climber { fill: var(--mk-amber); stroke: var(--mk-bg); stroke-width: 2.5; }
 .mk-ridge-climber-halo { fill: rgba(246,169,76,0.22); }
 .mk-ridge-flag { fill: var(--mk-amber); }
 .mk-ridge-mast { stroke: var(--mk-amber); stroke-width: 2.4; }
@@ -174,7 +192,7 @@ body { margin: 0; background: #0F1A2E; }
 .mk-nav-in { display: flex; align-items: center; gap: 18px; min-height: 66px; padding-block: 10px; }
 .mk-brand {
   display: flex; align-items: center; gap: 10px; margin-right: auto;
-  font-family: var(--mk-font-display); font-weight: 800; font-size: 19px;
+  font-family: var(--mk-font-display); font-weight: 800; font-size: var(--mk-t-lead);
   letter-spacing: -0.01em; color: var(--mk-text); text-decoration: none; white-space: nowrap;
 }
 .mk-brand-mark { flex: none; width: 26px; height: 26px; }
@@ -197,8 +215,8 @@ body { margin: 0; background: #0F1A2E; }
   font: 700 var(--mk-t-body)/1.2 var(--mk-font-ui);
   border: 2px solid transparent; text-decoration: none; cursor: pointer; text-align: center;
 }
-.mk-btn-primary { background: var(--mk-amber); color: #0F1A2E; border-color: var(--mk-amber); }
-.mk-btn-primary:hover { background: #FFBB63; border-color: #FFBB63; }
+.mk-btn-primary { background: var(--mk-amber); color: var(--mk-bg); border-color: var(--mk-amber); }
+.mk-btn-primary:hover { background: var(--mk-amber-hi); border-color: var(--mk-amber-hi); }
 .mk-btn-ghost { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
 .mk-btn-ghost:hover { border-color: var(--mk-text); }
 .mk-btn-quiet { background: transparent; color: var(--mk-text); border-color: transparent; font-weight: 600; }
@@ -269,7 +287,7 @@ body { margin: 0; background: #0F1A2E; }
 .jce-cell {
   height: 54px; display: grid; place-items: center; border-radius: var(--mk-radius-sm);
   background: rgba(15,26,46,0.55); border: 2px solid var(--mk-rule-strong);
-  font: 800 28px/1 var(--mk-font-display); color: var(--mk-text);
+  font: 800 var(--mk-t-head)/1 var(--mk-font-display); color: var(--mk-text);
 }
 .jce-cell.jce-next { border-color: var(--mk-amber); }
 .jce-go { flex: none; padding-inline: 20px; height: 54px; min-height: 54px; }
@@ -325,7 +343,7 @@ body { margin: 0; background: #0F1A2E; }
 /* =================================================== devices and clip slots */
 .mk-device { position: relative; }
 .mk-device-bezel {
-  border-radius: 14px; background: #0B1322; border: 1px solid var(--mk-rule-strong);
+  border-radius: 14px; background: var(--mk-device-bezel); border: 1px solid var(--mk-rule-strong);
   padding: 10px; box-shadow: 0 18px 40px rgba(6, 11, 20, 0.5);
 }
 .mk-device--tv .mk-device-bezel { border-radius: 12px; padding: 11px 11px 13px; }
@@ -338,7 +356,7 @@ body { margin: 0; background: #0F1A2E; }
 .mk-device--phone .mk-device-screen { aspect-ratio: 9 / 19; }
 .mk-device-foot {
   height: 8px; width: 34%; margin: 7px auto 0; border-radius: 0 0 6px 6px;
-  background: #0B1322; border: 1px solid var(--mk-rule); border-top: 0;
+  background: var(--mk-device-bezel); border: 1px solid var(--mk-rule); border-top: 0;
 }
 .mk-device--phone .mk-device-notch {
   position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
@@ -361,7 +379,7 @@ body { margin: 0; background: #0F1A2E; }
 /* Plain divs at a deliberately small scale. This is a recognisable drawing of
    the real screen, not a screenshot and not an empty grey rectangle. */
 .mk-ss { position: absolute; inset: 0; padding: 4.4% 4.6%; display: flex; flex-direction: column; gap: 3.2%;
-  background: linear-gradient(180deg, #14213A 0%, #0F1A2E 100%); }
+  background: linear-gradient(180deg, var(--mk-ridge-front) 0%, var(--mk-bg) 100%); }
 /* The slot badge is pinned to the top right of the screen, so the sketched
    header reserves that corner rather than drawing the session code underneath
    it — the code chip and the badge were landing on each other. */
@@ -392,16 +410,16 @@ body { margin: 0; background: #0F1A2E; }
 .mk-ss-track.mk-ss-cool i { background: var(--mk-blue); }
 .mk-ss-qr { width: 42%; aspect-ratio: 1; align-self: center; margin-top: auto; margin-bottom: auto;
   background:
-    repeating-linear-gradient(90deg, #F4EDE4 0 12%, transparent 12% 20%),
-    repeating-linear-gradient(0deg, #F4EDE4 0 12%, transparent 12% 20%),
-    #0F1A2E;
-  border: 5px solid #F4EDE4; border-radius: 4px; }
+    repeating-linear-gradient(90deg, var(--mk-text) 0 12%, transparent 12% 20%),
+    repeating-linear-gradient(0deg, var(--mk-text) 0 12%, transparent 12% 20%),
+    var(--mk-bg);
+  border: 5px solid var(--mk-text); border-radius: 4px; }
 .mk-ss-people { display: flex; flex-wrap: wrap; gap: 5px; }
 .mk-ss-person { font-size: var(--mk-t-floor); color: var(--mk-text); background: var(--mk-surface-2);
   border-radius: 999px; padding: 2px 9px; }
 .mk-ss-field { border: 1px solid var(--mk-rule-strong); border-radius: 7px; padding: 8px 9px;
   font-size: var(--mk-t-floor); color: var(--mk-text); background: rgba(15,26,46,0.6); }
-.mk-ss-cta { margin-top: auto; text-align: center; background: var(--mk-amber); color: #0F1A2E;
+.mk-ss-cta { margin-top: auto; text-align: center; background: var(--mk-amber); color: var(--mk-bg);
   border-radius: 7px; padding: 8px; font: 800 var(--mk-t-floor)/1.2 var(--mk-font-ui); }
 .mk-ss-foot { margin-top: auto; display: flex; gap: 8px; align-items: center; }
 .mk-ss-grow { flex: 1 1 auto; }
@@ -409,6 +427,13 @@ body { margin: 0; background: #0F1A2E; }
 .mk-ss-line { height: 6px; border-radius: 3px; background: rgba(244,237,228,0.16); }
 .mk-ss-line.mk-ss-short { width: 56%; }
 .mk-ss-line.mk-ss-warm { background: rgba(246,169,76,0.5); width: 72%; }
+
+/* A still of the report, drawn on the paper field rather than the dusk one, so
+   a reader recognises it as a different kind of object before reading a word. */
+.mk-ss--paper { background: var(--mk-paper); }
+.mk-ss--paper .mk-ss-line { background: var(--mk-paper-rule); }
+.mk-ss--paper .mk-ss-line.mk-ss-title { background: var(--mk-paper-text); height: 9px; }
+.mk-ss--paper .mk-ss-line.mk-ss-warm { background: var(--mk-amber); }
 
 /* ---------------------------------------------------------- your material -- */
 .mk-flow { display: grid; gap: 16px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); }
@@ -466,16 +491,16 @@ body { margin: 0; background: #0F1A2E; }
      the whole difference between "a light panel" and "something you could pick
      up". Outer shadows paint behind the element, so no stacking games. */
   box-shadow:
-    0 7px 0 -2px #EFE7DA,
-    0 13px 0 -5px #E2D8C8,
+    0 7px 0 -2px var(--mk-paper-edge),
+    0 13px 0 -5px var(--mk-paper-edge-deep),
     0 38px 80px rgba(3, 7, 15, 0.7),
     0 8px 20px rgba(3, 7, 15, 0.45);
   font-size: var(--mk-t-body);
 }
 .mk-report > :first-child { border-radius: 14px 14px 0 0; }
 .mk-report > :last-child { border-radius: 0 0 14px 14px; }
-.mk-report * { border-color: rgba(27, 41, 66, 0.14); }
-.mk-report-head { padding: 26px 30px 22px; border-bottom: 1px solid rgba(27,41,66,0.14); background: var(--mk-paper-surface); }
+.mk-report * { border-color: var(--mk-paper-rule); }
+.mk-report-head { padding: 26px 30px 22px; border-bottom: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface); }
 .mk-report-kicker {
   font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--mk-amber-ink);
@@ -499,12 +524,12 @@ body { margin: 0; background: #0F1A2E; }
   color: var(--mk-amber-ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .mk-report-answers .mk-report-by { grid-column: 1 / -1; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
-/* Amber never carries text on paper — #F6A94C is 1.84:1 on #FBF7F1. It draws
+/* Amber never carries text on paper — --mk-amber is 1.84:1 on --mk-paper. It draws
    the bar; --mk-amber-ink says the number. */
 .mk-report-meter { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: rgba(27,41,66,0.10); overflow: hidden; }
 .mk-report-meter i { display: block; height: 100%; background: var(--mk-amber); }
 .mk-report-summary {
-  background: var(--mk-paper-surface); border: 1px solid rgba(27,41,66,0.14);
+  background: var(--mk-paper-surface); border: 1px solid var(--mk-paper-rule);
   border-left: 3px solid var(--mk-amber); border-radius: 0 10px 10px 0; padding: 18px 20px;
 }
 .mk-report-summary p { color: var(--mk-paper-text); }
@@ -519,7 +544,7 @@ body { margin: 0; background: #0F1A2E; }
 .mk-report-standings tr:last-child td { border-bottom: 0; }
 .mk-report-foot {
   display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
-  padding: 18px 30px 22px; border-top: 1px solid rgba(27,41,66,0.14); background: var(--mk-paper-surface);
+  padding: 18px 30px 22px; border-top: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface);
 }
 .mk-report-btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px;
@@ -527,7 +552,7 @@ body { margin: 0; background: #0F1A2E; }
   font: 700 var(--mk-t-label)/1 var(--mk-font-ui); text-decoration: none; background: transparent;
 }
 .mk-report-note { margin-left: auto; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
-/* Dusk link colours must not reach the paper subtree: #7CA7E6 is 2.46:1 on it. */
+/* Dusk link colours must not reach the paper subtree: --mk-blue is 2.46:1 on it. */
 .mk-root .mk-report p a, .mk-root .mk-report li a { color: var(--mk-amber-ink); }
 
 /* ================================================================ big CTA = */
@@ -601,15 +626,15 @@ body { margin: 0; background: #0F1A2E; }
 }
 .mk-callout-n {
   width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--mk-amber); color: #0F1A2E; font: 800 var(--mk-t-label)/1 var(--mk-font-display);
+  background: var(--mk-amber); color: var(--mk-bg); font: 800 var(--mk-t-label)/1 var(--mk-font-display);
 }
 .mk-callout h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; }
 .mk-callout p { margin-top: 5px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
 /* The marker pinned into the paper sheet. Amber field, ink-dark numeral — the
-   one place a number sits on amber, and #0F1A2E on #F6A94C is 8.9:1. */
+   one place a number sits on amber, and --mk-bg on --mk-amber is 8.9:1. */
 .mk-pin {
   display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
-  background: var(--mk-amber); color: #0F1A2E; font: 800 var(--mk-t-floor)/1 var(--mk-font-display);
+  background: var(--mk-amber); color: var(--mk-bg); font: 800 var(--mk-t-floor)/1 var(--mk-font-display);
   vertical-align: 2px; margin-right: 8px;
 }
 .mk-export { display: grid; gap: 16px; margin-top: 30px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
@@ -686,6 +711,12 @@ body { margin: 0; background: #0F1A2E; }
   .mk-report-note { margin-left: 0; }
   .mk-case { padding: 22px 18px; }
 }
+
+/* ===== MOCKUP TOOLING BELOW — never copied to React =====================
+   Everything past this banner exists only so these six files can be reviewed:
+   the design-notes rail and its toggle. It is exempt from the token rule and
+   from the type ladder on purpose, and no rule below it names a product class.
+   ======================================================================== */
 
 /* ============================================================= design notes
    Not part of the product surface. Fixed rail on the right; the page reserves
