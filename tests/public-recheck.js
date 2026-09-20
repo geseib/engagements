@@ -164,6 +164,28 @@ async function recheck(body = { recheck: true }) {
     assert.strictEqual(queue().length, 0, 'a clean re-check queued something');
   });
 
+  /*
+    THE CASE THE PIN IS FOR. The entry was shared from the UNVERSIONED set, and
+    the organisation has since replaced it — so there is now an `activeVersion`,
+    and `resolvePartitionFromMeta(source, meta, null)` answers with it, because
+    for a session that is the right answer (set-version.js: 1. the pin, 2.
+    activeVersion, 3. legacy). Here it is the wrong one twice over: the check
+    would judge content the library does not serve, and `writeReview` would file
+    the verdict under the version it was ASKED for — the unsuffixed one — so the
+    score card would show a measurement of questions nobody published.
+  */
+  await H.test('a legacy entry whose organisation has since versioned the set is still judged on the unversioned content', async () => {
+    await seedOrg({ versions: [null, 1], active: 1 });
+    await seedPublished();
+    H.state.guardrailReplies = clean(3);
+    await recheck();
+    const judged = H.state.sentGuardrail.map((c) => c.content[0].text.text).join('\n');
+    assert.ok(judged.includes('the unversioned set'), `the check judged: ${judged.slice(0, 200)}`);
+    assert.ok(!judged.includes('version 1'), 'the check judged the version the organisation replaced it with');
+    assert.strictEqual((await review(null)).status, R.STATUS.PASSED);
+    assert.strictEqual((await review(1)).status, R.STATUS.UNREVIEWED, 'a version nobody published was given a review');
+  });
+
   // rejects: judging the set's CURRENT active version. The library serves v2;
   // resolvePartitionFromMeta would hand the worker v3 the moment a pin is not
   // recorded, and the review row would then describe content nobody published.
