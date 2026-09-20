@@ -126,6 +126,22 @@ const LOWERCASE_LETTER = {
   optionC: 'The Tiber',
   correctAnswer: 'c',
 };
+/* The same asymmetry one spelling over: the SLOT ID, recorded in a case the
+   card does not read. `correctOptionIndex` matches `/^option\s*([A-F])$/i` —
+   the `i` and the `\s*` are both deliberate — so the phone has always read
+   `optionc`, `Option C` and `OPTIONC`, while the card's branch is guarded on
+   `startsWith('Option')` and then compares the letter exactly. Nothing upstream
+   tidies it either: lambda-functions/admin/upload-questions.js stores the
+   CorrectAnswer cell of an imported CSV verbatim, with no validation at all,
+   and get-question.js rewrites an answer only when it startsWith('Option'). */
+const LOWERCASE_SLOT_ID = {
+  id: 'q-12',
+  title: 'Which river runs through Vienna?',
+  optionA: 'The Tiber',
+  optionB: 'The Seine',
+  optionC: 'The Danube',
+  correctAnswer: 'optionc',
+};
 const ART = {
   id: 'a-2', title: 'THE COMPANY STEPS OUT', detail: 'Oil on canvas.', image: '/assets/art/x.jpg',
 };
@@ -222,6 +238,31 @@ describe('REVEAL — the trivia RESULTS option treatment', () => {
     expect(marked).toHaveLength(1);
     expect(marked[0].querySelector('.ltr').textContent).toBe('C');
     expect(marked[0].querySelector('.txt').textContent).toBe(LOWERCASE_LETTER.optionC);
+    expect([...container.querySelectorAll('.opt')].map((n) => n.className))
+      .toEqual(['opt dim', 'opt dim', 'opt correct']);
+  });
+
+  test('an answer recorded as a lowercase slot id marks its option, and only it', () => {
+    // rejects: reading the slot id case-sensitively — `startsWith('Option')`,
+    // then comparing the letter it strips against the stage's UPPERCASE
+    // positional letter. `optionc` enters no branch at all: it is not the
+    // exact slot id, not the bare letter, not one character long, and not the
+    // option's text, so every option came back dim and the room was never told
+    // which answer was right. The host's phone reads that set
+    // (config/hostRemote.js `correctOptionIndex` matches `/^option\s*([A-F])$/i`),
+    // so the phone marked an answer the projector behind it could not.
+    //
+    // DELIBERATELY NOT COMPARED AGAINST OracleTriviaResults, for the same
+    // reason as the case above: the oracle calls the very predicate under test,
+    // so a card and an oracle that both mark nothing are equal, and every
+    // innerHTML case in this file stays green straight through the bug.
+    const { container } = render(
+      <QuestionCard phase="REVEAL" question={LOWERCASE_SLOT_ID} gameType="trivia" answers={[]} />
+    );
+    const marked = [...container.querySelectorAll('.opt.correct')];
+    expect(marked).toHaveLength(1);
+    expect(marked[0].querySelector('.ltr').textContent).toBe('C');
+    expect(marked[0].querySelector('.txt').textContent).toBe(LOWERCASE_SLOT_ID.optionC);
     expect([...container.querySelectorAll('.opt')].map((n) => n.className))
       .toEqual(['opt dim', 'opt dim', 'opt correct']);
   });
