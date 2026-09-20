@@ -38,6 +38,31 @@ export default function SetReviewBanner({ entry, share, busy = false, onResubmit
   const [message, setMessage] = useState('');
   const review = entry && entry.review;
   const staffNote = share && share.note;
+  /*
+    THE SHARE STAMP DECIDES, NOT THE REVIEW ROW, while the library is serving it.
+
+    Engage staff can re-run the content check on the version the public library
+    already serves (the score card's "Run the check again"). That check writes
+    its verdict onto the ORGANISATION's own REVIEW row — which `entry.review`
+    is — and deliberately writes no share stamp, because nothing about the
+    author's share changed: their set is still published, and the re-check
+    publishes, unpublishes and takes down nothing.
+
+    Read from `entry.review` alone this banner told them a person at Engage was
+    looking at a version nobody had asked about, or that their set "was not
+    published" while it was live, and offered Resubmit and "Ask for a human
+    review" — an appeal that would knock their own live set out of its published
+    state. So the stamp, which is the author's own share request and the one
+    author-facing fact a re-check never moves, is what is believed here: while it
+    still reads `published` this banner has nothing to say.
+
+    Not `entry.published`, which is the PUBLISHED marker: that outlives a check
+    the organisation itself submits for an already-published version, and THAT
+    answer is theirs to read — their submission moves the stamp, so it arrives
+    here. versionChip (utils/shareState.js) can use the marker because a chip
+    only labels; this banner asks them to act.
+  */
+  if (share && share.status === 'published') return null;
   const waiting = review === 'escalated' || review === 'appealed';
   const flagged = review === 'flagged' || (share && share.status === 'flagged');
   if (!waiting && !flagged) return null;

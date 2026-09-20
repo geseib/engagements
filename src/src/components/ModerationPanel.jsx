@@ -19,6 +19,11 @@ import './ModerationPanel.css';
  * arrives with the notice vocabulary (Stage 4, spec §7); dismiss / take down /
  * keep-with-a-notice arrive with reports (Stage 3, spec §6.2).
  *
+ * A row a staff RE-CHECK raised is the one exception, and it is not reviewed
+ * here at all: the library already serves that exact version, so its answers are
+ * its score card (which can take it down) and "Leave it serving", which clears
+ * the row and changes nothing else.
+ *
  * Two reviewers cannot both decide: the server's transition is conditional,
  * and a lost race reads "Already decided by <name>" here and refreshes.
  */
@@ -266,6 +271,8 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
   const [state, setState] = useState('loading');   // loading | ready | outage
   const [outage, setOutage] = useState('');
   const [open, setOpen] = useState(null);           // the sk under review
+  const [leaving, setLeaving] = useState('');       // the sk being left serving
+  const [rowError, setRowError] = useState('');     // one row's action failed; the list is still good
   const now = Date.now();
   /*
     Held in a ref, not read straight out of the closure, so `load` keeps an
@@ -303,6 +310,41 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  /*
+    "LEAVE IT SERVING" — the answer to a row a staff re-check raised, from the
+    worklist rather than from the score card.
+
+    Such a row is not a publish request: the library is already serving that
+    exact version, so Review is not offered on it and the decide route refuses
+    both its decisions. Its answers are Take down, on the score card, and this —
+    which deletes the queue entry and changes nothing else. Without it the only
+    way to clear the row was to take down content a person had already approved,
+    so the row (and the nav badge it feeds) aged for ever.
+
+    No dialog: nothing is destroyed and a later re-check raises the row again. A
+    failure is reported on its own line and NOT through `outage`, which switches
+    the table off — the list is still perfectly good, and hiding it would take
+    away every other row over one row's refusal. The list is reloaded either way:
+    a 404 here means somebody else has already answered it.
+  */
+  const leaveServing = async (sk) => {
+    setLeaving(sk); setRowError('');
+    try {
+      const res = await authFetch(adminApiUrl('admin/moderation/decide'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sk, decision: 'leave' }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) setRowError(body.error ? `It could not be cleared from the queue: ${body.error}` : `It could not be cleared from the queue (${res.status}).`);
+    } catch (e) {
+      setRowError(`It could not be cleared from the queue: ${e.message}`);
+    } finally {
+      setLeaving('');
+      await load();
+    }
+  };
+
   return (
     <section className="modq" data-theme="dark">
       <div className="modq-lede">
@@ -310,6 +352,7 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
         <p className="modq-fine">The check escalates rather than guessing. These are the ones it flagged as uncertain, not the ones it rejected.</p>
       </div>
       {state === 'outage' && <div className="modq-outage" role="alert"><Icon name="WarningCircle" weight="fill" size={16} color="var(--danger-text)" /> {outage}</div>}
+      {rowError && <div className="modq-outage" role="alert" data-testid="modq-rowerror"><Icon name="WarningCircle" weight="fill" size={16} color="var(--danger-text)" /> {rowError}</div>}
       {state === 'ready' && queue.count === 0 && <p className="modq-empty">Nothing is waiting — the check decided everything on its own.</p>}
       {state === 'ready' && queue.count > 0 && (
         <table className="modq-tbl">
@@ -333,11 +376,29 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
                   <td><span className="modq-why-cell" title={whyLabel(item)}>{whyLabel(item)}</span></td>
                   <td className="modq-wait">{waitedLabel(item.waitingSince, now)}</td>
                   <td>
+                    {/*
+                      A ROW A RE-CHECK RAISED IS NOT DECIDED HERE. The library is
+                      already serving that exact version, so Approve would
+                      publish it a second time and Reject would stamp its author
+                      for a check nobody told them about — the decide route
+                      refuses both (lambda-functions/admin/moderation-decide.js).
+                      A button whose only outcome is a refusal is not an action,
+                      so the row offers the two that are: its score card, which
+                      shows what held it and can take it down, and — here, because
+                      it is the whole answer for most of them — leaving it
+                      serving, which clears the row and changes nothing else.
+                    */}
                     <div className="modq-rowact">
                       {onOpenScoreCard && item.publicSetId && (
-                        <button type="button" className="modq-btn modq-btn--sm" onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
+                        <button type="button" className={`modq-btn modq-btn--sm${item.recheck ? ' modq-btn--primary' : ''}`} onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
                       )}
-                      <button type="button" className="modq-btn modq-btn--sm modq-btn--primary" onClick={() => setOpen(item.sk)}>Review</button>
+                      {item.recheck ? (
+                        <button type="button" className="modq-btn modq-btn--sm" onClick={() => leaveServing(item.sk)} disabled={leaving === item.sk}>
+                          {leaving === item.sk ? 'Leaving it…' : 'Leave it serving'}
+                        </button>
+                      ) : (
+                        <button type="button" className="modq-btn modq-btn--sm modq-btn--primary" onClick={() => setOpen(item.sk)}>Review</button>
+                      )}
                     </div>
                   </td>
                 </tr>

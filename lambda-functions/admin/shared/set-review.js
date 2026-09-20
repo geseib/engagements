@@ -117,6 +117,43 @@ const REVIEW_FIELDS = Object.freeze([
 ]);
 
 /**
+ * WHAT A PERSON DECIDED, as opposed to what a check measured.
+ *
+ * A staff re-check of a version the public library already serves must not
+ * erase the decision that put it there: `writeReview` replaces the row from the
+ * whitelist above, so an approval's `reviewer`, `decidedAt` and `notice` would
+ * simply be gone, and with them the evidence that a human looked.
+ *
+ * `note` travels with them, and ONLY with them. After a decision the note is
+ * the reviewer's own sentence ("Historical, not gratuitous."); without one it is
+ * the previous CHECK's count ("11/11 clean"), which a new check is entitled to
+ * replace. So a row with no `reviewer` carries nothing forward.
+ */
+const DECISION_FIELDS = Object.freeze(['reviewer', 'decidedAt', 'notice', 'note']);
+function decisionOf(review) {
+  if (!review || !review.reviewer) return {};
+  return Object.fromEntries(
+    DECISION_FIELDS.filter((f) => review[f] !== undefined && review[f] !== null).map((f) => [f, review[f]]),
+  );
+}
+
+/**
+ * WHAT THE AUTHOR DECLARED — neither a check's measurement nor a reviewer's
+ * decision, and the one fact on this row that no check can re-derive: the
+ * content says nothing about the notice its author chose to declare about it.
+ * So it rides across the lock beside `decisionOf`, and a re-check that did not
+ * carry it would erase it for good — taking the score card's account of why a
+ * person was ever in this set's history with it.
+ *
+ * Unlike a decision this is NOT gated on a reviewer: the declaration is the
+ * author's own, whether or not anybody has ruled on it yet.
+ */
+function declarationOf(review) {
+  const list = review && Array.isArray(review.declaredNotice) ? review.declaredNotice : [];
+  return list.length ? { declaredNotice: list } : {};
+}
+
+/**
  * Record an outcome. Refuses a status the state machine does not define, rather
  * than storing it — every reader would otherwise have to defend against a value
  * that should not exist.
@@ -177,8 +214,14 @@ const isConditionFailure = (e) => e && (e.name === 'ConditionalCheckFailedExcept
  * checking, or when the check that was is older than STALE_CHECK_MS. Readers
  * render a stale `checking` as "didn't finish — submit again" (`isUnfinished`).
  */
-async function beginCheck(db, tableName, ref, version, { jobId, now = new Date() } = {}) {
+async function beginCheck(db, tableName, ref, version, { jobId, now = new Date(), keep = null } = {}) {
   const item = {
+    // `keep` FIRST, and the keys and the lock's own fields after it: a caller
+    // may carry facts across the lock (a platform re-check carries the human
+    // decision, `decisionOf` above, so a worker that dies leaves it on the row
+    // rather than taking it down with it) and can never relabel or move the row,
+    // nor forge the status the lock is.
+    ...(keep && typeof keep === 'object' ? keep : {}),
     ...reviewKey(ref, version),
     version: version === null || version === undefined ? null : version,
     status: STATUS.CHECKING,
@@ -202,16 +245,36 @@ async function beginCheck(db, tableName, ref, version, { jobId, now = new Date()
     throw e;
   }
 }
-/** Release a lock this job took and could not use (the worker failed to dispatch). */
-async function abandonCheck(db, tableName, ref, version, { jobId } = {}) {
+/**
+ * Release a lock this job took and could not use (the worker failed to dispatch).
+ *
+ * `restore` is the row the lock REPLACED, for a caller that had one: a version
+ * the public library is serving already carries a review, and deleting the lock
+ * would delete that — the approval, the notice, the passed status — over a
+ * dispatch that never happened. Given one, the row goes back instead of away.
+ * Both forms are conditional on this job still holding the lock, so a worker
+ * that did start owns the row and neither branch can touch it.
+ */
+async function abandonCheck(db, tableName, ref, version, { jobId, restore = null } = {}) {
+  const guard = {
+    ConditionExpression: '#s = :checking AND jobId = :job',
+    ExpressionAttributeNames: { '#s': 'status' },
+    ExpressionAttributeValues: { ':checking': STATUS.CHECKING, ':job': String(jobId || '') },
+  };
+  const putBack = restore && typeof restore === 'object'
+    && WRITABLE.includes(restore.status) && restore.status !== STATUS.CHECKING;
   try {
-    await db.send(new DeleteCommand({
-      TableName: tableName,
-      Key: reviewKey(ref, version),
-      ConditionExpression: '#s = :checking AND jobId = :job',
-      ExpressionAttributeNames: { '#s': 'status' },
-      ExpressionAttributeValues: { ':checking': STATUS.CHECKING, ':job': String(jobId || '') },
-    }));
+    if (putBack) {
+      await db.send(new PutCommand({
+        TableName: tableName,
+        // The keys last, as everywhere else here: a row read from elsewhere
+        // cannot be put back over a different version's.
+        Item: { ...restore, ...reviewKey(ref, version) },
+        ...guard,
+      }));
+      return;
+    }
+    await db.send(new DeleteCommand({ TableName: tableName, Key: reviewKey(ref, version), ...guard }));
   } catch (e) {
     if (!isConditionFailure(e)) throw e;
   }
@@ -269,6 +332,9 @@ module.exports = {
   STATUS,
   WRITABLE,
   REVIEW_FIELDS,
+  DECISION_FIELDS,
+  decisionOf,
+  declarationOf,
   reviewKey,
   publishedKey,
   readReview,

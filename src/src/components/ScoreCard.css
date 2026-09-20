@@ -28,6 +28,12 @@
 .scard-identity { margin: 6px 0 0; font-weight: 600; }
 .scard-acts { display: flex; gap: 8px; margin: 12px 0; }
 .scard-h { margin: 18px 0 6px; font-size: var(--scard-t-head); font-weight: 700; }
+/* A heading with a control beside it. The heading takes the slack with
+   `margin-right: auto` rather than the row pushing the control with
+   `justify-content: flex-end` — hard rule 9: flex-end overflows toward the
+   start, and a wrapped row's overflow there is unreachable. */
+.scard-hrow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.scard-hrow .scard-h { margin-right: auto; }
 .scard-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .scard-event { display: grid; grid-template-columns: 11ch 1fr; gap: 4px 12px; padding: 6px 0; border-bottom: 1px solid var(--scard-rule); }
 .scard-when { color: var(--muted); font-size: var(--scard-t-label); font-variant-numeric: tabular-nums; }
@@ -62,6 +68,10 @@
 .scard-outage { padding: 10px 12px; border: 1px solid var(--scard-rule-strong); border-radius: 6px; color: var(--danger-text); margin: 0 0 12px; }
 .scard-btn { height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--scard-rule-strong); background: transparent; color: var(--text); font: 600 var(--scard-t-body)/1 var(--font-ui); cursor: pointer; }
 .scard-btn:hover { background: var(--scard-row-hover); }
+/* Beside a 19px heading a 36px button is the loudest thing on the page, and
+   this one is not the page's subject. Size only — the label keeps the card's
+   text colour, and 13px is the ladder's label step, not a new floor. */
+.scard-btn--sm { height: 28px; padding: 0 10px; font-size: var(--scard-t-label); }
 .scard-btn--danger { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
 .scard-btn:disabled { opacity: .6; cursor: default; }
 .scard-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 48px 16px; background: rgba(15, 26, 46, .72); }
@@ -72,5 +82,12 @@
 .scard-body { padding: 10px 20px; }
 .scard-body p { margin: 0 0 12px; }
 .scard-label { display: block; margin: 8px 0 4px; font-size: var(--scard-t-label); color: var(--muted); }
+/* What a re-check does and does not do, as a term list rather than a paragraph:
+   each promise is one thing, named, so a reader looking for one of them finds
+   it without reading the other two. ShareSetDialog's `.pubshare-outcomes` is
+   the same shape on the organisation's side of the same check. */
+.scard-promises { margin: 0 0 12px; }
+.scard-promises dt { margin: 8px 0 0; font-size: var(--scard-t-label); font-weight: 600; color: var(--text); }
+.scard-promises dd { margin: 2px 0 0; color: var(--muted); }
 .scard-textarea { width: 100%; box-sizing: border-box; font: inherit; color: var(--text); background: transparent; border: 1px solid var(--scard-rule-strong); border-radius: 6px; padding: 8px; }
 .scard-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 18px; border-top: 1px solid var(--scard-rule); }

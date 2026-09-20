@@ -31,6 +31,7 @@ const R = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-review.js
 const C = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
 const J = require(path.join(H.REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
 const W = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-check-worker.js'));
+const Q = require(path.join(H.REPO, 'lambda-functions/admin/shared/moderation-queue.js'));
 const { publicSetIdFor } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
 const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/public-library-item.js'));
 const deps = { db, tableName: T, s3: new S3Client({}), bucket: 'prompts-test', bedrock: new BedrockRuntimeClient({}) };
@@ -201,6 +202,52 @@ async function shareJob(version) {
   });
 
   /*
+    ── A SET SHARED BEFORE VERSIONING EXISTED HAS A REVIEW TOO ───────────────
+
+    The owner, of the four public sets on dev: they show nothing. Three were
+    shared from UNVERSIONED sets, so the public row's `sourceVersion` is NULL
+    and the review sits in the UNSUFFIXED partition — `setPartition(ref, null)`,
+    a different key from v1's, which the repo supports on purpose
+    (set-version.js toVersion/resolvePartitionFromMeta, tenant.setContentPk).
+    `readReview(source, null)` finds it. standing() guarded the read with
+    `Number(meta.sourceVersion) || 0`, which is 0 for NULL, so it never looked
+    and reported `unreviewed` over a row that says `passed`.
+  */
+  await H.test('a set shared before versioning existed: its review is read from the unsuffixed partition', async () => {
+    H.reset();
+    seedPublic({ sourceVersion: null });
+    await R.writeReview(db, T, SRC, null, {
+      status: R.STATUS.PASSED, findings: [], note: '11/11 clean', contentHash: HASH, checkedBy: 'sub-amara', tally: TALLY, observed: OBSERVED,
+    });
+    const card = await get();
+    assert.strictEqual(card.review.status, 'passed', 'a legacy set reads as unreviewed');
+    assert.strictEqual(card.review.note, '11/11 clean');
+    assert.deepStrictEqual(card.review.tally, TALLY);
+    assert.strictEqual(observedRow(card, 'c001#001', 'MISCONDUCT').text, 'The Zodiac\nWhich newspaper received the first cipher?');
+  });
+  // rejects: reporting version 0 for a set that has no version. Nothing in the
+  // table is ever v0 — the card's own log filter matches a check event on it,
+  // and a re-check would be offered a version the library does not serve.
+  await H.test('a set shared before versioning existed reports no source version, not version 0', async () => {
+    H.reset();
+    seedPublic({ sourceVersion: null });
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.PASSED, findings: [], note: '11/11 clean', contentHash: HASH });
+    assert.strictEqual((await get()).sourceVersion, null);
+  });
+  // rejects: a fix for the above that reads the unsuffixed partition for
+  // EVERY set — a versioned set's review must still come from its own.
+  await H.test('a versioned set still reads its own version\'s review, never the unsuffixed one', async () => {
+    H.reset();
+    seedPublic();
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.FLAGGED, findings: [], note: 'the legacy row, from before v3 existed' });
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.PASSED, findings: [], note: '3/3 clean', contentHash: HASH });
+    const card = await get();
+    assert.strictEqual(card.sourceVersion, 3);
+    assert.strictEqual(card.review.status, 'passed');
+    assert.strictEqual(card.review.note, '3/3 clean');
+  });
+
+  /*
     An approval KEEPS the row: transitionReview spreads what the row holds, so
     an escalation or an appeal a person approved still carries the findings
     that held it, explanations and all, whether or not it was ever measured.
@@ -256,6 +303,35 @@ async function shareJob(version) {
       publicRow: { versions: [{ version: 1, createdAt: '2026-09-01T10:00:00.000Z' }, { version: 2, createdAt: '2026-09-18T10:00:00.000Z' }] },
     });
     assert.strictEqual((await get()).questionCount, 3);
+  });
+
+  /*
+    WHETHER ANYBODY IS WAITING ON THIS LISTING.
+
+    A staff re-check that came out worse than the decision on record raises a
+    queue row under the listing's own key, and this card is the only surface that
+    can answer it: Take down, or "Leave it serving". A card that cannot see the
+    row cannot offer the second, which left the destructive control as the only
+    exit from a worklist row — on content a person had already approved.
+  */
+  await H.test('the card says when a re-check has left something waiting, and on which key', async () => {
+    await seedApproved();
+    assert.strictEqual((await get()).queued, null, 'a listing nobody is waiting on reports one');
+    await Q.upsertQueueRow(db, T, {
+      ref: PUBREF, version: 3, reason: 'escalated', orgId: 'org_acme', orgName: 'Acme', title: 'True crime',
+      publicSetId: PUB, recheck: true,
+    }, { now: new Date('2026-09-19T08:00:00.000Z') });
+    const card = await get();
+    assert.strictEqual(card.queued.sk, `PUBLIC#${PUB}`);
+    assert.strictEqual(card.queued.recheck, true);
+    assert.strictEqual(card.queued.waitingSince, '2026-09-19T08:00:00.000Z');
+  });
+  // rejects: every waiting row reading as a re-check's. Stage 3's reports land
+  // on the same key, and "Leave it serving" is not the answer to one.
+  await H.test('a row nobody re-checked says so', async () => {
+    await seedApproved();
+    await Q.upsertQueueRow(db, T, { ref: PUBREF, version: 3, reason: 'reported', publicSetId: PUB });
+    assert.strictEqual((await get()).queued.recheck, false);
   });
 
   H.summary();

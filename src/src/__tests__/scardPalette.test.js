@@ -136,3 +136,38 @@ describe('the tally is laid out as tables, and a truncated question keeps its te
     expect(q).not.toMatch(/display:\s*(inline-)?flex/);
   });
 });
+
+/*
+  2026-09-19 — RUNNING THE CHECK AGAIN. The platform card gained a control
+  beside the latest check and a confirmation that says what a re-check will and
+  will not do. Two of its classes carry text colour, so both are measured here
+  against the work field AND the dialog surface (the confirmation is a dialog);
+  the generic sweep above catches any third on arrival, and these name the two
+  so a rename cannot quietly drop them.
+*/
+describe('the re-check control and its confirmation', () => {
+  test.each([['.scard-promises dt'], ['.scard-promises dd']])('%s clears AA on the work field and on a dialog', (selector) => {
+    const fg = hex(hexOf(colourOf(selector)));
+    expect(ratio(fg, hex(T.bg))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(fg, hex(T.surface))).toBeGreaterThanOrEqual(AA);
+  });
+  // rejects: a small button that shrinks its label below the 12px floor, or
+  // repaints it in a colour of its own rather than the card's text.
+  test('the small button changes its size only, and stays on the ladder', () => {
+    const sm = rule('.scard-btn--sm');
+    expect(sm).not.toMatch(/(?:^|[;\s])color:/);
+    const size = sm.match(/font-size:\s*var\((--scard-t-[a-z]+)\)/);
+    expect(size).not.toBeNull();
+    const declared = STRIPPED.match(new RegExp(`${size[1]}:\\s*(\\d+)px`));
+    expect(Number(declared[1])).toBeGreaterThanOrEqual(12);
+  });
+  // rejects: hard rule 9 — flex-end in a row that can wrap pushes the overflow
+  // toward the start, where it is unreachable. The heading takes the slack.
+  test('the control sits beside the heading on a row that wraps, never flex-end', () => {
+    const row = rule('.scard-hrow');
+    expect(row).toMatch(/display:\s*flex/);
+    expect(row).toMatch(/flex-wrap:\s*wrap/);
+    expect(row).not.toMatch(/justify-content:\s*flex-end/);
+    expect(rule('.scard-hrow .scard-h')).toMatch(/margin-right:\s*auto/);
+  });
+});

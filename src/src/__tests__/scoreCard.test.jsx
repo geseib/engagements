@@ -661,3 +661,258 @@ test('a re-check in flight reads as checking, and one that never finished says s
   await open(withReview({ ...running, status: 'checking', checkedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() }));
   expect(screen.getByTestId('scard-verdict')).toHaveTextContent("Verdict: didn't finish");
 });
+
+/*
+  RUNNING THE CHECK AGAIN — the owner, 2026-09-19: their existing public sets
+  show nothing of what the check measured, and there is no way to fill them in.
+  The cure is to run the check again, and the ORDINARY route publishes: for a
+  live listing it would mint a second public version of identical content, move
+  the author's share stamp, and replace the row that records a person's
+  approval. So the platform console gets its own control for the platform
+  re-check (POST { recheck: true }, lambda-functions/admin/check-question-set.js
+  recheckPublished), beside the latest check, and it says what it will and will
+  not do before it runs.
+
+  The route reads WHICH set and WHICH version from the public row, so the only
+  thing the card sends is `recheck` and the version it is looking at — null
+  included, which is the legacy, unversioned content three of the four entries
+  on dev carry.
+*/
+const RECHECK = /run the check again/i;
+const postUrl = (id) => `https://api.test/question-sets/${id}/check`;
+/**
+ * One fetch mock for the three URLs this card uses: the card itself (GET
+ * .../admin/public-library/<id>), the re-check (POST .../check) and the job
+ * (GET .../check/<jobId>). `card` may be a function of the read's ordinal, so a
+ * re-read after the check can answer with what the check measured.
+ */
+function server({ card, post, polls = [] }) {
+  const calls = { posts: [], reads: 0 };
+  let poll = 0;
+  global.fetch = jest.fn(async (url, options = {}) => {
+    if ((options.method || 'GET').toUpperCase() === 'POST') {
+      calls.posts.push({ url, body: JSON.parse(options.body) });
+      return post();
+    }
+    if (/\/check\//.test(url)) {
+      const answer = polls[Math.min(poll, polls.length - 1)];
+      poll += 1;
+      return json(answer);
+    }
+    calls.reads += 1;
+    return json(typeof card === 'function' ? card(calls.reads) : card);
+  });
+  return calls;
+}
+const queued = (version) => json({ jobId: 'job-7', version, status: 'queued', recheck: true }, 202);
+const RUNNING_POLL = { jobId: 'job-7', status: 'running', phase: 'Checking questions', completed: 12, requested: 30 };
+const DONE_POLL = {
+  jobId: 'job-7', status: 'complete', phase: 'Done', completed: 30, requested: 30, items: [],
+  meta: { outcome: 'passed', version: 3, checked: 31, clean: 29, publicSetId: null, publicVersion: null },
+};
+
+test('the re-check is offered to Engage staff, and to nobody else', async () => {
+  server({ card: DECIDED, post: () => queued(3) });
+  const view = render(<ScoreCard publicSetId={DECIDED.publicSetId} onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.queryByRole('button', { name: RECHECK })).toBeNull();
+  view.unmount();
+  render(<ScoreCard publicSetId={DECIDED.publicSetId} mode="platform" onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.getByRole('button', { name: RECHECK })).toBeInTheDocument();
+});
+
+async function openPlatform(card) {
+  const view = render(<ScoreCard publicSetId={card.publicSetId} mode="platform" onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: card.name });
+  return view;
+}
+
+// rejects: a confirmation that says only "are you sure?" — the two things staff
+// have to know before running this are that it publishes nothing and that it
+// cannot erase the decision a person made.
+test('the confirmation says what a re-check does, and what it does not', async () => {
+  server({ card: DECIDED, post: () => queued(3) });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog).toHaveTextContent(/runs the content check again on the version the public library is serving/i);
+  expect(dialog).toHaveTextContent(/so this card can show what it measured/i);
+  expect(dialog).toHaveTextContent(/no new public version/i);
+  expect(dialog).toHaveTextContent(/does not undo a decision a person made/i);
+  expect(dialog).toHaveTextContent(/nothing is taken down/i);
+  // The exits: an X and a bottom Cancel (hard rule 2), and nothing has run yet.
+  expect(within(dialog).getByRole('button', { name: /close/i })).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('a re-check asks for nothing but the version on the card, shows its progress, and the card then reads what it measured', async () => {
+  const calls = server({
+    card: (n) => (n === 1 ? DECIDED : { ...DECIDED, review: TRUE_CRIME.review }),
+    post: () => queued(3),
+    polls: [RUNNING_POLL, DONE_POLL],
+  });
+  await openPlatform(DECIDED);
+  expect(screen.getByTestId('scard-pretally')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^run the check$/i }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: postUrl('orgacme-crime'), body: { recheck: true, version: 3 } },
+  ]));
+  const progress = await screen.findByTestId('scard-recheck-progress');
+  expect(progress).toHaveTextContent('12 / 30');
+  expect(progress).toHaveTextContent(/checking questions/i);
+  // It finishes, the card is re-read, and the measurement replaces the line
+  // that said this check recorded none.
+  await waitFor(() => expect(screen.getByTestId('scard-summary')).toBeInTheDocument(), { timeout: 8000 });
+  expect(screen.queryByTestId('scard-pretally')).toBeNull();
+  expect(screen.queryByTestId('scard-recheck-progress')).toBeNull();
+  expect(calls.reads).toBe(2);
+}, 20000);
+
+// rejects: `version: 0` for a set shared before versioning existed — the route
+// refuses any version but the published one, and 0 is not null.
+test('a legacy entry re-checks the unversioned content the library serves', async () => {
+  const legacy = { ...DECIDED, sourceVersion: null };
+  const calls = server({ card: legacy, post: () => queued(null), polls: [DONE_POLL] });
+  await openPlatform(legacy);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^run the check$/i }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: postUrl('orgacme-crime'), body: { recheck: true, version: null } },
+  ]));
+  await waitFor(() => expect(calls.reads).toBe(2));
+});
+
+// rejects: a refusal swallowed, or shown somewhere other than where it was
+// asked for — the confirm stays live for a retry, as the takedown's does (R17).
+test('a refusal from the route is read in its own words, beside the confirm', async () => {
+  server({ card: DECIDED, post: () => json({ error: 'This version is already being checked.', status: 'checking' }, 409) });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  const dialog = await screen.findByRole('dialog');
+  const confirm = within(dialog).getByRole('button', { name: /^run the check$/i });
+  fireEvent.click(confirm);
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(/already being checked/i);
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(confirm).toBeEnabled();
+  expect(screen.queryByTestId('scard-recheck-progress')).toBeNull();
+});
+
+// rejects: a failed check taking the card down with it — the reader still has
+// to be able to read what the set's last good check said.
+test('a check that does not finish says so, and the card is still readable', async () => {
+  server({
+    card: DECIDED,
+    post: () => queued(3),
+    polls: [{ jobId: 'job-7', status: 'error', errorMessage: 'Bedrock throttled the check.' }],
+  });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^run the check$/i }));
+  expect(await screen.findByTestId('scard-recheck-error')).toHaveTextContent(/bedrock throttled the check/i);
+  expect(screen.getByRole('heading', { name: DECIDED.name })).toBeInTheDocument();
+  expect(screen.getByTestId('scard-pretally')).toBeInTheDocument();
+  expect(screen.getAllByTestId('scard-obs').length).toBeGreaterThan(0);
+  // Still offered: the row is where it was, and running it again is the answer.
+  expect(screen.getByRole('button', { name: RECHECK })).toBeEnabled();
+});
+
+/*
+  NOTHING TO RE-CHECK. The route reads the source from the public row, so an
+  entry that names no organisation is a 409 there; a version already being
+  checked is a 409 on the lock. A `checking` past the stale window is neither —
+  the lock is free and nothing is running (set-review.js isUnfinished), which is
+  precisely the state a re-check exists to clear.
+*/
+test('the re-check is not offered where there is nothing to re-check, and is offered for a check that never finished', async () => {
+  const orphan = { ...DECIDED, sourceOrgId: '', sourceSetId: '' };
+  server({ card: orphan, post: () => queued(3) });
+  const view = await openPlatform(orphan);
+  expect(screen.queryByRole('button', { name: RECHECK })).toBeNull();
+  view.unmount();
+
+  const inFlight = { ...DECIDED, review: { ...DECIDED.review, status: 'checking', checkedAt: new Date(Date.now() - 60 * 1000).toISOString() } };
+  server({ card: inFlight, post: () => queued(3) });
+  const live = await openPlatform(inFlight);
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent('checking…');
+  expect(screen.queryByRole('button', { name: RECHECK })).toBeNull();
+  live.unmount();
+
+  const stalled = { ...DECIDED, review: { ...DECIDED.review, status: 'checking', checkedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() } };
+  server({ card: stalled, post: () => queued(3) });
+  await openPlatform(stalled);
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent("didn't finish");
+  expect(screen.getByRole('button', { name: RECHECK })).toBeInTheDocument();
+});
+
+/*
+  ANSWERING WHAT THE RE-CHECK FOUND, WITHOUT TAKING ANYTHING DOWN.
+
+  A re-check worse than the decision on record takes nothing down: it queues the
+  listing for a person, and this card is the only surface that can answer that
+  row — the review dialog's two buttons would publish it a second time or tell
+  its author off, and the route refuses both. So Take down used to be the ONLY
+  exit from the row, on content a person had already approved. The likely outcome
+  of exactly the re-checks this card offers is a medium band somebody has already
+  ruled on, so "the approval stands" is the common answer.
+*/
+const LEAVE = /leave it serving/i;
+const decideUrl = 'https://api.test/admin/moderation/decide';
+const WAITING = { sk: 'PUBLIC#orgacme-crime', recheck: true, waitingSince: '2026-09-19T08:00:00.000Z' };
+const waiting = (queued) => ({ ...DECIDED, queued });
+
+test('a re-check\'s queue entry is answered on the card: it says who is waiting, and clears without taking anything down', async () => {
+  // The second read is the card after the entry has been answered.
+  const calls = server({
+    card: (read) => (read === 1 ? waiting(WAITING) : waiting(null)),
+    post: () => json({ decision: 'leave', leftServing: 'orgacme-crime' }),
+  });
+  await openPlatform(DECIDED);
+  expect(screen.getByTestId('scard-waiting')).toHaveTextContent(/waiting for a person/i);
+  expect(screen.getByTestId('scard-waiting')).toHaveTextContent(/nothing was taken down/i);
+  fireEvent.click(screen.getByRole('button', { name: LEAVE }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: decideUrl, body: { sk: 'PUBLIC#orgacme-crime', decision: 'leave' } },
+  ]));
+  // Re-read, and the row is gone from the card with it.
+  await waitFor(() => expect(screen.queryByTestId('scard-waiting')).toBeNull());
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(calls.reads).toBe(2);
+  // Take down is untouched by any of it: the destructive answer is still there.
+  expect(screen.getByRole('button', { name: /take down/i })).toBeInTheDocument();
+});
+
+// rejects: one control for every waiting row. Stage 3's reports land on the same
+// key and are answered on the report, not by leaving the listing alone.
+test('a waiting row no re-check raised is not this card\'s to clear', async () => {
+  server({ card: waiting({ ...WAITING, recheck: false }), post: () => json({}) });
+  await openPlatform(DECIDED);
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(screen.queryByTestId('scard-waiting')).toBeNull();
+});
+
+// rejects: a staff control appearing because a caller said nothing about who is
+// looking — the same fail-closed default the re-check's `mode` takes.
+test('leaving it serving is offered to Engage staff and to nobody else', async () => {
+  server({ card: waiting(WAITING), post: () => json({}) });
+  render(<ScoreCard publicSetId={DECIDED.publicSetId} onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(screen.queryByTestId('scard-waiting')).toBeNull();
+});
+
+// rejects: a refusal swallowed, or the row reported as answered when it was not.
+test('a refusal leaves the entry where it was and says so on the card', async () => {
+  const calls = server({
+    card: waiting(WAITING),
+    post: () => json({ error: 'This entry also carries a report, which is answered on the report itself.' }, 409),
+  });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: LEAVE }));
+  expect(await screen.findByTestId('scard-leave-error')).toHaveTextContent(/carries a report/i);
+  expect(screen.getByTestId('scard-waiting')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: LEAVE })).toBeEnabled();
+  expect(calls.reads).toBe(1);
+});

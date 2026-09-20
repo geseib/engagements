@@ -202,12 +202,15 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     H.state.guardrailReplies = clean(4);
     const jobId = await job();
     // The upload succeeds; the failure is engineered to land AFTER it, in
-    // recordUnits — the first (and only) UpdateCommand whose expression adds
-    // quota units. Everything else passes through to the real stub.
+    // recordUnits — the first (and only) UpdateCommand whose expression adds to
+    // a unit counter. The counter is NAMED (`#counter`, so a staff re-check can
+    // send its calls to `staffUnits` without interpolating an attribute name
+    // into the expression), so the trap matches the alias, not the attribute.
+    // Everything else passes through to the real stub.
     const realSend = db.send.bind(db);
     let tripped = false;
     db.send = async (cmd) => {
-      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD units')) {
+      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD #counter')) {
         tripped = true;
         throw new Error('quota store down');
       }

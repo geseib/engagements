@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
+import { pollGenerationJob } from '../utils/aiBatchClient';
+import { interpretCheckJob } from '../utils/checkJob';
 import { gameTypeLabel } from '../config/gameTypes';
 import { versionChip, STALE_CHECK_MS } from '../utils/shareState';
 import { whyLabel } from '../utils/moderationRow';
@@ -53,6 +55,29 @@ import './ScoreCard.css';
  * still carries only what held the set, and every finding is also an
  * observation, so a measured card's table reads `observed` alone; a card
  * checked before measuring reads `findings`, all that check kept.
+ *
+ * ── AND RUNNING IT AGAIN (2026-09-19) ─────────────────────────────────────
+ *
+ * Three of the four public sets on dev were checked before measuring existed,
+ * so `pre-tally` is what their cards say and there is nothing to backfill from.
+ * The only cure is to run the check again, which as Engage is a DIFFERENT
+ * request from the organisation's own: `{ recheck: true }` publishes nothing,
+ * moves no share stamp and keeps the human decision
+ * (lambda-functions/admin/check-question-set.js recheckPublished). `mode`
+ * decides whether the control is offered, and defaults to the organisation's
+ * reading — a staff-only control must not appear because a caller said nothing.
+ * `RecheckDialog` below is where those promises are written down.
+ *
+ * ── AND ANSWERING WHAT IT FOUND ───────────────────────────────────────────
+ *
+ * A re-check worse than the decision on record takes nothing down: it puts the
+ * listing in the queue for a person, and this card is the only surface that can
+ * answer that row — the review dialog's two buttons would publish it a second
+ * time or tell its author off. So the card carries BOTH answers: Take down, and
+ * "Leave it serving", which clears the queue entry and changes nothing else. The
+ * server sends the row as `queued` so the card can say that anybody is waiting
+ * at all; without it Take down was the only exit from a worklist row, on content
+ * a person had already approved.
  */
 const SET_SUBJECT = '(set)';
 const BAND_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
@@ -86,6 +111,15 @@ const humanise = (id) => String(id || '').replace(/[-_]+/g, ' ');
 const categoryWords = (c) => CATEGORY_WORDS[String(c || '').toUpperCase()] || humanise(String(c || '').toLowerCase());
 const capitalised = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const itemUrl = (id) => adminApiUrl(`admin/public-library/${encodeURIComponent(id)}`);
+/**
+ * The check's own route, and NOT under `/admin`: the template mounts it at
+ * `/question-sets/{setId}/check`, which is where ShareSetDialog already posts.
+ * For a re-check the path segment is the PUBLIC set id — the route reads which
+ * organisation, which set and which version off the public row, which is what
+ * makes it unable to reach content the library is not already serving
+ * (lambda-functions/admin/check-question-set.js recheckPublished).
+ */
+const checkUrl = (publicSetId) => adminApiUrl(`question-sets/${encodeURIComponent(publicSetId)}/check`);
 
 /*
   A review status in the app's own words (utils/shareState.js), never the raw
@@ -96,10 +130,19 @@ const itemUrl = (id) => adminApiUrl(`admin/public-library/${encodeURIComponent(i
   verdict, and gets none rather than the version chip's "not shared".
 */
 const STATUSES = ['passed', 'flagged', 'escalated', 'appealed', 'checking'];
+/**
+ * A `checking` older than the stale window did not finish: the lock is free and
+ * nothing is running (set-review.js `isUnfinished`, `beginCheck`'s condition).
+ * One definition, because the chip and the re-check control have to agree — a
+ * card that says "didn't finish" while refusing to run the check again leaves
+ * the reader with a dead end.
+ */
+const unfinishedCheck = (review, nowMs = Date.now()) => review.status === 'checking'
+  && Boolean(review.checkedAt)
+  && nowMs - Date.parse(review.checkedAt) > STALE_CHECK_MS;
 function statusChip(status, checkedAt, nowMs = Date.now()) {
   if (!STATUSES.includes(status)) return null;
-  const unfinished = status === 'checking' && Boolean(checkedAt) && nowMs - Date.parse(checkedAt) > STALE_CHECK_MS;
-  return versionChip({ review: status, unfinished });
+  return versionChip({ review: status, unfinished: unfinishedCheck({ status, checkedAt }, nowMs) });
 }
 
 /** Did this row hold the set? Only an intervention can (finding-explanations.js `held`). */
@@ -308,6 +351,10 @@ const EVENT_WORDS = {
   published: (e) => `Published${e.publicVersion ? ` as public v${e.publicVersion}` : ''}`,
   unpublished: () => 'Unpublished by the organisation',
   'taken-down': (e) => `Taken down${e.reviewer ? ` by ${e.reviewer}` : ''}`,
+  // Staff looked at what a re-check found and left the listing serving. Its own
+  // event, never `decided`: nobody ruled on a version here (moderation-decide.js
+  // reads the log for `decided` when it resumes a crashed decision).
+  'left-serving': (e) => `Left in the library${e.reviewer ? ` by ${e.reviewer}` : ''}`,
   reported: (e) => `Reported${e.type ? ` — ${e.type}` : ''}`,
   'notice-set': () => 'Content notice set',
   'notice-cleared': () => 'Content notice cleared',
@@ -403,10 +450,83 @@ function TakedownDialog({ name, onClose, onConfirm }) {
   );
 }
 
-export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
+/**
+ * RUNNING THE CHECK AGAIN, AND SAYING WHAT THAT WILL AND WILL NOT DO.
+ *
+ * The owner, of the public sets they already have: the card shows nothing of
+ * what the check measured, because those checks predate the measuring. The cure
+ * is to run the check again — and the ORDINARY route publishes, which for a live
+ * listing would mint a second public version of identical content, move the
+ * author's share stamp off `published`, and replace the review row that records
+ * a person's approval. `{ recheck: true }` is a different request, defined by
+ * what it must not disturb, so this dialog's copy is those promises: it is the
+ * only place a reader is told them before the work happens.
+ *
+ * It owns the START only. A 202 closes it and the card takes over the job (see
+ * `followJob`); a refusal stays here, beside the confirm, live for a retry —
+ * `TakedownDialog` above resolves and throws on exactly the same terms (R17).
+ */
+function RecheckDialog({ name, version, onClose, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  // Nothing is typed here, so both exits are gated on `busy` alone: a request in
+  // flight must not be interrupted by a stray Escape or an off-card click.
+  const requestClose = () => { if (!busy) onClose(); };
+  const handleConfirm = async () => {
+    setBusy(true); setError(null);
+    try {
+      await onConfirm();
+    } catch (e) {
+      setError(e.message || 'The check could not start.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal overlayClassName="scard scard-scrim" contentClassName="scard-dialog" labelledBy="scard-rc-title" onClose={requestClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy}>
+      <header className="scard-head">
+        <h2 id="scard-rc-title">Run the check again on “{name}”?</h2>
+        <button type="button" className="scard-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
+      </header>
+      <div className="scard-body">
+        <p>
+          It runs the content check again on the version the public library is serving
+          {version ? ` — version ${version}` : ''}, so this card can show what it measured.
+        </p>
+        <dl className="scard-promises">
+          <dt>It changes nothing anyone can see</dt>
+          <dd>No new public version, no change to what the library serves, and the organisation's own set goes on reading as shared to them.</dd>
+          <dt>It does not undo a decision a person made</dt>
+          <dd>The reviewer, the date they decided and their words stay on the record, whatever this check says.</dd>
+          <dt>If it comes out worse than it stands</dt>
+          <dd>Nothing is taken down. The listing goes to the queue for a person to look at, and the library keeps serving it until one does.</dd>
+        </dl>
+        <p className="scard-fine">It usually finishes in under a minute. Leaving this card keeps it running; what it measured shows here next time you open it.</p>
+        {error && <div className="scard-outage" role="alert">{error}</div>}
+      </div>
+      <footer className="scard-foot">
+        <button type="button" className="scard-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+        <button type="button" className="scard-btn" onClick={handleConfirm} disabled={busy}>{busy ? 'Starting…' : 'Run the check'}</button>
+      </footer>
+    </Modal>
+  );
+}
+
+export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDown }) {
   const [card, setCard] = useState(null);
   const [error, setError] = useState(null);
   const [asking, setAsking] = useState(false);
+  const [askingRecheck, setAskingRecheck] = useState(false);
+  // The re-check's own job while this card is watching it: null when none is.
+  const [job, setJob] = useState(null);
+  const [recheckError, setRecheckError] = useState(null);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState(null);
+  // The job outlives the card — closing this place keeps the check running — so
+  // every write after an await is guarded rather than cancelled.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const safe = (fn) => { if (mounted.current) fn(); };
 
   useEffect(() => {
     let live = true;
@@ -440,6 +560,125 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
     if (onTakenDown) onTakenDown(publicSetId);
   };
 
+  /*
+    ── RUNNING THE CHECK AGAIN ────────────────────────────────────────────────
+
+    Three steps, and each owns exactly one failure.
+
+    `startRecheck` is the dialog's onConfirm: it THROWS, so a refusal — 403 not
+    staff, 404 no entry, 409 the source is gone or a check is already running,
+    400 a version that is no longer the published one — is read where it was
+    asked for, with the confirm live for a retry. On 202 it closes the dialog and
+    hands the job to `followJob` WITHOUT awaiting it: the job takes minutes and
+    the dialog must not stand open for them.
+
+    `followJob` polls the way every other check job here is polled and reports
+    its own failure on the card, never by unmounting it: a check that did not
+    finish leaves the last good one readable, which is the whole reason the
+    reader is here.
+
+    `reread` never clears `card` first. The mount effect does, because there is
+    nothing to show yet; blanking a card that is already on screen to fetch a
+    version of itself is a flash of nothing, and on a failed re-read it would be
+    permanent.
+  */
+  const reread = async () => {
+    try {
+      const res = await authFetch(itemUrl(publicSetId));
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Could not re-read that set (${res.status}).`);
+      safe(() => setCard(body));
+    } catch (e) {
+      safe(() => setRecheckError((was) => was || `The check finished, but this card could not be re-read: ${e.message}`));
+    }
+  };
+
+  const followJob = async (jobId) => {
+    let finished;
+    try {
+      finished = await pollGenerationJob(checkUrl(publicSetId), jobId, {
+        label: 'Content check',
+        onProgress: (j) => safe(() => setJob({ phase: j.phase || '', completed: Number(j.completed) || 0, requested: Number(j.requested) || 0 })),
+      });
+    } catch (e) {
+      // Lost contact, or a job row that expired. The check may well have
+      // finished, so the card is re-read anyway — it is one GET, and the row it
+      // reads is the answer.
+      safe(() => { setJob(null); setRecheckError(`The check could not be followed: ${e.message}`); });
+      await reread();
+      return;
+    }
+    const read = interpretCheckJob(finished);
+    safe(() => {
+      setJob(null);
+      if (read.outcome === 'failed') setRecheckError(read.error || 'The check did not finish. Run it again.');
+    });
+    // Whatever it said, the review row moved: a failed check writes its own
+    // verdict from the worker's catch block.
+    await reread();
+  };
+
+  /*
+    ── LEAVING IT SERVING ─────────────────────────────────────────────────────
+
+    A re-check that came out worse than the decision on record puts the listing
+    in the moderation queue, because nothing is taken down automatically. Neither
+    review-dialog button answers that row, so until now the only control left was
+    Take down — the destructive one, on content a person had already approved.
+    The likely outcome of exactly the re-checks this card offers is a medium band
+    somebody already ruled on, so "the approval stands" is the common answer and
+    this is where it is said.
+
+    It clears the queue entry and nothing else. No dialog: there is nothing to
+    warn about and nothing to undo — a later re-check raises the row again — so a
+    confirmation step would only be ceremony. A refusal is reported here rather
+    than by unmounting the card, exactly as the re-check's is.
+  */
+  const leaveServing = async () => {
+    setLeaving(true); setLeaveError(null);
+    try {
+      const res = await authFetch(adminApiUrl('admin/moderation/decide'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sk: card.queued.sk, decision: 'leave' }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `It could not be cleared from the queue (${res.status}).`);
+      // The card is re-read rather than patched: the queue row is the server's
+      // fact, and the same GET is what will say it has gone.
+      await reread();
+    } catch (e) {
+      safe(() => setLeaveError(e.message || 'It could not be cleared from the queue.'));
+    } finally {
+      safe(() => setLeaving(false));
+    }
+  };
+
+  const startRecheck = async () => {
+    setRecheckError(null);
+    let body;
+    let res;
+    try {
+      res = await authFetch(checkUrl(publicSetId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The version is the card's own, and it is a CONFIRMATION, not a choice:
+        // the route refuses any version but the one this entry was published
+        // from, so a card read before the organisation published a newer version
+        // is told so instead of silently checking the new one. `null` is the
+        // legacy, unversioned content, and the route accepts it as that.
+        body: JSON.stringify({ recheck: true, version: card.sourceVersion }),
+      });
+      body = await res.json().catch(() => ({}));
+    } catch (e) {
+      throw new Error(`The check could not start: ${e.message}`);
+    }
+    if (!res.ok) throw new Error(body.error || `The check could not start (${res.status}).`);
+    setAskingRecheck(false);
+    setJob({ phase: '', completed: 0, requested: 0 });
+    followJob(body.jobId);
+  };
+
   // Read once, here, rather than at each `card.review.*` site: the server is
   // documented to always send `review`, but a defensive `|| {}` costs nothing
   // and means a set that somehow arrives without one renders instead of
@@ -471,6 +710,27 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
   // words — and nothing at all when it needed none, never whyLabel's "Waiting".
   const reasons = Array.isArray(review.reasons) ? review.reasons : [];
   const why = verdict && !running && reasons.length ? whyLabel(review) : '';
+  /*
+    IS THERE ANYTHING TO RE-CHECK? The route reads the source off the public row,
+    so an entry naming no organisation has nothing to run (409 there), and a
+    version already being checked is refused on the lock (409 there too) — while
+    one this card is watching is already running, here. A `checking` past the
+    stale window is none of those: nothing holds that lock, and clearing it is
+    what this control is for.
+  */
+  const inFlight = Boolean(card) && review.status === 'checking' && !unfinishedCheck(review);
+  const canRecheck = mode === 'platform' && Boolean(card)
+    && Boolean(card.sourceOrgId) && Boolean(card.sourceSetId)
+    && !inFlight && !job;
+  /*
+    IS ANYBODY WAITING ON THIS LISTING, and is it staff's own re-check they are
+    waiting on? A row raised by anything else — Stage 3's reports — is answered
+    on that thing, not here, and the route refuses it. Not while a re-check of
+    this card's own is running either: that check is about to write the row this
+    would clear.
+  */
+  const queued = card && card.queued && card.queued.recheck ? card.queued : null;
+  const canLeave = mode === 'platform' && Boolean(queued) && !job && !inFlight;
 
   return (
     <section className="scard" data-theme="dark">
@@ -485,8 +745,27 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
           </header>
           <div className="scard-acts">
             <button type="button" className="scard-btn scard-btn--danger" onClick={() => setAsking(true)}>Take down</button>
-            {/* Stage 4: the content-notice editor sits beside Take down. */}
+            {/* THE REVERSIBLE NEIGHBOUR, and the reason Take down is no longer
+                the only answer to a re-check's queue row. Same size as it: these
+                are the two answers to one question, not a control and its
+                footnote. Stage 4: the content-notice editor joins them. */}
+            {canLeave && (
+              <button type="button" className="scard-btn" onClick={leaveServing} disabled={leaving}>
+                {leaving ? 'Leaving it…' : 'Leave it serving'}
+              </button>
+            )}
           </div>
+          {/* WHY THERE IS A SECOND BUTTON. Without this the queue row is
+              invisible here and "Leave it serving" answers a question the reader
+              was never asked. */}
+          {canLeave && (
+            <p className="scard-fine" data-testid="scard-waiting">
+              A re-check came out worse than the decision on record, so this is waiting for a person
+              {queued.waitingSince ? ` — since ${day(queued.waitingSince)}` : ''}. Nothing was taken down;
+              leaving it serving clears that entry and changes nothing else.
+            </p>
+          )}
+          {leaveError && <div className="scard-outage" data-testid="scard-leave-error" role="alert">{leaveError}</div>}
           <h3 className="scard-h">Timeline</h3>
           <ol className="scard-timeline">
             {timeline.map((e, i) => (
@@ -498,7 +777,24 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
             ))}
             {!timeline.length && <li className="scard-fine">No events recorded.</li>}
           </ol>
-          <h3 className="scard-h">The latest check{review.checkedAt ? ` · ${day(review.checkedAt)}` : ''}</h3>
+          {/* The control belongs HERE, beside the check it re-runs, rather than
+              up with Take down: it is not a decision about the listing, it is a
+              question about this section's own subject. */}
+          <div className="scard-hrow">
+            <h3 className="scard-h">The latest check{review.checkedAt ? ` · ${day(review.checkedAt)}` : ''}</h3>
+            {canRecheck && (
+              <button type="button" className="scard-btn scard-btn--sm" onClick={() => setAskingRecheck(true)}>Run the check again</button>
+            )}
+          </div>
+          {/* A count only once the job has one to report: before the first poll
+              answers there is no denominator, and "0" beside nothing reads as a
+              check that has looked at nothing rather than one just started. */}
+          {job && (
+            <p className="scard-fine" data-testid="scard-recheck-progress" role="status">
+              Re-running the check… {job.requested ? `${job.completed} / ${job.requested} · ` : ''}{job.phase || 'Starting'} · leaving this card keeps it running.
+            </p>
+          )}
+          {recheckError && <div className="scard-outage" data-testid="scard-recheck-error" role="alert">{recheckError}</div>}
           {verdict ? (
             <p className="scard-verdict" data-testid="scard-verdict">Verdict: {verdict.label}{checkNote ? ` · “${checkNote}”` : ''}</p>
           ) : <p className="scard-summary">No check is on record for the version this came from.</p>}
@@ -537,6 +833,9 @@ export default function ScoreCard({ publicSetId, onBack, onTakenDown }) {
         </>
       )}
       {asking && card && <TakedownDialog name={card.name || card.publicSetId} onClose={() => setAsking(false)} onConfirm={takeDown} />}
+      {askingRecheck && card && (
+        <RecheckDialog name={card.name || card.publicSetId} version={card.sourceVersion} onClose={() => setAskingRecheck(false)} onConfirm={startRecheck} />
+      )}
     </section>
   );
 }

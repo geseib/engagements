@@ -23,9 +23,11 @@ const { GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const tenant = require('./tenant');
-const { setRef, setMetadataKey, resolvePartitionFromMeta, toVersion, queryPartition } = require('./set-version');
+const {
+  setRef, setMetadataKey, resolvePartitionFromMeta, toVersion, queryPartition, setPartition,
+} = require('./set-version');
 const { decryptItem } = require('./tenant-crypto');
-const { writeReview, STATUS } = require('./set-review');
+const { writeReview, readReview, decisionOf, STATUS } = require('./set-review');
 const { checkQuestions, checkText, tallyOf, OUTCOME } = require('./content-guardrail');
 const { buildSnapshot, contentHash, questionText, setText, snapshotHasImages } = require('./publishable');
 const { explainFindings } = require('./finding-explanations');
@@ -69,10 +71,76 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   const request = job.request || {};
   const source = setRef({ scope: tenant.ORG, orgId, setId: request.setId });
   const version = toVersion(request.version);
+  // STAFF RE-RUNNING THE CHECK ON A VERSION THE PUBLIC LIBRARY ALREADY SERVES
+  // (check-question-set.js). It publishes nothing, moves no share stamp, and
+  // keeps the human decision it found; an outcome worse than `passed` is queued
+  // for a person instead, because nothing may be taken down without one.
+  const recheck = request.recheck === true;
+  /*
+    WHOSE WORKLIST ROW A RAISING BELONGS TO.
+
+    An organisation's own submission is a publish request ABOUT A VERSION: its
+    row is keyed `<org>#<set>#v<n>` and the review dialog decides it. A staff
+    re-check is not a publish request and must not share that key — it stamped
+    `recheck: true` onto the organisation's own pending row, and
+    moderation-decide.js then refused BOTH decisions on it, so a share the author
+    was waiting on became one no member of staff could answer. It is keyed by the
+    LISTING instead.
+
+    That key earns its place twice more. It is the one a takedown already clears
+    (public-library-item.js), and it is the only shape that can name a LEGACY
+    entry at all: `queueSk` counts a null version as v0, and moderation-get.js
+    and moderation-decide.js both refuse a `v0` key on purpose, so the row three
+    of the four entries on dev would raise used to list without opening.
+  */
+  const listingRef = recheck && request.publicSetId
+    ? setRef({ scope: tenant.PUBLIC, orgId: '', setId: String(request.publicSetId) })
+    : null;
+  const queueRef = listingRef || source;
+  /**
+   * Is that listing still in the library? A takedown can land while the check
+   * runs, and a row raised after one points at nothing: its `Score card` button
+   * would open a 404, and the takedown that clears this key ran before the key
+   * existed. Nothing to look at, so nothing is raised. A read that FAILS answers
+   * yes — a person looking at a live listing is the safe direction.
+   */
+  const listingStillServed = async () => {
+    if (!listingRef) return true;
+    try {
+      return Boolean((await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(listingRef) }))).Item);
+    } catch (error) {
+      console.warn(`⚠️ could not confirm ${request.publicSetId} is still listed: ${error.message}`);
+      return true;
+    }
+  };
   const checkedAt = new Date().toISOString();
   const declaredNotice = Array.isArray(request.declaredNotice) ? request.declaredNotice : [];
   const reasons = [];
   let findings = []; let checked = 0; let clean = 0;
+  // What a PERSON decided about this version, carried across the lock row by
+  // beginCheck's `keep` and written back below — including out of the catch
+  // block, so no failure of ours erases an approval.
+  let decision = {};
+  // WHAT THE AUTHOR DECLARED when they shared it, carried the same way and for
+  // a sharper reason: everything else a check rewrites it could measure again,
+  // and this it cannot. `declaredNotice` is the author's own statement about
+  // their own content; the content says nothing about it. A re-check writing its
+  // own empty list over it would erase it for good, and with it the score card's
+  // account of why a person was ever in this set's history.
+  let carriedDeclared = [];
+  /** What the carry inherited, over whatever this submission declared (nothing). */
+  const declaredOnRow = () => (carriedDeclared.length ? carriedDeclared : declaredNotice);
+  /**
+   * ...and the reason that NAMES it, which the score card's "Why a person was
+   * needed" line reads. It joins the row AFTER the status has been computed from
+   * the check's own reasons: that is what keeps a carried declaration from
+   * holding the set a second time where a person has already ruled on it. Where
+   * nobody has, it went in before the status instead (see below) and this is a
+   * no-op. The failure path does not use it — there the reasons are the
+   * failure's alone, because `error` is why a person is needed now, and the
+   * declaration is still on the row either way.
+   */
+  const reasonsOnRow = (list) => (carriedDeclared.length && !list.includes('declared') ? [...list, 'declared'] : list);
   // Hoisted like `findings`: a check that measured everything and then failed
   // in bookkeeping still records what it measured. Null until it has.
   let observed = null; let tally = null;
@@ -83,10 +151,19 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
 
   try {
     await updateJobProgress(db, tableName, jobId, { completed: 0, phase: 'Reading the set…' });
+    if (recheck) {
+      const previous = await readReview(db, tableName, source, version);
+      decision = decisionOf(previous);
+      carriedDeclared = Array.isArray(previous.declaredNotice) ? previous.declaredNotice : [];
+    }
     const meta = (await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(source) }))).Item;
     if (!meta) throw new Error('That set no longer exists');
-    const resolved = resolvePartitionFromMeta(source, meta, version);
-    const { items: rows } = await queryPartition(db, tableName, resolved.pk);
+    // A re-check judges the EXACT version the library serves. Resolution would
+    // substitute the organisation's active version for one since deleted, or for
+    // the legacy partition of a set since versioned — judging content nobody
+    // published while the review row claimed to describe the published one.
+    const pk = recheck ? setPartition(source, version) : resolvePartitionFromMeta(source, meta, version).pk;
+    const { items: rows } = await queryPartition(db, tableName, pk);
     const plainMeta = await decryptItem(orgId, 'set', meta);
     const questions = []; const categories = [];
     for (const row of rows) {
@@ -108,6 +185,13 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     }
     if (snapshotHasImages(snapshot)) reasons.push('images');
     if (declaredNotice.length) reasons.push('declared');
+    // A declaration NOBODY HAS RULED ON still holds the set, exactly as it does
+    // on the organisation's own check. With a ruling carried forward it does
+    // not: a version carrying a declaration reaches the library only because a
+    // person decided about that declaration, and re-escalating on it would
+    // queue every declared listing in the library on every staff re-check and
+    // bury the findings that are real.
+    if (carriedDeclared.length && !decision.reviewer) reasons.push('declared');
 
     const remaining = () => (context && typeof context.getRemainingTimeInMillis === 'function' ? context.getRemainingTimeInMillis() : Infinity);
     const inBudget = () => remaining() > BUDGET_FLOOR_MS;
@@ -154,31 +238,77 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       findings = withExplanations(findings, observed);
     }
 
-    await recordUnits(db, tableName, orgId, checked);
+    // A re-check is Engage's own work: the calls are recorded beside the
+    // organisation's ledger rather than in it (check-quota.js), and its daily
+    // cap was never reserved.
+    await recordUnits(db, tableName, orgId, checked, recheck ? { field: 'staffUnits' } : {});
     await writeReview(db, tableName, source, version, {
       status, findings, note, jobId,
-      contentHash: snapshot.contentHash, snapshotKey, reasons, checkedBy: job.callerUserId || null,
-      promptDropped, declaredNotice, tally, observed,
+      contentHash: snapshot.contentHash, snapshotKey, checkedBy: job.callerUserId || null,
+      promptDropped, tally, observed,
+      reasons: reasonsOnRow(reasons), declaredNotice: declaredOnRow(),
+      // LAST, so a person's decision outlives the count this check would
+      // otherwise write over their words.
+      ...decision,
     });
     // The log is the memory and keeps the small tally; the observations live
     // on the REVIEW row only, so a log row does not grow with the set.
     await appendReviewEvent(db, tableName, source, 'checked', {
       version, outcome: status, reasons, checked, clean, contentHash: snapshot.contentHash, snapshotKey,
       findings: findings.map(minimalFinding), tally, by: job.callerUserId || null,
+      // The customer's log is where they see what Engage did to their set, so a
+      // re-check says so and names the staff member who ran it.
+      ...(recheck ? { recheck: true, reviewer: job.callerUsername || '', publicSetId: request.publicSetId || '' } : {}),
     });
 
     let published = null;
-    if (status === STATUS.ESCALATED) {
+    /*
+      WHO HAS TO LOOK AT THIS.
+
+      An ordinary check escalates to a person and tells a FLAGGED set's author to
+      fix it, which is why `flagged` is deliberately not a queue item.
+
+      A re-check has no author in the loop: nobody asked for it, and its outcome
+      is never told to them (the share stamp is not written). So anything worse
+      than `passed` — flagged included — goes to the queue, or the finding is
+      thrown away while the library goes on serving the set.
+
+      A re-check's row is the LISTING's, not the version's (`listingRef` above),
+      so it never lands on the organisation's own publish request, a takedown
+      clears it, and a set shared before versioning existed raises one that can
+      actually be opened and cleared. Its two exits are Take down and "Leave it
+      serving", both on the score card.
+    */
+    const toAPerson = status === STATUS.ESCALATED || (recheck && status !== STATUS.PASSED);
+    if (toAPerson && await listingStillServed()) {
       const bands = {};
       for (const f of findings) if (f.band && f.band !== 'NONE') bands[f.category] = f.band;
       await upsertQueueRow(db, tableName, {
-        ref: source, version, reason: 'escalated',
+        ref: queueRef, version, reason: 'escalated',
         orgId, orgName: await orgName(db, tableName, orgId), setId: source.setId, title: plainMeta.name || source.setId,
         gameType: plainMeta.engagementType || '', questionCount: questions.length, bands,
         uncertainQuestionIds: findings.filter((f) => f.questionId && f.questionId !== '(set)').map((f) => f.questionId),
         snapshotKey, contentHash: snapshot.contentHash,
+        // WHERE IT IS DECIDED. A row raised over a version the library already
+        // serves is not a publish request: approving it would mint a second
+        // public version of content already live and rejecting it would stamp its
+        // author for a check nobody told them about. So the row says which
+        // listing it is about and staff open its score card, which shows the
+        // escalation, what held it, Take down and "Leave it serving". The flag
+        // says so on the row as well as in the key, because the queue's own words
+        // and moderation-decide.js's second lock both read it.
+        recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
       });
       await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons });
+    } else if (toAPerson) {
+      console.log(`🔎 ${request.publicSetId} is no longer in the library: ${status} recorded, nothing queued`);
+    }
+    if (recheck) {
+      // NOTHING ELSE. No publish (R1: the library is left exactly as it is,
+      // including its active version), and no share stamp (R3: the author's set
+      // goes on reading `published`, because as far as they are concerned it is).
+      console.log(`🔎 re-check only: ${orgId}/${source.setId} v${version} → ${status}, nothing published`);
+    } else if (status === STATUS.ESCALATED) {
       await writeShareStamp(db, tableName, source, { version, status: 'escalated', contentHash: snapshot.contentHash, reasons, jobId });
     } else if (status === STATUS.PASSED && request.publish !== false) {
       published = await publishSnapshot(db, tableName, snapshot, {
@@ -211,23 +341,42 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       await writeReview(db, tableName, source, version, {
         status: STATUS.ESCALATED, findings, note: error.message, jobId, reasons: ['error'], checkedBy: job.callerUserId || null,
         contentHash: snapshot ? snapshot.contentHash : null, snapshotKey, tally, observed,
+        // Only the CARRY here, never this submission's own list: a failure of
+        // ours must not erase what the author declared, and an ordinary check
+        // that failed goes on writing exactly the row it always did.
+        ...(carriedDeclared.length ? { declaredNotice: carriedDeclared } : {}),
+        // A failure of ours is not a reason to lose a person's decision either.
+        // `note` comes with it, so the reviewer's words are kept over this
+        // error's message — the message is on the job and in the log.
+        ...decision,
       });
       await appendReviewEvent(db, tableName, source, 'checked', {
         version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message, snapshotKey, ...(tally ? { tally } : {}),
+        ...(recheck ? { recheck: true, reviewer: job.callerUsername || '', publicSetId: request.publicSetId || '' } : {}),
       });
-      await upsertQueueRow(db, tableName, {
-        ref: source, version, reason: 'escalated', orgId,
-        setId: source.setId,
-        title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
-        // The snapshot is already in hand here — free to carry, and the queue
-        // row would otherwise say nothing about what kind of set this is.
-        gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
-        questionCount: snapshot ? snapshot.questions.length : 0,
-        bands: {}, orgName: await orgName(db, tableName, orgId),
-        snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
-      });
-      await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons: ['error'] });
-      await writeShareStamp(db, tableName, source, { version, status: 'escalated', reasons: ['error'], jobId });
+      // The listing's key for a re-check, the version's for an ordinary check —
+      // the same choice the success path makes, for the same reasons, and the
+      // same silence when the listing it would point at has gone. A read that
+      // cannot answer here answers yes, which is why a failure like "the table
+      // went away" still reaches a person.
+      if (await listingStillServed()) {
+        await upsertQueueRow(db, tableName, {
+          ref: queueRef, version, reason: 'escalated', orgId,
+          setId: source.setId,
+          title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
+          // The snapshot is already in hand here — free to carry, and the queue
+          // row would otherwise say nothing about what kind of set this is.
+          gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
+          questionCount: snapshot ? snapshot.questions.length : 0,
+          bands: {}, orgName: await orgName(db, tableName, orgId),
+          snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
+          recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
+        });
+        await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons: ['error'] });
+      }
+      // R3 holds through a failure too: a re-check that could not finish is not
+      // news the author's set should carry. The queue row above is who looks.
+      if (!recheck) await writeShareStamp(db, tableName, source, { version, status: 'escalated', reasons: ['error'], jobId });
     } catch (inner) {
       console.error(`❌ and could not record the failure: ${inner.message}`);
     }

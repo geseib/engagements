@@ -103,6 +103,7 @@ const del = (body, event) => handler(event || H.platformEvent({ method: 'DELETE'
     assert.strictEqual(td.note, 'Reported for graphic detail; taken down pending an edit.');
     assert.strictEqual(td.reviewer, 'dai');
     assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'nothing left to decide');
+    assert.strictEqual(H.rowsWhere((r) => r.SK === 'PUBLISHED').length, 0, 'the organisation still holds a marker saying this is published');
     assert.strictEqual((await get()).statusCode, 404, 'gone for everyone');
   });
   await H.test('a stale stamp is left alone: the org already re-shared as a different public set', async () => {
@@ -169,6 +170,57 @@ const del = (body, event) => handler(event || H.platformEvent({ method: 'DELETE'
     } finally {
       db.send = real;
     }
+  });
+  /*
+    ── THE SAME `|| 0` IN THE DELETE PATH ────────────────────────────────────
+
+    A set shared before versioning existed carries `sourceVersion` NULL, and the
+    takedown read it as 0: the organisation's log and stamp then named a version
+    0 that nothing in the table is, and `if (version)` skipped the queue delete
+    — so the row written at `<org>#<set>#v0` (moderation-queue.queueSk counts a
+    legacy version as v0) outlived the set it pointed at, leaving staff an entry
+    to decide on for a public set that no longer exists.
+  */
+  await H.test('a legacy set\'s takedown names no version and still clears its queue row', async () => {
+    H.reset();
+    H.seedRow({ ...V.setMetadataKey(SRC), name: 'x' });
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.PASSED, findings: [], note: '2/2 clean', contentHash: 'c'.repeat(64) });
+    await S.writeShareStamp(db, T, SRC, { status: 'published', publicSetId: PUB, publicVersion: 1 });
+    H.seedRow({
+      ...V.setMetadataKey(PUBREF), name: 'Safety walkthrough', engagementType: 'trivia',
+      activeVersion: 1, versions: [{ version: 1, questionCount: 2 }],
+      sourceOrgId: 'org_acme', sourceOrgName: 'Acme', sourceSetId: 'safety', sourceVersion: null, questionCount: 2,
+    });
+    H.seedRow({ PK: V.setPartition(PUBREF, 1), SK: 'QUESTION#c001#001', Title: 'Q1' });
+    /*
+      AND THE MARKER THE PUBLISH LEFT ON THE ORGANISATION'S SIDE, which is the
+      half of "published" that lived on past the takedown.
+
+      `unpublishSet` finds the source's PUBLISHED markers by walking the set's
+      own `versions` array — and a set shared before versioning existed has no
+      such array, so the marker at the unsuffixed partition was never a
+      candidate and survived the listing it named. It is not inert: the appeal
+      route reads exactly that key to decide whether there is anything to
+      appeal, so a legacy author whose listing had been taken down was refused
+      for ever, with a sentence that says the library is still serving it.
+    */
+    H.seedRow({ ...R.publishedKey(SRC, null), publicSetId: PUB, publicVersion: 1, at: '2026-09-18T10:00:00.000Z' });
+    await Q.upsertQueueRow(db, T, { ref: SRC, version: null, reason: 'reported', orgName: 'Acme', title: 'Safety walkthrough', publicSetId: PUB });
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 1, 'fixture: one queue row, keyed v0');
+
+    const res = await del({ note: 'Taken down while the organisation edits it.' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the legacy queue row outlived the set it pointed at');
+    assert.strictEqual(
+      H.rowsWhere((r) => r.SK === 'PUBLISHED').length, 0,
+      'the legacy PUBLISHED marker outlived the listing it names, so the set still reads as served',
+    );
+    const td = (await L.readReviewLog(db, T, SRC)).find((e) => e.event === 'taken-down');
+    assert.strictEqual(td.version, null, 'the log named a version the table does not have');
+    const stamp = await stampOf();
+    assert.strictEqual(stamp.status, 'flagged');
+    assert.strictEqual(stamp.version, undefined, 'the stamp named version 0 for a set that has no version');
+    assert.strictEqual(publicRows().length, 0);
   });
   H.summary();
 })();

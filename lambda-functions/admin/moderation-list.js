@@ -34,6 +34,10 @@ const project = (row) => ({
   waitingSince: row.waitingSince || null,
   latestAt: row.latestAt || null,
   publicSetId: row.publicSetId || '',
+  // Raised by a staff re-check of a listing the library already serves, so it
+  // is not decided in the review dialog (moderation-decide.js refuses it) and
+  // the row offers its score card instead.
+  recheck: row.recheck === true,
 });
 
 exports.handler = async (event) => {
