@@ -1,0 +1,131 @@
+/* ===========================================================================
+   HomePage.css — the home-only rule groups from
+   docs/design/marketing-redesign/mk.css: hero, problem, modes, material,
+   the room reacts, and the summit's page-level layout (the report itself is
+   SampleReport.css). Nothing here is declared in MarketingShell.css,
+   RidgeScene.css, DeviceFrame.css, ClipFrame.css or ClipStill.css.
+   =========================================================================== */
+
+/* `<RidgeScene>` is `position: fixed` on its own (RidgeScene.css); this only
+   has to put the page's own content in a stacking context above it. */
+.mk-home { position: relative; }
+.mk-home > section { position: relative; z-index: 1; }
+
+/* ==================================================================== hero = */
+.mk-hero {
+  min-height: var(--mk-ridge-band);
+  display: grid;
+  grid-template-rows: 55fr 45fr;
+  padding-block: clamp(36px, 7vh, 76px) clamp(30px, 6vh, 64px);
+}
+/* Row one is the top 55% of the hero and is the only place headline text
+   lands. Row two carries the CTAs and the join card. */
+.mk-hero-top { align-self: start; }
+.mk-hero-foot { align-self: end; display: flex; flex-wrap: wrap; gap: 22px 30px; align-items: flex-end; }
+/* mockup: style="margin-top:18px" on the h1 folded into this class. */
+.mk-hero-copy { max-width: 19ch; margin-top: 18px; }
+.mk-hero-sub { max-width: 46ch; margin-top: 20px; }
+.mk-hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* --------------------------------------------------------------- problem -- */
+.mk-problem-grid { display: grid; gap: 18px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); }
+.mk-stmt {
+  border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  background: var(--mk-surface); padding: 30px 26px 32px;
+  border-top: 3px solid var(--mk-amber-deep);
+}
+.mk-stmt-n {
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display); letter-spacing: 0.1em;
+  color: var(--mk-amber); display: block; margin-bottom: 12px;
+}
+.mk-stmt h3 { font-size: var(--mk-t-head); line-height: 1.14; }
+.mk-stmt p { margin-top: 12px; color: var(--mk-muted); }
+
+/* ----------------------------------------------------------------- modes -- */
+.mk-mode {
+  display: grid; gap: 30px 44px; margin-top: 46px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  padding-top: 46px; border-top: 1px solid var(--mk-rule);
+}
+.mk-mode:first-of-type { border-top: 0; padding-top: 0; }
+.mk-mode--flip .mk-mode-copy { order: 2; }
+.mk-mode-tag {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px; border-radius: 999px;
+  border: 1px solid var(--mk-amber); color: var(--mk-amber);
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+}
+/* The mockup draws the tag as a sibling pill above the h3; HomePage.jsx nests
+   it inside the h3 instead so the heading's own accessible name carries the
+   mode's name (see the component's comment). `display: flex` on the h3 keeps
+   the tag on its own line above the heading text, matching the mockup's
+   layout despite the different nesting. */
+.mk-mode-copy h3 {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 16px;
+  font-size: var(--mk-t-title); line-height: 1.08; margin-top: 16px; letter-spacing: -0.018em;
+}
+.mk-mode-copy > p { margin-top: 16px; color: var(--mk-muted); max-width: 44ch; }
+.mk-mode-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 10px; }
+.mk-mode-list li { display: flex; gap: 11px; align-items: flex-start; color: var(--mk-text); }
+.mk-mode-list li::before {
+  content: ""; flex: none; width: 9px; height: 9px; margin-top: 9px; border-radius: 2px;
+  background: var(--mk-amber); transform: rotate(45deg);
+}
+.mk-mode-screens { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 18px; align-items: end; }
+
+/* ---------------------------------------------------------- your material -- */
+.mk-flow { display: grid; gap: 16px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); }
+.mk-flow-step {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 22px 20px; position: relative;
+}
+.mk-flow-step h3 { font-size: var(--mk-t-body); margin-top: 12px; font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-flow-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+.mk-flow-n {
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: rgba(246, 169, 76, 0.14); border: 1px solid var(--mk-amber);
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display); color: var(--mk-amber);
+}
+/* mockup's second `.mk-flow` (a single-column row for the builder clip). */
+.mk-material-clip { margin-top: 26px; max-width: 560px; }
+.mk-material-note {
+  margin-top: 26px; padding: 18px 20px; border-radius: var(--mk-radius);
+  border: 1px solid var(--mk-rule); border-left: 3px solid var(--mk-amber);
+  background: rgba(246, 169, 76, 0.07); color: var(--mk-text); max-width: 74ch;
+}
+.mk-material-note b { color: var(--mk-amber); }
+
+/* ------------------------------------------------------------ the reaction */
+.mk-react-grid { display: grid; gap: 34px 44px; margin-top: 44px; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: center; }
+.mk-tally {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 24px 22px 26px;
+}
+.mk-tally-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mk-tally-head h3 { font-size: var(--mk-t-head); }
+.mk-tally .mk-muted { margin-top: 10px; }
+.mk-tally-rows { display: grid; gap: 16px; margin-top: 22px; }
+.mk-tally-row { display: grid; gap: 6px; }
+.mk-tally-top { display: flex; gap: 12px; align-items: baseline; }
+.mk-tally-top b { font-weight: 700; }
+.mk-tally-n { margin-left: auto; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-tally-track { height: 10px; border-radius: 5px; background: rgba(244, 237, 228, 0.1); overflow: hidden; }
+.mk-tally-track i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-tally-row--cool .mk-tally-track i { background: var(--mk-blue); }
+.mk-tally-note { margin-top: 20px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-room-list { margin-top: 22px; }
+
+/* -------------------------------------------------------- summit page frame */
+.mk-summit-link { margin-top: 22px; }
+
+@media (max-width: 720px) {
+  .mk-root { --mk-ridge-band: 92vh; }
+  .mk-hero-foot { flex-direction: column; align-items: stretch; }
+  .mk-hero-copy { max-width: none; }
+  .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
+}
+@media (max-width: 980px) {
+  .mk-mode, .mk-react-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-mode--flip .mk-mode-copy { order: 0; }
+  .mk-mode-screens { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .mk-mode-screens .mk-device--phone { width: 190px; }
+}
