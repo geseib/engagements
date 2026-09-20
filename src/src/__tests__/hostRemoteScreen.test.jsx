@@ -25,7 +25,13 @@ import HostRemote from '../HostRemote';
 // A real fetch would be attempted against the Cognito pool; the module under
 // test only needs the header attached, and the assertion is about the URL and
 // body it is handed.
+/* PARTIAL MOCK, and it has to stay partial: `HostRemote` mounts
+   `ActiveOrgSwitcher`, which reads and writes the ACTIVE ORGANISATION through
+   this same module. Replacing the whole module left `getActiveOrgId` undefined
+   and the remote threw on mount. Only the transport is swapped; the org
+   accessors are the real ones, so what they store is observable. */
 jest.mock('../auth/authFetch', () => ({
+  ...jest.requireActual('../auth/authFetch'),
   authFetch: jest.fn(() => Promise.resolve({
     ok: true,
     status: 200,
@@ -36,6 +42,10 @@ jest.mock('../auth/authFetch', () => ({
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
 
 const { authFetch } = require('../auth/authFetch');
+
+/** Only the calls that DISPATCH something — the GETs this surface makes on
+ *  mount (organisations, categories) share the same transport. */
+const postsTo = (mock) => mock.mock.calls.filter(([, init]) => init && init.method === 'POST');
 
 /**
  * Route every GET the remote makes. The shapes are the ones the real handlers
@@ -127,8 +137,12 @@ describe('the RESULTS two-step reaches the button', () => {
     const button = await screen.findByRole('button', { name: /what we heard/i });
     fireEvent.click(button);
 
-    await waitFor(() => expect(authFetch).toHaveBeenCalled());
-    const [url, options] = authFetch.mock.calls[0];
+    // THE POSTS, not every call on the module. `HostRemote` mounts
+    // `ActiveOrgSwitcher`, whose GET /orgs also goes through `authFetch`, so
+    // `calls[0]` is no longer the dispatch. Naming the dispatch is what this
+    // assertion always meant.
+    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1));
+    const [url, options] = postsTo(authFetch)[0];
     expect(url).toBe('https://api.test/games/4821/stage-beat');
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body)).toEqual({ beat: 'field-notes', questionNumber: 3 });
@@ -142,7 +156,8 @@ describe('the RESULTS two-step reaches the button', () => {
     serve({ state: 'RESULTS#003', stageBeat: 'results' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /what we heard/i }));
-    await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(1));
+    // ONE DISPATCH, counted as dispatches rather than as calls — see postsTo.
+    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1));
   });
 });
 

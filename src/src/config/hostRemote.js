@@ -806,3 +806,111 @@ export function phaseSummary(stateResponse) {
       return { phase: 'UNKNOWN', headline: 'Waiting…', detail: 'No game state yet' };
   }
 }
+
+/* ------------------------------------------------- what went wrong, in words */
+
+/**
+ * WHY A REFUSAL ON THIS SURFACE NEEDS ITS OWN VOCABULARY.
+ *
+ * The phone is the one host surface whose requests can be refused for a reason
+ * the host cannot see and did not cause. `auth/authFetch.js` attaches
+ * `X-Engage-Org` from THIS BROWSER's localStorage, and the server treats that
+ * header as the organisation the request is acting for — so a device that has
+ * never chosen one sends nothing, and `auth/pick-active-org.js` falls through
+ * to rule 3 — the caller's `defaultOrgId`, which names their HOME: it is
+ * written with `if_not_exists` when an approved account's personal space is
+ * provisioned (`admin/orgs/shared/personal-org.js`). So a phone with nothing
+ * remembered acts for the person's PERSONAL org, which is precisely not the
+ * team a session run for a customer belongs to, and every authenticated host
+ * route then refuses a session and a question set the host owns. (An account
+ * with exactly one membership is unaffected: rule 2 answers first.)
+ *
+ * A single sentence covering all of that is what shipped, and it was wrong in
+ * both directions: "Could not read the question set" named no cause, and "Game
+ * not found" named a false one. These two functions are the honest split, and
+ * neither of them may assert anything the response does not support.
+ */
+
+/** No status at all — the request never reached a server. */
+const NO_STATUS = (status) => !Number.isFinite(status) || status <= 0;
+
+/**
+ * What the Questions tab should say, given the status its load came back with.
+ *
+ * THE 404 IS THE ONE WITH A REAL CLAIM IN IT, and it is a claim about this
+ * device rather than about the set. `admin/shared/set-version.js:findSetMetadata`
+ * probes only the scopes `tenant.readableScopes` grants — org (only when the
+ * caller resolved one), platform and public — so "not found" means "not in a
+ * library this request may read". It must never be printed as "deleted": the
+ * set is almost certainly sitting exactly where the host left it.
+ *
+ * @param {{status?: number}} arg
+ * @returns {{kind: 'auth'|'notFound'|'error', message: string}}
+ */
+export function questionSetFailure({ status } = {}) {
+  if (status === 401 || status === 403) {
+    return {
+      kind: 'auth',
+      message: 'Your sign-in has expired. Sign in again on this device, then reopen the session.',
+    };
+  }
+  if (status === 404) {
+    return {
+      kind: 'notFound',
+      message: 'This device could not find the session’s question set. It may belong to a team '
+        + 'this device is not acting as.',
+    };
+  }
+  return {
+    kind: 'error',
+    message: NO_STATUS(status)
+      ? 'Could not read the question set. Check signal and try again.'
+      : `Could not read the question set (${status}).`,
+  };
+}
+
+/**
+ * THE ONE DEDUCTION THIS SURFACE IS ENTITLED TO MAKE.
+ *
+ * `tenant.callerMayDriveSession` answers 404 with the words "Game not found"
+ * for exactly two reasons: the session's rows are missing, or the caller's
+ * active organisation is not the session's. A phone whose state poll is
+ * answering RIGHT NOW has proved the METADATA row is there, because
+ * `game/get-game-state.js` 404s without it — so "the session is gone" is a
+ * claim this surface can rule out, and it is the claim that was being made.
+ *
+ * IT STOPS SHORT OF ASSERTING THE OTHER HALF, and the reason is one line of
+ * that same handler: `stateItem?.State || 'CREATED'` — the poll TOLERATES a
+ * missing STATE row and reports CREATED for it, while `game/start-game.js` and
+ * `game/next-question.js` 404 on exactly that row. So a live poll makes the
+ * organisation the likely cause rather than the proven one, and the wording
+ * says "probably" because that is what the evidence supports. Naming the
+ * certain half and hedging the uncertain one is the whole discipline here.
+ *
+ * That is also why `live` is a parameter and not an assumption. Without a
+ * snapshot the phone has proved nothing at all, and the server's own words go
+ * through untouched; repeating "Game not found" is then the honest answer
+ * rather than the false one.
+ *
+ * Only the exact phrase is rewritten. `next-question` 404s for a round that is
+ * not there too, and "Question not found" has nothing to do with organisations.
+ *
+ * @param {{status?: number, payload?: object, live?: boolean}} arg
+ * @returns {string}
+ */
+export function sessionActionMessage({ status, payload = {}, live = false } = {}) {
+  const said = String(payload.message || payload.error || '').trim();
+
+  if (status === 401 || status === 403) {
+    return 'Your sign-in has expired. Sign in again on this device, then reopen the session.';
+  }
+  if (status === 404 && live && /^game not found$/i.test(said)) {
+    return 'The session is running, but it would not take the change. This device is probably '
+      + 'acting as a different team from the one that owns the session — switch team under '
+      + 'Session, then try again.';
+  }
+  if (said) return said;
+  return NO_STATUS(status)
+    ? 'No connection. Check signal and try again.'
+    : `That did not go through (${status}).`;
+}

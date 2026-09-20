@@ -39,7 +39,13 @@ import HostRemote from '../HostRemote';
 // failures read as "the browser lists nothing", pointing at the component
 // rather than at the mock. Route both transports through one place so the
 // fixtures below are what the component actually receives, whichever it uses.
+/* PARTIAL MOCK, and it has to stay partial: `HostRemote` mounts
+   `ActiveOrgSwitcher`, which reads and writes the ACTIVE ORGANISATION through
+   this same module. Replacing the whole module left `getActiveOrgId` undefined
+   and the remote threw on mount. Only the transport is swapped; the org
+   accessors are the real ones, so what they store is observable. */
 jest.mock('../auth/authFetch', () => ({
+  ...jest.requireActual('../auth/authFetch'),
   authFetch: jest.fn((...args) => global.fetch(...args)),
 }));
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
