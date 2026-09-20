@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import HomePage from '../marketing/HomePage';
 import { navigateTo } from '../auth/navigate';
 import { RETURN_KEY } from '../auth/returnPath';
+import { SAMPLE_REPORT_HOME, SAMPLE_REPORT } from '../marketing/content/sampleReport';
 
 jest.mock('../auth/navigate', () => ({ navigateTo: jest.fn() }));
 beforeEach(() => {
@@ -70,4 +71,50 @@ test('the tour and the report page are one click away', () => {
   render(<HomePage />);
   expect(screen.getByRole('link', { name: /see how it works/i })).toHaveAttribute('href', '/how-it-works');
   expect(screen.getByRole('link', { name: /see a full report, annotated/i })).toHaveAttribute('href', '/reports');
+});
+
+// Fix round 1 (ruling 1): the home page must show exactly the sheet approved
+// in 01-home.html (SAMPLE_REPORT_HOME), not the fuller 04-reports.html sheet
+// (SAMPLE_REPORT) that /reports (Task 10) will use.
+test('the home report shows every answer from the approved home sheet, including the zero-vote one', () => {
+  render(<HomePage />);
+  const paper = document.querySelector('[data-theme="light"]');
+  for (const answer of SAMPLE_REPORT_HOME.round.answers) {
+    expect(within(paper).getByText(answer.text)).toBeInTheDocument();
+  }
+  // The zero-vote answer specifically: kept, not quietly dropped.
+  const zeroVote = SAMPLE_REPORT_HOME.round.answers.find((a) => a.votes === 0);
+  expect(within(paper).getByText(zeroVote.votesText)).toBeInTheDocument();
+});
+
+test('the home report shows the next step only the home sheet has', () => {
+  render(<HomePage />);
+  const paper = document.querySelector('[data-theme="light"]');
+  const homeOnlyStep = SAMPLE_REPORT_HOME.round.nextSteps.find(
+    (step) => !SAMPLE_REPORT.round.nextSteps.includes(step),
+  );
+  expect(homeOnlyStep).toBeTruthy();
+  expect(within(paper).getByText(homeOnlyStep)).toBeInTheDocument();
+});
+
+test('the home report does not show content that belongs only to the fuller /reports sheet', () => {
+  render(<HomePage />);
+  const paper = document.querySelector('[data-theme="light"]');
+  const fullOnlyQuestion = SAMPLE_REPORT.round.discussionQuestions[0];
+  expect(within(paper).queryByText(fullOnlyQuestion)).not.toBeInTheDocument();
+});
+
+test('the two report views share identical rows by reference, and neither uses "favorite"', () => {
+  // Rows that are character-for-character the same in both mockups are
+  // defined once in content/sampleReport.js and referenced from both views,
+  // so they cannot drift apart independently.
+  expect(SAMPLE_REPORT_HOME.round.answers[0]).toBe(SAMPLE_REPORT.round.answers[0]);
+  expect(SAMPLE_REPORT_HOME.round.answers[2]).toBe(SAMPLE_REPORT.round.answers[2]);
+  expect(SAMPLE_REPORT_HOME.round.answers[3]).toBe(SAMPLE_REPORT.round.answers[3]);
+  expect(SAMPLE_REPORT_HOME.standings[0]).toBe(SAMPLE_REPORT.standings[0]);
+  expect(SAMPLE_REPORT_HOME.standings[1]).toBe(SAMPLE_REPORT.standings[1]);
+  expect(SAMPLE_REPORT_HOME.standings[2]).toBe(SAMPLE_REPORT.standings[2]);
+
+  const everything = JSON.stringify(SAMPLE_REPORT_HOME) + JSON.stringify(SAMPLE_REPORT);
+  expect(everything.toLowerCase()).not.toMatch(/favou?rite/);
 });

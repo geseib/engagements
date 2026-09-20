@@ -6,6 +6,7 @@ import ClipFrame from './components/ClipFrame';
 import SampleReport from './components/SampleReport';
 import JoinCodeEntry from '../components/JoinCodeEntry';
 import { HOME } from './content/home';
+import { SAMPLE_REPORT_HOME } from './content/sampleReport';
 import './HomePage.css';
 
 /**
@@ -164,7 +165,7 @@ export default function HomePage() {
               <h2 className="mk-title">{summit.title}</h2>
               <p className="mk-lead">{summit.lead}</p>
             </div>
-            <SampleReport />
+            <SampleReport report={SAMPLE_REPORT_HOME} />
             <p className="mk-muted mk-summit-link">
               <a href="/reports">{summit.link}</a>
             </p>
