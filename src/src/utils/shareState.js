@@ -33,18 +33,53 @@ export function shareStateOf(set, nowMs = Date.now()) {
   const active = Number(set.activeVersion) || null;
   const shared = Number(share.version) || null;
   switch (share.status) {
+    /*
+     * SHARED IS WHAT YOU DID; PUBLIC IS WHAT IT IS.
+     *
+     * Reported by the owner: *"right now the tag is the same for your question
+     * set that was shared publicly and the copy that is public. they both are
+     * marked public."* They are two ROWS of the same list — the org console
+     * reads ORG, PLATFORM and PUBLIC scopes together (get-question-sets.js,
+     * spec §0 readableScopes) — and they are not the same object. The public
+     * row is a separate set with its own id, which this organisation can only
+     * copy; THIS row is theirs, and editing and re-sharing it is the whole
+     * point of the word.
+     *
+     * Only this branch changed. The public-library and Engage-library rows are
+     * caught above, before the stamp is read at all, and keep their words.
+     */
     case 'published': {
+      /*
+       * THE THIRD STATE, AND WHERE BOTH NUMBERS COME FROM.
+       *
+       * `set.activeVersion` is the set's own current version and
+       * `share.version` is the version the stamp recorded going out — written
+       * together by admin/shared/share-stamp.js beside publicSetId and
+       * publicVersion, and both already on the row get-question-sets.js
+       * projects. Nothing extra is read to know this.
+       *
+       * `publicVersion` is deliberately NOT the comparison: it counts the
+       * public copy's own revisions, which start at 1 and have no relation to
+       * the source set's numbering.
+       */
       if (active && shared && active > shared) {
         return {
           key: 'behind',
-          label: `Public, behind (v${active} not shared)`,
-          title: `v${shared} is public; your v${active} has not been shared. Submit it for review to update the library.`,
+          label: `Shared v${shared}, yours is v${active}`,
+          // The owner's own words, and they name the exit — which is on this
+          // same row, because `onShare` renders Share on everything the list
+          // says `canManage` for.
+          title: 'An older version is shared. Click Share to share the latest version.',
         };
       }
       // A legacy unversioned set's share carries no version number
-      // (set-version.js's versionList is [] for it) — say "Public", not the
-      // trailing-v "Public v" that `.trim()` alone never removed.
-      return { key: 'public', label: shared ? `Public v${shared}` : 'Public', title: 'In the public library. Anyone using Engage can read and copy it.' };
+      // (set-version.js's versionList is [] for it) — say "Shared", not the
+      // trailing-v "Shared v" that `.trim()` alone never removed.
+      return {
+        key: 'shared',
+        label: shared ? `Shared v${shared}` : 'Shared',
+        title: 'The public library has a copy of this set. Anyone using Engage can read and copy it.',
+      };
     }
     case 'checking': {
       const age = share.at ? nowMs - Date.parse(share.at) : 0;

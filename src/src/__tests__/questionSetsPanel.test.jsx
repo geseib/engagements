@@ -416,11 +416,56 @@ describe('who can see it', () => {
     expect(screen.queryByText('Needs changes')).toBeNull();
     expect(screen.getByRole('table')).not.toHaveClass('qsets-tbl--vis');
   });
+  /*
+    THE THREE THINGS THE OWNER COULD NOT TELL APART, ON ONE SCREEN.
+
+    An org console's list carries this organisation's rows, Engage's and the
+    public library's (get-question-sets.js readableScopes), so a set that has
+    been shared and the public COPY of it are two rows in the same table — and
+    both used to read "Public". The three rows below are exactly that: the set
+    you shared, the copy that is out there, and the set that has moved on since.
+  */
+  const THREE = [
+    { ...SETS[0], id: 'ours', name: 'Ours shared', canManage: true, scope: 'org', activeVersion: 2, share: { status: 'published', version: 2, publicSetId: 'orgacme-ours', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+    { ...SETS[0], id: 'theirs', name: 'Theirs public', canManage: false, scope: 'public', activeVersion: 1 },
+    { ...SETS[0], id: 'stale', name: 'Ours moved on', canManage: true, scope: 'org', activeVersion: 3, share: { status: 'published', version: 2, publicSetId: 'orgacme-stale', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+  ];
+  /* The "Who can see it" cell of a row, and only that cell. The State cell
+     carries the OWNER chip, which answers a different question with some of the
+     same words — a public row is owned by somebody else AND visible to
+     everybody, so both of its chips read "Public" and a row-wide query cannot
+     say which one it found. */
+  const visOf = (name) => rowFor(name).querySelector('.qsets-vis');
+
+  test('what you did, what it is, and what has drifted are three different words', () => {
+    mount({ questionSets: THREE, showVisibility: true });
+    expect(visOf('Ours shared')).toHaveTextContent(/^Shared v2$/);
+    expect(visOf('Theirs public')).toHaveTextContent(/^Public$/);
+    expect(visOf('Ours moved on')).toHaveTextContent(/^Shared v2, yours is v3$/);
+    // …and not each other's. rejects: one state's words leaking onto a row in
+    // another state, which is the whole defect.
+    expect(visOf('Ours shared')).not.toHaveTextContent(/yours is v/);
+    expect(visOf('Theirs public')).not.toHaveTextContent(/Shared/);
+  });
+  test('the drifted one carries its own colour and the sentence that says what to press', () => {
+    mount({ questionSets: THREE, showVisibility: true });
+    const stale = within(visOf('Ours moved on')).getByText(/yours is v3/);
+    expect(stale).toHaveClass('qsets-chip--vis-behind');
+    expect(stale).toHaveAttribute('title', 'An older version is shared. Click Share to share the latest version.');
+    // The two settled states share neither the class nor the sentence.
+    expect(within(visOf('Ours shared')).getByText(/^Shared v2$/)).toHaveClass('qsets-chip--vis-shared');
+    expect(within(visOf('Theirs public')).getByText(/^Public$/)).toHaveClass('qsets-chip--vis-public');
+  });
+  test('and the exit the hover names is on the same row', () => {
+    // rejects: telling somebody to "click Share" from a row that has no Share.
+    mount({ questionSets: THREE, showVisibility: true, onShare: jest.fn() });
+    expect(within(rowFor('Ours moved on')).getByRole('button', { name: /^share$/i })).toBeInTheDocument();
+  });
   test('each row says who can see it, from the share stamp', () => {
     mount({ questionSets: VIS, showVisibility: true });
     expect(screen.getByRole('columnheader', { name: /who can see it/i })).toBeInTheDocument();
     expect(within(rowFor('Private one')).getByText('Private')).toBeInTheDocument();
-    expect(within(rowFor('Public one')).getByText('Public v2')).toBeInTheDocument();
+    expect(within(rowFor('Public one')).getByText('Shared v2')).toBeInTheDocument();
     expect(within(rowFor('Flagged one')).getByText('Needs changes')).toHaveAttribute('title', expect.stringMatching(/what was flagged/));
     // An Engage-library (platform-scope) row carries no share stamp of its
     // own — it is not Private just because nobody has shared FROM it.

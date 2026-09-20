@@ -20,19 +20,58 @@ describe('shareStateOf — the "Who can see it" column', () => {
     expect(s).toMatchObject({ key: 'public', label: 'Everyone' });
     expect(s.title).toMatch(/every organisation/i);
   });
-  test('a published stamp with no recorded version says Public, not "Public v"', () => {
-    // Minor #11 / the legacy-unversioned-set case: `shared` is falsy.
-    expect(shareStateOf({ share: { status: 'published', version: null, at: at(60) } }).label).toBe('Public');
-  });
-  test('a published stamp at the active version is public, and names the version', () => {
+  /*
+    THREE THINGS, THREE WORDS — the owner's second report: *"right now the tag
+    is the same for your question set that was shared publicly and the copy
+    that is public. they both are marked public."*
+
+    They are on the same screen at the same time: the org console's list carries
+    ORG, PLATFORM and PUBLIC rows (get-question-sets.js readableScopes), so the
+    set you shared and the copy that went public are two rows, and both said
+    "Public". They are not the same thing and they do not have the same exits —
+    one you can edit and re-share, the other you can only copy.
+
+    SHARED is what you did. PUBLIC is what it is.
+  */
+  test("an organisation's own published set says what you did — Shared — not what the public copy is", () => {
     const s = shareStateOf({ activeVersion: 2, share: { status: 'published', version: 2, publicVersion: 1, at: at(60) } });
-    expect(s).toMatchObject({ key: 'public', label: 'Public v2' });
+    expect(s).toMatchObject({ key: 'shared', label: 'Shared v2' });
+    expect(s.label).not.toMatch(/^Public/);
+    // And the hover says whose copy is out there, which is the distinction.
+    expect(s.title).toMatch(/copy of this set/i);
   });
-  test('a newer active version than the published one reads as behind, naming both', () => {
-    const s = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } });
+  test('a published stamp with no recorded version still says Shared, not "Shared v"', () => {
+    // Minor #11 / the legacy-unversioned-set case: `shared` is falsy.
+    expect(shareStateOf({ share: { status: 'published', version: null, at: at(60) } }).label).toBe('Shared');
+  });
+  test('the public library\'s own copy keeps the word for what it IS', () => {
+    expect(shareStateOf({ scope: 'public' })).toMatchObject({ key: 'public', label: 'Public' });
+  });
+  /*
+    THE THIRD STATE, which the owner asked for by name: *"if the version has
+    been updated locally and not publicly, we make it yellow or something
+    shared(!) and when you hover over tag it will say older version is shared.
+    click share to share the latest version."*
+
+    Both numbers come off the row `admin/get-question-sets.js` already projects:
+    `activeVersion` (the set's own current version) and `share.version` (the
+    version the share stamp recorded going out — shared/share-stamp.js writes it
+    beside publicSetId and publicVersion). No extra read.
+  */
+  test('a set that has moved on since the shared version warns, and names both versions', () => {
+    const s = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, publicSetId: 'orgacme-x', publicVersion: 1, at: at(60) } });
     expect(s.key).toBe('behind');
-    expect(s.label).toBe('Public, behind (v3 not shared)');
-    expect(s.title).toMatch(/v2 is public/);
+    expect(s.label).toBe('Shared v2, yours is v3');
+  });
+  test('and its hover is the sentence that says which button fixes it', () => {
+    const s = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } });
+    expect(s.title).toBe('An older version is shared. Click Share to share the latest version.');
+  });
+  test('the three states are three different keys, so one style cannot paint two of them', () => {
+    const ours = shareStateOf({ activeVersion: 2, share: { status: 'published', version: 2, at: at(60) } }).key;
+    const theirs = shareStateOf({ scope: 'public' }).key;
+    const stale = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } }).key;
+    expect(new Set([ours, theirs, stale]).size).toBe(3);
   });
   test('checking is running inside fifteen minutes and unfinished after', () => {
     expect(shareStateOf({ share: { status: 'checking', version: 2, at: at(5) } }, NOW).key).toBe('checking');
