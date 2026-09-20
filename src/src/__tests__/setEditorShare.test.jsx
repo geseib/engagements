@@ -307,3 +307,36 @@ test("an organisation's own set is not offered the Engage control", async () => 
   expect(within(v2).queryByRole('button', { name: /run the content check/i })).toBeNull();
   expect(within(v2).getByRole('button', { name: /share publicly/i })).toBeInTheDocument();
 });
+
+/*
+  AND THE SETS THAT MOST NEED A FIRST MEASUREMENT HAVE NO VERSIONS AT ALL.
+
+  Most of Engage's library predates versioning: its content is in the legacy
+  unsuffixed partition and `GET .../versions` answers `[]` for it, so there is
+  no version row to hang a control on. The check does not need one — the worker
+  reads the partition a null version resolves to, and the queue row it may
+  raise is keyed by the SET (`PLATFORM#<setId>`), not by a version.
+*/
+test("an unversioned Engage set can still be checked, and is named as a set not a version", async () => {
+  const posted = [];
+  mockApi({
+    'GET /versions': () => jsonResponse(200, []),
+    'POST /check': (url, options) => { posted.push(JSON.parse(options.body)); return jsonResponse(202, { jobId: 'j0', version: null, status: 'queued' }); },
+  });
+  render(<QuestionSetEditor questionSet={HOUSE} onCancel={() => {}} />);
+  await screen.findByText(/no version history for this set yet/i);
+  fireEvent.click(screen.getByRole('button', { name: /run the content check/i }));
+  // rejects: sending `version: null`, which the route would read as a named
+  // version and refuse, and rejects "Checking version null…" on the screen.
+  await waitFor(() => expect(posted).toEqual([{}]));
+  expect(await screen.findByText(/content check is running on this set/i)).toBeInTheDocument();
+});
+
+// rejects: drawing it on an organisation's unversioned set, where the control
+// is "Share publicly" and the check is the step inside it.
+test("an organisation's unversioned set is not offered it", async () => {
+  mockApi({ 'GET /versions': () => jsonResponse(200, []) });
+  render(<QuestionSetEditor questionSet={SET} canShare onShare={jest.fn()} onAppeal={jest.fn()} onCancel={() => {}} />);
+  await screen.findByText(/no version history for this set yet/i);
+  expect(screen.queryByRole('button', { name: /run the content check/i })).toBeNull();
+});

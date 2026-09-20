@@ -861,11 +861,16 @@ export default function QuestionSetEditor({
    * raises a queue row, which is answered in Moderation.
    */
   const runHouseCheck = async (version) => {
+    // `null` is a set that has never been versioned — most of Engage's library
+    // — whose content is in the legacy partition. It is named as "this set"
+    // rather than "version null", and `startHouseCheck` sends no version, so
+    // the server resolves the same partition the room plays.
+    const which = version ? `version ${version}` : 'this set';
     setBusyVersion(version);
-    setVersionStatus({ text: `Checking version ${version}...`, tone: 'pending' });
-    const out = await startHouseCheck(setId, { version });
+    setVersionStatus({ text: `Checking ${which}...`, tone: 'pending' });
+    const out = await startHouseCheck(setId, version ? { version } : {});
     setVersionStatus(out.ok
-      ? { text: `The content check is running on version ${version}. Reload the versions in a minute to see what it made of it.`, tone: 'success' }
+      ? { text: `The content check is running on ${which}. Reload the versions in a minute to see what it made of it.`, tone: 'success' }
       : { text: `The content check could not be started: ${out.error}`, tone: 'error' });
     setBusyVersion(null);
   };
@@ -1648,9 +1653,30 @@ export default function QuestionSetEditor({
         </div>
 
         {versions.length === 0 ? (
-          <p className="qs-empty">
-            No version history for this set yet. The next CSV upload creates one.
-          </p>
+          <>
+            <p className="qs-empty">
+              No version history for this set yet. The next CSV upload creates one.
+            </p>
+            {/*
+              AND MOST OF ENGAGE'S LIBRARY IS EXACTLY THIS — unversioned, its
+              content in the legacy partition, and therefore with no version row
+              to hang a control on. The check does not need one: the worker
+              reads the partition a null version resolves to, and the queue row
+              it may raise is keyed by the SET rather than by a version
+              (`PLATFORM#<setId>`). Without this the sets that most need a first
+              measurement are the ones with no way to ask for it.
+            */}
+            {setScope === 'platform' && (
+              <button
+                className="btn-secondary btn-small"
+                onClick={() => runHouseCheck(null)}
+                disabled={busyVersion === null && versionStatus.tone === 'pending'}
+                title="Run the content check on this set's current questions"
+              >
+                <Icon name="ShieldCheck" weight="bold" size={14} color="currentColor" /> Run the content check
+              </button>
+            )}
+          </>
         ) : (
           <ul className="qs-version-list">
             {versions.map((v) => (
