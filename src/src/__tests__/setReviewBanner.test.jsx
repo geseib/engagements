@@ -42,3 +42,53 @@ test('a staff note leads the banner; waiting states say so and offer no appeal',
   expect(screen.getByText(/waiting for a person at Engage/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /ask for a human review/i })).toBeNull();
 });
+
+/*
+  A STAFF RE-CHECK IS NOT THE AUTHOR'S BUSINESS, and this banner is the author's.
+
+  Engage staff can re-run the content check on the version the public library is
+  serving (the score card's "Run the check again"). That writes its verdict onto
+  the organisation's own REVIEW row — which is what `entry.review` is — and
+  deliberately writes NO share stamp, because nothing about the author's share
+  changed: the library is still serving their set.
+
+  Read from `entry.review` alone this banner told them a person at Engage was
+  looking at a version nobody had asked about, or that their set "was not
+  published" while it was live in the library, and offered them Resubmit and
+  "Ask for a human review" — an appeal that would knock their own published set
+  out of its published state.
+*/
+test('a version the library is still serving says nothing here, whatever a staff re-check made of it', () => {
+  for (const review of ['escalated', 'flagged', 'appealed']) {
+    const { container, unmount } = render(
+      <SetReviewBanner
+        entry={{ ...FLAGGED, review, published: { publicSetId: 'orgacme-safety', publicVersion: 1 } }}
+        share={{ status: 'published', version: 2, publicSetId: 'orgacme-safety', publicVersion: 1 }}
+        onResubmit={() => {}}
+        onAppeal={() => {}}
+        onFocusQuestion={() => {}}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    unmount();
+  }
+});
+
+// rejects: suppressing on the review row's own say-so, or on the PUBLISHED
+// marker. The organisation submitting an already-published version for a check
+// of their own moves their share stamp off `published` (check-question-set.js
+// writes `checking`, then the worker writes the outcome) while the marker from
+// the earlier publish is still there — so that answer IS theirs to read.
+test('an answer to the author\'s own submission still shows, published marker or not', () => {
+  render(
+    <SetReviewBanner
+      entry={{ ...FLAGGED, published: { publicSetId: 'orgacme-safety', publicVersion: 1 } }}
+      share={{ status: 'flagged', version: 2 }}
+      onResubmit={() => {}}
+      onAppeal={() => {}}
+      onFocusQuestion={() => {}}
+    />,
+  );
+  expect(screen.getByRole('status')).toHaveTextContent(/this set was not published/i);
+  expect(screen.getByRole('button', { name: /ask for a human review/i })).toBeInTheDocument();
+});
