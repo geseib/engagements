@@ -32,11 +32,16 @@ const LIFECYCLE_SKS = ['REVIEW', 'PUBLISHED'];
  */
 const ORG_SHAPED = ['scope', 'orgId', 'sourceOrgId', 'publishedAt'];
 
-/** The set settings a restore makes the live row match: SET when present, REMOVE when not. */
+/** The set settings a restore makes the live row match: SET when present, REMOVE when not.
+ *
+ *  `topic` and `tags` are here because a snapshot that carried them and a
+ *  restore that did not would silently UNFILE the live set — the REMOVE branch
+ *  below strips any listed attribute the snapshot has no value for, so an
+ *  omission here is not merely "not carried across", it is "deleted". */
 const SET_SETTINGS = [
   'name', 'description', 'customInstruction', 'aiContextInstruction', 'personaId',
   'roundNoun', 'roundKind', 'roundKindBrief', 'engagementType', 'Quickstart',
-  'isAIGenerated', 'promptId',
+  'isAIGenerated', 'promptId', 'topic', 'tags',
 ];
 
 /** Where a prompt keeps its text when it has no S3 body (the gen-* rows). */

@@ -534,6 +534,10 @@ async function promptFor(payload) {
         fileContent: 'Category,Title\n"General","A question"',
         customTitle: 'Plain Set',
         engagementType: 'call-and-answer',
+        // A live set is created with a shelf now (shared/set-topics.js). The
+        // shelf is what a set is ABOUT and the round kind is what the room
+        // DOES with it — naming one here says nothing about the other.
+        topic: 'general-knowledge',
       }),
     });
     assert.strictEqual(res.statusCode, 200, res.body);
@@ -560,6 +564,7 @@ async function promptFor(payload) {
         ].join('\n'),
         customTitle: 'Kinded Set',
         engagementType: 'call-and-answer',
+        topic: 'general-knowledge',
       }),
     });
     assert.strictEqual(res.statusCode, 400, res.body);
@@ -580,6 +585,7 @@ async function promptFor(payload) {
         fileContent: 'Category,Question#,Title,Detail_lesson\n"General",1,"A question","Some framing."',
         customTitle: 'Ordinary Set',
         engagementType: 'call-and-answer',
+        topic: 'general-knowledge',
       }),
     });
     const setId = parse(created).setId;

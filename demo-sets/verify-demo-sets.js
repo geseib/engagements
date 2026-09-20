@@ -90,24 +90,31 @@ const SETS = [
     prompt: 'lessons-from-different-schools.prompt.json',
     title: 'Lessons from Different Schools',
     roundKind: 'apply',
+    // The SHELF this set sits on — what it is ABOUT, as distinct from the round
+    // kind, which is what the room DOES with it. A live set is created with one
+    // now (lambda-functions/admin/shared/set-topics.js).
+    topic: 'business-work',
   },
   {
     csv: 'what-we-should-be-known-for.csv',
     prompt: 'what-we-should-be-known-for.prompt.json',
     title: 'What We Should Be Known For',
     roundKind: 'produce',
+    topic: 'business-work',
   },
   {
     csv: 'the-rules-we-wrote-down.csv',
     prompt: 'the-rules-we-wrote-down.prompt.json',
     title: 'The Rules We Wrote Down',
     roundKind: 'improve',
+    topic: 'business-work',
   },
   {
     csv: 'ready-or-not.csv',
     prompt: 'ready-or-not.prompt.json',
     title: 'Ready or Not',
     roundKind: 'judge',
+    topic: 'business-work',
   },
 ];
 
@@ -117,7 +124,7 @@ const { DETAIL_CEILINGS } = require(
 
 /* ------------------------------------------------------------ the import -- */
 
-async function runImporter(fileContent, fileName, customTitle, roundKind) {
+async function runImporter(fileContent, fileName, customTitle, roundKind, topic) {
   process.env.TABLE_NAME = TABLE_NAME;
   const written = [];
   sendImpl = (command) => {
@@ -145,6 +152,7 @@ async function runImporter(fileContent, fileName, customTitle, roundKind) {
       customTitle,
       engagementType: 'call-and-answer',
       roundKind,
+      topic,
     }),
   });
 
@@ -175,7 +183,7 @@ const fail = (msg) => { failures += 1; line(`   FAIL  ${msg}`); };
 
     /* ---- 2. the real importer ------------------------------------------- */
     const { response, written } = await runImporter(
-      fileContent, set.csv, set.title, set.roundKind
+      fileContent, set.csv, set.title, set.roundKind, set.topic
     );
     const body = JSON.parse(response.body);
 

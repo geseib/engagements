@@ -3,7 +3,7 @@
  * Install a question set from a CSV file.
  *
  *   AWS_PROFILE=adminaccess node scripts/install-question-set.js <table> <file.csv> --type trivia \
- *     --title "80s Trivia" --description "..." [--persona mtv-vjs] [--quickstart] [--apply]
+ *     --title "80s Trivia" --topic music --description "..." [--persona mtv-vjs] [--quickstart] [--apply]
  *
  * WHY THIS EXISTS. Until now the ONLY ways to install a set were the admin UI's
  * file picker and a hand-rolled API call — both behind the Cognito authorizer,
@@ -40,17 +40,28 @@ const flag = (name, fallback = null) => {
 const apply = argv.includes('--apply');
 
 if (!tableName || !file) {
-  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." [--description "..."] [--persona <id>] [--quickstart] [--apply]');
+  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <shelf> [--description "..."] [--persona <id>] [--quickstart] [--apply]');
   process.exit(2);
 }
 
 const engagementType = flag('type', 'trivia');
 const customTitle = flag('title');
+/* THE SHELF the installed set sits on — one of the fifteen in
+   lambda-functions/admin/shared/set-topics.js. Required, because this installs
+   a LIVE set and the importer refuses one that names no shelf. Checked here as
+   well as there so the refusal arrives before the CSV is read, and names the
+   shelf either way. */
+const topic = flag('topic');
 const customDescription = flag('description', '');
 const personaId = flag('persona');
 const quickstart = argv.includes('--quickstart');
 
 if (!customTitle) { console.error('--title is required'); process.exit(2); }
+if (!topic || topic === true) {
+  const { setTopicChoices } = require(path.join(REPO, 'lambda-functions', 'admin', 'shared', 'set-topics.js'));
+  console.error(`--topic is required. Choose one of: ${setTopicChoices()}`);
+  process.exit(2);
+}
 
 process.env.TABLE_NAME = tableName;
 
@@ -107,6 +118,7 @@ async function dryImport() {
         customTitle,
         customDescription,
         engagementType,
+        topic,
       }),
     });
     const payload = JSON.parse(res.body || '{}');
@@ -233,6 +245,7 @@ function reportImport(payload, writes) {
       customTitle,
       customDescription,
       engagementType,
+      topic,
     }),
   });
 

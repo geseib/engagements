@@ -5,6 +5,9 @@ const { setMetadataKey } = require('./shared/set-version');
 const {
   ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
 } = require('./shared/round-kinds');
+const {
+  normalizeSetTopic, normalizeSetTags, setTopicRefusal,
+} = require('./shared/set-topics');
 const { ORG } = require('./shared/tenant');
 const { ENCRYPTED_FIELDS, encryptValue } = require('./shared/tenant-crypto');
 const { resolvePromptRef, resolvePersonaRef, refusal } = require('./shared/workie-refs');
@@ -331,6 +334,63 @@ exports.handler = async (event) => {
       updateParams.ExpressionAttributeNames['#roundKind'] = 'roundKind';
       updateParams.ExpressionAttributeValues[':roundKind'] = normalized;
       applied.roundKind = normalized;
+    }
+
+    /*
+      THE SHELF — validated like engagementType and roundKind, and for the same
+      reason: the filter, the browse and every facet downstream read a closed
+      list, so a typo must not become a sixteenth shelf none of them knows about.
+
+      CLEAR-VS-SKIP IS NOT THE RULE HERE, and that is the one difference from
+      every other optional field above. A save that MENTIONS the topic must name
+      a real shelf — '' and null are refused, not stored — because a set is
+      required to have one and blanking it would be the single way a filed set
+      could quietly become unfiled again.
+
+      A save that does NOT mention it leaves the row exactly as it was. That is
+      what keeps the ~40 sets predating this field usable: renaming one, or
+      re-pointing its Workie, is somebody in the middle of using it, and a
+      requirement that reaches backwards into those saves would be a wall in
+      front of an unrelated edit.
+    */
+    if ('topic' in body && body.topic !== undefined) {
+      const topic = normalizeSetTopic(body.topic);
+      if (!topic) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: setTopicRefusal(body.topic) }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      updateParams.UpdateExpression += ', #topic = :topic';
+      updateParams.ExpressionAttributeNames['#topic'] = 'topic';
+      // Through `store` even though `ENCRYPTED_FIELDS.set` does not name this
+      // field. Writing the value straight in would be a local restatement of
+      // the boundary by omission — exactly the drift this handler's own note
+      // above warns about — and the way that drift presents is a field silently
+      // shipping in the wrong form with every test still green.
+      updateParams.ExpressionAttributeValues[':topic'] = await store('topic', topic);
+      applied.topic = topic;
+    }
+
+    /*
+      THE SET'S OWN TAGS. A list, not a string, so it cannot ride in
+      OPTIONAL_FIELDS — `normalizeOptional` would stringify it.
+
+      `[]` IS A REAL VALUE HERE: it clears the tags. That is the opposite
+      choice from the topic immediately above and the right one — a tag is the
+      author's own word and must be removable, whereas the shelf is required.
+      Omitting the key still leaves the stored list alone.
+
+      Never confused with a QUESTION's `Tags`: this writes the metadata row's
+      lower-case `tags` and touches no question row at all.
+    */
+    if ('tags' in body && body.tags !== undefined) {
+      const tags = normalizeSetTags(body.tags);
+      updateParams.UpdateExpression += ', #tags = :tags';
+      updateParams.ExpressionAttributeNames['#tags'] = 'tags';
+      updateParams.ExpressionAttributeValues[':tags'] = await store('tags', tags);
+      applied.tags = tags;
     }
 
     await db.send(new UpdateCommand(updateParams));

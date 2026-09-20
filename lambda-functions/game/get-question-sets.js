@@ -105,6 +105,12 @@ exports.handler = async (event) => {
         promptId: item.promptId || null,
         personaId: item.personaId || null,
         roundNoun: item.roundNoun || null,
+        // The shelf and the author's own words, so a host choosing a set can
+        // filter this picker by the same facet the library uses. Raw, and '' /
+        // [] for the sets that predate the field: an unfiled set is offered
+        // here exactly as it always was.
+        topic: item.topic || '',
+        tags: Array.isArray(item.tags) ? item.tags : [],
         hasImages: item.hasImages === true,
         // The version a game created from this set right now would pin to.
         // null on an unmigrated set, which reads its legacy partition.

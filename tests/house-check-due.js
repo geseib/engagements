@@ -50,7 +50,9 @@ const HOUSE = { scope: 'platform', setId: 'warmups' };
 const ORG = 'org_acme';
 const body = (res) => JSON.parse(res.body || '{}');
 
-const create = (extra) => upload(h.adminEvent({ fileName: 'warm.csv', fileContent: CSV, customTitle: 'Warm Ups', ...extra }));
+// `topic` because a live set is created with a shelf now (shared/set-topics.js);
+// `extra` still overrides it, so a caller may drop or change it.
+const create = (extra) => upload(h.adminEvent({ fileName: 'warm.csv', fileContent: CSV, customTitle: 'Warm Ups', topic: 'everyday-life', ...extra }));
 const replace = () => upload(h.adminEvent({ fileName: 'edit.csv', fileContent: CSV2, replaceSetId: 'warmups' }));
 const setActive = (active) => toggle({
   ...h.adminEvent({ active }),

@@ -73,6 +73,7 @@ const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { jobKey } = require('./generation-jobs');
 const { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell, tagsToCsvCell } = require('./csv');
 const { normalizeRoundKind } = require('./round-kinds');
+const { normalizeSetTags } = require('./set-topics');
 
 /** How long a set title may be before the slug stops being a slug. */
 const MAX_TITLE = 200;
@@ -97,6 +98,15 @@ function readSetMetadata(payload) {
     description: str(meta.description),
     customInstructions: str(meta.customInstructions),
     aiContextInstructions: str(meta.aiContextInstructions),
+    // THE SHELF THE BUILDER CHOSE, carried RAW. The importer is what validates
+    // it against the closed list (shared/set-topics.js), and it has to be the
+    // one that does: a second check here would either drift from that list or
+    // turn a typo into a silent drop, and a set that quietly arrives unfiled is
+    // the exact outcome the shelf exists to prevent. The tags are normalised
+    // because a builder's own duplicates ("Heads of State", "heads of state")
+    // are an accident of typing, not a decision the importer should arbitrate.
+    topic: str(meta.topic),
+    tags: normalizeSetTags(meta.tags),
   };
 }
 
@@ -256,6 +266,15 @@ async function createSetForJob({
       engagementType,
       ...(roundKind ? { roundKind } : {}),
       ...(roundKindBrief ? { roundKindBrief } : {}),
+      // THE SHELF HAS TO TRAVEL, for the same reason the direction above does:
+      // this body is built BY HAND, so nothing carries a new field for it, and
+      // a shelf chosen in the builder and dropped here leaves the library, the
+      // filter and every later regeneration believing the set was never filed.
+      // Sent only when the builder named one — the importer lets a draft arrive
+      // unfiled (it is servable to nobody) but refuses an empty string that a
+      // person would then have to notice and undo.
+      ...(metadata.topic ? { topic: metadata.topic } : {}),
+      ...(metadata.tags.length ? { tags: metadata.tags } : {}),
       // The one flag that makes this a DRAFT. upload-questions.js turns it into
       // `active: false` on the set and on every question row.
       isAIGenerated: true,
