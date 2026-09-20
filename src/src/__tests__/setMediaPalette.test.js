@@ -18,6 +18,11 @@
  * What green means: the panel's paint still clears AA on the surface it is
  * actually mounted on, and the scope has not started leaking. It cannot prove
  * the panel looks right in a browser.
+ *
+ * THE SURFACE MOVED ONCE. This panel was paper, on the editor's #F1EDE4 card,
+ * until the owner asked for the editor to stop being the one white screen in a
+ * dark product. Every ground below is now READ out of the rule that paints it
+ * rather than named here, so the next move is measured rather than discovered.
  */
 const fs = require('fs');
 const path = require('path');
@@ -71,28 +76,30 @@ function tint(css, name) {
   return m[1];
 }
 
-const PAPER = '[data-theme="light"] {';
+const DUSK = '[data-theme="dark"] {';
 const ROOT = ':root {';
 const SMED = '.smed {';
 const QIMG = '.qimg {';
 
+const HOST_CSS = read('components', 'QuestionSetsPanel.css');
+const ONLIGHT = '.qsets.qsets--onlight,';
+
 const T = {
-  // The panel declares data-theme="light" on its root, so these are the tokens
-  // it actually gets — read from styles.css's paper block, not assumed.
-  bg: token(GLOBAL_CSS, PAPER, '--bg'),
-  surface: token(GLOBAL_CSS, PAPER, '--surface'),
-  surface2: token(GLOBAL_CSS, PAPER, '--surface-2'),
-  text: token(GLOBAL_CSS, PAPER, '--text'),
-  muted: token(GLOBAL_CSS, PAPER, '--muted'),
-  // Theme-INVARIANT in styles.css, and unusable on paper — which is why .smed
-  // re-points all three.
-  duskPrimary: token(GLOBAL_CSS, ROOT, '--primary'),
-  duskDangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
+  // The panel declares data-theme="dark" on its root, so these are the tokens
+  // it actually gets — read from styles.css's dusk block, not assumed.
+  bg: token(GLOBAL_CSS, DUSK, '--bg'),
+  surface: token(GLOBAL_CSS, DUSK, '--surface'),
+  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
+  text: token(GLOBAL_CSS, DUSK, '--text'),
+  muted: token(GLOBAL_CSS, DUSK, '--muted'),
+  // What the HOST SHELF pushes onto this panel's ancestors, and what the three
+  // re-points below exist to hold off.
+  hostPrimary: token(HOST_CSS, ONLIGHT, '--primary'),
+  hostDangerText: token(HOST_CSS, ONLIGHT, '--danger-text'),
   danger: token(GLOBAL_CSS, ROOT, '--danger'),
   // .smed's own re-points and locals.
   primary: token(SMED_CSS, SMED, '--primary'),
   dangerText: token(SMED_CSS, SMED, '--danger-text'),
-  dangerDeep: token(SMED_CSS, SMED, '--danger-deep'),
   successText: token(SMED_CSS, SMED, '--smed-success-text'),
   // .qimg's three, which inherit the surrounding form rather than a theme.
   qimgMuted: token(QIMG_CSS, QIMG, '--qimg-muted'),
@@ -116,21 +123,53 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
-// The panel is mounted inside `.qs-editor .qs-panel`, which paints
-// --surface-2 over the editor's white card (styles.css:10012).
-const PANEL = [T.surface, T.surface2];
+/* The panel is mounted inside `.qs-editor .qs-panel`. The ground that rule
+   paints is READ rather than named: it moved from --surface-2 to --bg when the
+   editor converted, and a retyped token would have gone on passing against a
+   ground nothing draws. */
+const PANEL_TOKEN = GLOBAL_CSS
+  .slice(GLOBAL_CSS.indexOf('.qs-editor .qs-panel {'))
+  .match(/background:\s*var\((--[\w-]+)\)/)[1];
+const PANEL = [T.surface, token(GLOBAL_CSS, DUSK, PANEL_TOKEN)];
 // Its own inner cards and rows paint --surface on top of that.
-const CARD = [T.surface, T.surface2, T.surface];
+const CARD = [...PANEL, T.surface];
 
-describe('the premise: the theme-invariant tokens are unusable on paper', () => {
-  // If either of these ever clears AA on white, .smed's re-points are dead
+describe('the premise: the host shelf\'s paper inks are unusable here', () => {
+  // If either of these ever clears AA on the panel, .smed's re-points are dead
   // weight and this file should be re-read rather than trusted.
-  test('--primary #F6A94C cannot carry text on the white card', () => {
-    expect(on(T.duskPrimary, [T.surface])).toBeLessThan(AA);
+  test('the host shelf\'s #9A5B18 amber cannot carry text on this panel', () => {
+    expect(on(T.hostPrimary, PANEL)).toBeLessThan(AA);
   });
-  test('--danger-text #EF8C86 cannot carry text on the white card', () => {
-    expect(on(T.duskDangerText, [T.surface])).toBeLessThan(AA);
+  test('the host shelf\'s #A32B25 red cannot carry text on this panel', () => {
+    expect(on(T.hostDangerText, PANEL)).toBeLessThan(AA);
   });
+});
+
+/** The ink a `.smed-btn--*` rule draws its label in, resolved in this scope. */
+function btnInk(selector) {
+  const rule = SMED_CSS
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`));
+  if (!rule) throw new Error(`no rule for "${selector}" — renamed?`);
+  const ink = rule[1].match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
+  if (!ink) throw new Error(`"${selector}" draws its label in no token`);
+  return token(GLOBAL_CSS, DUSK, ink[1]);
+}
+
+test('the panel re-points no GLOBAL token it does not read', () => {
+  // --danger-deep was re-pointed here while the panel was paper, copied out of
+  // `.qsets--onlight`, which really does render a filled destructive. This one
+  // does not, and a token nobody reads is how a palette drifts — the skill says
+  // so in as many words about --primary-deep. Only the global re-points are
+  // checked: a re-point is a claim about what this panel draws, where an unused
+  // `--smed-*` local is just an unused local.
+  const block = SMED_CSS.slice(SMED_CSS.indexOf(SMED), SMED_CSS.indexOf('}', SMED_CSS.indexOf(SMED)));
+  const repointed = [...block.matchAll(/(--[a-z0-9-]+)\s*:/gi)]
+    .map((m) => m[1])
+    .filter((name) => !name.startsWith('--smed-'));
+  expect(repointed.length).toBeGreaterThan(0);        // the premise
+  const body = SMED_CSS.replace(/\/\*[\s\S]*?\*\//g, '').replace(block, '');
+  expect(repointed.filter((name) => !new RegExp(`var\\(${name}[,)]`).test(body))).toEqual([]);
 });
 
 describe('every flat pairing the Images panel paints', () => {
@@ -145,8 +184,9 @@ describe('every flat pairing the Images panel paints', () => {
     ['--danger-text on an inner card (Refused)', () => T.dangerText, CARD],
     ['--smed-success-text on the panel ground (Uploaded)', () => T.successText, PANEL],
     ['--smed-success-text on an inner card', () => T.successText, CARD],
-    ['white on the filled primary button', () => '#FFFFFF', [T.primary]],
-    ['white on the filled destructive', () => '#FFFFFF', [T.dangerDeep]],
+    // The ink each filled button carries, READ from the rule that draws it —
+    // it was a bare #FFFFFF on the paper amber and is --bg on the dusk one.
+    ['the label on the filled primary button', () => btnInk('.smed-btn--primary'), [T.primary]],
   ];
   test.each(pairs)('%s clears AA', (_label, fg, layers) => {
     expect(on(fg(), layers)).toBeGreaterThanOrEqual(AA);
@@ -202,6 +242,13 @@ describe('the per-question field, which inherits the form rather than a theme', 
   test('it declares no theme, because the controls around it come from styles.css', () => {
     const jsx = read('components', 'QuestionImageField.jsx');
     expect(jsx).not.toMatch(/data-theme/);
+  });
+
+  test('the panel beside it DOES declare one, and it is the editor\'s', () => {
+    // The two sit in the same editor and moved together. rejects: one of them
+    // left on the other polarity, which is how a seam appears mid-form.
+    expect(read('components', 'SetMediaPanel.jsx')).toMatch(/data-theme="dark"/);
+    expect(read('components', 'QuestionSetEditor.jsx')).toMatch(/data-theme="dark"/);
   });
 });
 
@@ -269,11 +316,11 @@ describe('no stray literal, and no undeclared custom property', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\.smed\s*\{[^}]*\}/, '');           // the token block only
     const literals = [...declarations.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/g)].map((m) => m[1]);
-    // #FFFFFF is the label on the filled primary and the filled destructive,
-    // measured at 5.41:1 and 7.17:1. styles.css has no "on-primary" token and
-    // inventing a global one from a component sheet is the thing
-    // UserManagement.css was pulled up for.
-    expect([...new Set(literals.map((h) => h.toUpperCase()))]).toEqual(['#FFFFFF']);
+    // Nothing is left outside the block: the filled button's label used to be
+    // a bare #FFFFFF (5.41:1 on the paper amber) because styles.css had no
+    // "on-primary" token; on dusk the palette's own --bg is that ink, at
+    // 8.86:1, so the one exception this test used to allow is gone.
+    expect([...new Set(literals.map((h) => h.toUpperCase()))]).toEqual([]);
   });
 
   test('QuestionImageField.css keeps every literal inside its token block', () => {

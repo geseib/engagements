@@ -5,11 +5,14 @@
  * a file named for tokens is invisible to git — it passes locally and never
  * reaches CI. Do not rename it.
  *
- * TWO SURFACES IN ONE COMPONENT. The list and its controls are paper, on the
- * set editor's #F1EDE4 panel (both mounts: AdminPage renders the editor with
- * contentTheme 'light', the host shelf restates the same value inside
- * `.qsets--onlight .qs-editor`). The screen is the stage's dusk, drawn by
- * styles/stage.css's own card rules. Each is measured on its real stack.
+ * TWO SURFACES IN ONE COMPONENT, AND THEY USED TO BE OPPOSITE POLARITIES. The
+ * list and its controls were paper on the set editor's #F1EDE4 panel, and only
+ * the card was dusk. The owner, on the shipped console: *"the white background
+ * really contrasts the rest of the site, as we are entirely dark background
+ * throughout, except for question set editors and previews."* The editor moved
+ * onto the product's ground, so the list moved with it — and the screen did not
+ * move at all, because it was always the stage. Each is still measured on its
+ * real stack; they are simply the same stack now.
  *
  * THE CHECKS ARE LIFTED, NOT REWRITTEN — `lin`, `lum`, `ratio`, `alphaOver` and
  * `bgOf` are copied out of docs/design/admin-redesign/audit.html's <script>,
@@ -19,7 +22,7 @@
  * that assumed a ground would go on passing after the sheet stopped painting it.
  *
  * jsdom has no layout engine and loads no stylesheet. Green here means the
- * palette clears AA on paper; it cannot prove how a browser draws it.
+ * palette clears AA; it cannot prove how a browser draws it.
  */
 const fs = require('fs');
 const path = require('path');
@@ -97,7 +100,6 @@ function ruleBody(css, selector) {
   return m[2];
 }
 
-const PAPER = blockOf(GLOBAL_CSS, '[data-theme="light"] {');
 const DUSK = blockOf(GLOBAL_CSS, '[data-theme="dark"] {');
 const ROOT = blockOf(GLOBAL_CSS, ':root {');
 const STAGE = blockDeclaring(STAGE_CSS, '.stage{', '--muted');
@@ -105,11 +107,17 @@ const STAGE_ROOT = blockDeclaring(STAGE_CSS, ':root{', '--success-text');
 const SCOPE = blockOf(QPREV_CSS, '.qprev,\n.qprev-switch {');
 const SCREEN = blockOf(QPREV_CSS, '.qprev .qprev-screen {');
 
+/* The editor's `.qs-panel` ground, read from the rule that paints it rather
+   than named here — the panel moved from --surface-2 to --bg when the editor
+   converted, and a retyped token would have gone on passing against a ground
+   nothing draws. */
+const PANEL_TOKEN = ruleBody(GLOBAL_CSS, '.qs-editor .qs-panel').match(/background:\s*var\((--[\w-]+)\)/)[1];
+
 const P = {
-  panel: hexIn(PAPER, '--surface-2'),   // the editor's .qs-panel ground
-  surface: hexIn(PAPER, '--surface'),
-  text: hexIn(PAPER, '--text'),
-  muted: hexIn(PAPER, '--muted'),
+  panel: hexIn(DUSK, PANEL_TOKEN),      // the editor's .qs-panel ground
+  surface: hexIn(DUSK, '--surface'),
+  text: hexIn(DUSK, '--text'),
+  muted: hexIn(DUSK, '--muted'),
   accent: hexIn(SCOPE, '--qprev-accent'),
   rowSel: rgbaIn(SCOPE, '--qprev-row-sel'),
   rowHover: rgbaIn(SCOPE, '--qprev-row-hover'),
@@ -157,17 +165,20 @@ const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 const AA = 4.5;
 
 const PANEL = [P.panel];
-const LIST = [P.panel, groundOf('.qprev-list', PAPER)];
-const CONTROL = [P.panel, groundOf('.qprev-seg,\n.qprev-switch', PAPER)];
+const LIST = [P.panel, groundOf('.qprev-list', DUSK)];
+const CONTROL = [P.panel, groundOf('.qprev-seg,\n.qprev-switch', DUSK)];
 const SCREEN_GROUND = [P.panel, groundOf('.qprev-screen', DUSK)];
 const OPTION = [...SCREEN_GROUND, stageLayer('.opt')];
 
-describe('the list and its controls, on the editor\'s paper panel', () => {
-  test('the premise: the editor panel really is the paper --surface-2 on both mounts', () => {
-    // rejects: measuring against a ground the editor does not paint.
-    expect(GLOBAL_CSS).toMatch(/\.qs-editor \.qs-panel \{[^}]*background:\s*var\(--surface-2/);
-    const hostShelf = blockOf(read('components', 'QuestionSetsPanel.css'), '.qsets--onlight .qs-editor {');
-    expect(hexIn(hostShelf, '--surface-2')).toBe(P.panel);
+describe('the list and its controls, on the editor\'s panel', () => {
+  test('the premise: the editor panel is the SAME ground on both mounts', () => {
+    // rejects: measuring against a ground the editor does not paint. The host
+    // shelf used to restate --surface-2 on the editor's own root at 0,2,0,
+    // outranking the theme; now it restates nothing there and both mounts read
+    // the panel token out of [data-theme="dark"].
+    expect(strip(read('components', 'QuestionSetsPanel.css')))
+      .not.toMatch(/\.qsets--onlight\s+\.qs-editor\s*\{/);
+    expect(P.panel).toBe(hexIn(DUSK, PANEL_TOKEN));
   });
 
   test.each([
@@ -206,7 +217,7 @@ describe('the list and its controls, on the editor\'s paper panel', () => {
   ])('the row\'s detail line, in the colour its own rule draws it, clears AA %s', (_label, layers) => {
     const ink = ruleBody(QPREV_CSS, '.qprev-row-detail').match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
     expect(ink).not.toBeNull();
-    expect(on(hexIn(PAPER, ink[1]), layers)).toBeGreaterThanOrEqual(AA);
+    expect(on(hexIn(DUSK, ink[1]), layers)).toBeGreaterThanOrEqual(AA);
   });
 });
 
@@ -264,10 +275,10 @@ describe('the split between the list and the card', () => {
  * WHAT THE POSITION, THE NOTE AND THE EMPTY LINE STAND ON. They paint no ground
  * of their own: "3 / 30", the reveal note and its label, and the empty-state
  * line sit on the set editor's panel, and are only as legible as the panel
- * under them. The host shelf's panel is pinned above. The admin console's is
- * paper only because AdminPage.jsx renders the editor with contentTheme
- * 'light': on the dusk work body the same paper --muted would stand on
- * #25375A, at about 1.9:1, and nothing here would fail.
+ * under them. Both mounts paint the same panel, which is pinned above. The
+ * console's is dusk only because AdminPage.jsx renders the editor with
+ * contentTheme 'dark': on a paper work body this sheet's --muted would stand on
+ * #FBF7F1 at about 1.8:1, and nothing here would fail.
  *
  * PINNED, NOT BOXED. The other fix — an opaque ground of their own on each
  * line — would make the lines independent of the parent, but it is not the
@@ -279,14 +290,26 @@ describe('the split between the list and the card', () => {
  * on the panel.
  */
 describe('what the position, the note and the empty line stand on', () => {
-  test('the admin console renders the editor on the paper panel these are measured on', () => {
-    // rejects: the console's editor moving to the dusk work body while this
-    // sheet still paints paper text on it.
+  test('the console and this sheet agree on which theme the editor is', () => {
+    // THE DECISION, REVERSED AND RE-PINNED. This used to read 'light', and the
+    // comment under it explained that on the dusk work body the paper --muted
+    // would stand on #25375A at about 1.9:1 and nothing here would fail. That
+    // is still exactly the failure mode — it is just pointing the other way
+    // now, so the assertion has to move with the markup rather than be dropped.
+    // rejects: either half converting without the other.
     const page = strip(read('AdminPage.jsx'));
     const theme = page.match(/contentTheme=\{editingSet \? '(\w+)'/);
     expect(theme).not.toBeNull();
-    expect(theme[1]).toBe('light');
-    expect(hexIn(theme[1] === 'light' ? PAPER : DUSK, '--surface-2')).toBe(P.panel);
+    expect(theme[1]).toBe('dark');
+    // and the component's own roots say the same. Every element here that
+    // declares a theme declares this one — the sheet's token block is on
+    // `.qprev, .qprev-switch`, and `.qprev .qprev-screen` re-points three
+    // tokens under it, so a root left on the other polarity would take the list
+    // with it and leave the card alone.
+    const jsx = strip(read('components', 'QuestionPreview.jsx'));
+    const themes = [...jsx.matchAll(/data-theme="(\w+)"/g)].map((m) => m[1]);
+    expect(themes.length).toBeGreaterThanOrEqual(3);
+    expect([...new Set(themes)]).toEqual(['dark']);
   });
 
   // Each stack is the panel, then whatever ground this sheet paints on the way
@@ -297,7 +320,7 @@ describe('what the position, the note and the empty line stand on', () => {
     ['the reveal note\'s label', P.muted, ['.qprev', '.qprev-detail', '.qprev-note', '.qprev-note b']],
     ['the empty-state line', P.muted, ['.qprev', '.qprev--empty', '.qprev-empty']],
   ])('%s clears AA on the panel', (_label, fg, chain) => {
-    expect(on(fg, [P.panel, ...chain.map((selector) => groundOf(selector, PAPER))])).toBeGreaterThanOrEqual(AA);
+    expect(on(fg, [P.panel, ...chain.map((selector) => groundOf(selector, DUSK))])).toBeGreaterThanOrEqual(AA);
   });
 
   test('a held Edit, in the colour its :disabled rule draws it, clears AA on its own ground', () => {
@@ -307,7 +330,7 @@ describe('what the position, the note and the empty line stand on', () => {
     const ink = ruleBody(QPREV_CSS, '.qprev-btn:disabled').match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
     expect(ink).not.toBeNull();
     const chain = ['.qprev', '.qprev-detail', '.qprev-bar', '.qprev-btn'];
-    expect(on(hexIn(PAPER, ink[1]), [P.panel, ...chain.map((selector) => groundOf(selector, PAPER))]))
+    expect(on(hexIn(DUSK, ink[1]), [P.panel, ...chain.map((selector) => groundOf(selector, DUSK))]))
       .toBeGreaterThanOrEqual(AA);
   });
 });

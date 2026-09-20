@@ -1650,8 +1650,19 @@ function AdminPage() {
           still the paper-theme markup AdminShell.css documents, and a section
           that has not been converted must not be dropped onto the dark field —
           #333 body copy on #0F1A2E is 1.4:1.
+
+          THE SET EDITOR IS DUSK, AND THAT REVERSES A DECISION. It was 'light'
+          on purpose: its `.qs-*` rules in styles.css were written against the
+          paper theme. The owner, on the shipped console: *"the white background
+          really contrasts the rest of the site, as we are entirely dark
+          background throughout, except for question set editors and previews."*
+          So those rules were converted to tokens and the editor now declares
+          `data-theme="dark"` on its own root (it has to — it is mounted on the
+          host's paper shelf as well). The work body has to agree, or the
+          editor paints a dusk card onto a #FBF7F1 field.
+          Pinned in __tests__/questionSetEditorPalette.test.js.
         */
-        contentTheme={editingSet ? 'light' : section.contentTheme || 'light'}
+        contentTheme={editingSet ? 'dark' : section.contentTheme || 'light'}
         actions={(
           <>
             {/* IN THE HEADER, BESIDE HELP — not floating over the console.

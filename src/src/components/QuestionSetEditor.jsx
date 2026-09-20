@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import './QuestionSetEditor.css';
 import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
@@ -952,7 +953,18 @@ export default function QuestionSetEditor({
   const plannedVersion = nextVersionNumber(versions, activeVersion);
 
   return (
-    <div className="admin-section edit-section qs-editor">
+    /*
+      THE THEME IS DECLARED HERE, NOT INHERITED. This editor is mounted twice —
+      as a place in the admin console, and inside the host's set shelf, where
+      `.qsets--onlight` re-points the global tokens to paper on the overlay
+      above it. Custom properties inherit, so a theme taken from an ancestor
+      would have covered one mount and missed the other. The owner: *"the white
+      background really contrasts the rest of the site, as we are entirely dark
+      background throughout, except for question set editors and previews."*
+      components/QuestionSetEditor.css carries the scope's token block and the
+      re-inking of the paper controls this form borrows.
+    */
+    <div className="admin-section edit-section qs-editor" data-theme="dark">
       {/*
         THE TITLE AND THE WAY OUT, ON ONE LINE — the same `.qs-dialog-head` /
         `.qs-dialog-close` pair QuestionsPanel's question dialog already uses,

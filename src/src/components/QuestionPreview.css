@@ -5,14 +5,17 @@
    Questions tab's Preview mode: the set as a searchable list on the left, and
    on the right the card the live stage renders (components/QuestionCard.jsx).
 
-   THE LIST AND ITS CONTROLS ARE PAPER, because the editor around them is paper
-   on both mounts — the admin console renders it with contentTheme 'light'
-   (AdminPage.jsx:1636) and the host shelf inside `.qsets--onlight` — so the
-   roots declare data-theme="light" rather than inheriting whichever of the two
-   they landed in. The ladder is the admin one: 12 floor / 13 label / 15 body /
-   19 head (docs/design/admin-redesign/RATIONALE.md §3). --primary is not used
-   on paper: #F6A94C is 1.96:1 as text on white. The accent is the deep amber
-   the host shelf already settled on.
+   THE LIST AND ITS CONTROLS ARE DUSK, because the editor around them is dusk on
+   both mounts — the owner: *"the white background really contrasts the rest of
+   the site, as we are entirely dark background throughout, except for question
+   set editors and previews."* They were paper, on the editor's #F1EDE4 panel,
+   and the accent was the deep amber the host shelf settled on (#9A5B18, 1.9:1
+   on this ground — the failure the palette test caught when the panel moved).
+   The roots still DECLARE data-theme rather than inheriting it: this component
+   is mounted inside an editor that is itself mounted two places, and a theme
+   taken from an ancestor is a theme that only covers one of them. The ladder is
+   unchanged, the admin one: 12 floor / 13 label / 15 body / 19 head
+   (docs/design/admin-redesign/RATIONALE.md §3).
 
    THE SCREEN IS THE STAGE, AND THIS SHEET DOES NOT STYLE IT. `.qprev-screen`
    carries data-theme="dark" and `.stage-ladder-table`, and every rule inside it
@@ -22,9 +25,9 @@
 
    Measured in QuestionPreviewPalette.test.js, composited up the real stack
    (the editor's #F1EDE4 panel, then these layers), AA is 4.5:
-     list    --text on white 14.6 · --muted on white 6.2 · accent on white 5.4
-             the selected row or a pressed control: --text 12.7 · --muted 5.4 ·
-             accent 4.7 · --muted straight on the panel 5.3
+     list    --text on --surface 12.5 · --muted 6.1 · accent 7.4
+             the selected row or a pressed control: --text 11.4 · --muted 5.5 ·
+             accent 6.7 · --muted straight on the panel 7.2
              (a row is --text for its title and --muted for both the detail and
              the meta line, so every row state is one of the three above)
      screen  the question 15.0 · its prompt at .82 opacity 10.3 · option text
@@ -39,21 +42,24 @@
   --qprev-t-body: 15px;
   --qprev-t-head: 19px;
 
-  --qprev-accent: #9A5B18;
-  --qprev-rule: #E4DFD6;
-  --qprev-rule-strong: #D2CBBE;
-  --qprev-row-hover: rgba(30, 35, 45, .04);
-  --qprev-row-sel: rgba(154, 91, 24, .10);
+  --qprev-accent: #F6A94C;
+  --qprev-rule: rgba(155, 168, 190, .20);
+  --qprev-rule-strong: rgba(155, 168, 190, .34);
+  --qprev-row-hover: rgba(155, 168, 190, .055);
+  --qprev-row-sel: rgba(246, 169, 76, .10);
 }
 
 /* THE SCREEN'S TOKENS — what the stage sets and an ancestor here can take away.
    data-theme="dark" restores --bg, --surface and --text; it does not restore:
      --muted    the stage's lifted #B6C2D4 (stage.css `.stage`), not dusk's
                 #9BA8BE. The dimmed options in Reveal are drawn in it.
-     --primary  the host shelf re-points it to #9A5B18 (`.qsets--onlight`).
-                Every option letter is drawn in it.
-     --success  the host shelf re-points it to #1C7350
-                (`.qsets--onlight .qs-editor`). The correct option's border is.
+     --primary  the host shelf re-points it to #9A5B18 (`.qsets--onlight`) for
+                its own components. Every option letter is drawn in it.
+     --success  re-pointed the same way. The correct option's border is drawn
+                in it.
+   The editor's own scope restates the last two as well, so on the console mount
+   these three lines agree with what is already in force; they are what stops
+   the HOST mount's brown reaching the card.
    TWO CLASSES DEEP ON PURPOSE: styles.css's [data-theme="dark"] loads AFTER this
    sheet (index.jsx imports App before styles.css), so one class would lose. */
 .qprev .qprev-screen {
@@ -234,8 +240,8 @@
   cursor: pointer;
 }
 .qprev-seg-btn + .qprev-seg-btn { border-left: 1px solid var(--qprev-rule-strong); }
-/* The pressed segment's tint composites over the group's white, not over the
-   editor's #F1EDE4 panel: on the panel the accent measured under AA. */
+/* The pressed segment's tint composites over the group's own --surface, not
+   over the editor's panel: on the bare panel the accent measured under AA. */
 .qprev-seg-btn[aria-pressed="true"] { color: var(--qprev-accent); background: var(--qprev-row-sel); }
 .qprev-seg-btn:disabled { color: var(--muted); cursor: not-allowed; }
 .qprev-btn {

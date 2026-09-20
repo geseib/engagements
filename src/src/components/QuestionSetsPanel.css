@@ -82,8 +82,10 @@
 
 /* Legacy paper-theme classes reach inside this scope through two shared
    components (PromptShapePreview, SetImageBadge). They are re-coloured here
-   rather than edited at source, because both are used by the still-paper set
-   editor as well. */
+   rather than edited at source, because both are used elsewhere as well — the
+   set editor reaches `.help-text` the same way, from its own scope, now that it
+   is dusk too. Two scoped re-inks rather than one edit to a global that a
+   dozen paper screens still read. */
 .qsets .help-text,
 .qsets .prompt-shape-preview { color: var(--muted); font-size: var(--qsets-t-label); }
 .qsets .set-image-badge { color: var(--muted); }
@@ -700,52 +702,35 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    same modal etc) to the host question set screens. why recreate everything."*
    So the components are mounted as they are and only the paint is reconciled.
 
-   WHY THE RE-TINT LIVES HERE AND NOT IN styles.css. Every `.qs-*` rule is in
-   styles.css, but `questionSetsPalette.test.js` requires styles.css to declare
-   NOTHING in the `.qsets*` scope — the two prefixes collided once already and
-   that assertion is what keeps them apart. A rule that is scoped by
-   `.qsets--onlight` is therefore this file's, wherever its subject lives.
+   THERE IS NOTHING LEFT TO RECONCILE, AND THAT IS THE CHANGE. This scope used
+   to re-point two tokens on the editor's own root — `--surface-2` back to the
+   paper #F1EDE4 so the nested panels kept their card edge, and `--success` to
+   #1C7350 so the success banner's icon could be seen — because the editor was a
+   paper surface being mounted on a paper dialog. It is not any more: the owner,
+   on the shipped console, *"the white background really contrasts the rest of
+   the site, as we are entirely dark background throughout, except for question
+   set editors and previews."*
 
-   THE ACCENT IS THE HOST'S BROWN, ON PURPOSE, AND `--primary` IS NOT RESTATED
-   BELOW. Inside `.qsets--onlight` the editor inherits `--primary: #9A5B18`
-   instead of the console's `#F6A94C`. That is a decision, not a leak:
+   The editor now declares `data-theme="dark"` on its own root and carries its
+   own token block (components/QuestionSetEditor.css), including the four
+   `:root` tokens this scope re-points that `[data-theme="dark"]` does not
+   restore — `--primary` above all, which this scope moves to the host's
+   #9A5B18 brown for its OWN components and which would otherwise have reached
+   the editor unchanged and been drawn on dusk.
 
-     - The editor is a dialog INSIDE the host dialog. Two accents in one stack
-       is the accidental mix; whichever one is chosen has to be chosen once.
-     - #F6A94C is 1.96:1 as text on white, and `--primary` carries text all over
-       this subtree — `.btn-secondary`'s label and border, `.stat-badge`, the
-       editor's own h2. #9A5B18 is 5.41:1, and 5.41:1 the other way round under
-       `.btn-primary`'s white label. Measured in hostQuestionSetsPalette.test.js.
-     - The repo already says so twice in its own voice: styles.css writes
-       `var(--primary, #8a5300)` for the AI provenance rule, and `.gsd-setlink`
-       — the link that opens this very dialog — reaches for `--primary-deep`
-       with the comment *"#F6A94C carries 1.9:1 on the white dialog card"*.
-
-   Two tokens DO have to be restated, because the host scope re-points one and
-   never declares the other:
-
-     --surface-2  `.qs-editor .qs-panel` is the nested-card affordance that makes
-                  Details / Questions / Media read as steps. The host scope's
-                  #FAF7F2 is 1.07:1 against the white card — the card boundary
-                  simply disappears. #F1EDE4 is the paper theme's own value and
-                  1.17:1, the step the panel was drawn for.
-     --success    `utils/statusTone.js` returns `var(--success)` for the success
-                  banner's icon, and `.qsets--onlight` does not redeclare it, so
-                  it falls through to :root DUSK #4FB286 — 2.10:1 on the
-                  `.status-message.success` #d4edda ground. #1C7350 is the value
-                  `--qsets-success-text` already uses here, at 4.68:1.
-
-   `--primary-deep` is deliberately NOT restated: nothing this subtree renders
-   uses it (`.btn-link` is the only paper rule that does, and none of these
-   components draw one). Adding a token nobody reads is how a palette drifts.
+   A RULE HERE WOULD NOW BE THE BUG. `.qsets--onlight .qs-editor` is a 0,2,0
+   declaration on the editor's own root; `[data-theme="dark"]` is 0,1,0. Any
+   token restated here outranks the theme the editor asks for and makes the host
+   mount diverge from the console one — which is exactly the split that produced
+   the version-chip incident. The host shelf's own components keep their re-tint
+   above; the editor's paint is the editor's.
 
    NOT FIXED, AND NAMED SO IT IS A DECISION: `.qsets :focus-visible` above also
    sets `border-radius: 3px`, which squares off a FOCUSED .btn-primary or
    .form-input that is otherwise 8px. CSS has no way to un-declare that from a
    descendant rule, and restoring it would mean a hand-written radius table for
    every control class in the editor — which is the "recreate everything" the
-   owner objected to, spent on a corner that is only visible while focused. The
-   focus RING itself is a gain: the paper editor has none.
+   owner objected to, spent on a corner that is only visible while focused.
    -------------------------------------------------------------------------- */
 
 /* The dialog box the editor sits in. It carries only geometry — `.admin-section`
@@ -757,11 +742,6 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
   max-height: 86vh;
   overflow: auto;
   border-radius: 12px;
-}
-
-.qsets--onlight .qs-editor {
-  --surface-2: #F1EDE4;
-  --success: #1C7350;
 }
 
 /* The tinted composites hardcode the DUSK rgb() triplets inline, so they have

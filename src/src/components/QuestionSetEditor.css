@@ -1,0 +1,295 @@
+/* ============================================================================
+   THE QUESTION SET EDITOR, ON THE PRODUCT'S OWN GROUND — `.qs-editor`
+
+   components/QuestionSetEditor.jsx, components/QuestionsPanel.jsx and
+   components/QuestionPullDialog.jsx are painted by the `.qs-*` block in
+   styles.css; they have no sheet of their own. This file is that scope's TOKEN
+   BLOCK and nothing else — the one place a raw value is allowed to live — plus
+   the re-inking of the paper controls the editor borrows from elsewhere.
+
+   WHY. The editor was paper by decision: AdminPage rendered it with
+   `contentTheme: 'light'` and the host shelf re-pointed two more tokens to
+   match. The owner, on the shipped console: *"the white background really
+   contrasts the rest of the site, as we are entirely dark background
+   throughout, except for question set editors and previews."* So the editor now
+   declares `data-theme="dark"` on its own root. Nothing else about it changes —
+   this is a re-tint, not a redesign.
+
+   THE ROOT DECLARES THE THEME, NOT AN ANCESTOR. The editor is mounted twice: as
+   a place in the admin console, and inside the host's set shelf, where
+   `.qsets--onlight` re-points the global tokens to paper on the overlay above
+   it. Custom properties inherit, so a theme taken from an ancestor would have
+   covered one mount and missed the other. Declaring it here covers both, and the
+   four theme-invariant tokens `[data-theme="dark"]` does NOT restore are
+   restated below so the host shelf's paper amber cannot leak in.
+
+   THE GROUND STACK, and it is the same in both mounts because the card is
+   opaque:
+
+     --bg        #0F1A2E   the console work body (the host shelf's white dialog
+                           is behind the card and never reaches the text)
+     --surface   #1B2942   the editor's card (.admin-section.qs-editor)
+     --bg        #0F1A2E   a panel, cut into the card as a well
+     --surface   #1B2942   a question or version row, raised back out of it
+
+   That alternation is the paper original's, translated: white card, #F1EDE4
+   panel, white row. `--surface-2` is deliberately NOT the panel — `--muted` on
+   it is 4.93:1, with no room left for the tints the rows carry (4.22:1 under
+   the warn tint). It keeps the jobs where nothing tinted is drawn on it: the
+   input fields and the floating category list, where being LIGHTER than what it
+   sits on is the point.
+
+   MEASURED, composited up the real ancestor chain, in
+   __tests__/questionSetEditorPalette.test.js. AA is 4.5:
+
+     --text    on the card    12.53   on a panel 14.97   on a row 12.53
+     --muted   on the card     6.06   on a panel  7.24   on a row  6.06
+     --primary on a panel      8.86   on a changed row (warn tint)  6.29
+     --danger-text on a tombstoned row (danger tint)                5.50
+     --qs-success-text on the active version row (ok tint)          6.61
+     --bg on --primary  8.86   --text on --danger-deep  5.16
+
+   SPECIFICITY, NOT SOURCE ORDER. index.jsx imports App before styles.css, so
+   every component sheet loads FIRST — a same-specificity override here would
+   lose to the global it is replacing. Every rule below is one class deeper.
+   ========================================================================== */
+
+.qs-editor {
+  --qs-t-floor: 12px;
+  --qs-t-label: 13px;
+  --qs-t-body: 15px;
+  --qs-t-head: 19px;
+
+  /* RESTATED, NOT INHERITED. `.qsets--onlight` re-points these four on the host
+     shelf's overlay and `[data-theme="dark"]` does not restore them, because
+     they are theme-invariant `:root` values rather than surface tokens. Without
+     these four lines the mounted editor draws the host's #9A5B18 paper amber
+     and its #A32B25 paper red on dusk. The values are `:root`'s own. */
+  --primary: #F6A94C;
+  --danger: #E5645E;
+  --danger-text: #EF8C86;
+  --danger-deep: #B03A34;
+  /* Not re-pointed by the host scope itself — but `.qsets--onlight .qs-editor`
+     used to push it to the paper #1C7350 for the success banner's icon, and
+     that rule is gone. utils/statusTone.js still paints the icon with it, so it
+     is stated here where it can be measured on the banner this sheet draws. */
+  --success: #4FB286;
+
+  /* Locals, declared here rather than borrowed from a stylesheet that merely
+     happens to be in the bundle: an undefined custom property invalidates the
+     whole declaration, so a borrowed token disappears the day an import moves.
+     The three inks are the dusk values the `.qsets` list already uses, so the
+     list and the editor it opens read as one surface. */
+  --qs-success-text: #6FD0A4;
+  --qs-chip-public-ink: #6FD0A4;
+  --qs-chip-waiting-ink: #7CA7E6;
+
+  --qs-rule: rgba(155, 168, 190, .20);
+  --qs-rule-strong: rgba(155, 168, 190, .34);
+  --qs-row-hover: rgba(155, 168, 190, .055);
+  --qs-tint-neutral: rgba(155, 168, 190, .08);
+  --qs-tint-warn: rgba(246, 169, 76, .09);
+  --qs-tint-danger: rgba(229, 100, 94, .09);
+  --qs-tint-ok: rgba(79, 178, 134, .10);
+  --qs-shadow: rgba(4, 8, 16, .45);
+}
+
+.qs-editor :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* -- the card ---------------------------------------------------------------
+   `.admin-section` is `background: white`, shared with every paper admin panel
+   in the console. Two classes, because this element carries both. */
+.admin-section.qs-editor {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 4px 16px var(--qs-shadow);
+}
+
+.admin-section.qs-editor h2 { color: var(--text); }
+.qs-editor .section-description { color: var(--muted); }
+
+/* -- the fields -------------------------------------------------------------
+   `.form-input` is declared twice outside this scope — auth/auth.css (white
+   ground) and components/IssueReportForm.css (a #e9ecef border and a Bootstrap
+   blue focus) — and both are on screens that are still paper. Re-inked here.
+   The field is `--surface-2`, the one surface lighter than both grounds it
+   lands on: a panel (`--bg`) in the form, and the question dialog
+   (`--surface`). */
+.qs-editor .form-input,
+.qs-editor .form-select,
+.qs-editor .form-textarea {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--qs-rule-strong);
+}
+
+.qs-editor .form-input::placeholder,
+.qs-editor .form-textarea::placeholder { color: var(--muted); }
+
+/* THE BORDER NEEDS THE SAME SHAPE, NOT JUST THE SAME SCOPE. The rule that
+   actually draws every form control's border in this product is
+   components/AIPromptManager.css's one surviving global, `.form-group
+   input[type="text"] / textarea / select` (its header names QuestionSetEditor
+   and QuestionsPanel among the eighteen components that rely on it). That is
+   0,2,1; `.qs-editor .form-input` is 0,2,0 and loses on the element selector,
+   so its #ddd hairline would have survived as a near-white line round every
+   field on a dusk card. Mirrored one class deeper instead. */
+.qs-editor .form-group input[type="text"],
+.qs-editor .form-group input[type="number"],
+.qs-editor .form-group textarea,
+.qs-editor .form-group select { border-color: var(--qs-rule-strong); }
+
+.qs-editor .form-input:focus,
+.qs-editor .form-select:focus,
+.qs-editor .form-textarea:focus,
+.qs-editor .form-group input[type="text"]:focus,
+.qs-editor .form-group textarea:focus,
+.qs-editor .form-group select:focus {
+  border-color: var(--primary);
+  box-shadow: none;
+}
+
+/* Held while a save is in flight. auth/auth.css paints a disabled field
+   #f7fafc with #a0aec0 text — a near-white box on a dusk card. Inert here means
+   sunk back to the panel's own ground rather than lit up. --muted on --bg is
+   7.24:1, so a held field can still be read while it cannot be typed in. */
+.qs-editor .form-input:disabled,
+.qs-editor .form-select:disabled,
+.qs-editor .form-textarea:disabled,
+.qs-editor .form-group input[type="text"]:disabled,
+.qs-editor .form-group textarea:disabled,
+.qs-editor .form-group select:disabled {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.qs-editor .form-group label { color: var(--muted); }
+.qs-editor .help-text,
+.qs-editor .prompt-shape-preview { color: var(--muted); }
+
+/* The footer rule above Save / Cancel. `.form-actions` is
+   components/IssueReportForm.css's, and its #eee hairline is a near-white bar
+   across the bottom of a dusk card. */
+.qs-editor .form-actions { border-top-color: var(--qs-rule); }
+
+/* A <label> standing in for a hidden file input: the same field treatment, so
+   "Choose a file" and the text box beside it read as one row. */
+.qs-editor .file-input-label {
+  background: var(--surface-2);
+  border-color: var(--qs-rule-strong);
+  color: var(--text);
+}
+
+.qs-editor .file-input-label:hover {
+  background: var(--qs-row-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* -- the buttons ------------------------------------------------------------
+   All three carry `color: white` outside this scope, and white is 1.96:1 on
+   --primary and 3.32:1 on --danger — under AA in both cases, on paper as well
+   as here. Inside the editor the filled buttons take the ink the dusk palette
+   already pairs them with: --bg on the amber (8.86:1), --text on --danger-deep
+   (5.16:1). --danger itself never carries text.
+
+   THE HOVER AND DISABLED STATES ARE RESTATED, because
+   components/IssueReportForm.css declares a bare `.btn-primary:hover:not
+   (:disabled)` (0,3,0) and `.btn-primary:disabled` (0,2,0) that repaint the
+   button Bootstrap blue and grey. On paper that was invisible — the label was
+   white either way — but --bg on #0056b3 is 1.6:1. The amber is what
+   styles.css means the button to be, so it is restated rather than the ink
+   changed to suit a colour that leaked in from a feedback form. */
+.qs-editor .btn-primary { color: var(--bg); }
+.qs-editor .btn-primary:hover:not(:disabled),
+.qs-editor .btn-primary:disabled { background: var(--primary); }
+
+.qs-editor .btn-secondary {
+  background: transparent;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.qs-editor .btn-secondary:hover {
+  background: var(--primary);
+  color: var(--bg);
+}
+
+.qs-editor .btn-danger {
+  background: var(--danger-deep);
+  color: var(--text);
+}
+
+.qs-editor .stat-badge {
+  background: var(--qs-tint-neutral);
+  color: var(--primary);
+}
+
+.qs-editor .stat-badge.ai-generated {
+  background: var(--qs-tint-neutral);
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+/* -- the dialogs the editor opens -------------------------------------------
+   `Modal` renders in place rather than through a portal (the host shelf depends
+   on that for its stacking context), so the question dialog, the pull dialog
+   and the two confirmations are all DOM descendants of `.qs-editor` and reach
+   these rules.
+
+   THE HEADING KEEPS ITS RED. `.modal-content h3` is #d32f2f in styles.css —
+   the block was written for a delete confirmation and every h3 in a
+   `.modal-content` has been drawn in it ever since, the question dialog's
+   included. That is a design question and this change is a re-tint, so the red
+   is translated rather than settled: --danger-text is the token that carries
+   destructive copy on dusk, at 6.08:1 on this card. */
+.qs-editor .modal-content {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 40px var(--qs-shadow);
+}
+
+.qs-editor .modal-content h3 { color: var(--danger-text); }
+.qs-editor .modal-content p { color: var(--muted); }
+
+/* -- the status banner ------------------------------------------------------
+   `.status-message` and its two tones are paper: #d4edda under #155724, #f8d7da
+   under #721c24. utils/statusTone.js paints the icon `var(--success)`, which is
+   why --success is restated in the token block — the icon has to clear AA on
+   the ground this rule draws. */
+.qs-editor .status-message {
+  background: var(--qs-tint-neutral);
+  border: 1px solid var(--qs-rule-strong);
+  color: var(--text);
+}
+
+.qs-editor .status-message.success {
+  background: var(--qs-tint-ok);
+  border-color: var(--success);
+  color: var(--text);
+}
+
+.qs-editor .status-message.error {
+  background: var(--qs-tint-danger);
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+
+/* -- the two components that carry their own palette ------------------------
+   `RoundKindPicker` is shared with the two AI builders, which are still paper,
+   so its `--rkp-*` block is re-pointed HERE rather than edited at source. Its
+   two siblings are not: `QuestionImageField` and `SetMediaPanel` are the
+   editor's own, so each moved its own token block and neither is touched from
+   here — __tests__/setMediaPalette.test.js asserts that nothing else declares
+   in either scope, which is what keeps that true. */
+.qs-editor .round-kind-picker {
+  --rkp-text: var(--text);
+  --rkp-muted: var(--muted);
+  --rkp-accent: var(--primary);
+  --rkp-card: var(--surface-2);
+  --rkp-card-hover: var(--qs-row-hover);
+  --rkp-card-selected: var(--qs-tint-warn);
+  --rkp-rule: var(--qs-rule-strong);
+}
+
+.qs-editor .round-kind-when { border-top-color: var(--qs-rule-strong); }

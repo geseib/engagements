@@ -6,10 +6,13 @@
 
    1. THE COMPONENT RENDERS ON TWO DIFFERENT SURFACES. It sits inside the AI
       builder modal (`.modal-content`, white) and inside the set editor's
-      Details panel (`.qs-editor .qs-panel`, `--surface-2` = #F1EDE4 on paper).
-      A component that inherits its surface has to be audited twice and drifts
-      the moment either parent is repainted. This one PAINTS ITS OWN CARDS, so
-      the composite is the same in both places and can be measured once.
+      Details panel, which is dusk since the owner asked for the editor to stop
+      being the one white screen in a dark product. A component that inherits
+      its surface has to be audited twice and drifts the moment either parent is
+      repainted. This one PAINTS ITS OWN CARDS, so the composite is the same
+      wherever it lands and can be measured once — and the editor re-points
+      these seven `--rkp-*` values for its own mount in
+      components/QuestionSetEditor.css rather than this file being forked.
 
    2. AN UNDEFINED CUSTOM PROPERTY INVALIDATES THE WHOLE DECLARATION
       (UserManagement.css says the same, and QuestionSetsPanel.css repeats it).
@@ -17,11 +20,12 @@
       unstyled control anywhere styles.css is not loaded — which is every
       component test.
 
-   PAPER, NOT DUSK. Both surfaces are authoring UI, which the Warm Summit split
-   keeps light. `--primary` #F6A94C is 1.96:1 on white and cannot be text or a
-   meaningful icon here; the paper amber is #8a5300, which GeneratedItemsTable
-   .css already uses in the same modal as `--git-warn`. Reused rather than
-   reinvented.
+   PAPER HERE, BECAUSE THE AI BUILDERS ARE STILL PAPER. `--primary` #F6A94C is
+   1.96:1 on white and cannot be text or a meaningful icon there; the paper
+   amber is #8a5300, which GeneratedItemsTable.css already uses in the same
+   modal as `--git-warn`. Reused rather than reinvented. The set editor's mount
+   gets the dusk amber through the re-point named above, measured on ITS ground
+   in __tests__/questionSetEditorPalette.test.js.
 
    MEASURED, on the two surfaces this component actually paints:
 
