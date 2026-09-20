@@ -1,0 +1,2 @@
+/* The recording, once one exists — fills the device screen it sits inside. */
+.mk-clip-media { display: block; width: 100%; height: 100%; object-fit: cover; }
