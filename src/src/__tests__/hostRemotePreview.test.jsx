@@ -330,6 +330,76 @@ describe('the answer, and the deliberate step to it', () => {
   });
 });
 
+/* ------------------------------------------------- one answer, one lettering */
+
+/**
+ * A HOLE IN THE SLOTS — the only fixture that can tell the two letterings apart.
+ *
+ * `config/questionCard.js:triviaOptions` letters the options the card DRAWS, by
+ * position among the FILLED slots, so optionA / optionC / optionD are A, B, C on
+ * the room's screen. Lettering by slot instead would call them A, C, D — and the
+ * list and the card are one tap apart on this phone, so the host would read out
+ * whichever of the two they happened to be looking at.
+ *
+ * The stored answer is the spelling CLAUDE.md mandates. It is also the spelling
+ * that makes `isCorrectTriviaOption` match TWICE here — once on the slot
+ * (`optionC`) and once on the positional letter of optionD, which is drawn as C
+ * (config/questionPreview.js records this) — so it pins the mark as well as the
+ * letter.
+ */
+const TRIVIA_GAP = {
+  id: '003',
+  title: 'Which lever moved the number?',
+  optionA: 'Raised list price',
+  optionC: 'Bundled onboarding',
+  optionD: 'Cut the entry tier',
+  correctAnswer: 'OptionC',
+};
+
+/*
+ * THE LIST AND THE CARD ARE ONE TAP APART, so a host can read out whichever of
+ * them they happen to be looking at. The room's card is the truth — the stage
+ * renders components/QuestionCard.jsx — so the list letters and marks as it does,
+ * and the fixture above is the one where "as it does" is not "as the slots are
+ * named".
+ */
+describe('the list letters and marks exactly as the room does', () => {
+  // rejects: lettering by slot (A, C, D). The room letters the options it DRAWS,
+  // so a set with a hole in its slots would have the phone calling the room's B
+  // "C" — and the host reads the letter out.
+  it('letters a question with a hole in its slots by position, on both', async () => {
+    await mount([TRIVIA_GAP]);
+    const inTheList = [...cardFor(TRIVIA_GAP.title).querySelectorAll('.hrq-opts li b')]
+      .map((node) => node.textContent);
+
+    openPreview(TRIVIA_GAP.title);
+    const onTheCard = [...screenPane().querySelectorAll('.opt .ltr')]
+      .map((node) => node.textContent);
+
+    expect(onTheCard).toEqual(['A', 'B', 'C']);
+    expect(inTheList).toEqual(onTheCard);
+  });
+
+  // rejects: handing the card the stored `correctAnswer`. game/get-question.js
+  // rewrites it to the option's own TEXT before the room ever sees it; the
+  // browsing endpoint does not, and "OptionC" matches BOTH the optionC slot and
+  // the option DRAWN as C — two answers marked where the room marks one.
+  it('marks one option, and the same one the list flags', async () => {
+    await mount([TRIVIA_GAP]);
+    const flagged = cardFor(TRIVIA_GAP.title).querySelectorAll('.hrq-opts li.is-right');
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].querySelector('b')).toHaveTextContent('B');
+
+    openPreview(TRIVIA_GAP.title);
+    fireEvent.click(screen.getByRole('button', { name: /^reveal$/i }));
+
+    const marked = [...screenPane().querySelectorAll('.opt.correct')];
+    expect(marked).toHaveLength(1);
+    expect(marked[0].querySelector('.ltr')).toHaveTextContent('B');
+    expect(marked[0].querySelector('.txt')).toHaveTextContent(TRIVIA_GAP.optionC);
+  });
+});
+
 /* ------------------------------------------------------------------ paging */
 
 describe('paging without leaving the card', () => {

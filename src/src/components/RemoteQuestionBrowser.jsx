@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './RemoteQuestionBrowser.css';
 import Icon from './Icon';
 import QuestionCard from './QuestionCard';
-import { remoteQuestionRow, filterRemoteRows } from '../config/hostRemote';
+import { remoteQuestionRow, questionForCard, filterRemoteRows } from '../config/hostRemote';
 import { canReveal, revealText, stepSelection } from '../config/questionPreview';
 import { resolveInstruction } from '../config/instructions';
 import { normalizeGameType } from '../config/gameTypes';
@@ -51,14 +51,19 @@ import { authFetch } from '../auth/authFetch';
  *   renders. Nothing here draws a question of its own, so nothing here can
  *   drift from the room.
  *
- *   NO ADAPTER BETWEEN THE WIRE AND THE CARD. The browsing endpoint already
- *   answers in the card's own field names — `title`, `questionDetail`, `image`
- *   (the stored media key, exactly what the stage is handed),
- *   `optionA…`, `correctAnswer`, `customInstructions`
- *   (admin/get-question-set-questions.js). The set editor needs
- *   `stagedQuestion` only because it holds EDITOR rows, which spell three of
- *   those differently; a second spelling here would be a second thing to keep
- *   in step for no gain.
+ *   NO ADAPTER BETWEEN THE WIRE AND THE CARD, WITH ONE EXCEPTION, AND IT IS A
+ *   VALUE RATHER THAN A NAME. The browsing endpoint already answers in the
+ *   card's own field names — `title`, `questionDetail`, `image` (the stored
+ *   media key, exactly what the stage is handed), `optionA…`, `correctAnswer`,
+ *   `customInstructions` (admin/get-question-set-questions.js). The set editor
+ *   needs `stagedQuestion` only because it holds EDITOR rows, which spell three
+ *   of those differently; a second spelling here would be a second thing to
+ *   keep in step for no gain.
+ *   The exception is `correctAnswer`, which the endpoint returns AS STORED while
+ *   `game/get-question.js` rewrites it to the option's own text before the room
+ *   sees it. `questionForCard` does that rewrite, because without it the card
+ *   marks two options on a question whose filled slots are not contiguous — the
+ *   whole argument is next to that function.
  *
  *   REVEAL IS A DELIBERATE STEP AND IT IS STICKY. Offered for the SET, never
  *   for the question on the card (`canReveal`), so the control holds still while
@@ -144,10 +149,15 @@ export default function RemoteQuestionBrowser({
     const list = [];
     const map = new Map();
     for (const question of questions || []) {
-      const row = remoteQuestionRow(question);
+      // ONE ANSWER FEEDS BOTH: `questionForCard` resolves the stored spelling to
+      // the option's own text, exactly as the wire does for the room, and the row
+      // is read off that same value. Decoding twice is how the list came to flag
+      // one option while the card marked another.
+      const staged = questionForCard(question);
+      const row = remoteQuestionRow(staged);
       if (row.id === undefined) continue;
       list.push(row);
-      map.set(row.id, question);
+      map.set(row.id, staged);
     }
     return { rows: list, sources: map };
   }, [questions]);

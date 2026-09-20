@@ -305,19 +305,38 @@ function firstOf(source, ...names) {
 }
 
 /**
- * Which option the set says is right, as a 0-based index — or null.
+ * Which option SLOT the set says is right, as a 0-based index into
+ * `OPTION_KEYS` — or null.
  *
- * THREE SPELLINGS, because sets in the wild carry all three. CLAUDE.md mandates
+ * A SLOT, NOT A LETTER. The two are the same only while a question's filled
+ * slots are contiguous: the room letters the options it DRAWS
+ * (config/questionCard.js `triviaOptions`), so optionA / optionC / optionD are
+ * A, B, C on the stage, and slot 2 is the option lettered B. `remoteQuestionRow`
+ * does the lettering; this only says which slot.
+ *
+ * FOUR SPELLINGS, because sets in the wild carry all four. CLAUDE.md mandates
  * `"OptionB"`; the builders have also written a bare letter, and
  * config/setupPanel.js records that sets record the option's own TEXT "as often
  * as they record it as OptionB" — that observation is the entire reason the
- * STAGE browser refuses to carry options at all.
+ * STAGE browser refuses to carry options at all. The fourth is an array of any
+ * of those: game/get-question.js and config/questionCard.js both accept it, so a
+ * row that refused it would print "this set does not say which option is right"
+ * about a set that does, beside a card that marks it.
  *
- * NULL, not a guess, when none of the three match. A wrong CORRECT flag on the
- * host's own phone is worse than no flag: the host reads it out.
+ * NULL, not a guess, when none of them match. A wrong CORRECT flag on the host's
+ * own phone is worse than no flag: the host reads it out.
  */
 export function correctOptionIndex(question = {}) {
   const raw = firstOf(question, 'correctAnswer', 'CorrectAnswer');
+  // The array form resolves to the FIRST entry that places, so a set carrying
+  // several spellings of one answer is read rather than refused.
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      const at = correctOptionIndex({ ...question, correctAnswer: entry, CorrectAnswer: entry });
+      if (at !== null) return at;
+    }
+    return null;
+  }
   if (typeof raw !== 'string') return null;
   const answer = raw.trim();
   if (!answer) return null;
@@ -349,13 +368,24 @@ export function remoteQuestionRow(question = {}) {
   const correct = correctOptionIndex(question);
 
   const options = OPTION_KEYS
-    .map((names, index) => {
+    .map((names, slot) => {
       const text = firstOf(question, ...names);
       return typeof text === 'string' && text.trim()
-        ? { letter: LETTERS[index], text: text.trim(), correct: index === correct }
+        ? { slot, text: text.trim(), correct: slot === correct }
         : null;
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    /*
+      LETTERED AMONG THE FILLED SLOTS, WHICH IS HOW THE ROOM LETTERS THEM.
+
+      `config/questionCard.js:triviaOptions` — the function the live stage's card
+      letters with — drops the empty slots and then letters what is left, so a
+      question with optionA, optionC and optionD is A, B, C on the wall. This list
+      is one tap from that card on the same phone, and the host reads the letter
+      out to the room, so lettering by slot here would have them calling the
+      room's B "C".
+    */
+    .map((option, index) => ({ letter: LETTERS[index], text: option.text, correct: option.correct }));
 
   return {
     id: firstOf(question, 'id', 'Id', 'questionId'),
@@ -368,11 +398,49 @@ export function remoteQuestionRow(question = {}) {
     category: firstOf(question, 'category', 'Category') || '',
     difficulty: firstOf(question, 'difficulty', 'Difficulty') || '',
     options,
-    // The set claims an answer this row could not place. Said out loud rather
-    // than silently dropped, because the host is about to read the options to a
-    // room and needs to know the phone cannot help with this one.
-    answerUnresolved: options.length > 0 && correct === null,
+    /*
+      The set claims an answer this row could not place. Said out loud rather
+      than silently dropped, because the host is about to read the options to a
+      room and needs to know the phone cannot help with this one.
+
+      ASKED OF THE OPTIONS, NOT OF THE DECODER. `correctAnswer: 'OptionB'` on a
+      question that never filled optionB decodes to slot 1 — an answer — while no
+      drawn option carries it, so a test against the decoder alone left exactly
+      the silent no-op this line exists to prevent.
+    */
+    answerUnresolved: options.length > 0 && !options.some((option) => option.correct),
   };
+}
+
+/**
+ * THE QUESTION AS THE ROOM IS GIVEN IT — the one value the browsing endpoint
+ * spells differently from the wire the stage reads.
+ *
+ * `admin/get-question-set-questions.js` answers in the card's own field names
+ * (`title`, `questionDetail`, `image`, `optionA…`, `customInstructions`), so
+ * nothing else needs adapting. `correctAnswer` is the exception, and it is not a
+ * name but a VALUE: `game/get-question.js:249-255` rewrites a stored `"OptionC"`
+ * into optionC's own TEXT before the room's card ever sees it, and the browsing
+ * endpoint hands back what is stored.
+ *
+ * That difference is not cosmetic. `config/questionCard.js:isCorrectTriviaOption`
+ * compares the stored spelling against BOTH the slot id and the POSITIONAL
+ * letter, so on a question whose filled slots are not contiguous `"OptionC"`
+ * matches the optionC slot AND whatever is drawn as C — the card would mark two
+ * options where the room marks one. The option's own text can only ever match
+ * itself, which is why the wire sends that and why this sends it too.
+ * config/questionPreview.js:stagedQuestion mirrors the same rewrite for the set
+ * editor's preview, and for the same reason.
+ *
+ * Resolved through `correctOptionIndex`, so all four stored spellings reach the
+ * card as one; and emptied when no option could be placed, so the card marks
+ * nothing rather than guessing — the row beside it is already saying the set
+ * names no answer, and the two must not contradict each other on one screen.
+ */
+export function questionForCard(question = {}) {
+  const at = correctOptionIndex(question);
+  const text = at === null ? '' : firstOf(question, ...OPTION_KEYS[at]);
+  return { ...question, correctAnswer: typeof text === 'string' ? text.trim() : '' };
 }
 
 /** Title search, the one filter `17-remote.html` draws. */
