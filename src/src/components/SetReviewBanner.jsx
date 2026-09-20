@@ -208,6 +208,38 @@ export default function SetReviewBanner({ entry, scope = '', share, busy = false
   const setFindings = (entry.reviewFindings || []).filter((f) => f.questionId === '(set)');
   const total = Number(entry.questionCount) || 0;
   const passed = total ? total - questions.length : null;
+  /*
+    NOTHING TO COUNT IS NOT A COUNT OF NOTHING.
+
+    Two refusals reach this branch carrying no findings at all. A TAKEDOWN
+    stamps `flagged` (public-library-item.js) on a version whose own check
+    PASSED — the library was serving it, so nothing had ever held it. A
+    REVIEWER'S REFUSAL stamps the same (moderation-decide.js, the plain and
+    the resumed reject alike), and a person's reason is a NOTE, not
+    per-question findings.
+
+    Counted from `reviewFindings` regardless, both read "0 of 30 questions
+    were flagged" directly under the staff note that has just told the author
+    their set was taken out of the public library — a number meaning the
+    opposite of the sentence above it. And a finding against the set's own
+    name or description carries the id '(set)', which byQuestion() drops, so a
+    set held for its own text counted zero flagged questions while having
+    everything to say.
+
+    So the count speaks only when it has questions to count. Otherwise the
+    check DATE takes its place — true of every version that was checked, and
+    the one thing this sentence was carrying that a refusal without findings
+    still has — and a version with no date says nothing there at all.
+  */
+  const flaggedLine = questions.length
+    ? `${questions.length} of ${total || '—'} questions were flagged${entry.checkedAt ? ` on ${day(entry.checkedAt)}` : ''}.`
+    : (entry.checkedAt ? `Checked on ${day(entry.checkedAt)}.` : '');
+  // The same emptiness one line down: a heading over a list naming nothing,
+  // and "the other 30 questions passed" with nothing for those thirty to be
+  // other THAN. A refusal that named no question gets no section about named
+  // questions — what it does get is the staff note, the measurement and the
+  // way back, which are below and are all true of it.
+  const named = questions.length + setFindings.length;
   return (
     <section className="srev" role="status">
       <div className="srev-lead">
@@ -215,37 +247,41 @@ export default function SetReviewBanner({ entry, scope = '', share, busy = false
         <p>
           {staffNote && <><strong>From Engage:</strong> {staffNote} </>}
           <strong>This set was not published.</strong>{' '}
-          {questions.length} of {total || '—'} questions were flagged{entry.checkedAt ? ` on ${day(entry.checkedAt)}` : ''}.
+          {flaggedLine && <>{flaggedLine}{' '}</>}
           Nothing was shared, and your copy is untouched — it is still private to your organisation and still usable in your own sessions.
         </p>
       </div>
-      <h3 className="srev-h">What was flagged</h3>
-      <ul className="srev-list">
-        {questions.map(([id, findings]) => (
-          <li key={id} className="srev-item">
-            <div className="srev-item-head">
-              <strong>{label(id)}</strong>
-              {onFocusQuestion && (
-                <button type="button" className="srev-btn srev-btn--sm" onClick={() => onFocusQuestion(id)}>Edit {label(id)}</button>
-              )}
-            </div>
-            {findings.map((f, i) => (
-              <p key={i} className="srev-why">{f.explanation || `Flagged for ${String(f.category || '').toLowerCase()}.`}</p>
-            ))}
-          </li>
-        ))}
-        {setFindings.map((f, i) => (
-          <li key={`set-${i}`} className="srev-item">
-            <div className="srev-item-head"><strong>The set's own text</strong></div>
-            <p className="srev-why">{f.explanation || `The set's name, description or category names were flagged for ${String(f.category || '').toLowerCase()}.`}</p>
-          </li>
-        ))}
-        {passed !== null && passed >= 0 && (
-          <li className="srev-item srev-item--ok">
-            <Icon name="Check" weight="bold" size={14} color="currentColor" /> The other {passed} questions passed. They are unchanged and need no attention.
-          </li>
-        )}
-      </ul>
+      {named > 0 && (
+        <>
+        <h3 className="srev-h">What was flagged</h3>
+        <ul className="srev-list">
+          {questions.map(([id, findings]) => (
+            <li key={id} className="srev-item">
+              <div className="srev-item-head">
+                <strong>{label(id)}</strong>
+                {onFocusQuestion && (
+                  <button type="button" className="srev-btn srev-btn--sm" onClick={() => onFocusQuestion(id)}>Edit {label(id)}</button>
+                )}
+              </div>
+              {findings.map((f, i) => (
+                <p key={i} className="srev-why">{f.explanation || `Flagged for ${String(f.category || '').toLowerCase()}.`}</p>
+              ))}
+            </li>
+          ))}
+          {setFindings.map((f, i) => (
+            <li key={`set-${i}`} className="srev-item">
+              <div className="srev-item-head"><strong>The set's own text</strong></div>
+              <p className="srev-why">{f.explanation || `The set's name, description or category names were flagged for ${String(f.category || '').toLowerCase()}.`}</p>
+            </li>
+          ))}
+          {passed !== null && passed >= 0 && (
+            <li className="srev-item srev-item--ok">
+              <Icon name="Check" weight="bold" size={14} color="currentColor" /> The other {passed} questions passed. They are unchanged and need no attention.
+            </li>
+          )}
+        </ul>
+        </>
+      )}
       <Measured entry={entry} />
       <div className="srev-acts">
         {onResubmit && (
