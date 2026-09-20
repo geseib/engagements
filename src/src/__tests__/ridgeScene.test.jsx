@@ -63,6 +63,13 @@ test('deeper layers move further', () => {
   expect(Math.abs(shift('.mk-ridge-mid'))).toBeGreaterThan(Math.abs(shift('.mk-ridge-back')));
 });
 
+test('the glow renders at exactly the mockup opacity at every scroll position', () => {
+  const { container: atStart } = render(<RidgeScene progress={0} />);
+  expect(atStart.querySelector('.mk-ridge-glow').style.opacity).toBe('');
+  const { container: atEnd } = render(<RidgeScene progress={1} />);
+  expect(atEnd.querySelector('.mk-ridge-glow').style.opacity).toBe('');
+});
+
 test('reduced motion is read without a matchMedia to read it from', () => {
   // jsdom has no matchMedia; the hook must not throw there
   expect(prefersReducedMotion()).toBe(false);

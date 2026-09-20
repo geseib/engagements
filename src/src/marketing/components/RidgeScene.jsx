@@ -95,9 +95,6 @@ const driftStyle = (depth, progress) => ({
 
 export default function RidgeScene({ progress = 0 }) {
   const climber = pointOnRoute(progress);
-  // The mockup's glow rule has no opacity of its own (it relies on its mask),
-  // so this scales from the brief's 0.35 floor up to 1 as the reader climbs.
-  const glowOpacity = Math.min(1, 0.35 + 0.5 * progress);
 
   return (
     <div className="mk-ridge" aria-hidden="true">
@@ -111,7 +108,11 @@ export default function RidgeScene({ progress = 0 }) {
         <circle cx="1042" cy="104" r="1" /><circle cx="1136" cy="66" r="1.4" />
         <circle cx="150" cy="196" r="1" /><circle cx="1004" cy="180" r="1.1" />
       </svg>
-      <div className="mk-ridge-glow" style={{ opacity: glowOpacity }} />
+      {/* No inline opacity: the glow renders at exactly the mockup's CSS at
+          every progress value — ramping it made first paint visibly dimmer
+          than the owner-approved mockup, which the contrast audit was
+          measured against. */}
+      <div className="mk-ridge-glow" />
       <div className="mk-ridge-haze" />
 
       <svg

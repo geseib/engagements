@@ -49,9 +49,9 @@
 .mk-ridge-stars circle { fill: var(--mk-text); }
 
 .mk-ridge-layer { position: absolute; left: -5%; width: 110%; bottom: 0; display: block; }
-.mk-ridge-back  { height: 62%; opacity: 0.92; transform: translate3d(-1.2%, var(--mk-drift, 0px), 0); }
-.mk-ridge-mid   { height: 50%; transform: translate3d(-2.6%, var(--mk-drift, 0px), 0); }
-.mk-ridge-front { height: 38%; transform: translate3d(-4.4%, var(--mk-drift, 0px), 0); }
+.mk-ridge-back  { height: 62%; opacity: 0.92; transform: translate3d(-1.2%, var(--mk-drift, 0px), 0); will-change: transform; }
+.mk-ridge-mid   { height: 50%; transform: translate3d(-2.6%, var(--mk-drift, 0px), 0); will-change: transform; }
+.mk-ridge-front { height: 38%; transform: translate3d(-4.4%, var(--mk-drift, 0px), 0); will-change: transform; }
 .mk-ridge-back  .mk-ridge-body { fill: var(--mk-ridge-back); }
 .mk-ridge-mid   .mk-ridge-body { fill: var(--mk-ridge-mid); }
 .mk-ridge-front .mk-ridge-body { fill: var(--mk-ridge-front); }
@@ -68,5 +68,5 @@
 .mk-ridge-mast { stroke: var(--mk-amber); stroke-width: 2.4; }
 
 @media (prefers-reduced-motion: reduce) {
-  .mk-ridge-back, .mk-ridge-mid, .mk-ridge-front { --mk-drift: 0px; }
+  .mk-ridge-back, .mk-ridge-mid, .mk-ridge-front { --mk-drift: 0px; will-change: auto; }
 }
