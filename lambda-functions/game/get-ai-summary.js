@@ -4,6 +4,7 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanComman
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
   buildContextBlock, buildHostDirective, resolveOutputSections, pickOpeningMove,
@@ -1394,6 +1395,82 @@ function buildFallbackSummary({ totalParticipants, votesCast, top, gameType, que
 
 exports.buildFallbackSummary = buildFallbackSummary;
 
+/**
+ * Who answered the trivia question correctly, and what the room answered.
+ *
+ * THE DECISION IS NOT MADE HERE. It is `isAnswerCorrect` in trivia-answer.js,
+ * the same decoder websocket/message.js scores with, because this file makes a
+ * SECOND correctness judgement of its own — it never reads the IsCorrect the
+ * scorer stored — and two judgements that disagree put a summary in front of
+ * the room contradicting the scoreboard next to it.
+ *
+ * What it replaced compared the player's POSITIONAL letter against the SLOT
+ * letter it sliced off `OptionC`. Those differ on any question that skips a
+ * slot, and the `startsWith('Option')` guard was case-sensitive with no other
+ * branch that understood a slot id, so a set recording `optionb`, `Option B`,
+ * a bare letter or the option's own TEXT tallied nobody — and the prompt then
+ * told the room "0 of 12 players correct" about a question they had answered.
+ *
+ * `responseDistribution` stays keyed by the letter the player SENT, because it
+ * is printed back as "B: 3 players" and B is what the room saw.
+ */
+function tallyTriviaCorrectness(question, answers) {
+  const responseDistribution = {};
+  const correctPlayers = [];
+  const rows = Array.isArray(answers) ? answers : [];
+
+  for (const row of rows) {
+    const playerAnswer = row.Answer || row.answer;
+    const playerName = row.PlayerName || row.playerName;
+    responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+
+    const isCorrect = isAnswerCorrect(question, playerAnswer);
+    console.log(`🔍 CORRECTNESS CHECK: Player "${playerName}" answered "${playerAnswer}" (slot ${slotForSubmitted(question, playerAnswer) || 'none'}), correct slot(s) ${correctSlots(question).join(',') || 'none'}, isCorrect=${isCorrect}`);
+
+    if (isCorrect) correctPlayers.push({ playerName, answer: playerAnswer });
+  }
+
+  return { correctCount: correctPlayers.length, correctPlayers, responseDistribution };
+}
+exports.tallyTriviaCorrectness = tallyTriviaCorrectness;
+
+/**
+ * The sentence the prompt is handed about which option was right.
+ *
+ * NAMES THE DRAWN LETTER. What this replaced sliced the letter off the slot id
+ * — `OptionC` -> "C" — and on a question that skips a slot that is a different
+ * option from the one it then printed the text of: "The correct answer is C:
+ * Jupiter" about an option the whole room saw lettered B. The letter here is
+ * read back out loud, so it has to be the room's.
+ *
+ * It also could not survive an ARRAY, which is exactly what every trivia
+ * builder writes for a multi-answer question: `correctAnswerValue.startsWith`
+ * on an array is a TypeError, thrown out of a generateAISummary that has no
+ * try around this line, so the summary died rather than degraded.
+ *
+ * An answer that places against none of the question's own options is repeated
+ * verbatim rather than dressed up in a letter that would be a guess.
+ */
+function describeCorrectAnswer(question) {
+  const drawn = drawnOptions(question);
+  const named = correctSlots(question)
+    .map((slot) => drawn.find((option) => option.slot === slot))
+    .filter(Boolean)
+    .map((option) => `${option.letter}: ${option.text}`);
+
+  if (named.length === 1) return `The correct answer is ${named[0]}`;
+  if (named.length > 1) {
+    const last = named[named.length - 1];
+    return `The correct answers are ${named.slice(0, -1).join(', ')} and ${last}`;
+  }
+
+  // Nothing placed. Say what the set said, in whatever shape it said it.
+  const stored = (question || {}).correctAnswer || (question || {}).correctAnswers;
+  if (Array.isArray(stored)) return stored.join(', ');
+  return typeof stored === 'string' ? stored : '';
+}
+exports.describeCorrectAnswer = describeCorrectAnswer;
+
 // Exported for the same reason as buildFallbackSummary: it lets the anonymity
 // redaction inside this function (below) be exercised directly, without a full
 // exports.handler round trip.
@@ -1955,85 +2032,21 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     
     console.log('🔍 TRIVIA CHOICES DEBUG:', triviaChoices);
     
-    // Get correct answer(s) with improved extraction (use normalized field only)
-    let correctAnswerValue = question.correctAnswer;
-    
-    if (correctAnswerValue) {
-      // If it's an option ID (like OptionA), convert to actual text
-      if (correctAnswerValue.startsWith('Option')) {
-        const optionLetter = correctAnswerValue.replace('Option', '');
-        const optionField = `option${optionLetter}`;
-        const optionText = question[optionField];
-        if (optionText) {
-          correctAnswer = `The correct answer is ${optionLetter}: ${optionText}`;
-        } else {
-          correctAnswer = `The correct answer is ${optionLetter}`;
-        }
-        console.log(`🔍 CORRECT ANSWER DEBUG: Converted ${correctAnswerValue} to "${correctAnswer}"`);
-      } else {
-        correctAnswer = correctAnswerValue;
-        console.log(`🔍 CORRECT ANSWER DEBUG: Using direct value "${correctAnswer}"`);
-      }
-    } else if (question.correctAnswers && Array.isArray(question.correctAnswers)) {
-      // Handle multiple correct answers
-      correctAnswer = question.correctAnswers.map(ans => {
-        if (ans.startsWith('Option')) {
-          const optionLetter = ans.replace('Option', '');
-          const optionField = `option${optionLetter}`;
-          return question[optionField] || ans;
-        }
-        return ans;
-      }).join(', ');
-      console.log(`🔍 CORRECT ANSWER DEBUG: Multiple answers converted to "${correctAnswer}"`);
-    } else {
-      console.log('🔍 CORRECT ANSWER DEBUG: No correct answer found in question object');
-    }
-    
-    // Calculate trivia response distribution
-    const responseDistribution = {};
-    
-    answers.forEach(answer => {
-      const playerAnswer = answer.Answer || answer.answer;
-      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
-      
-      // Check if answer is correct using normalized fields only
-      const correctAnswerValue = question.correctAnswer;
-      const correctAnswersArray = question.correctAnswers;
-      
-      // Handle OptionA format conversion to actual text
-      let actualCorrectAnswer = correctAnswerValue;
-      if (correctAnswerValue && correctAnswerValue.startsWith('Option')) {
-        const optionLetter = correctAnswerValue.replace('Option', '');
-        const optionField = `option${optionLetter}`;
-        actualCorrectAnswer = question[optionField] || correctAnswerValue;
-      }
-      
-      // Check if player's answer is correct (handle both letter and full text matching)
-      let isCorrect = false;
-      if (correctAnswersArray && correctAnswersArray.includes(playerAnswer)) {
-        isCorrect = true;
-      } else if (correctAnswerValue) {
-        if (correctAnswerValue.startsWith('Option')) {
-          // For OptionA format, compare the letter (A, B, C, D)
-          const correctLetter = correctAnswerValue.replace('Option', '');
-          isCorrect = playerAnswer === correctLetter;
-        } else {
-          // Direct comparison for non-Option format
-          isCorrect = playerAnswer === correctAnswerValue || playerAnswer === actualCorrectAnswer;
-        }
-      }
-      
-      console.log(`🔍 CORRECTNESS CHECK: Player "${answer.PlayerName || answer.playerName}" answered "${playerAnswer}", correct="${correctAnswerValue}", isCorrect=${isCorrect}`);
-      
-      if (isCorrect) {
-        correctCount++;
-        correctAnswers.push({
-          playerName: answer.PlayerName || answer.playerName,
-          answer: playerAnswer
-        });
-      }
-    });
-    
+    // The sentence the prompt is handed about the answer. Through the decoder
+    // for the same reason the tally below is: the letter in it is read back to
+    // the room, so it must be the letter the room SAW.
+    correctAnswer = describeCorrectAnswer(question);
+    console.log(`🔍 CORRECT ANSWER DEBUG: "${correctAnswer}"`);
+
+    // Calculate trivia response distribution and who got it right. This is a
+    // SECOND correctness decision — it does not read the IsCorrect that
+    // websocket/message.js wrote — so it decides through the same decoder, or
+    // the room gets a summary that disagrees with the scoreboard beside it.
+    const tally = tallyTriviaCorrectness(question, answers);
+    const responseDistribution = tally.responseDistribution;
+    correctCount = tally.correctCount;
+    correctAnswers = tally.correctPlayers;
+
     // Format response distribution
     triviaResponses = Object.entries(responseDistribution)
       .map(([option, count]) => `${option}: ${count} players`)
@@ -2306,16 +2319,12 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     pollOptions: pollOptions,
     correctAnswer: correctAnswer || (() => {
       // Fallback if trivia processing didn't run
-      if (question && gameType === 'trivia' && question.correctAnswer) {
-        const correctAnswerValue = question.correctAnswer;
-        if (correctAnswerValue.startsWith('Option')) {
-          const optionLetter = correctAnswerValue.replace('Option', '');
-          const optionField = `option${optionLetter}`;
-          const optionText = question[optionField];
-          console.log('⚠️ FALLBACK: Building correctAnswer in template vars');
-          return optionText ? `The correct answer is ${optionLetter}: ${optionText}` : `The correct answer is ${optionLetter}`;
-        }
-        return correctAnswerValue;
+      // Through the one decoder: this used to call .startsWith on a value that
+      // is an ARRAY for a multi-answer question, and printed the slot letter as
+      // though it were the drawn one.
+      if (question && gameType === 'trivia') {
+        console.log('⚠️ FALLBACK: Building correctAnswer in template vars');
+        return describeCorrectAnswer(question);
       }
       return '';
     })(),
