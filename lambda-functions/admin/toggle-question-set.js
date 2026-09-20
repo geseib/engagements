@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb
 const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { setMetadataKey } = require('./shared/set-version');
 const { PLATFORM } = require('./shared/tenant');
+const { dispatchHouseCheck } = require('./shared/house-check');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -68,21 +69,8 @@ exports.handler = async (event) => {
       SWITCHING ON ONE OF ENGAGE'S OWN SETS IS THE MOMENT IT BECOMES SERVABLE
       TO EVERY ORGANISATION — the analogue of a customer sharing theirs, and the
       owner's chosen trigger for the content check (check-question-set.js,
-      `checkPlatformSet`).
-
-      THIS ROUTE CANNOT RUN THAT CHECK, AND SAYS SO RATHER THAN PRETENDING.
-      The check is a job: the POST that starts one self-invokes the check
-      function against its 900s, which needs `lambda:InvokeFunction` on that
-      function. This function's role is `DynamoDBCrudPolicy` and nothing else
-      (template-clean.yaml, AdminToggleQuestionSetFunction), so an invoke from
-      here is an AccessDenied at run time — quietly swallowed, since an
-      activation must never fail because of a check, and therefore a trigger
-      that looks like one and is not.
-
-      So the activation ANSWERS with the fact instead, the shape
-      import-from-archive.js already uses for `becameActive`: the set is live,
-      and its check is due. The console runs it. Wiring the dispatch here is a
-      four-line grant in the template and nothing else.
+      `checkPlatformSet`). This route starts it, below, once the row has moved;
+      `shared/house-check.js` carries why that is here and not in the console.
 
       A TRANSITION, not a state: switching on a set that was already serving
       makes nothing newly servable. A platform row written before `active`
@@ -105,18 +93,23 @@ exports.handler = async (event) => {
     }));
     
     console.log(`✅ Successfully toggled question set ${setId} to active: ${active}`);
-    
+
+    // AFTER the write, and it cannot undo it: a dispatch that will not go is
+    // logged inside and swallowed, and this activation still answers success.
+    if (becameServable) await dispatchHouseCheck(event, setId);
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         message: `Question set ${active ? 'activated' : 'deactivated'} successfully`,
         setId: setId,
         scope: found.ref.scope,
         orgId: found.ref.orgId || null,
         active: active,
         // Always present, so a client does not have to tell "not due" from
-        // "this build does not say". See `becameServable` above for why this
-        // is a fact reported rather than a check started.
+        // "this build does not say". It states what this activation MADE TRUE
+        // — the check it asked for above may still have failed to start, which
+        // is not something an activation reports on.
         checkDue: becameServable
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }

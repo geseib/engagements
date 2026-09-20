@@ -248,6 +248,10 @@ function install() {
   process.env.CONTENT_GUARDRAIL_ID = 'gr-test';
   process.env.CONTENT_GUARDRAIL_VERSION = 'DRAFT';
   process.env.AI_PROMPTS_BUCKET = 'prompts-test';
+  // The routes that change one of Engage's own sets dispatch its check
+  // themselves (admin/shared/house-check.js); this names the function they
+  // reach for.
+  process.env.CHECK_FUNCTION_NAME = 'engagetest-check-question-set';
   const kms = cryptoStub.makeKmsStub();
   const stubs = new Map([
     ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],

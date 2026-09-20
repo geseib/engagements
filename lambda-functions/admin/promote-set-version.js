@@ -7,6 +7,8 @@ const {
   setMetadataKey,
 } = require('./shared/set-version');
 const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
+const { PLATFORM } = require('./shared/tenant');
+const { dispatchHouseCheck } = require('./shared/house-check');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -85,6 +87,9 @@ exports.handler = async (event) => {
           promoted: false,
           setId,
           activeVersion: version,
+          // Nothing moved, so nothing newly reaches anybody. Stated anyway, so
+          // a client reads one shape from this route.
+          checkDue: false,
           message: `Version ${version} is already active.`
         }),
         headers
@@ -139,6 +144,29 @@ exports.handler = async (event) => {
 
     console.log(`⬆️ Promoted "${setId}" to v${version} (was v${toVersion(meta.activeVersion) ?? 'legacy'})`);
 
+    /*
+      PROMOTING A DIFFERENT VERSION OF ONE OF ENGAGE'S SETS WHILE IT IS ON is
+      the third of the owner's triggers for the content check, and it belongs
+      with the other two rather than beside them: it changes what every
+      organisation plays, and the version it changes to may never have been
+      measured at all. A replace made while the set was switched off dispatches
+      nothing, and the activation that followed checked only whichever version
+      was active by then — so the earlier ones sit on disk unjudged, and a
+      rollback is exactly how one of them reaches the whole customer base.
+
+      The check resolves the ACTIVE version (check-question-set.js,
+      `checkPlatformSet`), and the flip above has already happened, so what it
+      measures is what the library now serves.
+
+      `active !== false` because a platform row written before `active` existed
+      carries no attribute and IS active. An organisation's own set is not
+      touched: theirs is checked when they share it.
+    */
+    const checkDue = found.ref.scope === PLATFORM && meta.active !== false;
+    // AFTER the flip, and it cannot undo it: a dispatch that will not go is
+    // logged inside and swallowed, and this promote still answers success.
+    if (checkDue) await dispatchHouseCheck(event, setId);
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -146,6 +174,9 @@ exports.handler = async (event) => {
         setId,
         activeVersion: version,
         previousVersion: toVersion(meta.activeVersion),
+        // What this promote MADE TRUE. The check it asked for above may still
+        // have failed to start, which is not something a promote reports on.
+        checkDue,
         message: `Version ${version} is now active for "${meta.name || setId}".`
       }),
       headers

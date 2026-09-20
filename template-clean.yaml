@@ -3447,11 +3447,20 @@ Resources:
             - Effect: Allow
               Action: [ kms:Decrypt ]
               Resource: !GetAtt TenantKey.Arn
+            # New questions under one of Engage's own sets, while it is on,
+            # change what every organisation plays — so this route starts the
+            # content check itself, after the save has landed, rather than
+            # leaving it to a console that may already be closed
+            # (shared/house-check.js). The one function, by name.
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          CHECK_FUNCTION_NAME: !Sub '${StackName}-check-question-set'
       Events:
         AdminUploadQuestionsEvent:
           Type: HttpApi
@@ -3534,6 +3543,19 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Switching one of Engage's own sets on is the moment it becomes
+        # servable to every organisation — so this route starts the content
+        # check itself, after the row has moved, rather than leaving it to a
+        # console that may already be closed (shared/house-check.js). The one
+        # function, by name.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
+      Environment:
+        Variables:
+          CHECK_FUNCTION_NAME: !Sub '${StackName}-check-question-set'
       Events:
         AdminToggleQuestionSetEvent:
           Type: HttpApi
@@ -3799,6 +3821,20 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Promoting a different version of one of Engage's own sets, while it is
+        # on, changes what every organisation plays — and the version it rolls
+        # back to may never have been measured. So this route starts the content
+        # check itself, after the flip, rather than leaving it to a console that
+        # may already be closed (shared/house-check.js). The one function, by
+        # name.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
+      Environment:
+        Variables:
+          CHECK_FUNCTION_NAME: !Sub '${StackName}-check-question-set'
       Events:
         AdminPromoteSetVersionEvent:
           Type: HttpApi

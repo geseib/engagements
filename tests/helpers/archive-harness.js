@@ -31,6 +31,7 @@ Object.assign(process.env, {
   AWS_SESSION_TOKEN: 'archive-suite-token',
   BATCH_RETRY_BASE_MS: '1',
   DELETE_RETRY_BASE_MS: '1',
+  CHECK_FUNCTION_NAME: 'engage-archive-suite-check-question-set',
 });
 
 const table = new Map();
@@ -39,7 +40,8 @@ const archive = new Map();
 const writes = [];
 const reads = [];
 const fetchLog = [];
-const options = { queryPageSize: 1000, throwAfterNextBatchWrite: false };
+const dispatched = [];
+const options = { queryPageSize: 1000, throwAfterNextBatchWrite: false, lambdaShouldFail: false };
 let nextArchive = 1;
 
 const key = (pk, sk) => `${pk}|${sk}`;
@@ -222,8 +224,32 @@ const s3 = {
   },
 };
 
+// ---- Lambda ------------------------------------------------------------------
+/**
+ * The routes that change one of Engage's own sets dispatch its content check
+ * themselves (`admin/shared/house-check.js`). Nothing here runs the check — an
+ * `InvocationType: 'Event'` send returns the moment the Lambda service accepts
+ * it — so what a suite can see is exactly what production sees at that instant:
+ * that a request went, to which function, carrying whose authorizer. Set
+ * `options.lambdaShouldFail` to prove the write survives a dispatch that does
+ * not go.
+ */
+class InvokeCommand { constructor(input) { this.input = input; } }
+class LambdaClient {
+  async send(cmd) {
+    if (options.lambdaShouldFail) throw Object.assign(new Error('User is not authorized to perform: lambda:InvokeFunction'), { name: 'AccessDeniedException' });
+    dispatched.push({
+      FunctionName: cmd.input.FunctionName,
+      InvocationType: cmd.input.InvocationType,
+      payload: JSON.parse(Buffer.from(cmd.input.Payload).toString('utf8')),
+    });
+    return { StatusCode: 202 };
+  }
+}
+
 const stubs = new Map([
   ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
+  ['@aws-sdk/client-lambda', { LambdaClient, InvokeCommand }],
   ['@aws-sdk/lib-dynamodb', { DynamoDBDocumentClient: { from: () => db }, ...lib }],
   ['@aws-sdk/client-s3', {
     S3Client: class { send(cmd) { return s3.send(cmd); } },
@@ -357,10 +383,11 @@ const hostEvent = (body, extra) => event({ groups: 'hosts', userId: 'host-1' }, 
 
 function reset() {
   table.clear(); objects.clear(); archive.clear();
-  writes.length = 0; reads.length = 0; fetchLog.length = 0;
+  writes.length = 0; reads.length = 0; fetchLog.length = 0; dispatched.length = 0;
   nextArchive = 1;
   options.queryPageSize = 1000;
   options.throwAfterNextBatchWrite = false;
+  options.lambdaShouldFail = false;
 }
 
 function checker() {
@@ -380,7 +407,7 @@ function checker() {
 }
 
 module.exports = {
-  TABLE, DOWNLOAD, table, objects, archive, writes, reads, fetchLog, options,
+  TABLE, DOWNLOAD, table, objects, archive, writes, reads, fetchLog, dispatched, options,
   reset, put, get, rows, seedSet, seedPrompt, seedArchiveItem,
   adminEvent, orgAdminEvent, hostEvent, checker,
 };
