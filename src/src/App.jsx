@@ -19,6 +19,7 @@ const HomePage = lazy(() => import('./marketing/HomePage'));
 const HowItWorksPage = lazy(() => import('./marketing/HowItWorksPage'));
 const UseCasesPage = lazy(() => import('./marketing/UseCasesPage'));
 const ReportsPage = lazy(() => import('./marketing/ReportsPage'));
+const HelpPage = lazy(() => import('./marketing/HelpPage'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
 // the whole point of it), so both need this and neither should own it.
@@ -318,6 +319,12 @@ function AppRouter() {
   }
   if (path === '/reports') {
     return <MarketingRoute page={ReportsPage} />;
+  }
+
+  // The help corpus, at a linkable address. Exact or a sub-path -- never
+  // startsWith('/help'), which would also claim a future /helpers.
+  if (path === '/help' || path.startsWith('/help/')) {
+    return <MarketingRoute page={HelpPage} />;
   }
 
   /*

@@ -1,0 +1,238 @@
+/* ===========================================================================
+   HelpPage.css — the `.mk-help*` rules, copied from
+   docs/design/marketing-redesign/mk.css, plus the dusk overrides for the
+   `DocRenderer` blocks (documentation.css was written for the light modal;
+   see the block-by-block overrides at the bottom of this file).
+
+   `.mk-title`, `.mk-lead`, `.mk-kicker` and `.mk-shell` are owned by
+   MarketingShell.css and reused here, not redeclared.
+   =========================================================================== */
+
+.mk-help {
+  display: grid;
+  gap: 34px;
+  grid-template-columns: 272px minmax(0, 1fr);
+  margin-top: 38px;
+  align-items: start;
+  padding-bottom: 96px;
+}
+
+.mk-help-side {
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-rule);
+  border-radius: var(--mk-radius);
+  padding: 18px 16px 22px;
+  position: sticky;
+  top: 90px;
+}
+
+.mk-help-role + .mk-help-role { margin-top: 20px; }
+
+/* The mockup draws the role name as an `<h3>`. It is an anchor here instead:
+   headings only belong to the article's own outline (h1 the current view's
+   title, h2/h3 from DocRenderer), and this sidebar sits ahead of that
+   article in DOM order -- an `<h3>` here would open the page's heading
+   outline before its `<h1>`. */
+.mk-help-role-name {
+  display: block;
+  font-size: var(--mk-t-label);
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--mk-amber);
+  margin-bottom: 8px;
+  font-family: var(--mk-font-ui);
+  text-decoration: none;
+}
+.mk-help-role-name:hover { text-decoration: underline; }
+
+.mk-help-guides { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.mk-help-guides a {
+  display: block;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: var(--mk-muted);
+  text-decoration: none;
+  font-size: var(--mk-t-body);
+  line-height: 1.35;
+}
+.mk-help-guides a:hover { background: var(--mk-surface-2); color: var(--mk-text); }
+.mk-help-guides a[aria-current="page"] {
+  background: var(--mk-surface-2);
+  color: var(--mk-text);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--mk-amber);
+}
+
+/* A real search box: labelled input, not the mockup's drawn static field. */
+.mk-help-search { margin-bottom: 18px; }
+.mk-help-search-label {
+  display: block;
+  font-size: var(--mk-t-label);
+  color: var(--mk-muted);
+  margin-bottom: 6px;
+}
+.mk-help-search-input {
+  display: block;
+  width: 100%;
+  min-height: var(--mk-tap);
+  padding: 10px 14px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-bg);
+  border: 1px solid var(--mk-rule-strong);
+  color: var(--mk-text);
+  font-size: var(--mk-t-body);
+  font-family: var(--mk-font-ui);
+}
+.mk-help-search-input::placeholder { color: var(--mk-muted); }
+.mk-help-search-input:focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 2px; }
+
+.mk-help-body { max-width: 72ch; }
+
+.mk-help-crumb { font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-help-crumb a { color: var(--mk-muted); }
+.mk-help-crumb a:hover { color: var(--mk-text); }
+.mk-help-crumb [aria-current="page"] { color: var(--mk-text); font-weight: 600; }
+
+/* The role-view index -- one entry per guide, title plus summary. */
+.mk-help-index { list-style: none; padding: 0; display: grid; gap: 20px; margin-top: 32px; }
+.mk-help-index .mk-link { color: var(--mk-text); font-weight: 700; text-decoration: none; }
+.mk-help-index .mk-link:hover { color: var(--mk-amber); }
+.mk-help-index p { margin-top: 4px; }
+
+.mk-help-doc-footer { margin-top: 34px; }
+
+/* Search results, replacing the body while a term is present. */
+.mk-help-results-list { list-style: none; padding: 0; margin-top: 24px; display: grid; gap: 20px; }
+.mk-help-results-list a { color: var(--mk-text); font-weight: 700; text-decoration: none; }
+.mk-help-results-list a:hover { color: var(--mk-amber); }
+.mk-help-results-role { margin-left: 8px; font-size: var(--mk-t-label); }
+.mk-help-results-list p { margin-top: 4px; }
+
+@media (max-width: 720px) {
+  .mk-help { grid-template-columns: minmax(0, 1fr); }
+  .mk-help-side { position: static; }
+}
+
+/* ===========================================================================
+   DocRenderer on dusk.
+
+   `documentation.css` was written for the modal's light card, and every
+   override below is scoped under `.mk-help-body` so nothing here reaches the
+   modal itself. Each rule names the corpus block type it fixes; block types
+   with no rule here were checked and read fine as shipped (see the task
+   report for the full block-by-block judgment).
+   =========================================================================== */
+
+/* 'p' / the guide header: dark ink and a light border, both invisible on
+   `--mk-bg`. Body copy gets the full text colour, not muted -- a guide is
+   read end to end (the mockup's own note for this page makes the same
+   call). */
+.mk-help-body .help-doc-header h1 { color: var(--mk-text); border-bottom-color: var(--mk-rule); }
+.mk-help-body .help-doc-header p { color: var(--mk-muted); }
+.mk-help-body .help-doc-section h2 { color: var(--mk-text); border-bottom-color: var(--mk-rule); }
+.mk-help-body .help-doc-section h3 { color: var(--mk-text); }
+.mk-help-body .help-doc-section p,
+.mk-help-body .help-doc-section ul,
+.mk-help-body .help-doc-section ol { color: var(--mk-text); }
+
+/* 'faq': `dt`/`dd` carry no background of their own, so their dark ink from
+   the modal disappears on the dusk page. */
+.mk-help-body .help-faq dt { color: var(--mk-text); }
+.mk-help-body .help-faq dd { color: var(--mk-muted); border-left-color: var(--mk-rule); }
+
+/* 'keys': the `<kbd>` chip keeps its own light fill (readable anywhere); the
+   description text beside it does not carry one and needs retargeting. */
+.mk-help-body .help-keys dd { color: var(--mk-muted); }
+
+/* 'note': the modal's pastel info/warn/tip fills read as bright, out-of-
+   palette cards against the dusk page, even though their own dark text stays
+   legible on them. Recoloured to a surface card with a tone-coloured left
+   border instead of a tinted fill. */
+.mk-help-body .help-info-box,
+.mk-help-body .help-warning-box,
+.mk-help-body .help-tip-box { background: var(--mk-surface); }
+.mk-help-body .help-info-box { border-left-color: var(--mk-blue); }
+.mk-help-body .help-warning-box { border-left-color: var(--mk-amber-deep); }
+.mk-help-body .help-tip-box { border-left-color: var(--mk-amber); }
+.mk-help-body .help-info-box h4,
+.mk-help-body .help-warning-box h4,
+.mk-help-body .help-tip-box h4 { color: var(--mk-text); }
+.mk-help-body .help-info-box p,
+.mk-help-body .help-warning-box p,
+.mk-help-body .help-tip-box p,
+.mk-help-body .help-info-box ul,
+.mk-help-body .help-warning-box ul,
+.mk-help-body .help-tip-box ul { color: var(--mk-muted); }
+
+/* 'features': same pastel-card problem as 'note'. */
+.mk-help-body .help-feature-item { background: var(--mk-surface); border-color: var(--mk-rule); }
+.mk-help-body .help-feature-item h4 { color: var(--mk-text); }
+.mk-help-body .help-feature-item p { color: var(--mk-muted); }
+
+/* 'variables': same. The chip itself (`code`, dark fill / light text) already
+   reads fine and is left alone; only the card and the caption need it. */
+.mk-help-body .help-variable-item { background: var(--mk-surface); border-color: var(--mk-rule); }
+.mk-help-body .help-variable-item span { color: var(--mk-muted); }
+
+/* 'table' / 'gameTypes': header cells carry a light fill from the modal;
+   plain body cells set no colour of their own and already inherit the
+   page's light body text over the dusk background, so only the header rows
+   and the shared border colour need retargeting. */
+.mk-help-body .help-table { border-color: var(--mk-rule); }
+.mk-help-body .help-table th,
+.mk-help-body .help-table td { border-color: var(--mk-rule); }
+.mk-help-body .help-table thead th { background: var(--mk-surface-2); color: var(--mk-text); }
+.mk-help-body .help-table tbody th { background: var(--mk-surface); color: var(--mk-text); }
+
+/* 'steps': the numbered badge is recoloured to the amber this page already
+   uses for numbered badges elsewhere (`.mk-callout-n`), rather than the
+   modal's unrelated blue. */
+.mk-help-body .help-steps li::before { background: var(--mk-amber); color: var(--mk-bg); }
+
+/* 'code': the fenced code block is already dark-on-light and reads fine on
+   any background, so it is untouched. Inline `code`, though, is styled by a
+   bare, unscoped `code` selector in documentation.css whose text colour is
+   `var(--danger)` -- undefined here, so it silently falls back to the
+   page's own (light) inherited text colour sitting on that selector's light
+   grey fill, which is close to unreadable. */
+.mk-help-body code { background: var(--mk-surface-2); color: var(--mk-text); }
+
+/* 'phases': `PhaseFlow`'s classes (`.phase-flow*`) are declared in
+   `HelpSystem.css`, the modal's own container stylesheet, which this page
+   does not import (importing the modal's chrome wholesale would be a much
+   bigger surface than the one component that needs it). Without that CSS the
+   flow renders as a bare, unstyled list, so it is restyled here from the
+   corpus's own `PhaseFlow` markup using this page's tokens. */
+.mk-help-body .phase-flow {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0 8px;
+  padding: 0;
+}
+.mk-help-body .phase-flow__step {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-rule);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+}
+.mk-help-body .phase-flow__name {
+  font-weight: 700;
+  font-size: var(--mk-t-label);
+  letter-spacing: 0.06em;
+  color: var(--mk-amber);
+}
+.mk-help-body .phase-flow__desc { font-size: var(--mk-t-body); line-height: 1.35; color: var(--mk-text); }
+.mk-help-body .phase-flow__arrow { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.mk-help-body .phase-flow__note { font-size: var(--mk-t-label); color: var(--mk-muted); margin-bottom: 16px; }
+@media (max-width: 560px) {
+  .mk-help-body .phase-flow { flex-direction: column; }
+  .mk-help-body .phase-flow__arrow { transform: rotate(90deg); }
+}
