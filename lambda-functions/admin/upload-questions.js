@@ -13,6 +13,9 @@ const {
 } = require('./shared/set-version');
 const { normalizeTags } = require('./shared/tags');
 const {
+  normalizeSetTopic, normalizeSetTags, setTopicRefusal,
+} = require('./shared/set-topics');
+const {
   ownerStamp, requireSetManager, findSetForCaller, createSetRef, requestedScope,
 } = require('./shared/question-set-access');
 const { readAllowance } = require('./shared/usage');
@@ -163,6 +166,65 @@ exports.handler = async (event) => {
     const replaceSetId = String(payload.replaceSetId ?? '').trim();
     const isReplace = replaceSetId !== '';
     let engagementType = payload.engagementType;
+
+    /*
+      THE SHELF THIS SET SITS ON, and the author's own words beside it.
+
+      `topic` is ONE id from the closed list in shared/set-topics.js — what the
+      library filter and the browse are built on. `tags` are the specifics no
+      shelf of fifteen would ever carry ("1980s", "onboarding"), normalised by
+      the one tag vocabulary this repo has. They are a property of the SET; the
+      `Tags` column of the CSV belongs to each QUESTION and the two never meet.
+
+      ── WHERE THE REQUIREMENT BITES, AND THE THREE PLACES IT DOES NOT ───────
+
+      A CREATE that lands LIVE must name a shelf. That is every set a person
+      makes through this route, and it is the whole point: a library filter is
+      worth having only if the sets being added to it are filed.
+
+      A REPLACE NEVER HAS TO. It writes new questions under a set that already
+      exists and, like `name` and `description`, it does not rewrite the set's
+      prose at all (see the note above the activeVersion flip) — the shelf stays
+      whatever the metadata row already says. Requiring one here would refuse
+      every edit to the ~40 sets that predate this field, which is precisely the
+      retro-refusal this design rules out. `edit-question-set.js` is the route
+      that files a set; this one only ever files a NEW one.
+
+      A SET THAT ARRIVES ALREADY SWITCHED OFF does not have to either, and that
+      exception is narrow: an AI draft (`isAIGenerated`) and a legacy archive
+      restore (`startInactive`) are servable to nobody, and refusing those would
+      throw away a generation run nobody can repeat. SWITCHING ONE ON is where
+      the requirement lands — toggle-question-set.js refuses to make an unfiled
+      set servable, and every way a PERSON switches one on comes through there.
+      One writer does not: shared/archive-restore.js assigns `active` from the
+      snapshot without reading the topic, so a restored backup that recorded a
+      set as live is the one way past that refusal. This comment used to call
+      the toggle route the only one that flips `active`, which was never true;
+      toggle-question-set.js carries why the gap is narrow and how it is
+      reported. Not a later SAVE either: edit-question-set.js validates only a
+      save that mentions the topic, and switching a set on mentions nothing, so
+      a save-shaped promise here would be a gate that does not exist.
+
+      AN UNKNOWN TOPIC IS REFUSED WHEREVER IT IS OFFERED — create, replace or
+      draft. Off the shelf is off the shelf, and a typo must never become a
+      sixteenth shelf that no filter and no browse knows about. That is the same
+      reason the round-kind enum above is validated here rather than trusted.
+
+      ── AND NEITHER FIELD IS ENCRYPTED FOR AN ORG SET ───────────────────────
+
+      Deliberately. `topic` is an id from a closed list, structural like
+      `engagementType`; a tag is a canonical label, the same kind of thing as
+      `roundNoun` — a customer-authored word this boundary already leaves in
+      plaintext. `ENCRYPTED_FIELDS.set` names prose, and neither of these is.
+    */
+    const topicOffered = !(payload.topic === undefined || payload.topic === null
+      || (typeof payload.topic === 'string' && payload.topic.trim() === ''));
+    const mustBeFiled = !isReplace && !(isAIGenerated || startInactive);
+    const setTopic = normalizeSetTopic(payload.topic);
+    if (!setTopic && (mustBeFiled || topicOffered)) {
+      return badRequest(setTopicRefusal(payload.topic));
+    }
+    const setTags = normalizeSetTags(payload.tags);
 
     if (typeof fileContent !== 'string' || fileContent.trim() === '') {
       return badRequest('No file content received. Please choose a CSV file and try again.');
@@ -862,6 +924,11 @@ exports.handler = async (event) => {
       // distinction that keeps the no-migration decision cheap.
       ...(setRoundKind ? { roundKind: setRoundKind } : {}),
       ...(setRoundKindBrief ? { roundKindBrief: setRoundKindBrief } : {}),
+      // THE SHELF, and the author's own words. Both written only when there is
+      // something to write: an absent `topic` IS the unfiled state, and a
+      // stored `''` would be a value nobody chose sitting where a filter looks.
+      ...(setTopic ? { topic: setTopic } : {}),
+      ...(setTags.length ? { tags: setTags } : {}),
       // The set this one was forked from, when it was. Provenance only.
       ...(sourceSetIdMeta ? { sourceSetId: sourceSetIdMeta } : {}),
       questionCount: questions.length,

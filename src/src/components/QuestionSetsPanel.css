@@ -419,6 +419,101 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
 .qsets-drop:hover { background: var(--qsets-row-hover); border-color: var(--muted); }
 .qsets-drop em { color: var(--muted); font-style: normal; font-weight: 400; }
 
+/* ------------------------------------------- browse: the topics and tags -- */
+/* The index at the front of the library — components/SetShelfBrowse.jsx. The
+   Topic select on the bar above is the closed vocabulary; this is what is
+   actually on the shelves, and the open vocabulary of tags, which no select
+   can hold.
+
+   NO NEW COLOUR, DELIBERATELY. Every ground below is one of the three tints
+   this screen already declares, and every ink is --text, --muted or --primary
+   on top of one of them. A browse sits above the table it describes and must
+   not out-shout it; a fourth grey nobody can name is how that happens.
+   __tests__/setShelfBrowsePalette.test.js composites each of those stacks
+   THREE layers deep — work field, card, tint — because the table's own tinted
+   tiers sit only two deep and those numbers do not carry over. */
+
+.qsets-browse { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 0 0 12px; }
+
+.qsets-browse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid var(--qsets-rule);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--qsets-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.qsets-browse-toggle:hover { background: var(--qsets-row-hover); border-color: var(--muted); }
+.qsets-browse-sum { font-size: var(--qsets-t-floor); color: var(--muted); }
+
+/* Full-width on its own line under the toggle, whatever the bar above wraps to. */
+.qsets-browse-body {
+  flex: 1 0 100%;
+  margin: 2px 0 0;
+  padding: 13px 15px 15px;
+  border: 1px solid var(--qsets-rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.qsets-browse-lede { color: var(--muted); font-size: var(--qsets-t-label); margin: 0 0 12px; }
+.qsets-browse-h {
+  font-size: var(--qsets-t-label);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 9px;
+}
+
+.qsets-browse-pills { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 16px; }
+.qsets-browse-pills:last-child { margin-bottom: 0; }
+
+.qsets-browse-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--qsets-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--qsets-t-floor)/1 var(--font-ui);
+  cursor: pointer;
+}
+.qsets-browse-pill:hover { background: var(--qsets-row-hover); border-color: var(--muted); }
+/* THE SHELF IN FORCE, in two signals and not one: the ground changes AND the
+   border does. A state carried by colour alone is invisible to the people who
+   most need the cue, and `aria-pressed` alone is invisible to everyone who can
+   see it. The palette test pins both halves. */
+.qsets-browse-pill--on {
+  background: var(--qsets-tint-warn);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.qsets-browse-n { color: var(--muted); font-style: normal; font-weight: 400; }
+.qsets-browse-pill--on .qsets-browse-n { color: var(--primary); }
+
+.qsets-browse-find { position: relative; display: flex; align-items: center; max-width: 260px; margin: 0 0 11px; }
+.qsets-browse-find > svg { position: absolute; left: 9px; pointer-events: none; }
+.qsets-browse-input { min-height: 28px; }
+
+.qsets-browse-none { color: var(--muted); font-size: var(--qsets-t-label); margin: 0; }
+.qsets-browse-clear {
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: 600 var(--qsets-t-label)/1 var(--font-ui);
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* --------------------------------------------------------- creation panel -- */
 
 .qsets-panel {

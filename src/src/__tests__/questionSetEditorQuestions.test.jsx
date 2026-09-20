@@ -26,6 +26,9 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const SET = {
   id: 'lessons-learned',
   name: 'Lessons Learned',
+  // The shelf it sits on. A fork or a subset is a CREATE, which names a
+  // shelf before it is made, and the dialog seeds that from here.
+  topic: 'business-work',
   engagementType: 'call-and-answer',
   totalQuestions: 3,
   categoryCount: 2,

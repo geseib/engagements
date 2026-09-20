@@ -72,6 +72,13 @@ const checkedEvents = async () => (await L.readReviewLog(db, T, SRC)).filter((e)
 const stamp = () => H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`).share;
 const queue = () => H.rowsWhere((r) => r.PK === 'MODERATION');
 const promptOf = (i) => H.state.sentHaiku[i].messages[0].content;
+/**
+ * The EXPLANATION calls alone. A check makes one more model call after them —
+ * the shelf it would propose for the set (shared/topic-suggestion.js), whose
+ * prompt is the only one that lists the SHELVES — and this allowance of twelve
+ * is the explanations' own.
+ */
+const explanationCalls = () => H.state.sentHaiku.filter((c) => !c.messages[0].content.includes('SHELVES'));
 const byQuestion = (rows, id, category) => rows.find((o) => o.questionId === id && o.category === category);
 
 /** Three questions, the second clean; the set prose seen at LOW. Nothing intervenes. */
@@ -274,7 +281,7 @@ const NEAR_MISS_TALLY = {
     await W.runSetCheck(deps, { jobId: await job() }, H.ctx());
     const r = await review();
     assert.strictEqual(r.status, R.STATUS.FLAGGED);
-    assert.strictEqual(H.state.sentHaiku.length, 12, `${H.state.sentHaiku.length} Haiku calls`);
+    assert.strictEqual(explanationCalls().length, 12, `${explanationCalls().length} explanation calls`);
     assert.ok(promptOf(0).includes('Question 3 title'), 'the HIGH was not explained first');
     assert.ok(promptOf(1).includes('Question 2 title'), 'the MEDIUM was not explained second');
     assert.ok(promptOf(2).includes('Question 1 title'), 'the LOWs were not taken in question order');

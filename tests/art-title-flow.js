@@ -114,6 +114,9 @@ function check(label, fn) {
       fileName: 'famous-art-titles.csv',
       fileContent: csv,
       customTitle: 'Famous Art Titles',
+      // A live set is created with a shelf now (shared/set-topics.js). Which
+      // shelf is not what this suite is about; that it still imports is.
+      topic: 'arts-culture',
       customDescription: 'Public-domain masterpieces',
       engagementType: 'call-and-answer',
     }),
@@ -171,6 +174,7 @@ function check(label, fn) {
     body: JSON.stringify({
       fileName: 'plain.csv', fileContent: plainCsv,
       customTitle: 'Plain Set', engagementType: 'call-and-answer',
+      topic: 'business-work',
     }),
   });
   check('upload returns 200', () =>

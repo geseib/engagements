@@ -30,6 +30,11 @@ async function seed({ questions = 3, image = false, promptId = 'p-org', platform
   H.seedRow({ PK: `ORG#${ORG}`, SK: 'METADATA', orgId: ORG, name: 'Acme Learning' });
   const meta = await C.encryptItem(ORG, 'set', {
     PK: `ORG#${ORG}#SETS`, SK: `SET#${SET}`, name: 'Safety walkthrough', description: 'Site induction.',
+    // FILED. The cases that go through the ROUTE below are shares, and
+    // check-question-set.js refuses to share a set that is on no shelf. The
+    // shelf is incidental to what this suite is about — the check itself — but
+    // a set that reaches a share has one.
+    topic: 'health-medicine',
     engagementType: 'trivia', scope: 'org', orgId: ORG, promptId, activeVersion: 2,
     versions: [{ version: 1 }, { version: 2 }], questionCount: questionCount ?? questions, createdBy: 'sub-amara',
   });
@@ -55,6 +60,12 @@ async function job(extra = {}) {
   return jobId;
 }
 const clean = (n) => Array.from({ length: n }, () => H.guardrailClean());
+/**
+ * The EXPLANATION calls alone. A check makes one more model call after them —
+ * the shelf it would propose for the set (shared/topic-suggestion.js), whose
+ * prompt is the only one that lists the SHELVES.
+ */
+const explanationCalls = () => H.state.sentHaiku.filter((c) => !c.messages[0].content.includes('SHELVES'));
 const review = () => R.readReview(db, T, SRC, 2);
 const stamp = () => H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`).share;
 const queue = () => H.rowsWhere((r) => r.PK === 'MODERATION');
@@ -104,7 +115,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(r.status, R.STATUS.FLAGGED);
     assert.strictEqual(r.findings[0].questionId, 'q001');
     assert.match(r.findings[0].explanation, /injuries in detail/);
-    assert.strictEqual(H.state.sentHaiku.length, 1, 'one explanation per flagged question');
+    assert.strictEqual(explanationCalls().length, 1, 'one explanation per flagged question');
     assert.deepStrictEqual(publicRows(), []);
     assert.strictEqual(stamp().status, 'flagged');
     assert.strictEqual(queue().length, 0, 'a flagged set is not a queue item');

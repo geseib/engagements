@@ -91,6 +91,12 @@ function mockApi({ prompts = PROMPTS, promptStatus = 200, uploads = [] } = {}) {
   });
 }
 
+/* A set names the shelf it will sit on before the builder will save it — see
+   builderPageTopic.test.jsx, which owns that behaviour. The tests below are
+   about the prompt picker, so they satisfy it and move on. */
+const chooseShelf = (id = 'business-work') =>
+  fireEvent.change(screen.getByLabelText(/topic/i), { target: { value: id } });
+
 /** The prompt picker. Present from the first render, library or no library. */
 const promptSelect = () => screen.findByLabelText(/AI Summary Prompt/i);
 
@@ -175,6 +181,7 @@ describe('BuilderPage summary-prompt picker', () => {
     await promptSelect();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Retro' } });
+    chooseShelf();
     fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
 
@@ -191,6 +198,7 @@ describe('BuilderPage summary-prompt picker', () => {
     fireEvent.change(select, { target: { value: 'sum-1c8b44' } });
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Retro' } });
+    chooseShelf();
     fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
 
@@ -207,6 +215,7 @@ describe('BuilderPage summary-prompt picker', () => {
     expect(optionValues(select)).toEqual(['']);
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Retro' } });
+    chooseShelf();
     fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
 
@@ -241,6 +250,7 @@ describe('a summary approach chosen for one format does not follow the set to an
     expect(screen.queryByLabelText(/AI Summary Prompt/i)).toBeNull();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Quiz' } });
+    chooseShelf();
     fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
 
@@ -283,6 +293,7 @@ describe('a summary approach chosen for one format does not follow the set to an
 
     fireEvent.change(screen.getByLabelText(/Engagement Type/i), { target: { value: 'poll' } });
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Pulse' } });
+    chooseShelf();
     fireEvent.click(screen.getByRole('button', { name: /Add Question/i }));
     fireEvent.click(screen.getByRole('button', { name: /Save Question Set/i }));
 

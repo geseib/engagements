@@ -32,12 +32,29 @@ const LIFECYCLE_SKS = ['REVIEW', 'PUBLISHED'];
  */
 const ORG_SHAPED = ['scope', 'orgId', 'sourceOrgId', 'publishedAt'];
 
-/** The set settings a restore makes the live row match: SET when present, REMOVE when not. */
+/** The set settings a restore makes the live row match: SET when present, REMOVE when not.
+ *
+ *  THE REMOVE HALF IS THE POINT OF THE LIST. A snapshot with no `personaId`
+ *  describes a set that had none, so leaving the live one standing would
+ *  describe a set that never existed. Only attributes named here are ever
+ *  removed — an attribute left off this list is simply not carried across. */
 const SET_SETTINGS = [
   'name', 'description', 'customInstruction', 'aiContextInstruction', 'personaId',
   'roundNoun', 'roundKind', 'roundKindBrief', 'engagementType', 'Quickstart',
-  'isAIGenerated', 'promptId',
+  'isAIGenerated', 'promptId', 'topic', 'tags',
 ];
+
+/** ...and the two of them the REMOVE half must never touch (archive-restore.js).
+ *
+ *  Every envelope already in the archive was exported before the shelf existed
+ *  and carries neither attribute. Removing them on that evidence would UNFILE a
+ *  live set — it would fall out of every topic filter and its next share would
+ *  be refused — on the strength of a backup that knows nothing about filing.
+ *  So the absence is ignored here and only here: a snapshot that DOES carry a
+ *  shelf still restores it over the live one, and a set the restore CREATES
+ *  arrives with whatever the snapshot had, because that branch copies the whole
+ *  metadata row (`platformMetadata`) rather than reading this list. */
+const SET_SETTINGS_NEVER_REMOVED = ['topic', 'tags'];
 
 /** Where a prompt keeps its text when it has no S3 body (the gen-* rows). */
 const ROW_TEXT_FIELDS = ['basePrompt', 'instructions', 'template'];
@@ -181,7 +198,8 @@ function rowCarriesPromptText(row) {
 }
 
 module.exports = {
-  SET_SCHEMA, PROMPT_SCHEMA, TIERS, LIFECYCLE_SKS, ORG_SHAPED, SET_SETTINGS,
+  SET_SCHEMA, PROMPT_SCHEMA, TIERS, LIFECYCLE_SKS, ORG_SHAPED,
+  SET_SETTINGS, SET_SETTINGS_NEVER_REMOVED,
   currentTier, withoutKeys, snapshotRows, findCiphertext,
   buildSetEnvelope, buildPromptEnvelope, envelopeTags, parseArchiveContent,
   refusalFor, provenance, platformMetadata, settingsFrom, rowCarriesPromptText,

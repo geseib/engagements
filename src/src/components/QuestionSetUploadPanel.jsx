@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Icon from './Icon';
 import PromptShapePreview from './PromptShapePreview';
+import SetTopicField from './SetTopicField';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import {
@@ -132,6 +133,12 @@ export default function QuestionSetUploadPanel({
   const [customInstructions, setCustomInstructions] = useState('');
   const [aiContextInstructions, setAiContextInstructions] = useState('');
   const [promptId, setPromptId] = useState('');
+  // WHICH SHELF THE NEW SET WILL SIT ON, and the author's own words beside it.
+  // Starts UNFILED rather than on the first shelf: seeding one would file every
+  // set nobody thought about under Arts & Culture, which is a wrong answer
+  // stated as fact instead of an honest blank.
+  const [topic, setTopic] = useState('');
+  const [setTags, setSetTags] = useState([]);
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
   const [status, setStatus] = useState(null); // { text, tone }
   const [isUploading, setIsUploading] = useState(false);
@@ -290,6 +297,13 @@ export default function QuestionSetUploadPanel({
           aiContextInstructions: aiContextInstructions.trim(),
           promptId: promptId.trim(),
           engagementType,
+          // REQUIRED on a create that lands live — `upload-questions.js` answers
+          // 400 without it, and `canUpload` below is why that 400 is never the
+          // way somebody finds out. The tags go only when there are some: an
+          // empty list is a value nobody chose, offered to a writer that would
+          // store it.
+          topic,
+          ...(setTags.length ? { tags: setTags } : {}),
           ...(scope ? { scope } : {}),
         }),
       });
@@ -304,6 +318,8 @@ export default function QuestionSetUploadPanel({
       setCustomInstructions('');
       setAiContextInstructions('');
       setPromptId('');
+      setTopic('');
+      setSetTags([]);
       resetFile();
       if (onUploaded) onUploaded(result.message || 'Question set created.');
     } catch (error) {
@@ -314,7 +330,10 @@ export default function QuestionSetUploadPanel({
   };
 
   const blocked = !!(report && report.blocking.length);
-  const canUpload = !!file && !!title.trim() && !isUploading && !blocked;
+  // The shelf joins the file and the title as a thing a set cannot be made
+  // without. Its reason sits under the picker itself and is permanent, so the
+  // disabled button is never a control with no explanation on screen.
+  const canUpload = !!file && !!title.trim() && !!topic && !isUploading && !blocked;
 
   return (
     <div className="qsets qsets-panel">
@@ -509,6 +528,20 @@ export default function QuestionSetUploadPanel({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Brief description of this question set"
+            />
+          </div>
+
+          {/* WHERE THIS SET WILL SIT IN THE LIBRARY. Asked here, with the title,
+              rather than discovered from a 400 after the file, four fields and
+              the upload. Full width because the picker's help line is a
+              sentence, not a hint. */}
+          <div className="qsets-field qsets-field--wide">
+            <SetTopicField
+              idPrefix="qsets-topic"
+              topic={topic}
+              onTopicChange={setTopic}
+              tags={setTags}
+              onTagsChange={setSetTags}
             />
           </div>
 

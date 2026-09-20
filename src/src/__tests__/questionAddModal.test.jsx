@@ -30,6 +30,8 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const SET = {
   id: 'lessons-learned',
   name: 'Lessons Learned',
+  // The shelf it sits on, which a set carved out of it starts on too.
+  topic: 'business-work',
   engagementType: 'call-and-answer',
   description: 'What a delivery team learns the hard way.',
   customInstruction: 'Answer from your own experience.',

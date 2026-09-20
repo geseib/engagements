@@ -276,6 +276,10 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
       customTitle: 'Team Retro', customDescription: 'What we learned',
       customInstructions: 'Answer in one sentence.',
       engagementType: 'call-and-answer',
+      // A live set is created with a shelf now (shared/set-topics.js). It is
+      // NOT in ENCRYPTED_FIELDS.set, deliberately — a closed-list id is
+      // structural, like engagementType, and the checks below reflect that.
+      topic: 'business-work',
     }),
   });
   await check('the import succeeded', () =>
@@ -439,6 +443,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
       customTitle: 'Team Retro', customDescription: 'House content',
       customInstructions: 'Answer in one sentence.',
       engagementType: 'call-and-answer',
+      topic: 'business-work',
     }),
   });
   await check('staff with no org wrote a platform set', () =>

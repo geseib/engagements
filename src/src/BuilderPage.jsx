@@ -7,11 +7,13 @@ import AIAssistant from './components/AIAssistant';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
+import SetTopicField from './components/SetTopicField';
 import { tagsToCsvCell } from './utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
 import { adminApiUrl } from './utils/adminApi';
 import { selectableSummaryPrompts } from './utils/questionSetEditing';
 import { gameTypeLabel } from './config/gameTypes';
+import { setTopicRefusal } from './config/setTopics';
 
 const API_BASE = window.API_BASE;
 
@@ -30,6 +32,13 @@ function BuilderPage() {
        An absent promptId is the honest default: get-ai-summary.js already
        resolves a type-appropriate prompt when a set carries none. */
     promptId: '',
+    /* THE SHELF THIS SET WILL SIT ON, and the author's own words beside it.
+       Starts UNFILED rather than on the first shelf: seeding one would file
+       every set nobody thought about under Arts & Culture, which is a wrong
+       answer stated as fact instead of an honest blank. Required before the
+       save goes — this route creates a set that lands live. */
+    topic: '',
+    tags: [],
     questions: []
   });
   const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -173,6 +182,15 @@ function BuilderPage() {
       return;
     }
 
+    /* A CREATE THAT LANDS LIVE NAMES ITS SHELF. `upload-questions.js` answers
+       400 without one; refused here, with the same sentence, so nobody meets
+       that refusal over a field this page never showed them. */
+    const topicRefusal = setTopicRefusal(questionSet.topic);
+    if (topicRefusal) {
+      setSaveStatus(topicRefusal);
+      return;
+    }
+
     setIsSaving(true);
     setSaveStatus('Saving question set...');
 
@@ -193,7 +211,10 @@ function BuilderPage() {
           customInstructions: questionSet.customInstructions.trim(),
           aiContextInstructions: questionSet.aiContextInstructions.trim(),
           promptId: questionSet.promptId,
-          engagementType: engagementType
+          engagementType: engagementType,
+          topic: questionSet.topic,
+          // Only when there are some: an empty list is a value nobody chose.
+          ...(questionSet.tags.length ? { tags: questionSet.tags } : {})
         })
       });
 
@@ -208,6 +229,8 @@ function BuilderPage() {
           customInstructions: '',
           aiContextInstructions: '',
           promptId: '',
+          topic: '',
+          tags: [],
           questions: []
         });
       } else {
@@ -361,6 +384,18 @@ function BuilderPage() {
                 rows="3"
               />
             </div>
+          </div>
+
+          {/* Where this set will sit in the library, asked with the title
+              rather than discovered from a 400 after the questions are written. */}
+          <div className="form-row">
+            <SetTopicField
+              idPrefix="builder"
+              topic={questionSet.topic}
+              onTopicChange={(value) => setQuestionSet(prev => ({ ...prev, topic: value }))}
+              tags={questionSet.tags}
+              onTagsChange={(value) => setQuestionSet(prev => ({ ...prev, tags: value }))}
+            />
           </div>
 
           <div className="form-row">

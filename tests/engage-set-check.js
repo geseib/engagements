@@ -85,6 +85,11 @@ function seedEngageSet({ versions = [null], activeVersion = null, questions = 2,
   H.seedRow({
     ...V.setMetadataKey(REF),
     name: 'Warm ups', description: 'Openers for a cold room.', engagementType: 'call-and-answer',
+    // FILED. Several cases below switch this set ON, and toggle-question-set.js
+    // refuses to make an unfiled set servable. The shelf is incidental to what
+    // this suite is about — the content check — but a set that reaches the
+    // activation has one.
+    topic: 'everyday-life',
     scope: 'platform', questionCount: questions, active,
     ...(activeVersion ? { activeVersion } : {}),
     ...(numbered.length ? { versions: numbered.map((v) => ({ version: v, questionCount: questions })) } : {}),
@@ -107,6 +112,10 @@ async function seedOrgSet({ questions = 2 } = {}) {
   H.seedRow({ PK: `ORG#${ORG}`, SK: 'METADATA', orgId: ORG, name: 'Acme Learning' });
   H.seedRow(await C.encryptItem(ORG, 'set', {
     ...V.setMetadataKey(ORGREF), name: 'Safety walkthrough', description: 'Site induction.',
+    // FILED, for the same reason as the Engage set above: X1 switches this one
+    // on. `topic` is not in ENCRYPTED_FIELDS.set, so it survives encryptItem in
+    // plaintext — which is exactly how a real org row carries it.
+    topic: 'health-medicine',
     engagementType: 'trivia', scope: 'org', orgId: ORG, activeVersion: 2,
     versions: [{ version: 2, questionCount: questions }], questionCount: questions, createdBy: 'sub-amara',
   }));

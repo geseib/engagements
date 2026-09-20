@@ -487,6 +487,10 @@ const editPlatform = (setId, body) => H.platformEvent({ method: 'PUT', path: { s
       body: {
         fileName: 'x.csv', fileContent: csv, customTitle: 'Imported Set',
         engagementType: 'call-and-answer', promptId: 'lessons-learned',
+        // A live set is created with a shelf now (shared/set-topics.js), and it
+        // has to be a real one here or the topic refusal would pre-empt the
+        // Workie refusal this case is about.
+        topic: 'business-work',
       },
     }), H.ctx());
 
@@ -505,6 +509,7 @@ const editPlatform = (setId, body) => H.platformEvent({ method: 'PUT', path: { s
       body: {
         fileName: 'x.csv', fileContent: csv, customTitle: 'Imported Set',
         engagementType: 'call-and-answer', promptId: 'house-retro',
+        topic: 'business-work',
       },
     }), H.ctx());
 
@@ -521,6 +526,7 @@ const editPlatform = (setId, body) => H.platformEvent({ method: 'PUT', path: { s
       body: {
         fileName: 'x.csv', fileContent: csv, customTitle: 'Plain Set',
         engagementType: 'call-and-answer',
+        topic: 'business-work',
       },
     }), H.ctx());
 

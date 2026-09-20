@@ -122,7 +122,11 @@ if (!process.env.DEBUG) console.log = () => {};
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 
 // ---- helpers ---------------------------------------------------------------
-const invoke = (body) => handler({ body: JSON.stringify(body) });
+// `topic` is defaulted here because a live set is CREATED with a shelf now
+// (shared/set-topics.js) and none of the cases below is about which shelf. A
+// caller still overrides or drops it — the replaces further down pass none,
+// which is the point: a replace never has to name one.
+const invoke = (body) => handler({ body: JSON.stringify({ topic: 'business-work', ...body }) });
 const parse = (res) => JSON.parse(res.body);
 const questionsOf = (setId) =>
   [...store.values()]

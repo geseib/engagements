@@ -111,7 +111,10 @@ const CSV_WITHOUT_TAGS = [
 
 const upload = (fileContent, title) => handler({
   requestContext: { http: { method: 'POST' } },
-  body: JSON.stringify({ fileName: `${title}.csv`, fileContent, customTitle: title }),
+  // `topic` because a live set is created with a shelf now
+  // (shared/set-topics.js). It is the SET's shelf and has nothing to do with
+  // the per-question Tags this suite is about — which is itself worth pinning.
+  body: JSON.stringify({ fileName: `${title}.csv`, fileContent, customTitle: title, topic: 'business-work' }),
 }, { functionName: 'engagedev-admin-upload-questions' });
 
 (async function run() {

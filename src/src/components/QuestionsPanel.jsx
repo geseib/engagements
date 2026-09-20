@@ -6,10 +6,12 @@ import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
 import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
+import SetTopicField from './SetTopicField';
 import { nothingToPreview } from '../config/questionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
+import { resolveSetTopic, normalizeSetTags, setTopicRefusal } from '../config/setTopics';
 import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/questionSetEditing';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
@@ -221,8 +223,32 @@ export default function QuestionsPanel({
   const [selected, setSelected] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showPull, setShowPull] = useState(false);
-  // { mode: 'fork' | 'subset', title, rows }
+  // { mode: 'fork' | 'subset', title, rows, topic, tags }
   const [newSetDialog, setNewSetDialog] = useState(null);
+  /* Same reason as `formError` above, and the same mistake this dialog made:
+     `status` renders OUTSIDE the modal, and `.modal-overlay` is a fixed
+     full-viewport scrim at z-index 9999 over a body whose scroll `Modal` has
+     locked. A refusal written there while this dialog is open is one nobody
+     can see, so Create reads as a dead button. This is the dialog's own line. */
+  const [newSetError, setNewSetError] = useState('');
+
+  /*
+    A FORK AND A SUBSET ARE CREATES, so the importer requires a shelf for both —
+    and the shelf it should start on is the one the set being copied sits on. A
+    fork of an 80s trivia set is still Music, and asking again would be asking a
+    question the screen already knows the answer to. An UNFILED source seeds
+    nothing: inheriting '' is the honest starting point, and the dialog says so.
+  */
+  const openNewSetDialog = (dialog) => {
+    // Every open goes through here, so this is the one place a refusal from a
+    // previous attempt has to be dropped.
+    setNewSetError('');
+    setNewSetDialog({
+      topic: resolveSetTopic(questionSet?.topic),
+      tags: normalizeSetTags(questionSet?.tags),
+      ...dialog,
+    });
+  };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   /* ---------------------------------------------------------------- view -- */
@@ -761,7 +787,7 @@ export default function QuestionsPanel({
     // Not mine to replace: the save forks instead, and the person is told which
     // it will be before they press anything.
     if (!canManage) {
-      setNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
+      openNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
       return;
     }
 
@@ -797,7 +823,7 @@ export default function QuestionsPanel({
         // The handler's refusal, surfaced as the offer it implies. Reaching
         // here means the list said this set was manageable and the server
         // disagreed — the server is right, and the work is not lost.
-        setNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
+        openNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
         setStatus({
           text: 'This set belongs to someone else, so it cannot be replaced. '
             + 'Your changes are still here — save them as your own copy.',
@@ -824,17 +850,32 @@ export default function QuestionsPanel({
   /** Fork, or carve a subset out. One path; only the rows and the title differ. */
   const handleSaveAsNewSet = async () => {
     if (!newSetDialog) return;
+    // This attempt answers for itself; whatever the last one said is gone.
+    setNewSetError('');
     // Never a set of no questions (utils/questionSetEditing.js `rowsForNewSet`).
-    // Said on the status line, which this dialog covers, so the dialog closes.
+    // Nothing in this dialog can fix that, so it CLOSES and the panel's own
+    // status line — visible again once the scrim is gone — carries the reason.
     const chosen = rowsForNewSet(newSetDialog, rows);
     if (!chosen) {
       setNewSetDialog(null);
       setStatus({ text: 'No set was made: there were no questions to make it from.', tone: 'error' });
       return;
     }
+    /* THE REST ARE ANSWERED ON THE CARD. Each one is about a field this dialog
+       is still showing, so it stays open and says so where the person is
+       looking — see `newSetError`. */
     const title = String(newSetDialog.title || '').trim();
     if (!title) {
-      setStatus({ text: 'The new set needs a name.', tone: 'error' });
+      setNewSetError('The new set needs a name.');
+      return;
+    }
+    /* A CREATE THAT LANDS LIVE NAMES ITS SHELF. `upload-questions.js` answers
+       400 without one; refused here instead so the dialog stays open with the
+       name still in it and the picker one gesture away, rather than the person
+       reading the importer's refusal about a field they were never shown. */
+    const topicRefusal = setTopicRefusal(newSetDialog.topic);
+    if (topicRefusal) {
+      setNewSetError(topicRefusal);
       return;
     }
     // Provenance, write-once: a row copied in from a third set keeps ITS
@@ -853,6 +894,11 @@ export default function QuestionsPanel({
         {
           customTitle: title,
           customDescription: `Adapted from "${setName}".`,
+          // The shelf and the author's own words. Only on THIS target: a
+          // replace rewrites no set prose, so the importer stores neither, and
+          // sending them would be values that go nowhere.
+          topic: newSetDialog.topic,
+          ...(newSetDialog.tags && newSetDialog.tags.length ? { tags: newSetDialog.tags } : {}),
         },
         summarizeRowChanges(stamped, [])
       );
@@ -868,14 +914,16 @@ export default function QuestionsPanel({
         });
         if (onChanged) onChanged();
       } else {
-        setStatus({
-          text: `Could not create "${title}": ${result.error || `HTTP ${response.status}`}. Your changes are still here.`,
-          tone: 'error'
-        });
+        // The dialog is still open, so this belongs on it: the importer refuses
+        // a create for reasons beyond the shelf, and those must not be the one
+        // class of answer that lands behind the scrim.
+        setNewSetError(
+          `Could not create "${title}": ${result.error || `HTTP ${response.status}`}. Your changes are still here.`,
+        );
       }
     } catch (error) {
       console.error('Create set from working copy error:', error);
-      setStatus({ text: `Could not create "${title}": ${error.message}`, tone: 'error' });
+      setNewSetError(`Could not create "${title}": ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -1082,7 +1130,7 @@ export default function QuestionsPanel({
         {selected.length > 0 && !previewing && (
           <button
             className="btn-secondary btn-small"
-            onClick={() => setNewSetDialog({
+            onClick={() => openNewSetDialog({
               mode: 'subset',
               title: `${setName} — selection`,
               rows: rows.filter((r) => selected.includes(r.uid)),
@@ -1468,6 +1516,22 @@ export default function QuestionsPanel({
                 onChange={(e) => setNewSetDialog({ ...newSetDialog, title: e.target.value })}
               />
             </div>
+
+            {/* Where the new set will sit. Seeded from the set it came from,
+                and changeable — a subset carved out of a mixed set is often
+                about one thing, which is exactly when that matters. */}
+            <SetTopicField
+              idPrefix="new-set"
+              topic={newSetDialog.topic}
+              onTopicChange={(value) => setNewSetDialog({ ...newSetDialog, topic: value })}
+              tags={newSetDialog.tags || []}
+              onTagsChange={(value) => setNewSetDialog({ ...newSetDialog, tags: value })}
+            />
+
+            {/* Beside the button that was pressed, INSIDE the card. The panel's
+                status line is behind this dialog's own scrim. */}
+            {newSetError && <StatusMessage message={newSetError} tone="error" />}
+
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setNewSetDialog(null)} disabled={saving}>
                 Cancel

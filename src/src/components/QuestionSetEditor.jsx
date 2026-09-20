@@ -8,9 +8,11 @@ import RoundKindPicker from './RoundKindPicker';
 import QuestionsPanel from './QuestionsPanel';
 import SetMediaPanel from './SetMediaPanel';
 import SetReviewBanner from './SetReviewBanner';
+import SetTopicField from './SetTopicField';
 import { authFetch } from '../auth/authFetch';
 import { versionChip } from '../utils/shareState';
 import { startHouseCheck } from '../utils/houseCheck';
+import { askForTopicSuggestion } from '../utils/topicSuggestion';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
@@ -21,8 +23,10 @@ import {
   normalizeVersions,
   nextVersionNumber,
   interpretVersionDelete,
-  versionDeleteTone
+  versionDeleteTone,
+  latestTopicSuggestion
 } from '../utils/questionSetEditing';
+import { setTopicRefusal } from '../config/setTopics';
 import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 import { editableRows } from '../utils/questionRows';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
@@ -200,6 +204,17 @@ export default function QuestionSetEditor({
   // predate the field. See config/roundKinds.js.
   const [roundKind, setRoundKind] = useState('');
   const [roundKindBrief, setRoundKindBrief] = useState('');
+  // WHICH SHELF THIS SET SITS ON, and the author's own words beside it. '' is
+  // Unfiled — what the forty sets predating the field really carry — and it is
+  // kept as '' rather than resolved, for the same reason roundKind is: the save
+  // is a diff, and a resolved default would file them all on the catch-all one
+  // accidental Save at a time. See config/setTopics.js.
+  const [topic, setTopic] = useState('');
+  const [ownTags, setOwnTags] = useState([]);
+  // ...and the request that asks the content check which shelf it looks like.
+  // See `askForShelf` below for why it exists only on an organisation's set.
+  const [topicAsking, setTopicAsking] = useState(false);
+  const [topicAskNote, setTopicAskNote] = useState('');
   // Snapshot of the set as it was when the editor opened; the save payload is a
   // diff against this. Rebaselined on every successful save, so "dirty" always
   // means "differs from what the server now holds", not "differs from open".
@@ -409,6 +424,8 @@ export default function QuestionSetEditor({
     setPersonaId(snapshot.personaId);
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
+    setTopic(snapshot.topic);
+    setOwnTags(snapshot.tags);
     setOriginal(snapshot);
     setSavedTitle(questionSet?.name || '');
     setSaveStatus('');
@@ -703,11 +720,20 @@ export default function QuestionSetEditor({
     // Only meaningful for `custom`; cleared when the kind moves off it, so a
     // set cannot keep steering the generator with a brief for a direction it
     // no longer has.
-    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : ''
+    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : '',
+    topic,
+    tags: ownTags
   };
 
+  // The body this form would send right now. Built here as well as in the save
+  // so "dirty" and "has something to send" can never disagree: the two filing
+  // fields are NOT in EDITABLE_SET_FIELDS — one cannot be cleared and the other
+  // is a list, so neither survives that whitelist's `!==` loop.
+  const pendingEdit = buildEditPayload(title, currentDetails, original);
+
   const detailsDirty = title.trim() !== savedTitle.trim()
-    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''));
+    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''))
+    || 'topic' in pendingEdit || 'tags' in pendingEdit;
 
   /*
    * WHAT THE WAY OUT IS CALLED. Reported by the owner: after replacing the
@@ -749,10 +775,79 @@ export default function QuestionSetEditor({
   */
   const setScope = String(questionSet?.scope || '');
 
+  /*
+    ASKING THE CONTENT CHECK WHICH SHELF THIS SET LOOKS LIKE.
+
+    ONLY AN ORGANISATION'S OWN SET, and only for somebody who could submit it:
+    the route behind this is the one a share posts to and is admin-gated the
+    same way, and one of Engage's sets already has the Versions panel's
+    on-demand check a few hundred lines down — which proposes a shelf on
+    exactly this path and costs no organisation anything. Drawing a second
+    control there would be two buttons for one thing.
+
+    THE GAP IT FILLS IS NARROW AND REAL. Sharing an UNFILED set is refused
+    before a check is spent (deliberately: nobody should be charged for a "no"
+    they could be told at once), so the one set whose author is staring at a
+    picker with no idea which of fifteen to choose is the one set the share can
+    never produce a proposal for. This is the request that can.
+
+    THE ANSWER IS NOT IN THE RESPONSE. It is written onto the review row at the
+    END of the run, so `askForTopicSuggestion` waits for the job and the
+    versions are reloaded after it — reloading any earlier reads the row as it
+    was before the check. The proposal then appears in the field above on its
+    own, because that is where `latestTopicSuggestion` reads it from.
+  */
+  const canAskForShelf = setScope === 'org' && canShare;
+  const askForShelf = async () => {
+    setTopicAsking(true);
+    setTopicAskNote('');
+    const out = await askForTopicSuggestion(setId);
+    if (out.ok) {
+      await loadVersions();
+      // The CHECK's verdict is not the same question as whether a shelf came
+      // back, and this sentence must not claim one when there is none — what
+      // it can say honestly is where to look, which is the row above it.
+      setTopicAskNote(out.outcome === 'passed'
+        ? 'The check has read the questions. Anything it proposes is above.'
+        : `The check has read the questions and its verdict (${out.outcome}) is on this set's versions. Anything it proposes is above.`);
+    } else {
+      setTopicAskNote(`The check could not run: ${out.error}`);
+    }
+    setTopicAsking(false);
+  };
+
   const handleSave = async () => {
     if (!title.trim()) {
       setSaveOk(false);
       setSaveStatus('Title is required');
+      return;
+    }
+
+    /*
+      A SET HAS TO SIT ON A SHELF, AND THIS IS WHERE THAT BITES.
+
+      The owner asked for a topic on every set, not only the public ones, and a
+      set that is never asked is a set the library filter cannot show. So the
+      FORM requires one — here, with the picker and, often, the check's own
+      proposal already on screen one click away.
+
+      THE ROUTE DELIBERATELY DOES NOT. `edit-question-set.js` refuses a BLANK
+      topic and requires nothing when the key is absent, because that route also
+      carries a rename from the host's shelf, a Workie re-point and a copy
+      rebind — a requirement reaching backwards into those would be a wall in
+      front of an unrelated edit. Nothing about the forty unfiled sets changes:
+      they list, play and host exactly as they did. This is the one screen that
+      asks, and it asks the person who opened the set to edit it.
+
+      Refused HERE rather than by letting the 400 come back, because this form
+      saves a dozen fields at once and a bounced PUT leaves nobody sure which of
+      them landed. `setTopicRefusal` is the same sentence both writers answer
+      with, so the product says it in one voice.
+    */
+    const refusal = setTopicRefusal(topic);
+    if (refusal) {
+      setSaveOk(false);
+      setSaveStatus(refusal);
       return;
     }
 
@@ -1259,6 +1354,26 @@ export default function QuestionSetEditor({
               rows="3"
             />
           </div>
+
+          {/*
+            WHERE THIS SET SITS IN THE LIBRARY. Directly under the description
+            because it answers the same question — what is this about — and the
+            proposal it can offer is drawn from the check that read those very
+            questions. The picker is a closed fifteen; see SetTopicField.jsx for
+            why it is not CategoryPicker's combobox.
+          */}
+          <SetTopicField
+            idPrefix="edit-set"
+            topic={topic}
+            onTopicChange={setTopic}
+            tags={ownTags}
+            onTagsChange={setOwnTags}
+            suggestion={latestTopicSuggestion(versions)}
+            /* Only where there is something to ask — see `askForShelf`. */
+            onAskForSuggestion={canAskForShelf ? askForShelf : null}
+            asking={topicAsking}
+            askNote={topicAskNote}
+          />
 
           {/*
             Engagement type was loaded into state but never rendered and never

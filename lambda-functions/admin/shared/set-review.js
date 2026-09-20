@@ -109,11 +109,17 @@ async function readReview(db, tableName, ref, version) {
  * data. `findings` keeps its meaning — only what intervened — so nothing that
  * reads findings sees a near-miss. A row without a tally was checked before
  * measuring existed; nothing back-fills one.
+ *
+ * `topicSuggestion` is the shelf the check would have filed the set on
+ * (shared/topic-suggestion.js) — a RECOMMENDATION, on the row so a surface can
+ * offer it. It decides nothing here either: the status above is computed
+ * without reading it, and the set's own `topic` is never written by a check.
  */
 const REVIEW_FIELDS = Object.freeze([
   'jobId', 'note', 'findings', 'contentHash', 'snapshotKey', 'reasons', 'checkedBy', 'promptDropped', 'declaredNotice',
   'reviewer', 'decidedAt', 'notice',
   'tally', 'observed',
+  'topicSuggestion',
 ]);
 
 /**

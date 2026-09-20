@@ -245,7 +245,12 @@ const rowsIn = (pk) =>
 async function roundTrip(title, engagementType, csv) {
   const created = await upload({
     ...adminContext(),
-    body: JSON.stringify({ fileName: `${title}.csv`, fileContent: csv, customTitle: title, engagementType }),
+    // `topic` because a live set is created with a shelf now
+    // (shared/set-topics.js). The replace below deliberately sends none: a
+    // replace never has to name one, and this round trip proves it.
+    body: JSON.stringify({
+      fileName: `${title}.csv`, fileContent: csv, customTitle: title, engagementType, topic: 'business-work',
+    }),
   });
   assert.strictEqual(created.statusCode, 200, `create failed: ${created.body}`);
   const setId = parse(created).setId;
@@ -893,6 +898,11 @@ const WAVELENGTH_CSV = [
         customTitle: 'House Set, adapted by Bo',
         customDescription: 'Adapted from "House Set".',
         sourceSetId: original.setId,
+        // A fork IS a create, so it names a shelf like any other
+        // (shared/set-topics.js). The console carries the source's across;
+        // nothing on the server reads the original row to infer it, because
+        // `sourceSetId` here is provenance and never identity.
+        topic: 'business-work',
         engagementType: 'call-and-answer',
       }),
     });
