@@ -42,15 +42,52 @@ function AuthLoading() {
   );
 }
 
+// Catches the marketing CHUNK failing to load at all -- a network blip, or a
+// stale hash right after a deploy makes the browser request a bundle that no
+// longer exists. `React.lazy`'s promise rejects, which throws during render,
+// and nothing below this point can help: `MarketingShell`'s own error
+// boundary (see marketingShell.test.jsx) lives INSIDE that same chunk, so it
+// never runs if the chunk itself never arrived. This has to sit above the
+// `Suspense`, in code that is part of the main bundle and therefore always
+// present.
+//
+// The fallback is `<RootPage />` -- the statically-imported join/host page
+// that WAS `/` before this task. That is deliberate, not a placeholder: a
+// participant who types the bare domain mid-session, or a host mid-deploy,
+// needs Sign In and Join to keep working, and RootPage already is that page
+// with no new UI to design (design spec §8).
+class MarketingBoundary extends React.Component {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error) {
+    // Never suppress silently -- log once so a broken deploy shows up in the
+    // console/telemetry instead of just quietly degrading for everyone.
+    console.error('Marketing page failed to load', error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return <RootPage />;
+    }
+    return this.props.children;
+  }
+}
+
 // Wraps a lazily-loaded marketing page in its own Suspense boundary, with the
 // same spinner ProtectedRoute and RootGate already use, so a slow chunk load
 // never shows a blank screen. Later tasks (9-11) reuse this for their own
 // public marketing routes.
 function MarketingRoute({ page: Page }) {
   return (
-    <Suspense fallback={<AuthLoading />}>
-      <Page />
-    </Suspense>
+    <MarketingBoundary>
+      <Suspense fallback={<AuthLoading />}>
+        <Page />
+      </Suspense>
+    </MarketingBoundary>
   );
 }
 
