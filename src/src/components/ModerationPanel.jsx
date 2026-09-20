@@ -333,11 +333,23 @@ export default function ModerationPanel({ onOpenScoreCard, onQueueChanged }) {
                   <td><span className="modq-why-cell" title={whyLabel(item)}>{whyLabel(item)}</span></td>
                   <td className="modq-wait">{waitedLabel(item.waitingSince, now)}</td>
                   <td>
+                    {/*
+                      A ROW A RE-CHECK RAISED IS NOT DECIDED HERE. The library is
+                      already serving that exact version, so Approve would
+                      publish it a second time and Reject would stamp its author
+                      for a check nobody told them about — the decide route
+                      refuses both (lambda-functions/admin/moderation-decide.js).
+                      A button whose only outcome is a refusal is not an action,
+                      so the row offers the surface that can act: the score card,
+                      which shows the escalation, what held it, and Take down.
+                    */}
                     <div className="modq-rowact">
                       {onOpenScoreCard && item.publicSetId && (
-                        <button type="button" className="modq-btn modq-btn--sm" onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
+                        <button type="button" className={`modq-btn modq-btn--sm${item.recheck ? ' modq-btn--primary' : ''}`} onClick={() => onOpenScoreCard(item.publicSetId)}>Score card</button>
                       )}
-                      <button type="button" className="modq-btn modq-btn--sm modq-btn--primary" onClick={() => setOpen(item.sk)}>Review</button>
+                      {!item.recheck && (
+                        <button type="button" className="modq-btn modq-btn--sm modq-btn--primary" onClick={() => setOpen(item.sk)}>Review</button>
+                      )}
                     </div>
                   </td>
                 </tr>

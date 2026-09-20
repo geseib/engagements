@@ -323,3 +323,47 @@ test('a set-level finding with the snapshot gone renders no block to read', asyn
   expect(within(dialog).queryByText('Custom instruction')).toBeNull();
   expect(within(dialog).queryByText('Name')).toBeNull();
 });
+
+/*
+  A ROW A RE-CHECK RAISED IS NOT DECIDED HERE.
+
+  The library is already serving that exact version, so Approve would publish a
+  second public version of it and Reject would stamp its author `flagged` for a
+  check nobody told them about — moderation-decide.js refuses both. A button
+  that can only produce a refusal is not an action, so the row offers the one
+  surface that can act: the score card, which shows the escalation, what held
+  it, and Take down.
+*/
+const RECHECKED = { count: 1, oldestWaitingSince: '2026-09-16T10:00:00.000Z', items: [
+  {
+    sk: 'org_acme#crime#v2', orgName: 'Acme', setId: 'crime', title: 'True crime', version: 2,
+    gameType: 'trivia', questionCount: 11, reasons: ['escalated'], uncertainQuestionIds: ['c001#003'],
+    waitingSince: '2026-09-16T10:00:00.000Z', publicSetId: 'orgacme-crime', recheck: true,
+  },
+  ...QUEUE.items,
+] };
+
+test('a re-checked listing offers the score card and no Review, and says the library already serves it', async () => {
+  global.fetch = jest.fn(async (url) => (String(url).endsWith('/admin/moderation') ? json(RECHECKED) : json(ITEM)));
+  const opened = [];
+  render(<ModerationPanel onOpenScoreCard={(id) => opened.push(id)} />);
+  const row = (await screen.findByText('True crime')).closest('tr');
+  expect(within(row).getByText('Already in the library · 1 uncertain question')).toBeInTheDocument();
+  expect(within(row).queryByRole('button', { name: /^review$/i })).toBeNull();
+  fireEvent.click(within(row).getByRole('button', { name: /score card/i }));
+  expect(opened).toEqual(['orgacme-crime']);
+  // rejects: hiding Review on every row. An organisation's own escalated share
+  // is still decided here.
+  const ordinary = screen.getByText('Safety walkthrough').closest('tr');
+  expect(within(ordinary).getByRole('button', { name: /^review$/i })).toBeInTheDocument();
+});
+
+test('a re-checked listing with no score card to open still says why it is here', async () => {
+  global.fetch = jest.fn(async (url) => (String(url).endsWith('/admin/moderation') ? json(RECHECKED) : json(ITEM)));
+  // No onOpenScoreCard, and no publicSetId, is the shape a legacy entry can
+  // reach: the row must still not offer a button that can only be refused.
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('True crime')).closest('tr');
+  expect(within(row).queryByRole('button', { name: /^review$/i })).toBeNull();
+  expect(within(row).getByText(/already in the library/i)).toBeInTheDocument();
+});

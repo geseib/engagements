@@ -84,6 +84,26 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   // beginCheck's `keep` and written back below — including out of the catch
   // block, so no failure of ours erases an approval.
   let decision = {};
+  // WHAT THE AUTHOR DECLARED when they shared it, carried the same way and for
+  // a sharper reason: everything else a check rewrites it could measure again,
+  // and this it cannot. `declaredNotice` is the author's own statement about
+  // their own content; the content says nothing about it. A re-check writing its
+  // own empty list over it would erase it for good, and with it the score card's
+  // account of why a person was ever in this set's history.
+  let carriedDeclared = [];
+  /** What the carry inherited, over whatever this submission declared (nothing). */
+  const declaredOnRow = () => (carriedDeclared.length ? carriedDeclared : declaredNotice);
+  /**
+   * ...and the reason that NAMES it, which the score card's "Why a person was
+   * needed" line reads. It joins the row AFTER the status has been computed from
+   * the check's own reasons: that is what keeps a carried declaration from
+   * holding the set a second time where a person has already ruled on it. Where
+   * nobody has, it went in before the status instead (see below) and this is a
+   * no-op. The failure path does not use it — there the reasons are the
+   * failure's alone, because `error` is why a person is needed now, and the
+   * declaration is still on the row either way.
+   */
+  const reasonsOnRow = (list) => (carriedDeclared.length && !list.includes('declared') ? [...list, 'declared'] : list);
   // Hoisted like `findings`: a check that measured everything and then failed
   // in bookkeeping still records what it measured. Null until it has.
   let observed = null; let tally = null;
@@ -94,7 +114,11 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
 
   try {
     await updateJobProgress(db, tableName, jobId, { completed: 0, phase: 'Reading the set…' });
-    if (recheck) decision = decisionOf(await readReview(db, tableName, source, version));
+    if (recheck) {
+      const previous = await readReview(db, tableName, source, version);
+      decision = decisionOf(previous);
+      carriedDeclared = Array.isArray(previous.declaredNotice) ? previous.declaredNotice : [];
+    }
     const meta = (await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(source) }))).Item;
     if (!meta) throw new Error('That set no longer exists');
     // A re-check judges the EXACT version the library serves. Resolution would
@@ -124,6 +148,13 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     }
     if (snapshotHasImages(snapshot)) reasons.push('images');
     if (declaredNotice.length) reasons.push('declared');
+    // A declaration NOBODY HAS RULED ON still holds the set, exactly as it does
+    // on the organisation's own check. With a ruling carried forward it does
+    // not: a version carrying a declaration reaches the library only because a
+    // person decided about that declaration, and re-escalating on it would
+    // queue every declared listing in the library on every staff re-check and
+    // bury the findings that are real.
+    if (carriedDeclared.length && !decision.reviewer) reasons.push('declared');
 
     const remaining = () => (context && typeof context.getRemainingTimeInMillis === 'function' ? context.getRemainingTimeInMillis() : Infinity);
     const inBudget = () => remaining() > BUDGET_FLOOR_MS;
@@ -176,8 +207,9 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     await recordUnits(db, tableName, orgId, checked, recheck ? { field: 'staffUnits' } : {});
     await writeReview(db, tableName, source, version, {
       status, findings, note, jobId,
-      contentHash: snapshot.contentHash, snapshotKey, reasons, checkedBy: job.callerUserId || null,
-      promptDropped, declaredNotice, tally, observed,
+      contentHash: snapshot.contentHash, snapshotKey, checkedBy: job.callerUserId || null,
+      promptDropped, tally, observed,
+      reasons: reasonsOnRow(reasons), declaredNotice: declaredOnRow(),
       // LAST, so a person's decision outlives the count this check would
       // otherwise write over their words.
       ...decision,
@@ -224,8 +256,13 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         gameType: plainMeta.engagementType || '', questionCount: questions.length, bands,
         uncertainQuestionIds: findings.filter((f) => f.questionId && f.questionId !== '(set)').map((f) => f.questionId),
         snapshotKey, contentHash: snapshot.contentHash,
-        // Which listing it is about, so the person can open the score card.
-        ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
+        // WHERE IT IS DECIDED. A row raised over a version the library already
+        // serves is not a publish request, and moderation-decide.js refuses it:
+        // approving would mint a second public version of content already live,
+        // rejecting would stamp its author for a check nobody told them about.
+        // So the row says which listing it is about and staff open its score
+        // card, which shows the escalation, what held it, and Take down.
+        recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
       });
       await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons });
     }
@@ -267,6 +304,10 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       await writeReview(db, tableName, source, version, {
         status: STATUS.ESCALATED, findings, note: error.message, jobId, reasons: ['error'], checkedBy: job.callerUserId || null,
         contentHash: snapshot ? snapshot.contentHash : null, snapshotKey, tally, observed,
+        // Only the CARRY here, never this submission's own list: a failure of
+        // ours must not erase what the author declared, and an ordinary check
+        // that failed goes on writing exactly the row it always did.
+        ...(carriedDeclared.length ? { declaredNotice: carriedDeclared } : {}),
         // A failure of ours is not a reason to lose a person's decision either.
         // `note` comes with it, so the reviewer's words are kept over this
         // error's message — the message is on the job and in the log.
@@ -286,7 +327,7 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         questionCount: snapshot ? snapshot.questions.length : 0,
         bands: {}, orgName: await orgName(db, tableName, orgId),
         snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
-        ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
+        recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
       });
       await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons: ['error'] });
       // R3 holds through a failure too: a re-check that could not finish is not

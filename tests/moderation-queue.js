@@ -38,6 +38,30 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     await Q.deleteQueueRow(db, 'engage-test', Q.queueSk(ORG, 2));
     assert.strictEqual((await Q.listQueue(db, 'engage-test')).length, 1);
   });
+  /*
+    `recheck` is THIS raising's provenance, never the last one's.
+
+    A row staff's re-check of a live listing raised is not a publish request and
+    moderation-decide.js refuses to decide it. The organisation's OWN later
+    submission of the same version IS one — and it comes through here carrying
+    no `recheck`, so an inherited flag would leave their share undecidable for
+    good. Everything else on a pointer is deliberately carried forward; this is
+    the one field that must not be.
+  */
+  await H.test('recheck is written fresh on every upsert, never inherited from the row it bumps', async () => {
+    H.reset();
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing', recheck: true });
+    assert.strictEqual(H.rowsWhere((r) => r.PK === 'MODERATION')[0].recheck, true);
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing' });
+    const [row] = H.rowsWhere((r) => r.PK === 'MODERATION');
+    assert.strictEqual(row.recheck, false, 'the organisation\'s own submission inherited the re-check flag');
+    assert.strictEqual(row.title, 'Pricing', 'clearing the flag dropped the pointer fields');
+  });
+  await H.test('an ordinary row says plainly that it is not a re-check', async () => {
+    H.reset();
+    await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'Pricing' });
+    assert.strictEqual(H.rowsWhere((r) => r.PK === 'MODERATION')[0].recheck, false);
+  });
   await H.test('a row never carries question text', async () => {
     H.reset();
     await Q.upsertQueueRow(db, 'engage-test', { ref: ORG, version: 2, reason: 'escalated', title: 'T', questions: [{ Title: 'secret' }], snapshot: { x: 1 } });

@@ -138,6 +138,22 @@ function decisionOf(review) {
 }
 
 /**
+ * WHAT THE AUTHOR DECLARED — neither a check's measurement nor a reviewer's
+ * decision, and the one fact on this row that no check can re-derive: the
+ * content says nothing about the notice its author chose to declare about it.
+ * So it rides across the lock beside `decisionOf`, and a re-check that did not
+ * carry it would erase it for good — taking the score card's account of why a
+ * person was ever in this set's history with it.
+ *
+ * Unlike a decision this is NOT gated on a reviewer: the declaration is the
+ * author's own, whether or not anybody has ruled on it yet.
+ */
+function declarationOf(review) {
+  const list = review && Array.isArray(review.declaredNotice) ? review.declaredNotice : [];
+  return list.length ? { declaredNotice: list } : {};
+}
+
+/**
  * Record an outcome. Refuses a status the state machine does not define, rather
  * than storing it — every reader would otherwise have to defend against a value
  * that should not exist.
@@ -318,6 +334,7 @@ module.exports = {
   REVIEW_FIELDS,
   DECISION_FIELDS,
   decisionOf,
+  declarationOf,
   reviewKey,
   publishedKey,
   readReview,

@@ -43,6 +43,13 @@ function reportWords(item) {
 export function whyLabel(item = {}) {
   const reasons = Array.isArray(item.reasons) ? item.reasons : [];
   const parts = [];
+  // FIRST, because it changes what the reader should do with the row: a staff
+  // re-check raised this over a listing the library is already serving, so it is
+  // not decided in the review dialog but opened on its score card. The Why cell
+  // truncates, and the fact that redirects the reader must not be the half cut.
+  // Only a QUEUE row carries this; a REVIEW row never does, so the score card's
+  // own line through this function is unchanged.
+  if (item.recheck) parts.push('Already in the library');
   if (reasons.includes('escalated') || reasons.includes('guardrail')) parts.push(escalationWords(item));
   if (reasons.includes('appealed')) parts.push(appealWords(item));
   if (reasons.includes('reported')) parts.push(reportWords(item));

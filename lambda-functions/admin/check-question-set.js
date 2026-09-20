@@ -60,7 +60,7 @@ const {
 const tenant = require('./shared/tenant');
 const { callerUserId } = require('./shared/question-set-access');
 const { callerUsername } = require('./shared/require-admin');
-const { beginCheck, abandonCheck, readReview, decisionOf } = require('./shared/set-review');
+const { beginCheck, abandonCheck, readReview, decisionOf, declarationOf } = require('./shared/set-review');
 const { reserveSubmit, DEFAULT_DAILY_CAP } = require('./shared/check-quota');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { newJobId, createJob, getJob, jobToResponse, failJob } = require('./shared/generation-jobs');
@@ -170,7 +170,13 @@ async function recheckPublished(event, publicSetId, body, context) {
     // WHO: the staff member, so the organisation's log names them. WHOSE
     // CONTENT: the source org, which is what the worker decrypts and reads with.
     caller: { userId: callerUserId(event), username: callerUsername(event), orgId: source.orgId },
-    keep: decisionOf(previous),
+    // ACROSS THE LOCK: the human decision, and the notice the AUTHOR declared.
+    // `declaredNotice: []` in the request above is deliberate — a re-check does
+    // not re-declare anything, it inherits, and the worker reads what it
+    // inherits off the lock row these two put there. Without them beginCheck's
+    // Put would replace the review row and the worker would write its own empty
+    // list over both.
+    keep: { ...decisionOf(previous), ...declarationOf(previous) },
     restore: previous,
     stamp: false,
   }, context);

@@ -50,6 +50,17 @@ async function upsertQueueRow(db, tableName, { ref, version, reason, ...fields }
     setId: clean(ref.setId),
     ...(scope === 'org' ? { orgId: clean(ref.orgId), version: versionOf(version) } : {}),
     reasons: [...new Set([...((existing && existing.reasons) || []), reason])],
+    // THIS raising's provenance, and deliberately not carried forward from the
+    // row it bumps — the one field here that is not.
+    //
+    // A row staff's re-check of a listing the library already serves raised is
+    // not a publish request: moderation-decide.js refuses to decide it, because
+    // approving would publish a second public version of content already live
+    // and rejecting would stamp its author for a check nobody told them about.
+    // The organisation's OWN later submission of the same version IS a publish
+    // request, and it arrives here carrying no `recheck` — so an inherited flag
+    // would leave their share undecidable for good.
+    recheck: fields.recheck === true,
     waitingSince: (existing && existing.waitingSince) || at,
     latestAt: at,
     // The keys come LAST so nothing a caller passes — and nothing on an

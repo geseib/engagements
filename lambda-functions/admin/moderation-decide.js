@@ -208,6 +208,34 @@ exports.handler = async (event) => {
     const row = await db.send(new GetCommand({ TableName: TABLE(), Key: queueKey(sk) }));
     if (!row || !row.Item) return json(404, { error: 'Nothing is waiting under that entry — it may already be decided.' });
     const pointer = row.Item;
+    /*
+      A ROW STAFF'S RE-CHECK RAISED IS NOT DECIDED HERE, and the refusal comes
+      before every branch below because both buttons are wrong on it.
+
+      The library is already serving this exact version. APPROVE would take the
+      ordinary path — `escalated` is open, so nothing resumes — and
+      publishSnapshot without `resume` mints a SECOND public version of content
+      already live (publish-set.js), flips `activeVersion` onto it and rewrites
+      the author's share stamp: the "every card becomes Public v2" outcome the
+      re-check was built to avoid. REJECT would stamp the author `flagged`, with
+      a note they read, for a check nobody told them about — while the library
+      goes on serving the set, so the finding is dismissed as well. A FLAGGED
+      re-check is worse again: `flagged` is not open, so the resumed-reject
+      branch is the only one a reject reaches, and it deletes the snapshot a
+      person still has to look at.
+
+      So the decision belongs on the set's score card, which shows the
+      escalation, what held it, and Take down. `recheck` is written fresh on
+      every upsert (moderation-queue.js), so the organisation's own later
+      submission of this version is decided here as usual.
+    */
+    if (pointer.recheck === true) {
+      return json(409, {
+        error: 'The library is already serving this version, and a staff re-check raised this entry — so approving it would publish it a second time and rejecting it would tell its author off for a check nobody asked them for. Open its score card to take it down, or leave it serving.',
+        recheck: true,
+        publicSetId: pointer.publicSetId || '',
+      });
+    }
     const review = await readReview(db, TABLE(), ref, version);
     const decidedAt = new Date().toISOString();
 

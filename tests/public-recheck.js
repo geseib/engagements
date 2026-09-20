@@ -48,6 +48,10 @@ const C = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant-crypto
 const J = require(path.join(H.REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
 const { publicSetIdFor } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
 const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/check-question-set.js'));
+// R1 and R3 are not properties of the re-check alone: they are properties of
+// everything the queue row it raises can reach. The review dialog is the only
+// other surface that acts on a queue row, so its route is driven from here.
+const { handler: decideHandler } = require(path.join(H.REPO, 'lambda-functions/admin/moderation-decide.js'));
 
 const ORG = 'org_acme'; const SET = 'crime';
 const SRC = { scope: 'org', orgId: ORG, setId: SET };
@@ -59,6 +63,8 @@ const DAY = () => new Date().toISOString().slice(0, 10);
 const parse = (res) => JSON.parse(res.body || '{}');
 /** Engage staff, acting as Engage, asking for the re-check of one public entry. */
 const post = (body = { recheck: true }, publicSetId = PUB) => handler(H.platformEvent({ method: 'POST', path: { setId: publicSetId }, body }), H.ctx());
+/** The review dialog's route, against a queue row the re-check raised. */
+const decide = (body) => decideHandler(H.platformEvent({ method: 'POST', body }), H.ctx());
 const poll = (jobId) => handler(H.platformEvent({ method: 'GET', path: { setId: PUB, jobId } }), H.ctx());
 const review = (version) => R.readReview(db, T, SRC, version);
 const stampOf = async () => S.readShareStamp(await C.decryptItem(ORG, 'set', H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`)));
@@ -215,6 +221,47 @@ async function recheck(body = { recheck: true }) {
     assert.strictEqual(r.note, 'Historical, not gratuitous.', 'the reviewer\'s own words were overwritten by the check\'s count');
   });
 
+  /*
+    R2 COVERS WHAT THE AUTHOR DECLARED TOO, and it is the one thing on the row
+    no check can re-derive: `declaredNotice` is the author's own statement about
+    their own content, made when they shared it, and the content says nothing
+    about it. A re-check that wrote its own empty list over it would erase it
+    for good — and with it the score card's "Why a person was needed: Declared:
+    graphic violence", which is the whole account of why a person was ever in
+    this set's history.
+
+    It must come back WITHOUT holding the set a second time. A version carrying
+    a declaration reaches the library only because a person ruled on it, and
+    that ruling is what this re-check is carrying forward; re-escalating on it
+    would queue every declared listing in the library on every staff re-check
+    and bury the findings that are real.
+  */
+  await H.test('what the author declared survives the re-check, and does not hold the set a second time', async () => {
+    await seedOrg();
+    await seedPublished();
+    H.state.guardrailReplies = clean(3);
+    await recheck();
+    const r = await review(null);
+    assert.deepStrictEqual(r.declaredNotice, ['graphic-violence'], 'the author\'s declaration was erased');
+    assert.ok(Array.isArray(r.reasons) && r.reasons.includes('declared'), `the card's reasons line lost the declaration: ${JSON.stringify(r.reasons)}`);
+    assert.strictEqual(r.status, R.STATUS.PASSED, `a declaration a person already ruled on escalated again: ${r.status}`);
+    assert.strictEqual(queue().length, 0, 'a carried declaration queued an approved listing again');
+  });
+
+  // rejects: the exemption above being read as "a declaration never holds a
+  // set". With nobody's ruling to carry, the declaration is still a reason a
+  // person is needed, exactly as it is on an organisation's own check.
+  await H.test('a declaration no person has ruled on still holds the set and queues it', async () => {
+    await seedOrg();
+    await seedPublished({ reviewer: '' });
+    H.state.guardrailReplies = clean(3);
+    await recheck();
+    const r = await review(null);
+    assert.deepStrictEqual(r.declaredNotice, ['graphic-violence']);
+    assert.strictEqual(r.status, R.STATUS.ESCALATED, `an undecided declaration passed: ${r.status}`);
+    assert.strictEqual(queue().length, 1, 'nobody will ever see an undecided declaration');
+  });
+
   // rejects: carrying a decision that does not exist. A set that was never
   // decided on by a person must take the re-check's own note and no reviewer.
   await H.test('a set no person ever decided on takes the re-check\'s own note', async () => {
@@ -308,6 +355,87 @@ async function recheck(body = { recheck: true }) {
     assert.strictEqual(queue().length, 1, 'a flagged re-check reached nobody');
     assert.strictEqual(libraryState(), before);
     assert.strictEqual((await stampOf()).status, 'published');
+  });
+
+  /*
+    R1 AND R3 REACH PAST THE RE-CHECK, into the worklist it feeds.
+
+    A queue row raised over a listing the library is already serving is not a
+    publish request, and the review dialog's two buttons are the only things
+    that act on a queue row. APPROVE would run moderation-decide's ordinary
+    path — `escalated` is open, so nothing resumes — and publishSnapshot without
+    `resume` mints a SECOND public version of content already live, flips
+    `activeVersion` onto it and rewrites the author's share stamp: the exact
+    "every card becomes Public v2" R1 exists to prevent. REJECT would stamp the
+    author `flagged`, with a note they read, for a check nobody told them about
+    — while the library goes on serving the set, so the finding is dismissed as
+    well. Whichever button staff press the result is wrong, so neither decides
+    here: the surface that acts on this row is the score card, which shows the
+    escalation, what held it, and Take down.
+  */
+  await H.test('the queue row a re-check raised is not decided in the review dialog: neither button publishes it again or tells its author off', async () => {
+    await seedOrg({ versions: [2, 3], active: 3 });
+    await seedPublished({ sourceVersion: 2 });
+    H.state.guardrailReplies = [H.guardrailFull({ HATE: 'MEDIUM' }, { HATE: true }), ...clean(2)];
+    await recheck();
+    const [row] = queue();
+    // The two preconditions that make this a real test rather than a vacuous
+    // one. The sk is the version-shaped key the decide route parses (a legacy
+    // entry's `v0` is refused by the parser and proves nothing), and the
+    // snapshot approve would publish is really in S3 — without both, a refusal
+    // would arrive for some other reason and the publish would never have been
+    // on the table at all.
+    assert.strictEqual(row.SK, `${ORG}#${SET}#v2`, `the queue row is keyed ${row && row.SK}`);
+    assert.ok(H.state.s3.has(`prompts-test/${row.snapshotKey}`), 'no snapshot: approve would refuse for the wrong reason');
+    assert.strictEqual((await review(2)).status, R.STATUS.ESCALATED);
+    const before = libraryState();
+
+    for (const decision of ['approve', 'reject']) {
+      const res = await decide({ sk: row.SK, decision, note: 'Looks fine to me.' }); // eslint-disable-line no-await-in-loop
+      assert.strictEqual(res.statusCode, 409, `${decision}: ${res.body}`);
+      assert.match(parse(res).error, /score card/i, `${decision} did not say where the decision belongs`);
+    }
+    assert.strictEqual(libraryState(), before, 'a decision on the re-check\'s row changed what the library serves');
+    const meta = V.setMetadataKey(PUBREF);
+    assert.strictEqual(H.state.ddb.get(`${meta.PK}|${meta.SK}`).activeVersion, 1, 'the active version moved');
+    assert.strictEqual((await stampOf()).status, 'published', 'the author was told off for a check nobody told them about');
+    assert.strictEqual((await review(2)).status, R.STATUS.ESCALATED, 'the refusal decided the review anyway');
+    assert.strictEqual(queue().length, 1, 'the refusal cleared the row a person still has to look at');
+  });
+
+  // rejects: the resumed-reject branch being reachable on a FLAGGED re-check.
+  // `flagged` is not open, so approve answers "already decided" and resumed
+  // reject is the ONLY branch a reject reaches — and it writes the author a
+  // `flagged` stamp and DELETES the snapshot a person still has to look at.
+  await H.test('a re-check that flagged is refused the same way, the resumed reject included', async () => {
+    await seedOrg({ versions: [2], active: 2 });
+    await seedPublished({ sourceVersion: 2 });
+    H.state.guardrailReplies = [H.guardrailFull({ VIOLENCE: 'HIGH' }, { VIOLENCE: true }), ...clean(2)];
+    await recheck();
+    const [row] = queue();
+    assert.strictEqual((await review(2)).status, R.STATUS.FLAGGED);
+    const res = await decide({ sk: row.SK, decision: 'reject', note: 'Down it goes.' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.match(parse(res).error, /score card/i);
+    assert.strictEqual((await stampOf()).status, 'published');
+    assert.ok(H.state.s3.has(`prompts-test/${row.snapshotKey}`), 'the snapshot a person still needs was deleted');
+    assert.strictEqual(queue().length, 1);
+  });
+
+  // rejects: the refusal above catching every queue row. An organisation's own
+  // escalated share is still decided in the dialog, and still publishes.
+  await H.test('an ordinary escalated row is still decided in the dialog, and still publishes', async () => {
+    await seedOrg({ versions: [2], active: 2 });
+    H.state.guardrailReplies = [H.guardrailFull({ HATE: 'MEDIUM' }, { HATE: true }), ...clean(2)];
+    const res = await handler(H.orgEvent({ orgId: ORG, role: 'owner', method: 'POST', setId: SET, body: { version: 2 } }), H.ctx());
+    assert.strictEqual(res.statusCode, 202, res.body);
+    await handler({ __workerMode: true, jobId: parse(res).jobId }, H.ctx());
+    const [row] = queue();
+    assert.strictEqual(row.SK, `${ORG}#${SET}#v2`);
+    const decided = await decide({ sk: row.SK, decision: 'approve', note: 'Historical.' });
+    assert.strictEqual(decided.statusCode, 200, decided.body);
+    assert.strictEqual(parse(decided).publicSetId, PUB);
+    assert.strictEqual(queue().length, 0);
   });
 
   console.log('\nwho may run it, and on what\n');
@@ -473,6 +601,7 @@ async function recheck(body = { recheck: true }) {
     assert.deepStrictEqual(r.reasons, ['error']);
     assert.strictEqual(r.reviewer, 'dai', 'the failure erased the approval');
     assert.deepStrictEqual(r.notice, ['graphic-violence']);
+    assert.deepStrictEqual(r.declaredNotice, ['graphic-violence'], 'the failure erased what the author declared');
     assert.strictEqual((await J.getJob(db, T, jobId)).status, 'error');
     assert.strictEqual((await stampOf()).status, 'published', 'a failed re-check moved the author\'s stamp');
   });

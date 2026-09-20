@@ -23,6 +23,21 @@ describe('whyLabel — band words, never scores', () => {
     expect(whyLabel({})).toBe('Waiting');
   });
   /*
+    A row staff's re-check raised is about a listing the library is ALREADY
+    serving, which changes what the reader should do with it: it is not decided
+    in the review dialog (moderation-decide.js refuses it), it is opened on the
+    score card. So the line leads with that — the Why cell truncates, and the
+    fact that changes the reader's next move must not be the half that is cut.
+  */
+  test('a row a re-check raised leads with the library already serving it', () => {
+    expect(whyLabel({ recheck: true, reasons: ['escalated'], uncertainQuestionIds: ['c001#014'] }))
+      .toBe('Already in the library · 1 uncertain question');
+    expect(whyLabel({ recheck: true, reasons: ['escalated'], bands: { HIGH: 1 } }))
+      .toBe('Already in the library · Uncertain (high ×1)');
+    // A REVIEW row carries no `recheck`, so the score card's line is unchanged.
+    expect(whyLabel({ reasons: ['escalated'], uncertainQuestionIds: ['c001#014'] })).toBe('1 uncertain question');
+  });
+  /*
     The score card reads a REVIEW row through the same function. Its reasons
     are the check's own (set-check-worker.js): 'images' and 'declared' the
     queue already words; the guardrail unsure, a budget that ran out, a
