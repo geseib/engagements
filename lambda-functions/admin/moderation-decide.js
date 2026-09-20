@@ -212,6 +212,15 @@ exports.handler = async (event) => {
       A ROW STAFF'S RE-CHECK RAISED IS NOT DECIDED HERE, and the refusal comes
       before every branch below because both buttons are wrong on it.
 
+      THE SECOND LOCK, and deliberately kept as one. A re-check is now keyed by
+      the LISTING (`PUBLIC#<publicSetId>`, set-check-worker.js), a shape
+      `parseOrgSk` above does not parse at all, so no row this code raises can
+      reach here carrying the flag. It used to share the organisation's version
+      key, which is how a re-check turned THEIR pending publish request into one
+      nobody could answer. A bump still inherits the flag from whatever row it
+      lands on (moderation-queue.js), so the check below costs one boolean and
+      keeps the two locks independent of each other.
+
       The library is already serving this exact version. APPROVE would take the
       ordinary path — `escalated` is open, so nothing resumes — and
       publishSnapshot without `resume` mints a SECOND public version of content

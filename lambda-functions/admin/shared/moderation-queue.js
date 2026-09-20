@@ -48,7 +48,13 @@ async function upsertQueueRow(db, tableName, { ref, version, reason, ...fields }
     ...pointer,
     scope,
     setId: clean(ref.setId),
-    ...(scope === 'org' ? { orgId: clean(ref.orgId), version: versionOf(version) } : {}),
+    // The version is recorded whatever the scope keys the row. A staff re-check
+    // is keyed by the LISTING (`PUBLIC#<publicSetId>`, so it can never land on
+    // the organisation's own publish request) and still has to say which of the
+    // organisation's versions it judged — without this the row said v0 for every
+    // one of them, and the queue's sub-line reads it.
+    version: versionOf(version),
+    ...(scope === 'org' ? { orgId: clean(ref.orgId) } : {}),
     reasons: [...new Set([...((existing && existing.reasons) || []), reason])],
     /*
       SAID BY THE CHECK, AND ONLY BY THE CHECK.

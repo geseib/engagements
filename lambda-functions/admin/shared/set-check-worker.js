@@ -76,6 +76,43 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
   // keeps the human decision it found; an outcome worse than `passed` is queued
   // for a person instead, because nothing may be taken down without one.
   const recheck = request.recheck === true;
+  /*
+    WHOSE WORKLIST ROW A RAISING BELONGS TO.
+
+    An organisation's own submission is a publish request ABOUT A VERSION: its
+    row is keyed `<org>#<set>#v<n>` and the review dialog decides it. A staff
+    re-check is not a publish request and must not share that key — it stamped
+    `recheck: true` onto the organisation's own pending row, and
+    moderation-decide.js then refused BOTH decisions on it, so a share the author
+    was waiting on became one no member of staff could answer. It is keyed by the
+    LISTING instead.
+
+    That key earns its place twice more. It is the one a takedown already clears
+    (public-library-item.js), and it is the only shape that can name a LEGACY
+    entry at all: `queueSk` counts a null version as v0, and moderation-get.js
+    and moderation-decide.js both refuse a `v0` key on purpose, so the row three
+    of the four entries on dev would raise used to list without opening.
+  */
+  const listingRef = recheck && request.publicSetId
+    ? setRef({ scope: tenant.PUBLIC, orgId: '', setId: String(request.publicSetId) })
+    : null;
+  const queueRef = listingRef || source;
+  /**
+   * Is that listing still in the library? A takedown can land while the check
+   * runs, and a row raised after one points at nothing: its `Score card` button
+   * would open a 404, and the takedown that clears this key ran before the key
+   * existed. Nothing to look at, so nothing is raised. A read that FAILS answers
+   * yes — a person looking at a live listing is the safe direction.
+   */
+  const listingStillServed = async () => {
+    if (!listingRef) return true;
+    try {
+      return Boolean((await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(listingRef) }))).Item);
+    } catch (error) {
+      console.warn(`⚠️ could not confirm ${request.publicSetId} is still listed: ${error.message}`);
+      return true;
+    }
+  };
   const checkedAt = new Date().toISOString();
   const declaredNotice = Array.isArray(request.declaredNotice) ? request.declaredNotice : [];
   const reasons = [];
@@ -236,35 +273,35 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       than `passed` — flagged included — goes to the queue, or the finding is
       thrown away while the library goes on serving the set.
 
-      KNOWN LIMIT, for a set shared before versioning existed: its queue SK is
-      `<org>#<set>#v0` (moderation-queue.queueSk counts a null version as v0),
-      and `moderation-get.js` and `moderation-decide.js` both refuse a `v0` key
-      on purpose — they reserve v0 to mean "not a version" so a queue row can
-      never be read as the legacy partition. So such a row LISTS but does not
-      open, and the surface that acts on it is the score card, which now shows
-      the escalation, what held it, and Take down. Taking the set down clears
-      the row (public-library-item.js deletes exactly this key). Pre-existing:
-      an ordinary check of a legacy set has always queued the same way.
+      A re-check's row is the LISTING's, not the version's (`listingRef` above),
+      so it never lands on the organisation's own publish request, a takedown
+      clears it, and a set shared before versioning existed raises one that can
+      actually be opened and cleared. Its two exits are Take down and "Leave it
+      serving", both on the score card.
     */
     const toAPerson = status === STATUS.ESCALATED || (recheck && status !== STATUS.PASSED);
-    if (toAPerson) {
+    if (toAPerson && await listingStillServed()) {
       const bands = {};
       for (const f of findings) if (f.band && f.band !== 'NONE') bands[f.category] = f.band;
       await upsertQueueRow(db, tableName, {
-        ref: source, version, reason: 'escalated',
+        ref: queueRef, version, reason: 'escalated',
         orgId, orgName: await orgName(db, tableName, orgId), setId: source.setId, title: plainMeta.name || source.setId,
         gameType: plainMeta.engagementType || '', questionCount: questions.length, bands,
         uncertainQuestionIds: findings.filter((f) => f.questionId && f.questionId !== '(set)').map((f) => f.questionId),
         snapshotKey, contentHash: snapshot.contentHash,
         // WHERE IT IS DECIDED. A row raised over a version the library already
-        // serves is not a publish request, and moderation-decide.js refuses it:
-        // approving would mint a second public version of content already live,
-        // rejecting would stamp its author for a check nobody told them about.
-        // So the row says which listing it is about and staff open its score
-        // card, which shows the escalation, what held it, and Take down.
+        // serves is not a publish request: approving it would mint a second
+        // public version of content already live and rejecting it would stamp its
+        // author for a check nobody told them about. So the row says which
+        // listing it is about and staff open its score card, which shows the
+        // escalation, what held it, Take down and "Leave it serving". The flag
+        // says so on the row as well as in the key, because the queue's own words
+        // and moderation-decide.js's second lock both read it.
         recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
       });
       await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons });
+    } else if (toAPerson) {
+      console.log(`🔎 ${request.publicSetId} is no longer in the library: ${status} recorded, nothing queued`);
     }
     if (recheck) {
       // NOTHING ELSE. No publish (R1: the library is left exactly as it is,
@@ -317,19 +354,26 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
         version, outcome: STATUS.ESCALATED, reasons: ['error'], error: error.message, snapshotKey, ...(tally ? { tally } : {}),
         ...(recheck ? { recheck: true, reviewer: job.callerUsername || '', publicSetId: request.publicSetId || '' } : {}),
       });
-      await upsertQueueRow(db, tableName, {
-        ref: source, version, reason: 'escalated', orgId,
-        setId: source.setId,
-        title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
-        // The snapshot is already in hand here — free to carry, and the queue
-        // row would otherwise say nothing about what kind of set this is.
-        gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
-        questionCount: snapshot ? snapshot.questions.length : 0,
-        bands: {}, orgName: await orgName(db, tableName, orgId),
-        snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
-        recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
-      });
-      await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons: ['error'] });
+      // The listing's key for a re-check, the version's for an ordinary check —
+      // the same choice the success path makes, for the same reasons, and the
+      // same silence when the listing it would point at has gone. A read that
+      // cannot answer here answers yes, which is why a failure like "the table
+      // went away" still reaches a person.
+      if (await listingStillServed()) {
+        await upsertQueueRow(db, tableName, {
+          ref: queueRef, version, reason: 'escalated', orgId,
+          setId: source.setId,
+          title: snapshot && snapshot.meta && snapshot.meta.name ? snapshot.meta.name : source.setId,
+          // The snapshot is already in hand here — free to carry, and the queue
+          // row would otherwise say nothing about what kind of set this is.
+          gameType: snapshot && snapshot.meta ? snapshot.meta.engagementType || '' : '',
+          questionCount: snapshot ? snapshot.questions.length : 0,
+          bands: {}, orgName: await orgName(db, tableName, orgId),
+          snapshotKey, contentHash: snapshot ? snapshot.contentHash : null,
+          recheck, ...(recheck && request.publicSetId ? { publicSetId: request.publicSetId } : {}),
+        });
+        await appendReviewEvent(db, tableName, source, 'escalated', { version, reasons: ['error'] });
+      }
       // R3 holds through a failure too: a re-check that could not finish is not
       // news the author's set should carry. The queue row above is who looks.
       if (!recheck) await writeShareStamp(db, tableName, source, { version, status: 'escalated', reasons: ['error'], jobId });
