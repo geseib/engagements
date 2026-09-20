@@ -166,6 +166,17 @@ export default function QuestionSetsPanel({
 
   const nothingExists = questionSets.length === 0;
 
+  /*
+    DOES THIS ROW CARRY A SHARE BUTTON? Written once, because two things read
+    it: the button itself, and the words on the "Who can see it" chip, one of
+    which tells the reader to click Share. Two copies of this condition would
+    let the chip instruct somebody the row gives nothing to press — which is
+    what it did. `canManage !== false`, not a bare truthiness test, for the
+    reason the row actions below give: surfaces that project no ownership carry
+    no `canManage` at all.
+  */
+  const rowCanShare = (set) => Boolean(!rowActions && showVisibility && onShare && set.canManage !== false);
+
   return (
     <div className="qsets">
       {notice && notice.text ? (
@@ -201,41 +212,75 @@ export default function QuestionSetsPanel({
           chooser is not built (plan Part 5 puts it outside the constraint), and
           a link to a screen that does not exist is the same defect one level
           down, so it is not drawn here.
+
+          AND THE THREE VERBS ARE GATED ON `onCreate`, for the reason the header
+          button above is. They were written as `onCreate && onCreate('ai')`,
+          which is a click handler that quietly does nothing on any caller that
+          passes no `onCreate` — the same dead affordance the owner reported,
+          in the one state where there is nothing else on the screen to press.
+          Design rule 2: gate the affordance on the handler existing.
+
+          What is left when there is no way in still has to say something true
+          (rule 6), so the heading and the sentence that says what a question
+          set IS both stay; only the sentence that promises three ways to make
+          one goes, because on this mount there are none.
         */
         <div className="qsets-empty">
           <Icon name="Books" weight="duotone" size={40} color="var(--muted)" />
           <h3>No question sets yet</h3>
-          <p>
-            A question set is what a session plays. Every other screen in here — sessions,
-            archive, reports — is downstream of one. There are three ways to make the first,
-            and they are not equivalent.
-          </p>
-          <div className="qsets-paths">
-            <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate && onCreate('ai')}>
-              <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
-              Generate with AI
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate && onCreate('csv')}>
-              <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
-              Upload a CSV
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate && onCreate('template')}>
-              <Icon name="FileText" weight="bold" size={16} color="currentColor" />
-              Start from a template
-            </button>
-          </div>
+          {onCreate ? (
+            <>
+              <p>
+                A question set is what a session plays. Every other screen in here — sessions,
+                archive, reports — is downstream of one. There are three ways to make the first,
+                and they are not equivalent.
+              </p>
+              <div className="qsets-paths">
+                <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate('ai')}>
+                  <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
+                  Generate with AI
+                </button>
+                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('csv')}>
+                  <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
+                  Upload a CSV
+                </button>
+                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('template')}>
+                  <Icon name="FileText" weight="bold" size={16} color="currentColor" />
+                  Start from a template
+                </button>
+              </div>
+            </>
+          ) : (
+            <p>
+              A question set is what a session plays. There are none to show here yet.
+            </p>
+          )}
         </div>
       )}
 
       {!nothingExists && (
         <>
-          <div className="qsets-head">
-            <span className="qsets-head-grow" />
-            <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate && onCreate('new')}>
-              <Icon name="Plus" weight="bold" size={14} color="currentColor" />
-              {createOpen ? 'Hide new set' : 'New set'}
-            </button>
-          </div>
+          {/*
+            THE HEADER IS AN AFFORDANCE FOR `onCreate`, SO IT IS GATED ON IT.
+
+            It used to render unconditionally with `onCreate && onCreate('new')`
+            behind it, and the Public library mounts this table with `rowActions`
+            and no `onCreate` — so the button people reach for first sat there,
+            filled and primary, doing nothing at all in either console. That is
+            the owner's report, and design rule 2's exact case: gate the
+            affordance on the handler existing, never render one that does
+            nothing. The public library's own way in is a different verb and
+            lives in PublicLibraryPanel, where there is something to honour it.
+          */}
+          {onCreate && (
+            <div className="qsets-head">
+              <span className="qsets-head-grow" />
+              <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate('new')}>
+                <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+                {createOpen ? 'Hide new set' : 'New set'}
+              </button>
+            </div>
+          )}
 
           {/*
             The bar renders through the shared ListControls under this screen's
@@ -482,7 +527,11 @@ export default function QuestionSetsPanel({
                         </td>
                       )}
                       {showVisibility && (() => {
-                        const vis = shareStateOf(set);
+                        /* THE WORDS AND THE BUTTON, DECIDED ONCE. `rowCanShare`
+                           is the same predicate the Share action below renders
+                           on, so the amber drift chip cannot tell this reader to
+                           click a Share that this row does not carry. */
+                        const vis = shareStateOf(set, undefined, { canShare: rowCanShare(set) });
                         return (
                           <td className="qsets-vis">
                             <span className={`qsets-chip qsets-chip--vis-${vis.key}`} title={vis.title}>{vis.label}</span>
@@ -531,7 +580,7 @@ export default function QuestionSetsPanel({
                               >
                                 {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
                               </button>
-                              {showVisibility && onShare && (
+                              {rowCanShare(set) && (
                                 <button
                                   type="button"
                                   className="qsets-btn qsets-btn--sm"

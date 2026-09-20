@@ -182,6 +182,59 @@ describe('nothing exists', () => {
     expect(onCreate).toHaveBeenLastCalledWith('csv');
   });
 
+  /*
+    THE SAME RULE, ONE STATE FURTHER IN. The header button was gated on its
+    handler; these three were left rendering behind `onCreate && onCreate('ai')`
+    — the identical short-circuit, on the identical filled primary, in the state
+    where a person is pressing hardest because there is nothing else on screen.
+
+    This is the component's contract, not a screen's: a caller with no creation
+    path mounts this table today (PublicLibraryPanel, with `rowActions` and no
+    `onCreate`), and that caller happens to intercept its own empty case with
+    its own copy before this state is reached. "Unreachable through one caller
+    today" is not the same as "cannot render dead controls", and it is the
+    second half of the owner's report either way.
+  */
+  test('the three creation paths are not drawn when no caller can honour them', () => {
+    render(<QuestionSetsPanel questionSets={[]} loading={false} />);
+    expect(screen.queryByRole('button', { name: /generate with ai/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /upload a csv/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start from a template/i })).toBeNull();
+  });
+
+  test('and what is left still says what the thing is, without naming a way in that is not there', () => {
+    // rejects: deleting the empty state along with its buttons (design rule 6 —
+    // the reader still has to be told there is nothing here), and rejects
+    // keeping the sentence that promises three ways to make the first one when
+    // none of the three is on screen (rule 2, one sentence further down).
+    render(<QuestionSetsPanel questionSets={[]} loading={false} />);
+    expect(screen.getByText(/No question sets yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/A question set is what a session plays/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/three ways/i);
+  });
+
+  /*
+    THE HEADER'S "New set" IS AN AFFORDANCE FOR `onCreate`, AND NOTHING ELSE.
+
+    Reported by the owner against the Public library, which mounts this table
+    with `rowActions` and no `onCreate`: the button rendered as a filled primary
+    on every visit and did precisely nothing when pressed, because its handler
+    is `onCreate && onCreate('new')`. Design rule 2 — "a dead X is the control
+    people reach for first, so gate the affordance on the handler existing,
+    never render one that does nothing".
+  */
+  test('the header button is not drawn at all when there is no creation path to take', () => {
+    render(<QuestionSetsPanel questionSets={SETS} loading={false} />);
+    expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
+  });
+
+  test('and it is drawn, and works, the moment a caller can honour it', () => {
+    const onCreate = jest.fn();
+    render(<QuestionSetsPanel questionSets={SETS} loading={false} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole('button', { name: /new set/i }));
+    expect(onCreate).toHaveBeenCalledWith('new');
+  });
+
   test('while the list is still loading it says so instead of "none exist"', () => {
     // rejects: an empty state that lies (host §7.9) one level down — the first
     // paint of a console with 41 sets would otherwise offer to create the first.
@@ -394,11 +447,85 @@ describe('who can see it', () => {
     expect(screen.queryByText('Needs changes')).toBeNull();
     expect(screen.getByRole('table')).not.toHaveClass('qsets-tbl--vis');
   });
+  /*
+    THE THREE THINGS THE OWNER COULD NOT TELL APART, ON ONE SCREEN.
+
+    An org console's list carries this organisation's rows, Engage's and the
+    public library's (get-question-sets.js readableScopes), so a set that has
+    been shared and the public COPY of it are two rows in the same table — and
+    both used to read "Public". The three rows below are exactly that: the set
+    you shared, the copy that is out there, and the set that has moved on since.
+  */
+  const THREE = [
+    { ...SETS[0], id: 'ours', name: 'Ours shared', canManage: true, scope: 'org', activeVersion: 2, share: { status: 'published', version: 2, publicSetId: 'orgacme-ours', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+    { ...SETS[0], id: 'theirs', name: 'Theirs public', canManage: false, scope: 'public', activeVersion: 1 },
+    { ...SETS[0], id: 'stale', name: 'Ours moved on', canManage: true, scope: 'org', activeVersion: 3, share: { status: 'published', version: 2, publicSetId: 'orgacme-stale', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+  ];
+  /* The "Who can see it" cell of a row, and only that cell. The State cell
+     carries the OWNER chip, which answers a different question with some of the
+     same words — a public row is owned by somebody else AND visible to
+     everybody, so both of its chips read "Public" and a row-wide query cannot
+     say which one it found. */
+  const visOf = (name) => rowFor(name).querySelector('.qsets-vis');
+
+  test('what you did, what it is, and what has drifted are three different words', () => {
+    mount({ questionSets: THREE, showVisibility: true });
+    expect(visOf('Ours shared')).toHaveTextContent(/^Shared v2$/);
+    expect(visOf('Theirs public')).toHaveTextContent(/^Public$/);
+    expect(visOf('Ours moved on')).toHaveTextContent(/^Shared v2, yours is v3$/);
+    // …and not each other's. rejects: one state's words leaking onto a row in
+    // another state, which is the whole defect.
+    expect(visOf('Ours shared')).not.toHaveTextContent(/yours is v/);
+    expect(visOf('Theirs public')).not.toHaveTextContent(/Shared/);
+  });
+  test('the drifted one carries its own colour and the sentence that says what to press', () => {
+    mount({ questionSets: THREE, showVisibility: true, onShare: jest.fn() });
+    const stale = within(visOf('Ours moved on')).getByText(/yours is v3/);
+    expect(stale).toHaveClass('qsets-chip--vis-behind');
+    expect(stale).toHaveAttribute('title', 'An older version is shared. Click Share to share the latest version.');
+    // The two settled states share neither the class nor the sentence.
+    expect(within(visOf('Ours shared')).getByText(/^Shared v2$/)).toHaveClass('qsets-chip--vis-shared');
+    expect(within(visOf('Theirs public')).getByText(/^Public$/)).toHaveClass('qsets-chip--vis-public');
+  });
+  test('and the exit the hover names is on the same row', () => {
+    // rejects: telling somebody to "click Share" from a row that has no Share.
+    mount({ questionSets: THREE, showVisibility: true, onShare: jest.fn() });
+    expect(within(rowFor('Ours moved on')).getByRole('button', { name: /^share$/i })).toBeInTheDocument();
+  });
+  /*
+    …AND WHEN IT IS NOT, THE SENTENCE IS NOT EITHER.
+
+    "Click Share to share the latest version" was written unconditionally, and
+    this table draws the Share action only when the caller passed `onShare` AND
+    the server said `canManage` for that row. Both cases are ordinary on the org
+    console: a host sees a colleague's set with `canManage: false`
+    (admin/shared/question-set-access.js — "a host may edit or delete ONLY the
+    ones they created"), and the same drift chip renders there beside an Open
+    button. Naming an exit that is not on the surface is the defect the header
+    button's ruling exists to prevent, one attribute down.
+  */
+  test('a row whose Share this caller never passed is told the fact without the instruction', () => {
+    mount({ questionSets: THREE, showVisibility: true });
+    expect(within(rowFor('Ours moved on')).queryByRole('button', { name: /^share$/i })).toBeNull();
+    const stale = within(visOf('Ours moved on')).getByText(/yours is v3/);
+    expect(stale).toHaveAttribute('title', expect.stringMatching(/an older version is shared/i));
+    expect(stale).toHaveAttribute('title', expect.not.stringMatching(/click share/i));
+  });
+  test("and neither is a colleague's set this reader may not manage, on a console that does have Share", () => {
+    const theirs = { ...THREE[2], id: 'colleague', name: 'A colleague’s set', canManage: false };
+    mount({ questionSets: [...THREE, theirs], showVisibility: true, onShare: jest.fn() });
+    expect(within(rowFor('A colleague’s set')).queryByRole('button', { name: /^share$/i })).toBeNull();
+    expect(within(visOf('A colleague’s set')).getByText(/yours is v3/))
+      .toHaveAttribute('title', expect.not.stringMatching(/click share/i));
+    // …while the row on the same screen that DOES have the button keeps the words.
+    expect(within(visOf('Ours moved on')).getByText(/yours is v3/))
+      .toHaveAttribute('title', expect.stringMatching(/click share/i));
+  });
   test('each row says who can see it, from the share stamp', () => {
     mount({ questionSets: VIS, showVisibility: true });
     expect(screen.getByRole('columnheader', { name: /who can see it/i })).toBeInTheDocument();
     expect(within(rowFor('Private one')).getByText('Private')).toBeInTheDocument();
-    expect(within(rowFor('Public one')).getByText('Public v2')).toBeInTheDocument();
+    expect(within(rowFor('Public one')).getByText('Shared v2')).toBeInTheDocument();
     expect(within(rowFor('Flagged one')).getByText('Needs changes')).toHaveAttribute('title', expect.stringMatching(/what was flagged/));
     // An Engage-library (platform-scope) row carries no share stamp of its
     // own — it is not Private just because nobody has shared FROM it.

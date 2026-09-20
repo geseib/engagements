@@ -347,12 +347,22 @@
 .qsets-chip--off { color: var(--muted); border-style: dashed; }
 .qsets-chip--warn { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
 .qsets-chip--bad { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
-/* "Who can see it" (utils/shareState.js). Eight values: private, checking and
-   passed are quiet and borrow --muted; public is already shared and gets its
-   own success green; behind, flagged and unfinished want a look and borrow
-   --primary; waiting is somebody else's turn and borrows --secondary (7.0:1
-   on --bg, asserted). */
+/* "Who can see it" (utils/shareState.js). Nine values: private, checking and
+   passed are quiet and borrow --muted; shared (what you did) and public (what
+   the library's own copy is) are both settled, both done, and share the success
+   green — the WORD carries which of the two, exactly as the owner chip carries
+   four values in two tones; behind, flagged and unfinished want a look and
+   borrow --primary; waiting is somebody else's turn and borrows --secondary
+   (7.0:1 on --bg, asserted).
+
+   `behind` is the amber this system already spends on "about to happen"
+   (.qsets-chip--warn, the would-be-skipped CSV tier), not a tenth hue for one
+   chip, and never --danger, which does not carry text here. Every pairing is
+   measured in __tests__/questionSetsPalette.test.js, composited on the work
+   field AND on --surface — the Public library's share picker draws the same
+   chip on its dialog card. */
 .qsets-chip--vis-private { color: var(--muted); border-style: dashed; }
+.qsets-chip--vis-shared,
 .qsets-chip--vis-public { color: var(--qsets-success-text); border-color: rgba(79, 178, 134, .5); }
 .qsets-chip--vis-behind,
 .qsets-chip--vis-flagged,

@@ -254,6 +254,80 @@ describe('the conversion actually happened, in both halves', () => {
   });
 });
 
+/* --------------------------------------------------- "Who can see it" chips */
+
+/*
+  THREE STATES, THREE STYLES, AND NO KEY WITHOUT ONE.
+
+  The owner could not tell a set they had SHARED from the public COPY of it —
+  both chips said "Public". Splitting them into `shared`, `public` and the amber
+  `behind` only helps if each key actually reaches a rule: a `.qsets-chip--vis-x`
+  nobody declared falls back to the base chip's `--muted`, which is precisely
+  "they look the same" wearing a new class name.
+
+  The colours themselves are read out of the stylesheet rather than retyped, and
+  composited up the REAL ancestor chain — the work field for a list row, and
+  work field → dialog card for the same chip inside the Public library's share
+  picker, which renders it over `--surface`.
+*/
+describe('the share tags, which are the distinction the owner asked for', () => {
+  const SHARE_STATE = read('utils', 'shareState.js');
+  /** Every key `shareStateOf` can hand the row — versionChip's belong to another chip. */
+  const visKeys = () => {
+    const body = SHARE_STATE.slice(0, SHARE_STATE.indexOf('export function versionChip'));
+    return [...new Set([...body.matchAll(/key:\s*'([\w-]+)'/g)].map((m) => m[1]))];
+  };
+  /** The `color:` a `.qsets-chip--vis-<key>` rule resolves to, following one var hop. */
+  const chipColour = (key) => {
+    const css = QS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const block of css.split('}')) {
+      const [head, body] = block.split('{');
+      if (!head || !body) continue;
+      const selectors = head.split(',').map((s) => s.trim());
+      if (!selectors.includes(`.qsets-chip--vis-${key}`)) continue;
+      const m = body.match(/(?:^|[\s;])color:\s*var\((--[a-z0-9-]+)\)/i);
+      if (m) return m[1];
+    }
+    return null;
+  };
+  const RESOLVED = {
+    '--muted': T.muted, '--primary': T.primary, '--secondary': T.secondary,
+    '--text': T.text, '--qsets-success-text': T.successText, '--danger-text': T.dangerText,
+  };
+
+  test('the module really offers the three the owner named, as separate keys', () => {
+    // rejects: renaming the words and leaving one key behind both states, which
+    // would make the CSS unable to tell them apart however the label reads.
+    expect(visKeys()).toEqual(expect.arrayContaining(['shared', 'public', 'behind']));
+  });
+
+  test.each(['shared', 'public', 'behind'])('the %s chip is styled rather than falling through to the base chip', (key) => {
+    expect(chipColour(key)).not.toBeNull();
+  });
+
+  test('the warning is the amber the system already uses, not a new colour', () => {
+    // --primary, the same amber as .qsets-chip--warn and the would-be-skipped
+    // CSV tier. rejects: reaching for --danger (which this file already forbids
+    // as text) or inventing a fourth hue for one chip.
+    expect(chipColour('behind')).toBe('--primary');
+    // …and it is not the settled state's colour, or the split is decorative.
+    expect(chipColour('behind')).not.toBe(chipColour('shared'));
+  });
+
+  test.each(['shared', 'public', 'behind'])('the %s chip clears AA on the work field and inside the share picker', (key) => {
+    const colour = RESOLVED[chipColour(key)];
+    expect(colour).toBeDefined();
+    expect(on(colour, FIELD)).toBeGreaterThanOrEqual(AA);
+    // PublicLibraryPanel's picker draws the same chip on `.publib-dialog`,
+    // which is `background: var(--surface)` over this work field.
+    expect(on(colour, PANEL)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('every key shareStateOf can return has a rule, so none can render unstyled', () => {
+    expect(visKeys().filter((key) => chipColour(key) === null)).toEqual([]);
+  });
+});
+
 describe('the namespace, which is the failure a component test cannot see', () => {
   /*
     FOUND BY LOOKING AT THE RENDERED SCREEN, not by a test. The first cut was

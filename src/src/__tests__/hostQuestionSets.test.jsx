@@ -1230,3 +1230,44 @@ describe('every row says whose set it is', () => {
     expect(within(row).queryByText('Yours')).toBeNull();
   });
 });
+
+/*
+  C5 — THE HOST'S SHELF, AND WHAT IT DOES *NOT* SAY.
+ 
+  The "Who can see it" tags — Shared / Public / the amber drift warning — are
+  QuestionSetsPanel's visibility column, and this shelf is not that panel: it
+  shares the stylesheet and `utils/setOwnerTag`, and renders its own table with
+  the OWNER chip only (HostQuestionSetsDialog.jsx:602, :758). So the three
+  words cannot collide here, and the row for a set this host shared still reads
+  whose it is.
+ 
+  That is the right answer rather than an omission. The hover on the drift
+  warning says "Click Share to share the latest version", and this shelf has no
+  Share control on any row — naming an exit that is not on the surface is the
+  defect the console's own dead-control ruling exists to prevent.
+*/
+describe("the share vocabulary stays off the host's shelf", () => {
+  const SHARED = [
+    { id: 'ours', name: 'Ours Shared', engagementType: 'trivia', totalQuestions: 5, active: true, canManage: true, mine: true, scope: 'org', activeVersion: 3, share: { status: 'published', version: 2, publicSetId: 'orgacme-ours', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+    { id: 'theirs', name: 'Theirs Public', engagementType: 'trivia', totalQuestions: 5, active: true, canManage: false, mine: false, scope: 'public' },
+  ];
+
+  // rejects: wiring shareStateOf into this shelf's chip, which would put
+  // "Shared v2, yours is v3" — and the instruction to click a Share button
+  // that is not here — on a row whose question is "whose is it".
+  test('a shared set still reads Yours here, and carries no share tag', async () => {
+    await openDialog({}, { sets: SHARED });
+    const row = rowFor('Ours Shared');
+    expect(within(row).getByText('Yours')).toBeInTheDocument();
+    expect(within(row).queryByText(/^Shared/)).toBeNull();
+    expect(within(row).queryByText(/yours is v/)).toBeNull();
+    expect(row.querySelector('[class*="qsets-chip--vis-"]')).toBeNull();
+  });
+
+  // rejects: renaming the owner tag's PUBLIC label along with the visibility
+  // one. They are two different questions and only the second one changed.
+  test("and the public library's copy still reads Public here", async () => {
+    await openDialog({}, { sets: SHARED });
+    expect(within(rowFor('Theirs Public')).getByText('Public')).toBeInTheDocument();
+  });
+});
