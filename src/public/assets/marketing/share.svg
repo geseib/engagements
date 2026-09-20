@@ -1,0 +1,16 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Engagements">
+  <defs>
+    <radialGradient id="mkShareGlow" cx="50%" cy="76%" r="46%">
+      <stop offset="0%" stop-color="#F6A94C" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#F6A94C" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0F1A2E" />
+  <rect x="260" y="140" width="680" height="420" fill="url(#mkShareGlow)" />
+  <g transform="translate(0,210)">
+    <path d="M0 300 L120 236 L230 268 L360 176 L470 232 L600 108 L720 196 L840 150 L960 224 L1080 180 L1200 246 L1200 420 L0 420 Z" fill="#2E4262" />
+    <path d="M0 352 L150 300 L280 330 L420 244 L540 292 L600 214 L680 270 L810 226 L940 300 L1060 262 L1200 318 L1200 420 L0 420 Z" fill="#22344F" />
+    <path d="M0 400 L110 360 L240 388 L380 322 L500 364 L600 300 L700 348 L830 310 L980 368 L1110 336 L1200 372 L1200 420 L0 420 Z" fill="#16233B" />
+  </g>
+  <text x="600" y="210" text-anchor="middle" font-family="Archivo Expanded, Archivo, system-ui, -apple-system, Segoe UI, sans-serif" font-size="96" font-weight="800" fill="#F4EDE4">Engagements</text>
+</svg>

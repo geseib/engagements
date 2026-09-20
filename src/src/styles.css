@@ -404,19 +404,6 @@ body {
   bottom: calc(var(--host-bar-h, 76px) + 16px);
 }
 
-/* The decorative parallax hero is 250px+ of pure chrome. It earns that on the
-   landing/lobby screen; during a live round it is 250px of the fold spent on a
-   word the host already knows. Collapse it — the brand band stays, the content
-   comes up. */
-.outer-container.round-live .parallax__header {
-  min-height: 96px;
-  padding: 12px 20px;
-}
-
-.outer-container.round-live .parallax__title {
-  font-size: clamp(1.5rem, 5vw, 2rem);
-}
-
 @media (max-width: 900px) {
   .host-action-bar__inner {
     padding: 10px 14px;
@@ -1792,115 +1779,6 @@ body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
-/* Parallax styles adapted for quiz game */
-.parallax {
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-  border-radius: 20px 20px 0 0;
-}
-
-.parallax__header {
-  z-index: 2;
-  padding: 20px;
-  justify-content: center;
-  align-items: center;
-  min-height: 250px;
-  display: flex;
-  position: relative;
-  flex-direction: column;
-}
-
-.parallax__visuals {
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  overflow: hidden;
-}
-
-.parallax__layers {
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  overflow: hidden;
-}
-
-.parallax__layer-img {
-  pointer-events: none;
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 120%;
-  position: absolute;
-  top: -10%;
-  left: 0;
-}
-
-.parallax__layer-title {
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.parallax__title {
-  pointer-events: auto;
-  text-align: center;
-  text-transform: none;
-  margin-top: 0;
-  margin-bottom: 0.1em;
-  margin-right: 0.075em;
-  font-family: var(--font-display);
-  /* Archivo Expanded is a wide face — a fixed 4rem renders "Engagements" at
-     ~395px, which clips on both edges of a 375px phone. Scale with the
-     viewport and cap at the original desktop size. */
-  font-size: clamp(2.25rem, 12vw, 4rem);
-  font-weight: 600;
-  line-height: 1;
-  position: relative;
-  color: white;
-  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 0, 0, 0.3);
-}
-
-.parallax__title.report-title {
-  font-size: 3rem;
-  line-height: 1.1;
-}
-
-.parallax__black-line-overflow {
-  z-index: 20;
-  background-color: #000;
-  width: 100%;
-  height: 2px;
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-}
-
-.parallax__fade {
-  z-index: 30;
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 20%;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-}
-
-
 .game-id {
   font-size: 1.5rem;
   font-weight: bold;
@@ -2692,10 +2570,6 @@ body {
   .player-container {
     max-width: 1200px;
   }
-}
-
-.player-parallax {
-  min-height: 150px;
 }
 
 .join-screen {
@@ -7741,11 +7615,6 @@ body {
   overflow: hidden;
   position: relative;
   background: var(--bg);
-}
-
-/* Hide the normal (landing) parallax header in big-screen mode */
-.outer-container.big-screen-mode .parallax {
-  display: none;
 }
 
 /* ---- the persistent mountain-hiker photo hero ---- */
