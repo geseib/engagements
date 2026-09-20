@@ -178,8 +178,32 @@ describe('shareStateOf — the "Who can see it" column', () => {
   });
 });
 describe('versionChip — the Versions panel', () => {
+  /*
+    THE RESERVED WORD, ONE SCREEN DEEPER.
+
+    The owner's complaint was that one word meant two things: the set THEY
+    shared and the library's COPY of it both read "public". The list row was
+    split into "Shared v2" and "Public" — and this chip, reached by pressing
+    Edit on that very row, went on labelling the organisation's own version
+    "public". It is the same object as the row that now says "Shared v2", so it
+    is the same collision, one click along.
+
+    The KEY stays `public` deliberately: in this module the key is the style
+    bucket rather than the word — `shareStateOf` returns key `public` for the
+    label "Everyone" too — and it is what `.qs-version-chip--public` and the
+    editor's hover read. That hover, "Public as orgacme-x v1", is the reserved
+    word used correctly: it names the library's copy, by its id.
+  */
+  test("the version that went out says what you did, and leaves 'public' to the library's copy", () => {
+    const chip = versionChip({ review: 'passed', published: { publicSetId: 'orgacme-x', publicVersion: 1 } });
+    expect(chip.label).toBe('shared');
+    expect(chip.label).not.toMatch(/public/i);
+    expect(chip.key).toBe('public');
+    // …and its opposite still reads as its opposite.
+    expect(versionChip({ review: 'unreviewed', published: null }).label).toBe('not shared');
+  });
   test('a version that went public says so; the rest follow the review', () => {
-    expect(versionChip({ review: 'passed', published: { publicVersion: 1 } })).toEqual({ key: 'public', label: 'public' });
+    expect(versionChip({ review: 'passed', published: { publicVersion: 1 } })).toEqual({ key: 'public', label: 'shared' });
     expect(versionChip({ review: 'flagged', published: null })).toEqual({ key: 'flagged', label: 'needs changes' });
     expect(versionChip({ review: 'checking', published: null, unfinished: false })).toEqual({ key: 'checking', label: 'checking…' });
     expect(versionChip({ review: 'checking', published: null, unfinished: true })).toEqual({ key: 'unfinished', label: "didn't finish" });

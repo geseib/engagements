@@ -73,7 +73,15 @@ test('each version says where it went, and Share publicly asks for that version'
   const onShare = jest.fn();
   render(<QuestionSetEditor questionSet={SET} canShare onShare={onShare} onAppeal={jest.fn()} onCancel={() => {}} />);
   const v1 = await screen.findByTestId('version-1');
-  expect(within(v1).getByText('public')).toBeInTheDocument();
+  /*
+    "shared", not "public". The chip says what this organisation DID with its
+    own version — the same fact the list row states as "Shared v1" — and the
+    word "public" is left to mean the library's copy, which the hover names by
+    its id. One word, one meaning, on both screens (utils/shareState.js).
+  */
+  expect(within(v1).getByText('shared')).toBeInTheDocument();
+  expect(within(v1).queryByText('public')).toBeNull();
+  expect(within(v1).getByText('shared')).toHaveAttribute('title', 'Public as orgacme-safety v1');
   const v2 = await screen.findByTestId('version-2');
   expect(within(v2).getByText('needs changes')).toBeInTheDocument();
   fireEvent.click(within(v1).getByRole('button', { name: /share publicly/i }));

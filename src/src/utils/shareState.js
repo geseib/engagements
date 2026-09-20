@@ -168,7 +168,25 @@ export function versionChip(entry, scope = '') {
       default: return { key: 'unshared', label: 'not checked' };
     }
   }
-  if (entry && entry.published) return { key: 'public', label: 'public' };
+  /*
+   * "SHARED", NOT "PUBLIC" — the reserved word, kept out of a panel that is
+   * looking at the organisation's OWN version.
+   *
+   * This chip hangs off a row of the Versions panel, which is reached by
+   * pressing Edit on the list row that now reads "Shared v2". Same set, same
+   * version, so calling it "public" here is the collision the owner reported
+   * ("the tag is the same for your question set that was shared publicly and
+   * the copy that is public") re-created one screen deeper. What it is telling
+   * the reader is what THEY did with this version; the copy it produced is
+   * named, correctly and by id, in the hover the editor draws beside it
+   * ("Public as <publicSetId> v<publicVersion>").
+   *
+   * The KEY stays `public`: in this module a key is the style bucket, not the
+   * word — `shareStateOf` returns key `public` under the label "Everyone" for
+   * an Engage row — and `.qs-version-chip--public` plus that hover both read
+   * it. Renaming it would move a colour contract for no word on any screen.
+   */
+  if (entry && entry.published) return { key: 'public', label: 'shared' };
   switch (entry && entry.review) {
     case 'flagged': return { key: 'flagged', label: 'needs changes' };
     case 'checking': return entry.unfinished ? { key: 'unfinished', label: "didn't finish" } : { key: 'checking', label: 'checking…' };
