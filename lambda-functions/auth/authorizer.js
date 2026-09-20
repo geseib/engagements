@@ -189,8 +189,19 @@ async function getDefaultOrgId(sub) {
  * `orgIds` carries EVERY membership while `orgId` carries only the active one,
  * because they answer different questions: "may this caller switch to X"
  * (a picker) is not "is this caller acting for X right now" (a row guard).
- * Nothing may use `orgIds` to decide whether a write is permitted — that is
- * `canManageScope`, which reads the single active `orgId` on purpose.
+ * Nothing may use `orgIds` to decide WHICH LIBRARY A WRITE LANDS IN, or to
+ * widen what a caller may list — that is `canManageScope` and
+ * `readableScopes`, which read the single active `orgId` on purpose. A set, a
+ * prompt, a publish and a moderation decision all still belong to the
+ * organisation the person chose to act for, and that has not changed.
+ *
+ * ONE NAMED EXCEPTION: `tenant.js:callerMayDriveSession` asks `orgIds` whether
+ * the caller belongs to the organisation that owns a SESSION. Driving a room
+ * is the case where the active org has nothing to resolve — the session row
+ * already names its owner — and comparing only the active org refused a host
+ * their own team's room whenever their browser had not picked that team, which
+ * is what a phone does by default. The exception is deliberate, it is written
+ * down in that function's header, and it extends to nothing else.
  */
 async function resolveOrgContext(sub, requestedOrgId) {
   const [memberships, defaultOrgId] = await Promise.all([

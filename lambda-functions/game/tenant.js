@@ -193,8 +193,25 @@ function callerOrgRole(event) {
   return ORG_ROLES.includes(role) ? role : '';
 }
 
-/** Every organisation the caller belongs to. Comma-joined in the context, like
- *  `groups` — the authorizer cannot put an array in a Lambda authorizer context. */
+/**
+ * Every organisation the caller belongs to. Comma-joined in the context, like
+ * `groups` — the authorizer cannot put an array in a Lambda authorizer context.
+ *
+ * ── WHAT THIS MAY AND MAY NOT DECIDE ──────────────────────────────────────
+ *
+ * The standing rule (stated at `auth/authorizer.js:resolveOrgContext`) is that
+ * memberships answer "may this caller switch to X" and the single active
+ * `orgId` answers "is this caller acting for X right now". Content follows it
+ * without exception: `canManageScope` reads the ACTIVE org, because a set, a
+ * prompt or a publish has to land in one library and only the person at the
+ * keyboard can say which one. Nothing below may use this list to choose where
+ * a write goes, or to widen what `readableScopes` lists.
+ *
+ * THERE IS EXACTLY ONE NAMED EXCEPTION, and it is `callerMayDriveSession`.
+ * A session names its own owning organisation on its own row, so there is no
+ * library for a choice to resolve — only "are you one of these people". Its
+ * header carries the reasoning and the live bug that forced it.
+ */
 function callerOrgIds(event) {
   const { lambda } = authCtx(event);
   const raw = lambda.orgIds;
@@ -260,6 +277,33 @@ function roleAtLeast(role, min) {
  * already require one — the host controls — and it is the caller's ORG that it
  * checks, never their identity.
  *
+ * ── MEMBERSHIP, NOT THE LIBRARY THE BROWSER IS STANDING IN ────────────────
+ *
+ * This compared the caller's ACTIVE organisation and nothing else, and that
+ * was reported as a bug from a live room: the owner drove a session from their
+ * phone and every control answered "Game not found", while the same buttons
+ * worked on the laptop beside it. `/remote` mounted no library picker, so the
+ * phone sent no organisation, the authorizer fell back to the account's
+ * DEFAULT organisation — the personal one — and this refused a session owned
+ * by a team the very same account belongs to. Watching kept working, which is
+ * why it read as a phone problem: the participant routes are waved through
+ * above.
+ *
+ * So the rule is MEMBERSHIP. A signed-in caller may drive a session when they
+ * belong to the organisation that owns it, whichever of their own libraries
+ * they are currently acting for.
+ *
+ * The reason it is safe here and nowhere else: A SESSION NAMES ITS OWN OWNING
+ * ORGANISATION, on the row this function was handed. There is nothing for an
+ * active-org choice to resolve. A content write is the opposite case — a set
+ * has to land in ONE library and only the person can say which — so that
+ * question stays with `canManageScope` and the single active `orgId`, exactly
+ * as it was.
+ *
+ * BEING ENGAGE STAFF IS NOT MEMBERSHIP. `admins` adds nothing here; a platform
+ * administrator who is not in the customer's team is refused like anyone else,
+ * which is the same loss of power `readableScopes` and `canManageScope` record.
+ *
  * @returns {boolean} true when the caller may act on this session
  */
 function callerMayDriveSession(event, gameRow) {
@@ -267,7 +311,8 @@ function callerMayDriveSession(event, gameRow) {
   if (!gameOrg) return true;              // pre-tenancy or orgless: not ours to refuse
   const groups = callerGroups(event);
   if (!groups.length) return true;        // an anonymous participant, judged elsewhere
-  return callerOrgId(event) === gameOrg;
+  if (callerOrgId(event) === gameOrg) return true;   // acting for the owning team
+  return callerOrgIds(event).includes(gameOrg);      // ...or simply a member of it
 }
 
 function readableScopes(event) {
