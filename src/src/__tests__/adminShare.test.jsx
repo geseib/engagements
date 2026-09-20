@@ -49,10 +49,29 @@ const SETS = {
   ],
 };
 
+/*
+  A LIBRARY WITH SOMETHING IN IT — and the reason it has to exist.
+
+  `SETS` carries no `scope: 'public'` row, and PublicLibraryPanel answers an
+  empty library with its own one-line empty state instead of mounting
+  QuestionSetsPanel at all. So every assertion about a control that lives on
+  that table — the header's "New set" — passes for the wrong reason against
+  that fixture: the table is not there to carry a button either way. A negative
+  assertion whose subject never rendered is not a test.
+*/
+const SETS_WITH_PUBLIC = {
+  questionSets: [
+    ...SETS.questionSets,
+    {
+      id: 'orgacme-published', name: 'Somebody else’s published set', engagementType: 'trivia', totalQuestions: 12, canManage: false, scope: 'public', activeVersion: 1, sourceOrgName: 'Acme',
+    },
+  ],
+};
+
 /** Routes GET …/orgs (and …platform/orgs, which also ends in "/orgs") to the
- *  one-org fixture, GET admin/question-sets to SETS, and everything else
+ *  one-org fixture, GET admin/question-sets to `sets`, and everything else
  *  (prompts, personas, appeal/check POSTs nothing here exercises) to `{}`. */
-function serve() {
+function serve(sets = SETS) {
   global.fetch = jest.fn(async (url) => {
     const u = String(url);
     if (u.includes('/orgs')) {
@@ -62,7 +81,7 @@ function serve() {
     }
     if (u.includes('admin/question-sets')) {
       return {
-        ok: true, status: 200, text: async () => '{}', json: async () => SETS,
+        ok: true, status: 200, text: async () => '{}', json: async () => sets,
       };
     }
     return {
@@ -300,14 +319,45 @@ test('Share a set in the Public library opens the same share dialog the list row
   expect(screen.queryByRole('heading', { name: /which set do you want to share/i })).toBeNull();
 });
 
+/*
+  THE LIBRARY HAS TO HAVE A ROW IN IT, or this test cannot fail.
+
+  The dead button was QuestionSetsPanel's header, and this panel only mounts
+  that table once there is a public row to put in it — with `SETS` (no public
+  row) the panel renders "Nobody has published a set yet" and the table, the
+  header and the button are all absent no matter what the component does. The
+  fixture below puts a row in the library, and the first assertion states that
+  the table really is on screen, so the two that follow are about a control
+  that had somewhere to render.
+*/
 test('and the staff console has no way in there either, because Engage publishes nothing', async () => {
   mockActiveOrg = '~platform'; mockGroups = ['admins', 'hosts'];
-  serve();
+  serve(SETS_WITH_PUBLIC);
   render(<AdminPage />);
   await screen.findByRole('table');
   const nav = screen.getByRole('navigation', { name: /sections/i });
   fireEvent.click(within(nav).getByText('Public library'));
   await screen.findByRole('heading', { level: 1, name: /public library/i });
+  // The table this button would sit on top of is mounted and populated.
+  expect(await screen.findByText('Somebody else’s published set')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /share a set/i })).toBeNull();
+  expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
+});
+
+/*
+  AND THE ORG CONSOLE'S LIBRARY, which has the same table and the same absence
+  of a creation path — the console the owner was actually looking at. "Share a
+  set" is the way in here; "New set" was the button that did nothing.
+*/
+test("the org console's Public library has the Share a set way in and no New set button, with rows on screen", async () => {
+  mockActiveOrg = HOME.orgId; mockGroups = ['hosts'];
+  serve(SETS_WITH_PUBLIC);
+  render(<AdminPage />);
+  await screen.findByRole('columnheader', { name: /who can see it/i });
+  const nav = screen.getByRole('navigation', { name: /sections/i });
+  fireEvent.click(within(nav).getByText('Public library'));
+  await screen.findByRole('heading', { level: 1, name: /public library/i });
+  expect(await screen.findByText('Somebody else’s published set')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /share a set/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /new set/i })).toBeNull();
 });
