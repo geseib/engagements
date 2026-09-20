@@ -158,6 +158,21 @@ describe('the shelf is a filter, on the same bar as the others', () => {
 });
 
 describe('a tag is something you can search for', () => {
+  test('the box says it reads tags, because it does', () => {
+    // rejects: a control that promises less than it delivers. The owner's ask
+    // was "ability to see/search all tags", and a box that reads them while
+    // naming only the name and description hides the feature from the one
+    // person it was built for — there is nothing on the screen to suggest
+    // typing a word somebody tagged would find anything.
+    //
+    // Both halves, because they are read by different people: the placeholder
+    // is what a sighted person sees in the empty box, the aria-label is the
+    // whole of what a screen reader announces.
+    mount();
+    expect(searchBox()).toHaveAttribute('placeholder', 'Search name, description, tags');
+    expect(searchBox()).toHaveAttribute('aria-label', 'Search name, description, tags');
+  });
+
   test('searching a tag finds the sets carrying it', () => {
     // The set's own tags join name/description/customInstruction in the search
     // haystack. rejects: tags that can be written and never found again.

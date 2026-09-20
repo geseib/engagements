@@ -266,8 +266,16 @@ export default function QuestionSetsPanel({
             search={{
               value: search,
               onChange: (value) => set({ search: value }),
-              ariaLabel: 'Search name, description',
-              placeholder: 'Search name, description',
+              /*
+                IT NAMES THE TAGS BECAUSE IT READS THE TAGS. `searchFields`
+                above put a set's own words into the haystack; this said
+                "name, description" for a while after, which is the shape of
+                defect the owner's ask was about — "ability to see/search all
+                tags" is not delivered by a box that can do it and never says
+                so. A control's label is the only documentation anybody reads.
+              */
+              ariaLabel: 'Search name, description, tags',
+              placeholder: 'Search name, description, tags',
             }}
             selects={[
               {
