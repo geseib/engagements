@@ -95,6 +95,20 @@ function ruleBody(css, selector) {
   return m[2];
 }
 
+/* SPECIFICITY, counted the way a browser counts it. Used by two describes
+   below: the audit of the paper controls the editor borrows, and the review
+   banner's flagged ink, where an override has to out-rank a rule that always
+   matches rather than merely come later in the bundle. */
+const specificity = (selector) => {
+  const s = selector.replace(/::?[a-z-]+\([^)]*\)/g, (m) => (/:not\(/.test(m) ? m.slice(5, -1) : ''));
+  return [
+    (s.match(/#[\w-]+/g) || []).length,
+    (s.match(/\.[\w-]+|\[[^\]]*\]|:[a-z-]+(?!\()/g) || []).length,
+    (s.match(/(^|[\s>+~])[a-z][\w-]*/g) || []).length,
+  ];
+};
+const beats = (a, b) => (a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2]);
+
 const DUSK = blockOf(GLOBAL_CSS, '[data-theme="dark"] {');
 const ROOT = blockOf(GLOBAL_CSS, ':root {');
 const SCOPE = blockOf(EDITOR_CSS, '.qs-editor {');
@@ -360,7 +374,10 @@ describe('the paper controls the editor borrows are re-inked inside the scope', 
     // rejects: a bare `.form-input` or `.btn-secondary` in this sheet, which
     // would repaint the auth forms, the issue reporter and every paper admin
     // panel from a stylesheet none of them know about.
-    const unscoped = selectors.filter((s) => !/(^|\s|\.)qs-editor(\.|\s|$)/.test(s));
+    // The lookahead, not a "followed by . or space", is what lets the scope
+    // class carry a qualifier of its own — `.qs-editor[data-theme="dark"]`,
+    // which the review banner's ink needs — while still refusing `.qs-editorish`.
+    const unscoped = selectors.filter((s) => !/\.qs-editor(?![\w-])/.test(s));
     expect(unscoped).toEqual([]);
   });
 
@@ -374,16 +391,6 @@ describe('the paper controls the editor borrows are re-inked inside the scope', 
    * it on the element selector, so a #ddd hairline would have survived round
    * every field on a dusk card.
    */
-  const specificity = (selector) => {
-    const s = selector.replace(/::?[a-z-]+\([^)]*\)/g, (m) => (/:not\(/.test(m) ? m.slice(5, -1) : ''));
-    return [
-      (s.match(/#[\w-]+/g) || []).length,
-      (s.match(/\.[\w-]+|\[[^\]]*\]|:[a-z-]+(?!\()/g) || []).length,
-      (s.match(/(^|[\s>+~])[a-z][\w-]*/g) || []).length,
-    ];
-  };
-  const beats = (a, b) => (a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2]);
-
   const FOREIGN = ['styles.css', 'auth/auth.css', 'components/IssueReportForm.css',
     'components/FileUploadPrompt.css', 'components/AIPromptManager.css'];
 
@@ -466,6 +473,144 @@ describe('the paper controls the editor borrows are re-inked inside the scope', 
     // and the glyph really is drawn in that token — read from statusColor()
     // itself, so a change there is caught rather than silently unmeasured.
     expect(read('utils', 'statusTone.js')).toMatch(new RegExp(`return 'var\\(${glyph}\\)'`));
+  });
+});
+
+/*
+ * THE NEEDS-CHANGES BANNER — components/SetReviewBanner.jsx.
+ *
+ * Its ONLY mount is this editor (QuestionSetEditor.jsx, inside `showVersions`,
+ * which defaults to true, so the console place renders it), so it moved onto
+ * dusk with everything else. Its flagged ink did not.
+ *
+ * SetReviewBanner.css declares `--srev-flag-ink: var(--danger-text)` on `.srev`
+ * and then swaps it for a paper red under `[data-theme="light"] .srev`. That is
+ * a DESCENDANT selector and public/index.html ships `<html data-theme="light">`,
+ * so the swap matches every `.srev` in the product unconditionally and outranks
+ * the declaration it is meant to override — 0,2,0 against 0,1,0. The dusk
+ * branch has never applied in a browser. While the editor was paper that was
+ * harmless: the paper red was the right ink, reached by the wrong route, at
+ * 6.8:1. On dusk the same ink lands at 1.7:1 on three things — each flagged
+ * question's title, the "high" band word, and the Warning glyph the component
+ * passes `var(--srev-flag-ink)` to.
+ *
+ * RE-POINTED FROM THIS SCOPE rather than by editing SetReviewBanner.css. That
+ * sheet is theme-agnostic by design and its always-matching selector is a
+ * separate defect on surfaces this change does not touch; a re-tint is not the
+ * place to settle it. __tests__/srevPalette.test.js measures the sheet in the
+ * abstract — including a dusk branch the DOM cannot produce — so this measures
+ * what the editor actually renders.
+ */
+describe('the needs-changes banner the editor renders', () => {
+  const SREV_CSS = read('components', 'SetReviewBanner.css');
+  const SREV = blockOf(SREV_CSS, '.srev {');
+  const PAPER_INK = hexIn(SREV, '--srev-flag-ink-paper');
+
+  /* The banner's tint, read from the rule that paints it. `.srev` writes the
+     danger red by hand as an rgba whose alpha is a token, so both halves are
+     read and the rgb is checked against --danger — a red that drifted from the
+     token would otherwise go on being measured as the token. */
+  const tintRgb = SREV.match(/background:\s*rgba\(([^,]+,[^,]+,[^,]+),/)[1].replace(/\s/g, '');
+  const tintAlpha = Number(SREV.match(/--srev-tint-alpha:\s*([\d.]+)/)[1]);
+  const TINTED = [...CARD, `rgba(${tintRgb},${tintAlpha})`];
+
+  test('the premise: this editor is the only thing that renders the banner', () => {
+    // rejects: measuring one surface's ground for a component drawn on several.
+    const mounts = ['components/QuestionSetEditor.jsx', 'components/QuestionsPanel.jsx',
+      'components/QuestionSetsPanel.jsx', 'AdminPage.jsx', 'GameHostPage.jsx']
+      .filter((f) => /<SetReviewBanner/.test(strip(read(...f.split('/')))));
+    expect(mounts).toEqual(['components/QuestionSetEditor.jsx']);
+    // and it is drawn by default, not behind an opt-in the console leaves off
+    expect(strip(read('components', 'QuestionSetEditor.jsx'))).toMatch(/showVersions\s*=\s*true/);
+  });
+
+  test('the premise: the tint is the danger token, over this editor\'s card', () => {
+    expect(tintRgb).toBe(parseHex(resolve('--danger')).join(','));
+    expect(tintAlpha).toBeGreaterThan(0);
+  });
+
+  test('the premise: the paper red the html rule forces is unreadable here', () => {
+    // 1.73:1. rejects: the whole fix, if the ink ever stops being a problem.
+    expect(on(PAPER_INK, TINTED)).toBeLessThan(AA);
+  });
+
+  test('the premise: the paper swap always matches, so only a scope can out-rank it', () => {
+    // rejects: "the editor declares data-theme='dark', so the dusk branch
+    // applies" — it does not. A descendant combinator does not care that a
+    // nearer ancestor says something else, and there is no [data-theme="dark"]
+    // .srev rule to win it back.
+    expect(strip(read('..', 'public', 'index.html'))).toMatch(/<html[^>]*data-theme="light"/);
+    expect(strip(SREV_CSS)).toMatch(/\[data-theme="light"\]\s+\.srev\s*\{[^}]*--srev-flag-ink\s*:/);
+    expect(strip(SREV_CSS)).not.toMatch(/\[data-theme="dark"\]\s+\.srev\s*\{/);
+    expect(beats(specificity('[data-theme="light"] .srev'), specificity('.srev'))).toBe(true);
+  });
+
+  test('the editor re-points the flagged ink with a selector that out-ranks it', () => {
+    // rejects: a same-specificity `.qs-editor .srev`, which is 0,2,0 and ties —
+    // and a tie is settled by import order between two component sheets, which
+    // is not a contract anyone should be relying on.
+    const rule = strip(EDITOR_CSS).match(/([^{}]*\.srev[^{}]*)\{([^}]*--srev-flag-ink[^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(beats(specificity(rule[1].trim()), specificity('[data-theme="light"] .srev'))).toBe(true);
+    expect(rule[2]).toMatch(/--srev-flag-ink:\s*var\(--danger-text\)/);
+  });
+
+  test.each([
+    ['a flagged question\'s title, on the tinted banner', () => TINTED],
+    ['the "high" band word in the waiting state, where the banner is transparent', () => CARD],
+  ])('the flagged ink clears AA for %s', (_label, layers) => {
+    // Two grounds because `.srev--waiting` sets `background: transparent` and
+    // still renders the measurement block, band word and all.
+    expect(on(resolve('--danger-text'), layers())).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+/*
+ * THE GLYPHS, WHICH ARE PAINTED FROM THE MARKUP AND NOT FROM A STYLESHEET.
+ * components/Icon.jsx takes `color` as a prop, so a colour handed to a glyph
+ * escapes every rule the sheets above are audited by — a hex in JSX follows a
+ * theme no better than a hex in CSS, and it is not caught by the stray-literal
+ * tests because it is not in a stylesheet at all.
+ */
+describe('the glyphs these surfaces hand a colour to', () => {
+  /* The editor's own markup. SetReviewBanner.jsx is deliberately not here: it
+     paints from --srev-flag-ink, a token of its own, measured above. */
+  const JSX = ['components/QuestionSetEditor.jsx', 'components/QuestionsPanel.jsx',
+    'components/QuestionPullDialog.jsx', 'components/QuestionPreview.jsx'];
+  const inks = JSX.flatMap((f) => [...strip(read(...f.split('/')))
+    .matchAll(/<Icon[^>]*?\scolor="([^"]*)"/g)].map((m) => [f, m[1]]));
+
+  test('the premise: these surfaces really do paint glyphs from the markup', () => {
+    expect(inks.length).toBeGreaterThan(10);
+  });
+
+  test('none of them is handed a raw colour', () => {
+    // rejects: #8a5300 — the deep paper amber-brown — which three Warning
+    // glyphs carried across the conversion untouched: the unsaved bar, the
+    // discard-this-edit box and the pull dialog's artwork caveat, at 2.36:1,
+    // 1.95:1 and 2.30:1 on the dusk grounds they landed on. The same defect as
+    // the review banner's ink and the same cause: an ink that was right on
+    // paper, never re-measured when the paper went away.
+    expect(inks.filter(([, ink]) => /#[0-9A-Fa-f]{3,8}|^rgba?\(/.test(ink))).toEqual([]);
+  });
+
+  test.each([
+    ['the card', () => CARD],
+    ['a panel', () => PANEL],
+    ['a question row', () => ROW],
+    ['a dialog', () => DIALOG],
+    ['the unsaved bar and the discard box, which tint their ground', () => [...PANEL, T.tintWarn]],
+    ['the same two inside a dialog', () => [...DIALOG, T.tintWarn]],
+  ])('every token a glyph is handed survives on %s', (_label, layers) => {
+    // A glyph is a non-text graphic: 3:1, not 4.5. Every ground the editor
+    // paints, because a glyph moves between them and the markup carries no
+    // record of which one it is standing on.
+    const tokens = [...new Set(inks.map(([, ink]) => ink))]
+      .filter((ink) => ink !== 'currentColor')
+      .map((ink) => ink.match(/^var\((--[\w-]+)\)$/));
+    expect(tokens.filter((m) => m === null)).toEqual([]);     // no bare keyword either
+    expect(tokens.length).toBeGreaterThan(0);                 // the premise
+    for (const [, name] of tokens) expect(on(resolve(name), layers())).toBeGreaterThanOrEqual(3);
   });
 });
 

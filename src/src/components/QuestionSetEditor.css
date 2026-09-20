@@ -275,6 +275,27 @@
   color: var(--danger-text);
 }
 
+/* -- the needs-changes banner -----------------------------------------------
+   components/SetReviewBanner.css is theme-agnostic and gets this right on its
+   own terms: `.srev` declares `--srev-flag-ink: var(--danger-text)` and swaps
+   it for a paper red under `[data-theme="light"] .srev`. But that is a
+   DESCENDANT selector, and public/index.html ships `<html data-theme="light">`
+   — so the swap matches every `.srev` in the product, unconditionally, and at
+   0,2,0 it outranks the 0,1,0 declaration it is meant to override. The dusk
+   branch has never applied in a browser. That was harmless while this editor
+   was paper (the right ink by the wrong route, 6.76:1); the banner's only mount
+   is this editor, so the move to dusk left the paper red at 1.73:1 on the
+   flagged titles, the "high" band word and the Warning glyph the component
+   hands `var(--srev-flag-ink)`.
+
+   Re-pointed from HERE, three classes deep so it wins on specificity rather
+   than on which component sheet imported first. Not fixed at source: that
+   sheet's selector is a defect on its own terms, but settling it is a change
+   to a shared component and this one is a re-tint. Measured on both grounds the
+   ink is drawn on — the tinted banner and the transparent waiting state — in
+   __tests__/questionSetEditorPalette.test.js. */
+.qs-editor[data-theme="dark"] .srev { --srev-flag-ink: var(--danger-text); }
+
 /* -- the two components that carry their own palette ------------------------
    `RoundKindPicker` is shared with the two AI builders, which are still paper,
    so its `--rkp-*` block is re-pointed HERE rather than edited at source. Its

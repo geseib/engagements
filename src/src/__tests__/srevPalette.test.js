@@ -1,5 +1,12 @@
-/* The needs-changes banner sits inside the set editor, which is part-paper:
-   it declares no theme of its own, so every pairing is asserted on BOTH grounds. */
+/* The needs-changes banner declares no theme of its own, so every pairing is
+   asserted on BOTH grounds. Its one mount — the set editor — is dusk now, but
+   the sheet is still theme-agnostic and is still measured as such.
+
+   WHAT THIS FILE CANNOT MEASURE ON ITS OWN: the paper swap is a DESCENDANT
+   selector and `public/index.html` ships `<html data-theme="light">`, so it
+   matches every `.srev` in the product unconditionally. The flagged ink a
+   browser draws is therefore never this sheet's dusk declaration, and the test
+   below says so rather than measuring a value the DOM cannot produce. */
 const fs = require('fs');
 const path = require('path');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
@@ -32,9 +39,26 @@ describe.each(Object.entries(grounds))('on %s', (_name, g) => {
     expect(ratio(g.muted, tinted)).toBeGreaterThanOrEqual(AA);
   });
   test('the flagged-question heading colour clears AA on the tint', () => {
-    // --danger-text is a dusk-derived token; on paper the sheet must swap it.
-    const flaggedInk = _name === 'paper' ? hex((CSS.match(/--srev-flag-ink-paper:\s*(#[0-9A-Fa-f]{6})/) || [])[1] || '#000000') : dangerText;
-    expect(ratio(flaggedInk, tinted)).toBeGreaterThanOrEqual(AA);
+    /* WHICH INK REACHES THE DOM, not which one this sheet declares. The swap is
+       `[data-theme="light"] .srev`, 0,2,0, and it always matches (see the file
+       header), so it outranks `.srev`'s own 0,1,0 `--srev-flag-ink:
+       var(--danger-text)` everywhere. The paper red is what a browser draws on
+       BOTH grounds — correct on paper, and 1.7:1 on dusk. A dusk consumer has
+       to re-point the token from its own scope, so that is asserted here rather
+       than assumed: this test used to measure --danger-text on the dusk tint
+       and pass while nothing on screen was ever drawn in it. */
+    const paperInk = hex((CSS.match(/--srev-flag-ink-paper:\s*(#[0-9A-Fa-f]{6})/) || [])[1] || '#000000');
+    if (_name === 'paper') {
+      expect(ratio(paperInk, tinted)).toBeGreaterThanOrEqual(AA);
+      return;
+    }
+    expect(ratio(paperInk, tinted)).toBeLessThan(AA);                       // the premise
+    // The banner has exactly one mount and it is the set editor, which
+    // re-points the ink three classes deep. The specificity of that selector is
+    // measured where it is written — __tests__/questionSetEditorPalette.test.js.
+    expect(read('components', 'QuestionSetEditor.css'))
+      .toMatch(/\.qs-editor[^{}]*\.srev[^{}]*\{[^}]*--srev-flag-ink:\s*var\(--danger-text\)/);
+    expect(ratio(dangerText, tinted)).toBeGreaterThanOrEqual(AA);
   });
 });
 test('every selector is rooted at .srev and no --danger carries text', () => {
