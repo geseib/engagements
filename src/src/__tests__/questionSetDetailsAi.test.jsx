@@ -146,32 +146,47 @@ const openAiPanel = async () => {
   return screen.findByTestId('ai-details-panel');
 };
 const draftIt = async () => {
-  fireEvent.click(screen.getByRole('button', { name: /^Draft it$/i }));
   /*
-    THE DEFAULT 1000ms BUDGET IS A RACE HERE, NOT A LIMIT.
+    THE BUTTON IS RESOLVED ONCE AND THEN HELD. That is the whole fix for the
+    intermittent "Exceeded timeout of 5000 ms" this helper used to produce, and
+    it replaces an earlier `{ timeout: 8000 }` that treated the symptom.
 
-    Waiting for this button to come back enabled means waiting for a whole
-    async job: start, then poll, then apply. `pollGenerationJob` does its first
-    poll immediately, so the happy path takes no `POLL_INTERVAL_MS` sleep — but
-    that interval is 2000ms of REAL time (utils/aiBatchClient.js:108), so any
-    run that needs a second poll blows a one-second budget outright, and even
-    the single-poll path is several awaits and a re-render deep.
+    What actually went wrong. While a draft runs, the button relabels itself to
+    "Drafting…" (QuestionSetEditor.jsx: `{aiBusy ? 'Drafting…' : 'Draft it'}`),
+    so a re-queried `getByRole('button', { name: /^Draft it$/ })` MISSES on every
+    poll until the job lands. A `getByRole` that misses does not fail cheaply: it
+    builds its message out of `prettyRoles(container)`, computing an accessible
+    name for every element in the tree. Measured against the 70-question fixture
+    below, ONE failed poll costs ~1s — and because that cost is synchronous CPU,
+    it also starves the very job the poll is waiting for. A busy worker pool adds
+    a poll or two and the 5s test budget is gone, which is exactly why this went
+    green alone and red in a full run.
 
-    It is green on every developer machine and it took the whole dev build down
-    on f68b31b5, which is the signature of contention rather than of a defect.
+    The earlier note here blamed `POLL_INTERVAL_MS` (2000ms, aiBatchClient.js).
+    That is real but cannot reach this file: `pollGenerationJob` takes its first
+    poll before any sleep, and every mock in this suite answers that first GET
+    with `status: 'complete'`, so no test here ever sleeps. And 8000ms could
+    never fire anyway — jest kills the test at 5000ms first, turning a precise
+    RTL error into an opaque one.
 
-    Nothing here measures speed — the assertion is "the button comes back
-    enabled" — so the budget is raised clear of one poll cycle rather than the
-    wait being weakened.
+    Nothing about the component was slow. React commits the 60-item list in
+    ~11ms and commits the same SEVEN times whether the list holds 3 rows or 60.
+    This was only ever a cost in how the test asked the question.
 
-    `questionAddModal.test.jsx` drives the same flow through `findByTestId`,
-    which carries the same 1000ms default. It has not failed yet; if it starts
-    to, this is why.
+    React keeps the same DOM node across the relabel — only the text and
+    `disabled` change — so holding it is O(1) and a tighter assertion besides:
+    it pins THIS button, not whichever button answers to that name. Scoped to the
+    panel for the same reason the empty-set case below is scoped: the editor is
+    ~1980 nodes and this panel ~250 of them, and an unscoped role query walks all
+    of them (~43ms a call against ~4ms here).
+
+    The timeout stays explicit, and stays UNDER jest's 5000ms so a genuine hang
+    is reported by RTL naming this button rather than by jest naming the test.
   */
-  await waitFor(
-    () => expect(screen.getByRole('button', { name: /^Draft it$/i })).toBeEnabled(),
-    { timeout: 8000 },
-  );
+  const draftButton = within(screen.getByTestId('ai-details-panel'))
+    .getByRole('button', { name: /^Draft it$/i });
+  fireEvent.click(draftButton);
+  await waitFor(() => expect(draftButton).toBeEnabled(), { timeout: 4000 });
 };
 
 /**
