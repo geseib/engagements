@@ -17,6 +17,9 @@ import {
 } from '../config/gameTypes';
 import { truncate } from '../utils/questionSetEditing';
 import { shareStateOf } from '../utils/shareState';
+import {
+  resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
+} from '../config/setTopics';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
 
@@ -81,8 +84,17 @@ const SORTS = {
   `polls`).
 */
 const LIST_CONFIG = {
-  searchFields: ['name', 'description', 'customInstruction'],
+  // The SET's own tags join the haystack (config/setTopics.js: not the list a
+  // QUESTION carries, which lives on a different row and never meets this one).
+  // A word somebody can write and never find again is not a tag.
+  searchFields: ['name', 'description', 'customInstruction', (set) => set.tags],
   axes: {
+    // THE SHELF, first because it is the axis a library is browsed by. Only
+    // the ITEM side is resolved: the options come from the closed vocabulary,
+    // so the filter's own value is already an id — and `resolveSetTopic` folds
+    // a row with no shelf, or a shelf nothing recognises, onto UNFILED, which
+    // is a real option here rather than a row that cannot be reached.
+    topic: { get: (set) => resolveSetTopic(set.topic) },
     type: { get: (set) => normalizeGameType(set.engagementType) },
     status: { get: (set) => (set.active ? 'active' : 'inactive') },
     // WHOSE IT IS — the same four values as the chip on every row, from the
@@ -148,7 +160,7 @@ export default function QuestionSetsPanel({
     contract, on the same predicate the list itself uses.
   */
   const {
-    state: { search, type, status, owner, sort },
+    state: { search, topic, type, status, owner, sort },
     set,
     shown,
     drops,
@@ -158,6 +170,9 @@ export default function QuestionSetsPanel({
   } = useListControls(questionSets, LIST_CONFIG, {
     labels: {
       search: (needle) => `Search “${needle}”`,
+      // setTopicLabel answers "Unfiled" for the empty id, so the exit out of
+      // that filter names itself the same way the option does.
+      topic: (value) => `Topic: ${setTopicLabel(value)}`,
       type: (value) => `Type: ${gameTypeLabel(value)}`,
       owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
       status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
@@ -254,6 +269,28 @@ export default function QuestionSetsPanel({
               placeholder: 'Search name, description',
             }}
             selects={[
+              {
+                /*
+                  THE SHELF. All fifteen are offered whether or not anything
+                  sits on them, exactly as the type filter offers every type:
+                  this control is the closed vocabulary, and a person filtering
+                  has to be able to read what the vocabulary is. What is
+                  ACTUALLY on the shelves, with counts, is the browse below.
+
+                  Unfiled is last and is a real destination, not a placeholder:
+                  the sets that predate the field are on no shelf, and a filter
+                  that can only name the fifteen makes that backlog invisible.
+                */
+                key: 'topic',
+                value: topic,
+                onChange: (value) => set({ topic: value }),
+                ariaLabel: 'Filter by topic',
+                options: [
+                  { value: 'all', label: 'All topics' },
+                  ...SET_TOPIC_IDS.map((id) => ({ value: id, label: SET_TOPICS[id].label })),
+                  { value: UNFILED, label: UNFILED_LABEL },
+                ],
+              },
               {
                 key: 'type',
                 value: type,
