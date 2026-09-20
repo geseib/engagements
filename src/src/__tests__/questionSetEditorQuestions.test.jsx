@@ -995,12 +995,14 @@ describe('the permission flags', () => {
 /*
   ── REPLACING THE QUESTIONS OF ONE OF ENGAGE'S OWN SETS ───────────────────
 
-  The other half of the owner's trigger. A platform set that is switched on is
-  being played by every organisation, so new questions under it are the same
-  content change a share would have had checked — and nothing had ever checked
-  one. The save route cannot dispatch the job (it holds no
-  lambda:InvokeFunction), so it answers `checkDue` and this panel runs it, after
-  the save has returned and the version is already live.
+  One of the owner's three triggers. A platform set that is switched on is being
+  played by every organisation, so new questions under it are the same content
+  change a share would have had checked — and nothing had ever checked one.
+
+  THE SAVE ROUTE STARTS THE CHECK (upload-questions.js, via
+  admin/shared/house-check.js). This panel used to, off `checkDue`, and a tab
+  closed between the save and the post left a set live and unchecked. What is
+  left here is telling the person, on the same line as the save's own outcome.
 */
 describe("Engage's own set, replaced while it is on", () => {
   const started = [];
@@ -1008,40 +1010,30 @@ describe("Engage's own set, replaced while it is on", () => {
     fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
     fireEvent.click(saveButton(/Save as version 3/i));
   };
-  const apiWith = (saveBody, checkReply) => mockApi({
+  const apiWith = (saveBody) => mockApi({
     'POST upload-questions': async () => jsonResponse(200, { setId: SET.id, setName: SET.name, version: 3, questionCount: 2, ...saveBody }),
-    'POST /check': async (url) => { started.push(url); return checkReply; },
+    'POST /check': async (url) => { started.push(url); return jsonResponse(202, { jobId: 'j4', version: 3, status: 'queued' }); },
   });
   beforeEach(() => { started.length = 0; });
 
-  it('runs the content check after the save, and says so on the same line', async () => {
-    apiWith({ replaced: true, checkDue: true }, jsonResponse(202, { jobId: 'j4', version: 3, status: 'queued' }));
+  // rejects: a sentence that reports only the check and drops the save's own
+  // outcome, which is the thing the person pressed the button for. And rejects
+  // a SECOND check posted from here — the save already started one, and two
+  // requests race for the same lock, so one of them is answered 409.
+  it('says the check is running, and posts none of its own', async () => {
+    apiWith({ replaced: true, checkDue: true });
     renderPanel();
     await ready();
     await saveOnce();
-    await waitFor(() => expect(started).toEqual(['https://api.test/question-sets/lessons-learned/check']));
-    // rejects: a sentence that reports only the check and drops the save's own
-    // outcome, which is the thing the person pressed the button for.
     const said = await screen.findByText(/Version 3 of "Lessons Learned" is now live/i);
     expect(said).toHaveTextContent(/content check is running on it/i);
-  });
-
-  // rejects: a check that will not start swallowing the save's success, or
-  // throwing out of the handler and taking the panel with it.
-  it('a check that will not start is a clause, not a failure of the save', async () => {
-    apiWith({ replaced: true, checkDue: true }, jsonResponse(409, { error: 'A check is already running for this version.' }));
-    renderPanel();
-    await ready();
-    await saveOnce();
-    const said = await screen.findByText(/Version 3 of "Lessons Learned" is now live/i);
-    expect(said).toHaveTextContent(/could not be started: A check is already running/i);
-    expect(said).toHaveTextContent(/Run it from the Versions panel/i);
+    expect(started).toEqual([]);
   });
 
   // rejects: firing a check on every save. An organisation's own set goes
   // through its own share-and-check path and this must not touch it.
   it("an organisation's own save starts nothing and reads exactly as it did", async () => {
-    apiWith({ replaced: true, checkDue: false }, jsonResponse(202, {}));
+    apiWith({ replaced: true, checkDue: false });
     renderPanel();
     await ready();
     await saveOnce();

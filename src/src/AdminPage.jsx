@@ -22,7 +22,7 @@ import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import QuestionSetsPanel from './components/QuestionSetsPanel';
-import { checkIsDue, startHouseCheck, houseCheckNotice } from './utils/houseCheck';
+import { checkIsDue, houseCheckNotice } from './utils/houseCheck';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
 import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
@@ -916,19 +916,14 @@ function AdminPage() {
         /*
           SWITCHING ON ONE OF ENGAGE'S OWN SETS IS THE MOMENT IT BECOMES
           SERVABLE TO EVERY ORGANISATION, and the owner's trigger for the
-          content check. The activation route cannot dispatch the job itself —
-          it holds no lambda:InvokeFunction, so the invoke would be an
-          AccessDenied it had to swallow — so it answers `checkDue` and the
-          console runs it. See utils/houseCheck.js.
-
-          AFTER the toggle has returned and the row above has already moved, so
-          this cannot delay the activation and cannot fail it: the worst
-          outcome is a set that is live and a sentence saying the check did not
-          start, with the Versions panel named as the way to run it by hand.
+          content check. THE ACTIVATION ROUTE STARTS IT — this console used to,
+          and a tab closed between the two calls left a set live and unchecked.
+          What is left here is telling the person: `checkDue` says the
+          activation made a check due and dispatched one. See utils/houseCheck.js.
         */
         if (checkIsDue(result)) {
           const name = (questionSets.find((s) => s.id === setId) || {}).name || '';
-          setNotice(houseCheckNotice(await startHouseCheck(setId), name));
+          setNotice(houseCheckNotice(name));
         }
       } else {
         // Was `alert()`, in a console that has imported StatusMessage since it
