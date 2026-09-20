@@ -135,7 +135,7 @@ async function updateJobProgress(dynamodb, tableName, jobId, {
   }));
 }
 
-async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], meta }) {
+async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], meta, promptSource }) {
   const sets = [
     '#status = :status', '#items = :items', 'warnings = :warnings',
     'completed = :completed', 'phase = :phase', 'updatedAt = :now',
@@ -152,6 +152,17 @@ async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], m
   // Omitted meta must LEAVE an earlier one alone, not overwrite it with null —
   // the survey worker writes meta on its first pass and completes much later.
   if (meta && typeof meta === 'object') { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = meta; }
+  /*
+    WHICH PROMPT PRODUCED THIS. Not a warning — a warning is for a problem, and
+    this is provenance, wanted just as much when the run went well. Without it,
+    editing a generation prompt and re-running tells you nothing about whether
+    the edit was used, which is how "I changed it and nothing happened" starts.
+    Omitted leaves an earlier value alone, for the same reason meta does.
+  */
+  if (promptSource && typeof promptSource === 'object') {
+    sets.push('promptSource = :promptSource');
+    values[':promptSource'] = promptSource;
+  }
 
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
@@ -216,6 +227,8 @@ function jobToResponse(item) {
     items: item.items || [],
     warnings: item.warnings || [],
     meta: item.meta || null,
+    // Provenance, so the client can say which generation prompt ran.
+    promptSource: item.promptSource || null,
     error: item.errorMessage || null,
     createdSet: item.createdSetId
       ? { setId: item.createdSetId, setName: item.createdSetName || item.createdSetId }

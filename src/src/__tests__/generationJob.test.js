@@ -64,6 +64,49 @@ const partialFailure = jobResponse({
   error: 'rate limited by the AI service (HTTP 429)',
 });
 
+/*
+  WHICH GENERATION PROMPT RAN.
+
+  The owner, on discovering that generation prompts exist and are bound by a
+  naming convention rather than a picker: "im not sure how you select them when
+  you click generate questions." The worker records provenance on the job now;
+  this is the client half, so a panel can say which prompt produced a batch.
+
+  Read defensively for the same reason `createdSet` is: a job started before
+  this shipped carries no field at all.
+*/
+describe('which generation prompt produced the batch', () => {
+  test('a curated prompt is reported with its key', () => {
+    const r = interpretGenerationJob({
+      status: 'complete', items: [{ title: 'a' }],
+      promptSource: { kind: 'curated', key: 'AIPROMPT#gen-wavelength-tech-terms' },
+    });
+    expect(r.promptSource).toEqual({ kind: 'curated', key: 'AIPROMPT#gen-wavelength-tech-terms' });
+  });
+
+  test('a fallback run is reported as a fallback', () => {
+    const r = interpretGenerationJob({
+      status: 'complete', items: [{ title: 'a' }],
+      promptSource: { kind: 'fallback', key: null },
+    });
+    expect(r.promptSource.kind).toBe('fallback');
+  });
+
+  test('a job from before this shipped reports nothing rather than throwing', () => {
+    const r = interpretGenerationJob({ status: 'complete', items: [{ title: 'a' }] });
+    expect(r.promptSource).toBeNull();
+  });
+
+  test('a malformed value is discarded rather than rendered', () => {
+    for (const bad of ['gen-thing', 42, [], { key: 'x' }]) {
+      const r = interpretGenerationJob({
+        status: 'complete', items: [{ title: 'a' }], promptSource: bad,
+      });
+      expect(r.promptSource).toBeNull();
+    }
+  });
+});
+
 describe('the outcome, which is never items.length', () => {
   test('a failed job carrying 41 of 100 is partial, and never complete', () => {
     // rejects: any re-derivation of the branch from items.length — the exact

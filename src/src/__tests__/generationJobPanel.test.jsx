@@ -36,6 +36,53 @@ const mount = (job, props = {}) => render(
 /** Every button on screen, by its visible label. */
 const buttonNames = () => screen.getAllByRole('button').map((b) => b.textContent.trim());
 
+/*
+  WHICH PROMPT WROTE THIS BATCH.
+
+  Generation prompts are bound by a naming convention derived from the game type
+  and the category, with no picker — so the panel is the only place a user can
+  learn which one ran, and a mismatch fell through to a generic fallback in
+  silence. That silence is how an edited generation prompt appears to do nothing.
+*/
+describe('the generation prompt is named on the result', () => {
+  test('a curated prompt is named, without its storage prefix', () => {
+    mount(jobResponse({
+      status: 'complete', requested: 2, completed: 2, items: questions(2),
+      promptSource: { kind: 'curated', key: 'AIPROMPT#gen-wavelength-tech-terms' },
+    }));
+    const line = screen.getByTestId('gjp-prompt-source');
+    expect(line.textContent).toMatch(/gen-wavelength-tech-terms/);
+    expect(line.textContent).not.toMatch(/AIPROMPT#/);
+  });
+
+  test('a prompt somebody picked is named as their choice', () => {
+    mount(jobResponse({
+      status: 'complete', requested: 2, completed: 2, items: questions(2),
+      promptSource: { kind: 'chosen', key: 'AIPROMPT#gen-wavelength-brainstorming' },
+    }));
+    const line = screen.getByTestId('gjp-prompt-source');
+    expect(line.textContent).toMatch(/gen-wavelength-brainstorming/);
+    expect(line.textContent).toMatch(/you chose/i);
+  });
+
+  test('a fallback run says so in words rather than naming nothing', () => {
+    mount(jobResponse({
+      status: 'complete', requested: 2, completed: 2, items: questions(2),
+      promptSource: { kind: 'fallback', key: null },
+    }));
+    expect(screen.getByTestId('gjp-prompt-source').textContent)
+      .toMatch(/no generation prompt matched/i);
+  });
+
+  // rejects: a blank line, or a crash, on every job that predates this.
+  test('a job from before this shipped renders no line at all', () => {
+    mount(jobResponse({
+      status: 'complete', requested: 2, completed: 2, items: questions(2),
+    }));
+    expect(screen.queryByTestId('gjp-prompt-source')).toBeNull();
+  });
+});
+
 describe('while it is running', () => {
   const running = jobResponse({
     status: 'running',

@@ -666,8 +666,30 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         ? selectedType.dbPrompt.scenarioType
         : scenarioConfig.type;
 
+      /*
+        SEND WHICH PROMPT WAS PICKED, BY IDENTITY.
+
+        Each stored generation prompt is its own card here, so a choice really is
+        being made — but until now it reached the backend only as
+        `scenarioType`, a CATEGORY NAME. The worker then re-derived a prompt from
+        that name plus the game type, which is a different question from "the one
+        they clicked": two prompts sharing a scenarioType resolve to whichever
+        the derived key happens to name, and the card you picked can lose.
+
+        The id settles it. The backend prefers it over the derived key and warns
+        if it cannot be honored, so a pick can no longer be silently substituted.
+        `scenarioType` is still sent — it remains the fallback when nothing was
+        picked, and for the hardcoded cards that have no stored row at all.
+      */
+      const chosenPromptId = selectedType?.source === 'database' && selectedType.dbPrompt
+        ? (selectedType.dbPrompt.promptId
+          || String(selectedType.dbPrompt.SK || '').replace(/^AIPROMPT#/, '')
+          || null)
+        : null;
+
       const { jobId } = await startGenerationJob(ENDPOINT, {
         scenarioType: backendScenarioType,
+        ...(chosenPromptId ? { promptId: chosenPromptId } : {}),
         engagementType: engagementType,
         prompt: basePrompt,
         count: scenarioConfig.count,

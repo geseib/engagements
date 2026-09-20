@@ -181,6 +181,59 @@ describe('the direction reaches the generator', () => {
   });
 });
 
+/*
+  WHICH PROMPT WAS PICKED, SENT BY IDENTITY.
+
+  Every stored generation prompt is its own card, so a choice really is being
+  made — but it reached the backend only as `scenarioType`, a CATEGORY NAME, and
+  the worker re-derived a prompt from that name plus the game type. That is a
+  different question from "the one they clicked": two prompts sharing a
+  scenarioType resolve to whichever the derived key names, and the picked card
+  can lose without anybody being told.
+
+  The owner asked "is there already a way to pick?" — the cards were the picker
+  all along; the pick just was not being carried.
+*/
+describe('the picked prompt is identified, not merely categorised', () => {
+  const storedPrompt = {
+    SK: 'AIPROMPT#gen-ca-lessons',
+    promptId: 'gen-ca-lessons',
+    name: 'Lessons Learned - Strategic Insights',
+    description: 'What the room took away',
+    basePrompt: 'base',
+    scenarioType: 'lessons-learned',
+    gameType: 'call-and-answer',
+    promptType: 'generation',
+    status: 'active',
+  };
+
+  test('choosing a stored prompt sends its id alongside the scenarioType', async () => {
+    const { posted } = await open({ api: { job: completeJob(), prompts: [storedPrompt] } });
+    await templatesSettled();
+    fireEvent.click(screen.getByTestId('template-disclosure'));
+    fireEvent.click(screen.getByText('Lessons Learned'));
+    fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].promptId).toBe('gen-ca-lessons');
+    // The category still rides along: it is the backend's fallback when the
+    // chosen row cannot be used, and the only thing a hardcoded card has.
+    expect(posted[0].scenarioType).toBe('lessons-learned');
+  });
+
+  // rejects: sending an id for a built-in card, which names no stored row —
+  // the backend would warn about a prompt that was never chosen.
+  test('a built-in card sends no id at all', async () => {
+    const { posted } = await open({ api: { job: completeJob() } });
+    openTemplates();
+    fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
+    fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].promptId).toBeUndefined();
+  });
+});
+
 describe('the participant instruction follows the KIND and not the topic', () => {
   /**
    * Drive the whole flow and return what the builder handed the page.
