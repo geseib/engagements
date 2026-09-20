@@ -201,6 +201,52 @@ async function shareJob(version) {
   });
 
   /*
+    ── A SET SHARED BEFORE VERSIONING EXISTED HAS A REVIEW TOO ───────────────
+
+    The owner, of the four public sets on dev: they show nothing. Three were
+    shared from UNVERSIONED sets, so the public row's `sourceVersion` is NULL
+    and the review sits in the UNSUFFIXED partition — `setPartition(ref, null)`,
+    a different key from v1's, which the repo supports on purpose
+    (set-version.js toVersion/resolvePartitionFromMeta, tenant.setContentPk).
+    `readReview(source, null)` finds it. standing() guarded the read with
+    `Number(meta.sourceVersion) || 0`, which is 0 for NULL, so it never looked
+    and reported `unreviewed` over a row that says `passed`.
+  */
+  await H.test('a set shared before versioning existed: its review is read from the unsuffixed partition', async () => {
+    H.reset();
+    seedPublic({ sourceVersion: null });
+    await R.writeReview(db, T, SRC, null, {
+      status: R.STATUS.PASSED, findings: [], note: '11/11 clean', contentHash: HASH, checkedBy: 'sub-amara', tally: TALLY, observed: OBSERVED,
+    });
+    const card = await get();
+    assert.strictEqual(card.review.status, 'passed', 'a legacy set reads as unreviewed');
+    assert.strictEqual(card.review.note, '11/11 clean');
+    assert.deepStrictEqual(card.review.tally, TALLY);
+    assert.strictEqual(observedRow(card, 'c001#001', 'MISCONDUCT').text, 'The Zodiac\nWhich newspaper received the first cipher?');
+  });
+  // rejects: reporting version 0 for a set that has no version. Nothing in the
+  // table is ever v0 — the card's own log filter matches a check event on it,
+  // and a re-check would be offered a version the library does not serve.
+  await H.test('a set shared before versioning existed reports no source version, not version 0', async () => {
+    H.reset();
+    seedPublic({ sourceVersion: null });
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.PASSED, findings: [], note: '11/11 clean', contentHash: HASH });
+    assert.strictEqual((await get()).sourceVersion, null);
+  });
+  // rejects: a fix for the above that reads the unsuffixed partition for
+  // EVERY set — a versioned set's review must still come from its own.
+  await H.test('a versioned set still reads its own version\'s review, never the unsuffixed one', async () => {
+    H.reset();
+    seedPublic();
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.FLAGGED, findings: [], note: 'the legacy row, from before v3 existed' });
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.PASSED, findings: [], note: '3/3 clean', contentHash: HASH });
+    const card = await get();
+    assert.strictEqual(card.sourceVersion, 3);
+    assert.strictEqual(card.review.status, 'passed');
+    assert.strictEqual(card.review.note, '3/3 clean');
+  });
+
+  /*
     An approval KEEPS the row: transitionReview spreads what the row holds, so
     an escalation or an appeal a person approved still carries the findings
     that held it, explanations and all, whether or not it was ever measured.

@@ -57,7 +57,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('./shared/tenant');
-const { setMetadataKey, setPartition, queryPartition } = require('./shared/set-version');
+const { setMetadataKey, setPartition, queryPartition, toVersion } = require('./shared/set-version');
 const { unpublishSet } = require('./shared/publish-set');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
@@ -109,8 +109,15 @@ async function withText(lists, meta, publicSetId) {
 
 async function standing(meta, publicSetId) {
   const source = sourceOf(meta);
-  const version = Number(meta.sourceVersion) || 0;
-  const review = source.orgId && source.setId && version ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
+  // NULL IS A VERSION HERE — the legacy one. `toVersion` returns null for a set
+  // shared before versioning existed, and `setPartition(ref, null)` is the
+  // UNSUFFIXED partition, which is where such a set's REVIEW row really is.
+  // This read used to be guarded by `Number(meta.sourceVersion) || 0`, so every
+  // legacy entry — three of the four on dev — reported `unreviewed` over a row
+  // that says `passed`. The guard that matters is only that the public row
+  // names a source at all.
+  const version = toVersion(meta.sourceVersion);
+  const review = source.orgId && source.setId ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
   const [observed, findings] = await withText([review.observed, review.findings], meta, publicSetId);
   const log = source.orgId && source.setId ? await readReviewLog(db, TABLE(), source) : [];
   const versions = Array.isArray(meta.versions) ? meta.versions : [];
@@ -186,14 +193,20 @@ exports.handler = async (event) => {
     if (note.length > NOTE_MAX) return json(400, { error: `The note is over ${NOTE_MAX} characters.` });
 
     const source = sourceOf(meta);
-    const version = Number(meta.sourceVersion) || 0;
+    // Legacy is null, not 0 — the same reason standing() gives above. Read as 0
+    // this named a version 0 in the organisation's own log and stamp, and
+    // `if (version)` then skipped the queue delete: the row the check wrote at
+    // `<org>#<set>#v0` (queueSk counts a legacy version as v0) outlived the
+    // public set it pointed at. The delete is unconditional now — the same key
+    // the check would have written, present or not.
+    const version = toVersion(meta.sourceVersion);
     const reviewer = reviewerOf(event);
     // R10: the organisation is told FIRST — the destructive delete is LAST.
     // See the handler docstring for why.
     if (source.orgId && source.setId) {
       await appendReviewEvent(db, TABLE(), source, 'taken-down', { version, publicSetId, note, reviewer });
       await writeShareStamp(db, TABLE(), source, { version, status: 'flagged', note }, { onlyIfPublicSetId: publicSetId });
-      if (version) await deleteQueueRow(db, TABLE(), queueSk(source, version));
+      await deleteQueueRow(db, TABLE(), queueSk(source, version));
     }
     await deleteQueueRow(db, TABLE(), queueSk(pubRefOf(publicSetId), 0));
     await unpublishSet(db, TABLE(), source, pubRefOf(publicSetId));
