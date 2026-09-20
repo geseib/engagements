@@ -30,20 +30,23 @@
  *
  * ── WHAT IS REFUSED, AND WHAT IS DELIBERATELY NOT ──────────────────────────
  *
- * A topic is REQUIRED on a set that is created live, and an unknown topic is
- * refused wherever it is offered. But the ~40 sets that predate this field are
- * UNFILED, not broken: they list, read and play exactly as they did, and a
- * rename of one still saves. The requirement bites when a set is created live,
- * and when a save actually mentions the topic. Nothing retro-refuses a set
- * somebody is in the middle of using.
+ * A topic is REQUIRED on a set that is created live, required again before an
+ * unfiled set is SWITCHED ON, and an unknown topic is refused wherever it is
+ * offered. But the ~40 sets that predate this field are UNFILED, not broken:
+ * they list, read and play exactly as they did, and a rename of one still
+ * saves. Nothing retro-refuses a set somebody is in the middle of using.
  *
  * A set created ALREADY SWITCHED OFF — an AI draft, a legacy archive restore —
- * may arrive unfiled. It is servable to nobody until a person opens it, and
- * that person's save is where the requirement lands. Refusing it instead would
- * throw away a generation run nobody can repeat.
+ * may arrive unfiled, because it is servable to nobody and refusing it would
+ * throw away a generation run nobody can repeat. SWITCHING IT ON is where the
+ * requirement lands (section 4), and that is the only thing that makes the
+ * exemption honest: a save is not the gate, because edit-question-set.js only
+ * validates a save that mentions the topic and switching a set on mentions
+ * nothing at all.
  *
  * // rejects: a topic off the shelf being stored; a live set created with no
- * //          shelf at all; an existing unfiled set being refused a rename;
+ * //          shelf at all; an unfiled set being switched on; an existing
+ * //          unfiled set being refused a rename, a deactivation or a play;
  * //          set tags leaking onto question rows; the two copies of the shelf
  * //          drifting apart.
  */
@@ -58,6 +61,7 @@ const { setMetadataKey } = require(path.join(REPO, 'lambda-functions/admin/share
 const snap = require(path.join(REPO, 'lambda-functions/admin/shared/archive-snapshot.js'));
 const upload = require(path.join(REPO, 'lambda-functions/admin/upload-questions.js')).handler;
 const editSet = require(path.join(REPO, 'lambda-functions/admin/edit-question-set.js')).handler;
+const toggle = require(path.join(REPO, 'lambda-functions/admin/toggle-question-set.js')).handler;
 const listSets = require(path.join(REPO, 'lambda-functions/admin/get-question-sets.js')).handler;
 const pickerSets = require(path.join(REPO, 'lambda-functions/game/get-question-sets.js')).handler;
 
@@ -224,8 +228,11 @@ const save = (setId, patch) => editSet({
   });
 
   // rejects: throwing away a generation run because nobody had filed it yet.
-  // A draft arrives switched off; it is servable to nobody, and the person who
-  // reviews it is the one the requirement lands on.
+  // A draft arrives switched off and is servable to nobody; SWITCHING IT ON is
+  // where the requirement lands, and section 4 is that gate. Saying "the
+  // reviewer's save" here would be describing a gate that does not exist:
+  // edit-question-set.js only validates a save that MENTIONS the topic, and
+  // switching a draft on mentions nothing.
   await check('a set created already switched off may arrive unfiled', async () => {
     h.reset();
     const res = await create({ isAIGenerated: true });
@@ -293,7 +300,88 @@ const save = (setId, patch) => editSet({
       "the question kept its own keywords and did not inherit the set's");
   });
 
-  say('\n4. saving a set');
+  say('\n4. switching a set on');
+  /*
+    THE GATE THE DRAFT EXEMPTION LEANS ON. Section 3 lets a set arrive unfiled
+    when it arrives switched OFF — an AI draft, a legacy archive restore —
+    because it is servable to nobody and refusing it would throw away a run
+    nobody can repeat. That exemption is only honest if something asks later,
+    and toggle-question-set.js is the only route that flips a set's `active`,
+    so this is the whole of "later".
+
+    A TRANSITION, NEVER A STATE. It bites on off → on and nowhere else:
+    deactivating an unfiled set is not refused, an already-live unfiled set is
+    not refused, and listing, renaming and playing one are untouched. A legacy
+    row carries no `active` attribute at all and reads as live, so the ~40 sets
+    predating the shelf never reach this gate — which is what keeps it from
+    being the retro-refusal the design rules out.
+  */
+
+  /** A draft of Engage's own, switched off, filed or not. */
+  const draft = (meta = {}) => h.seedSet({
+    setId: 'draft',
+    meta: {
+      name: 'Draft', engagementType: 'call-and-answer', createdBy: 'staff-1',
+      active: false, ...meta,
+    },
+  });
+  const setActive = (setId, active) => toggle({
+    ...h.adminEvent({ active }),
+    pathParameters: { setId },
+  });
+
+  // rejects: the draft exemption having no downstream gate at all, which is
+  // how a generated set goes live unfiled and is never asked again.
+  await check('an unfiled draft cannot be switched on, and the refusal names the shelf', async () => {
+    h.reset();
+    draft();
+    const res = await setActive('draft', true);
+    assert.strictEqual(res.statusCode, 400, `an unfiled set went live: ${res.body}`);
+    assert.ok(body(res).error.includes('General Knowledge'), body(res).error);
+    assert.strictEqual(metaOf('draft').active, false, 'the set was switched on anyway');
+  });
+
+  // rejects: the gate reading a stored shelf as absent — the control, so the
+  // refusal above is the shelf being read and not activation broken outright.
+  await check('a filed draft switches on', async () => {
+    h.reset();
+    draft({ topic: 'history' });
+    const res = await setActive('draft', true);
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(metaOf('draft').active, true);
+  });
+
+  // rejects: a gate on the STATE rather than the transition, which would trap
+  // an unfiled set in the on position and make it unhideable.
+  await check('an unfiled set can still be switched off', async () => {
+    h.reset();
+    draft({ active: true });
+    const res = await setActive('draft', false);
+    assert.strictEqual(res.statusCode, 200, `an unfiled set could not be hidden: ${res.body}`);
+    assert.strictEqual(metaOf('draft').active, false);
+  });
+
+  // rejects: the same, from the other side. Re-asserting `active: true` on a
+  // set that is already serving makes nothing newly servable, so there is
+  // nothing to ask about.
+  await check('an already-live unfiled set is not refused', async () => {
+    h.reset();
+    draft({ active: true });
+    const res = await setActive('draft', true);
+    assert.strictEqual(res.statusCode, 200, res.body);
+  });
+
+  // rejects: the ~40 sets predating the shelf being caught by this gate. They
+  // carry no `active` attribute at all and every reader treats that as live,
+  // so switching one on is not a transition and must not be a wall.
+  await check('a legacy set with no active attribute is not refused', async () => {
+    h.reset();
+    h.seedSet({ setId: 'legacy', meta: { name: 'Legacy', engagementType: 'call-and-answer', createdBy: 'staff-1' } });
+    const res = await setActive('legacy', true);
+    assert.strictEqual(res.statusCode, 200, `a legacy set was retro-refused: ${res.body}`);
+  });
+
+  say('\n5. saving a set');
 
   // rejects: the editor offering a shelf the save then drops.
   await check('a save files a set', async () => {
@@ -349,7 +437,7 @@ const save = (setId, patch) => editSet({
     assert.strictEqual(metaOf('filed').topic, 'history');
   });
 
-  say('\n5. what the readers say');
+  say('\n6. what the readers say');
 
   // rejects: the shelf being stored and then never reaching a screen. Raw, not
   // resolved: the editor has to tell "chose General Knowledge" from "never
@@ -385,7 +473,7 @@ const save = (setId, patch) => editSet({
     assert.deepStrictEqual(legacy.tags, []);
   });
 
-  say('\n6. the shelf travels');
+  say('\n7. the shelf travels');
 
   // rejects: a restore silently unfiling a set, which is what happens when an
   // attribute is missing from the list the restore carries across.

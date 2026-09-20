@@ -192,9 +192,13 @@ exports.handler = async (event) => {
 
       A SET THAT ARRIVES ALREADY SWITCHED OFF does not have to either, and that
       exception is narrow: an AI draft (`isAIGenerated`) and a legacy archive
-      restore (`startInactive`) are servable to nobody until a person opens
-      them, and that person's save is where the requirement lands. Refusing
-      those would throw away a generation run nobody can repeat.
+      restore (`startInactive`) are servable to nobody, and refusing those would
+      throw away a generation run nobody can repeat. SWITCHING ONE ON is where
+      the requirement lands — toggle-question-set.js refuses to make an unfiled
+      set servable, and it is the only route that flips `active`. Not a later
+      SAVE: edit-question-set.js validates only a save that mentions the topic,
+      and switching a set on mentions nothing, so a save-shaped promise here
+      would be a gate that does not exist.
 
       AN UNKNOWN TOPIC IS REFUSED WHEREVER IT IS OFFERED — create, replace or
       draft. Off the shelf is off the shelf, and a typo must never become a
