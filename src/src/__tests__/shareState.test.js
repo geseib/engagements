@@ -28,6 +28,24 @@ describe('shareStateOf — the "Who can see it" column', () => {
     const s = shareStateOf({ activeVersion: 2, share: { status: 'published', version: 2, publicVersion: 1, at: at(60) } });
     expect(s).toMatchObject({ key: 'public', label: 'Public v2' });
   });
+  test('a set shared while unversioned and since replaced reads as behind, not a flat Public', () => {
+    // The live stamp for a set shared before it had versions carries NO
+    // `version` key at all (verified on engagedev). Replacing that set
+    // snapshots the legacy content to v1 and writes the new content as v2, so
+    // the public copy is genuinely stale — but `active > shared` never fired,
+    // because `shared` was null, and the org was told a flat "Public" forever.
+    const s = shareStateOf({ activeVersion: 2, share: { status: 'published', at: at(60) } });
+    expect(s.key).toBe('behind');
+    expect(s.label).toBe('Public, behind (v2 not shared)');
+    expect(s.title).not.toMatch(/vnull|undefined|NaN/);
+  });
+  test('a set shared while unversioned and only MIGRATED to v1 is not behind', () => {
+    // v1 minted from legacy content is a verbatim copy of it — by the migration
+    // script, and by the snapshot a replace or a restore takes first. The
+    // content that is public IS v1, so "behind" here would be a false alarm.
+    expect(shareStateOf({ activeVersion: 1, share: { status: 'published', at: at(60) } }))
+      .toMatchObject({ key: 'public', label: 'Public' });
+  });
   test('a newer active version than the published one reads as behind, naming both', () => {
     const s = shareStateOf({ activeVersion: 3, share: { status: 'published', version: 2, at: at(60) } });
     expect(s.key).toBe('behind');

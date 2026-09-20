@@ -49,7 +49,7 @@ H.install();
 const tenant = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant.js'));
 const C = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
 const { promptKey } = require(path.join(H.REPO, 'lambda-functions/admin/shared/prompt-access.js'));
-const { setMetadataKey, setPartition } = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-version.js'));
+const { setMetadataKey, setPartition, FIRST_VERSION } = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-version.js'));
 
 const copySet = require(path.join(H.REPO, 'lambda-functions/admin/copy-question-set.js')).handler;
 
@@ -304,7 +304,9 @@ async function copyInto(scope = tenant.PLATFORM) {
     assert.strictEqual(copy.orgId, GLOBEX);
     assert.strictEqual(copy.sourceSetId, SET);
 
-    const contentPk = setPartition({ scope: tenant.ORG, orgId: GLOBEX, setId: copy.SK.replace('SET#', '') }, null);
+    // FIRST_VERSION: a copy opens its own version history at v1, so that is
+    // where copy-question-set.js writes the rows it carried over.
+    const contentPk = setPartition({ scope: tenant.ORG, orgId: GLOBEX, setId: copy.SK.replace('SET#', '') }, FIRST_VERSION);
     const sks = H.rowsWhere((i) => i.PK === contentPk).map((i) => i.SK).sort();
     assert.deepStrictEqual(sks, ['CATEGORY#c001', 'QUESTION#q001'],
       `the content rows did not reach the copy (found ${sks.join(', ') || 'none'})`);

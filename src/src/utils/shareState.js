@@ -34,11 +34,26 @@ export function shareStateOf(set, nowMs = Date.now()) {
   const shared = Number(share.version) || null;
   switch (share.status) {
     case 'published': {
-      if (active && shared && active > shared) {
+      /*
+       * A set shared BEFORE it had versions stamps no number at all, and
+       * `active && shared && …` therefore never fired: the set was replaced,
+       * its content moved on, and the chip still read a flat "Public" with
+       * nothing telling the organisation its public copy was stale.
+       *
+       * The missing number is not unknown, it is v1. Every path that mints v1
+       * out of legacy content COPIES it verbatim — scripts/migrate-set-versions.js,
+       * and the snapshot a replace (upload-questions.js) or a restore
+       * (shared/archive-restore.js) takes before writing the next version — so
+       * what is public IS v1, and only v2 onwards is genuinely behind.
+       */
+      const sharedOrLegacy = shared || 1;
+      if (active && active > sharedOrLegacy) {
         return {
           key: 'behind',
           label: `Public, behind (v${active} not shared)`,
-          title: `v${shared} is public; your v${active} has not been shared. Submit it for review to update the library.`,
+          title: shared
+            ? `v${shared} is public; your v${active} has not been shared. Submit it for review to update the library.`
+            : `What is public was shared before this set had versions; your v${active} has not been shared. Submit it for review to update the library.`,
         };
       }
       // A legacy unversioned set's share carries no version number

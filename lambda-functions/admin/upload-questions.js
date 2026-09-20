@@ -5,6 +5,7 @@ const {
   batchPutItems,
   copyPartition,
   knownVersions,
+  FIRST_VERSION,
   nextVersion,
   queryPartition,
   setPartition,
@@ -797,7 +798,22 @@ exports.handler = async (event) => {
     // replace supersedes actually exists and rolling back is a promote rather
     // than a restore. The snapshot is a copy; the legacy rows stay put, exactly
     // as the migration script leaves them.
-    let targetVersion = null;
+    //
+    // A NEW set is born at v1 (`FIRST_VERSION`). It used to be born unversioned,
+    // which made "no version" the normal state rather than a transitional one:
+    // on engagedev 2026-09-19, 15 of 21 platform sets and 5 of 6 org sets had no
+    // `activeVersion`, every one of them created after versioning shipped. Only
+    // a replace ever minted one. Everything built on top since — the per-version
+    // REVIEW row, the share stamp, the public library's `sourceVersion` — then
+    // carried null for the majority of sets, and `scripts/migrate-set-versions.js`
+    // could never finish, because the importer kept making new legacy rows for
+    // the sweep to find.
+    //
+    // The legacy BRANCH below stays exactly as it was. Nothing is migrated and
+    // nothing is swept: the sets already unversioned keep resolving through
+    // set-version.js's third step, and a replace still snapshots them to v1
+    // first. This only stops new ones joining them.
+    let targetVersion = isReplace ? null : FIRST_VERSION;
     let snapshotted = 0;
     if (isReplace) {
       const alreadyVersioned = toVersion(existingMeta.activeVersion) !== null
@@ -827,9 +843,8 @@ exports.handler = async (event) => {
       console.log(`↻ Replacing set "${setId}" — writing version v${targetVersion}`);
     }
 
-    // Content partition for THIS import. A plain import keeps writing to the
-    // legacy `SET#<id>` layout (a new set is version-less until it is migrated
-    // or first replaced); a replace writes to `SET#<id>#v<n>`.
+    // Content partition for THIS import — `SET#<id>#v<n>` either way now: v1
+    // for a new set, `nextVersion` for a replace.
     const contentPk = setPartition(targetRef, targetVersion);
 
     const setMetadataItem = {
@@ -865,6 +880,20 @@ exports.handler = async (event) => {
       ...(sourceSetIdMeta ? { sourceSetId: sourceSetIdMeta } : {}),
       questionCount: questions.length,
       categoryCount: categoriesByKey.size,
+      // THE SET'S VERSION HISTORY, opened at v1 by the import that creates it.
+      // `versions[]` must carry the entry from the start: `knownVersions` reads
+      // it, `nextVersion` counts from it, and get-set-versions.js lists it — a
+      // set with content at #v1 but an empty array would show no versions at all
+      // and let a later replace renumber over its own content.
+      activeVersion: targetVersion,
+      versions: [{
+        version: targetVersion,
+        createdAt: new Date().toISOString(),
+        questionCount: questions.length,
+        categoryCount: categoriesByKey.size,
+        sourceFile: fileName,
+        note: versionNote,
+      }],
       // AI-generated content starts inactive, and so does a set restored from a legacy backup.
       active: (isAIGenerated || startInactive) ? false : true,
       createdAt: new Date().toISOString(),

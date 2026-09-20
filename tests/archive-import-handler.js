@@ -120,12 +120,12 @@ const LEGACY_CSV = '"Category","Title","Detail","OptionA","OptionB","OptionC","O
   await check('the CSV restores as "Old Quiz", inactive, owned by the restorer', () => {
     assert.deepStrictEqual(res.body.results.failed, []);
     assert.deepStrictEqual(res.body.results.successful[0], {
-      archiveId: legacySet, kind: 'set', id: 'oldquiz', name: 'Old Quiz', mode: 'created', version: null, active: false, legacy: true, questionCount: 1,
+      archiveId: legacySet, kind: 'set', id: 'oldquiz', name: 'Old Quiz', mode: 'created', version: 1, active: false, legacy: true, questionCount: 1,
     });
     assert.deepStrictEqual([legacyRow.name, legacyRow.description, legacyRow.active, legacyRow.createdBy], ['Old Quiz', 'Space facts', false, 'staff-1']);
   });
   await check('its trivia options survive', () => {
-    const question = h.rows(setPartition({ scope: 'platform', setId: 'oldquiz' }, null)).find((r) => r.SK.startsWith('QUESTION#'));
+    const question = h.rows(setPartition({ scope: 'platform', setId: 'oldquiz' }, 1)).find((r) => r.SK.startsWith('QUESTION#'));
     assert.deepStrictEqual([question.optionE, question.correctAnswer], ['Jupiter', 'OptionE']);
   });
   await check('restoring it again, over the set it created, is refused and changes nothing', async () => {
