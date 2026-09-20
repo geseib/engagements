@@ -57,6 +57,12 @@ export default function RemoteSessionPanel({
   initialTab = 'players',
   roster = null,
   state = '',
+  // The session's game type, straight from the server, for the Questions tab's
+  // preview: it decides whether the card draws options at all and which
+  // instruction line the room would be given. Normalised inside the browser,
+  // because an alias or a capital is the server's to send and the card compares
+  // `trivia` as a literal.
+  gameType = '',
   round = null,
   unaskedCount = null,
   busy = false,
@@ -274,6 +280,7 @@ export default function RemoteSessionPanel({
               that had to be written. */}
           <RemoteQuestionBrowser
             setId={setId}
+            gameType={gameType}
             unaskedCount={unaskedCount}
             busy={busy}
             onAsk={onAsk}

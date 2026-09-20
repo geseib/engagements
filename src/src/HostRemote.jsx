@@ -784,6 +784,7 @@ function HostRemote() {
             initialTab={panelTab}
             roster={roster}
             state={snapshot?.state}
+            gameType={gameType}
             round={round}
             unaskedCount={unaskedCount}
             busy={!!busyAction || cooling}

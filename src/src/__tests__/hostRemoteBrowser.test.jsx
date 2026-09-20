@@ -16,6 +16,7 @@ import HostRemote from '../HostRemote';
 import {
   correctOptionIndex,
   remoteQuestionRow,
+  questionForCard,
   filterRemoteRows,
   askNextRequest,
 } from '../config/hostRemote';
@@ -156,6 +157,69 @@ describe('which option the set says is right', () => {
     expect(row.options.map((option) => option.letter)).toEqual(['A', 'B', 'C', 'D']);
     expect(row.options[0]).toMatchObject({ correct: true });
   });
+
+  // Rejects: an array answer read as "no answer". get-question.js and
+  // config/questionCard.js both accept the array form, so a row that refused it
+  // would print "this set does not say which option is right" about a set that
+  // does — beside a card that marks it.
+  it('reads an array of any of those spellings', () => {
+    expect(correctOptionIndex({ ...TRIVIA, correctAnswer: ['OptionC'] })).toBe(2);
+    expect(correctOptionIndex({ ...TRIVIA, correctAnswer: ['Discounting the entry plan'] })).toBe(3);
+    expect(correctOptionIndex({ ...TRIVIA, correctAnswer: [] })).toBeNull();
+  });
+
+  // Rejects: lettering by SLOT. `config/questionCard.js:triviaOptions` letters
+  // the options the card draws, by position among the FILLED slots, so a set with
+  // a hole in its slots is A, B, C on the room's screen. The list is one tap from
+  // that card and the host reads the letter out loud.
+  it('letters the filled slots by position, as the room letters them', () => {
+    const row = remoteQuestionRow({
+      optionA: 'first', optionC: 'second', optionD: 'third', correctAnswer: 'OptionC',
+    });
+    expect(row.options.map((option) => option.letter)).toEqual(['A', 'B', 'C']);
+    expect(row.options.filter((option) => option.correct).map((option) => option.text))
+      .toEqual(['second']);
+  });
+
+  // Rejects: `answerUnresolved` derived from the decoder alone. "OptionB" decodes
+  // to a slot the question never filled, so the decoder answers and nothing is
+  // flagged — the silent no-op this line exists to prevent.
+  it('says so when the answer names a slot the question left empty', () => {
+    const row = remoteQuestionRow({ optionA: 'first', optionC: 'second', correctAnswer: 'OptionB' });
+    expect(row.options.some((option) => option.correct)).toBe(false);
+    expect(row.answerUnresolved).toBe(true);
+  });
+});
+
+describe('what the card is handed', () => {
+  // Rejects: passing the stored `correctAnswer` straight through.
+  // game/get-question.js:249-255 rewrites it to the option's own TEXT before the
+  // room ever sees it, and `isCorrectTriviaOption` matches "OptionC" BOTH on the
+  // optionC slot and on the positional letter of whatever is drawn as C — so on a
+  // set with a hole in its slots the card would mark two options where the room
+  // marks one.
+  it('carries the flagged option\'s own text, never the stored spelling', () => {
+    const gap = { optionA: 'first', optionC: 'second', optionD: 'third', correctAnswer: 'OptionC' };
+    expect(questionForCard(gap).correctAnswer).toBe('second');
+    expect(questionForCard(TRIVIA).correctAnswer).toBe(TRIVIA.optionA);
+  });
+
+  // Rejects: leaving an unplaceable answer on the question. The card would try to
+  // match it and could land on the wrong option; the list has already said the set
+  // names no answer, and the card must agree with the list beside it.
+  it('carries nothing at all when no option could be flagged', () => {
+    expect(questionForCard({ ...TRIVIA, correctAnswer: 'None of the above' }).correctAnswer)
+      .toBe('');
+    expect(questionForCard({ optionA: 'first', correctAnswer: 'OptionB' }).correctAnswer).toBe('');
+  });
+
+  // Rejects: an adapter that reshapes the question. The browsing endpoint already
+  // answers in the card's own field names; only the ANSWER's value differs from
+  // what the room is given.
+  it('changes nothing else about the question', () => {
+    const staged = questionForCard(TRIVIA);
+    expect(staged).toEqual({ ...TRIVIA, correctAnswer: TRIVIA.optionA });
+  });
 });
 
 describe('the search', () => {
@@ -238,6 +302,28 @@ describe('the phone question browser', () => {
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].url).toBe('https://api.test/games/4821/next-question');
     expect(posts[0].body).toEqual({ questionId: '004', action: 'skip_to_specific' });
+  });
+
+  // Rejects: the preview reaching the phone without the session's game type.
+  // `gameType` travels HostRemote -> RemoteSessionPanel -> the browser, and a
+  // missing link anywhere on it draws a trivia question as free text — no
+  // options on the card, and another game's instruction line under it. The
+  // preview's own behaviour is held in hostRemotePreview.test.jsx; this is the
+  // one assertion that the chain is connected end to end.
+  it('previews the question as the room would see it, from the live remote', async () => {
+    serve();
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    await screen.findByText(TRIVIA.title);
+
+    fireEvent.click(screen.getByRole('button', { name: /^preview/i }));
+
+    const pane = screen.getByTestId('hrq-preview-screen');
+    expect(pane.querySelector('h1.q')).toHaveTextContent(TRIVIA.title);
+    expect([...pane.querySelectorAll('.opt .txt')].map((n) => n.textContent))
+      .toEqual([TRIVIA.optionA, TRIVIA.optionB, TRIVIA.optionC, TRIVIA.optionD]);
+    // and the answer is not on it until the host asks for it
+    expect(pane.querySelectorAll('.opt.correct')).toHaveLength(0);
   });
 
   // Rejects: leaving the browser open after a choice. The host chose; what they
