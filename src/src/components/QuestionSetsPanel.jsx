@@ -21,6 +21,7 @@ import { shareStateOf } from '../utils/shareState';
 import {
   resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
 } from '../config/setTopics';
+import { setCarriesTag } from '../config/setShelfIndex';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
 
@@ -96,6 +97,26 @@ const LIST_CONFIG = {
     // a row with no shelf, or a shelf nothing recognises, onto UNFILED, which
     // is a real option here rather than a row that cannot be reached.
     topic: { get: (set) => resolveSetTopic(set.topic) },
+    /*
+      ONE OF THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed
+      into the search box — which is what the browse's tag pills used to do.
+
+      The pill carries a COUNT, and a count has to be the number of rows the
+      click produces. The search box cannot give it that: it OR-matches a
+      substring across the name, the description, the custom instruction and
+      the tags, so `empire` also returned "The British Empire" (which carries
+      no such tag) and `ancient` also returned every `ancient-egypt` set.
+      Matching through `setCarriesTag` — the same function config/
+      setShelfIndex.js counts with — makes the two agree by construction.
+
+      `all: ''` rather than the usual `all` sentinel: a set tagged `all` is
+      not a hypothetical, and the empty string is the one value `normalizeTag`
+      can never produce, so it cannot collide with a real word.
+
+      The row itself is handed to `eq`, not a field of it, because carrying a
+      tag is a question about the set rather than a value to compare.
+    */
+    tag: { all: '', get: (set) => set, eq: (set, wanted) => setCarriesTag(set, wanted) },
     type: { get: (set) => normalizeGameType(set.engagementType) },
     status: { get: (set) => (set.active ? 'active' : 'inactive') },
     // WHOSE IT IS — the same four values as the chip on every row, from the
@@ -161,7 +182,7 @@ export default function QuestionSetsPanel({
     contract, on the same predicate the list itself uses.
   */
   const {
-    state: { search, topic, type, status, owner, sort },
+    state: { search, topic, tag, type, status, owner, sort },
     set,
     shown,
     drops,
@@ -174,6 +195,8 @@ export default function QuestionSetsPanel({
       // setTopicLabel answers "Unfiled" for the empty id, so the exit out of
       // that filter names itself the same way the option does.
       topic: (value) => `Topic: ${setTopicLabel(value)}`,
+      // A tag is already the word a person clicked, so it names itself.
+      tag: (value) => `Tag: ${value}`,
       type: (value) => `Type: ${gameTypeLabel(value)}`,
       owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
       status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
@@ -365,9 +388,9 @@ export default function QuestionSetsPanel({
           <SetShelfBrowse
             sets={questionSets}
             topic={topic}
-            search={search}
+            tag={tag}
             onPickTopic={(value) => set({ topic: value })}
-            onPickTag={(value) => set({ search: value })}
+            onPickTag={(value) => set({ tag: value })}
           />
 
           {shown.length === 0 ? (

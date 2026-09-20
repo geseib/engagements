@@ -13,6 +13,7 @@ import {
   topicIndex,
   tagIndex,
   filterTagIndex,
+  setCarriesTag,
 } from '../config/setShelfIndex';
 import { UNFILED, UNFILED_LABEL } from '../config/setTopics';
 
@@ -83,6 +84,48 @@ describe('tagIndex — which words the sets carry', () => {
 
   test('a library where nobody has tagged anything indexes nothing', () => {
     expect(tagIndex([{ id: 'a' }, { id: 'b', tags: [] }])).toEqual([]);
+  });
+});
+
+describe('setCarriesTag — the one comparison the count and the filter share', () => {
+  /*
+    THE WHOLE POINT OF THIS FUNCTION IS THAT THERE IS ONE OF IT. `tagIndex`
+    counts with it and the library's tag filter matches with it, so the number
+    on a pill and the rows clicking it produces cannot be computed by two
+    rules and drift apart — which is exactly what happened when the click was
+    a free-text search over the name, the description and the tags at once.
+  */
+  test('a set carries a tag it stores, in whatever spelling it stored it', () => {
+    expect(setCarriesTag({ tags: ['cold-war'] }, 'cold-war')).toBe(true);
+    expect(setCarriesTag({ tags: ['Cold War'] }, 'cold-war')).toBe(true);
+    expect(setCarriesTag({ tags: ['cold-war'] }, 'Cold War')).toBe(true);
+  });
+
+  test('a longer tag is not the shorter one it begins with', () => {
+    // rejects: a substring compare, under which clicking `ancient` returns
+    // every `ancient-egypt` set and the pill's own count says otherwise.
+    expect(setCarriesTag({ tags: ['ancient-egypt'] }, 'ancient')).toBe(false);
+    expect(setCarriesTag({ tags: ['ancient'] }, 'ancient-egypt')).toBe(false);
+  });
+
+  test('a word that is only in the name is not a tag', () => {
+    // rejects: matching the row instead of its tags, which is how a pill
+    // reading 1 produced two rows.
+    expect(setCarriesTag({ name: 'The British Empire', tags: ['1980s'] }, 'empire')).toBe(false);
+  });
+
+  test('a set with no tags at all carries none, and nothing carries nothing', () => {
+    expect(setCarriesTag({ id: 'a' }, 'empire')).toBe(false);
+    expect(setCarriesTag({ tags: ['empire'] }, '')).toBe(false);
+    expect(setCarriesTag(null, 'empire')).toBe(false);
+  });
+
+  test('every tag the index counts is one the predicate agrees the set carries', () => {
+    // The structural half of the contract, asserted without a DOM: for each
+    // counted tag, exactly `count` of the sets answer true.
+    for (const entry of tagIndex(SETS)) {
+      expect(SETS.filter((set) => setCarriesTag(set, entry.tag))).toHaveLength(entry.count);
+    }
   });
 });
 

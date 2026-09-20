@@ -43,13 +43,25 @@ export default function SetShelfBrowse({
   sets = [],
   /** The topic axis's current value, so the shelf in force reads as pressed. */
   topic = ALL,
-  /** The search box's current text, for the same reason on the tag side. */
-  search = '',
+  /** The tag axis's current value, for the same reason on the tag side. '' is
+   *  that axis's All — see QuestionSetsPanel's LIST_CONFIG. */
+  tag = '',
   /** Called with a shelf id, or ALL to let go of the one in force. */
   onPickTopic,
-  /** Called with a tag, or '' to let go of it. A tag goes into the SEARCH
-   *  rather than an axis of its own: it is then visible in the box, clearable
-   *  there, and carries the same drop-exit as any other search. */
+  /**
+   * Called with a tag, or '' to let go of it.
+   *
+   * A TAG IS ITS OWN AXIS, not a phrase dropped into the search box. The box
+   * OR-matches a substring across a set's name, description, custom
+   * instruction and tags, so a pill reading `empire — 1 set` produced two
+   * rows the moment a set said the word in its name — a count that disagrees
+   * with its own result. `config/setShelfIndex.js` carries the whole of that.
+   *
+   * What the search box gave a tag for free was VISIBILITY, and the summary
+   * beside the toggle below carries that instead: it sits outside the
+   * disclosure, so a tag in force is readable and releasable with the browse
+   * shut, and it takes a drop-exit from `computeDrops` like every other axis.
+   */
   onPickTag,
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -97,6 +109,26 @@ export default function SetShelfBrowse({
       </button>
       <span className="qsets-browse-sum">
         {plural(topics.length, 'topic')} · {plural(tags.length, 'tag')}
+        {/*
+          THE TAG IN FORCE, OUTSIDE THE DISCLOSURE. A filter nothing on the
+          screen names is the defect the drop-exits exist to prevent, and
+          collapsing the browse would hide this one — so the state and the way
+          out of it both live on the always-visible row. `.qsets-browse-clear`
+          is the same link affordance the "Show all N" exit uses below.
+        */}
+        {tag ? (
+          <>
+            {' · tagged '}
+            <button
+              type="button"
+              className="qsets-browse-clear"
+              aria-label={`Clear the tag ${tag}`}
+              onClick={() => onPickTag && onPickTag('')}
+            >
+              {tag}
+            </button>
+          </>
+        ) : null}
       </span>
 
       {isOpen && (
@@ -159,8 +191,8 @@ export default function SetShelfBrowse({
                   entry.tag,
                   entry.tag,
                   entry.count,
-                  search === entry.tag,
-                  () => onPickTag && onPickTag(search === entry.tag ? '' : entry.tag)
+                  tag === entry.tag,
+                  () => onPickTag && onPickTag(tag === entry.tag ? '' : entry.tag)
                 ))}
             </div>
           )}

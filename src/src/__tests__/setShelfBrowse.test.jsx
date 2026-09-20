@@ -17,6 +17,7 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import SetShelfBrowse from '../components/SetShelfBrowse';
 import QuestionSetsPanel from '../components/QuestionSetsPanel';
+import { tagIndex } from '../config/setShelfIndex';
 
 const SETS = [
   { id: 'rome', name: 'Rome at its Height', topic: 'history', tags: ['ancient', 'empire'], engagementType: 'trivia', totalQuestions: 20, active: true, createdAt: '2026-08-01T10:00:00.000Z' },
@@ -100,10 +101,14 @@ describe('the tags, which are the half a select cannot do', () => {
     expect(onPickTag).toHaveBeenCalledWith('onboarding');
   });
 
-  test('the tag already being searched for reads as pressed, and clicking it lets go', () => {
+  test('the tag already being filtered on reads as pressed, and clicking it lets go', () => {
     const onPickTag = jest.fn();
-    open({ search: 'empire', onPickTag });
-    const pill = screen.getByRole('button', { name: /empire/ });
+    open({ tag: 'empire', onPickTag });
+    // By the pill's whole name: the summary beside the toggle names the tag in
+    // force too, so a bare /empire/ now matches two controls — which is the
+    // point of that summary, and no reason for this test to address the wrong
+    // one of them.
+    const pill = screen.getByRole('button', { name: /^empire — / });
     expect(pill).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(pill);
     expect(onPickTag).toHaveBeenCalledWith('');
@@ -171,15 +176,38 @@ describe('wired into the list it describes', () => {
     expect(screen.getByRole('combobox', { name: /filter by topic/i })).toHaveValue('history');
   });
 
-  test('clicking a tag narrows the table under it, and shows in the search box', () => {
-    // The tag goes into the SEARCH, not into a filter of its own: it is then
-    // visible, clearable, and carries the same drop-exit every other search
-    // does when it matches nothing.
+  test('clicking a tag narrows the table under it, and says so where it can still be seen', () => {
+    // The tag is a FILTER OF ITS OWN, not a phrase dropped into the search
+    // box — see the count-and-click block at the foot of this file for why.
+    // What the search box gave it for free was visibility, so the summary
+    // beside the toggle carries that instead: it is outside the disclosure,
+    // so the filter in force is readable and releasable with the browse shut.
     render(<QuestionSetsPanel questionSets={SETS} />);
     fireEvent.click(toggle());
     fireEvent.click(screen.getByRole('button', { name: /^onboarding — 1 set$/ }));
     expect(names()).toEqual(['Shipping Safely']);
-    expect(screen.getByRole('searchbox', { name: /search name, description/i })).toHaveValue('onboarding');
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    const release = screen.getByRole('button', { name: /clear the tag onboarding/i });
+    fireEvent.click(release);
+    expect(names()).toHaveLength(SETS.length);
+  });
+
+  test('a tag that matches nothing beside another filter is offered as an exit', () => {
+    // `onboarding` is on the one Science & Technology set, so asking for it on
+    // the History shelf intersects to nothing. rejects: an axis wired into the
+    // predicate and left out of `computeDrops`, which is a dead end whose only
+    // way back is a filter the screen never names.
+    render(<QuestionSetsPanel questionSets={SETS} />);
+    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole('button', { name: /^onboarding — 1 set$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^History — 2 sets$/ }));
+    expect(screen.getByText(/No sets match these 2 filters/i)).toBeInTheDocument();
+    // The label names the filter being dropped; the count is what dropping it
+    // leaves, which is the two History sets.
+    fireEvent.click(screen.getByRole('button', { name: /Tag: onboarding — 2 sets/ }));
+    expect(names()).toEqual(['Rome at its Height', 'The Cold War Years']);
   });
 
   test('it is still there when nothing matches, because it is an exit too', () => {
@@ -191,5 +219,119 @@ describe('wired into the list it describes', () => {
     });
     expect(screen.getByText(/No sets match this filter/i)).toBeInTheDocument();
     expect(toggle()).toBeInTheDocument();
+  });
+});
+
+describe('the number on a tag is the number of rows clicking it produces', () => {
+  /*
+    THE MODULE'S OWN PROMISE, KEPT. config/setShelfIndex.js says it in one
+    line — "the number beside a tag has to be the number of rows clicking it
+    produces" — and for a while it was not true, because the two halves were
+    computed by two different rules. The pill counted SETS CARRYING THE TAG.
+    The click wrote the word into the free-text search, which OR-matches a
+    substring across a set's name, description, custom instruction AND tags.
+
+    So the number was routinely LOWER than the rows it produced, in two ways
+    that have nothing to do with each other and so are both fixtured below:
+
+      - a set that merely SAYS the word ("The British Empire") came back with
+        the rows and was never in the count;
+      - a LONGER tag containing a shorter one (`ancient-egypt` under
+        `ancient`) did the same.
+
+    A count that disagrees with its own result is worse than no count: it
+    teaches people the filter is approximate, and then they stop reading any
+    of the numbers on the screen.
+  */
+  const MIXED = [
+    {
+      id: 'rome',
+      name: 'Rome at its Height',
+      description: 'The republic, the empire and the fall.',
+      topic: 'history',
+      tags: ['empire', 'ancient'],
+      engagementType: 'trivia',
+      totalQuestions: 20,
+      active: true,
+      createdAt: '2026-08-01T10:00:00.000Z',
+    },
+    {
+      id: 'brit',
+      name: 'The British Empire',
+      description: 'It says the word and carries none of it.',
+      topic: 'history',
+      tags: ['1980s'],
+      engagementType: 'trivia',
+      totalQuestions: 12,
+      active: true,
+      createdAt: '2026-07-01T10:00:00.000Z',
+    },
+    {
+      id: 'egypt',
+      name: 'Along the Nile',
+      description: 'A longer tag that begins with a shorter one.',
+      topic: 'history',
+      tags: ['ancient-egypt'],
+      engagementType: 'trivia',
+      totalQuestions: 8,
+      active: true,
+      createdAt: '2026-06-01T10:00:00.000Z',
+    },
+    {
+      id: 'ship',
+      name: 'Shipping Safely',
+      description: 'How a change reaches production.',
+      topic: 'science-technology',
+      tags: ['onboarding'],
+      engagementType: 'poll',
+      totalQuestions: 12,
+      active: true,
+      createdAt: '2026-05-01T10:00:00.000Z',
+    },
+  ];
+
+  const mixedRows = () => within(screen.getByRole('table')).getAllByRole('row').slice(1);
+  const mixedNames = () =>
+    mixedRows().map((row) => within(row).getAllByRole('cell')[0].firstElementChild.textContent);
+
+  test('every tag pill produces exactly the rows it counted', () => {
+    // EVERY pill, not one: the two ways the promise broke are unrelated, and
+    // a single case pins only whichever one it happens to be. This is the
+    // assertion that fails if the count and the click are ever computed by
+    // two rules again.
+    for (const entry of tagIndex(MIXED)) {
+      const view = render(<QuestionSetsPanel questionSets={MIXED} />);
+      fireEvent.click(toggle());
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${entry.tag} — `) }));
+      expect(mixedRows()).toHaveLength(entry.count);
+      view.unmount();
+    }
+  });
+
+  test('a set that only says the word in its name is neither counted nor produced', () => {
+    render(<QuestionSetsPanel questionSets={MIXED} />);
+    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole('button', { name: /^empire — 1 set$/ }));
+    expect(mixedNames()).toEqual(['Rome at its Height']);
+  });
+
+  test('a longer tag is not dragged in by the shorter one it begins with', () => {
+    render(<QuestionSetsPanel questionSets={MIXED} />);
+    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole('button', { name: /^ancient — 1 set$/ }));
+    expect(mixedNames()).toEqual(['Rome at its Height']);
+  });
+
+  test('the search box still finds every set that says the word, and still says so', () => {
+    // The two controls answer two different questions and both stay honest:
+    // the box is a find-anything, and its label names the tags it reads
+    // (setTopicFilter.test.jsx); the pill is one exact tag with an exact
+    // count. rejects: fixing the pill by taking tags out of the search, which
+    // would undo the owner's ask rather than deliver it.
+    render(<QuestionSetsPanel questionSets={MIXED} />);
+    fireEvent.change(screen.getByRole('searchbox', { name: /search name, description/i }), {
+      target: { value: 'empire' },
+    });
+    expect(mixedNames()).toEqual(['Rome at its Height', 'The British Empire']);
   });
 });

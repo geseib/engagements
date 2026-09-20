@@ -18,6 +18,14 @@
  * count line ("41 sets · 3 shown") and the drop-exits under it are what keep
  * the TABLE honest; this stays an index of the library.
  *
+ * ONE RULE FOR THE COUNT AND THE CLICK. `setCarriesTag` below is the whole of
+ * what "this set carries this tag" means, and both halves go through it: this
+ * module counts with it and the library's tag filter matches with it. The
+ * promise a few lines further down — the number beside a tag is the number of
+ * rows clicking it produces — is then structural rather than a claim, in the
+ * same way `config/listControls.js` makes the drop-counts structural by
+ * refusing to own a second predicate.
+ *
  * TOLERATES ON READ, like everything else that reads these two fields: a shelf
  * it does not recognise is Unfiled rather than a sixteenth entry, and two
  * spellings of one word are one tag. `utils/tags.js` states the rule —
@@ -57,24 +65,65 @@ export function topicIndex(sets = []) {
 }
 
 /**
+ * One set's tags, canonical and de-duplicated — what this module means by
+ * "the words this set carries".
+ *
+ * De-duplicated because the count is per SET and not per occurrence: a set
+ * spelling a word two ways is one set carrying that tag, not two.
+ */
+function setTagsOf(set) {
+  const raw = set && Array.isArray(set.tags) ? set.tags : [];
+  const out = [];
+  for (const candidate of raw) {
+    const tag = normalizeTag(candidate);
+    if (tag && !out.includes(tag)) out.push(tag);
+  }
+  return out;
+}
+
+/**
+ * DOES THIS SET CARRY THIS TAG — and the reason this is exported rather than
+ * inlined twice.
+ *
+ * The index's count and the library's tag filter are two halves of one
+ * promise: the number beside a tag has to be the number of rows clicking it
+ * produces. They were computed by two different rules, and so they disagreed.
+ * `tagIndex` counted sets carrying the tag; the click dropped the word into
+ * the free-text search box, which OR-matches a SUBSTRING across a set's name,
+ * description, custom instruction AND tags — so a pill reading 1 could
+ * produce three rows: the set that carries the tag, a set that merely says
+ * the word in its name, and a set whose own longer tag begins with it.
+ *
+ * The count was the honest half and stayed. This is the rule it counts by,
+ * and `QuestionSetsPanel`'s `tag` axis matches by the same function, so there
+ * is no second rule left to drift. A whole-tag compare, never a substring:
+ * `ancient-egypt` is a different word from `ancient`, and a person who asked
+ * for one did not ask for the other.
+ *
+ * TOLERATES BOTH SIDES, like every other comparison in this repo that reads
+ * these fields — the stored spelling may be anything, and the wanted one
+ * comes from a pill, a saved filter or a URL one day.
+ */
+export function setCarriesTag(set, tag) {
+  const wanted = normalizeTag(tag);
+  if (!wanted) return false;
+  return setTagsOf(set).includes(wanted);
+}
+
+/**
  * Every tag these sets carry, most-used first and then alphabetically — the
  * order that answers "what is this library about" before "what is in it".
  *
- * Counted per SET, not per occurrence: one set spelling a word two ways is one
- * set carrying that tag, and the number beside a tag has to be the number of
- * rows clicking it produces.
+ * Counted per SET, not per occurrence, through `setTagsOf` — the same list
+ * `setCarriesTag` reads, which is what makes the number beside a tag the
+ * number of rows clicking it produces rather than merely a claim that it is.
  *
  * @returns {Array<{tag: string, count: number}>}
  */
 export function tagIndex(sets = []) {
   const counts = new Map();
   for (const set of sets) {
-    const raw = set && Array.isArray(set.tags) ? set.tags : [];
-    const seen = new Set();
-    for (const candidate of raw) {
-      const tag = normalizeTag(candidate);
-      if (!tag || seen.has(tag)) continue;
-      seen.add(tag);
+    for (const tag of setTagsOf(set)) {
       counts.set(tag, (counts.get(tag) || 0) + 1);
     }
   }
