@@ -3,6 +3,7 @@ import { navigateTo } from '../auth/navigate';
 import { rememberReturnPath } from '../auth/returnPath';
 import useJoinCode, { CODE_LENGTH } from '../hooks/useJoinCode';
 import './RootPage.css';
+import BrandMark from './BrandMark';
 
 /**
  * The signed-out door at `/`.
@@ -48,6 +49,7 @@ export default function RootPage() {
       <header className="entry-pad">
         <div className="entry-shell entry-top">
           <a className="entry-brand" href="/home">
+            <BrandMark size={24} />
             Engagements {env && <span className="entry-env">{env}</span>}
           </a>
         </div>

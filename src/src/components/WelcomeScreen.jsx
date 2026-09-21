@@ -3,6 +3,7 @@ import ActiveOrgSwitcher from './ActiveOrgSwitcher';
 import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 import HelpButton from './HelpButton';
+import BrandMark from './BrandMark';
 
 /**
  * The host's front door: the screen before any session exists.
@@ -97,6 +98,7 @@ export default function WelcomeScreen({
               not link their brand, where one stray tap would take a projector
               or a participant out of a live round. */}
           <a className="wel-brand" href="/home">
+            <BrandMark size={24} />
             Engagements {env && <span className="wel-env">{env}</span>}
           </a>
 

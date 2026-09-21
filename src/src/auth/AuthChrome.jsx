@@ -1,5 +1,6 @@
 import React from 'react';
 import './auth.css';
+import BrandMark from '../components/BrandMark';
 
 /**
  * The shell every authentication surface sits in, and the glyphs they share.
@@ -116,6 +117,7 @@ export default function AuthChrome({ back, children }) {
       <header className="au-pad">
         <div className="au-top">
           <a className="au-brand" href="/">
+            <BrandMark size={24} />
             Engagements {env && <span className="au-env">{env}</span>}
           </a>
           {back && (

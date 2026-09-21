@@ -915,3 +915,24 @@ describe('the list, as data (config/questionPreview.js)', () => {
     expect(stepSelection([], 'a', 1)).toBeNull();
   });
 });
+
+describe('the category is the preview card\'s first line', () => {
+  test('the selected question\'s category opens the card, in the stage\'s own kicker', () => {
+    renderPreview();
+    const tag = screen.getByTestId('preview-category');
+    expect(tag).toHaveTextContent('History');
+    // The stage's eyebrow class, so this sheet still styles nothing on the screen.
+    expect(tag).toHaveClass('kicker');
+    // At the TOP of the card: before the question itself.
+    const card = tag.closest('.qprev-card');
+    expect(card.firstElementChild).toBe(tag);
+    // …and inside the dusk screen, not in the paper chrome around it.
+    expect(tag.closest('[data-testid="preview-screen"]')).not.toBeNull();
+  });
+
+  test('a question with no category gets no line, not a placeholder', () => {
+    // rejects: "No category" dressed up as a category on the card.
+    renderPreview({ rows: makeRows().map((r) => ({ ...r, category: '' })) });
+    expect(screen.queryByTestId('preview-category')).toBeNull();
+  });
+});

@@ -16,6 +16,7 @@ import './components/PlayerSurface.css';
 
 import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
+import BrandMark from './components/BrandMark';
 
 const API_BASE = window.API_BASE;
 
@@ -77,6 +78,8 @@ export const PlayerShell = ({
     <header className="plr-bar">
       <div className="plr-strip" />
       <div className="plr-line">
+        {/* The mark, NOT a link: a tap here must never leave a live round. */}
+        <BrandMark size={18} />
         <span className="plr-ctx">{ctx}</span>
         {category && <span className="plr-cat">{category}</span>}
         <span className="plr-spacer" />
