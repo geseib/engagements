@@ -31,6 +31,27 @@ rail. **The reasoning lives in that rail**, not in this file, and it is the bett
 
 ---
 
+## 0.5 BUILT 2026-09-21 — the gentle first step (dev)
+
+The owner asked to "start gently". What shipped, and what it deliberately did not touch:
+
+- **New set is a dialog** — `components/NewSetDialog.jsx`, the shared `Modal` in the `.qsets` shell.
+  Its content is the existing `QuestionSetUploadPanel`, unchanged (`bare` mode). The below-the-table
+  panel and its scroll-into-view are gone from the console. The AI route closes the dialog and hands
+  over to the builder (never a modal from a modal). The host's dialog still appends the panel inline.
+- **The count control** — `SetSizeField` in `components/CountField.jsx`: categories × questions in
+  each (presets **2 / 3 / 5 / 10 per category**), total stated once. Trivia and Scenario builders use
+  it; their state is still `count` + `numberOfCategories`. The number box can now be emptied and
+  retyped. Poll and Survey keep the single `CountField`.
+- **Add questions to an existing set (§5, question 4) — built with NO append route.** The editor
+  already saves its working rows as a new version, so `components/AddQuestionsDialog.jsx` asks
+  "this set's categories, or new ones?" (one or the other per pass), offers the same three routes
+  (AI / CSV / by hand) and appends rows to the working copy (`utils/addQuestions.js`). The builders
+  take `appendTo` (`utils/appendMode.js`) and send `appendOnly: true`, which makes
+  `shared/generated-set.js` create no set. Survey has no AI route here.
+- **Still open:** the one-screen AI builder (§4, question 1), Survey's AI path (2), the manual
+  builder (3), the interview (6). The four builders are still hand-rolled modals.
+
 ## 1. WHAT THE AUDIT FOUND — today's create flow, step by step
 
 Audited 2026-09-18 by reading the code. Line numbers were accurate that morning; several of these

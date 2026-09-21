@@ -6,6 +6,7 @@ import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
 import {
@@ -48,7 +49,7 @@ const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 // words for it, and the game measures how many words overlap across players.
 const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
 
-function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer' }) {
+function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer', appendTo = null }) {
   const [step, setStep] = useState(1);
   // The saved-template deck, folded shut where the sample ideas lead. The
   // owner, after the samples landed: "it can still use more work in dealing
@@ -695,10 +696,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         difficulty: scenarioConfig.difficulty,
         context: scenarioConfig.context,
         audience: scenarioConfig.audience,
-        customPrompt: scenarioConfig.customPrompt,
+        customPrompt: withAppendRequirement(scenarioConfig.customPrompt, appendTo),
         customTitle: scenarioConfig.customTitle,
         numberOfCategories: scenarioConfig.numberOfCategories,
         mustHaveCategories: scenarioConfig.mustHaveCategories,
+        // ADDING TO A SET'S OWN CATEGORIES: forced at send time, because
+        // choosing a topic card resets both fields from the prompt's defaults.
+        ...appendCategoryDefaults(appendTo),
+        ...(isAppend(appendTo) ? { appendOnly: true } : {}),
         // DIRECTION. The backend puts this IN FRONT OF the topic's basePrompt,
         // because basePrompt used to be the first thing the model read and
         // first is what a model follows — which is why typing an Apply brief
@@ -716,7 +721,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         // round kind, the chosen topic card's title, the STAR addendum. A
         // second server-side implementation of generateCustomInstructions()
         // would drift from this one on the first change to either.
-        setMetadata: {
+        // An append-only run makes no set, so it is sent no title to make one with.
+        setMetadata: isAppend(appendTo) ? undefined : {
           title: generateTitle(),
           description: generateDescription(),
           customInstructions: generateCustomInstructions(),
@@ -1009,7 +1015,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder</h2>
+          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder{isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}</h2>
           <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
@@ -1310,9 +1316,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     onChange={({ count, categories }) => setScenarioConfig((prev) => ({ ...prev, count, numberOfCategories: categories }))}
                     noun={itemNoun(engagementType)}
                     maxTotal={50}
+                    lockedCategories={appendsToExisting(appendTo) ? appendTo.categories : null}
                     hint="Categories are what the host can switch on and off mid-session."
                   />
-                  <div className="form-group">
+                  <div className="form-group" hidden={appendsToExisting(appendTo)}>
                     <div className="label-row">
                       <label>Must Have Categories</label>
                       {lockFor('mustHaveCategories')}
@@ -1437,7 +1444,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                         </button>
                       ) : (
                         <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptScenarios.length} into System
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptScenarios.length} to “${appendTo.setName}”` : `Load ${keptScenarios.length} into System`}
                         </button>
                       )}
                     </>

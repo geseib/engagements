@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -23,7 +24,7 @@ const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-trivia`;
 const ASSIST_FORM = BUILDER_FORM_FIELDS.trivia;
 
-function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
+function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   const [step, setStep] = useState(1);
   const [triviaConfig, setTriviaConfig] = useState({
     topic: '',
@@ -34,7 +35,11 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     numCorrect: 1,
     numberOfCategories: 3,
     mustHaveCategories: '',
-    customPrompt: ''
+    customPrompt: '',
+    // ADDING TO A SET'S OWN CATEGORIES: the count and the names are the set's,
+    // not the form's. Count follows so "in each" starts at a sensible 3.
+    ...appendCategoryDefaults(appendTo),
+    ...(appendsToExisting(appendTo) ? { count: Math.min(100, Math.max(1, appendTo.categories.length) * 3) } : {}),
   });
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
   const [currentTriviaIndex, setCurrentTriviaIndex] = useState(0);
@@ -168,14 +173,15 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
         numCorrect: triviaConfig.numCorrect,
         numberOfCategories: triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
-        customPrompt: triviaConfig.customPrompt,
+        customPrompt: withAppendRequirement(triviaConfig.customPrompt, appendTo),
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
         // question set itself now — that is the fix for "Close — this keeps
         // running", which was true about the job and false about the outcome —
         // and it needs a title and a description to do it. Computed in the
         // browser and sent, rather than re-derived in the Lambda, so there is
         // one author of this copy and not two that drift.
-        setMetadata: buildSetMetadata()
+        // ADDING makes no set: the items come back and the editor appends them.
+        ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { topic: triviaConfig.topic });
@@ -370,7 +376,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> AI Trivia Builder</h2>
+          <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'AI Trivia Builder'}</h2>
           <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
@@ -452,6 +458,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                     onChange={({ count, categories }) => setTriviaConfig((prev) => ({ ...prev, count, numberOfCategories: categories }))}
                     noun="questions"
                     maxTotal={100}
+                    lockedCategories={appendsToExisting(appendTo) ? appendTo.categories : null}
                     hint="Categories are what the host can switch on and off mid-session."
                   />
                 </div>
@@ -481,6 +488,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   </div>
                 </div>
 
+                {!appendsToExisting(appendTo) && (
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
@@ -495,6 +503,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                     />
                   </div>
                 </div>
+                )}
 
                 <div className="form-group">
                   <div className="label-row">
@@ -581,7 +590,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                         </button>
                       ) : (
                         <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptTrivia.length} into System
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptTrivia.length} to “${appendTo.setName}”` : `Load ${keptTrivia.length} into System`}
                         </button>
                       )}
                     </>

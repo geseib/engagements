@@ -219,6 +219,11 @@ export function SetSizeField({
   maxTotal = 100,
   maxCategories = 24,
   hint = '',
+  /**
+   * The categories are already decided — adding to a set's OWN categories.
+   * The picker is replaced by their names, and only "in each" can change.
+   */
+  lockedCategories = null,
 }) {
   const catId = useId();
   const perId = useId();
@@ -267,7 +272,12 @@ export function SetSizeField({
 
   return (
     <div className="cnt cnt-size" role="group" aria-label={`How many ${noun}`}>
-      {row(catId, 'Categories', cats, CATEGORY_PRESETS, maxCategories, setCats)}
+      {lockedCategories ? (
+        <div className="cnt-size-row" data-testid="set-size-locked">
+          <span className="cnt-label">Categories — this set's own {lockedCategories.length}</span>
+          <p className="cnt-hint">{lockedCategories.join(' · ')}</p>
+        </div>
+      ) : row(catId, 'Categories', cats, CATEGORY_PRESETS, maxCategories, setCats)}
       {row(perId, `${noun.replace(/^./, (c) => c.toUpperCase())} in each category`, per, PER_CATEGORY_PRESETS, perMax, setPer)}
       <p className="cnt-size-total" data-testid="set-size-total" aria-live="polite">
         <b>{even ? total : `About ${total}`}</b> {noun} in total

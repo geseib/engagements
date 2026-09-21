@@ -337,6 +337,21 @@ const scenarioBody = (overrides = {}) => ({
     assert.strictEqual(sets[0].questionCount, 4);
   });
 
+  await test('an appendOnly run hands back its items and creates NO set', async () => {
+    // rejects: "Add questions" in the set editor leaving a stray inactive
+    // duplicate set in the library after every run. The editor appends the
+    // items to the set that already exists and saves a new VERSION of it.
+    // Also rejects recording "No title was given" as an error on such a job:
+    // a run that was never going to create a set has not failed to create one.
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(3, 'more'));
+    const { job } = await runJob(scenarios, scenarioBody({ count: 3, appendOnly: true, setMetadata: undefined }));
+    assert.strictEqual(setRows().length + orgSetRows().length, 0, 'an append-only run must not create a set');
+    assert.strictEqual(job.items.length, 3, 'the items still come back for the editor to append');
+    assert.ok(!job.createdSet, 'no createdSet on an append-only job');
+    assert.ok(!job.setCreationError, `no set-creation error either, got: ${job.setCreationError}`);
+  });
+
   await test('the set and every question row are INACTIVE', async () => {
     // rejects: dropping `isAIGenerated: true` from the synthetic upload. That
     // one flag is what upload-questions.js:702 and :800 turn into

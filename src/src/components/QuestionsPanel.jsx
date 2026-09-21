@@ -16,6 +16,13 @@ import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/quest
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
 import { checkIsDue } from '../utils/houseCheck';
+import AddQuestionsDialog from './AddQuestionsDialog';
+import TriviaAIBuilder from './TriviaAIBuilder';
+import PollAIBuilder from './PollAIBuilder';
+import AIScenarioBuilder from './AIScenarioBuilder';
+import {
+  ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
+} from '../utils/addQuestions';
 import {
   editableRows,
   blankRow,
@@ -223,6 +230,11 @@ export default function QuestionsPanel({
   const [selected, setSelected] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showPull, setShowPull] = useState(false);
+  // ADD QUESTIONS: the dialog, then (AI route only) the builder it hands to.
+  // `addBuilder` holds the mode the person chose, so the rows that come back
+  // are held to the same one they were generated under.
+  const [showAdd, setShowAdd] = useState(false);
+  const [addBuilder, setAddBuilder] = useState(null); // { mode, categories }
   // { mode: 'fork' | 'subset', title, rows, topic, tags }
   const [newSetDialog, setNewSetDialog] = useState(null);
   /* Same reason as `formError` above, and the same mistake this dialog made:
@@ -611,6 +623,40 @@ export default function QuestionsPanel({
     closeForm();
     setConfirmDiscard(false);
     setStatus({ text: 'Unsaved changes discarded. The set is as it was when you opened it.', tone: 'pending' });
+  };
+
+  /* ------------------------------------------------- adding questions --- */
+
+  /** Rows that came through Add questions join the working copy, unsaved. */
+  const acceptAdded = (held, mode) => {
+    setShowAdd(false);
+    setAddBuilder(null);
+    if (held.kept.length) setRows((current) => [...current, ...held.kept]);
+    setStatus({ text: describeAdded(held, mode), tone: held.kept.length ? 'pending' : 'error' });
+  };
+
+  /**
+   * The builder's own `on*Generated`, pointed here instead of at "create a
+   * set". An append-only job carries no `createdSet`, so what arrives is the
+   * kept questions — held to the mode, with strays re-filed rather than lost.
+   */
+  const acceptGenerated = (payload) => {
+    const mode = addBuilder ? addBuilder.mode : ADD_MODES.EXISTING;
+    const items = (payload && (payload.questions || payload.scenarios || payload.polls)) || [];
+    acceptAdded(holdToMode(rowsFromItems(items), rows, mode, { spread: true }), mode);
+  };
+
+  const openAddBuilder = (mode) => {
+    setShowAdd(false);
+    setAddBuilder({ mode, categories: existingCategories(rows) });
+  };
+
+  const writeOneFromAdd = (mode) => {
+    setShowAdd(false);
+    // New-category mode opens the form with the category EMPTY, so the picker's
+    // "+ New category" is the first thing reached; existing mode seeds as usual.
+    if (mode === ADD_MODES.NEW) openForm(blankRow({ category: '' }), 'add');
+    else startAdd();
   };
 
   /** Questions pulled out of another set arrive here as independent copies. */
@@ -1144,6 +1190,15 @@ export default function QuestionsPanel({
         <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready'}>
           <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
         </button>
+        {/* The New set routes — AI, CSV, by hand — pointed at THIS set. */}
+        <button
+          className="btn-secondary btn-small"
+          onClick={() => setShowAdd(true)}
+          disabled={loadState !== 'ready'}
+          data-testid="add-questions"
+        >
+          <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" /> Add questions…
+        </button>
         <button
           className="btn-secondary btn-small"
           onClick={() => setShowPull(true)}
@@ -1476,6 +1531,42 @@ export default function QuestionsPanel({
           </div>
         </div>
       )}
+
+      {showAdd && (
+        <AddQuestionsDialog
+          setName={questionSet?.name || setId}
+          engagementType={engagementType}
+          categories={existingCategories(rows)}
+          counts={categoryCounts(rows)}
+          currentRows={rows}
+          /* Survey's AI builder exports a file and makes no questions a set can
+             hold, so it is not offered as a way to add any. */
+          aiAvailable={engagementType !== 'survey'}
+          onClose={() => setShowAdd(false)}
+          onOpenBuilder={openAddBuilder}
+          onWriteOne={writeOneFromAdd}
+          onAddRows={acceptAdded}
+        />
+      )}
+
+      {addBuilder && (() => {
+        const appendTo = { setName: questionSet?.name || setId, ...addBuilder };
+        const close = () => setAddBuilder(null);
+        if (engagementType === 'trivia') {
+          return <TriviaAIBuilder appendTo={appendTo} onClose={close} onTriviaGenerated={acceptGenerated} />;
+        }
+        if (engagementType === 'poll') {
+          return <PollAIBuilder appendTo={appendTo} onClose={close} onPollGenerated={acceptGenerated} />;
+        }
+        return (
+          <AIScenarioBuilder
+            appendTo={appendTo}
+            engagementType={engagementType}
+            onClose={close}
+            onScenariosGenerated={acceptGenerated}
+          />
+        );
+      })()}
 
       {showPull && (
         <QuestionPullDialog
