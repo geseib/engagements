@@ -148,7 +148,13 @@ export default function QueueList({
           fact about the same object, which the console's own rule forbids.
         */}
         <span className="setup-q__count" data-testid="queue-count">
-          {count === 0 ? 'Nothing queued' : `${count} queued`}
+          {/* With nothing queued the list below is still full — of the
+              AUTOMATIC order. A bare "Nothing queued" over six listed rows read
+              to the owner as a bug ("it has questions queued, but says there
+              are none"), so the count says what the rows are. */}
+          {count === 0
+            ? (autoRows.length > 0 ? 'Nothing queued — automatic order below' : 'Nothing queued')
+            : `${count} queued`}
           {count >= QUEUE_MAX - 4 && ` of ${QUEUE_MAX}`}
         </span>
       </div>
@@ -318,7 +324,7 @@ export default function QueueList({
       {autoRows.length > 0 && (
         <div className="setup-q__auto" data-testid="queue-auto">
           <p className="setup-q__auto-head">
-            {count === 0 ? 'Coming up' : 'Then, automatically'}
+            {count === 0 ? 'Coming up — automatic order' : 'Then, automatically'}
           </p>
           <ol className="setup-q__list setup-q__list--auto" start={count + 1}>
             {autoRows.map((row, autoIndex) => {
@@ -335,7 +341,7 @@ export default function QueueList({
               return (
                 <li
                   key={row.questionId}
-                  className="setup-q__row setup-q__row--auto"
+                  className={`setup-q__row setup-q__row--auto ${onAutoMove ? 'setup-q__row--acts' : ''}`}
                   data-testid="queue-auto-row"
                 >
                   <span className="setup-q__pos" aria-hidden="true">{row.round}</span>
@@ -382,21 +388,18 @@ export default function QueueList({
                           <Icon name="EyeSlash" weight="bold" size={14} />
                         </button>
                       )}
-                      {/* The fourth slot, INERT here on purpose: an auto row
+                      {/* The fourth slot is an INVISIBLE SPACER. An auto row
                           is not in the queue, so there is nothing to move it
-                          back out of — but the slot exists so the four
-                          buttons align with the queued rows above, which is
-                          the owner's report ("the up down buttons dont align
-                          ... they should"). */}
-                      <button
-                        type="button"
-                        className="setup-q__btn"
-                        disabled
-                        title="Not in the queue — nothing to move out."
-                        aria-label={`${label} is not in the queue`}
-                      >
-                        <Icon name="X" weight="bold" size={14} />
-                      </button>
+                          back out of — the slot exists only so the buttons
+                          align with the queued rows ("the up down buttons dont
+                          align ... they should"). It was a greyed-out X once,
+                          and the owner read that as a broken remove button;
+                          a control that can never work is not drawn. */}
+                      <span
+                        className="setup-q__btn setup-q__btn--slot"
+                        data-testid="queue-auto-slot"
+                        aria-hidden="true"
+                      />
                     </span>
                   )}
                 </li>

@@ -1279,6 +1279,15 @@ body {
 
 .setup-q__row--auto .setup-q__name { font-weight: 500; }
 
+/* …AND THREE AGAIN ONCE THE ROW CARRIES BUTTONS. The auto rows gained an action
+   group (move / disable) after the two-track rule above was written, and a
+   third child in a two-track grid wraps onto its own line: the buttons landed
+   UNDER the title at the left edge. The modifier is set only when the caller
+   can actually rearrange, so a button-less row keeps its full-width title. */
+.setup-q__row--auto.setup-q__row--acts {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
 /* The tag the request asked for, and it sits on THESE rows rather than the
    queued ones: the queued rows already announce themselves by being numbered,
    movable and under a heading that says Running order. It is the questions the
@@ -1319,6 +1328,9 @@ body {
    the action column's width per row and move the remaining buttons under the
    host's finger every time the list reorders. */
 .setup-q__btn:disabled { opacity: 0.3; cursor: default; }
+
+/* Holds the fourth slot's width on rows that have no fourth action. */
+.setup-q__btn--slot { visibility: hidden; cursor: default; }
 
 .setup-q__btn--drop:hover:not(:disabled) {
   border-color: rgba(229, 100, 94, 0.55);

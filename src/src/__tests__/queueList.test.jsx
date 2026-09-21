@@ -139,7 +139,7 @@ describe('a populated running order', () => {
     expect(onDisable).toHaveBeenCalledWith('c001#002', { queued: true });
   });
 
-  test('auto rows carry the same four slots, with move-out inert', () => {
+  test('auto rows keep the fourth slot as an invisible spacer, never a dead X', () => {
     const onDisable = jest.fn();
     renderQueue({
       upNext: [{ questionId: 'QUESTION#c009#001', source: 'auto', title: 'Auto One', round: 4 }],
@@ -147,9 +147,18 @@ describe('a populated running order', () => {
       onDisable,
     });
     const auto = screen.getAllByTestId('queue-auto-row')[0];
-    expect(within(auto).getAllByRole('button')).toHaveLength(4);
-    // The fourth slot exists for alignment and says why it does nothing.
-    expect(within(auto).getByRole('button', { name: /is not in the queue/i })).toBeDisabled();
+    // rejects: a greyed-out X. The owner read it as a broken remove button
+    // ("it also greys out the x button to remove because it says not in the
+    // queue"). The slot holds the column's width and is not a control.
+    expect(within(auto).getAllByRole('button')).toHaveLength(3);
+    expect(within(auto).queryByRole('button', { name: /not in the queue/i })).toBeNull();
+    expect(within(auto).getByTestId('queue-auto-slot')).toHaveAttribute('aria-hidden', 'true');
+    expect(block('.setup-q__btn--slot')).toMatch(/visibility:\s*hidden/);
+    // The row announces that it has an action group, which is what gives it
+    // the third grid track — without it the buttons wrap under the title.
+    expect(auto.className).toMatch(/setup-q__row--acts/);
+    expect(block('.setup-q__row--auto.setup-q__row--acts'))
+      .toMatch(/grid-template-columns:\s*auto\s+minmax\(0,\s*1fr\)\s+auto\s*;/);
     fireEvent.click(within(auto).getByRole('button', { name: /disable auto one/i }));
     expect(onDisable).toHaveBeenCalledWith('QUESTION#c009#001', { queued: false });
   });
@@ -427,7 +436,9 @@ describe('what follows the queue — the automatic picks', () => {
     render(<QueueList queue={[]} questions={questions} upNext={plan} />);
     expect(screen.getByTestId('queue-auto')).toBeInTheDocument();
     expect(screen.getAllByTestId('queue-auto-row')).toHaveLength(2);
-    expect(screen.getByText('Coming up')).toBeInTheDocument();
+    expect(screen.getByText('Coming up — automatic order')).toBeInTheDocument();
+    // rejects: a bare "Nothing queued" over a full list, which read as a bug.
+    expect(screen.getByTestId('queue-count')).toHaveTextContent('Nothing queued — automatic order below');
   });
 
   test('the empty-queue explainer survives beside it', () => {
