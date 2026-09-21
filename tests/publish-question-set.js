@@ -151,8 +151,16 @@ const owner = (body = {}) => ({
 
 const parse = (res) => JSON.parse(res.body || '{}');
 
-/** An org set at v2, with two questions and a category. */
-async function seed({ reviewStatus = R.STATUS.PASSED } = {}) {
+/**
+ * An org set at v2, with two questions and a category.
+ *
+ * IT IS FILED, because a set being shared publicly has to be — see section 1c.
+ * `topic: null` seeds the unfiled state instead, which is what the ~40 sets
+ * predating the shelf carry. The shelf is not part of `publishable.js`'s
+ * SET_FIELDS, so which of the two a case picks never moves the content hash
+ * that section 1b turns on.
+ */
+async function seed({ reviewStatus = R.STATUS.PASSED, topic = 'business-work' } = {}) {
   store.clear();
   forgetAllOrgs();
   await mintOrg((item) => store.set(key(item.PK, item.SK), item), ORG);
@@ -164,6 +172,7 @@ async function seed({ reviewStatus = R.STATUS.PASSED } = {}) {
     promptId: 'p-pricing', personaId: 'coach',
     activeVersion: 2, versions: [{ version: 1 }, { version: 2 }],
     createdBy: 'sub-amara',
+    ...(topic ? { topic } : {}),
   });
   for (const [sk, extra] of [
     ['CATEGORY#c001', { Name: 'Pricing', QuestionCount: 2 }],
@@ -274,6 +283,55 @@ function snapshotOf({ version = 2, contentHash } = {}) {
     store.set(key(`ORG#${ORG}#SETS`, `SET#${SET}`), { ...row, description: 'Edited after a pre-hash review.' });
     const res = await publish(owner({ version: 2 }));
     assert.strictEqual(res.statusCode, 201, res.body);
+  });
+
+  say('\n1c. the shelf, which is where the owner asked for the requirement first');
+  /*
+    *"req at least 1 pretty broad for public ones"* is the owner's own sentence,
+    and the public library is the one everybody browses: a filter there is worth
+    having only if what is on the shelves is filed. So an unfiled set may go on
+    living in its own organisation — the ~40 that predate the shelf do — but it
+    does not get into the library unfiled.
+
+    A 409 and not a 400, like the two gates above it: the request is fine, the
+    SET is not ready. And it is checked before anything is written, so a refusal
+    leaves the public partition exactly as it found it.
+  */
+  // rejects: sharing an unfiled set into the library everybody browses.
+  await check('an unfiled set is refused, and the refusal names the shelf', async () => {
+    await seed({ topic: null });
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 409, `an unfiled set reached the library: ${res.body}`);
+    assert.ok(parse(res).error.includes('General Knowledge'), parse(res).error);
+    assert.deepStrictEqual(publicRows(), [], 'rows reached the public partition anyway');
+  });
+
+  // rejects: the refusal landing before the ownership read, which would tell a
+  // stranger that this organisation has a set by this name.
+  await check('a stranger still gets the 404, not the shelf refusal', async () => {
+    await seed({ topic: null });
+    const res = await publish({
+      ...owner({ version: 2 }),
+      requestContext: {
+        http: { method: 'POST' },
+        authorizer: {
+          lambda: {
+            username: 'bo', userId: 'sub-bo', groups: 'hosts', status: 'enabled',
+            orgId: 'org_globex', orgRole: 'owner', orgIds: 'org_globex',
+          },
+        },
+      },
+    });
+    assert.strictEqual(res.statusCode, 404, res.body);
+  });
+
+  // rejects: a stored shelf being ignored — the control for the refusal above,
+  // so it is the shelf being read and not publishing broken outright.
+  await check('a filed set still shares, and the shelf rides along', async () => {
+    await seed({ topic: 'health-medicine' });
+    const res = await publish(owner({ version: 2 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.strictEqual(publicMeta().topic, 'health-medicine');
   });
 
   say('\n2. what lands, and in what shape');

@@ -9,19 +9,24 @@
    NO THEME IS DECLARED HERE AND THAT IS DELIBERATE — this is the ONE surface
    in this change that inherits. The field sits inside `.qs-question-form`,
    between a `.form-input` and a `.btn-secondary` that it is meant to look
-   continuous with, and both of those are styles.css's paper controls. A
-   `data-theme` on this element would re-point --text and --surface underneath
-   controls whose own colours come from outside the scope, and the seam would
-   be visible in the middle of a form row. It borrows `.form-input` and
-   `.btn-secondary` for exactly the same reason: reusing the editor's controls
-   is the "why recreate everything" the owner already objected to once.
+   continuous with, and both of those are styles.css's controls, re-inked by the
+   editor's scope rather than by this sheet. A `data-theme` on this element
+   would re-point --text and --surface underneath controls whose own colours
+   come from outside the scope, and the seam would be visible in the middle of a
+   form row. It borrows `.form-input` and `.btn-secondary` for exactly the same
+   reason: reusing the editor's controls is the "why recreate everything" the
+   owner already objected to once.
 
-   So this sheet declares GEOMETRY and three text colours, and the three are
-   the paper values the surrounding editor is already using:
+   So this sheet declares GEOMETRY and three text colours, and the three are the
+   values the surrounding editor is already using. They were the paper set until
+   the editor moved onto the product's dark ground — the owner: *"the white
+   background really contrasts the rest of the site, as we are entirely dark
+   background throughout, except for question set editors and previews."* The
+   architecture did not change; only the values did.
 
-     --qimg-muted   #5E6167 on the panel's #F1EDE4    5.32:1   the explainer
-     --qimg-ok      #1C7350 on #F1EDE4                4.97:1   "uploaded"
-     --qimg-bad     #A32B25 on #F1EDE4                6.14:1   a failure
+     --qimg-muted   #9BA8BE on the question row's #1B2942   6.06:1  the explainer
+     --qimg-ok      #6FD0A4 on #1B2942                      7.79:1  "uploaded"
+     --qimg-bad     #EF8C86 on #1B2942                      6.08:1  a failure
 
    `--danger` carries no text here — it is not referenced at all.
    THE LADDER: 12 floor / 13 label. Nothing below 12px.
@@ -31,13 +36,13 @@
   --qimg-t-floor: 12px;
   --qimg-t-label: 13px;
 
-  /* Literals, in the scope's own token block, because styles.css declares no
-     paper equivalents: --muted is paper #5E6167 only under [data-theme="light"],
-     which this element deliberately does not set (see the header), and there
-     has never been a --success-text token at all. */
-  --qimg-muted: #5E6167;
-  --qimg-ok: #1C7350;
-  --qimg-bad: #A32B25;
+  /* Literals, in the scope's own token block, rather than the theme tokens they
+     happen to equal: this element deliberately sets no data-theme (see the
+     header), so it cannot depend on one being in force, and there has never
+     been a --success-text token at all. */
+  --qimg-muted: #9BA8BE;
+  --qimg-ok: #6FD0A4;
+  --qimg-bad: #EF8C86;
 }
 
 .qimg-row {

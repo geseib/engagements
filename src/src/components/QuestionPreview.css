@@ -1,0 +1,320 @@
+/* ==========================================================================
+   THE QUESTION PREVIEW — components/QuestionPreview.jsx
+   ==========================================================================
+   Spec: docs/superpowers/specs/2026-09-19-question-preview-design.md. The
+   Questions tab's Preview mode: the set as a searchable list on the left, and
+   on the right the card the live stage renders (components/QuestionCard.jsx).
+
+   THE LIST AND ITS CONTROLS ARE DUSK, because the editor around them is dusk on
+   both mounts — the owner: *"the white background really contrasts the rest of
+   the site, as we are entirely dark background throughout, except for question
+   set editors and previews."* They were paper, on the editor's #F1EDE4 panel,
+   and the accent was the deep amber the host shelf settled on (#9A5B18, 1.9:1
+   on this ground — the failure the palette test caught when the panel moved).
+   The roots still DECLARE data-theme rather than inheriting it: this component
+   is mounted inside an editor that is itself mounted two places, and a theme
+   taken from an ancestor is a theme that only covers one of them. The ladder is
+   unchanged, the admin one: 12 floor / 13 label / 15 body / 19 head
+   (docs/design/admin-redesign/RATIONALE.md §3).
+
+   THE SCREEN IS THE STAGE, AND THIS SHEET DOES NOT STYLE IT. `.qprev-screen`
+   carries data-theme="dark" and `.stage-ladder-table`, and every rule inside it
+   is styles/stage.css's own, at the Table profile. This sheet adds the ground,
+   the box, the typography the stage's body would have given it, and the three
+   colour tokens data-theme="dark" does not restore (see the block below).
+
+   Measured in QuestionPreviewPalette.test.js, composited up the real stack
+   (the editor's #F1EDE4 panel, then these layers), AA is 4.5:
+     list    --text on --surface 12.5 · --muted 6.1 · accent 7.4
+             the selected row or a pressed control: --text 11.4 · --muted 5.5 ·
+             accent 6.7 · --muted straight on the panel 7.2
+             (a row is --text for its title and --muted for both the detail and
+             the meta line, so every row state is one of the three above)
+     screen  the question 15.0 · its prompt at .82 opacity 10.3 · option text
+             13.2 · a dimmed option (--muted) 8.5 · an option letter (--primary)
+             6.0 · the correct letter (--success-text) 6.3
+   ========================================================================== */
+
+.qprev,
+.qprev-switch {
+  --qprev-t-floor: 12px;
+  --qprev-t-label: 13px;
+  --qprev-t-body: 15px;
+  --qprev-t-head: 19px;
+
+  --qprev-accent: #F6A94C;
+  --qprev-rule: rgba(155, 168, 190, .20);
+  --qprev-rule-strong: rgba(155, 168, 190, .34);
+  --qprev-row-hover: rgba(155, 168, 190, .055);
+  --qprev-row-sel: rgba(246, 169, 76, .10);
+}
+
+/* THE SCREEN'S TOKENS — what the stage sets and an ancestor here can take away.
+   data-theme="dark" restores --bg, --surface and --text; it does not restore:
+     --muted    the stage's lifted #B6C2D4 (stage.css `.stage`), not dusk's
+                #9BA8BE. The dimmed options in Reveal are drawn in it.
+     --primary  the host shelf re-points it to #9A5B18 (`.qsets--onlight`) for
+                its own components. Every option letter is drawn in it.
+     --success  re-pointed the same way. The correct option's border is drawn
+                in it.
+   The editor's own scope restates the last two as well, so on the console mount
+   these three lines agree with what is already in force; they are what stops
+   the HOST mount's brown reaching the card.
+   TWO CLASSES DEEP ON PURPOSE: styles.css's [data-theme="dark"] loads AFTER this
+   sheet (index.jsx imports App before styles.css), so one class would lose. */
+.qprev .qprev-screen {
+  --muted: #B6C2D4;
+  --primary: #F6A94C;
+  --success: #4FB286;
+}
+
+/* -- layout ---------------------------------------------------------------- */
+/* THE LIST IS THE WIDER PANE, and it is a SHARE of the width rather than a cap.
+   The owner, after using the preview on dev: *"the preview is great except for
+   the width. the question list could be wider and the preview narrower. so that
+   you can read the questions from the list."* The first cut was
+   minmax(220px, 300px) minmax(0, 1fr) — the list capped at 300px and the card
+   taking every remaining pixel, so a question's title was cut in the one pane
+   whose whole job is listing questions.
+   1.2fr against 1fr is 55/45, slightly more than half, which is what makes room
+   for the row's detail line. The minimums (320 / 300, plus the 16px gap = 636)
+   fit above the 760px where the panes stack, so there is no band in which two
+   tracks that cannot fit are still side by side. Held in
+   QuestionPreviewPalette.test.js, as arithmetic on this declaration: jsdom lays
+   nothing out, so a measured width there would be zero and pass regardless. */
+.qprev {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 12px;
+  color: var(--text);
+  font: 400 var(--qprev-t-body)/1.45 var(--font-ui);
+}
+.qprev--empty { display: block; }
+@media (max-width: 760px) {
+  .qprev { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* -- the list -------------------------------------------------------------- */
+.qprev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--qprev-rule);
+  border-radius: 10px;
+}
+.qprev-search {
+  width: 100%;
+  font: 400 var(--qprev-t-body)/1.3 var(--font-ui);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--qprev-rule-strong);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.qprev-search::placeholder { color: var(--muted); }
+.qprev-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.qprev-chip {
+  font: 600 var(--qprev-t-floor)/1 var(--font-ui);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--qprev-rule-strong);
+  border-radius: 999px;
+  padding: 5px 10px;
+  min-height: 24px;
+  cursor: pointer;
+}
+.qprev-chip[aria-pressed="true"] {
+  color: var(--qprev-accent);
+  border-color: var(--qprev-accent);
+  background: var(--qprev-row-sel);
+}
+.qprev-count { margin: 0; font-size: var(--qprev-t-label); color: var(--muted); }
+.qprev-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--qprev-rule);
+}
+/* THE ROW IS THE IN-SESSION BROWSER'S ROW, in this scope's own tokens: *"i like
+   a bit of how the list looks in the session questions menu."* That is
+   `.setup-qb__row` and friends (styles.css) — a row separated from the next by a
+   hairline rather than boxed as a card, 11px of vertical air, a 15/700 title,
+   then the detail, then the meta line.
+   THE `.setup-qb__*` CLASSES THEMSELVES ARE NOT USED. They read `--muted` and
+   `--secondary` as the STAGE declares them, and under the admin ladder those
+   resolve to something else or to nothing at all — an undefined custom property
+   invalidates the whole declaration, so the row would render unstyled. The trap
+   is recorded for `.qsets-chip` in QuestionSetsPanel.css. Only the treatment is
+   copied; every value here is this sheet's. */
+.qprev-row {
+  display: block;
+  min-width: 0;
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--qprev-rule);
+  cursor: pointer;
+}
+.qprev-row:hover { background: var(--qprev-row-hover); }
+.qprev-row[aria-selected="true"] {
+  background: var(--qprev-row-sel);
+  box-shadow: inset 3px 0 0 var(--qprev-accent);
+}
+/* One text node with min-width:0, or text-overflow is inert and the text is
+   silently cut. `title=` on EACH span carries its full string: a cut with no
+   recovery is a deletion, and the meta line's difficulty is the first to go. */
+.qprev-row-title,
+.qprev-row-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qprev-row-title { font-size: var(--qprev-t-body); font-weight: 700; line-height: 1.3; color: var(--text); }
+/* THE DETAIL IS CLAMPED, NOT ELLIPSISED. It is prose and it can run long, so one
+   nowrap line would cut most of it; two lines are read, and the third onward is
+   the tail a scan does not need. The clamp is the app's existing idiom
+   (`.content[data-clamped="on"] .opt .txt`, styles/stage.css) and it shortens
+   only the DRAWING — the whole string stays in the DOM and on `title=`, so the
+   reduction has a recovery and copying the line out of the row gives the detail
+   rather than a fragment. Rendered only when the question has one: an empty span
+   is a blank line, and a set with details unevenly filled then reads as ragged
+   rows with nothing on screen explaining why. */
+.qprev-row-detail {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
+  margin-top: 3px;
+  font-size: var(--qprev-t-label);
+  line-height: 1.4;
+  color: var(--muted);
+}
+.qprev-row-meta { margin-top: 5px; font-size: var(--qprev-t-floor); color: var(--muted); }
+.qprev-empty { margin: 0; color: var(--muted); }
+.qprev-nomatch { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.qprev-nomatch p { margin: 0; color: var(--muted); }
+.qprev-link {
+  font: 600 var(--qprev-t-label)/1.2 var(--font-ui);
+  color: var(--qprev-accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* -- the controls beside the screen, and the toolbar's switch --------------- */
+.qprev-detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.qprev-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.qprev-pos { font-size: var(--qprev-t-label); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* overflow: hidden gives the pressed tint the group's rounded corners. It also
+   clips whatever a segment draws outside itself — its focus ring included,
+   which is why that ring is drawn inside the segment (below). */
+.qprev-seg,
+.qprev-switch {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--qprev-rule-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+/* Right-aligned in the Questions panel's wrapping toolbar by margin, never by
+   justify-content: flex-end, which overflows toward the start when it wraps. */
+.qprev-switch { margin-left: auto; }
+.qprev-seg-btn {
+  font: 600 var(--qprev-t-label)/1 var(--font-ui);
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: 8px 12px;
+  min-height: 30px;
+  cursor: pointer;
+}
+.qprev-seg-btn + .qprev-seg-btn { border-left: 1px solid var(--qprev-rule-strong); }
+/* The pressed segment's tint composites over the group's own --surface, not
+   over the editor's panel: on the bare panel the accent measured under AA. */
+.qprev-seg-btn[aria-pressed="true"] { color: var(--qprev-accent); background: var(--qprev-row-sel); }
+.qprev-seg-btn:disabled { color: var(--muted); cursor: not-allowed; }
+.qprev-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 var(--qprev-t-label)/1 var(--font-ui);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--qprev-rule-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 30px;
+  cursor: pointer;
+}
+/* Edit is held while a Save is written and read back (its title says why).
+   Restated because .qprev-btn sets its own colour, which outranks the
+   browser's greyed text for a disabled button: without this the held Edit
+   looks exactly like the live one. --muted on its white is 6.2. */
+.qprev-btn:disabled { color: var(--muted); cursor: not-allowed; }
+.qprev-edit { margin-left: auto; }
+.qprev-chip:focus-visible,
+.qprev-seg-btn:focus-visible,
+.qprev-btn:focus-visible,
+.qprev-link:focus-visible,
+.qprev-search:focus-visible,
+.qprev-rows:focus-visible { outline: 2px solid var(--qprev-accent); outline-offset: 2px; }
+/* A SEGMENT'S RING IS DRAWN INSIDE IT. The segment sits flush on its group's
+   clipped edge, so a ring offset outward loses its top, bottom and outer end
+   and survives only as a bar inside the NEIGHBOURING segment — pointing at the
+   wrong control. Every other control here keeps the outward ring; none of
+   their containers clips. */
+.qprev-seg-btn:focus-visible { outline-offset: -2px; }
+
+/* -- the screen ------------------------------------------------------------ */
+/* The ground and the box. The inheritable typography is restated because the
+   editor around this pane is not the stage's body: stage.css's `body` gives the
+   card Inter, antialiasing and tabular figures, and styles.css's `body` its
+   1.6 line height.
+   THE WRAPPING TOO. On the host shelf the editor renders inside `.qsets-modal`,
+   which sets `overflow-wrap: anywhere` for a 98-character set title
+   (QuestionSetsPanel.css), and the card's heading and prompt inherited it and
+   broke long words anywhere. Nothing between the stage's body and its card sets
+   any of these three, so the stage's value is `normal`.
+   THE EDGE IS THIS SHEET'S NOW. The pane restates the stage's ground on
+   purpose — it is what the room sees — and while the editor was paper the
+   `.qs-panel` behind it was #F1EDE4, so that ground alone was a 14.9:1 boundary
+   and no line was needed. The panel moved to --bg with the rest of the editor
+   and the two became the same colour, leaving the radius and the padding with
+   nothing to draw them on while the list beside it kept its --surface card and
+   its hairline. The stronger of the two rules, not the list's own: the list is
+   told apart by a lighter fill as well, and this pane has only the line. */
+.qprev-screen {
+  min-width: 0;
+  padding: 24px 28px;
+  border-radius: 12px;
+  border: 1px solid var(--qprev-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.6 var(--font-ui);
+  letter-spacing: normal;
+  text-align: start;
+  text-transform: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+/* .fitbox's gap (stage.css), without .fitbox: this pane runs no fitter. */
+.qprev-card { display: flex; flex-direction: column; gap: calc(1.5vh + 4px); min-width: 0; }
+.qprev-screen-empty { margin: 0; font-size: var(--qprev-t-body); color: var(--muted); }
+
+/* -- off the screen, and marked so ----------------------------------------- */
+.qprev-note { margin: 0; color: var(--text); line-height: 1.5; }
+.qprev-note b { display: block; font-size: var(--qprev-t-label); font-weight: 700; color: var(--muted); }

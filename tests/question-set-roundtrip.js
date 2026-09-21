@@ -182,8 +182,29 @@ const getQuestions = require(path.join(REPO, 'lambda-functions', 'admin', 'get-q
  */
 const {
   editableRows, rowsToCsv, blankRow, copiedRow, moveRow,
-  summarizeRowChanges, versionNote, rowProblems,
+  summarizeRowChanges, versionNote, rowProblems, savedKeys,
 } = require(path.join(REPO, 'src', 'src', 'utils', 'questionRows.js'));
+
+/**
+ * THE KEY EACH QUESTION WAS STORED UNDER, AS THE BROWSER PREDICTED IT.
+ *
+ * A Save reads the set back and every row arrives with a new uid, so the set
+ * editor's question preview finds the question it was showing by the key the
+ * importer gave it — which `savedKeys` works out before the save lands. The
+ * importer renumbers on every save (categories by first appearance, questions
+ * within their category), so a key the question had before the save is not
+ * its key after: this holds the prediction to the keys the real importer wrote.
+ */
+function assertKeysPredicted(working, stored) {
+  const keys = savedKeys(working);
+  const live = working.filter((r) => !r.removed);
+  assert.strictEqual(stored.length, live.length, `stored ${stored.length} questions, the working copy had ${live.length}`);
+  for (const r of live) {
+    const row = stored.find((s) => s.Title === r.title.trim());
+    assert.ok(row, `nothing was stored for "${r.title}"`);
+    assert.strictEqual(row.SK, `QUESTION#${keys.get(r.uid)}`, `"${r.title}"`);
+  }
+}
 
 if (!process.env.DEBUG) console.log = () => {};
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -217,18 +238,22 @@ const rowsIn = (pk) =>
 /**
  * Create -> export -> re-import as a replace, all through the real handlers.
  *
- * A plain create lands in the legacy `SET#<id>` partition; the replace
- * snapshots that to v1 and writes v2. So `before` is the legacy partition and
+ * A plain create is born at v1; the replace writes v2. So `before` is v1 and
  * `after` is v2 — the same rows a game would be served, on both sides.
  */
 async function roundTrip(title, engagementType, csv) {
   const created = await upload({
     ...adminContext(),
-    body: JSON.stringify({ fileName: `${title}.csv`, fileContent: csv, customTitle: title, engagementType }),
+    // `topic` because a live set is created with a shelf now
+    // (shared/set-topics.js). The replace below deliberately sends none: a
+    // replace never has to name one, and this round trip proves it.
+    body: JSON.stringify({
+      fileName: `${title}.csv`, fileContent: csv, customTitle: title, engagementType, topic: 'business-work',
+    }),
   });
   assert.strictEqual(created.statusCode, 200, `create failed: ${created.body}`);
   const setId = parse(created).setId;
-  const before = rowsIn(`ORG#org_nw#SET#${setId}`);
+  const before = rowsIn(`ORG#org_nw#SET#${setId}#v1`);
 
   // The download needs the caller too. The set is created by adminContext(),
   // which since tenancy belongs to an ORGANISATION — so an anonymous export is
@@ -251,7 +276,7 @@ async function roundTrip(title, engagementType, csv) {
   return { setId, before, after, csv: exportedCsv, header: exportedCsv.split('\n')[0] };
 }
 
-/** Compare question rows field for field. PK differs by design (legacy vs #v2). */
+/** Compare question rows field for field. PK differs by design (#v1 vs #v2). */
 function assertSameQuestions(before, after) {
   assert.strictEqual(after.length, before.length,
     `question count changed: ${before.length} -> ${after.length}`);
@@ -697,6 +722,11 @@ const WAVELENGTH_CSV = [
     // rejects: a validation gate that only checks the server's answer. The
     // importer SKIPS a row with no Category or Title — 200, cheerful message,
     // silently one question short — so the editor has to refuse it first.
+    // rejects: a preview that loses its question on Save, or finds a different
+    // one — the key it predicts is the key it looks for once the set is read back.
+    check('savedKeys predicts the key the importer gave every question in this save', () =>
+      assertKeysPredicted(next, saved.rows));
+
     check('a half-filled row is refused before it can be silently skipped', () => {
       const problems = rowProblems({ ...blankRow(), title: 'NO CATEGORY' }, 'trivia');
       assert.ok(problems.some((p) => /category/i.test(p)), problems.join('; '));
@@ -734,6 +764,11 @@ const WAVELENGTH_CSV = [
     // worse than no label.
     check('question numbers are rewritten to match the new order', () =>
       assert.deepStrictEqual(saved.rows.map((r) => r.QuestionNumber), [1, 2, 3, 4]));
+
+    // Four categories folded into one and the last row moved first: every key
+    // moves, and the prediction has to move with it.
+    check('savedKeys predicts every key after a reorder that renumbers the set', () =>
+      assertKeysPredicted(moved, saved.rows));
   }
 
   // ==== copying a question out of another set ==============================
@@ -862,6 +897,11 @@ const WAVELENGTH_CSV = [
         customTitle: 'House Set, adapted by Bo',
         customDescription: 'Adapted from "House Set".',
         sourceSetId: original.setId,
+        // A fork IS a create, so it names a shelf like any other
+        // (shared/set-topics.js). The console carries the source's across;
+        // nothing on the server reads the original row to infer it, because
+        // `sourceSetId` here is provenance and never identity.
+        topic: 'business-work',
         engagementType: 'call-and-answer',
       }),
     });
@@ -890,7 +930,7 @@ const WAVELENGTH_CSV = [
     // It is the same working copy through the same serialiser, so the rows must
     // match field for field apart from the provenance stamp.
     check('the forked set carries the same questions, with provenance', () => {
-      const forkedRows = rowsIn(`ORG#org_nw#SET#${parse(forked).setId}`);
+      const forkedRows = rowsIn(`ORG#org_nw#SET#${parse(forked).setId}#v1`);
       assert.deepStrictEqual(forkedRows.map((r) => r.Title), original.after.map((r) => r.Title));
       assert.ok(forkedRows.every((r) => r.SourceSetId === original.setId),
         'a forked row lost its provenance');

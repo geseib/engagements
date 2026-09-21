@@ -144,11 +144,28 @@ async function unpublishSet(db, tableName, source, pubRef) {
     keys.push(...partitionKeys);
   }
   keys.push(setMetadataKey(pubRef));
-  // The org's own PUBLISHED markers that point at this listing.
+  /*
+    The org's own PUBLISHED markers that point at this listing: every version the
+    set still records, AND THE LEGACY UNSUFFIXED ONE.
+
+    A set shared before versioning existed has no `versions` array at all — three
+    of the four listings on dev came from one — so walking that array alone never
+    offered `publishedKey(source, null)` as a candidate and the marker survived
+    the listing it named. That orphan is not inert: appeal-question-set.js reads
+    exactly this key to decide whether there is anything left to appeal, so a
+    legacy author whose listing had been taken down was refused for ever, and
+    told the library was still serving a set it had removed.
+
+    `null` is added unconditionally rather than only for a set that looks legacy:
+    a set that WAS legacy and has been versioned since can hold both, and the
+    `publicSetId` check below is what decides in every case — a marker naming
+    somebody else's listing is still left exactly where it is.
+  */
   const srcRes = await db.send(new GetCommand({ TableName: tableName, Key: setMetadataKey(source) }));
   const srcVersions = Array.isArray(srcRes.Item && srcRes.Item.versions) ? srcRes.Item.versions : [];
-  for (const entry of srcVersions) {
-    const k = publishedKey(source, entry.version);
+  const markerVersions = [...new Set([...srcVersions.map((entry) => toVersion(entry && entry.version)), null])];
+  for (const markerVersion of markerVersions) {
+    const k = publishedKey(source, markerVersion);
     const row = (await db.send(new GetCommand({ TableName: tableName, Key: k }))).Item; // eslint-disable-line no-await-in-loop
     if (row && row.publicSetId === pubRef.setId) keys.push(k);
   }

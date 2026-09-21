@@ -5,6 +5,7 @@ const {
   batchPutItems,
   copyPartition,
   knownVersions,
+  FIRST_VERSION,
   nextVersion,
   queryPartition,
   setPartition,
@@ -13,6 +14,9 @@ const {
 } = require('./shared/set-version');
 const { normalizeTags } = require('./shared/tags');
 const {
+  normalizeSetTopic, normalizeSetTags, setTopicRefusal,
+} = require('./shared/set-topics');
+const {
   ownerStamp, requireSetManager, findSetForCaller, createSetRef, requestedScope,
 } = require('./shared/question-set-access');
 const { readAllowance } = require('./shared/usage');
@@ -20,9 +24,10 @@ const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./shared/pricing')
 const {
   ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
 } = require('./shared/round-kinds');
-const { ORG } = require('./shared/tenant');
+const { ORG, PLATFORM } = require('./shared/tenant');
 const { encryptItem } = require('./shared/tenant-crypto');
 const { resolvePromptRef, refusal } = require('./shared/workie-refs');
+const { dispatchHouseCheck } = require('./shared/house-check');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -162,6 +167,65 @@ exports.handler = async (event) => {
     const replaceSetId = String(payload.replaceSetId ?? '').trim();
     const isReplace = replaceSetId !== '';
     let engagementType = payload.engagementType;
+
+    /*
+      THE SHELF THIS SET SITS ON, and the author's own words beside it.
+
+      `topic` is ONE id from the closed list in shared/set-topics.js — what the
+      library filter and the browse are built on. `tags` are the specifics no
+      shelf of fifteen would ever carry ("1980s", "onboarding"), normalised by
+      the one tag vocabulary this repo has. They are a property of the SET; the
+      `Tags` column of the CSV belongs to each QUESTION and the two never meet.
+
+      ── WHERE THE REQUIREMENT BITES, AND THE THREE PLACES IT DOES NOT ───────
+
+      A CREATE that lands LIVE must name a shelf. That is every set a person
+      makes through this route, and it is the whole point: a library filter is
+      worth having only if the sets being added to it are filed.
+
+      A REPLACE NEVER HAS TO. It writes new questions under a set that already
+      exists and, like `name` and `description`, it does not rewrite the set's
+      prose at all (see the note above the activeVersion flip) — the shelf stays
+      whatever the metadata row already says. Requiring one here would refuse
+      every edit to the ~40 sets that predate this field, which is precisely the
+      retro-refusal this design rules out. `edit-question-set.js` is the route
+      that files a set; this one only ever files a NEW one.
+
+      A SET THAT ARRIVES ALREADY SWITCHED OFF does not have to either, and that
+      exception is narrow: an AI draft (`isAIGenerated`) and a legacy archive
+      restore (`startInactive`) are servable to nobody, and refusing those would
+      throw away a generation run nobody can repeat. SWITCHING ONE ON is where
+      the requirement lands — toggle-question-set.js refuses to make an unfiled
+      set servable, and every way a PERSON switches one on comes through there.
+      One writer does not: shared/archive-restore.js assigns `active` from the
+      snapshot without reading the topic, so a restored backup that recorded a
+      set as live is the one way past that refusal. This comment used to call
+      the toggle route the only one that flips `active`, which was never true;
+      toggle-question-set.js carries why the gap is narrow and how it is
+      reported. Not a later SAVE either: edit-question-set.js validates only a
+      save that mentions the topic, and switching a set on mentions nothing, so
+      a save-shaped promise here would be a gate that does not exist.
+
+      AN UNKNOWN TOPIC IS REFUSED WHEREVER IT IS OFFERED — create, replace or
+      draft. Off the shelf is off the shelf, and a typo must never become a
+      sixteenth shelf that no filter and no browse knows about. That is the same
+      reason the round-kind enum above is validated here rather than trusted.
+
+      ── AND NEITHER FIELD IS ENCRYPTED FOR AN ORG SET ───────────────────────
+
+      Deliberately. `topic` is an id from a closed list, structural like
+      `engagementType`; a tag is a canonical label, the same kind of thing as
+      `roundNoun` — a customer-authored word this boundary already leaves in
+      plaintext. `ENCRYPTED_FIELDS.set` names prose, and neither of these is.
+    */
+    const topicOffered = !(payload.topic === undefined || payload.topic === null
+      || (typeof payload.topic === 'string' && payload.topic.trim() === ''));
+    const mustBeFiled = !isReplace && !(isAIGenerated || startInactive);
+    const setTopic = normalizeSetTopic(payload.topic);
+    if (!setTopic && (mustBeFiled || topicOffered)) {
+      return badRequest(setTopicRefusal(payload.topic));
+    }
+    const setTags = normalizeSetTags(payload.tags);
 
     if (typeof fileContent !== 'string' || fileContent.trim() === '') {
       return badRequest('No file content received. Please choose a CSV file and try again.');
@@ -797,7 +861,22 @@ exports.handler = async (event) => {
     // replace supersedes actually exists and rolling back is a promote rather
     // than a restore. The snapshot is a copy; the legacy rows stay put, exactly
     // as the migration script leaves them.
-    let targetVersion = null;
+    //
+    // A NEW set is born at v1 (`FIRST_VERSION`). It used to be born unversioned,
+    // which made "no version" the normal state rather than a transitional one:
+    // on engagedev 2026-09-19, 15 of 21 platform sets and 5 of 6 org sets had no
+    // `activeVersion`, every one of them created after versioning shipped. Only
+    // a replace ever minted one. Everything built on top since — the per-version
+    // REVIEW row, the share stamp, the public library's `sourceVersion` — then
+    // carried null for the majority of sets, and `scripts/migrate-set-versions.js`
+    // could never finish, because the importer kept making new legacy rows for
+    // the sweep to find.
+    //
+    // The legacy BRANCH below stays exactly as it was. Nothing is migrated and
+    // nothing is swept: the sets already unversioned keep resolving through
+    // set-version.js's third step, and a replace still snapshots them to v1
+    // first. This only stops new ones joining them.
+    let targetVersion = isReplace ? null : FIRST_VERSION;
     let snapshotted = 0;
     if (isReplace) {
       const alreadyVersioned = toVersion(existingMeta.activeVersion) !== null
@@ -827,9 +906,8 @@ exports.handler = async (event) => {
       console.log(`↻ Replacing set "${setId}" — writing version v${targetVersion}`);
     }
 
-    // Content partition for THIS import. A plain import keeps writing to the
-    // legacy `SET#<id>` layout (a new set is version-less until it is migrated
-    // or first replaced); a replace writes to `SET#<id>#v<n>`.
+    // Content partition for THIS import — `SET#<id>#v<n>` either way now: v1
+    // for a new set, `nextVersion` for a replace.
     const contentPk = setPartition(targetRef, targetVersion);
 
     const setMetadataItem = {
@@ -861,10 +939,29 @@ exports.handler = async (event) => {
       // distinction that keeps the no-migration decision cheap.
       ...(setRoundKind ? { roundKind: setRoundKind } : {}),
       ...(setRoundKindBrief ? { roundKindBrief: setRoundKindBrief } : {}),
+      // THE SHELF, and the author's own words. Both written only when there is
+      // something to write: an absent `topic` IS the unfiled state, and a
+      // stored `''` would be a value nobody chose sitting where a filter looks.
+      ...(setTopic ? { topic: setTopic } : {}),
+      ...(setTags.length ? { tags: setTags } : {}),
       // The set this one was forked from, when it was. Provenance only.
       ...(sourceSetIdMeta ? { sourceSetId: sourceSetIdMeta } : {}),
       questionCount: questions.length,
       categoryCount: categoriesByKey.size,
+      // THE SET'S VERSION HISTORY, opened at v1 by the import that creates it.
+      // `versions[]` must carry the entry from the start: `knownVersions` reads
+      // it, `nextVersion` counts from it, and get-set-versions.js lists it — a
+      // set with content at #v1 but an empty array would show no versions at all
+      // and let a later replace renumber over its own content.
+      activeVersion: targetVersion,
+      versions: [{
+        version: targetVersion,
+        createdAt: new Date().toISOString(),
+        questionCount: questions.length,
+        categoryCount: categoriesByKey.size,
+        sourceFile: fileName,
+        note: versionNote,
+      }],
       // AI-generated content starts inactive, and so does a set restored from a legacy backup.
       active: (isAIGenerated || startInactive) ? false : true,
       createdAt: new Date().toISOString(),
@@ -1172,6 +1269,30 @@ exports.handler = async (event) => {
       : `✅ Successfully created question set "${setName}"`);
     console.log(`📊 Final stats: ${questions.length} questions, ${categoriesByKey.size} categories`);
 
+    /*
+      REPLACING THE QUESTIONS OF ONE OF ENGAGE'S SETS WHILE IT IS ON is the
+      second of the owner's three triggers for the content check — the same
+      content change an organisation's share would have had checked, on a set
+      every organisation is already playing. The others are the activation
+      (toggle-question-set.js) and the promote (promote-set-version.js), and all
+      three start the check the same way; `shared/house-check.js` carries why
+      that is here and not in the console.
+
+      A REPLACE, not a create: a brand-new set is served to nobody until
+      somebody switches it on, and that activation is the other trigger. Read
+      off the row as it was BEFORE this save, and `active !== false` because a
+      platform row written before `active` existed carries no attribute and IS
+      active — the rule every reader of these rows applies.
+    */
+    const checkDue = Boolean(isReplace
+      && targetRef && targetRef.scope === PLATFORM
+      && existingMeta && existingMeta.active !== false);
+
+    // AFTER the content rows and the activeVersion flip, and it cannot undo
+    // either: a dispatch that will not go is logged inside and swallowed, and
+    // this save still answers success.
+    if (checkDue) await dispatchHouseCheck(event, setId);
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -1184,6 +1305,11 @@ exports.handler = async (event) => {
         snapshottedLegacyRows: snapshotted || undefined,
         questionCount: questions.length,
         categoryCount: categoriesByKey.size,
+        // Always stated, so a client never has to tell "not due" from "this
+        // build does not say". It states what this save MADE TRUE — the check
+        // it asked for above may still have failed to start, which is not
+        // something a save reports on.
+        checkDue,
         // Rows the importer could not use. Reported so an import that quietly
         // drops half a file is visible instead of looking like a clean success.
         skippedRowCount: skippedRows.length,

@@ -3,6 +3,9 @@ import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
 import { gameTypeMeta } from '../config/gameTypes';
+import {
+  isUnreadableSet, unreadableSetName, UNREADABLE_REASON, UNREADABLE_SUB,
+} from '../utils/unreadableSet';
 
 const API_BASE = window.API_BASE;
 
@@ -291,13 +294,31 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
                           type="button"
                           key={set.id}
                           className="quickstart-set-card"
-                          disabled={creating}
-                          onClick={() => !creating && createQuickGame(set)}
+                          /*
+                            A SET THE SERVER COULD NOT DECRYPT IS NOT QUICK-
+                            STARTABLE. This is the surface where that costs the
+                            most: there is no picker to back out of and no
+                            confirm step — one press creates the session AND
+                            starts it, so the first anybody would learn of the
+                            failure is a room already looking at it.
+                          */
+                          disabled={creating || isUnreadableSet(set)}
+                          title={isUnreadableSet(set) ? UNREADABLE_REASON : undefined}
+                          onClick={() => !creating && !isUnreadableSet(set) && createQuickGame(set)}
                         >
                           <div className="quickstart-set-info">
-                            <h4>{set.name}<SetImageBadge hasImages={set.hasImages} /></h4>
+                            {/* `{set.name}` on a nulled name leaves an empty
+                                heading, and the card's accessible name falls
+                                through to the leftovers — "Ready to play 42
+                                questions" — which reads as an invitation. */}
+                            <h4>
+                              {isUnreadableSet(set) ? unreadableSetName(set) : set.name}
+                              <SetImageBadge hasImages={set.hasImages} />
+                            </h4>
                             <p className="quickstart-set-description">
-                              {set.description || 'Ready to play'}
+                              {isUnreadableSet(set)
+                                ? UNREADABLE_SUB
+                                : (set.description || 'Ready to play')}
                             </p>
                             <div className="quickstart-set-stats">
                               <span>{set.totalQuestions} questions</span>

@@ -28,6 +28,7 @@ jest.mock('qrcode.react', () => ({
 // Imported AFTER jest.mock above, which jest hoists — the order is required,
 // not accidental. (Was an `import/first` disable directive.)
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
+import { browserRow, filterBrowserRows } from '../config/setupPanel';
 
 const players = [
   { name: 'Ada', score: 3, email: 'ada@example.com' },
@@ -386,6 +387,24 @@ describe('the Questions tab — the browser', () => {
     expect(screen.getByTestId('browser-count').textContent).toMatch(/1 of 3/);
   });
 
+  test('search is titles only: a word only in a question\'s detail matches nothing', () => {
+    // rejects: this browser opting into `matchDetail` — the set editor's
+    // preview searches details, and this call site is the one place that
+    // keeps the stage's search to titles (spec 2026-09-19 §6). Only the
+    // option's default was pinned; nothing failed if the call site turned it on.
+    const withDetail = questions.map((q) => (q.id === 'q-1'
+      ? { ...q, questionDetail: 'Elasticity decides who keeps the margin.' } : q));
+    // the premise: the word is really there, in the detail and only there
+    expect(filterBrowserRows(withDetail.map((q) => browserRow(q)), { search: 'elasticity', matchDetail: true }))
+      .toHaveLength(1);
+    renderPanel({ questions: withDetail });
+    openTab('Questions');
+    expect(screen.getByPlaceholderText('Search titles…')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'elasticity' } });
+    expect(screen.queryAllByTestId('browser-row')).toHaveLength(0);
+    expect(screen.getByTestId('browser-count')).toHaveTextContent('Showing 0 of 3');
+  });
+
   test('a category chip filters the list without disabling the category', () => {
     // rejects: reusing the on/off toggle as the filter. Narrowing what you are
     // reading and removing a category from the game are different acts, and
@@ -582,12 +601,18 @@ describe('the Settings tab', () => {
     expect(report.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test('report-a-problem is rendered where the caller puts it', () => {
-    // The IssueFab pulls the auth'd API client in; the panel takes it as a
-    // node so the panel itself stays renderable.
-    renderPanel({ issueControl: <span>Report a problem</span> });
+  test('reporting is in the header `?`, on every tab — not slotted into this one', () => {
+    // It was an `issueControl` node dropped into this tab's footer, which is how
+    // a host could only report a bug from Settings. It is the help button's menu
+    // now, and the help button is in the header whichever tab is open.
+    renderPanel({});
     openTab('Settings');
-    expect(screen.getByText('Report a problem')).toBeInTheDocument();
+    const help = document.querySelector('.setup-panel__help');
+    expect(help).toHaveAttribute('aria-haspopup', 'menu');
+    fireEvent.click(help);
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent.trim())).toEqual([
+      'Read the guides', 'Report a bug', 'Request a feature', 'Ask for help',
+    ]);
   });
 });
 

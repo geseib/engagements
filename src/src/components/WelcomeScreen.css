@@ -98,6 +98,8 @@
 }
 
 .wel-brand {
+  /* an <a> since 2026-09-21; it keeps the wordmark's look, not a link's */
+  text-decoration: none;
   display: flex;
   align-items: baseline;
   gap: 9px;
@@ -414,3 +416,40 @@
    outlined buttons on one line there would either wrap mid-label or force the
    split's wide column narrower. */
 .wel-links { margin-top: 14px; display: grid; gap: 18px; }
+
+/* ---------------------------------------------------------------------------
+   THE `?` IN THE TOP BAR — help, and the three ways to tell us something.
+
+   HelpButton's base paint is a #3b82f6 circle with a blue shadow, a colour in no
+   Warm Summit palette. Re-tinted here the way the player bar and the session
+   panel re-tint theirs, at (0,3,0) against the component's (0,1,0), so the
+   result does not depend on where the two stylesheets land in the bundle.
+   40px to match the quiet buttons it sits beside; 44px for a finger.
+   --------------------------------------------------------------------------- */
+.wel-page .help-button.wel-helpbtn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.wel-page .help-button.wel-helpbtn:hover,
+.wel-page .help-button.wel-helpbtn[aria-expanded="true"] {
+  background: rgba(246, 169, 76, 0.12);
+  border-color: rgba(246, 169, 76, 0.5);
+  color: var(--text);
+  transform: none;
+  box-shadow: none;
+}
+
+@media (pointer: coarse) {
+  .wel-page .help-button.wel-helpbtn {
+    width: 44px;
+    height: 44px;
+  }
+}
+

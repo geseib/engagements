@@ -200,15 +200,21 @@ describe('a bare key resolves against the site root, which is why no resolver is
       `sets/<id>/x.jpg` is ever resolved against its directory.
 
         /auth/callback   — OAuth handoff, redirects immediately
-        /test/wordcloud  — a dev harness
+        /help/           — marketing/HelpPage.jsx renders the help corpus
+                           (config/help), which carries no images and never
+                           renders a question, so no `sets/<id>/…` src is ever
+                           resolved against its directory. A help-refresh that
+                           adds screenshots must use root-absolute URLs
+                           (`/assets/…`), never relative ones.
         /invite/         — components/InviteAcceptPage.jsx: one line of text
                            and a button, for somebody who followed an invitation
                            link before they had an account
+        /test/wordcloud  — a dev harness
 
       Adding to this list is a decision. A nested route that DOES render a
       question breaks every uploaded image on it, and nothing else would say so.
     */
-    expect(multiSegment.sort()).toEqual(['/auth/callback', '/invite/', '/test/wordcloud']);
+    expect(multiSegment.sort()).toEqual(['/auth/callback', '/help/', '/invite/', '/test/wordcloud']);
   });
 
   test('no route that renders a question is multi-segment', () => {

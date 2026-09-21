@@ -134,3 +134,63 @@ test('Escape closes it', async () => {
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
+
+/* ------------------------------------- a quickstart set the server can't read */
+
+describe('a quickstart set whose content could not be decrypted', () => {
+  /*
+    The sheet reads the SAME admin list as the console (`admin/question-sets`),
+    so it receives the same degraded row: encrypted fields nulled,
+    `decryptFailed: true`. See utils/unreadableSet.js.
+
+    Quick start is the surface where an unreadable set costs the most. There is
+    no confirmation step and no picker to back out of — one press creates the
+    session AND starts it, so the first thing anybody learns about the set being
+    unreadable would be a room already looking at it.
+  */
+  const UNREADABLE = {
+    id: 'q3retro',
+    name: null,
+    description: null,
+    engagementType: 'call-and-answer',
+    totalQuestions: 42,
+    categoryCount: 6,
+    quickstart: true,
+    active: true,
+    decryptFailed: true,
+  };
+
+  beforeEach(() => {
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) {
+        return { ok: true, json: async () => ({ questionSets: [...SETS, UNREADABLE] }) };
+      }
+      return { ok: true, json: async () => ({ gameId: '4821' }) };
+    });
+  });
+
+  // rejects: `<h4>{set.name}</h4>` rendered straight through. A nulled name
+  // leaves a card whose heading is empty and whose accessible name is built
+  // from the leftovers — "Ready to play 42 questions 6 categories" — which
+  // reads as an invitation.
+  test('the card names the set by the field that was never encrypted', async () => {
+    renderMenu();
+    expect(await screen.findByRole('button', { name: /q3retro/ })).toBeInTheDocument();
+  });
+
+  // rejects: leaving it pressable. One press here creates and starts a session,
+  // so there is no later step at which the failure could be caught.
+  test('and it cannot be started, because there is no step after this one', async () => {
+    renderMenu();
+    expect(await screen.findByRole('button', { name: /q3retro/ })).toBeDisabled();
+  });
+
+  // rejects: "Ready to play" — the description slot's default — surviving on a
+  // set that is not.
+  test('it does not claim to be ready to play', async () => {
+    renderMenu();
+    const card = await screen.findByRole('button', { name: /q3retro/ });
+    expect(card.textContent).not.toMatch(/ready to play/i);
+    expect(card.textContent).toMatch(/decrypt/i);
+  });
+});

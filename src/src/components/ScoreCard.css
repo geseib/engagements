@@ -3,7 +3,12 @@
    MEASURED (asserted in __tests__/scardPalette.test.js; recomputed with the
    test's own ratio() helper for this fix round — see task-10-fix-round-1-report.md):
      --text on --bg 15.0:1 · --muted on --bg 7.2:1 · --primary on --bg 8.9:1 · --danger-text on --bg 7.3:1
-     --text on --surface 12.5:1 · --muted on --surface 6.1:1 */
+     --text on --surface 12.5:1 · --muted on --surface 6.1:1
+     --secondary on --bg 7.1:1 · --secondary on --surface 5.9:1   (2026-09-19, the LOW chip)
+   THE BANDS (2026-09-19): the card lists everything the check SAW, most of it
+   let through, so a chip names a CONFIDENCE, never a verdict — high in
+   --danger-text, medium in --primary, low in --secondary. LOW used to fall
+   through to the base chip's grey because a LOW never reached the card. */
 .scard {
   --scard-t-floor: 12px;
   --scard-t-label: 13px;
@@ -23,22 +28,50 @@
 .scard-identity { margin: 6px 0 0; font-weight: 600; }
 .scard-acts { display: flex; gap: 8px; margin: 12px 0; }
 .scard-h { margin: 18px 0 6px; font-size: var(--scard-t-head); font-weight: 700; }
+/* A heading with a control beside it. The heading takes the slack with
+   `margin-right: auto` rather than the row pushing the control with
+   `justify-content: flex-end` — hard rule 9: flex-end overflows toward the
+   start, and a wrapped row's overflow there is unreachable. */
+.scard-hrow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.scard-hrow .scard-h { margin-right: auto; }
 .scard-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .scard-event { display: grid; grid-template-columns: 11ch 1fr; gap: 4px 12px; padding: 6px 0; border-bottom: 1px solid var(--scard-rule); }
 .scard-when { color: var(--muted); font-size: var(--scard-t-label); font-variant-numeric: tabular-nums; }
 .scard-what { color: var(--text); }
 .scard-note { grid-column: 2; color: var(--muted); font-size: var(--scard-t-label); }
+.scard-verdict { margin: 0; font-weight: 600; }
+.scard-summary { margin: 4px 0 10px; }
 .scard-tbl { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.scard-tbl + .scard-tbl { margin-top: 18px; }
 .scard-tbl th { text-align: left; font-size: var(--scard-t-label); font-weight: 600; color: var(--muted); padding: 0 8px 6px; border-bottom: 1px solid var(--scard-rule-strong); }
-.scard-col-q { width: 18%; } .scard-col-b { width: 14%; } .scard-col-c { width: 16%; } .scard-col-w { width: 52%; }
-.scard-finding td { height: var(--scard-row-h); padding: 4px 8px; border-bottom: 1px solid var(--scard-rule); vertical-align: middle; }
+/* The five-row category block. */
+.scard-col-cat { width: 40%; } .scard-col-worst { width: 14%; } .scard-col-count { width: 46%; }
+/* Everything the check saw, worst first. */
+.scard-col-q { width: 30%; } .scard-col-b { width: 9%; } .scard-col-c { width: 15%; } .scard-col-w { width: 34%; } .scard-col-h { width: 12%; }
+.scard-obs td, .scard-cat td { height: var(--scard-row-h); padding: 4px 8px; border-bottom: 1px solid var(--scard-rule); vertical-align: middle; }
+/* A question is named by its text, clamped at two lines — the rows already
+   run two for the Why column, and one line of this column is ~30 characters,
+   barely better than the id it replaced. One text node, so the clamp shows an
+   ellipsis rather than cutting silently (hard rule 8); the full question
+   rides on title=. */
+.scard-q { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.scard-q--missing { color: var(--muted); font-style: italic; }
 .scard-why { color: var(--muted); font-size: var(--scard-t-label); }
-.scard-chip { display: inline-flex; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--scard-rule-strong); font-size: var(--scard-t-floor); font-weight: 600; color: var(--muted); }
-.scard-chip--flagged { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
-.scard-chip--uncertain { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
+.scard-held { color: var(--muted); font-size: var(--scard-t-label); }
+.scard-held--yes { color: var(--text); font-weight: 600; }
+.scard-none { color: var(--muted); }
+.scard-count { font-variant-numeric: tabular-nums; }
+.scard-chip { display: inline-flex; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--scard-rule-strong); font-size: var(--scard-t-floor); font-weight: 600; color: var(--muted); white-space: nowrap; }
+.scard-chip--high { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
+.scard-chip--medium { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
+.scard-chip--low { color: var(--secondary); border-color: rgba(124, 167, 230, .5); }
 .scard-outage { padding: 10px 12px; border: 1px solid var(--scard-rule-strong); border-radius: 6px; color: var(--danger-text); margin: 0 0 12px; }
 .scard-btn { height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--scard-rule-strong); background: transparent; color: var(--text); font: 600 var(--scard-t-body)/1 var(--font-ui); cursor: pointer; }
 .scard-btn:hover { background: var(--scard-row-hover); }
+/* Beside a 19px heading a 36px button is the loudest thing on the page, and
+   this one is not the page's subject. Size only — the label keeps the card's
+   text colour, and 13px is the ladder's label step, not a new floor. */
+.scard-btn--sm { height: 28px; padding: 0 10px; font-size: var(--scard-t-label); }
 .scard-btn--danger { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
 .scard-btn:disabled { opacity: .6; cursor: default; }
 .scard-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 48px 16px; background: rgba(15, 26, 46, .72); }
@@ -49,5 +82,12 @@
 .scard-body { padding: 10px 20px; }
 .scard-body p { margin: 0 0 12px; }
 .scard-label { display: block; margin: 8px 0 4px; font-size: var(--scard-t-label); color: var(--muted); }
+/* What a re-check does and does not do, as a term list rather than a paragraph:
+   each promise is one thing, named, so a reader looking for one of them finds
+   it without reading the other two. ShareSetDialog's `.pubshare-outcomes` is
+   the same shape on the organisation's side of the same check. */
+.scard-promises { margin: 0 0 12px; }
+.scard-promises dt { margin: 8px 0 0; font-size: var(--scard-t-label); font-weight: 600; color: var(--text); }
+.scard-promises dd { margin: 2px 0 0; color: var(--muted); }
 .scard-textarea { width: 100%; box-sizing: border-box; font: inherit; color: var(--text); background: transparent; border: 1px solid var(--scard-rule-strong); border-radius: 6px; padding: 8px; }
 .scard-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 18px; border-top: 1px solid var(--scard-rule); }

@@ -416,6 +416,14 @@ let mockSend;
 
 jest.mock('@aws-sdk/client-dynamodb', () => ({ DynamoDBClient: class {} }), { virtual: true });
 
+// The importer dispatches the content check on one of Engage's own sets
+// (admin/shared/house-check.js). Nothing here is a platform replace, so nothing
+// is ever sent — this exists so the module loads.
+jest.mock('@aws-sdk/client-lambda', () => ({
+  LambdaClient: class { async send() { throw new Error('no check should be dispatched by a plain import'); } },
+  InvokeCommand: class { constructor(input) { this.input = input; } },
+}), { virtual: true });
+
 jest.mock('@aws-sdk/lib-dynamodb', () => {
   const kinded = (kind) => class {
     constructor(input) {
@@ -459,6 +467,11 @@ async function importedCategories(rows, engagementType = 'call-and-answer') {
       fileContent: rowsToCsv(rows, engagementType),
       customTitle: 'Anchor Set',
       engagementType,
+      // A live set is created with a shelf now
+      // (lambda-functions/admin/shared/set-topics.js). Which shelf is nothing
+      // to do with in-set CATEGORIES, which is what this file is about — the
+      // two words are deliberately kept apart.
+      topic: 'general-knowledge',
     }),
   });
 

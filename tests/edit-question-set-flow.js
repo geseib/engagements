@@ -435,6 +435,8 @@ function seedSet(overrides = {}) {
     body: JSON.stringify({
       fileName: 'trivia.csv', fileContent: TRIVIA_CSV,
       customTitle: 'Science Trivia', engagementType: 'trivia',
+      // A live set is created with a shelf now (shared/set-topics.js).
+      topic: 'science-technology',
     }),
   });
   check('upload returns 200', () => assert.strictEqual(up.statusCode, 200, up.body));
@@ -450,6 +452,7 @@ function seedSet(overrides = {}) {
       fileName: 'trivia2.csv', fileContent: TRIVIA_CSV,
       customTitle: 'Chosen Prompt Set', engagementType: 'trivia',
       promptId: 'trivia-summary',
+      topic: 'science-technology',
     }),
   });
   check('upload returns 200', () => assert.strictEqual(up.statusCode, 200, up.body));

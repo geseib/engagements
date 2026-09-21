@@ -14,10 +14,16 @@ const { GetCommand, PutCommand, DeleteCommand, QueryCommand } = require('@aws-sd
 
 const QUEUE_PK = 'MODERATION';
 const REASONS = Object.freeze(['escalated', 'appealed', 'reported', 'declared', 'images']);
-/** Fields a pointer may carry. Anything else — snapshots, questions — is refused by omission. */
+/**
+ * Fields a pointer may carry. Anything else — snapshots, questions — is refused by omission.
+ * `checkReasons` is what a check escalation was FOR (the REVIEW row's reasons:
+ * images, declared, guardrail, timeout, snapshot, error) and `declaredNotice`
+ * the notices it names; like `bands`, a later check replaces them.
+ */
 const POINTER_FIELDS = Object.freeze([
   'orgId', 'orgName', 'setId', 'title', 'version', 'gameType', 'questionCount',
-  'bands', 'uncertainQuestionIds', 'appealMessage', 'reports', 'snapshotKey', 'contentHash', 'publicSetId',
+  'bands', 'uncertainQuestionIds', 'checkReasons', 'declaredNotice',
+  'appealMessage', 'reports', 'snapshotKey', 'contentHash', 'publicSetId',
 ]);
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 const versionOf = (version) => { const v = Number(version); return Number.isFinite(v) && v > 0 ? v : 0; };
@@ -48,8 +54,36 @@ async function upsertQueueRow(db, tableName, { ref, version, reason, ...fields }
     ...pointer,
     scope,
     setId: clean(ref.setId),
-    ...(scope === 'org' ? { orgId: clean(ref.orgId), version: versionOf(version) } : {}),
+    // The version is recorded whatever the scope keys the row. A staff re-check
+    // is keyed by the LISTING (`PUBLIC#<publicSetId>`, so it can never land on
+    // the organisation's own publish request) and still has to say which of the
+    // organisation's versions it judged — without this the row said v0 for every
+    // one of them, and the queue's sub-line reads it.
+    version: versionOf(version),
+    ...(scope === 'org' ? { orgId: clean(ref.orgId) } : {}),
     reasons: [...new Set([...((existing && existing.reasons) || []), reason])],
+    /*
+      SAID BY THE CHECK, AND ONLY BY THE CHECK.
+
+      A row staff's re-check of a listing the library already serves raised is
+      not a publish request: moderation-decide.js refuses to decide it, because
+      approving would publish a second public version of content already live
+      and rejecting would stamp its author for a check nobody told them about.
+      The organisation's OWN later submission of the same version IS a publish
+      request and must clear the flag, or their share is undecidable for good.
+
+      Only set-check-worker.js knows which of the two it just ran, and it states
+      the field on EVERY raising it makes (`request.recheck === true`, a boolean,
+      passed either way). So a caller that states it is believed, and a caller
+      that does not — an APPEAL, a report — leaves it as it stands.
+
+      Written fresh on every upsert instead, an appeal CLEARED the guard: the
+      author appeals the FLAGGED a staff re-check wrote, this bump turns
+      `recheck` off, and Approve publishes that content a second time. The
+      appeal route refuses such a version outright now; this is the second lock
+      on the same door, and the one that does not depend on knowing who called.
+    */
+    recheck: 'recheck' in fields ? fields.recheck === true : Boolean(existing && existing.recheck),
     waitingSince: (existing && existing.waitingSince) || at,
     latestAt: at,
     // The keys come LAST so nothing a caller passes — and nothing on an

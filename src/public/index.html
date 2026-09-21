@@ -3,7 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Engagements</title>
+  <!-- The mountain from the nav. SVG for browsers that take one, a 32px PNG for
+       the ones that do not, and a 180px touch icon; all three are drawn from
+       public/favicon.svg, whose path is the brand mark's own. -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0F1A2E" />
+  <title>Engagements — live sessions that turn your team’s material into decisions</title>
+  <meta name="description" content="Run trivia and call-and-answer sessions from your own material. Everyone answers from their phone; call-and-answer rounds put every idea to a vote, and the report keeps everything." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Engagements" />
+  <meta property="og:description" content="Live sessions that turn your team’s own material into decisions — with a report that kept everything." />
+  <!--
+    Absolute, prod-origin URLs: this file is one static index.html served by
+    every tier (dev/test/prod all ship the same build), so a share on dev or
+    test still points readers at the prod asset rather than at a relative
+    path that would 404 or, worse, resolve against whichever tier happens to
+    be serving the page. share.png is the rasterised share.svg (fix round 2)
+    — an SVG og:image does not render on several link-unfurlers, so this is
+    a PNG, not the vector source.
+  -->
+  <meta property="og:url" content="https://engage.seibtribe.us/" />
+  <meta property="og:site_name" content="Engagements" />
+  <meta property="og:image" content="https://engage.seibtribe.us/assets/marketing/share.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://engage.seibtribe.us/assets/marketing/share.png" />
   <!-- Warm Summit fonts: Archivo Expanded (display) + Inter (UI) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

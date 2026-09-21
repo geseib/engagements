@@ -1,0 +1,406 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Icon from './Icon';
+import QuestionCard from './QuestionCard';
+import { filterBrowserRows } from '../config/setupPanel';
+import { resolveInstruction } from '../config/instructions';
+import {
+  stagedQuestion, previewRows, previewCategories, stepSelection, refindPlace, nothingToPreview,
+  canReveal, revealText,
+} from '../config/questionPreview';
+import { savedKeys } from '../utils/questionRows';
+import './QuestionPreview.css';
+
+/** Input types a person types into — ↑/↓ belong to the field there, not the list. */
+const TEXT_ENTRY_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number']);
+
+function isTextEntry(target) {
+  if (!target || !target.tagName) return false;
+  if (target.isContentEditable) return true;
+  if (target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return true;
+  if (target.tagName !== 'INPUT') return false;
+  return TEXT_ENTRY_TYPES.has(String(target.type || 'text').toLowerCase());
+}
+
+const optionDomId = (id) => `qprev-opt-${id}`;
+
+/**
+ * [Table] [Preview] — the Questions tab's two views of one working copy.
+ *
+ * Its own root and theme, because it sits in the Questions panel's toolbar
+ * OUTSIDE the preview: the panel is paper on both mounts (the admin console
+ * renders the editor with contentTheme 'light', AdminPage.jsx:1636; the host
+ * shelf inside `.qsets--onlight`), and the token block it reads is declared on
+ * `.qprev-switch` as well as `.qprev`.
+ *
+ * `previewBlocked` is the reason Preview cannot be pressed, or '' when it can.
+ * A disabled control says why on its own title — never a dead button.
+ */
+export function QuestionViewSwitch({ mode = 'table', onChange, previewBlocked = '' }) {
+  return (
+    <div className="qprev-switch" data-theme="dark" role="group" aria-label="How the questions are shown">
+      <button
+        type="button"
+        className="qprev-seg-btn"
+        aria-pressed={mode === 'table'}
+        onClick={() => onChange && onChange('table')}
+      >
+        Table
+      </button>
+      <button
+        type="button"
+        className="qprev-seg-btn"
+        aria-pressed={mode === 'preview'}
+        disabled={Boolean(previewBlocked)}
+        title={previewBlocked || undefined}
+        onClick={() => onChange && onChange('preview')}
+      >
+        Preview
+      </button>
+    </div>
+  );
+}
+
+/**
+ * THE PREVIEW — browse a set and see each question as the room will.
+ *
+ * Spec: docs/superpowers/specs/2026-09-19-question-preview-design.md. Two panes:
+ * the in-session browser's mechanics on the left (search, category chips,
+ * "Showing N of M", click a row), and on the right the card the live stage
+ * renders — components/QuestionCard.jsx, the same component — at the Table
+ * profile on the stage's dusk ground.
+ *
+ * THE LIST IS THE WIDER PANE, and its rows are the in-session browser's rows —
+ * title, detail, meta — because that is what the owner asked for after using the
+ * first cut: *"the question list could be wider and the preview narrower. so
+ * that you can read the questions from the list. i like a bit of how the list
+ * looks in the session questions menu."* The split and the row's treatment are
+ * both in QuestionPreview.css, which records the reasoning for each.
+ *
+ * IT NEVER TOUCHES document.documentElement. The stage keeps its display
+ * profile there (components/stage/Stage.jsx), and a preview that re-classed the
+ * root would re-profile a projector. The Table ladder reaches the card through
+ * the `.stage-ladder-table` class on the screen pane instead (styles/stage.css).
+ *
+ * IT READS THE WORKING COPY, NOT THE SERVER. `rows` is the Questions panel's
+ * array, tombstones and unsaved edits included; a removed row is not listed,
+ * and an edit made in the question dialog shows here the moment Done is pressed.
+ *
+ * ↑ / ↓ STOP HERE. They are handled on this root and never reach a window
+ * listener — the stage's pager pages on a bare ↑/↓ (config/stagePaging.js
+ * `pageIntentFor`), and a preview key must never turn a page on a projector.
+ * That holds with nothing visible to step through, too. They step through the
+ * VISIBLE rows, wrap at the ends, and belong to the field instead whenever
+ * focus is in something the person types into.
+ *
+ * `selectRequest` is `{ uid }` — "Edit Q14" from the needs-changes banner
+ * (components/SetReviewBanner.jsx), which the Questions tab resolves to a row of
+ * the working copy and hands here while this view is up. See the effect below.
+ *
+ * `editBlocked` is why "Edit this question" cannot be pressed right now, or ''
+ * when it can — the Questions tab holds it while a Save is written and read
+ * back, because the read-back replaces the row it would open. Held, it stays in
+ * the bar, disabled, with the reason on its own title, as the view switch's
+ * `previewBlocked` does. With no `onEditQuestion` there is no Edit at all.
+ */
+export default function QuestionPreview({
+  rows = [],
+  gameType = 'call-and-answer',
+  setInstruction = '',
+  setId = '',
+  onEditQuestion,
+  editBlocked = '',
+  selectRequest = null,
+}) {
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
+  // STICKY: flip to Reveal once and every question you move to shows its answer.
+  const [phase, setPhase] = useState('ASK');
+
+  const listRows = useMemo(() => previewRows(rows), [rows]);
+  const categories = useMemo(() => previewCategories(listRows), [listRows]);
+  // A chip whose last question was edited into another category filters
+  // nothing that exists; it stops being a filter rather than emptying the list.
+  const activeCategory = categories.includes(category) ? category : '';
+  const visible = useMemo(
+    () => filterBrowserRows(listRows, { search, category: activeCategory, matchDetail: true }),
+    [listRows, search, activeCategory],
+  );
+  const keys = useMemo(() => savedKeys(rows), [rows]);
+
+  // THE PLACE SURVIVES THE ROWS BEING READ BACK. A Save reads the set back
+  // (QuestionsPanel `load`), and every row arrives with a new uid, so the
+  // selection's uid is simply gone from the list. `place` is where it was as of
+  // the last render — the key the question was saved under, its title, its
+  // position — and the question is found again from it (config/questionPreview.js
+  // `refindPlace`) in the same render, so the card never shows another question
+  // in between. A selection that is only FILTERED OUT is still in the list, and
+  // keeps the rule below.
+  const place = useRef(null);
+  const lost = selectedId !== null && !listRows.some((r) => r.id === selectedId);
+  const found = lost ? refindPlace(place.current, rows, visible) : null;
+  const selected = visible.find((r) => r.id === selectedId) || found || visible[0] || null;
+
+  // A selection that is filtered out MOVES to the first visible row — it does
+  // not wait there to snap back when the filter clears.
+  useEffect(() => {
+    if (selected && selected.id !== selectedId) setSelectedId(selected.id);
+  }, [selected, selectedId]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const row = rows.find((r) => r.uid === selected.id);
+    place.current = {
+      key: keys.get(selected.id) || '',
+      title: String((row && row.title) || '').trim(),
+      index: visible.indexOf(selected),
+    };
+  }, [selected, rows, keys, visible]);
+
+  // GOING TO ONE QUESTION ON REQUEST. The preview's way of going to a question
+  // is selecting it: the card draws it and "Edit this question" is beside it,
+  // and the row scrolls into view the way ↑/↓ scroll it.
+  //
+  // A search or chip that hides the question is cleared first. Left in place,
+  // the rule above would move the selection straight back to the first visible
+  // row, and the request would look as if it had done nothing. A filter that
+  // does not hide it is left alone. A row this list does not hold (a removed
+  // one) is not this view's to show; the Questions tab sends that one to the
+  // Table instead.
+  //
+  // Each request OBJECT is acted on once, so the list can move on from it and
+  // an edit to the working copy does not snap back to it. A second press of the
+  // banner's button arrives as a new object.
+  const handledRequest = useRef(null);
+  useEffect(() => {
+    if (!selectRequest || !selectRequest.uid || handledRequest.current === selectRequest) return;
+    const { uid } = selectRequest;
+    if (!visible.some((r) => r.id === uid)) {
+      if (listRows.some((r) => r.id === uid) && (search.trim() || activeCategory)) {
+        setSearch('');
+        setCategory('');
+        return; // acted on at the next render, when the cleared list is on screen
+      }
+      handledRequest.current = selectRequest;
+      return;
+    }
+    handledRequest.current = selectRequest;
+    setSelectedId(uid);
+    const el = document.getElementById(optionDomId(uid));
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [selectRequest, visible, listRows, search, activeCategory]);
+
+  const selectedRow = selected ? rows.find((r) => r.uid === selected.id) || null : null;
+  const staged = selectedRow ? stagedQuestion(selectedRow, { setId }) : null;
+  // Offered for the SET, not the question on the card (config/questionPreview.js
+  // `canReveal`): trivia always, any other format once a question carries a
+  // reveal, so the control holds still while paging.
+  const revealable = useMemo(() => canReveal(rows, gameType), [rows, gameType]);
+  const reveal = revealable && phase === 'REVEAL';
+
+  const onKeyDown = (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (isTextEntry(event.target)) return;
+    // Stopped FIRST, whether or not there is anything to step to. With nothing
+    // visible the key is still the preview's, and a window listener — the
+    // stage's pager — would otherwise hear it and turn the projector's page.
+    // Only a step takes the key's default (the page's own scroll) with it.
+    event.stopPropagation();
+    const next = stepSelection(visible.map((r) => r.id), selected ? selected.id : null,
+      event.key === 'ArrowDown' ? 1 : -1);
+    if (!next) return;
+    event.preventDefault();
+    setSelectedId(next);
+    const el = document.getElementById(optionDomId(next));
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  };
+
+  // No rows, or only tombstones: two different lines (config/questionPreview.js).
+  if (listRows.length === 0) {
+    return (
+      <div className="qprev qprev--empty" data-theme="dark" data-testid="question-preview">
+        <p className="qprev-empty">{nothingToPreview(rows)}</p>
+      </div>
+    );
+  }
+
+  /* The root's keydown is a delegate for the list's keys, not a control of its
+     own: the listbox inside is the focusable element, and the chips, the toggle
+     and Edit keep ↑/↓ working when focus has moved onto them. */
+  return (
+    <div className="qprev" data-theme="dark" data-testid="question-preview" onKeyDown={onKeyDown}>
+      <div className="qprev-list">
+        {/* ESCAPE CLEARS THE SEARCH, AND STOPS HERE — while there is a search to
+            clear. The editor can be a dialog (the host shelf), and components/
+            Modal.jsx closes it on an Escape heard at `document` when nothing is
+            unsaved, so an Escape meant for this box closed the whole editor. An
+            empty box has nothing to clear, and its Escape goes on to the dialog
+            as one pressed anywhere else in the editor would. */}
+        <input
+          type="search"
+          className="qprev-search"
+          placeholder="Search titles and details…"
+          aria-label="Search titles and details"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape' || !search) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setSearch('');
+          }}
+        />
+        {categories.length > 1 && (
+          <div className="qprev-chips" role="group" aria-label="Category">
+            <button
+              type="button"
+              className="qprev-chip"
+              aria-pressed={activeCategory === ''}
+              onClick={() => setCategory('')}
+            >
+              All
+            </button>
+            {categories.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className="qprev-chip"
+                aria-pressed={activeCategory === name}
+                onClick={() => setCategory(activeCategory === name ? '' : name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="qprev-count" data-testid="preview-count">
+          {`Showing ${visible.length} of ${listRows.length}`}
+        </p>
+        {visible.length === 0 ? (
+          <div className="qprev-nomatch">
+            <p>
+              {`No questions match “${search.trim()}”${activeCategory ? ` in ${activeCategory}` : ''}.`}
+            </p>
+            <button type="button" className="qprev-link" onClick={() => setSearch('')}>
+              Clear search
+            </button>
+          </div>
+        ) : (
+          <ul
+            className="qprev-rows"
+            role="listbox"
+            aria-label="Questions"
+            tabIndex={0}
+            aria-activedescendant={selected ? optionDomId(selected.id) : undefined}
+          >
+            {visible.map((r) => {
+              // Every line the sheet shortens carries its whole string on
+              // title= — a reduction with no recovery is a deletion. The title
+              // and the meta are cut to one line each (difficulty, written
+              // last, is the first thing the meta line loses); the detail is
+              // clamped to two.
+              const title = r.title || 'Untitled question';
+              const detail = String(r.detail || '').trim();
+              const meta = [r.category || 'No category', r.difficulty].filter(Boolean).join(' · ');
+              return (
+                <li
+                  key={r.id}
+                  id={optionDomId(r.id)}
+                  role="option"
+                  aria-selected={Boolean(selected && selected.id === r.id)}
+                  className="qprev-row"
+                  onClick={() => setSelectedId(r.id)}
+                >
+                  <span className="qprev-row-title" title={title}>{title}</span>
+                  {detail && <span className="qprev-row-detail" title={detail}>{detail}</span>}
+                  <span className="qprev-row-meta" title={meta}>{meta}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div className="qprev-detail">
+        <div className="qprev-bar">
+          {revealable && (
+            <div className="qprev-seg" role="group" aria-label="What the card shows">
+              <button
+                type="button"
+                className="qprev-seg-btn"
+                aria-pressed={!reveal}
+                onClick={() => setPhase('ASK')}
+              >
+                ASK
+              </button>
+              <button
+                type="button"
+                className="qprev-seg-btn"
+                aria-pressed={reveal}
+                onClick={() => setPhase('REVEAL')}
+              >
+                Reveal
+              </button>
+            </div>
+          )}
+          {selected && (
+            <span className="qprev-pos" data-testid="preview-position">
+              {`${visible.indexOf(selected) + 1} / ${visible.length}`}
+            </span>
+          )}
+          {selectedRow && typeof onEditQuestion === 'function' && (
+            <button
+              type="button"
+              className="qprev-btn qprev-edit"
+              disabled={Boolean(editBlocked)}
+              title={editBlocked || undefined}
+              onClick={() => onEditQuestion(selectedRow)}
+            >
+              <Icon name="PencilSimple" weight="bold" size={14} color="currentColor" /> Edit this question
+            </button>
+          )}
+        </div>
+
+        {/* THE SCREEN. Dusk and the Table ladder on this pane alone, so the card
+            looks like the stage inside a paper editor. Nothing in here is
+            restyled by this component's stylesheet: the card's rules are
+            stage.css's, untouched (QuestionPreviewPalette.test.js holds that).
+            REVEAL KEEPS ITS QUESTION (`withQuestion`). Reveal is sticky, so
+            every question you move to arrives already revealed. The options
+            alone would be four answers with nothing saying what was asked; the
+            card draws the question above them in ASK's own lines, as the spec's
+            §1 sketch has it.
+            ONLY TRIVIA'S CARD CHANGES IN REVEAL. Its answer is on the card: the
+            correct option, marked. Any other format's reveal is text the stage
+            never draws at RESULTS — an art set's real title, say — so its card
+            stays exactly as in ASK and the reveal is the note below. */}
+        <div className="qprev-screen stage-ladder-table" data-theme="dark" data-testid="preview-screen">
+          {staged ? (
+            <div className="qprev-card">
+              <QuestionCard
+                phase={reveal && gameType === 'trivia' ? 'REVEAL' : 'ASK'}
+                question={staged}
+                gameType={gameType}
+                instruction={resolveInstruction(staged, setInstruction, gameType)}
+                withQuestion
+              />
+            </div>
+          ) : (
+            <p className="qprev-screen-empty">Nothing is selected.</p>
+          )}
+        </div>
+
+        {/* NOT ON THE SCREEN, AND SAID SO. The stage's RESULTS never shows the
+            reveal text — it reaches players only in the round report — so it
+            sits below and outside the screen, under the editor's own words. */}
+        {reveal && revealText(selectedRow) && (
+          <p className="qprev-note" data-testid="preview-note">
+            <b>Reveal — shown only after the round</b>
+            {revealText(selectedRow)}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

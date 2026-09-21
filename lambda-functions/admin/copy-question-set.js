@@ -56,7 +56,7 @@ const {
   DynamoDBDocumentClient, QueryCommand, GetCommand, PutCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const {
-  setRef, setMetadataKey, resolvePartitionFromMeta, setPartition,
+  setRef, setMetadataKey, resolvePartitionFromMeta, setPartition, FIRST_VERSION,
   queryPartition, batchPutItems, toVersion,
 } = require('./shared/set-version');
 const tenant = require('./shared/tenant');
@@ -156,7 +156,7 @@ exports.handler = async (event) => {
 
     const name = `${meta.name || setId}`.slice(0, 120);
     const newSetId = await freeSetId(orgId, name);
-    const targetPk = setPartition({ scope: tenant.ORG, orgId, setId: newSetId }, null);
+    const targetPk = setPartition({ scope: tenant.ORG, orgId, setId: newSetId }, FIRST_VERSION);
     const now = new Date().toISOString();
 
     /*
@@ -185,12 +185,15 @@ exports.handler = async (event) => {
        so a future row type is carried rather than dropped.
 
        EXCEPT THE REVIEW AND PUBLISHED ROWS, which are not content. Each public
-       version carries its own REVIEW row. Copied into this unversioned
-       partition, that row would sit at exactly the key publish-question-set.js
-       reads for a set with no version, and the copying team could publish
-       content its own check never saw. PUBLISHED says where the SOURCE version
-       was shared. A backup leaves both out for the same reason
-       (shared/archive-snapshot.js). */
+       version carries its own REVIEW row, and a verdict on the library's copy
+       says nothing about this one. PUBLISHED says where the SOURCE version was
+       shared. A backup leaves both out for the same reason
+       (shared/archive-snapshot.js).
+
+       This filter is not made redundant by the copy now landing at v1 rather
+       than in the unversioned partition. Dropping it would put the library's
+       verdict at the copy's OWN v1 review key, which is worse: a publish that
+       names no version resolves through activeVersion straight onto it. */
     const copies = [];
     for (const row of rows) {
       if (LIFECYCLE_SKS.includes(String(row.SK))) continue;
@@ -227,11 +230,21 @@ exports.handler = async (event) => {
          which `setScopeOf` treats as a half-written row precisely because that
          shape is the one a hand-rolled stamp produces. */
       ...ownerStamp(event, { scope: tenant.ORG, orgId, setId: newSetId }),
-      /* A copy starts at the beginning of its own version history. Carrying the
-         source's `versions` would describe snapshots that live in a partition
-         this organisation cannot read. */
-      activeVersion: null,
-      versions: [],
+      /* A copy starts at the beginning of its own version history — v1, holding
+         the rows copied above. Carrying the source's `versions` would describe
+         snapshots that live in a partition this organisation cannot read.
+
+         It used to start UNVERSIONED, which left the copy in the one state the
+         per-version review record cannot address: `reviewKey(copy, null)`. */
+      activeVersion: FIRST_VERSION,
+      versions: [{
+        version: FIRST_VERSION,
+        createdAt: now,
+        questionCount: copies.filter((r) => String(r.SK || '').startsWith('QUESTION#')).length,
+        categoryCount: copies.filter((r) => String(r.SK || '').startsWith('CATEGORY#')).length,
+        sourceFile: '',
+        note: `copied from ${scope}:${setId}`,
+      }],
       active: true,
       /* Never inherited: a copy of a published set is NOT published, and a copy
          of a quickstart is not one of Engage's quickstarts. */

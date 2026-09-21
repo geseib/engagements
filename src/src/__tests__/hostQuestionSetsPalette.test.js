@@ -179,80 +179,73 @@ describe('the scope reaches the components nested inside it', () => {
 /**
  * THE ADMIN QUESTION-SET EDITOR, MOUNTED ON THE HOST'S SHELF.
  *
- * `HostQuestionSetsDialog` now opens `components/QuestionSetEditor.jsx` on a row
- * the server said `canManage` on — the owner's *"expose the same style (maybe
- * the same modal etc) to the host question set screens. why recreate
- * everything."* Every `.qs-*` rule those components use lives in styles.css and
- * was measured against the ADMIN paper theme; mounted here they inherit
- * `.qsets--onlight`'s tokens instead, because custom properties inherit and that
- * scope re-declares GLOBAL ones rather than only its own `--qsets-*` locals.
+ * `HostQuestionSetsDialog` opens `components/QuestionSetEditor.jsx` on a row the
+ * server said `canManage` on — the owner's *"expose the same style (maybe the
+ * same modal etc) to the host question set screens. why recreate everything."*
  *
- * This block is the measurement of what that inheritance does.
+ * IT USED TO INHERIT THIS SCOPE'S PAPER TOKENS, and this block measured what
+ * that inheritance did. It does not any more: the editor declares
+ * `data-theme="dark"` on its own root and carries its own token block, because
+ * the owner asked for it to stop being the one white screen in a dark product
+ * — *"the white background really contrasts the rest of the site, as we are
+ * entirely dark background throughout, except for question set editors and
+ * previews."*
+ *
+ * So what is measured here is the BOUNDARY rather than the inheritance: that
+ * this scope hands the editor nothing, and that everything it would otherwise
+ * have handed it is caught. The editor's own pairings are in
+ * __tests__/questionSetEditorPalette.test.js, on the stack it really paints.
  */
-const EDITOR = (() => {
-  const start = QS_CSS.indexOf('.qsets--onlight .qs-editor {');
-  if (start < 0) {
-    throw new Error('.qsets--onlight .qs-editor block not found — the mounted editor has no re-tint');
-  }
-  return QS_CSS.slice(start, QS_CSS.indexOf('}', start));
+const EDITOR_CSS = read('components', 'QuestionSetEditor.css');
+const EDITOR_SCOPE = (() => {
+  const start = EDITOR_CSS.indexOf('.qs-editor {');
+  if (start < 0) throw new Error('.qs-editor token block not found');
+  return EDITOR_CSS.slice(start, EDITOR_CSS.indexOf('}', start));
 })();
 
-const editorToken = (name) => {
-  const m = EDITOR.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  return m ? parseHex(m[1]) : null;
-};
-
 describe('the editor, mounted inside the host dialog', () => {
-  test('the nested-card affordance survives the host surface', () => {
-    // `.qs-editor .qs-panel` is `background: var(--surface-2)` on a white modal,
-    // and it is what makes Details / Questions / Media read as four steps rather
-    // than one long form. The host scope's #FAF7F2 is 1.07:1 against the card —
-    // the boundary simply is not there. rejects: deleting this override and
-    // letting the panels dissolve into the dialog.
-    const s2 = editorToken('--surface-2');
-    expect(s2).not.toBeNull();
-    expect(ratio(s2, L.surface)).toBeGreaterThan(1.1);
-    // And it still has to carry the copy printed on it.
-    expect(ratio(L.muted, s2)).toBeGreaterThanOrEqual(AA);
-    expect(ratio(L.text, s2)).toBeGreaterThanOrEqual(AA);
+  test('this scope declares nothing on the editor\'s own root', () => {
+    // A rule scoped `.qsets--onlight .qs-editor` is 0,2,0 ON that root and
+    // outranks the `[data-theme="dark"]` the editor asks for at 0,1,0 — so a
+    // token restated here would silently make the host mount diverge from the
+    // console one. That divergence is the shape of the version-chip incident.
+    // rejects: bringing the old `--surface-2` / `--success` re-point back.
+    expect(QS_CSS.replace(/\/\*[\s\S]*?\*\//g, ''))
+      .not.toMatch(/\.qsets--onlight\s+\.qs-editor\s*\{/);
   });
 
-  test('the success status icon is readable on its own banner', () => {
-    // `utils/statusTone.js` returns `var(--success)` for the success icon, and
-    // `.qsets--onlight` does not redeclare --success — so without this override
-    // it falls through to :root DUSK #4FB286, which is 2.10:1 on the
-    // `.status-message.success` ground. The ground is READ from styles.css so
-    // this cannot go stale. rejects: dropping the override.
-    const success = editorToken('--success');
-    expect(success).not.toBeNull();
-    const banner = GLOBAL_CSS.match(/\.status-message\.success\s*\{[^}]*background:\s*(#[0-9A-Fa-f]{6})/);
-    expect(banner).not.toBeNull();
-    expect(ratio(success, L.surface)).toBeGreaterThanOrEqual(AA);
-    expect(ratio(success, parseHex(banner[1]))).toBeGreaterThanOrEqual(AA);
+  test('every token this scope re-points, the editor restates for itself', () => {
+    // Custom properties inherit, and this scope re-points GLOBAL ones on the
+    // overlay the editor is mounted inside — `--primary: #9A5B18` above all.
+    // `[data-theme="dark"]` restores the five surface/ink tokens; anything else
+    // reaches the editor unchanged. rejects: a paper amber drawn on dusk.
+    const dusk = (() => {
+      const start = GLOBAL_CSS.indexOf('[data-theme="dark"] {');
+      return GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('}', start));
+    })();
+    const leaking = [...SCOPE.matchAll(/(--[a-z0-9-]+)\s*:/gi)]
+      .map((m) => m[1])
+      .filter((name) => !name.startsWith('--qsets-'))
+      .filter((name) => !new RegExp(`${name}\\s*:`).test(dusk))
+      .filter((name) => !new RegExp(`${name}\\s*:`).test(EDITOR_SCOPE));
+    expect(leaking).toEqual([]);
   });
 
-  test('the accent is the host’s, and the console amber is not pinned back over it', () => {
-    // THE DECISION, ASSERTED. The editor inherits --primary #9A5B18 from the
-    // scope it is mounted in: one accent per stack, and #F6A94C is 1.96:1 as
-    // text on white while `--primary` carries text all through this subtree
-    // (`.btn-secondary`'s label and border, `.stat-badge`, the editor's h2).
-    // styles.css says the same thing twice in its own voice — `var(--primary,
-    // #8a5300)` on the AI provenance rule, and `.gsd-setlink` reaching for
-    // --primary-deep because *"#F6A94C carries 1.9:1 on the white dialog card"*.
-    // rejects: restoring the amber inside the mount, whether by re-declaring
-    // --primary here or by stamping [data-theme="light"] on the editor's frame.
-    expect(EDITOR).not.toMatch(/--primary\s*:/);
-    expect(GLOBAL_CSS).not.toMatch(/qs-editor[^{]*\{[^}]*data-theme/);
-    const amber = GLOBAL_CSS.match(/--primary:\s*(#[0-9A-Fa-f]{6})/);
-    expect(amber).not.toBeNull();
-    // The premise, so the assertion above cannot become decorative: the accent
-    // it declines really is the unreadable one, and the one it keeps really is
-    // readable both ways round.
-    expect(ratio(parseHex(amber[1]), L.surface)).toBeLessThan(AA);
-    expect(ratio(L.primary, L.surface)).toBeGreaterThanOrEqual(AA);
+  test('the accent this scope keeps really is the one the dusk editor cannot use', () => {
+    // THE PREMISE, so the assertion above cannot become decorative. #9A5B18 is
+    // this dialog's accent because #F6A94C is 1.96:1 on its white card; the
+    // editor restates #F6A94C because #9A5B18 is under AA on its dusk one.
+    // Both halves are true at once, which is why the boundary has to exist.
+    const hostAmber = L.primary;
+    const editorAmber = parseHex(EDITOR_SCOPE.match(/--primary:\s*(#[0-9A-Fa-f]{6})/)[1]);
+    expect(ratio(editorAmber, L.surface)).toBeLessThan(AA);          // amber on the host card
+    expect(ratio(hostAmber, L.surface)).toBeGreaterThanOrEqual(AA);
+    const editorRow = parseHex(GLOBAL_CSS.match(/\[data-theme="dark"\] \{[\s\S]*?--surface:\s*(#[0-9A-Fa-f]{6})/)[1]);
+    expect(ratio(hostAmber, editorRow)).toBeLessThan(AA);            // and back the other way
+    expect(ratio(editorAmber, editorRow)).toBeGreaterThanOrEqual(AA);
   });
 
-  test('the frame the editor sits in is this stylesheet’s, not styles.css’s', () => {
+  test('the frame the editor sits in is this stylesheet\'s, not styles.css\'s', () => {
     // `.qsets-editor-frame` is the dialog box `Modal` renders for the editor.
     // questionSetsPalette.test.js requires styles.css to declare NOTHING in the
     // `.qsets*` scope — the `.qs` / `.qsets` prefixes collided once already.

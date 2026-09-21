@@ -30,6 +30,11 @@ async function seed({ questions = 3, image = false, promptId = 'p-org', platform
   H.seedRow({ PK: `ORG#${ORG}`, SK: 'METADATA', orgId: ORG, name: 'Acme Learning' });
   const meta = await C.encryptItem(ORG, 'set', {
     PK: `ORG#${ORG}#SETS`, SK: `SET#${SET}`, name: 'Safety walkthrough', description: 'Site induction.',
+    // FILED. The cases that go through the ROUTE below are shares, and
+    // check-question-set.js refuses to share a set that is on no shelf. The
+    // shelf is incidental to what this suite is about — the check itself — but
+    // a set that reaches a share has one.
+    topic: 'health-medicine',
     engagementType: 'trivia', scope: 'org', orgId: ORG, promptId, activeVersion: 2,
     versions: [{ version: 1 }, { version: 2 }], questionCount: questionCount ?? questions, createdBy: 'sub-amara',
   });
@@ -55,6 +60,12 @@ async function job(extra = {}) {
   return jobId;
 }
 const clean = (n) => Array.from({ length: n }, () => H.guardrailClean());
+/**
+ * The EXPLANATION calls alone. A check makes one more model call after them —
+ * the shelf it would propose for the set (shared/topic-suggestion.js), whose
+ * prompt is the only one that lists the SHELVES.
+ */
+const explanationCalls = () => H.state.sentHaiku.filter((c) => !c.messages[0].content.includes('SHELVES'));
 const review = () => R.readReview(db, T, SRC, 2);
 const stamp = () => H.state.ddb.get(`ORG#${ORG}#SETS|SET#${SET}`).share;
 const queue = () => H.rowsWhere((r) => r.PK === 'MODERATION');
@@ -104,7 +115,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(r.status, R.STATUS.FLAGGED);
     assert.strictEqual(r.findings[0].questionId, 'q001');
     assert.match(r.findings[0].explanation, /injuries in detail/);
-    assert.strictEqual(H.state.sentHaiku.length, 1, 'one explanation per flagged question');
+    assert.strictEqual(explanationCalls().length, 1, 'one explanation per flagged question');
     assert.deepStrictEqual(publicRows(), []);
     assert.strictEqual(stamp().status, 'flagged');
     assert.strictEqual(queue().length, 0, 'a flagged set is not a queue item');
@@ -126,6 +137,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(row.title, 'Safety walkthrough');
     assert.strictEqual(row.orgName, 'Acme Learning');
     assert.deepStrictEqual(row.bands, { HATE: 'MEDIUM' });
+    assert.deepStrictEqual(row.checkReasons, ['guardrail'], 'the queue row does not say what the escalation was for');
     assert.ok(row.snapshotKey, 'the queue row does not point at the snapshot');
     assert.ok(!JSON.stringify(row).includes('Question 2 title'), 'question text on the queue row');
     assert.strictEqual(stamp().status, 'escalated');
@@ -133,17 +145,38 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.deepStrictEqual(publicRows(), []);
   });
 
+  // The queue row names the reason too: without it the queue could only say
+  // "Uncertain" of a set the guardrail had nothing against (moderationRow.js).
   await H.test('a declared notice, or an image, sends a clean set to a person with the reason named', async () => {
     await seed();
     H.state.guardrailReplies = clean(4);
     await W.runSetCheck(deps, { jobId: await job({ declaredNotice: ['graphic-medical'] }) }, H.ctx());
     assert.strictEqual((await review()).status, R.STATUS.ESCALATED);
     assert.deepStrictEqual((await review()).reasons, ['declared']);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['declared']);
+    assert.deepStrictEqual(queue()[0].declaredNotice, ['graphic-medical']);
+    assert.deepStrictEqual(queue()[0].bands, {});
     await seed({ image: true });
     H.state.guardrailReplies = clean(4);
     await W.runSetCheck(deps, { jobId: await job() }, H.ctx());
     assert.deepStrictEqual((await review()).reasons, ['images']);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['images']);
+    assert.deepStrictEqual(queue()[0].declaredNotice, []);
     assert.deepStrictEqual(publicRows(), []);
+  });
+
+  // rejects: the author's notices copied onto the pointer as sent. The entry
+  // point caps them at eight but not their length, and a pointer is ≤4KB
+  // (spec §3.2) because the whole queue is one Query. A notice id is at most
+  // 40 characters wherever one is checked (moderation-decide.js NOTICE_ID).
+  await H.test('a declared notice cannot grow the queue row past a pointer', async () => {
+    await seed();
+    H.state.guardrailReplies = clean(4);
+    await W.runSetCheck(deps, { jobId: await job({ declaredNotice: Array.from({ length: 8 }, (_, i) => `${i}${'x'.repeat(5000)}`) }) }, H.ctx());
+    const [row] = queue();
+    assert.strictEqual(row.declaredNotice.length, 8);
+    assert.ok(row.declaredNotice.every((n) => n.length <= 40), `a notice was carried at ${Math.max(...row.declaredNotice.map((n) => n.length))} characters`);
+    assert.ok(JSON.stringify(row).length < 4096, `the queue row is ${JSON.stringify(row).length} bytes`);
   });
 
   await H.test('an org Workie is dropped from the public copy; the dialog was told in advance', async () => {
@@ -181,6 +214,7 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     await W.runSetCheck({ ...deps, s3: failingS3 }, { jobId: await job() }, H.ctx());
     assert.strictEqual((await review()).status, R.STATUS.ESCALATED);
     assert.deepStrictEqual((await review()).reasons, ['snapshot']);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['snapshot']);
     assert.deepStrictEqual(publicRows(), []);
   });
 
@@ -192,9 +226,31 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     assert.strictEqual(r.status, R.STATUS.ESCALATED);
     assert.deepStrictEqual(r.reasons, ['error']);
     assert.strictEqual(queue().length, 1);
+    assert.deepStrictEqual(queue()[0].checkReasons, ['error']);
+    assert.deepStrictEqual(queue()[0].bands, {});
     const j = await J.getJob(db, T, jobId);
     assert.strictEqual(j.status, 'error');
     assert.match(j.errorMessage, /no longer exists/);
+  });
+
+  // rejects: a re-check that throws leaving the last check's questions and
+  // notices beside its own error — "1 uncertain question · Error" of a check
+  // that decided nothing. An escalated version can be checked again
+  // (set-review.js beginCheck refuses only one being checked), and the upsert
+  // keeps any field it is not given.
+  await H.test('a re-check that throws replaces everything the last check put on the queue row', async () => {
+    H.reset();
+    H.seedRow({
+      PK: 'MODERATION', SK: `${ORG}#${SET}#v2`, scope: 'org', orgId: ORG, setId: SET, version: 2, reasons: ['escalated'],
+      waitingSince: '2026-09-18T10:00:00.000Z', bands: { HATE: 'MEDIUM' }, uncertainQuestionIds: ['q002'],
+      checkReasons: ['declared', 'guardrail'], declaredNotice: ['graphic-medical'],
+    });
+    await W.runSetCheck(deps, { jobId: await job() }, H.ctx()); // no set rows: the check throws
+    const [row] = queue();
+    assert.deepStrictEqual(row.checkReasons, ['error']);
+    assert.deepStrictEqual(row.bands, {});
+    assert.deepStrictEqual(row.uncertainQuestionIds, [], 'the last check\'s questions stayed on the row');
+    assert.deepStrictEqual(row.declaredNotice, [], 'the last check\'s notices stayed on the row');
   });
 
   await H.test('a failure after the upload still leaves the reviewer a pointer', async () => {
@@ -202,12 +258,15 @@ const publicRows = () => H.rowsWhere((r) => String(r.PK).startsWith('PUBLIC#'));
     H.state.guardrailReplies = clean(4);
     const jobId = await job();
     // The upload succeeds; the failure is engineered to land AFTER it, in
-    // recordUnits — the first (and only) UpdateCommand whose expression adds
-    // quota units. Everything else passes through to the real stub.
+    // recordUnits — the first (and only) UpdateCommand whose expression adds to
+    // a unit counter. The counter is NAMED (`#counter`, so a staff re-check can
+    // send its calls to `staffUnits` without interpolating an attribute name
+    // into the expression), so the trap matches the alias, not the attribute.
+    // Everything else passes through to the real stub.
     const realSend = db.send.bind(db);
     let tripped = false;
     db.send = async (cmd) => {
-      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD units')) {
+      if (!tripped && cmd && cmd.kind === 'update' && String((cmd.input || {}).UpdateExpression || '').startsWith('ADD #counter')) {
         tripped = true;
         throw new Error('quota store down');
       }

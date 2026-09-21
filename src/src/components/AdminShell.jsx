@@ -138,8 +138,14 @@ export default function AdminShell({
        in the chrome resolves to the paper set. Same move as WelcomeScreen. */
     <div className="adm-shell" data-theme="dark">
       <header className="adm-brand">
-        <span className="adm-mark" aria-hidden="true" />
-        <span className="adm-word">{brand}</span>
+        {/* The mark is the way back to the marketing home. `/home`, because `/`
+            is the host's main screen for anybody signed in — and the "Host"
+            link in the bar already goes there. A page load, like every other
+            navigation in this app (App.jsx routes on pathname). */}
+        <a className="adm-home" href="/home" aria-label={`${brand} home`}>
+          <span className="adm-mark" aria-hidden="true" />
+          <span className="adm-word">{brand}</span>
+        </a>
       </header>
 
       <div className="adm-top" data-testid="adm-topbar">

@@ -1,0 +1,36 @@
+/* ===========================================================================
+   UseCasesPage.css — the /use-cases-only rule groups from
+   docs/design/marketing-redesign/mk.css: the four facilitator cases and
+   their before/after panels. Section, CTA, kicker and lead primitives are
+   declared once in MarketingShell.css; nothing here duplicates them.
+
+   Heading levels are promoted from the mockup (h3 -> h2 for a case's own
+   title, h4 -> h3 for its two panels) so the page's headings descend without
+   a skip: h1 (page), h2 (each case), h3 (Before / With Engagements).
+   =========================================================================== */
+.mk-cases { display: grid; gap: 22px; margin-top: 46px; }
+.mk-case {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 28px 26px 26px; display: grid; gap: 22px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
+.mk-case-head h2 { font-size: var(--mk-t-head); }
+.mk-case-head .mk-kicker { display: block; margin-bottom: 10px; }
+.mk-case-set { margin-top: 16px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-case-set b { color: var(--mk-text); }
+.mk-case-ba { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.mk-case-panel { border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm); padding: 16px 17px; background: rgba(15, 26, 46, 0.5); }
+.mk-case-panel h3 {
+  margin: 0 0 9px; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-muted);
+}
+.mk-case-panel--with { border-left: 3px solid var(--mk-amber); }
+.mk-case-panel--with h3 { color: var(--mk-amber); }
+.mk-case-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid var(--mk-rule); margin-top: 2px; }
+
+@media (max-width: 980px) {
+  .mk-case { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .mk-case { padding: 22px 18px; }
+}

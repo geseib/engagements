@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import AuthPage from './auth/AuthPage';
 import OAuthCallback from './auth/OAuthCallback';
@@ -12,6 +12,14 @@ import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
+
+// Marketing is lazy so that a player on /play and a host on the stage never
+// download a brochure. One chunk per page; AuthLoading is the fallback.
+const HomePage = lazy(() => import('./marketing/HomePage'));
+const HowItWorksPage = lazy(() => import('./marketing/HowItWorksPage'));
+const UseCasesPage = lazy(() => import('./marketing/UseCasesPage'));
+const ReportsPage = lazy(() => import('./marketing/ReportsPage'));
+const HelpPage = lazy(() => import('./marketing/HelpPage'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
 // the whole point of it), so both need this and neither should own it.
@@ -35,6 +43,55 @@ function AuthLoading() {
       }}></div>
       <p>Loading...</p>
     </div>
+  );
+}
+
+// Catches the marketing CHUNK failing to load at all -- a network blip, or a
+// stale hash right after a deploy makes the browser request a bundle that no
+// longer exists. `React.lazy`'s promise rejects, which throws during render,
+// and nothing below this point can help: `MarketingShell`'s own error
+// boundary (see marketingShell.test.jsx) lives INSIDE that same chunk, so it
+// never runs if the chunk itself never arrived. This has to sit above the
+// `Suspense`, in code that is part of the main bundle and therefore always
+// present.
+//
+// The fallback is `<RootPage />` -- the statically-imported join/host page
+// that WAS `/` before this task. That is deliberate, not a placeholder: a
+// participant who types the bare domain mid-session, or a host mid-deploy,
+// needs Sign In and Join to keep working, and RootPage already is that page
+// with no new UI to design (design spec §8).
+class MarketingBoundary extends React.Component {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error) {
+    // Never suppress silently -- log once so a broken deploy shows up in the
+    // console/telemetry instead of just quietly degrading for everyone.
+    console.error('Marketing page failed to load', error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return <RootPage />;
+    }
+    return this.props.children;
+  }
+}
+
+// Wraps a lazily-loaded marketing page in its own Suspense boundary, with the
+// same spinner ProtectedRoute and RootGate already use, so a slow chunk load
+// never shows a blank screen. Later tasks (9-11) reuse this for their own
+// public marketing routes.
+function MarketingRoute({ page: Page }) {
+  return (
+    <MarketingBoundary>
+      <Suspense fallback={<AuthLoading />}>
+        <Page />
+      </Suspense>
+    </MarketingBoundary>
   );
 }
 
@@ -153,7 +210,7 @@ function ProtectedRoute({ children, requireAdmin = false }) {
  *
  * | loading    | the same inline spinner ProtectedRoute shows |
  * | signed in  | the host page, exactly as before             |
- * | signed out | the join/host landing page                   |
+ * | signed out | the marketing home, with the join field in its hero |
  *
  * The signed-in case is deliberate: making the only repeat users click through
  * a landing page on every visit would be a real cost paid for a hypothetical.
@@ -170,7 +227,7 @@ function RootGate() {
   }
 
   if (!currentUser) {
-    return <RootPage />;
+    return <MarketingRoute page={HomePage} />;
   }
 
   return (
@@ -242,6 +299,40 @@ function AppRouter() {
   // Authentication route
   if (path.startsWith('/auth')) {
     return <AuthPage onAuthSuccess={() => window.location.href = '/'} />;
+  }
+
+  // The focused join page. `/` used to be this; it is now the marketing home
+  // with a compact join field, and this stays as the page to send a room to.
+  // Exact match, like `/` below.
+  // The marketing home at an address that ALWAYS means the marketing home. `/`
+  // cannot be that: for a signed-in host it is the app (RootGate). The mark on
+  // the host's main screen, in the console and on every marketing page links
+  // here, so a host can get back to the brochure without signing out.
+  if (path === '/home') {
+    return <MarketingRoute page={HomePage} />;
+  }
+
+  if (path === '/join') {
+    return <RootPage />;
+  }
+
+  // The six-step tour and the four facilitator use cases. Exact match, like
+  // /join above, and public for the same reason: a prospect reading either
+  // page has no account yet.
+  if (path === '/how-it-works') {
+    return <MarketingRoute page={HowItWorksPage} />;
+  }
+  if (path === '/use-cases') {
+    return <MarketingRoute page={UseCasesPage} />;
+  }
+  if (path === '/reports') {
+    return <MarketingRoute page={ReportsPage} />;
+  }
+
+  // The help corpus, at a linkable address. Exact or a sub-path -- never
+  // startsWith('/help'), which would also claim a future /helpers.
+  if (path === '/help' || path.startsWith('/help/')) {
+    return <MarketingRoute page={HelpPage} />;
   }
 
   /*

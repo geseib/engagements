@@ -1,0 +1,240 @@
+/* ===========================================================================
+   MarketingShell.css — the tokens and the primitives every marketing page
+   shares: nav, brand, buttons, type ladder, sections, the big CTA band and
+   the footer. Everything here is namespaced `.mk-*`.
+
+   Values below are copied from docs/design/marketing-redesign/mk.css, the
+   approved mockup. See task-4-report.md for the exact list of which rule
+   groups were copied here and which were deliberately left for later tasks
+   (the hero, the ridge scene, and every page-specific block).
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   THE TOKEN BLOCK. Copied verbatim from mk.css. Do not edit a value here
+   without editing it there.
+   --------------------------------------------------------------------------- */
+.mk-root {
+  --mk-bg: #0F1A2E;
+  --mk-surface: #1B2942;
+  --mk-surface-2: #25375A;
+  --mk-text: #F4EDE4;
+  --mk-muted: #9BA8BE;
+  --mk-amber: #F6A94C;
+  --mk-amber-deep: #C77B4A;
+  --mk-blue: #7CA7E6;
+  --mk-ridge-front: #16233B;
+  --mk-ridge-mid: #22344F;
+  --mk-ridge-back: #2E4262;
+  --mk-paper: #FBF7F1;
+  --mk-paper-surface: #FFFFFF;
+  --mk-paper-text: #1B2942;
+  --mk-paper-muted: #5E6167;
+  --mk-amber-ink: #8a5300;
+  --mk-hair: rgba(244, 237, 228, 0.14);
+
+  --mk-t-floor: 12px;
+  --mk-t-label: 13px;
+  --mk-t-body: 17px;
+  --mk-t-lead: 21px;
+  --mk-t-head: 30px;
+  --mk-t-title: 44px;
+  --mk-t-display: 68px;
+
+  --mk-shell: 1160px;
+  --mk-gutter: 24px;
+  background: var(--mk-bg);
+  color: var(--mk-text);
+  font-size: var(--mk-t-body);
+  line-height: 1.55;
+
+  /* additional tokens
+     Every colour this stylesheet needs that the block above does not already
+     name. Nothing below this line paints from a literal. Four candidates were
+     MERGED into an existing token rather than added, because they sat within a
+     hair of one: the screen still's gradient top and the sky gradient's top
+     stop, the mobile page's surround, and every restatement of the background
+     colour that had been written out by hand. See RATIONALE.md §9. */
+  --mk-amber-hi: #FFBB63;        /* the primary button under the pointer */
+  --mk-sky-low: #2A3A57;         /* the sky gradient's lowest stop (art brief §3) */
+  --mk-device-bezel: #0B1322;    /* the frame and foot around a device screen */
+  --mk-paper-edge: #EFE7DA;      /* the second sheet showing under the report */
+  --mk-paper-edge-deep: #E2D8C8; /* and the third */
+  --mk-paper-rule: rgba(27, 41, 66, 0.14); /* the hairline on a paper surface */
+}
+@media (max-width: 720px) {
+  .mk-root { --mk-t-head: 25px; --mk-t-title: 32px; --mk-t-display: 42px; --mk-gutter: 16px; }
+}
+/* --------------------------------------------------------------------------- */
+
+/* Second rule, deliberately separate so the block above stays byte-identical
+   to the one in mk.css. System stack only — no font is fetched from anywhere,
+   so the named faces are a preference, not a dependency. */
+.mk-root {
+  --mk-font-display: "Archivo Expanded", "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mk-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --mk-rule: var(--mk-hair);
+  --mk-rule-strong: rgba(244, 237, 228, 0.26);
+  --mk-radius: 16px;
+  --mk-radius-sm: 10px;
+  --mk-tap: 48px;
+
+  /* The hero's height. The scene reads it so the glow can be clamped to the
+     bottom 40% of the hero band and nothing else has to know the number. */
+  --mk-ridge-band: 88vh;
+
+  /* The four translucent washes. A later suite pins these exact strings. */
+  --mk-wash-nav: rgba(15, 26, 46, 0.86);
+  --mk-wash-card: rgba(27, 41, 66, 0.82);
+  --mk-wash-a: rgba(15, 26, 46, 0.9);
+  --mk-wash-b: rgba(27, 41, 66, 0.92);
+
+  font-family: var(--mk-font-ui);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+/* --------------------------------------------------------------- base/reset
+   mk.css has these unscoped (`*`, `html`, `body`) because it is a whole
+   document. This file may only ship rules that stay scoped inside a
+   `.mk-root` instance, so each is rewritten as a `.mk-root` descendant
+   selector; `html` is never a descendant of `.mk-root` and `body`
+   may not be styled from here (rulings 3 & 4), so neither is carried over —
+   an app-level reset already clears body's margin. */
+.mk-root, .mk-root *, .mk-root *::before, .mk-root *::after { box-sizing: border-box; }
+.mk-root [hidden] { display: none !important; }
+
+.mk-root :focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 2px; border-radius: 6px; }
+.mk-root ::selection { background: var(--mk-amber); color: var(--mk-bg); }
+
+/* ------------------------------------------------------------------ layout */
+.mk-shell { width: 100%; max-width: var(--mk-shell); margin-inline: auto; padding-inline: var(--mk-gutter); }
+
+/* `<RidgeScene>` (RidgeScene.css) is `position: fixed` with `z-index: 0` and
+   renders as `.mk-root`'s first child (see MarketingShell.jsx) — matching
+   where every inner mockup places `.mk-ridge`, ahead of `.mk-page`. Giving
+   `<main>` and the footer their own stacking context here, with no explicit
+   z-index, puts them in the same paint group as the scene; because they come
+   AFTER it in the DOM they paint on top of it. `.mk-nav` already carries its
+   own `z-index: 30` below and needs nothing added. This replaces the
+   per-section `z-index: 1` that used to live in HomePage.css, now that the
+   scene is a shell-level sibling rather than a child of one page's wrapper. */
+.mk-root > main, .mk-root > .mk-foot { position: relative; }
+
+/* ==================================================================== nav = */
+.mk-nav {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--mk-wash-nav);
+  backdrop-filter: blur(9px);
+  border-bottom: 1px solid var(--mk-rule);
+}
+.mk-nav-in { display: flex; align-items: center; gap: 18px; min-height: 66px; padding-block: 10px; }
+.mk-brand {
+  display: flex; align-items: center; gap: 10px; margin-right: auto;
+  font-family: var(--mk-font-display); font-weight: 800; font-size: var(--mk-t-lead);
+  letter-spacing: -0.01em; color: var(--mk-text); text-decoration: none; white-space: nowrap;
+}
+.mk-brand-mark { flex: none; width: 26px; height: 26px; }
+.mk-brand-mark path { fill: var(--mk-amber); }
+.mk-nav-links { display: flex; align-items: center; gap: 4px; }
+.mk-nav-link {
+  display: inline-flex; align-items: center; min-height: var(--mk-tap);
+  padding: 0 12px; border-radius: var(--mk-radius-sm);
+  color: var(--mk-muted); text-decoration: none; font-weight: 600; font-size: var(--mk-t-body);
+}
+.mk-nav-link:hover { color: var(--mk-text); }
+.mk-nav-link[aria-current="page"] { color: var(--mk-text); box-shadow: inset 0 -2px 0 var(--mk-amber); }
+.mk-nav-acts { display: flex; align-items: center; gap: 10px; }
+.mk-nav-burger { display: none; }
+
+/* ================================================================ buttons = */
+.mk-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: var(--mk-tap); padding: 12px 20px; border-radius: var(--mk-radius-sm);
+  font: 700 var(--mk-t-body)/1.2 var(--mk-font-ui);
+  border: 2px solid transparent; text-decoration: none; cursor: pointer; text-align: center;
+}
+.mk-btn-primary { background: var(--mk-amber); color: var(--mk-bg); border-color: var(--mk-amber); }
+.mk-btn-primary:hover { background: var(--mk-amber-hi); border-color: var(--mk-amber-hi); }
+.mk-btn-ghost { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-btn-ghost:hover { border-color: var(--mk-text); }
+.mk-btn-quiet { background: transparent; color: var(--mk-text); border-color: transparent; font-weight: 600; }
+.mk-btn-quiet:hover { color: var(--mk-amber); }
+.mk-btn-lg { min-height: 56px; padding: 15px 28px; font-size: var(--mk-t-lead); }
+
+/* ============================================================== typography = */
+/* Headings set their own leading. Inheriting the 1.55 body line-height put a
+   whole blank line inside a two-line card title and swallowed the margin
+   under it — see mk.css's own note on this rule. */
+.mk-root h1, .mk-root h2, .mk-root h3 {
+  margin: 0; font-family: var(--mk-font-display); font-weight: 800; line-height: 1.14;
+}
+.mk-root p { margin: 0; }
+.mk-display { font-size: var(--mk-t-display); line-height: 1.03; letter-spacing: -0.022em; }
+.mk-title { font-size: var(--mk-t-title); line-height: 1.08; letter-spacing: -0.018em; }
+.mk-head { font-size: var(--mk-t-head); line-height: 1.16; letter-spacing: -0.012em; }
+.mk-lead { font-size: var(--mk-t-lead); line-height: 1.45; color: var(--mk-text); }
+.mk-muted { color: var(--mk-muted); }
+.mk-kicker {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--mk-amber);
+}
+/* The generic link colour is scoped to PROSE, not to every `a` in the surface
+   — see mk.css's own note on why a blanket `.mk-root a` rule is wrong here. */
+.mk-root p a, .mk-root li a, .mk-root dd a { color: var(--mk-blue); }
+.mk-root p a:hover, .mk-root li a:hover, .mk-root dd a:hover { color: var(--mk-amber); }
+
+/* ================================================================ sections = */
+.mk-section { position: relative; padding-block: clamp(56px, 8vw, 104px); }
+.mk-section--a { background: var(--mk-wash-a); }
+.mk-section--b { background: var(--mk-wash-b); }
+.mk-section--a + .mk-section--a, .mk-section--b + .mk-section--b { border-top: 1px solid var(--mk-rule); }
+.mk-section-head { max-width: 68ch; }
+.mk-section-head .mk-lead { max-width: 58ch; margin-top: 18px; color: var(--mk-muted); }
+.mk-section-head .mk-title { margin-top: 12px; }
+
+/* ================================================================ big CTA = */
+.mk-cta { position: relative; padding-block: clamp(64px, 9vw, 116px); background: var(--mk-wash-a); border-top: 1px solid var(--mk-rule); }
+.mk-cta-in { display: grid; gap: 26px; justify-items: center; text-align: center; }
+.mk-cta-in .mk-title { max-width: 20ch; }
+.mk-cta-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.mk-cta-fine { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ================================================================== footer = */
+.mk-foot { background: var(--mk-wash-a); border-top: 1px solid var(--mk-rule); padding-block: 34px 44px; }
+.mk-foot-in { display: flex; flex-wrap: wrap; gap: 16px 30px; align-items: center; }
+.mk-foot-links { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-left: auto; }
+.mk-foot-links a { color: var(--mk-muted); text-decoration: none; font-size: var(--mk-t-label); }
+.mk-foot-links a:hover { color: var(--mk-text); text-decoration: underline; }
+.mk-foot-legal { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ============================================================= the failure
+   fallback PageBoundary renders. Not in the mockup — styled entirely from
+   primitives declared above so it never depends on a page-specific rule
+   that could itself be the thing that failed to load. */
+.mk-failed { padding-block: 96px; }
+
+/* ================================================================ responsive
+   The nav's narrow-width collapse, ported from mk.css's ≤860px block. The
+   mockup never shows the OPEN state of a collapsed nav (it is a static
+   export, not a running page), so `.mk-nav-links.mk-nav--open` is this
+   file's own addition: it is what MarketingShell.jsx toggles via the burger
+   button's `aria-expanded` state. mk.css also hides just the primary button
+   inside `.mk-nav-acts` at this width — that rule does not carry over
+   because Sign in / Create a host account now live inside `.mk-nav-links`
+   (so the nav element can contain both, per the behavioural contract), not
+   inside `.mk-nav-acts` alongside the burger. */
+@media (max-width: 860px) {
+  .mk-nav-links { display: none; }
+  .mk-nav-links.mk-nav--open { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+  .mk-nav-burger {
+    display: inline-grid; place-items: center; width: var(--mk-tap); height: var(--mk-tap);
+    border-radius: var(--mk-radius-sm); background: transparent; color: var(--mk-text);
+    border: 1px solid var(--mk-rule-strong); cursor: pointer;
+  }
+  .mk-nav-burger svg { width: 20px; height: 20px; }
+  .mk-nav-burger path { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+}

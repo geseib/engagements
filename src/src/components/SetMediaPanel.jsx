@@ -219,7 +219,7 @@ export default function SetMediaPanel({
     : counts.none;
 
   return (
-    <div className="smed" data-theme="light">
+    <div className="smed" data-theme="dark">
       <p className="smed-lede">
         Pick the folder your pictures are in and they go straight to storage under{' '}
         <code>{mediaPrefix(setId)}</code>. A question finds its picture by <strong>file name</strong>:

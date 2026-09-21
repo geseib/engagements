@@ -158,6 +158,10 @@ async function copyAPassedPublicSet() {
     name: 'Pricing mechanics', engagementType: 'call-and-answer', scope: 'org', orgId: ACME,
     activeVersion: 2, versions: [{ version: 1 }, { version: 2 }],
     createdBy: `sub-owner-${ACME}`,
+    // FILED, because this fixture is SHARED below and an unfiled set does not
+    // reach the public library — publish-question-set.js's shelf gate. Which
+    // shelf is immaterial here; that it has one is not.
+    topic: 'business-work',
   });
   const v2 = `ORG#${ACME}#SET#${SET}#v2`;
   store.set(key(v2, 'CATEGORY#c001'), { PK: v2, SK: 'CATEGORY#c001', Name: 'Pricing', QuestionCount: 2 });
@@ -182,7 +186,9 @@ async function copyAPassedPublicSet() {
   const copied = await copySet(caller(GLOBEX, 'member', PUBLIC_SET, { scope: 'public' }));
   assert.strictEqual(copied.statusCode, 201, `Globex could not copy the public set: ${copied.body}`);
   const { setId } = parse(copied);
-  return { setId, pk: `ORG#${GLOBEX}#SET#${setId}` };
+  // v1: a copy opens its own version history there, so that is where its
+  // content lands and where a leaked lifecycle row would now sit.
+  return { setId, pk: `ORG#${GLOBEX}#SET#${setId}#v1` };
 }
 
 (async () => {
@@ -216,7 +222,21 @@ async function copyAPassedPublicSet() {
     assert.ok(!store.has(key(pk, 'PUBLISHED')), `the library's PUBLISHED marker was copied into ${pk}`);
   });
 
-  say('\n2. everything else still arrives');
+  say('\n2. the copy opens its own version history');
+  // rejects: leaving the copy unversioned. That is the state step 3 of the
+  // docstring turns on — content sitting at the key `reviewKey(copy, null)`
+  // addresses — and it is also the state every new set used to be created in.
+  // A copy born at v1 cannot collide with an unversioned review key at all.
+  await check('a copy is born at v1, with its own version history', async () => {
+    const { setId } = await copyAPassedPublicSet();
+    const meta = store.get(key(`ORG#${GLOBEX}#SETS`, `SET#${setId}`));
+    assert.strictEqual(meta.activeVersion, 1, 'the copy was left unversioned');
+    assert.deepStrictEqual((meta.versions || []).map((v) => v.version), [1]);
+    assert.ok(rowsIn(`ORG#${GLOBEX}#SET#${setId}#v1`).some((i) => String(i.SK).startsWith('QUESTION#')),
+      "the copy's questions did not land in its v1 partition");
+  });
+
+  say('\n3. everything else still arrives');
   // rejects: fixing the lifecycle rows by narrowing the copy to the row types
   // known today. The handler promises a future row type is carried, not dropped.
   await check('questions, categories and an unknown row type are all copied', async () => {
@@ -230,7 +250,9 @@ async function copyAPassedPublicSet() {
   // make the refusal above prove nothing about the review row.
   await check('once the team\'s own check passes, the copy may be published', async () => {
     const { setId } = await copyAPassedPublicSet();
-    await R.writeReview(fakeDoc, 'engage-test', { scope: 'org', orgId: GLOBEX, setId }, null, { status: R.STATUS.PASSED });
+    // The team's own check, on the copy's own v1 — which is what a publish
+    // naming no version resolves to through `activeVersion`.
+    await R.writeReview(fakeDoc, 'engage-test', { scope: 'org', orgId: GLOBEX, setId }, 1, { status: R.STATUS.PASSED });
     const res = await publish(caller(GLOBEX, 'owner', setId, {}));
     assert.strictEqual(res.statusCode, 201, res.body);
   });

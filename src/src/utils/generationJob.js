@@ -95,6 +95,26 @@ export function interpretGenerationJob(job) {
     error: payload.error || null,
     meta: payload.meta || null,
     /**
+     * WHICH GENERATION PROMPT PRODUCED THIS, or null.
+     *
+     * `{ kind: 'curated'|'fallback', key: string|null }`. Generation prompts are
+     * bound by a NAMING CONVENTION derived from the game type and the category —
+     * there is no picker — so without this there is no way to tell which one ran,
+     * and editing one gives no signal that the edit was used.
+     *
+     * Read defensively, exactly as `createdSet` below is: a job started before
+     * this shipped carries no field, and a malformed value must render nothing
+     * rather than something wrong.
+     */
+    promptSource: (() => {
+      const p = payload.promptSource;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+      // 'chosen' is a prompt somebody picked; 'curated' is one derived from the
+      // game type and category; 'fallback' is the built-in.
+      if (!['chosen', 'curated', 'fallback'].includes(p.kind)) return null;
+      return { kind: p.kind, key: typeof p.key === 'string' ? p.key : null };
+    })(),
+    /**
      * The set the WORKER made, or null. Read defensively — a job started
      * before server-side creation shipped, or by a builder that does not
      * create sets at all, carries neither field — and a malformed value is

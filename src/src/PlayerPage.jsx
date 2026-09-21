@@ -110,6 +110,7 @@ export const PlayerShell = ({
           size="small"
           tooltip="Help"
           className="plr-helpbtn"
+          reports={{ context: 'player' }}
         />
       </div>
     </header>

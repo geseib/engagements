@@ -13,12 +13,12 @@ test('renders nothing for a version with nothing to say', () => {
   const { container } = render(<SetReviewBanner entry={{ version: 2, review: 'passed', reviewFindings: [] }} share={null} />);
   expect(container).toBeEmptyDOMElement();
 });
-test('a flagged version says what was not published, names each question with its sentence, and counts the rest', () => {
+test('a flagged version names the version, names each question with its sentence, and counts the rest', () => {
   const onFocusQuestion = jest.fn();
   render(<SetReviewBanner entry={FLAGGED} share={{ status: 'flagged', version: 2 }} onFocusQuestion={onFocusQuestion} onResubmit={() => {}} onAppeal={() => {}} />);
-  expect(screen.getByRole('status')).toHaveTextContent(/this set was not published/i);
+  expect(screen.getByRole('status')).toHaveTextContent(/version 2 needs changes/i);
   expect(screen.getByRole('status')).toHaveTextContent(/2 of 30 questions were flagged on 19 Aug/i);
-  expect(screen.getByRole('status')).toHaveTextContent(/nothing was shared, and your copy is untouched/i);
+  expect(screen.getByRole('status')).toHaveTextContent(/your own copy is untouched/i);
   expect(screen.getByText(/injuries in detail/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /edit q14/i }));
   expect(onFocusQuestion).toHaveBeenCalledWith('q014');
@@ -36,9 +36,321 @@ test('Resubmit and Ask for a human review call back with the version and the mes
 });
 test('a staff note leads the banner; waiting states say so and offer no appeal', () => {
   const first = render(<SetReviewBanner entry={{ ...FLAGGED, review: 'flagged' }} share={{ status: 'flagged', version: 2, note: 'Q14 needs the injury detail removed.' }} onResubmit={() => {}} onAppeal={() => {}} onFocusQuestion={() => {}} />);
-  expect(screen.getByRole('status').textContent.indexOf('Q14 needs')).toBeLessThan(screen.getByRole('status').textContent.indexOf('not published'));
+  expect(screen.getByRole('status').textContent.indexOf('Q14 needs')).toBeLessThan(screen.getByRole('status').textContent.indexOf('Version 2 needs changes'));
   first.unmount();
   render(<SetReviewBanner entry={{ ...FLAGGED, review: 'appealed' }} share={{ status: 'appealed', version: 2 }} />);
   expect(screen.getByText(/waiting for a person at Engage/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /ask for a human review/i })).toBeNull();
+});
+
+/*
+  A STAFF RE-CHECK IS NOT THE AUTHOR'S BUSINESS, and this banner is the author's.
+
+  Engage staff can re-run the content check on the version the public library is
+  serving (the score card's "Run the check again"). That writes its verdict onto
+  the organisation's own REVIEW row — which is what `entry.review` is — and
+  deliberately writes NO share stamp, because nothing about the author's share
+  changed: the library is still serving their set.
+
+  Read from `entry.review` alone this banner told them a person at Engage was
+  looking at a version nobody had asked about, or that their set "was not
+  published" while it was live in the library, and offered them Resubmit and
+  "Ask for a human review" — an appeal that would knock their own published set
+  out of its published state.
+*/
+test('a version the library is still serving says nothing here, whatever a staff re-check made of it', () => {
+  for (const review of ['escalated', 'flagged', 'appealed']) {
+    const { container, unmount } = render(
+      <SetReviewBanner
+        entry={{ ...FLAGGED, review, published: { publicSetId: 'orgacme-safety', publicVersion: 1 } }}
+        share={{ status: 'published', version: 2, publicSetId: 'orgacme-safety', publicVersion: 1 }}
+        onResubmit={() => {}}
+        onAppeal={() => {}}
+        onFocusQuestion={() => {}}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    unmount();
+  }
+});
+
+// rejects: suppressing on the review row's own say-so, or on the PUBLISHED
+// marker. The organisation submitting an already-published version for a check
+// of their own moves their share stamp off `published` (check-question-set.js
+// writes `checking`, then the worker writes the outcome) while the marker from
+// the earlier publish is still there — so that answer IS theirs to read.
+test('an answer to the author\'s own submission still shows, and leaves its live copy alone', () => {
+  render(
+    <SetReviewBanner
+      entry={{ ...FLAGGED, published: { publicSetId: 'orgacme-safety', publicVersion: 1 } }}
+      share={{ status: 'flagged', version: 2 }}
+      onResubmit={() => {}}
+      onAppeal={() => {}}
+      onFocusQuestion={() => {}}
+    />,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(/version 2 needs changes/i);
+  /*
+    AND THE LIBRARY IS STILL SERVING IT. A takedown and an unpublish both delete
+    the PUBLISHED markers pointing at the listing (publish-set.js unpublishSet),
+    so a marker still on the version is the listing still standing; and a check
+    of an already-published version publishes nothing and unpublishes nothing
+    (set-check-worker.js:374). Telling this author their set "was not published"
+    was the falsehood at its loudest: theirs was live while it was said.
+  */
+  expect(banner).toHaveTextContent(/the library's copy of this version is still being served/i);
+  expect(banner).not.toHaveTextContent(/not in the public library/i);
+  expect(screen.getByRole('button', { name: /ask for a human review/i })).toBeInTheDocument();
+});
+
+/*
+  ── A REFUSAL SPEAKS OF THE VERSION, NEVER OF THE LIBRARY ──────────────────
+
+  Pressing Share on v3 of a set whose v2 is already published replaces the whole
+  stamp with `{version: 3, status: 'checking'}` (check-question-set.js:153, via
+  admin/shared/share-stamp.js — the map is REPLACED, never merged, and no
+  non-published writer carries `publicSetId` forward). Nothing unpublishes v2:
+  publishing happens only on a pass (set-check-worker.js:374). So while the
+  library went on serving v2, this banner told its author "This set was not
+  published… Nothing was shared… it is still private to your organisation" —
+  three statements about a set every organisation could read.
+
+  Absent a marker on THIS version the banner cannot know whether some other
+  version's copy is live — the stamp's pointer is gone, and
+  get-question-sets.js projects the public row's sourceOrgId but not its
+  sourceSetId, so there is nothing to match on. A state that cannot know must
+  not claim, in either direction: the same rule the list-row tags were given in
+  45878a85 (utils/shareState.js). What it CAN do is name the one screen that
+  answers the question, version by version.
+*/
+test('a refused re-share says nothing about the library beyond this version', () => {
+  render(
+    <SetReviewBanner
+      entry={{ ...FLAGGED, version: 3, published: null }}
+      share={{ status: 'flagged', version: 3 }}
+      onResubmit={() => {}}
+      onAppeal={() => {}}
+    />,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).not.toHaveTextContent(/this set was not published/i);
+  expect(banner).not.toHaveTextContent(/nothing was shared/i);
+  expect(banner).not.toHaveTextContent(/private to your organisation/i);
+  expect(banner).toHaveTextContent(/version 3 needs changes/i);
+  expect(banner).toHaveTextContent(/this version is not in the public library/i);
+  expect(banner).toHaveTextContent(/the versions list below says where each of your versions went/i);
+});
+
+// The OTHER writer of a `flagged` stamp: a takedown (public-library-item.js:217),
+// on a version that HAD been published and whose listing has just been deleted.
+// "This set was not published" was false for it in the opposite direction, and
+// the banner cannot tell the two apart — the note is mandatory on a takedown
+// and routine on a reviewer's refusal, and the stamp says `flagged` for both.
+// So the sentence has to be true of either.
+test('a taken-down version is not told it was never published', () => {
+  render(
+    <SetReviewBanner
+      entry={{ ...FLAGGED, review: 'taken-down', published: null }}
+      share={{ status: 'flagged', version: 2, note: 'Taken down after a report about Q14.' }}
+      onResubmit={() => {}}
+      onAppeal={() => {}}
+    />,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(/taken down after a report about q14/i);
+  expect(banner).not.toHaveTextContent(/was not published/i);
+  expect(banner).not.toHaveTextContent(/nothing was shared/i);
+  expect(banner).toHaveTextContent(/this version is not in the public library/i);
+});
+
+/*
+  ── WHAT THE CHECK MEASURED, ON THE AUTHOR'S OWN SET ───────────────────────
+
+  The owner: an author gets a status and a sentence, and "Violence: LOW on 11
+  of 30 questions" answers "why was mine held?" in a way a sentence cannot.
+  `reviewTally` and `reviewObserved` are the same measurement the staff score
+  card reads (admin/shared/review-card.js, one projection), carried by
+  get-set-versions.js to the library the row is in.
+*/
+const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
+const TALLY = {
+  scope: 'full',
+  questions: 30,
+  setTextChecked: true,
+  setTextUnread: false,
+  spotless: 19,
+  unread: 0,
+  categories: {
+    VIOLENCE: { worst: 'LOW', low: 11, medium: 0, high: 0 },
+    SEXUAL: NONE_SEEN,
+    HATE: { worst: 'HIGH', low: 0, medium: 0, high: 1 },
+    INSULTS: NONE_SEEN,
+    MISCONDUCT: NONE_SEEN,
+  },
+};
+const OBSERVED = [
+  { questionId: 'q022', category: 'HATE', band: 'HIGH', intervened: true, explanation: 'The question invites an answer about a category of people.' },
+  { questionId: 'q003', category: 'VIOLENCE', band: 'LOW', intervened: false, explanation: 'A crash is named, not described.' },
+];
+const MEASURED = { ...FLAGGED, reviewTally: TALLY, reviewObserved: OBSERVED };
+
+test('the author is told what the check measured, category by category', () => {
+  render(<SetReviewBanner entry={MEASURED} share={{ status: 'flagged', version: 2 }} onResubmit={() => {}} onAppeal={() => {}} />);
+  expect(screen.getByTestId('srev-summary')).toHaveTextContent(/30 questions and the set's own text checked/i);
+  expect(screen.getByTestId('srev-summary')).toHaveTextContent(/19 with nothing in any category/i);
+  const rows = screen.getAllByTestId('srev-cat').map((r) => r.textContent);
+  expect(rows).toHaveLength(5);
+  expect(rows[0]).toMatch(/violence or injury/i);
+  expect(rows[0]).toMatch(/low/);
+  expect(rows[0]).toMatch(/11 at low/);
+  // Every category, "none" written out — a category left off the list reads as
+  // one the check did not look at.
+  expect(rows.join(' ')).toMatch(/sexual content/i);
+  expect(rows.filter((r) => /none/i.test(r))).toHaveLength(3);
+});
+
+// rejects: a near miss the check let through being invisible to the author,
+// which is the half `findings` has never carried.
+test('an observation the check let through is named, and says it did not hold the set', () => {
+  render(<SetReviewBanner entry={MEASURED} share={{ status: 'flagged', version: 2 }} onResubmit={() => {}} />);
+  const seen = screen.getByTestId('srev-seen');
+  expect(seen).toHaveTextContent(/Q3/);
+  expect(seen).toHaveTextContent(/A crash is named, not described/);
+  expect(seen).toHaveTextContent(/let through/i);
+  // What held the set is above, in "What was flagged"; it is not repeated here.
+  expect(seen).not.toHaveTextContent(/Q22/);
+});
+
+// rejects: a version checked before measuring existed drawing an empty block
+// that reads as "measured, and nothing found".
+test('a version with no measurement draws no measurement block', () => {
+  render(<SetReviewBanner entry={FLAGGED} share={{ status: 'flagged', version: 2 }} onResubmit={() => {}} />);
+  expect(screen.queryByTestId('srev-summary')).toBeNull();
+  expect(screen.queryByTestId('srev-cat')).toBeNull();
+});
+
+// rejects: a set held for a person telling the author only that somebody is
+// looking — which was the whole of the waiting state.
+test('a version waiting on a person still shows what the check measured', () => {
+  render(<SetReviewBanner entry={{ ...MEASURED, review: 'escalated' }} share={{ status: 'escalated', version: 2 }} />);
+  expect(screen.getByText(/waiting for a person at Engage/i)).toBeInTheDocument();
+  expect(screen.getByTestId('srev-summary')).toHaveTextContent(/30 questions/);
+});
+
+/*
+  ── ENGAGE'S OWN SHARED SET IS NOT SOMEBODY'S SUBMISSION ───────────────────
+
+  A platform set is served to every organisation and belongs to none. Its check
+  publishes nothing and unpublishes nothing, so "version 2 needs changes", "it
+  is not in the public library" and "your own copy is untouched" are three
+  false statements, and Resubmit and the appeal are two actions with nobody to
+  perform them.
+*/
+test("Engage's own set never claims to be somebody's held submission", () => {
+  render(
+    <SetReviewBanner entry={MEASURED} scope="platform" share={null} onResubmit={() => {}} onAppeal={() => {}} onFocusQuestion={() => {}} />,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).not.toHaveTextContent(/needs changes/i);
+  expect(banner).not.toHaveTextContent(/not in the public library/i);
+  expect(banner).not.toHaveTextContent(/your own copy/i);
+  expect(banner).not.toHaveTextContent(/private to your organisation/i);
+  expect(banner).toHaveTextContent(/still being served to every organisation/i);
+  expect(screen.queryByRole('button', { name: /resubmit/i })).toBeNull();
+  expect(screen.queryByRole('button', { name: /ask for a human review/i })).toBeNull();
+  // The measurement is the point of showing it at all.
+  expect(screen.getByTestId('srev-summary')).toHaveTextContent(/30 questions/);
+});
+
+test("Engage's own set waiting on a person says the library is still serving it", () => {
+  render(<SetReviewBanner entry={{ ...MEASURED, review: 'escalated' }} scope="platform" share={null} />);
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(/still being served to every organisation/i);
+  expect(banner).not.toHaveTextContent(/waiting for a person at Engage to look at version/i);
+});
+
+/*
+  ── A REFUSAL WITH NO FINDINGS HAS NOTHING TO COUNT ────────────────────────
+
+  The count sentence was read from `reviewFindings` alone, and two refusals
+  reach this branch carrying none:
+
+  A TAKEDOWN writes a `flagged` share stamp (public-library-item.js) for a
+  version whose own check PASSED — the set was in the library, so nothing held
+  it — leaving `reviewFindings` empty. A REVIEWER'S REFUSAL writes the same
+  stamp (moderation-decide.js, both the plain and the resumed reject), and a
+  person's reason is a NOTE, not per-question findings.
+
+  So the author read "0 of 30 questions were flagged" directly under the
+  mandatory staff note explaining that their set had just been removed from
+  the public library — a sentence that answers the note with a number meaning
+  the opposite of what happened.
+*/
+const TAKEDOWN_NOTE = 'A player reported Q7. The set is out of the public library while we look at it.';
+const TAKEN_DOWN = {
+  version: 2, review: 'passed', checkedAt: '2026-08-19T10:00:00.000Z', questionCount: 30, reasons: [], reviewFindings: [],
+};
+
+test('a refusal carrying no findings counts nothing, and says when the version was checked', () => {
+  render(<SetReviewBanner entry={TAKEN_DOWN} share={{ status: 'flagged', version: 2, note: TAKEDOWN_NOTE }} onResubmit={() => {}} onAppeal={() => {}} />);
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(TAKEDOWN_NOTE);
+  expect(banner).not.toHaveTextContent(/0 of 30/);
+  expect(banner).not.toHaveTextContent(/questions were flagged/i);
+  expect(banner).toHaveTextContent(/checked on 19 Aug/i);
+});
+
+// rejects: swapping one wrong sentence for another. With no date to give,
+// the count's place is empty — "checked on" with nothing after it, or a bare
+// "—", would both be worse than the silence.
+test('a refusal carrying neither findings nor a check date says nothing in the count’s place', () => {
+  render(<SetReviewBanner entry={{ ...TAKEN_DOWN, checkedAt: '' }} share={{ status: 'flagged', version: 2, note: TAKEDOWN_NOTE }} onResubmit={() => {}} />);
+  const banner = screen.getByRole('status');
+  expect(banner).not.toHaveTextContent(/of 30/);
+  expect(banner).not.toHaveTextContent(/checked on/i);
+  // The sentences that ARE true of a refusal are untouched.
+  expect(banner).toHaveTextContent(/version 2 needs changes/i);
+  expect(banner).toHaveTextContent(/this version is not in the public library/i);
+  expect(banner).toHaveTextContent(/your own copy is untouched/i);
+});
+
+/*
+  The same emptiness one line down. "What was flagged" over an empty list, and
+  "The other 30 questions passed" with nothing for those thirty to be OTHER
+  than, are the count sentence's defect wearing a heading: a refusal that named
+  no question was answered with a section about named questions.
+*/
+test('a refusal carrying no findings draws no "What was flagged" section', () => {
+  render(<SetReviewBanner entry={TAKEN_DOWN} share={{ status: 'flagged', version: 2, note: TAKEDOWN_NOTE }} onResubmit={() => {}} onAppeal={() => {}} />);
+  const banner = screen.getByRole('status');
+  expect(banner).not.toHaveTextContent(/what was flagged/i);
+  expect(banner).not.toHaveTextContent(/questions passed/i);
+  // The refusal itself, and the way out of it, are the whole point of the banner.
+  expect(banner).toHaveTextContent(TAKEDOWN_NOTE);
+  expect(screen.getByRole('button', { name: /resubmit/i })).toBeInTheDocument();
+});
+
+// rejects: standing the section down on the QUESTION count alone. A finding
+// against the set's own name, description or category names carries the id
+// '(set)', which byQuestion() drops — so a set held for its own text has zero
+// flagged questions and everything to say.
+test("a finding against the set's own text is named, and is not called a flagged question", () => {
+  render(
+    <SetReviewBanner
+      entry={{
+        ...TAKEN_DOWN,
+        review: 'flagged',
+        reviewFindings: [{ questionId: '(set)', category: 'INSULTS', band: 'HIGH', explanation: 'The set description names a rival company.' }],
+      }}
+      share={{ status: 'flagged', version: 2 }}
+      onResubmit={() => {}}
+    />,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(/what was flagged/i);
+  expect(banner).toHaveTextContent(/the set's own text/i);
+  expect(banner).toHaveTextContent(/names a rival company/i);
+  expect(banner).not.toHaveTextContent(/0 of 30/);
+  expect(banner).toHaveTextContent(/checked on 19 Aug/i);
 });

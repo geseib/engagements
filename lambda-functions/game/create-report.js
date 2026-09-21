@@ -6,6 +6,7 @@ const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
+const { reconcileReport } = require('./report-merge');
 
 /**
  * WHOSE SESSION IS THIS? — off the row, though the route is no longer public.
@@ -693,8 +694,12 @@ exports.handler = async (event) => {
       });
     }
 
-    // Legacy question summaries for backward compatibility
-    const questionSummaries = detailedQuestions.map(q => ({
+    // Legacy question summaries for backward compatibility.
+    // Derived from `rounds` — the RECONCILED list built below — and not from
+    // `detailedQuestions`, so a round recovered from the snapshot carries its
+    // winners and tallies into this shape too rather than summarising an empty
+    // array.
+    const summarise = (rounds) => rounds.map(q => ({
       questionId: q.questionId,
       answerCount: q.answers.length,
       voteCount: q.voteStats.totalVotes,
@@ -775,9 +780,42 @@ exports.handler = async (event) => {
         answersGiven: playerAnswers.length,
         votesGiven: playerVotes.length,
         gamesWon: wins,
-        participationRate: gameStats.totalQuestions > 0 ? 
+        participationRate: gameStats.totalQuestions > 0 ?
           Math.round((playerAnswers.length / gameStats.totalQuestions) * 100) : 0
       };
+    });
+
+    // ── THE REBUILD IS RECONCILED AGAINST THE SNAPSHOT BEFORE IT REPLACES IT ─
+    //
+    // Everything above rebuilds the report from the live table, and the live
+    // table forgets on four different clocks: the ballots and the participant
+    // rows at seven days, the results, scores and summaries at thirty, the
+    // session itself at ninety. So from about day 8 this handler was producing
+    // a 200 with `totalAnswers: 0` and every answers array empty — a retro that
+    // read as though nobody had come.
+    //
+    // AND IT WROTE THAT OVER THE GOOD ONE. The `REPORT` snapshot below has
+    // always been written unconditionally, so the hollow rebuild replaced the
+    // copy taken on the night and put a fresh TTL on the hollow one. Opening
+    // the retro is what destroyed it, and the Rounds tab POSTs this route on
+    // every round advance, so it fired without anyone asking for a report.
+    //
+    // report-merge.js has the rule and the reasoning, including why the answer
+    // rows' 7-day TTL is deliberately NOT what changed here. Read below is the
+    // only new I/O: one Get of a row this handler already writes.
+    const storedReportRow = (await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'REPORT' }
+    }))).Item;
+    // Decrypted BEFORE it is merged. For an org session this row is an
+    // envelope, and splicing `{v:1,iv:…}` into `answers` would be a failure
+    // that looks exactly like data.
+    const storedReport = storedReportRow && reportOrgId
+      ? await decryptItem(reportOrgId, 'report', storedReportRow)
+      : storedReportRow;
+
+    const reconciled = reconcileReport(storedReport, {
+      detailedQuestions, playerPerformance, gameStats
     });
 
     // Create comprehensive report
@@ -802,9 +840,11 @@ exports.handler = async (event) => {
       // resolveRoundNoun(questionData, reportData.gameType, reportData.roundNoun).
       roundNoun: questionSetData?.roundNoun || questionSetData?.RoundNoun || null,
 
-      // Statistics
-      gameStats,
-      
+      // Statistics. Reconciled, which for every live session and every report
+      // generated inside a week is byte-for-byte the figures computed above —
+      // report-merge.js takes an early return when nothing was recovered.
+      gameStats: reconciled.gameStats,
+
       // Player performance, ordered by SCORE.
       //
       // This sorted by `gamesWon` and that was wrong for most of the product.
@@ -823,19 +863,28 @@ exports.handler = async (event) => {
       //
       // The host stage's top-three reads this ordering, so it is a
       // prerequisite for that podium being truthful and not merely present.
-      playerPerformance: playerPerformance.sort((a, b) => (
+      //
+      // Reconciled: the roster comes from PLAYER# rows, which expire at seven
+      // days, so past that this is the snapshot's roster rather than an empty
+      // podium.
+      playerPerformance: reconciled.playerPerformance.slice().sort((a, b) => (
         (b.totalScore || 0) - (a.totalScore || 0)
         || String(a.playerName || '').localeCompare(String(b.playerName || ''))
       )),
-      
+
       // Enhanced question data with rankings and AI summaries
-      detailedQuestions: detailedQuestions.sort((a, b) => 
-        parseInt(a.questionNumber) - parseInt(b.questionNumber)
-      ),
-      
+      detailedQuestions: reconciled.detailedQuestions,
+
       // Legacy question summaries for backward compatibility
-      questionSummaries,
-      
+      questionSummaries: summarise(reconciled.detailedQuestions),
+
+      // WHAT THIS REPORT IS, SAID OUT LOUD — whether it was fully rebuilt,
+      // whether anything came from the stored snapshot, and which rounds (if
+      // any) have lost their answers for good. The defect this replaces was a
+      // 200 carrying a plausible empty report, which is the worst shape a wrong
+      // answer can take. get-report.js whitelists this through to the host.
+      reportCompleteness: reconciled.completeness,
+
       // Scoring configuration
       scoringConfig,
       

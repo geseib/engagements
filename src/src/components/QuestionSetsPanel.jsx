@@ -2,10 +2,15 @@ import React from 'react';
 import Icon from './Icon';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
+import SetShelfBrowse from './SetShelfBrowse';
 import useListControls from '../hooks/useListControls';
 import {
   setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
 } from '../utils/setOwnerTag';
+import {
+  isUnreadableSet, unreadableSetName,
+  UNREADABLE_LABEL, UNREADABLE_REASON, UNREADABLE_SUB,
+} from '../utils/unreadableSet';
 import { matchesListFilters } from '../config/listControls';
 import {
   GAME_TYPE_LIST,
@@ -17,6 +22,10 @@ import {
 } from '../config/gameTypes';
 import { truncate } from '../utils/questionSetEditing';
 import { shareStateOf } from '../utils/shareState';
+import {
+  resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
+} from '../config/setTopics';
+import { setCarriesTag } from '../config/setShelfIndex';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
 
@@ -81,8 +90,37 @@ const SORTS = {
   `polls`).
 */
 const LIST_CONFIG = {
-  searchFields: ['name', 'description', 'customInstruction'],
+  // The SET's own tags join the haystack (config/setTopics.js: not the list a
+  // QUESTION carries, which lives on a different row and never meets this one).
+  // A word somebody can write and never find again is not a tag.
+  searchFields: ['name', 'description', 'customInstruction', (set) => set.tags],
   axes: {
+    // THE SHELF, first because it is the axis a library is browsed by. Only
+    // the ITEM side is resolved: the options come from the closed vocabulary,
+    // so the filter's own value is already an id — and `resolveSetTopic` folds
+    // a row with no shelf, or a shelf nothing recognises, onto UNFILED, which
+    // is a real option here rather than a row that cannot be reached.
+    topic: { get: (set) => resolveSetTopic(set.topic) },
+    /*
+      ONE OF THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed
+      into the search box — which is what the browse's tag pills used to do.
+
+      The pill carries a COUNT, and a count has to be the number of rows the
+      click produces. The search box cannot give it that: it OR-matches a
+      substring across the name, the description, the custom instruction and
+      the tags, so `empire` also returned "The British Empire" (which carries
+      no such tag) and `ancient` also returned every `ancient-egypt` set.
+      Matching through `setCarriesTag` — the same function config/
+      setShelfIndex.js counts with — makes the two agree by construction.
+
+      `all: ''` rather than the usual `all` sentinel: a set tagged `all` is
+      not a hypothetical, and the empty string is the one value `normalizeTag`
+      can never produce, so it cannot collide with a real word.
+
+      The row itself is handed to `eq`, not a field of it, because carrying a
+      tag is a question about the set rather than a value to compare.
+    */
+    tag: { all: '', get: (set) => set, eq: (set, wanted) => setCarriesTag(set, wanted) },
     type: { get: (set) => normalizeGameType(set.engagementType) },
     status: { get: (set) => (set.active ? 'active' : 'inactive') },
     // WHOSE IT IS — the same four values as the chip on every row, from the
@@ -148,7 +186,7 @@ export default function QuestionSetsPanel({
     contract, on the same predicate the list itself uses.
   */
   const {
-    state: { search, type, status, owner, sort },
+    state: { search, topic, tag, type, status, owner, sort },
     set,
     shown,
     drops,
@@ -158,6 +196,11 @@ export default function QuestionSetsPanel({
   } = useListControls(questionSets, LIST_CONFIG, {
     labels: {
       search: (needle) => `Search “${needle}”`,
+      // setTopicLabel answers "Unfiled" for the empty id, so the exit out of
+      // that filter names itself the same way the option does.
+      topic: (value) => `Topic: ${setTopicLabel(value)}`,
+      // A tag is already the word a person clicked, so it names itself.
+      tag: (value) => `Tag: ${value}`,
       type: (value) => `Type: ${gameTypeLabel(value)}`,
       owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
       status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
@@ -165,6 +208,17 @@ export default function QuestionSetsPanel({
   });
 
   const nothingExists = questionSets.length === 0;
+
+  /*
+    DOES THIS ROW CARRY A SHARE BUTTON? Written once, because two things read
+    it: the button itself, and the words on the "Who can see it" chip, one of
+    which tells the reader to click Share. Two copies of this condition would
+    let the chip instruct somebody the row gives nothing to press — which is
+    what it did. `canManage !== false`, not a bare truthiness test, for the
+    reason the row actions below give: surfaces that project no ownership carry
+    no `canManage` at all.
+  */
+  const rowCanShare = (set) => Boolean(!rowActions && showVisibility && onShare && set.canManage !== false);
 
   return (
     <div className="qsets">
@@ -201,41 +255,75 @@ export default function QuestionSetsPanel({
           chooser is not built (plan Part 5 puts it outside the constraint), and
           a link to a screen that does not exist is the same defect one level
           down, so it is not drawn here.
+
+          AND THE THREE VERBS ARE GATED ON `onCreate`, for the reason the header
+          button above is. They were written as `onCreate && onCreate('ai')`,
+          which is a click handler that quietly does nothing on any caller that
+          passes no `onCreate` — the same dead affordance the owner reported,
+          in the one state where there is nothing else on the screen to press.
+          Design rule 2: gate the affordance on the handler existing.
+
+          What is left when there is no way in still has to say something true
+          (rule 6), so the heading and the sentence that says what a question
+          set IS both stay; only the sentence that promises three ways to make
+          one goes, because on this mount there are none.
         */
         <div className="qsets-empty">
           <Icon name="Books" weight="duotone" size={40} color="var(--muted)" />
           <h3>No question sets yet</h3>
-          <p>
-            A question set is what a session plays. Every other screen in here — sessions,
-            archive, reports — is downstream of one. There are three ways to make the first,
-            and they are not equivalent.
-          </p>
-          <div className="qsets-paths">
-            <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate && onCreate('ai')}>
-              <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
-              Generate with AI
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate && onCreate('csv')}>
-              <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
-              Upload a CSV
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate && onCreate('template')}>
-              <Icon name="FileText" weight="bold" size={16} color="currentColor" />
-              Start from a template
-            </button>
-          </div>
+          {onCreate ? (
+            <>
+              <p>
+                A question set is what a session plays. Every other screen in here — sessions,
+                archive, reports — is downstream of one. There are three ways to make the first,
+                and they are not equivalent.
+              </p>
+              <div className="qsets-paths">
+                <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate('ai')}>
+                  <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
+                  Generate with AI
+                </button>
+                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('csv')}>
+                  <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
+                  Upload a CSV
+                </button>
+                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('template')}>
+                  <Icon name="FileText" weight="bold" size={16} color="currentColor" />
+                  Start from a template
+                </button>
+              </div>
+            </>
+          ) : (
+            <p>
+              A question set is what a session plays. There are none to show here yet.
+            </p>
+          )}
         </div>
       )}
 
       {!nothingExists && (
         <>
-          <div className="qsets-head">
-            <span className="qsets-head-grow" />
-            <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate && onCreate('new')}>
-              <Icon name="Plus" weight="bold" size={14} color="currentColor" />
-              {createOpen ? 'Hide new set' : 'New set'}
-            </button>
-          </div>
+          {/*
+            THE HEADER IS AN AFFORDANCE FOR `onCreate`, SO IT IS GATED ON IT.
+
+            It used to render unconditionally with `onCreate && onCreate('new')`
+            behind it, and the Public library mounts this table with `rowActions`
+            and no `onCreate` — so the button people reach for first sat there,
+            filled and primary, doing nothing at all in either console. That is
+            the owner's report, and design rule 2's exact case: gate the
+            affordance on the handler existing, never render one that does
+            nothing. The public library's own way in is a different verb and
+            lives in PublicLibraryPanel, where there is something to honour it.
+          */}
+          {onCreate && (
+            <div className="qsets-head">
+              <span className="qsets-head-grow" />
+              <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate('new')}>
+                <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+                {createOpen ? 'Hide new set' : 'New set'}
+              </button>
+            </div>
+          )}
 
           {/*
             The bar renders through the shared ListControls under this screen's
@@ -250,10 +338,40 @@ export default function QuestionSetsPanel({
             search={{
               value: search,
               onChange: (value) => set({ search: value }),
-              ariaLabel: 'Search name, description',
-              placeholder: 'Search name, description',
+              /*
+                IT NAMES THE TAGS BECAUSE IT READS THE TAGS. `searchFields`
+                above put a set's own words into the haystack; this said
+                "name, description" for a while after, which is the shape of
+                defect the owner's ask was about — "ability to see/search all
+                tags" is not delivered by a box that can do it and never says
+                so. A control's label is the only documentation anybody reads.
+              */
+              ariaLabel: 'Search name, description, tags',
+              placeholder: 'Search name, description, tags',
             }}
             selects={[
+              {
+                /*
+                  THE SHELF. All fifteen are offered whether or not anything
+                  sits on them, exactly as the type filter offers every type:
+                  this control is the closed vocabulary, and a person filtering
+                  has to be able to read what the vocabulary is. What is
+                  ACTUALLY on the shelves, with counts, is the browse below.
+
+                  Unfiled is last and is a real destination, not a placeholder:
+                  the sets that predate the field are on no shelf, and a filter
+                  that can only name the fifteen makes that backlog invisible.
+                */
+                key: 'topic',
+                value: topic,
+                onChange: (value) => set({ topic: value }),
+                ariaLabel: 'Filter by topic',
+                options: [
+                  { value: 'all', label: 'All topics' },
+                  ...SET_TOPIC_IDS.map((id) => ({ value: id, label: SET_TOPICS[id].label })),
+                  { value: UNFILED, label: UNFILED_LABEL },
+                ],
+              },
               {
                 key: 'type',
                 value: type,
@@ -307,6 +425,21 @@ export default function QuestionSetsPanel({
             count={`${questionSets.length} set${questionSets.length === 1 ? '' : 's'}${
               shown.length !== questionSets.length ? ` · ${shown.length} shown` : ''
             }`}
+          />
+
+          {/*
+            WHAT IS ACTUALLY ON THE SHELVES, and the words these sets carry —
+            the other half of the owner's ask, which a select cannot do because
+            a tag vocabulary is open. Closed by default, and OUTSIDE the
+            shown/empty branch below on purpose: on the screen that says
+            nothing matches, the one control showing what does exist is an exit.
+          */}
+          <SetShelfBrowse
+            sets={questionSets}
+            topic={topic}
+            tag={tag}
+            onPickTopic={(value) => set({ topic: value })}
+            onPickTag={(value) => set({ tag: value })}
           />
 
           {shown.length === 0 ? (
@@ -386,13 +519,25 @@ export default function QuestionSetsPanel({
                     clipped line with one `title` carrying the whole of it.
                   */
                   const publisher = set.sourceOrgName ? `by ${set.sourceOrgName}` : '';
-                  const blurb = truncate(set.description, 110);
+                  // The description slot says WHY it is blank rather than showing
+                  // the em dash this column uses for a set that genuinely has no
+                  // description — same glyph, opposite meaning.
+                  const blurb = isUnreadableSet(set) ? UNREADABLE_SUB : truncate(set.description, 110);
                   const subLine = [publisher, blurb].filter(Boolean).join(' · ') || '—';
                   return (
                     <tr key={set.id}>
                       <td>
+                        {/*
+                          A SET NOBODY NAMED AND A SET NOBODY CAN READ LOOK
+                          IDENTICAL IF YOU JUST RENDER THE FIELD. `name` comes
+                          back null on a row the server could not decrypt, and
+                          `{set.name}` for null is an empty cell — which cannot
+                          be told from a rendering failure, and leaves nothing on
+                          the row to quote when reporting it. The id was never
+                          encrypted, so it is the handle that survives.
+                        */}
                         <span className="qsets-nm">
-                          {set.name}
+                          {isUnreadableSet(set) ? unreadableSetName(set) : set.name}
                           <SetImageBadge hasImages={set.hasImages} />
                         </span>
                         <span className="qsets-sub" title={subLine}>{subLine}</span>
@@ -432,6 +577,20 @@ export default function QuestionSetsPanel({
                               </span>
                             )}
                             {!set.totalQuestions && <span className="qsets-chip qsets-chip--bad">Empty</span>}
+                            {/*
+                              THE STATE NOBODY CAN FIX FROM THIS SCREEN, NAMED
+                              ANYWAY. Every other column on this row still renders
+                              — the count, the type, Active — so without a marker
+                              an unreadable set reads as a healthy one somebody
+                              forgot to title. The `title` carries the consequence
+                              rather than the severity: what cannot be shown, and
+                              that it cannot be played until it is restored.
+                            */}
+                            {isUnreadableSet(set) && (
+                              <span className="qsets-chip qsets-chip--bad" title={UNREADABLE_REASON}>
+                                {UNREADABLE_LABEL}
+                              </span>
+                            )}
                             {/*
                               AI, AND WHETHER ANYONE HAS READ IT. A generated set
                               arrives switched OFF and unreviewed
@@ -482,7 +641,11 @@ export default function QuestionSetsPanel({
                         </td>
                       )}
                       {showVisibility && (() => {
-                        const vis = shareStateOf(set);
+                        /* THE WORDS AND THE BUTTON, DECIDED ONCE. `rowCanShare`
+                           is the same predicate the Share action below renders
+                           on, so the amber drift chip cannot tell this reader to
+                           click a Share that this row does not carry. */
+                        const vis = shareStateOf(set, undefined, { canShare: rowCanShare(set) });
                         return (
                           <td className="qsets-vis">
                             <span className={`qsets-chip qsets-chip--vis-${vis.key}`} title={vis.title}>{vis.label}</span>
@@ -514,32 +677,49 @@ export default function QuestionSetsPanel({
                           {rowActions ? rowActions(set) : (set.canManage !== false ? (
                             <>
                               {/*
-                                THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. On an
-                                unreviewed generation the task is to READ it and
-                                then decide; "Edit" is the label for a set you
-                                already trust. It is also the row's primary
-                                action in that state, because it is the only
-                                thing anyone should be doing to it.
+                                EDIT, OPEN, COPY AND SHARE ALL NEED THE ROW'S
+                                CONTENT — to render into the editor, to submit
+                                for the content check, or to duplicate. None of
+                                those can happen on a row the server could not
+                                decrypt: the editor would open on nulled fields
+                                and a save would write them back over whatever
+                                is still recoverable, and a share would submit
+                                nothing for the check to read. Delete alone
+                                needs no content and stays offered, because it
+                                is the one control a staff member can actually
+                                use to clear a row that will never recover.
                               */}
-                              <button
-                                type="button"
-                                className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false ? ' qsets-btn--primary' : ''}`}
-                                onClick={() => onEdit && onEdit(set)}
-                                title={set.isAIGenerated && set.active === false
-                                  ? 'Read what the generator wrote, then switch it on'
-                                  : 'Edit this question set'}
-                              >
-                                {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
-                              </button>
-                              {showVisibility && onShare && (
-                                <button
-                                  type="button"
-                                  className="qsets-btn qsets-btn--sm"
-                                  onClick={() => onShare(set)}
-                                  title="Submit the active version for the content check; it goes public if it passes"
-                                >
-                                  Share
-                                </button>
+                              {!isUnreadableSet(set) && (
+                                <>
+                                  {/*
+                                    THE SAME DOOR, NAMED FOR WHAT IS BEHIND IT. On an
+                                    unreviewed generation the task is to READ it and
+                                    then decide; "Edit" is the label for a set you
+                                    already trust. It is also the row's primary
+                                    action in that state, because it is the only
+                                    thing anyone should be doing to it.
+                                  */}
+                                  <button
+                                    type="button"
+                                    className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false ? ' qsets-btn--primary' : ''}`}
+                                    onClick={() => onEdit && onEdit(set)}
+                                    title={set.isAIGenerated && set.active === false
+                                      ? 'Read what the generator wrote, then switch it on'
+                                      : 'Edit this question set'}
+                                  >
+                                    {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
+                                  </button>
+                                  {rowCanShare(set) && (
+                                    <button
+                                      type="button"
+                                      className="qsets-btn qsets-btn--sm"
+                                      onClick={() => onShare(set)}
+                                      title="Submit the active version for the content check; it goes public if it passes"
+                                    >
+                                      Share
+                                    </button>
+                                  )}
+                                </>
                               )}
                               <button
                                 type="button"
@@ -560,24 +740,32 @@ export default function QuestionSetsPanel({
                                   duplicate or nothing, and the reported flow was
                                   somebody wanting to look, adjust and then
                                   keep. Delete stays absent: that one has no
-                                  copy-on-write equivalent. */}
-                              <button
-                                type="button"
-                                className="qsets-btn qsets-btn--sm"
-                                onClick={() => onEdit && onEdit(set)}
-                                title="Open it. Saving makes your organisation its own copy."
-                              >
-                                Open
-                              </button>
-                              {onCopy && (
-                                <button
-                                  type="button"
-                                  className="qsets-btn qsets-btn--sm"
-                                  onClick={() => onCopy(set)}
-                                  title="Take a copy now, without opening it"
-                                >
-                                  Copy
-                                </button>
+                                  copy-on-write equivalent. Neither Open nor Copy
+                                  is offered on a row the server could not
+                                  decrypt — there is no content behind either
+                                  one, for the same reason Edit and Share are
+                                  withheld above. */}
+                              {!isUnreadableSet(set) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="qsets-btn qsets-btn--sm"
+                                    onClick={() => onEdit && onEdit(set)}
+                                    title="Open it. Saving makes your organisation its own copy."
+                                  >
+                                    Open
+                                  </button>
+                                  {onCopy && (
+                                    <button
+                                      type="button"
+                                      className="qsets-btn qsets-btn--sm"
+                                      onClick={() => onCopy(set)}
+                                      title="Take a copy now, without opening it"
+                                    >
+                                      Copy
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </>
                           ))}

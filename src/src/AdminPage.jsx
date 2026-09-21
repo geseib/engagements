@@ -9,7 +9,6 @@ import ArchivePanel from './components/ArchivePanel';
 import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
 import HelpButton from './components/HelpButton';
-import IssueFab from './components/IssueFab';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
@@ -22,6 +21,7 @@ import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import QuestionSetsPanel from './components/QuestionSetsPanel';
+import { checkIsDue, houseCheckNotice } from './utils/houseCheck';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
 import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
@@ -559,6 +559,13 @@ function AdminPage() {
    * before handing the set to the dialog.
    */
   const promptScopeOf = (set) => ((availablePrompts || []).find((p) => p.promptId === set.promptId) || {}).scope || null;
+  /* ONE SHARE PATH, TWO WAYS IN. The question sets list's row action and the
+     Public library's "Share a set" picker both land here, so the two cannot
+     drift into handing the dialog differently-shaped sets. Undefined off the
+     org console, which is what gates both affordances. */
+  const handleShareSet = orgConsole
+    ? (set) => setSharing({ set: { ...set, promptScope: promptScopeOf(set) }, version: null })
+    : undefined;
   // The persona library, read from GET /admin/personas. Personas live under
   // SK='PERSONA#' which get-ai-prompts.js hard-filters out, so they need their
   // own endpoint — this is the list that used to be unreachable (D8).
@@ -912,6 +919,18 @@ function AdminPage() {
           )
         );
         console.log(`Question set ${setId} ${newActive ? 'activated' : 'deactivated'}`);
+        /*
+          SWITCHING ON ONE OF ENGAGE'S OWN SETS IS THE MOMENT IT BECOMES
+          SERVABLE TO EVERY ORGANISATION, and the owner's trigger for the
+          content check. THE ACTIVATION ROUTE STARTS IT — this console used to,
+          and a tab closed between the two calls left a set live and unchecked.
+          What is left here is telling the person: `checkDue` says the
+          activation made a check due and dispatched one. See utils/houseCheck.js.
+        */
+        if (checkIsDue(result)) {
+          const name = (questionSets.find((s) => s.id === setId) || {}).name || '';
+          setNotice(houseCheckNotice(name));
+        }
       } else {
         // Was `alert()`, in a console that has imported StatusMessage since it
         // was written. A modal browser dialog on a failed toggle stops the
@@ -1632,15 +1651,27 @@ function AdminPage() {
           still the paper-theme markup AdminShell.css documents, and a section
           that has not been converted must not be dropped onto the dark field —
           #333 body copy on #0F1A2E is 1.4:1.
+
+          THE SET EDITOR IS DUSK, AND THAT REVERSES A DECISION. It was 'light'
+          on purpose: its `.qs-*` rules in styles.css were written against the
+          paper theme. The owner, on the shipped console: *"the white background
+          really contrasts the rest of the site, as we are entirely dark
+          background throughout, except for question set editors and previews."*
+          So those rules were converted to tokens and the editor now declares
+          `data-theme="dark"` on its own root (it has to — it is mounted on the
+          host's paper shelf as well). The work body has to agree, or the
+          editor paints a dusk card onto a #FBF7F1 field.
+          Pinned in __tests__/questionSetEditorPalette.test.js.
         */
-        contentTheme={editingSet ? 'light' : section.contentTheme || 'light'}
+        contentTheme={editingSet ? 'dark' : section.contentTheme || 'light'}
         actions={(
           <>
-            {/* IN THE HEADER, BESIDE HELP — not floating over the console.
-                These two are the same kind of thing (ask for something, get
-                help), so they belong in the same place and look alike. */}
-            <IssueFab context="admin" placement="inline" />
-            <HelpButton section="admin" variant="header" size="medium" />
+            {/* ONE `?`: the guides, and the three ways to tell us something.
+                Reporting used to be a second icon here, then a tab in the
+                corner of every screen; it is this button's menu now (see
+                HelpButton's `reports`). The small contextual `?` buttons
+                further down pass no `reports` and open their guide directly. */}
+            <HelpButton section="admin" variant="header" size="medium" tooltip="Help and feedback" reports={{ context: 'admin' }} />
           </>
         )}
       >
@@ -1815,7 +1846,7 @@ function AdminPage() {
                  library never goes through it, so platform mode gets neither
                  the "Who can see it" column nor the row action. */
               showVisibility={orgConsole}
-              onShare={orgConsole ? (set) => setSharing({ set: { ...set, promptScope: promptScopeOf(set) }, version: null }) : undefined}
+              onShare={handleShareSet}
               createOpen={isCreateOpen}
             >
               {(isCreateOpen || visibleSets.length === 0) && (
@@ -1916,6 +1947,10 @@ function AdminPage() {
               loading={questionSetsLoading}
               onCopy={handleCopySet}
               onPreview={handleEditQuestionSet}
+              /* The way INTO the library, from the library. Same handler as the
+                 question sets list's row action, so the picker's Share opens
+                 the same dialog on the same set. */
+              onShare={handleShareSet}
             />
           )}
 
@@ -1929,6 +1964,12 @@ function AdminPage() {
               ? (
                 <ScoreCard
                   publicSetId={scoreCardId}
+                  /* As Engage, which is what unlocks re-running a published
+                     version's check. ScoreCard defaults to the org's reading,
+                     the same fail-closed default PublicLibraryPanel's `mode`
+                     takes: a staff-only control must not appear because a
+                     caller forgot to say who is looking. */
+                  mode="platform"
                   onBack={() => setScoreCardId('')}
                   onTakenDown={() => { setScoreCardId(''); fetchQuestionSets(); }}
                 />

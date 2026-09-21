@@ -168,6 +168,7 @@ const W = (f) => require(path.join(REPO, 'lambda-functions', 'websocket', f)).ha
 
 const uploadQuestions = A('upload-questions.js');
 const adminListSets = A('get-question-sets.js');
+const gameListSets = G('get-question-sets.js');
 const downloadSet = A('download-question-set.js');
 const getQuestion = G('get-question.js');
 const getAnswers = G('get-answers.js');
@@ -212,7 +213,11 @@ const CSV = [
 const GAME_ID = '4821';
 const SET_ID = 'teamretro';
 const ORG_SETS = `ORG#${ORG}#SETS`;
+// The UNVERSIONED partition, kept for the deliberately pre-versioning,
+// pre-encryption fixture at the bottom of this file. Content written by an
+// import lands in ORG_CONTENT_V1: a new set is born at v1.
 const ORG_CONTENT = `ORG#${ORG}#SET#${SET_ID}`;
+const ORG_CONTENT_V1 = `${ORG_CONTENT}#v1`;
 
 /**
  * Mint the org exactly as create-org does: ONE GenerateDataKey, and the wrapped
@@ -276,6 +281,10 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
       customTitle: 'Team Retro', customDescription: 'What we learned',
       customInstructions: 'Answer in one sentence.',
       engagementType: 'call-and-answer',
+      // A live set is created with a shelf now (shared/set-topics.js). It is
+      // NOT in ENCRYPTED_FIELDS.set, deliberately — a closed-list id is
+      // structural, like engagementType, and the checks below reflect that.
+      topic: 'business-work',
     }),
   });
   await check('the import succeeded', () =>
@@ -283,7 +292,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   await check('…and produced the org-scoped set', () =>
     assert.strictEqual(parse(created).setId, SET_ID));
 
-  const questionRows = rowsIn(ORG_CONTENT).filter((i) => String(i.SK).startsWith('QUESTION#'));
+  const questionRows = rowsIn(ORG_CONTENT_V1).filter((i) => String(i.SK).startsWith('QUESTION#'));
   await check('two question rows landed in the org partition', () =>
     assert.strictEqual(questionRows.length, 2, `got ${questionRows.length}`));
 
@@ -302,7 +311,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   // The substring sweep is the assertion that catches the field nobody thought
   // to name — the same reasoning as the leak check in player-question-payload.
   await check('the question text appears NOWHERE in the raw org partition', () => {
-    const raw = JSON.stringify(rowsIn(ORG_CONTENT));
+    const raw = JSON.stringify(rowsIn(ORG_CONTENT_V1));
     assert.ok(!raw.includes('THE THING NOBODY SAID'), 'a question title is readable at rest');
     assert.ok(!raw.includes('Say it now.'), 'a per-question instruction is readable at rest');
   });
@@ -325,7 +334,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
     assert.strictEqual(meta.createdBy, 'sub-ada');
   });
   await check('the CATEGORY row is deliberately untouched (the mask depends on its order)', () => {
-    const cat = rowsIn(ORG_CONTENT).find((i) => String(i.SK).startsWith('CATEGORY#'));
+    const cat = rowsIn(ORG_CONTENT_V1).find((i) => String(i.SK).startsWith('CATEGORY#'));
     assert.ok(cat, 'no category row');
     assert.strictEqual(cat.Name, 'Leadership', `Name stored as ${JSON.stringify(cat.Name)}`);
   });
@@ -439,14 +448,15 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
       customTitle: 'Team Retro', customDescription: 'House content',
       customInstructions: 'Answer in one sentence.',
       engagementType: 'call-and-answer',
+      topic: 'business-work',
     }),
   });
   await check('staff with no org wrote a platform set', () =>
     assert.strictEqual(platformCreated.statusCode, 200, platformCreated.body));
-  await check('…at the legacy keys, byte for byte', () =>
+  await check('…with its metadata row still at PK=SETS, byte for byte', () =>
     assert.ok(store.get(`SETS|SET#${SET_ID}`), 'no platform metadata row at PK=SETS'));
   await check('its questions are READABLE at rest', () => {
-    const rows = rowsIn(`SET#${SET_ID}`).filter((i) => String(i.SK).startsWith('QUESTION#'));
+    const rows = rowsIn(`SET#${SET_ID}#v1`).filter((i) => String(i.SK).startsWith('QUESTION#'));
     assert.strictEqual(rows.length, 2, `got ${rows.length}`);
     assert.strictEqual(rows[0].Title, 'THE THING NOBODY SAID',
       `a platform title was stored as ${JSON.stringify(rows[0].Title)}`);
@@ -459,7 +469,7 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   });
   await check('a participant can still play it with no org anywhere in sight', async () => {
     seedSession({ orgId: '' });
-    const platformQuestion = rowsIn(`SET#${SET_ID}`)
+    const platformQuestion = rowsIn(`SET#${SET_ID}#v1`)
       .filter((i) => String(i.SK).startsWith('QUESTION#'))
       .sort((a, b) => a.SK.localeCompare(b.SK))[0];
     seedRef({ scope: 'platform', orgId: '', sourceQuestionId: platformQuestion.SK });
@@ -538,6 +548,132 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
     assert.ok(kmsCalls.generate + kmsCalls.decrypt < 12,
       `KMS was called ${kmsCalls.generate}× generate + ${kmsCalls.decrypt}× decrypt`);
     assert.ok(kmsCalls.decrypt > 0, 'nothing was ever decrypted — is anything wired in at all?');
+  });
+
+  // ── 7. ONE UNREADABLE ROW DOES NOT TAKE THE LIST DOWN WITH IT ────────────
+  //
+  // decryptValue THROWS on a failed tag check, and it must: its own header says
+  // a decrypt that fell back to "return something" would hand a report a
+  // plausible sentence from nowhere. What this section settles is what the LIST
+  // does with that throw.
+  //
+  // Both list handlers decrypt their rows in a bare loop inside a Promise.all
+  // over the caller's scopes, and Promise.all rejects the moment ANY one of its
+  // promises does. So a single corrupt row in the caller's OWN org partition
+  // 500d the entire response — the readable org sets beside it, the PLATFORM
+  // library, and the public one, none of which are even encrypted and none of
+  // which were ever in question. An org with one torn row had no set library at
+  // all, in the console AND in the create-engagement picker.
+  //
+  // Simulated the way the real failure arrives: not a wrong org (tests/
+  // tenant-crypto.js section 3 owns that story) but a torn write — the stored
+  // envelope's auth tag no longer matches the ciphertext it is paired with,
+  // which is what a partial write or a rotated key leaves behind.
+  say('\n7. one corrupted org row does not take the whole library down');
+  store.clear();
+  await mintOrg(ORG);
+  /*
+    mintOrg() clears the GAME copy's key cache and no other, which was enough
+    for sections 1-5: each of those encrypts and reads inside ONE bundle, so a
+    stale key is at least a CONSISTENT stale key. This section is the first to
+    write with the admin bundle and read with both, and a re-mint leaves the
+    admin copy holding section 1's key while the game copy reads the new one off
+    the fresh METADATA row — two keys over one ciphertext, which fails the tag
+    check and looks EXACTLY like the corruption under test. Forgetting it here
+    keeps the only tampering in this section the tampering that is deliberate.
+  */
+  require(path.join(REPO, 'lambda-functions/admin/shared/tenant-crypto.js')).forgetOrg(ORG);
+
+  // `topic` is required on a fresh, active, non-AI upload since the shelf
+  // redesign (admin/upload-questions.js: mustBeFiled) — this section predates
+  // that requirement and is not testing it, so it files every fixture on the
+  // same shelf rather than leaving it to the refusal this fixture is not
+  // written to expect.
+  const upload = async (who, title) => parse(await uploadQuestions({
+    ...who,
+    body: JSON.stringify({
+      fileName: `${title}.csv`, fileContent: CSV,
+      customTitle: title, customDescription: `${title} — description`,
+      customInstructions: 'Answer in one sentence.',
+      engagementType: 'call-and-answer', topic: 'general-knowledge',
+    }),
+  })).setId;
+
+  const okSet = await upload(HOST, 'Readable Retro');
+  const badSet = await upload(HOST, 'Corrupted Retro');
+  const houseSet = await upload(STAFF, 'Engage House Set');
+
+  const badKey = `${ORG_SETS}|SET#${badSet}`;
+  const badRow = store.get(badKey);
+  // Not a check — a precondition. If the fixture is not an envelope this
+  // section is testing nothing, and a harness error says so louder than a
+  // green assertion would.
+  assert.ok(badRow && isEnvelope(badRow.name),
+    `fixture is wrong: the org set name is ${JSON.stringify(badRow && badRow.name)}`);
+  const tornTag = Buffer.from(badRow.name.tag, 'base64');
+  tornTag[0] ^= 0xff;
+  store.set(badKey, { ...badRow, name: { ...badRow.name, tag: tornTag.toString('base64') } });
+
+  const savedWarn = console.warn;
+  const warned = [];
+  console.warn = (...args) => { warned.push(args.map(String).join(' ')); };
+  let consoleList, pickerList;
+  try {
+    consoleList = await adminListSets(HOST);
+    pickerList = await gameListSets(HOST);
+  } finally {
+    console.warn = savedWarn;
+  }
+  const shelf = parse(consoleList).questionSets || [];
+  const picker = parse(pickerList).sets || [];
+  const onShelf = (id) => shelf.find((s) => s.id === id);
+  const inPicker = (id) => picker.find((s) => s.id === id);
+
+  await check('the console list still succeeds — one bad row is not a 500', () =>
+    assert.strictEqual(consoleList.statusCode, 200, consoleList.body));
+  await check('…the readable org set is still in it, still decrypted', () =>
+    assert.strictEqual((onShelf(okSet) || {}).name, 'Readable Retro',
+      `ids returned: ${shelf.map((s) => s.id).join(', ')}`));
+  await check('…and the unrelated PLATFORM set is still in it too', () =>
+    assert.ok(onShelf(houseSet),
+      'the shared library vanished behind one org\'s bad row'));
+  await check('…the bad row is still LISTED, not silently dropped', () =>
+    assert.ok(onShelf(badSet),
+      `the unreadable set was dropped: ${shelf.map((s) => s.id).join(', ')}`));
+  await check('…but its name is not the raw ciphertext envelope', () =>
+    assert.ok(!isEnvelope((onShelf(badSet) || {}).name),
+      `the envelope leaked into "name": ${JSON.stringify((onShelf(badSet) || {}).name)}`));
+  await check('…and it says it could not be read, rather than inventing a name', () => {
+    const row = onShelf(badSet) || {};
+    assert.strictEqual(row.decryptFailed, true, `row was ${JSON.stringify(row)}`);
+    assert.strictEqual(row.name, null, `expected no fabricated name, got ${JSON.stringify(row.name)}`);
+    assert.strictEqual(row.description, null,
+      `expected no fabricated description, got ${JSON.stringify(row.description)}`);
+  });
+  await check('…and the failure was logged server-side, naming the row and the org', () =>
+    assert.ok(warned.some((w) => w.includes(badSet) && w.includes(ORG)),
+      `nothing diagnosable was logged: ${JSON.stringify(warned)}`));
+
+  // THE PICKER IS THE SECOND VICTIM, and it fails differently. game/get-
+  // question-sets.js projects `name: item.name || 'Unknown Set'`, so a nulled
+  // field there does not come back empty — it comes back as a plausible,
+  // wrong, and unfalsifiable label that a host cannot tell from a set somebody
+  // genuinely left untitled. The degraded row has to stay distinguishable on
+  // this surface too.
+  await check('the create-engagement picker survives it as well', () =>
+    assert.strictEqual(pickerList.statusCode, 200, pickerList.body));
+  await check('…with the readable org set and the platform set both still offered', () => {
+    assert.strictEqual((inPicker(okSet) || {}).name, 'Readable Retro',
+      `ids offered: ${picker.map((s) => s.id).join(', ')}`);
+    assert.ok(inPicker(houseSet), 'the shared library vanished from the picker');
+  });
+  await check('…and the unreadable set is flagged, not passed off as "Unknown Set"', () => {
+    const row = inPicker(badSet);
+    assert.ok(row, `the unreadable set was dropped from the picker: ${picker.map((s) => s.id).join(', ')}`);
+    assert.strictEqual(row.decryptFailed, true, `row was ${JSON.stringify(row)}`);
+    assert.notStrictEqual(row.name, 'Unknown Set',
+      'a set that cannot be READ was labelled as one nobody NAMED');
+    assert.strictEqual(row.name, null, `expected no fabricated name, got ${JSON.stringify(row.name)}`);
   });
 
   say(`\n${pass} passed, ${fail} failed`);

@@ -14,15 +14,18 @@ const assert = require('assert');
 const path = require('path');
 
 const REPO = path.join(__dirname, '..');
-const { setMetadataKey, setPartition } = require(path.join(REPO, 'lambda-functions/admin/shared/set-version.js'));
+const { setMetadataKey, setPartition, FIRST_VERSION } = require(path.join(REPO, 'lambda-functions/admin/shared/set-version.js'));
 const upload = require(path.join(REPO, 'lambda-functions/admin/upload-questions.js')).handler;
 
 const { check, finish } = h.checker();
 const CSV = 'Category,Title,Detail\nWarmups,First,One\nWarmups,Second,Two';
 const ref = { scope: 'platform', setId: 'warmups' };
-const create = (extra) => upload(h.adminEvent({ fileName: 'warm.csv', fileContent: CSV, customTitle: 'Warm Ups', ...extra }));
+// `topic` because a live set is created with a shelf now (shared/set-topics.js);
+// `extra` still overrides it, so a caller may drop or change it.
+const create = (extra) => upload(h.adminEvent({ fileName: 'warm.csv', fileContent: CSV, customTitle: 'Warm Ups', topic: 'everyday-life', ...extra }));
 const meta = () => h.get(setMetadataKey(ref).PK, setMetadataKey(ref).SK);
-const questions = () => h.rows(setPartition(ref, null)).filter((row) => row.SK.startsWith('QUESTION#'));
+// FIRST_VERSION: the import creates the set, and a new set is born at v1.
+const questions = () => h.rows(setPartition(ref, FIRST_VERSION)).filter((row) => row.SK.startsWith('QUESTION#'));
 
 (async () => {
   console.log('1. startInactive');

@@ -20,6 +20,7 @@
 
 import { normalizeGameType } from '../config/gameTypes';
 import { normalizeRoundKind, ROUND_KINDS } from '../config/roundKinds';
+import { normalizeSetTopic, normalizeSetTags, setTopicLabel } from '../config/setTopics';
 
 /**
  * Question-set fields the editor can change, and how to describe a change to
@@ -41,8 +42,44 @@ export const EDITABLE_SET_FIELDS = {
   roundKindBrief: 'custom direction'
 };
 
+/**
+ * THE SHELF AND THE SET'S OWN TAGS — deliberately NOT in the map above.
+ *
+ * That map is the "an empty string clears it" family. Neither of these belongs
+ * to it:
+ *
+ *   topic  CANNOT be cleared. `edit-question-set.js` answers 400 for a blank
+ *          one, because a filed set quietly becoming unfiled again is the one
+ *          way the requirement could be undone. So the diff below OMITS a blank
+ *          shelf rather than sending it — a rename must never come back refused
+ *          with a message about a field the person did not touch.
+ *   tags   is a LIST, and `!==` cannot compare two equal arrays: they are never
+ *          the same object, so every open-and-save would re-send them.
+ *
+ * They are still editable, still diffed and still described — just by name,
+ * three lines further down, instead of by a loop whose contract they break.
+ */
+export const SET_FILING_FIELDS = { topic: 'topic', tags: 'tags' };
+
+/** Two canonical tag lists, compared as the values they are. Order counts: it is stored. */
+const sameTags = (a, b) => {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  return left.length === right.length && left.every((tag, i) => tag === right[i]);
+};
+
 export function describeSetChange(field, value) {
-  const label = EDITABLE_SET_FIELDS[field] || field;
+  const label = EDITABLE_SET_FIELDS[field] || SET_FILING_FIELDS[field] || field;
+  // BEFORE the falsy branch, because `[]` is truthy in JavaScript: an emptied
+  // list would otherwise fall to the generic line and report `tags set to ""`,
+  // which reads as a tag whose name is the empty string.
+  if (field === 'tags') {
+    const tags = Array.isArray(value) ? value : [];
+    return tags.length ? `tags set to ${tags.join(', ')}` : 'tags cleared';
+  }
+  // The stored value is a shelf id; the screen showed a label. Same rule as
+  // roundKind — a confirmation must name what was on the screen.
+  if (field === 'topic' && normalizeSetTopic(value)) return `topic set to ${setTopicLabel(value)}`;
   if (!value) {
     if (field === 'promptId') return 'AI summary prompt reset to the game-type default';
     if (field === 'personaId') return "Workie's voice reset to adapting to the session";
@@ -86,7 +123,16 @@ export function editableSnapshot(questionSet = {}) {
     // An unrecognised stored value normalises to '' for the same reason a
     // reader treats it as produce: the form must not offer to re-save junk.
     roundKind: normalizeRoundKind(questionSet.roundKind) || '',
-    roundKindBrief: trimmed(questionSet.roundKindBrief)
+    roundKindBrief: trimmed(questionSet.roundKindBrief),
+    // THE SHELF, kept RAW for exactly the reason roundKind is: resolving an
+    // absent one to the catch-all here would file all forty legacy sets on
+    // General Knowledge, one accidental Save at a time. '' is Unfiled, which is
+    // what those rows really carry. An unrecognised value folds to '' too — the
+    // form must not offer to re-save something the writer would 400 over.
+    topic: normalizeSetTopic(questionSet.topic) || '',
+    // Canonicalised here so an untouched set reports no changes: the row may
+    // hold 'Pop' from an older write and the input produces 'pop'.
+    tags: normalizeSetTags(questionSet.tags)
   };
 }
 
@@ -100,6 +146,16 @@ export function buildEditPayload(name, current, original = {}) {
   const changed = {};
   for (const field of Object.keys(EDITABLE_SET_FIELDS)) {
     if (current[field] !== (original[field] ?? '')) changed[field] = current[field];
+  }
+  // The shelf: sent only when it changed to a REAL one. A blank is omitted, not
+  // cleared — see SET_FILING_FIELDS. The form refuses to save unfiled; this is
+  // the second line of the same rule, so no other caller can reach the 400.
+  const topic = normalizeSetTopic(current.topic);
+  if (topic && topic !== (original.topic || '')) changed.topic = topic;
+  // The tags: `[]` IS a value here and clears them, because a tag is the
+  // author's own word and has to be removable.
+  if ('tags' in current && !sameTags(current.tags, original.tags)) {
+    changed.tags = Array.isArray(current.tags) ? current.tags : [];
   }
   return { name: trimmed(name), ...changed };
 }
@@ -275,12 +331,50 @@ export function normalizeVersions(payload, activeVersion) {
         checkedAt: v.checkedAt || null,
         reasons: Array.isArray(v.reasons) ? v.reasons : [],
         reviewNote: v.reviewNote || '',
+        /*
+          WHAT THE CHECK MEASURED, and the one field here that is deliberately
+          not defaulted. `reviewTally` is null when the check ran before
+          measuring existed and ABSENT when this reader may not see it
+          (get-set-versions.js gates the whole review row to the library it is
+          in) — and both mean "there is no measurement to draw", which is what
+          `null` says. An empty object in its place would draw a block reading
+          "measured, and nothing found", on a set that was never measured.
+        */
+        reviewTally: v.reviewTally && typeof v.reviewTally === 'object' ? v.reviewTally : null,
+        reviewObserved: Array.isArray(v.reviewObserved) ? v.reviewObserved : [],
+        /*
+          AND THE SHELF THE CHECK WOULD HAVE FILED IT ON — `{topic, tags,
+          filedAs, mismatch}` or null. Null rather than `{}` for the same reason
+          reviewTally is: an empty map would draw a proposal of nothing, on a
+          version nothing proposed for. It is ABSENT for a reader who may not
+          see the review row at all (get-set-versions.js gates it), which lands
+          here as null too — both mean "there is no proposal to offer".
+        */
+        reviewTopicSuggestion: v.reviewTopicSuggestion && typeof v.reviewTopicSuggestion === 'object'
+          ? v.reviewTopicSuggestion
+          : null,
         unfinished: v.unfinished === true,
         published: v.published && typeof v.published === 'object' ? v.published : null
       };
     })
     .filter((v) => Number.isFinite(v.version))
     .sort((a, b) => b.version - a.version);
+}
+
+/**
+ * THE ONE PROPOSAL WORTH OFFERING — the newest version that has one, or null.
+ *
+ * A check writes its proposal on the version it checked, and a later check read
+ * later questions, so the newest is the one that describes the set as it is
+ * now. Versions arrive newest-first from `normalizeVersions`, and a version
+ * with no proposal is SKIPPED rather than treated as the answer: a check can
+ * leave the proposal out entirely — no budget, or the model would not answer —
+ * while still writing its review, and one of those on top must not hide a live
+ * proposal underneath it.
+ */
+export function latestTopicSuggestion(versions = []) {
+  const found = versions.find((v) => v && v.reviewTopicSuggestion);
+  return found ? found.reviewTopicSuggestion : null;
 }
 
 /** The highest version number seen, so the preview can name the version it will write. */
@@ -381,4 +475,26 @@ export function selectableSummaryPrompts(prompts = [], engagementType) {
     const gt = normalizeGameType(p.gameType);
     return gt === wanted || p.gameType === 'all';
   });
+}
+
+/* ------------------------------------------------ a new set, from the copy --- */
+
+/**
+ * THE QUESTIONS A NEW SET IS MADE FROM — or null when there are none, which is
+ * a refusal and never a set of no questions.
+ *
+ * The Questions tab makes a set two ways from its working copy
+ * (QuestionsPanel.jsx `handleSaveAsNewSet`): a FORK takes the whole copy
+ * (`dialog.rows` is null), a SUBSET takes the questions ticked in the table
+ * (`dialog.rows`). It read them as `(dialog.rows || rows)`, and an empty choice
+ * is an empty array, which is truthy — so a subset of nothing was posted as a
+ * set of 0 questions. A subset never falls back to the whole copy either: that
+ * would make a set of every question when none was chosen.
+ *
+ * A question marked for removal is not in the copy, so it is never carried.
+ */
+export function rowsForNewSet(dialog, rows = []) {
+  const source = dialog && dialog.mode === 'subset' ? (dialog.rows || []) : rows;
+  const chosen = source.filter((row) => row && !row.removed);
+  return chosen.length ? chosen : null;
 }

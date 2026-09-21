@@ -1,0 +1,105 @@
+/* ============================================================ the report ==
+   The one paper surface. `data-theme="light"` and paper markup convert in the
+   same change — dusk copy on this sheet would measure 1.2:1. Rule groups
+   copied verbatim from docs/design/marketing-redesign/mk.css: the whole
+   `.mk-report*` block plus `.mk-pin`. Neither is declared anywhere else
+   (MarketingShell.css/RidgeScene.css/DeviceFrame.css/ClipFrame.css/
+   ClipStill.css do not touch `.mk-report*` or `.mk-pin`).
+   ========================================================================== */
+.mk-report {
+  position: relative;
+  background: var(--mk-paper);
+  color: var(--mk-paper-text);
+  border-radius: 14px;
+  /* The two sheets under the sheet, drawn as offset shadows with negative
+     spread so only their bottom edge shows. */
+  box-shadow:
+    0 7px 0 -2px var(--mk-paper-edge),
+    0 13px 0 -5px var(--mk-paper-edge-deep),
+    0 38px 80px rgba(3, 7, 15, 0.7),
+    0 8px 20px rgba(3, 7, 15, 0.45);
+  font-size: var(--mk-t-body);
+}
+.mk-report > :first-child { border-radius: 14px 14px 0 0; }
+.mk-report > :last-child { border-radius: 0 0 14px 14px; }
+.mk-report * { border-color: var(--mk-paper-rule); }
+.mk-report-head { padding: 26px 30px 22px; border-bottom: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface); }
+.mk-report-kicker {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mk-amber-ink);
+}
+/* Fix round 1: was `.mk-report-head h3` (tag selector) — SampleReport's
+   title-level heading is now an h2 or h3 depending on `headingLevel`, so the
+   rule targets the class the element always carries instead, and both
+   levels look identical. */
+.mk-report-title { font-size: var(--mk-t-head); margin-top: 8px; color: var(--mk-paper-text); font-family: var(--mk-font-display); }
+.mk-report-meta { margin-top: 10px; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+.mk-report-body { padding: 26px 30px 30px; display: grid; gap: 26px; }
+/* Fix round 1: was `.mk-report-block h4` (tag selector) — same reasoning. */
+.mk-report-block-h {
+  margin: 0; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-paper-muted);
+}
+.mk-report-block > * + * { margin-top: 12px; }
+.mk-report-q { font-weight: 700; color: var(--mk-paper-text); }
+.mk-report-answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.mk-report-answers li {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: baseline;
+  padding-bottom: 10px; border-bottom: 1px solid rgba(27, 41, 66, 0.12);
+}
+.mk-report-answers li:last-child { border-bottom: 0; padding-bottom: 0; }
+.mk-report-answers .mk-report-votes {
+  color: var(--mk-amber-ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mk-report-answers .mk-report-by { grid-column: 1 / -1; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+/* Amber never carries text on paper — --mk-amber is 1.84:1 on --mk-paper. It draws
+   the bar; --mk-amber-ink says the number. */
+.mk-report-meter { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: rgba(27, 41, 66, 0.10); overflow: hidden; }
+.mk-report-meter i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-report-summary {
+  background: var(--mk-paper-surface); border: 1px solid var(--mk-paper-rule);
+  border-left: 3px solid var(--mk-amber); border-radius: 0 10px 10px 0; padding: 18px 20px;
+}
+.mk-report-summary p { color: var(--mk-paper-text); }
+.mk-report-list { margin: 10px 0 0; padding-left: 20px; color: var(--mk-paper-text); }
+.mk-report-list li + li { margin-top: 6px; }
+.mk-report-standings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.mk-report-standings th {
+  text-align: left; font-size: var(--mk-t-label); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-paper-muted); padding: 0 10px 7px; border-bottom: 1px solid rgba(27, 41, 66, 0.18); font-weight: 800;
+}
+.mk-report-standings td { padding: 8px 10px; border-bottom: 1px solid rgba(27, 41, 66, 0.1); color: var(--mk-paper-text); }
+.mk-report-standings tr:last-child td { border-bottom: 0; }
+.mk-report-foot {
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+  padding: 18px 30px 22px; border-top: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface);
+}
+/* A picture of a button, not a control: fix round 2 made this element an
+   inert <span aria-hidden="true">, never an <a> or <button>, so no rule here
+   may assume the pointer affordances a real link would get for free. */
+.mk-report-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px;
+  border-radius: 8px; border: 1.5px solid rgba(27, 41, 66, 0.3); color: var(--mk-paper-text);
+  font: 700 var(--mk-t-label)/1 var(--mk-font-ui); text-decoration: none; background: transparent;
+  cursor: default;
+}
+.mk-report-note { margin-left: auto; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+/* Dusk link colours must not reach the paper subtree: --mk-blue is 2.46:1 on it. */
+.mk-root .mk-report p a, .mk-root .mk-report li a { color: var(--mk-amber-ink); }
+
+/* On the home page the sheet is narrower than the shell and centred, so the
+   dusk page shows all the way round it: paper laid on a dark desk, not a
+   light band across the page. */
+.mk-summit .mk-report { max-width: 920px; margin-inline: auto; margin-top: 40px; }
+
+/* The marker pinned into the paper sheet. Amber field, ink-dark numeral. */
+.mk-pin {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--mk-amber); color: var(--mk-bg); font: 800 var(--mk-t-floor)/1 var(--mk-font-display);
+  vertical-align: 2px; margin-right: 8px;
+}
+
+@media (max-width: 720px) {
+  .mk-report-head, .mk-report-body, .mk-report-foot { padding-inline: 18px; }
+  .mk-report-note { margin-left: 0; }
+}

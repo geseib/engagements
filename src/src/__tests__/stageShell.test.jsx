@@ -684,10 +684,20 @@ describe('what the host page must now render', () => {
     // per-round switch beside the session setting — two controls for one
     // decision, which is what this change removed. Also rejects re-adding one
     // with a data-drop number, where the fitter could strand the room's names.
+    //
+    // TWO FILES, ONE STAGE, as in the drop-ladder scan below. The retired
+    // controls sat on ASK, VOTE and RESULTS, and ASK's lines and trivia
+    // RESULTS' options are components/QuestionCard.jsx now. A negative scan
+    // cannot fail once its subject has moved out from under it: reading
+    // GameHostPage alone lets a control back onto the wall through the card —
+    // gated on a handler the card's DOM oracles never pass — with nothing red.
     const markup = source.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(markup).not.toMatch(/stage-authors-toggle/);
-    expect(markup).not.toMatch(/reveal-authors-btn/);
-    expect(markup).not.toMatch(/className="early-reveal"/);
+    const card = readFileSync(join(__dirname, '..', 'components', 'QuestionCard.jsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const stage = `${markup}\n${card}`;
+    expect(stage).not.toMatch(/stage-authors-toggle/);
+    expect(stage).not.toMatch(/reveal-authors-btn/);
+    expect(stage).not.toMatch(/className="early-reveal"/);
     // ...and the setting that replaced them is genuinely wired to the panel,
     // or this test passes on a feature that was simply deleted.
     expect(markup).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
@@ -771,7 +781,13 @@ describe('what the host page must now render', () => {
     // above the markup — including the numbers it used to have — and a scan
     // that counted those would report the file's own explanation of the bug as
     // the bug.
-    const markup = source.replace(/\/\*[\s\S]*?\*\//g, '');
+    //
+    // TWO FILES, ONE STAGE. ASK's two content lines ("Full prompt" and "How to
+    // answer") are rendered by components/QuestionCard.jsx, the card the set
+    // editor's preview shares. Scanning GameHostPage alone would drop ASK out
+    // of "every state" — and fail the floor below — so the scan reads both.
+    const card = readFileSync(join(__dirname, '..', 'components', 'QuestionCard.jsx'), 'utf8');
+    const markup = `${source}\n${card}`.replace(/\/\*[\s\S]*?\*\//g, '');
     // Each match runs from `data-drop="N"` to the end of that JSX tag, so the
     // note is found only when it is on the SAME element.
     const groups = [];

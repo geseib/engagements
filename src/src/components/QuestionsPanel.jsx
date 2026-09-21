@@ -5,12 +5,17 @@ import StatusMessage from './StatusMessage';
 import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
+import QuestionPreview, { QuestionViewSwitch } from './QuestionPreview';
+import SetTopicField from './SetTopicField';
+import { nothingToPreview } from '../config/questionPreview';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import { ROUND_KIND_IDS, ROUND_KINDS, roundKindApplies } from '../config/roundKinds';
-import { summarizeCsv, describeReplacePlan } from '../utils/questionSetEditing';
+import { resolveSetTopic, normalizeSetTags, setTopicRefusal } from '../config/setTopics';
+import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/questionSetEditing';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
+import { checkIsDue } from '../utils/houseCheck';
 import {
   editableRows,
   blankRow,
@@ -146,10 +151,21 @@ export default function QuestionsPanel({
    * question is a NEW object — a repeated identical id would otherwise bail
    * out of the `focusRequest` state update and never re-run the effect below,
    * so a second click silently did nothing (no re-scroll, no re-highlight
-   * after the first highlight had already faded). The row scrolls into view
-   * and is briefly marked `.focused`.
+   * after the first highlight had already faded). In Table the row scrolls
+   * into view and is briefly marked `.focused`; in Preview the preview selects
+   * the question instead, and a removed one takes the tab back to the Table
+   * (the focus effects below).
    */
   focusRequest = null,
+  /**
+   * The set's own instruction as the editor's Details panel holds it right
+   * now, saved or not (QuestionSetEditor's Custom Instructions). The preview's
+   * how-to-answer line reads it: the owner's decision is that the preview shows
+   * unsaved edits, and a Details edit is one. '' is a real value — a cleared
+   * field, which leaves the format's default line. Absent, on a mount with no
+   * Details panel beside it, the saved instruction stands in.
+   */
+  detailsInstruction,
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -187,6 +203,12 @@ export default function QuestionsPanel({
   // The draft as it was when the modal opened, so closing can tell "you have
   // typed something" from "you opened this and changed your mind".
   const [draftSeed, setDraftSeed] = useState(null);
+  // HOW THE DIALOG WAS OPENED: 'add' (Add a question) or 'edit' (a row's
+  // Edit, in the table or the preview). Recorded, never inferred from whether
+  // the draft's uid is in `rows`: a Save's read-back gives every row a new uid,
+  // so an edit open across it would read as an add — and did, until Done
+  // appended the saved question a second time. See `commitEdit`.
+  const [draftKind, setDraftKind] = useState(null);
   const [confirmDropDraft, setConfirmDropDraft] = useState(false);
   // Validation belongs INSIDE the modal — the panel's status bar is behind it.
   const [formError, setFormError] = useState('');
@@ -201,9 +223,39 @@ export default function QuestionsPanel({
   const [selected, setSelected] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showPull, setShowPull] = useState(false);
-  // { mode: 'fork' | 'subset', title, rows }
+  // { mode: 'fork' | 'subset', title, rows, topic, tags }
   const [newSetDialog, setNewSetDialog] = useState(null);
+  /* Same reason as `formError` above, and the same mistake this dialog made:
+     `status` renders OUTSIDE the modal, and `.modal-overlay` is a fixed
+     full-viewport scrim at z-index 9999 over a body whose scroll `Modal` has
+     locked. A refusal written there while this dialog is open is one nobody
+     can see, so Create reads as a dead button. This is the dialog's own line. */
+  const [newSetError, setNewSetError] = useState('');
+
+  /*
+    A FORK AND A SUBSET ARE CREATES, so the importer requires a shelf for both —
+    and the shelf it should start on is the one the set being copied sits on. A
+    fork of an 80s trivia set is still Music, and asking again would be asking a
+    question the screen already knows the answer to. An UNFILED source seeds
+    nothing: inheriting '' is the honest starting point, and the dialog says so.
+  */
+  const openNewSetDialog = (dialog) => {
+    // Every open goes through here, so this is the one place a refusal from a
+    // previous attempt has to be dropped.
+    setNewSetError('');
+    setNewSetDialog({
+      topic: resolveSetTopic(questionSet?.topic),
+      tags: normalizeSetTags(questionSet?.tags),
+      ...dialog,
+    });
+  };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  /* ---------------------------------------------------------------- view -- */
+  // TABLE OR PREVIEW — how the working copy is shown, never what it holds.
+  // Named `viewMode`, not anything with "preview" in it: `preview` below is the
+  // replace-from-a-CSV diff, a different thing that happens to share the word.
+  const [viewMode, setViewMode] = useState('table');
 
   /* ------------------------------------------------------------- replace -- */
   const [replaceFile, setReplaceFile] = useState(null);
@@ -216,6 +268,36 @@ export default function QuestionsPanel({
   const problems = useMemo(
     () => workingCopyProblems(rows, engagementType), [rows, engagementType]
   );
+
+  // Why Preview cannot be pressed right now, or '' when it can. The switch
+  // prints it as the disabled button's title — a control that says why.
+  // Worked out here, above the focus effects that read `previewing`: a hook's
+  // dependency array naming a const declared further down throws on the first
+  // render (the outage .eslintrc.js records).
+  //
+  // A READ-BACK IS NOT A FIRST LOAD. A Save (or a replace from a CSV) reads the
+  // set back while the rows just written are still on screen, and the preview
+  // stays up over them: blocking it there unmounted it, and it came back at the
+  // first question in ASK. It finds its question again in the rows that come
+  // back (QuestionPreview.jsx, `place`). Only a load with nothing to show yet —
+  // a set just opened — blocks it.
+  // With nothing to show, the reason is the preview's own empty line: a set
+  // with no questions and a set whose every question is marked for removal are
+  // different situations with different ways back (config/questionPreview.js).
+  const previewBlocked = loadState === 'loading' && rows.length === 0 ? 'The questions are still loading.'
+    : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
+      : nothingToPreview(rows);
+  const previewing = viewMode === 'preview' && !previewBlocked;
+
+  // WHY THE PREVIEW'S EDIT IS HELD, or '' when it is not. The preview stays up
+  // while a Save — or a replace from a CSV — is written and while the set is
+  // read back after it, and the read-back gives every row a new uid. So a
+  // dialog opened in that time is an edit of a row about to stop existing, and
+  // finished after the read-back it has no row to land on (`commitEdit`
+  // refuses it; it used to append it, the saved question twice). Held until
+  // the set on screen is the saved one: disabled, saying why, never live and
+  // never missing from the bar.
+  const editBlocked = loadState === 'ready' && !saving && !isReplacing ? '' : 'Wait for the save to finish.';
 
   /* ----------------------------------------------------------- loading --- */
 
@@ -238,6 +320,16 @@ export default function QuestionsPanel({
       setRows(loaded);
       setBaseline(loaded);
       setBaselineOrder(loaded.map((r) => r.uid));
+      // THE SELECTION STARTS OVER. Every row read comes back under a new uid,
+      // so after a Save's read-back the uids a selection held name nothing on
+      // screen: "Save 1 selected as a new set…" with no box ticked, offering a
+      // set of 0 questions. Cleared, as Discard and opening another set clear
+      // it — the other two places the working copy is replaced wholesale. Not
+      // carried across by the key the importer gives each row (`savedKeys`,
+      // as the preview's place is): that has no honest fallback for a question
+      // it cannot find again, and a selection quietly shortened, or moved onto
+      // another question, is worse than unticked boxes one click from redone.
+      setSelected([]);
       setLoadState('ready');
       setLoadError('');
     } catch (error) {
@@ -250,6 +342,7 @@ export default function QuestionsPanel({
   const closeForm = useCallback(() => {
     setDraft(null);
     setDraftSeed(null);
+    setDraftKind(null);
     setConfirmDropDraft(false);
     setFormError('');
     setAiOpen(false);
@@ -264,6 +357,7 @@ export default function QuestionsPanel({
     closeForm();
     setStatus({ text: '', tone: '' });
     setCategoryFilter('');
+    setViewMode('table');
     load();
   }, [setId, load, closeForm]);
 
@@ -289,16 +383,68 @@ export default function QuestionsPanel({
   // the same question — a NEW object with the same id, per `seq` — still
   // re-runs it: re-scrolls and restarts the 2-second highlight, rather than
   // bailing out the way an identical-id `setState` would.
+  //
+  // IN PREVIEW THE TABLE IS NOT ON SCREEN, and its rows are the only thing that
+  // carries `data-question-id` — so there the request is resolved to its row of
+  // the working copy and handed to the preview as `previewRequest`, and the
+  // preview selects it (QuestionPreview.jsx). Until this, the banner's button
+  // did nothing at all in Preview. A question the working copy has REMOVED is
+  // not in the preview (a tombstone will not exist once the set is saved), so
+  // for that one the tab goes back to the Table, where the struck-through row
+  // and its Restore are, and the row is scrolled to once the table renders.
+  //
+  // The rows and the view are read through `focusContext`, as of the latest
+  // render, rather than listed as dependencies: the request is the event, and
+  // re-running it whenever a row changed would re-scroll and re-highlight on
+  // every edit made after it.
   const [focusedId, setFocusedId] = useState(null);
+  const [previewRequest, setPreviewRequest] = useState(null);
+  const pendingRowFocus = useRef(null);
+  const focusContext = useRef(null);
+  focusContext.current = { rows, previewing };
   useEffect(() => {
     if (!focusRequest || !focusRequest.id) return undefined;
     const wanted = String(focusRequest.id).replace('QUESTION#', '');
+    const { rows: current, previewing: inPreview } = focusContext.current;
+    if (inPreview) {
+      const row = current.find((r) => String(r.sk || '').replace('QUESTION#', '') === wanted);
+      if (row && row.removed) {
+        setViewMode('table');
+      } else {
+        // Whatever an earlier request marked in the table is over: this one
+        // is the preview's. One that is not in the working copy at all
+        // (deleted and saved since the flagged version was checked, say) has
+        // no table row either, so switching views would only lose the
+        // preview's place.
+        setFocusedId(null);
+        pendingRowFocus.current = null;
+        // A new object on every request, so a second press is a new request.
+        if (row) setPreviewRequest({ uid: row.uid });
+        return undefined;
+      }
+    }
     setFocusedId(wanted);
-    const el = document.querySelector(`[data-question-id="${wanted}"]`);
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+    pendingRowFocus.current = wanted;
     const t = setTimeout(() => setFocusedId(null), 2000);
     return () => clearTimeout(t);
   }, [focusRequest]);
+
+  // The table row's scroll waits for the table: at once when it is already on
+  // screen, or on the render that brings it back from Preview.
+  useEffect(() => {
+    const wanted = pendingRowFocus.current;
+    if (!wanted || previewing) return;
+    pendingRowFocus.current = null;
+    const el = document.querySelector(`[data-question-id="${wanted}"]`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+  }, [focusRequest, previewing]);
+
+  // A request is spent with the preview it was made for. Leaving Preview drops
+  // it, so coming back starts where the preview always starts, not on a
+  // question the banner named minutes ago.
+  useEffect(() => {
+    if (!previewing) setPreviewRequest(null);
+  }, [previewing]);
 
   /* ------------------------------------------------- working-copy edits --- */
 
@@ -308,8 +454,35 @@ export default function QuestionsPanel({
     return seen;
   }, [rows]);
 
-  const visibleRows = categoryFilter
-    ? rows.filter((r) => r.category === categoryFilter)
+  // THE FILTER IS IN FORCE ONLY WHILE ITS SELECT CAN BE ON SCREEN, and only on
+  // a category some row of the table still carries. The select renders only
+  // while there is more than one category, and `categoryFilter` used to outlive
+  // it: filter to Method, move Method's only question to History, and the
+  // table went on filtering to a category that no longer existed — no rows,
+  // "No questions in that category.", Move up/down asking for a filter to be
+  // cleared, and nothing on screen that could clear it. So everything the table
+  // does with the filter reads `activeCategory`, never `categoryFilter`: the
+  // rows it lists, the move buttons, the select's own value, and the category
+  // an added question is seeded with.
+  //
+  // A category carried only by REMOVED questions still counts. The table lists
+  // a tombstone, struck through, with its Restore, until Save, so that category
+  // still has rows to show, and Remove then Restore leaves a filtered table as
+  // it was. (The preview lists no tombstones, so its chips do not count them.)
+  const activeCategory = categories.length > 1 && categories.includes(categoryFilter)
+    ? categoryFilter
+    : '';
+
+  // A filter that stops is DROPPED, not only unread, so it cannot come back on
+  // its own. Move Method's last question out and back again, and the select
+  // would otherwise return already on Method, filtering a table that a moment
+  // earlier listed every question: a filter nobody chose.
+  useEffect(() => {
+    if (categoryFilter && !activeCategory) setCategoryFilter('');
+  }, [categoryFilter, activeCategory]);
+
+  const visibleRows = activeCategory
+    ? rows.filter((r) => r.category === activeCategory)
     : rows;
 
   /**
@@ -338,9 +511,10 @@ export default function QuestionsPanel({
       .slice(0, SIBLING_LIMIT);
   }, [rows, draft, draftCategory]);
 
-  const openForm = (row) => {
+  const openForm = (row, kind) => {
     setDraft(row);
     setDraftSeed(row);
+    setDraftKind(kind);
     setConfirmDropDraft(false);
     setFormError('');
     setAiOpen(false);
@@ -354,14 +528,14 @@ export default function QuestionsPanel({
     // The seed is unchanged: whatever the list is filtered to, else the
     // category of the last row, so adding a run of questions to one category
     // does not mean retyping its name every time.
-    const seedCategory = categoryFilter || rows[rows.length - 1]?.category || '';
-    openForm(blankRow({ category: seedCategory }));
+    const seedCategory = activeCategory || rows[rows.length - 1]?.category || '';
+    openForm(blankRow({ category: seedCategory }), 'add');
   };
 
-  const startEdit = (row) => openForm({ ...row });
+  const startEdit = (row) => openForm({ ...row }, 'edit');
 
-  /** Is this draft in the working copy already, or is it an add in progress? */
-  const isAdding = Boolean(draft) && !rows.some((r) => r.uid === draft.uid);
+  /** Is this an add in progress, or an edit of a row? By how it was opened. */
+  const isAdding = Boolean(draft) && draftKind === 'add';
   // Reference equality is enough and is what we want: `openForm` stores the very
   // object it hands the form, and every edit replaces it.
   const draftTouched = Boolean(draft) && draft !== draftSeed;
@@ -378,18 +552,38 @@ export default function QuestionsPanel({
 
   const commitEdit = () => {
     if (!draft) return;
+    // AN EDIT LANDS ON THE ROW IT WAS OPENED ON, OR NOWHERE — never as an add.
+    //
+    // A Save reads the set back and every row returns under a new uid. The
+    // table stays up while the version is written, so an edit can be opened
+    // on a row the read-back then replaces; Done after it finds no row with
+    // this uid. This used to take that for an add and append the draft — the
+    // saved question, twice. Refused instead, and said so on the status line,
+    // which is in view once the dialog closes. Decided by how the dialog was
+    // opened: a new question's uid is never in `rows`, and it must still go in.
+    if (draftKind === 'edit' && !rows.some((r) => r.uid === draft.uid)) {
+      const opened = String(draftSeed?.title || '').trim();
+      closeForm();
+      setStatus({
+        text: `That edit was not applied: the set was reloaded while ${opened ? `"${opened}"` : 'the question'} `
+          + 'was open, so it was editing a copy that no longer exists. Nothing was added. '
+          + 'Open the question again to make the change.',
+        tone: 'error',
+      });
+      return;
+    }
     const problemsNow = rowProblems(draft, engagementType);
     if (problemsNow.length) {
       // In the modal, not in the panel's status bar underneath it.
       setFormError(`That question ${problemsNow.join(', and ')}.`);
       return;
     }
-    setRows((current) => (current.some((r) => r.uid === draft.uid)
-      ? current.map((r) => (r.uid === draft.uid
-        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
-        : r))
+    setRows((current) => (draftKind === 'add'
       // An add only reaches the working copy here.
-      : [...current, draft]));
+      ? [...current, draft]
+      : current.map((r) => (r.uid === draft.uid
+        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
+        : r))));
     closeForm();
     setStatus({ text: '', tone: '' });
   };
@@ -620,7 +814,7 @@ export default function QuestionsPanel({
     // Not mine to replace: the save forks instead, and the person is told which
     // it will be before they press anything.
     if (!canManage) {
-      setNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
+      openNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
       return;
     }
 
@@ -631,11 +825,23 @@ export default function QuestionsPanel({
       if (response.ok) {
         const version = result.version != null ? `Version ${result.version}` : 'A new version';
         const skipped = Number(result.skippedRowCount || 0);
+        /*
+          NEW QUESTIONS UNDER ONE OF ENGAGE'S SETS WHILE IT IS ON is one of the
+          owner's three triggers for the content check: the same content change
+          an organisation's share would have had checked, on a set every
+          organisation is already playing. THE SAVE ROUTE STARTS IT — this panel
+          used to, and a tab closed between the two calls left a set live and
+          unchecked. What is left here is telling the person: `checkDue`
+          (upload-questions.js) says the save made a check due and dispatched
+          one. See utils/houseCheck.js.
+        */
+        const check = checkIsDue(result);
         setStatus({
           text: `${version} of "${setName}" is now live with ${result.questionCount} questions `
             + `(${describeRowChanges(summary) || 'no changes'}). `
             + (skipped ? `${skipped} row${skipped === 1 ? '' : 's'} could not be read and ${skipped === 1 ? 'was' : 'were'} skipped. ` : '')
-            + 'The previous version is kept and can be promoted back.',
+            + 'The previous version is kept and can be promoted back.'
+            + (check ? ' The content check is running on it — every organisation reads this set.' : ''),
           tone: 'success'
         });
         await load();
@@ -644,7 +850,7 @@ export default function QuestionsPanel({
         // The handler's refusal, surfaced as the offer it implies. Reaching
         // here means the list said this set was manageable and the server
         // disagreed — the server is right, and the work is not lost.
-        setNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
+        openNewSetDialog({ mode: 'fork', title: `${setName} (adapted)`, rows: null });
         setStatus({
           text: 'This set belongs to someone else, so it cannot be replaced. '
             + 'Your changes are still here — save them as your own copy.',
@@ -671,12 +877,34 @@ export default function QuestionsPanel({
   /** Fork, or carve a subset out. One path; only the rows and the title differ. */
   const handleSaveAsNewSet = async () => {
     if (!newSetDialog) return;
-    const title = String(newSetDialog.title || '').trim();
-    if (!title) {
-      setStatus({ text: 'The new set needs a name.', tone: 'error' });
+    // This attempt answers for itself; whatever the last one said is gone.
+    setNewSetError('');
+    // Never a set of no questions (utils/questionSetEditing.js `rowsForNewSet`).
+    // Nothing in this dialog can fix that, so it CLOSES and the panel's own
+    // status line — visible again once the scrim is gone — carries the reason.
+    const chosen = rowsForNewSet(newSetDialog, rows);
+    if (!chosen) {
+      setNewSetDialog(null);
+      setStatus({ text: 'No set was made: there were no questions to make it from.', tone: 'error' });
       return;
     }
-    const chosen = (newSetDialog.rows || rows).filter((r) => !r.removed);
+    /* THE REST ARE ANSWERED ON THE CARD. Each one is about a field this dialog
+       is still showing, so it stays open and says so where the person is
+       looking — see `newSetError`. */
+    const title = String(newSetDialog.title || '').trim();
+    if (!title) {
+      setNewSetError('The new set needs a name.');
+      return;
+    }
+    /* A CREATE THAT LANDS LIVE NAMES ITS SHELF. `upload-questions.js` answers
+       400 without one; refused here instead so the dialog stays open with the
+       name still in it and the picker one gesture away, rather than the person
+       reading the importer's refusal about a field they were never shown. */
+    const topicRefusal = setTopicRefusal(newSetDialog.topic);
+    if (topicRefusal) {
+      setNewSetError(topicRefusal);
+      return;
+    }
     // Provenance, write-once: a row copied in from a third set keeps ITS
     // origin, because that is the truer answer to "where did this come from".
     const stamped = chosen.map((r) => ({
@@ -693,6 +921,11 @@ export default function QuestionsPanel({
         {
           customTitle: title,
           customDescription: `Adapted from "${setName}".`,
+          // The shelf and the author's own words. Only on THIS target: a
+          // replace rewrites no set prose, so the importer stores neither, and
+          // sending them would be values that go nowhere.
+          topic: newSetDialog.topic,
+          ...(newSetDialog.tags && newSetDialog.tags.length ? { tags: newSetDialog.tags } : {}),
         },
         summarizeRowChanges(stamped, [])
       );
@@ -708,14 +941,16 @@ export default function QuestionsPanel({
         });
         if (onChanged) onChanged();
       } else {
-        setStatus({
-          text: `Could not create "${title}": ${result.error || `HTTP ${response.status}`}. Your changes are still here.`,
-          tone: 'error'
-        });
+        // The dialog is still open, so this belongs on it: the importer refuses
+        // a create for reasons beyond the shelf, and those must not be the one
+        // class of answer that lands behind the scrim.
+        setNewSetError(
+          `Could not create "${title}": ${result.error || `HTTP ${response.status}`}. Your changes are still here.`,
+        );
       }
     } catch (error) {
       console.error('Create set from working copy error:', error);
-      setStatus({ text: `Could not create "${title}": ${error.message}`, tone: 'error' });
+      setNewSetError(`Could not create "${title}": ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -885,7 +1120,7 @@ export default function QuestionsPanel({
       {dirty && (
         <div className="qs-dirty-bar" data-testid="unsaved-bar" role="status">
           <div className="qs-dirty-text">
-            <Icon name="Warning" weight="fill" size={16} color="#8a5300" />{' '}
+            <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
             <strong>Unsaved: {describeRowChanges(summary)}.</strong>{' '}
             Nothing has been written yet — {summary.questionCount} question
             {summary.questionCount === 1 ? '' : 's'} will be saved
@@ -916,10 +1151,13 @@ export default function QuestionsPanel({
         >
           <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
         </button>
-        {selected.length > 0 && (
+        {/* The selection is the table's checkboxes, and Preview does not show
+            them: a "Save 2 selected" there acts on two questions nothing on
+            screen names. Hidden, not cleared — it returns with the table. */}
+        {selected.length > 0 && !previewing && (
           <button
             className="btn-secondary btn-small"
-            onClick={() => setNewSetDialog({
+            onClick={() => openNewSetDialog({
               mode: 'subset',
               title: `${setName} — selection`,
               rows: rows.filter((r) => selected.includes(r.uid)),
@@ -928,11 +1166,13 @@ export default function QuestionsPanel({
             Save {selected.length} selected as a new set…
           </button>
         )}
-        {categories.length > 1 && (
+        {/* The table's own filter. Preview has chips of its own, and a select
+            that filters a table nobody can see is a control that does nothing. */}
+        {categories.length > 1 && !previewing && (
           <label className="qs-filter">
             Filter by category:{' '}
             <select
-              value={categoryFilter}
+              value={activeCategory}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="form-select"
             >
@@ -941,22 +1181,46 @@ export default function QuestionsPanel({
             </select>
           </label>
         )}
+        <QuestionViewSwitch
+          mode={previewing ? 'preview' : 'table'}
+          onChange={setViewMode}
+          previewBlocked={previewBlocked}
+        />
       </div>
 
-      {loadState === 'loading' && <p className="qs-empty">Loading questions…</p>}
+      {/* Not over a preview that is reading its set back: the questions it
+          shows are the ones just saved, and the line would push it down and
+          back up again for nothing. */}
+      {loadState === 'loading' && !previewing && <p className="qs-empty">Loading questions…</p>}
       {loadState === 'error' && (
         <StatusMessage message={`${loadError} Nothing has been changed.`} tone="error" />
       )}
 
-      {loadState === 'ready' && visibleRows.length === 0 && (
-        <p className="qs-empty">
-          {rows.length
-            ? 'No questions in that category.'
-            : 'This set has no questions yet. Add one, or pull some from another set.'}
-        </p>
+      {/* PREVIEW REPLACES THE TABLE, and nothing else on this panel. The dirty
+          bar, Add, Pull, Save and the CSV controls stay where they are: they act
+          on the working copy, which is the thing being previewed. Edit opens the
+          same question dialog the table's Edit does — no second container. */}
+      {previewing && (
+        <QuestionPreview
+          rows={rows}
+          gameType={engagementType}
+          setInstruction={detailsInstruction !== undefined
+            ? detailsInstruction
+            : (questionSet?.customInstruction || '')}
+          setId={setId}
+          onEditQuestion={startEdit}
+          editBlocked={editBlocked}
+          selectRequest={previewRequest}
+        />
       )}
 
-      {loadState === 'ready' && visibleRows.length > 0 && (
+      {/* The table's one empty state. A filter cannot empty the table: it is
+          only ever in force on a category some row carries (`activeCategory`). */}
+      {loadState === 'ready' && !previewing && visibleRows.length === 0 && (
+        <p className="qs-empty">This set has no questions yet. Add one, or pull some from another set.</p>
+      )}
+
+      {loadState === 'ready' && !previewing && visibleRows.length > 0 && (
         <ol className="qs-question-list">
           {visibleRows.map((row) => {
             const rowIndex = rows.indexOf(row);
@@ -1011,18 +1275,18 @@ export default function QuestionsPanel({
                         <button
                           className="btn-secondary btn-small"
                           onClick={() => move(row.uid, -1)}
-                          disabled={rowIndex === 0 || Boolean(categoryFilter)}
+                          disabled={rowIndex === 0 || Boolean(activeCategory)}
                           aria-label={`Move ${row.title || 'question'} up`}
-                          title={categoryFilter ? 'Clear the category filter to reorder' : 'Move up'}
+                          title={activeCategory ? 'Clear the category filter to reorder' : 'Move up'}
                         >
                           <Icon name="ArrowUp" weight="bold" size={14} color="currentColor" />
                         </button>
                         <button
                           className="btn-secondary btn-small"
                           onClick={() => move(row.uid, 1)}
-                          disabled={rowIndex === rows.length - 1 || Boolean(categoryFilter)}
+                          disabled={rowIndex === rows.length - 1 || Boolean(activeCategory)}
                           aria-label={`Move ${row.title || 'question'} down`}
-                          title={categoryFilter ? 'Clear the category filter to reorder' : 'Move down'}
+                          title={activeCategory ? 'Clear the category filter to reorder' : 'Move down'}
                         >
                           <Icon name="ArrowDown" weight="bold" size={14} color="currentColor" />
                         </button>
@@ -1277,6 +1541,22 @@ export default function QuestionsPanel({
                 onChange={(e) => setNewSetDialog({ ...newSetDialog, title: e.target.value })}
               />
             </div>
+
+            {/* Where the new set will sit. Seeded from the set it came from,
+                and changeable — a subset carved out of a mixed set is often
+                about one thing, which is exactly when that matters. */}
+            <SetTopicField
+              idPrefix="new-set"
+              topic={newSetDialog.topic}
+              onTopicChange={(value) => setNewSetDialog({ ...newSetDialog, topic: value })}
+              tags={newSetDialog.tags || []}
+              onTagsChange={(value) => setNewSetDialog({ ...newSetDialog, tags: value })}
+            />
+
+            {/* Beside the button that was pressed, INSIDE the card. The panel's
+                status line is behind this dialog's own scrim. */}
+            {newSetError && <StatusMessage message={newSetError} tone="error" />}
+
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setNewSetDialog(null)} disabled={saving}>
                 Cancel
@@ -1583,7 +1863,7 @@ function QuestionForm({
         // question that needs covering — the thing at risk is on screen.
         <div className="qs-form-discard" role="alert">
           <p>
-            <Icon name="Warning" weight="fill" size={16} color="#8a5300" />{' '}
+            <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
             <strong>Throw this {isAdding ? 'new question' : 'edit'} away?</strong>{' '}
             {isAdding
               ? 'It was never added to the set, so closing leaves nothing behind — including nothing half-typed to block the next Save.'

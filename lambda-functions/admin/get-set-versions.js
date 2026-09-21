@@ -8,6 +8,7 @@ const {
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
 const { readReviews, publishedKey, isUnfinished } = require('./shared/set-review');
+const { measurementOf } = require('./shared/review-card');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -107,6 +108,110 @@ exports.handler = async (event) => {
     */
     const reviews = await readReviews(db, tableName, found.ref, entries.map((e) => e.version));
 
+    /*
+      MAY THIS CALLER READ THE CHECK'S ACCOUNT OF THIS SET?
+
+      THE WHOLE REVIEW ROW, not the measurement alone. This gate once covered
+      `tally` and `observed` and left the four fields beside them — the status,
+      the per-question findings, the reasons and the note — going to every
+      reader of the set. That was harmless only while nothing ever wrote a
+      REVIEW row outside an organisation's own partition, and two writers now
+      do: `checkPlatformSet` writes Engage's own verdict on Engage's own SHARED
+      set, and `publishSnapshot` writes a public copy's row carrying the SOURCE
+      organisation's per-question findings and the Engage reviewer's own
+      sentence. Both of those rows are readable by id from every signed-in
+      account (`readableScopes` gives everybody platform and public), so a
+      half-gate handed one customer another's questions, bands and
+      model-written explanations — and handed every customer Engage's internal
+      finding about the shared library, which the author banner then rendered
+      to them as a statement about their own content.
+
+      So the row goes to the library it is in:
+
+        org        this organisation's members. `findSetForCaller` only ever
+                   probes the CALLER's org partition, so another organisation's
+                   set was already absent rather than forbidden; asking the
+                   scope again is the second lock, and the one that survives a
+                   later change to how a set is found.
+        platform   Engage acting as Engage — the authors of the shared library.
+                   `canManageScope` requires the `admins` group AND no active
+                   organisation, so staff standing inside a customer get exactly
+                   what that customer gets and nothing more.
+        public     nobody. A public copy is somebody's published set; the staff
+                   score card is where its measurement is read.
+
+      WHAT A READER OUTSIDE IT STILL GETS is what they were owed before either
+      of those rows existed, which is why nothing that worked yesterday reads
+      differently today:
+
+        platform   nothing. There was no row to read, so `unreviewed` is not a
+                   new silence — it is the unchanged one.
+        public     the STATUS alone. A copy is in the public library BECAUSE it
+                   passed, so "passed" is already a public fact about it; whose
+                   questions were seen, at what band, and what the reviewer
+                   wrote about them are not.
+
+      The measurement fields are ABSENT rather than empty for such a reader: an
+      absent tally means "not measured", and handing someone who may not see it
+      the same answer would quietly teach them to read "nothing was found".
+    */
+    const mayReadReview = tenant.canManageScope(event, found.ref.scope, found.ref.orgId);
+    const publicCopy = found.ref.scope === tenant.PUBLIC;
+    const reviewFacts = (review) => {
+      if (!mayReadReview) {
+        // No `reviewTally` and no `reviewObserved` — absent, not empty, per the
+        // last paragraph above. Everything else is the default a version with
+        // no row has always produced.
+        return {
+          review: publicCopy ? (review.status || 'unreviewed') : 'unreviewed',
+          reviewFindings: [],
+          checkedAt: null,
+          reasons: [],
+          reviewNote: '',
+          unfinished: false,
+        };
+      }
+      const measured = measurementOf(review);
+      return {
+        review: review.status || 'unreviewed',
+        reviewFindings: review.findings || [],
+        checkedAt: review.checkedAt || null,
+        reasons: review.reasons || [],
+        reviewNote: review.note || '',
+        /*
+          WHAT THE CHECK MEASURED — the same projection the staff score card
+          reads (shared/review-card.js measurementOf), and NOTHING ELSE OFF
+          THAT ROW. The REVIEW item also carries the reviewer, when they ruled,
+          the notices they attached and the snapshot key; all four are staff's,
+          and none of them is named here or anywhere else in this map.
+
+          No question TEXT beside the ids, unlike the card. The card names each
+          observation because staff cannot decrypt an organisation's rows, so it
+          reads the public copy instead; this function has no kms:Decrypt grant
+          (and tests/kms-grants-match-code.js is what would tell you, loudly, if
+          it ever reached tenant-crypto). It does not need one: the surface that
+          renders this is the set editor, which is already holding the plaintext
+          questions these ids name.
+        */
+        reviewTally: measured.tally,
+        reviewObserved: measured.observed,
+        /*
+          AND THE SHELF THE CHECK WOULD HAVE FILED IT ON (shared/
+          topic-suggestion.js), which is the author's in a way none of the
+          fields above are: it exists to be offered to the person choosing a
+          topic, and this list is what that person's editor reads.
+
+          Inside the gate with the rest of the row, because it names the shelf
+          the AUTHOR chose and may say it does not fit the content — a sentence
+          about somebody's judgement of their own set, not a public fact about
+          it. `null` where no check proposed one, the same shape `reviewTally`
+          uses for a version checked before any of this existed.
+        */
+        reviewTopicSuggestion: review.topicSuggestion || null,
+        unfinished: isUnfinished(review),
+      };
+    };
+
     // WHERE EACH VERSION WENT. One GetItem per version: this is the editor's
     // Versions panel, not the list, and a set has a handful of versions.
     const published = new Map();
@@ -131,14 +236,11 @@ exports.handler = async (event) => {
           PROJECTED EXPLICITLY, like every other field here. This map is a
           whitelist: a field not named on it does not reach the client however
           faithfully it is stored, which is why adding the row was only half the
-          work.
+          work. `reviewFacts` above is the same whitelist for everything that
+          comes off the REVIEW row, kept in one place because the answer to
+          "may this reader see it" is one answer for all of them.
         */
-        review: review.status || 'unreviewed',
-        reviewFindings: review.findings || [],
-        checkedAt: review.checkedAt || null,
-        reasons: review.reasons || [],
-        reviewNote: review.note || '',
-        unfinished: isUnfinished(review),
+        ...reviewFacts(review),
         published: published.get(entry.version) || null,
         pinnedByGames: pinnedBySet
           .filter((g) => toVersion(g.QuestionSetVersion) === entry.version)

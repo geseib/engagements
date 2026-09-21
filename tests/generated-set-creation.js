@@ -287,7 +287,9 @@ const setRows = () => [...ddb.values()].filter((row) => row.PK === 'SETS');
 /** Set metadata rows in ONE organisation's library. tenant.js keys it this way. */
 const orgSetRows = (org = 'org_acme') => [...ddb.values()].filter((row) => row.PK === `ORG#${org}#SETS`);
 const questionRows = (setId) => [...ddb.values()]
-  .filter((row) => row.PK === `SET#${setId}` && String(row.SK).startsWith('QUESTION#'))
+  // #v1 — a generated set is created through upload-questions.js like any
+  // other, and a new set is born at v1 (shared/set-version.js FIRST_VERSION).
+  .filter((row) => row.PK === `SET#${setId}#v1` && String(row.SK).startsWith('QUESTION#'))
   .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
 
 const SUBJECTS = [

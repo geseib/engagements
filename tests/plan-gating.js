@@ -350,7 +350,10 @@ const uploadAs = (orgId, body) => upload({
     },
     http: { method: 'POST' },
   },
-  body: JSON.stringify({ fileName: 'x.csv', fileContent: CSV, ...body }),
+  // `topic` because a live set is CREATED with a shelf now
+  // (shared/set-topics.js). A replace passes one too and is simply ignored, so
+  // one helper still serves both and the 402 under test is still what answers.
+  body: JSON.stringify({ fileName: 'x.csv', fileContent: CSV, topic: 'business-work', ...body }),
 });
 
 (async () => {

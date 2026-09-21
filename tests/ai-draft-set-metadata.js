@@ -63,10 +63,13 @@ const authorizer = (groups, extra = {}) => ({
   },
 });
 
-const postEvent = (body, groups = 'admins') => ({
-  requestContext: { http: { method: 'POST' }, authorizer: authorizer(groups) },
+const postEvent = (body, groups = 'admins', extra = {}) => ({
+  requestContext: { http: { method: 'POST' }, authorizer: authorizer(groups, extra) },
   body: JSON.stringify(body),
 });
+
+/** Acting for an organisation: the three fields auth/authorizer.js adds. */
+const actingFor = (orgId, orgRole) => ({ orgId, orgRole, orgIds: orgId });
 
 const getEvent = (jobId, groups = 'admins') => ({
   requestContext: { http: { method: 'GET' }, authorizer: authorizer(groups) },
@@ -85,6 +88,31 @@ const SET_ROW = {
 function seedSet(overrides = {}) {
   const row = { ...SET_ROW, ...overrides };
   state.ddb.set(`SETS|${row.SK}`, row);
+  return row;
+}
+
+/**
+ * AN ORGANISATION'S OWN SET, in the shape upload-questions.js writes one: its
+ * own partition, the scope pair stamped on the row, and its prose as ciphertext
+ * envelopes (shared/tenant-crypto.js). The ownership attributes stay plaintext,
+ * which is what lets the guard judge the row without a key. Same id as SET_ROW
+ * on purpose — set ids are slugs of titles, so collisions are ordinary.
+ */
+const ORG_ID = 'acme';
+const envelope = { v: 1, iv: 'aXZpdml2aXZp', tag: 'dGFndGFndGFn', ct: 'Y2lwaGVydGV4dA==' };
+const ORG_SET_ROW = {
+  PK: 'ORG#acme#SETS', SK: `SET#${SET_ID}`,
+  scope: 'org', orgId: ORG_ID,
+  name: envelope, description: envelope, customInstruction: envelope, aiContextInstruction: envelope,
+  engagementType: 'call-and-answer', questionCount: 4, categoryCount: 2,
+  active: true, isAIGenerated: false, activeVersion: 1,
+  createdBy: 'sub-admin-1', createdByName: 'ada',
+  createdAt: '2026-09-01T12:00:00.000Z', updatedAt: '2026-09-01T12:00:00.000Z',
+};
+
+function seedOrgSet(overrides = {}) {
+  const row = { ...ORG_SET_ROW, ...overrides };
+  state.ddb.set(`ORG#acme#SETS|${row.SK}`, row);
   return row;
 }
 
@@ -217,14 +245,84 @@ const drafts = (item = DRAFT) => () => toolResponse([item]);
     assert.strictEqual(state.dispatched.length, 0);
   });
 
-  await test('an admin may draft for a set somebody else created', async () => {
-    // rejects: reusing the host ownership rule verbatim. `requireSetManager` is
-    // here so that opening this route to hosts stays a one-line edit rather than
-    // a security review — it must never refuse an admin, who may manage every
-    // set by rule. SET_ROW is deliberately owned by someone else.
+  await test('an admin acting as Engage may draft for a platform set somebody else created', async () => {
+    // rejects: applying the creator rule to Engage's own library. Staff manage
+    // the platform library collectively, and most of its rows record no creator
+    // at all, so `createdBy` must not refuse an administrator there. Inside an
+    // organisation the rule is different — section 1c. SET_ROW is deliberately
+    // owned by someone else.
     reset(); seedSet({ createdBy: 'sub-not-ada' });
     const res = await handler(postEvent(BASE), ctx());
     assert.strictEqual(res.statusCode, 202);
+  });
+
+  console.log('\n1c. an organisation\'s own set — found in its own library');
+
+  await test('an org-authored set is found for a caller acting in that organisation', async () => {
+    // rejects: THE BUG. A pre-flight read of `Key: { PK: 'SETS' }`, which since
+    // tenancy is Engage's library and nothing else. An organisation's set lives
+    // at `ORG#<org>#SETS`, so that read answered 404 "was not found" for every
+    // set a customer ever made, and drafting only ever worked on the platform
+    // library.
+    reset(); seedOrgSet();
+    const res = await handler(postEvent(BASE, 'admins', actingFor(ORG_ID, 'member')), ctx());
+    assert.strictEqual(res.statusCode, 202,
+      `the organisation's own set was refused with ${res.statusCode}: ${res.body}`);
+    assert.strictEqual(state.dispatched.length, 1, 'the draft was never started');
+  });
+
+  await test('the organisation\'s own row is the one judged when Engage has a set of the same id', async () => {
+    // rejects: patching the bug by reading 'SETS' first and falling back to the
+    // org partition. The fallback finds Engage's row whenever the slugs collide,
+    // and Engage's library is not changeable from inside an organisation — so
+    // the org's own set would be refused. Most specific library first
+    // (shared/set-version.js:readableSetRefs).
+    reset();
+    seedSet({ createdBy: 'sub-engage-staff' });
+    seedOrgSet();
+    const res = await handler(postEvent(BASE, 'admins', actingFor(ORG_ID, 'member')), ctx());
+    assert.strictEqual(res.statusCode, 202,
+      `Engage's row was judged instead of the organisation's: ${res.statusCode} ${res.body}`);
+  });
+
+  await test('an org set the caller may not manage is refused, not reported missing', async () => {
+    // rejects: finding the org row and then not judging it, or judging it as if
+    // the `admins` group still granted everything. Inside an organisation being
+    // Engage staff grants nothing (shared/question-set-access.js): a plain member
+    // who did not make the set may not change it, so may not spend a draft on it.
+    // And it is a 403 rather than a 404 — "not yours" and "not there" stay apart.
+    reset(); seedOrgSet({ createdBy: 'sub-someone-else' });
+    const res = await handler(postEvent(BASE, 'admins', actingFor(ORG_ID, 'member')), ctx());
+    assert.strictEqual(res.statusCode, 403, `expected a refusal, got ${res.statusCode}: ${res.body}`);
+    assert.match(JSON.parse(res.body).error, /belongs to someone else/);
+    assert.strictEqual(state.dispatched.length, 0, 'a refused caller must not start a worker');
+  });
+
+  await test('another organisation\'s set is absent, even when the request names that organisation', async () => {
+    // rejects: taking the organisation from anywhere but the caller's own
+    // authorizer context — the body, the row, or a sweep across partitions. A
+    // 403 here would leak on its own: it confirms acme has a set by that id.
+    reset(); seedOrgSet();
+    const res = await handler(
+      postEvent({ ...BASE, scope: 'org', orgId: ORG_ID }, 'admins', actingFor('rival', 'owner')), ctx());
+    assert.strictEqual(res.statusCode, 404,
+      `a rival organisation reached acme's set: ${res.statusCode} ${res.body}`);
+    assert.strictEqual(state.dispatched.length, 0);
+  });
+
+  await test('a scope named by the request is the library probed', async () => {
+    // rejects: ignoring `scope`, which every other set route honours
+    // (question-set-access.js:requestedScope). A request naming Engage's library
+    // must have Engage's row judged — the same row edit-question-set.js would
+    // refuse to save into from inside an organisation — not be quietly handed
+    // the organisation's own set of the same id.
+    reset();
+    seedSet({ createdBy: 'sub-engage-staff' });
+    seedOrgSet();
+    const res = await handler(
+      postEvent({ ...BASE, scope: 'platform' }, 'admins', actingFor(ORG_ID, 'member')), ctx());
+    assert.strictEqual(res.statusCode, 403,
+      `the library the request named was ignored: ${res.statusCode} ${res.body}`);
   });
 
   console.log('\n2. the HTTP request does not generate');

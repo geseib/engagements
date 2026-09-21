@@ -26,6 +26,9 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const SET = {
   id: 'lessons-learned',
   name: 'Lessons Learned',
+  // The shelf it sits on. A fork or a subset is a CREATE, which names a
+  // shelf before it is made, and the dialog seeds that from here.
+  topic: 'business-work',
   engagementType: 'call-and-answer',
   totalQuestions: 3,
   categoryCount: 2,
@@ -302,6 +305,122 @@ describe('the working copy', () => {
   });
 });
 
+/*
+ * AN EDIT OPEN ACROSS A SAVE'S READ-BACK. A Save writes the working copy and
+ * then reads the set back, and every row comes back under a new uid. The table
+ * stays up while the version is written, so its Edit can open a dialog on a row
+ * the read-back is about to replace. Done after the read-back used to find no
+ * row with the draft's uid and take the edit for a NEW question — the saved
+ * question, twice. The Questions tab now decides "edit or add" by how the
+ * dialog was opened, and refuses an edit whose row is gone, saying so.
+ */
+describe('an edit open while a Save is written and read back', () => {
+  const [, CHANGE, WRONG] = QUESTIONS.questions;   // the endpoint's order: ARE WE SHIPPING is first
+  const ADDED = { id: 'c002#002', Category: 'Delivery', title: 'SHOULD WE HAVE SHIPPED', QuestionNumber: 2 };
+
+  /** The first read answers at once; the write and the read-back after it wait for the test. */
+  function holdTheSave(readBack) {
+    const held = { write: null, readBack: null };
+    let reads = 0;
+    mockApi({
+      'GET lessons-learned/questions': () => {
+        reads += 1;
+        if (reads === 1) return jsonResponse(200, QUESTIONS);
+        return new Promise((resolve) => {
+          held.readBack = () => resolve(jsonResponse(200, { setId: SET.id, questions: readBack }));
+        });
+      },
+      'POST upload-questions': () => new Promise((resolve) => {
+        held.write = () => resolve(jsonResponse(200, {
+          setId: SET.id, setName: SET.name, version: 3, questionCount: readBack.length,
+        }));
+      }),
+    });
+    return held;
+  }
+  async function letTheSaveLand(held) {
+    held.write();
+    await waitFor(() => expect(held.readBack).not.toBeNull());
+    held.readBack();
+    await waitFor(() => expect(screen.queryByText('Loading questions…')).not.toBeInTheDocument());
+  }
+  const tableRows = () => screen.queryAllByTestId(/^question-\d+$/);
+
+  it('opened while the version is written and finished after the read-back, it is refused and says so — the saved question is not added a second time', async () => {
+    // rejects: commitEdit's add branch taking the edit for a new question.
+    // The dialog was opened on WHAT WENT WRONG while the version was written;
+    // after the read-back its uid named nothing, and Done appended it — two
+    // copies of the question, and an "Unsaved" bar over a set just saved.
+    const held = holdTheSave([WRONG, CHANGE]);
+    renderPanel();
+    await ready();
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    fireEvent.click(within(rowFor('WHAT WENT WRONG')).getByRole('button', { name: /edit/i }));
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'WHAT REALLY WENT WRONG' } });
+
+    await letTheSaveLand(held);
+    // Still an edit: its heading is not re-read from whether its row is there.
+    const dialog = screen.getByRole('dialog', { name: /edit question/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(tableRows()).toHaveLength(2);
+    expect(screen.queryByText('WHAT REALLY WENT WRONG')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument();
+    const said = screen.getByText(/That edit was not applied/);
+    expect(said).toHaveTextContent(/reloaded while "WHAT WENT WRONG" was open.*Nothing was added/);
+    expect(said.closest('.status-message')).toHaveClass('error');
+  });
+
+  it('is refused the same way for a question added earlier in the session: how the dialog was opened decides, not where the question came from', async () => {
+    // rejects: telling an edit from an add by the row's origin. The question
+    // was added before the Save, so the copy the dialog opened is
+    // `origin: 'new'` — and the read-back has it as a saved question under a
+    // new uid. Read as an add, Done would have put it in twice.
+    const held = holdTheSave([...QUESTIONS.questions, ADDED]);
+    renderPanel();
+    await ready();
+    fireEvent.click(screen.getByRole('button', { name: /Add a question/i }));
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'SHOULD WE HAVE SHIPPED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    fireEvent.click(within(rowFor('SHOULD WE HAVE SHIPPED')).getByRole('button', { name: /edit/i }));
+
+    await letTheSaveLand(held);
+    const dialog = screen.getByRole('dialog', { name: /edit question/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+
+    expect(tableRows()).toHaveLength(4);
+    expect(screen.getAllByText('SHOULD WE HAVE SHIPPED')).toHaveLength(1);
+    expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument();
+    expect(screen.getByText(/That edit was not applied/)).toBeInTheDocument();
+  });
+
+  it('still takes a new question: one added after the read-back goes in, as any new question does', async () => {
+    // rejects: refusing every draft whose uid is not in the working copy. A
+    // new question's never is — it only reaches the copy at Done.
+    const held = holdTheSave([WRONG, CHANGE]);
+    renderPanel();
+    await ready();
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    await letTheSaveLand(held);
+    expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Add a question/i }));
+    expect(screen.getByRole('dialog', { name: /new question/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Title *'), { target: { value: 'WHAT WOULD YOU KEEP' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(tableRows()).toHaveLength(3);
+    expect(rowFor('WHAT WOULD YOU KEEP')).toBeInTheDocument();
+    expect(screen.getByTestId('unsaved-bar')).toHaveTextContent('Unsaved: 1 added');
+    expect(screen.queryByText(/That edit was not applied/)).not.toBeInTheDocument();
+  });
+});
+
 describe('pulling questions out of another set', () => {
   it('filters what was already fetched, without asking the server again', async () => {
     // rejects: a request per filter change, and a filter that claims to search
@@ -462,6 +581,41 @@ describe('carving a subset out', () => {
     expect(posts[0].customTitle).toBe('Openers');
     expect(titlesIn(posts[0])).toEqual(['WHAT WENT WRONG', 'ARE WE SHIPPING']);
     expect(posts[0].sourceSetId).toBe('lessons-learned');
+  });
+
+  it('starts over after a Save: the questions come back under new identities, so the selection is cleared, never counted', async () => {
+    // The reviewer's repro: tick one, remove another, Preview, Save, Table.
+    // rejects: keeping the selection across the read-back. Every row returns
+    // under a new uid, so the uids it held named nothing on screen: "Save 1
+    // selected as a new set…" with no box ticked, and a dialog offering a set
+    // "from the 0 questions you selected" — which it then posted, a header
+    // and no rows, for the importer to refuse.
+    const [, CHANGE, WRONG] = QUESTIONS.questions;
+    let reads = 0;
+    const posts = mockApi({
+      'GET lessons-learned/questions': () => {
+        reads += 1;
+        return jsonResponse(200, reads === 1 ? QUESTIONS : { setId: SET.id, questions: [WRONG, CHANGE] });
+      },
+    });
+    const views = () => within(screen.getByRole('group', { name: 'How the questions are shown' }));
+    renderPanel();
+    await ready();
+
+    fireEvent.click(screen.getByLabelText('Select WHAT WENT WRONG'));
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(views().getByRole('button', { name: 'Preview' }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+    await waitFor(() => expect(screen.queryByTestId('unsaved-bar')).not.toBeInTheDocument());
+    fireEvent.click(views().getByRole('button', { name: 'Table' }));
+
+    expect(screen.queryByRole('button', { name: /selected as a new set/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox').filter((box) => box.checked)).toHaveLength(0);
+    // And a tick made now is counted: the selection works on the rows read back.
+    fireEvent.click(screen.getByLabelText('Select WHAT WENT WRONG'));
+    fireEvent.click(screen.getByRole('button', { name: /Save 1 selected as a new set/i }));
+    expect(await screen.findByText(/from the 1 question you selected/)).toBeInTheDocument();
+    expect(posts).toHaveLength(1);
   });
 });
 
@@ -838,5 +992,56 @@ describe('the permission flags', () => {
 
     fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+  });
+});
+
+/*
+  ── REPLACING THE QUESTIONS OF ONE OF ENGAGE'S OWN SETS ───────────────────
+
+  One of the owner's three triggers. A platform set that is switched on is being
+  played by every organisation, so new questions under it are the same content
+  change a share would have had checked — and nothing had ever checked one.
+
+  THE SAVE ROUTE STARTS THE CHECK (upload-questions.js, via
+  admin/shared/house-check.js). This panel used to, off `checkDue`, and a tab
+  closed between the save and the post left a set live and unchecked. What is
+  left here is telling the person, on the same line as the save's own outcome.
+*/
+describe("Engage's own set, replaced while it is on", () => {
+  const started = [];
+  const saveOnce = async () => {
+    fireEvent.click(within(rowFor('ARE WE SHIPPING')).getByRole('button', { name: /remove/i }));
+    fireEvent.click(saveButton(/Save as version 3/i));
+  };
+  const apiWith = (saveBody) => mockApi({
+    'POST upload-questions': async () => jsonResponse(200, { setId: SET.id, setName: SET.name, version: 3, questionCount: 2, ...saveBody }),
+    'POST /check': async (url) => { started.push(url); return jsonResponse(202, { jobId: 'j4', version: 3, status: 'queued' }); },
+  });
+  beforeEach(() => { started.length = 0; });
+
+  // rejects: a sentence that reports only the check and drops the save's own
+  // outcome, which is the thing the person pressed the button for. And rejects
+  // a SECOND check posted from here — the save already started one, and two
+  // requests race for the same lock, so one of them is answered 409.
+  it('says the check is running, and posts none of its own', async () => {
+    apiWith({ replaced: true, checkDue: true });
+    renderPanel();
+    await ready();
+    await saveOnce();
+    const said = await screen.findByText(/Version 3 of "Lessons Learned" is now live/i);
+    expect(said).toHaveTextContent(/content check is running on it/i);
+    expect(started).toEqual([]);
+  });
+
+  // rejects: firing a check on every save. An organisation's own set goes
+  // through its own share-and-check path and this must not touch it.
+  it("an organisation's own save starts nothing and reads exactly as it did", async () => {
+    apiWith({ replaced: true, checkDue: false });
+    renderPanel();
+    await ready();
+    await saveOnce();
+    const said = await screen.findByText(/Version 3 of "Lessons Learned" is now live/i);
+    expect(started).toEqual([]);
+    expect(said).not.toHaveTextContent(/content check/i);
   });
 });

@@ -43,7 +43,10 @@ const PUBLIC_ROWS = { questionSets: [
   { id: 'orgacme-safety', name: 'Safety walkthrough', engagementType: 'trivia', totalQuestions: 30, canManage: false, scope: 'public', activeVersion: 2, sourceOrgName: 'Acme' },
 ] };
 const QUEUE = { count: 1, oldestWaitingSince: '2026-09-15T10:00:00.000Z', items: [{ sk: 'org_acme#safety#v2', orgName: 'Acme', setId: 'safety', title: 'Safety walkthrough', version: 2, gameType: 'trivia', questionCount: 30, reasons: ['escalated'], uncertainQuestionIds: ['c001#014'], waitingSince: '2026-09-15T10:00:00.000Z', publicSetId: '' }] };
-const CARD = { publicSetId: 'orgacme-safety', name: 'Safety walkthrough', engagementType: 'trivia', questionCount: 30, sourceOrgName: 'Acme', publicVersion: 2, sourceVersion: 2, sensitivity: [], review: { status: 'passed', reviewer: 'dai', decidedAt: '2026-08-19T10:00:00.000Z', findings: [] }, log: [] };
+// `sourceOrgId`/`sourceSetId` as the endpoint always sends them
+// (admin/public-library-item.js standing): they are what the re-check reads, so
+// a fixture without them hid whether the control is offered at all.
+const CARD = { publicSetId: 'orgacme-safety', name: 'Safety walkthrough', engagementType: 'trivia', questionCount: 30, sourceOrgId: 'org_acme', sourceSetId: 'safety', sourceOrgName: 'Acme', publicVersion: 2, sourceVersion: 2, sensitivity: [], review: { status: 'passed', reviewer: 'dai', decidedAt: '2026-08-19T10:00:00.000Z', findings: [] }, log: [] };
 const json = (body, status = 200) => ({ ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body });
 let deleted;
 function serveStaff() {
@@ -185,6 +188,24 @@ test('Score card is a place: the breadcrumb goes back to the Public library', as
   const topbar = screen.getByTestId('adm-topbar');
   fireEvent.click(within(topbar).getByRole('button', { name: /^public library$/i }));
   expect(await screen.findByRole('heading', { level: 1, name: /public library/i })).toBeInTheDocument();
+});
+
+/*
+  2026-09-19 — the card is mounted AS THE PLATFORM CONSOLE'S. ScoreCard's
+  re-check is gated on `mode="platform"` and defaults to the org's, fail-closed,
+  the way PublicLibraryPanel's own `mode` does. The console has to pass it or
+  staff's only route to re-running a published check is unreachable — a gate
+  nothing in ScoreCard's own suite can see.
+*/
+test('the score card opened as Engage offers the re-check', async () => {
+  mockActiveOrg = '~platform'; mockGroups = ['admins', 'hosts'];
+  serveStaff();
+  window.history.pushState({}, '', '/admin?section=publiclibrary');
+  render(<AdminPage />);
+  const row = (await screen.findByText('Safety walkthrough')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: /score card/i }));
+  expect(await screen.findByRole('heading', { level: 1, name: /score card/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /run the check again/i })).toBeInTheDocument();
 });
 
 test('Moderation mounts the queue, and the org console library lists public sets with Copy', async () => {

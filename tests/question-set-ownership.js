@@ -685,6 +685,8 @@ function reset() { store.clear(); log.length = 0; }
     body: JSON.stringify({
       fileName: 'ivy.csv', fileContent: CSV,
       customTitle: 'Ivy Set', engagementType: 'call-and-answer',
+      // A live set is created with a shelf now (shared/set-topics.js).
+      topic: 'business-work',
     }),
   });
   check('a host can create a question set', () =>

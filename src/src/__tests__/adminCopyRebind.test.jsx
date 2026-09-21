@@ -41,8 +41,10 @@ import AdminPage from '../AdminPage';
 // with Close as the way out.
 
 const HOME = { orgId: 'org_WLZyeb6wGSarf1grsXGxSM', name: 'George Seib', type: 'personal', yourRole: 'owner' };
-const PUBLIC_ROW = { id: 'name-that-thing', name: 'Name that thing', engagementType: 'trivia', totalQuestions: 3, canManage: false, scope: 'public', activeVersion: 1 };
-const COPY_ROW = { id: 'name-that-thing', name: 'Name that thing (mine)', engagementType: 'trivia', totalQuestions: 3, canManage: true, scope: 'org', activeVersion: 1 };
+// Both rows carry a shelf: the Details save requires one before it will send,
+// and a copy keeps whatever the original was filed under.
+const PUBLIC_ROW = { id: 'name-that-thing', name: 'Name that thing', engagementType: 'trivia', totalQuestions: 3, canManage: false, scope: 'public', activeVersion: 1, topic: 'general-knowledge' };
+const COPY_ROW = { id: 'name-that-thing', name: 'Name that thing (mine)', engagementType: 'trivia', totalQuestions: 3, canManage: true, scope: 'org', activeVersion: 1, topic: 'general-knowledge' };
 
 let copied = false;
 const calls = [];

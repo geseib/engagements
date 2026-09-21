@@ -398,25 +398,6 @@ body {
   padding-bottom: calc(var(--host-bar-h, 76px) + 24px);
 }
 
-/* The report FAB is fixed bottom-right and would otherwise sit on the primary
-   button. */
-.main-layout.has-host-bar .issue-fab-container {
-  bottom: calc(var(--host-bar-h, 76px) + 16px);
-}
-
-/* The decorative parallax hero is 250px+ of pure chrome. It earns that on the
-   landing/lobby screen; during a live round it is 250px of the fold spent on a
-   word the host already knows. Collapse it — the brand band stays, the content
-   comes up. */
-.outer-container.round-live .parallax__header {
-  min-height: 96px;
-  padding: 12px 20px;
-}
-
-.outer-container.round-live .parallax__title {
-  font-size: clamp(1.5rem, 5vw, 2rem);
-}
-
 @media (max-width: 900px) {
   .host-action-bar__inner {
     padding: 10px 14px;
@@ -727,13 +708,15 @@ body {
   flex-wrap: wrap;
 }
 
-/* The IssueFab is exempt. It is a DOM child of the panel but `position:fixed`,
-   so it is not visually inside it — and the rule below repainted its button to
-   the panel's navy while `.issue-fab-option .label` kept its own `color:#333`
-   at higher specificity. Dark grey on dark navy: the labels were unreadable.
-   Excluding it here restores the FAB's own white-on-dark-text design rather
-   than fighting it with another override. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.issue-fab-main):not(.issue-fab-option) {
+/* The help menu's rows are exempt. They are DOM children of the panel (the `?`
+   in its header opens them: guides, report a bug, request a feature, ask for
+   help) and they are dressed by HelpButton.css as menu rows — full width, 44px,
+   transparent. Without the exemption this rule makes each one a padded navy
+   panel button inside a menu that is already a navy card.
+
+   (This list used to exempt `.issue-fab-main` / `.issue-fab-option`, the
+   separate report control the menu replaced on 2026-09-21.) */
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
@@ -1792,115 +1775,6 @@ body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
-/* Parallax styles adapted for quiz game */
-.parallax {
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-  border-radius: 20px 20px 0 0;
-}
-
-.parallax__header {
-  z-index: 2;
-  padding: 20px;
-  justify-content: center;
-  align-items: center;
-  min-height: 250px;
-  display: flex;
-  position: relative;
-  flex-direction: column;
-}
-
-.parallax__visuals {
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  overflow: hidden;
-}
-
-.parallax__layers {
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  overflow: hidden;
-}
-
-.parallax__layer-img {
-  pointer-events: none;
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 120%;
-  position: absolute;
-  top: -10%;
-  left: 0;
-}
-
-.parallax__layer-title {
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.parallax__title {
-  pointer-events: auto;
-  text-align: center;
-  text-transform: none;
-  margin-top: 0;
-  margin-bottom: 0.1em;
-  margin-right: 0.075em;
-  font-family: var(--font-display);
-  /* Archivo Expanded is a wide face — a fixed 4rem renders "Engagements" at
-     ~395px, which clips on both edges of a 375px phone. Scale with the
-     viewport and cap at the original desktop size. */
-  font-size: clamp(2.25rem, 12vw, 4rem);
-  font-weight: 600;
-  line-height: 1;
-  position: relative;
-  color: white;
-  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 0, 0, 0.3);
-}
-
-.parallax__title.report-title {
-  font-size: 3rem;
-  line-height: 1.1;
-}
-
-.parallax__black-line-overflow {
-  z-index: 20;
-  background-color: #000;
-  width: 100%;
-  height: 2px;
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-}
-
-.parallax__fade {
-  z-index: 30;
-  object-fit: cover;
-  width: 100%;
-  max-width: none;
-  height: 20%;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-}
-
-
 .game-id {
   font-size: 1.5rem;
   font-weight: bold;
@@ -2692,10 +2566,6 @@ body {
   .player-container {
     max-width: 1200px;
   }
-}
-
-.player-parallax {
-  min-height: 150px;
 }
 
 .join-screen {
@@ -7743,11 +7613,6 @@ body {
   background: var(--bg);
 }
 
-/* Hide the normal (landing) parallax header in big-screen mode */
-.outer-container.big-screen-mode .parallax {
-  display: none;
-}
-
 /* ---- the persistent mountain-hiker photo hero ---- */
 .big-screen-hero {
   position: absolute;
@@ -10285,15 +10150,29 @@ body {
 /* ==========================================================================
    Question set editor (components/QuestionSetEditor.jsx)
 
-   Paper surface, per the Warm Summit split: admin is authoring UI, so it stays
-   light and amber shows up once per panel at most. Each panel is a nested card
-   inside .admin-section so Details / Questions / Versions / Media read as four
-   steps rather than one long form.
+   DUSK, AND EVERY VALUE BELOW IS A TOKEN. This block was written paper — forty
+   -odd literals, #FFFFFF rows on a #F1EDE4 panel with #5E6167 copy and the
+   #8a5300 paper amber — because the editor was the one authoring surface the
+   Warm Summit split kept light. The owner, on the shipped console: *"the white
+   background really contrasts the rest of the site, as we are entirely dark
+   background throughout, except for question set editors and previews."*
+
+   A hardcoded hex does not follow a theme, which is why flipping one flag was
+   never going to be enough. The colours now come from the scope's token block
+   in components/QuestionSetEditor.css, which is also where the editor's root
+   declares `data-theme="dark"` — it has to declare it itself, because it is
+   mounted on the host's paper shelf as well as in the console.
+
+   Each panel is still a nested card inside .admin-section so Details /
+   Questions / Versions / Media read as four steps rather than one long form;
+   on dusk the card is `--surface` and the panel is a well cut back down to
+   `--bg`, which is the paper original's white / #F1EDE4 / white alternation
+   translated. Measured in __tests__/questionSetEditorPalette.test.js.
    ========================================================================== */
 
 .qs-editor .qs-panel {
-  background: var(--surface-2, #F1EDE4);
-  border: 1px solid rgba(155, 168, 190, 0.28);
+  background: var(--bg);
+  border: 1px solid var(--qs-rule);
   border-radius: var(--radius-sm, 8px);
   padding: 20px 24px;
   margin-top: 24px;
@@ -10306,7 +10185,7 @@ body {
   gap: 4px 14px;
   padding-bottom: 10px;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(155, 168, 190, 0.28);
+  border-bottom: 1px solid var(--qs-rule);
 }
 
 .qs-panel-header h3 {
@@ -10315,7 +10194,7 @@ body {
 }
 
 .qs-panel-note {
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -10328,7 +10207,7 @@ body {
 }
 
 .qs-empty {
-  color: #5E6167;
+  color: var(--muted);
   font-style: italic;
   margin: 0;
 }
@@ -10349,8 +10228,8 @@ body {
 .qs-replace-preview {
   margin-top: 16px;
   padding: 16px 20px;
-  background: #FFFFFF;
-  border: 1px solid var(--primary, #F6A94C);
+  background: var(--surface);
+  border: 1px solid var(--primary);
   border-radius: var(--radius-sm, 8px);
 }
 
@@ -10367,7 +10246,7 @@ body {
 
 .qs-preview-categories {
   margin: 0;
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.92rem;
 }
 
@@ -10388,8 +10267,8 @@ body {
   justify-content: space-between;
   gap: 10px 16px;
   padding: 12px 16px;
-  background: #FFFFFF;
-  border: 1px solid rgba(155, 168, 190, 0.28);
+  background: var(--surface);
+  border: 1px solid var(--qs-rule);
   border-left: 4px solid transparent;
   border-radius: var(--radius-sm, 8px);
 }
@@ -10397,8 +10276,8 @@ body {
 /* The active version is the one new engagements get. It is the single most
    important fact in this panel, so it gets the panel's one warm accent. */
 .qs-version-row.active {
-  border-left-color: var(--primary, #F6A94C);
-  background: #FFFBF4;
+  border-left-color: var(--primary);
+  background: var(--qs-tint-warn);
 }
 
 .qs-version-id {
@@ -10420,34 +10299,40 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: rgba(79, 178, 134, 0.12);
-  color: #2F6B52;
+  background: var(--qs-tint-ok);
+  color: var(--qs-success-text);
 }
 
 .qs-version-pinned-badge {
-  background: rgba(246, 169, 76, 0.16);
-  color: #8A5A22;
+  background: var(--qs-tint-warn);
+  color: var(--primary);
 }
 
 /* Where this version went (utils/shareState.js versionChip) — public, needs
    changes, waiting for a person, still checking, or never shared at all.
-   --qs-chip-public-ink and --qs-chip-waiting-ink are scoped to this rule
-   rather than reusing --success / --secondary: --success (#4FB286) is only
-   2.6:1 on this paper editor's --bg and --secondary (#7CA7E6, written for the
-   list's own waiting chip on dusk, 7.0:1 there) is only ~2.3:1 here — neither
-   is text-safe on paper. #1E7A52 and #2B5F9E clear 4.5:1 on both paper --bg
-   and white (__tests__/setEditorChipsPalette.test.js). */
-.qs-version-chip { --qs-chip-public-ink: #1E7A52; --qs-chip-waiting-ink: #2B5F9E; display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(155,168,190,.34); font-size: 12px; color: var(--muted); }
-.qs-version-chip--public { color: var(--qs-chip-public-ink); border-color: rgba(79,178,134,.5); }
-.qs-version-chip--flagged, .qs-version-chip--unfinished { color: var(--danger-deep); border-color: rgba(229,100,94,.5); }
-.qs-version-chip--waiting { color: var(--qs-chip-waiting-ink); border-color: rgba(43,95,158,.4); }
+   --qs-chip-public-ink and --qs-chip-waiting-ink are still scoped tokens rather
+   than --success / --secondary reused, and they still exist for the reason they
+   were introduced: an ink is only safe on the surface it was measured on. Only
+   the surface changed. They are declared in the scope's token block
+   (components/QuestionSetEditor.css) with this editor's other values, and both
+   are measured on the version row in __tests__/setEditorChipsPalette.test.js.
+
+   THE FLAGGED CHIP IS --danger-text, NOT --danger-deep. --danger-deep (#B03A34)
+   is the DEEP red a white label sits on; as ink it is 2.4:1 on the dusk row.
+   --danger-text (#EF8C86) is the token that exists for destructive copy, and it
+   is 6.08:1 there. The borders stay on --success / --danger / --secondary,
+   where no contrast ratio applies. */
+.qs-version-chip { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--qs-rule-strong); font-size: 12px; color: var(--muted); }
+.qs-version-chip--public { color: var(--qs-chip-public-ink); border-color: var(--success); }
+.qs-version-chip--flagged, .qs-version-chip--unfinished { color: var(--danger-text); border-color: var(--danger); }
+.qs-version-chip--waiting { color: var(--qs-chip-waiting-ink); border-color: var(--secondary); }
 
 .qs-version-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
   flex: 1 1 240px;
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.88rem;
 }
 
@@ -10489,11 +10374,11 @@ body {
   gap: 10px 16px;
   margin-bottom: 16px;
   padding: 12px 16px;
-  background: #FFF8EC;
-  border: 1px solid rgba(138, 83, 0, 0.35);
-  border-left: 4px solid #8a5300;
+  background: var(--qs-tint-warn);
+  border: 1px solid var(--qs-rule-strong);
+  border-left: 4px solid var(--primary);
   border-radius: var(--radius-sm, 8px);
-  color: #4A3512;
+  color: var(--text);
 }
 
 .qs-dirty-text {
@@ -10507,7 +10392,7 @@ body {
 }
 
 .qs-filter {
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -10528,8 +10413,8 @@ body {
 
 .qs-question-row {
   padding: 10px 14px;
-  background: #FFFFFF;
-  border: 1px solid rgba(155, 168, 190, 0.28);
+  background: var(--surface);
+  border: 1px solid var(--qs-rule);
   border-left: 4px solid transparent;
   border-radius: var(--radius-sm, 8px);
 }
@@ -10537,21 +10422,21 @@ body {
 /* Changed but not yet saved. The row itself says so, so a long set does not
    depend on the bar at the top being on screen. */
 .qs-question-row.changed {
-  border-left-color: #8a5300;
-  background: #FFFBF4;
+  border-left-color: var(--primary);
+  background: var(--qs-tint-warn);
 }
 
 /* A tombstone: removed in the working copy, still restorable, not yet written.
    Struck through rather than gone, because a delete you cannot see is a delete
    you cannot undo. */
 .qs-question-row.removed {
-  border-left-color: #B04A45;
-  background: #FBF3F2;
+  border-left-color: var(--danger);
+  background: var(--qs-tint-danger);
 }
 
 .qs-question-row.removed .qs-question-title {
   text-decoration: line-through;
-  color: #6B6E74;
+  color: var(--muted);
 }
 
 /* "Edit Q14" from the needs-changes banner scrolls here and marks it for 2s.
@@ -10592,13 +10477,13 @@ body {
   flex-wrap: wrap;
   gap: 2px 14px;
   margin-top: 2px;
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.86rem;
 }
 
 .qs-question-detail {
   flex: 1 1 100%;
-  color: #6B6E74;
+  color: var(--muted);
 }
 
 .qs-question-actions {
@@ -10614,20 +10499,20 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: rgba(138, 83, 0, 0.12);
-  color: #8a5300;
+  background: var(--qs-tint-warn);
+  color: var(--primary);
 }
 
 .qs-change-badge.removed {
-  background: rgba(176, 74, 69, 0.12);
-  color: #B04A45;
+  background: var(--qs-tint-danger);
+  color: var(--danger-text);
 }
 
 /* --- one question's fields --- */
 .qs-question-form {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed rgba(155, 168, 190, 0.45);
+  border-top: 1px dashed var(--qs-rule-strong);
 }
 
 .qs-form-grid {
@@ -10668,7 +10553,7 @@ body {
   font-size: 1.6rem;
   line-height: 1;
   padding: 0 4px;
-  color: var(--muted, #5E6167);
+  color: var(--muted);
   /* 44px is the touch target this bug was reported on. A 1.6rem glyph is about
      half that, and a close control you have to aim at is the thing that sends
      someone back to the inert backdrop they cannot use. */
@@ -10677,7 +10562,7 @@ body {
 }
 
 .qs-dialog-close:hover:not(:disabled) {
-  color: var(--text, #1B2942);
+  color: var(--text);
 }
 
 .qs-dialog-close:disabled {
@@ -10737,6 +10622,147 @@ body {
   font-size: 13px;
 }
 
+/* --- WHICH SHELF THIS SET SITS ON (components/SetTopicField.jsx) -----------
+
+   One shelf from a closed fifteen, and the author's own words beside it, drawn
+   as one group for the same reason `.qs-workie` is: they are one question —
+   where does this sit, and what is it about — and rendering them as two
+   unrelated rows two fields apart is what made the Workie pair unreadable.
+
+   IT DECLARES NO INK, on purpose and by the same argument. This control renders
+   on the paper console, inside the host's dusk dialog, and on the CSV upload
+   panel, which is both again. The only colour below is --primary on a BORDER,
+   where no contrast ratio applies, and the hueless hairline grey the rest of
+   this sheet already tints with — it darkens paper and lightens dusk by the
+   same small amount instead of tinting either. Both composites, and the bare
+   buttons' `color: inherit`, are measured in setTopicFieldPalette.test.js.
+
+   NOT A CATEGORY. In this app a category is the IN-SET grouping (c001…c005,
+   the host's 24-bit mask), and nothing here is one. */
+.qs-topic {
+  /* THE NEUTRAL INKS THIS FIELD PAINTS WITH, declared on the field's own root
+     and not on `.qs-editor`: SetTopicField also mounts in the upload panel and
+     in BuilderPage, where the editor's token block is not an ancestor. An
+     undefined custom property invalidates the WHOLE declaration, so a token
+     borrowed from a scope that is not always overhead would silently unpaint
+     these rules in two of their three homes. */
+  --qs-topic-accent: rgba(155, 168, 190, .45);
+  --qs-topic-chip: rgba(155, 168, 190, .14);
+  --qs-topic-chip-strong: rgba(155, 168, 190, .3);
+  --qs-topic-dashed: rgba(155, 168, 190, .5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+/* The rows inside carry the group's gap, not their own 20px stack margin —
+   otherwise the box reads as two fields that happen to share a border. */
+.qs-topic .form-group {
+  margin-bottom: 0;
+}
+
+/* What the check would have filed it under, offered as one click. A quiet rule
+   rather than the warm one below: this is a convenience, not a decision the
+   person owes anybody. */
+.qs-topic-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--qs-topic-accent);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+/* The shelf the content contradicts. Said once, answered by nothing — so it
+   takes the warm rule that means "this wants a decision" and no danger ink:
+   nothing is broken, the set plays, and the author may simply be right. */
+.qs-topic-mismatch {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.qs-topic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.qs-topic-tags:empty {
+  margin: 0;
+}
+
+.qs-topic-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: var(--qs-topic-chip);
+  font-size: 13px;
+}
+
+/* A 24px target, per audit A5 — a chip carrying an action is an action. */
+.qs-topic-tagx {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.qs-topic-tagx:hover {
+  background: var(--qs-topic-chip-strong);
+}
+
+.qs-topic-tagadd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+}
+
+/* The input is the part that must not shrink to nothing beside its button. */
+.qs-topic-tagadd .form-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* A word the check read out of the questions: dashed, because it is a proposal
+   and not yet one of this set's own. */
+.qs-topic-tagadd-one {
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px dashed var(--qs-topic-dashed);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.qs-topic-tagadd-one:hover {
+  background: var(--qs-topic-chip);
+}
+
 .qs-ai-toggle {
   align-self: flex-start;
   margin-top: 6px;
@@ -10745,16 +10771,16 @@ body {
 .qs-ai-panel {
   margin: 12px 0;
   padding: 12px 14px;
-  border: 1px solid rgba(155, 168, 190, 0.35);
+  border: 1px solid var(--qs-rule-strong);
   border-radius: var(--radius-sm, 8px);
-  background: rgba(155, 168, 190, 0.08);
+  background: var(--qs-tint-neutral);
 }
 
 .qs-ai-provenance {
   margin: 8px 0 12px;
   padding: 8px 12px;
-  border-left: 3px solid var(--primary, #8a5300);
-  background: rgba(138, 83, 0, 0.08);
+  border-left: 3px solid var(--primary);
+  background: var(--qs-tint-warn);
   font-size: 0.85rem;
 }
 
@@ -10765,7 +10791,7 @@ body {
 .qs-ai-source {
   margin: 12px 0;
   padding: 12px 14px;
-  border: 1px dashed rgba(155, 168, 190, 0.45);
+  border: 1px dashed var(--qs-rule-strong);
   border-radius: var(--radius-sm, 8px);
 }
 
@@ -10779,9 +10805,9 @@ body {
 .qs-ai-held {
   margin: 12px 0;
   padding: 12px 14px;
-  border: 1px solid var(--primary, #8a5300);
+  border: 1px solid var(--primary);
   border-radius: var(--radius-sm, 8px);
-  background: rgba(138, 83, 0, 0.06);
+  background: var(--qs-tint-warn);
 }
 
 .qs-ai-held h4 {
@@ -10792,22 +10818,22 @@ body {
 .qs-ai-held-field {
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid rgba(155, 168, 190, 0.3);
+  border-top: 1px solid var(--qs-rule);
 }
 
 .qs-ai-held-yours,
 .qs-ai-held-draft {
   margin: 6px 0;
   padding: 8px 12px;
-  border-left: 3px solid rgba(155, 168, 190, 0.55);
+  border-left: 3px solid var(--qs-rule-strong);
   border-radius: var(--radius-sm, 8px);
-  background: rgba(155, 168, 190, 0.08);
+  background: var(--qs-tint-neutral);
   font-size: 0.85rem;
   white-space: pre-wrap;
 }
 
 .qs-ai-held-draft {
-  border-left-color: var(--primary, #8a5300);
+  border-left-color: var(--primary);
 }
 
 .qs-ai-held-label {
@@ -10824,8 +10850,8 @@ body {
   margin-left: 8px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(138, 83, 0, 0.12);
-  color: var(--primary, #8a5300);
+  background: var(--qs-tint-warn);
+  color: var(--primary);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -10837,7 +10863,7 @@ body {
 .qs-siblings {
   margin: 14px 0;
   padding: 12px 14px;
-  border: 1px dashed rgba(155, 168, 190, 0.45);
+  border: 1px dashed var(--qs-rule-strong);
   border-radius: var(--radius-sm, 8px);
 }
 
@@ -10868,7 +10894,7 @@ body {
   margin-top: 12px;
   padding: 10px 14px;
   border-radius: var(--radius-sm, 8px);
-  background: rgba(138, 83, 0, 0.10);
+  background: var(--qs-tint-warn);
 }
 
 .qs-form-discard p {
@@ -10898,8 +10924,8 @@ body {
   width: 100%;
   text-align: left;
   padding: 10px 14px;
-  background: #FFFFFF;
-  border: 1px solid rgba(155, 168, 190, 0.28);
+  background: var(--surface);
+  border: 1px solid var(--qs-rule);
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
   font: inherit;
@@ -10908,8 +10934,8 @@ body {
 
 .qs-pull-set:hover,
 .qs-pull-set:focus-visible {
-  border-color: #8a5300;
-  background: #FFFBF4;
+  border-color: var(--primary);
+  background: var(--qs-row-hover);
 }
 
 .qs-pull-question-list label {
@@ -10917,8 +10943,8 @@ body {
   align-items: flex-start;
   gap: 10px;
   padding: 8px 12px;
-  background: #FFFFFF;
-  border: 1px solid rgba(155, 168, 190, 0.28);
+  background: var(--surface);
+  border: 1px solid var(--qs-rule);
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
 }
@@ -10928,7 +10954,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 16px;
-  color: #5E6167;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -10939,7 +10965,7 @@ body {
 
 .qs-pull-caveat {
   margin: 10px 0 0;
-  color: #4A3512;
+  color: var(--text);
   font-size: 0.9rem;
 }
 

@@ -1,0 +1,338 @@
+// tests/score-card-standing.js
+/**
+ * THE SCORE CARD'S DATA — GET /admin/public-library/{publicSetId}, standing()
+ * in admin/public-library-item.js
+ *
+ * The owner, 2026-09-19: the card "doesn't reveal much" — raw ids like
+ * c001#014 and "The check found nothing to say." Decision A: the card must
+ * MEASURE, with a tally per category and the questions named by their TEXT.
+ *
+ * The text comes from the PUBLISHED PUBLIC COPY's own question rows, matched
+ * by id — publish copies the judged snapshot's rows byte-for-byte, keys and
+ * all (shared/publish-set.js), so an id in the org's review is the same id in
+ * the public partition. Not the S3 snapshot: snapshots expire after 30 days
+ * and this function has no S3 grant. Not the org's rows: they are encrypted,
+ * and may have been edited since.
+ *
+ * Decision C: a review checked before measuring existed has no tally, and the
+ * card is given nothing to invent one from.
+ */
+const path = require('path');
+const assert = require('assert');
+const H = require('./helpers/moderation-harness');
+H.install();
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const { S3Client } = require('@aws-sdk/client-s3');
+const { BedrockRuntimeClient } = require('@aws-sdk/client-bedrock-runtime');
+const db = DynamoDBDocumentClient.from({});
+const T = 'engage-test';
+const V = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-version.js'));
+const R = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-review.js'));
+const C = require(path.join(H.REPO, 'lambda-functions/admin/shared/tenant-crypto.js'));
+const J = require(path.join(H.REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
+const W = require(path.join(H.REPO, 'lambda-functions/admin/shared/set-check-worker.js'));
+const Q = require(path.join(H.REPO, 'lambda-functions/admin/shared/moderation-queue.js'));
+const { publicSetIdFor } = require(path.join(H.REPO, 'lambda-functions/admin/shared/publish-set.js'));
+const { handler } = require(path.join(H.REPO, 'lambda-functions/admin/public-library-item.js'));
+const deps = { db, tableName: T, s3: new S3Client({}), bucket: 'prompts-test', bedrock: new BedrockRuntimeClient({}) };
+
+const SRC = { scope: 'org', orgId: 'org_acme', setId: 'crime' };
+const PUB = publicSetIdFor('org_acme', 'crime');
+const PUBREF = { scope: 'public', orgId: '', setId: PUB };
+const HASH = 'c'.repeat(64);
+const NONE_SEEN = { worst: null, low: 0, medium: 0, high: 0 };
+const TALLY = {
+  scope: 'full',
+  questions: 3,
+  setTextChecked: true,
+  setTextUnread: false,
+  spotless: 1,
+  unread: 0,
+  categories: {
+    VIOLENCE: { worst: 'MEDIUM', low: 0, medium: 1, high: 0 },
+    SEXUAL: NONE_SEEN,
+    HATE: NONE_SEEN,
+    INSULTS: NONE_SEEN,
+    MISCONDUCT: { worst: 'LOW', low: 1, medium: 0, high: 0 },
+  },
+};
+const OBSERVED = [
+  { questionId: 'c001#001', category: 'MISCONDUCT', band: 'LOW', intervened: false, explanation: 'A cipher is named; nothing is taught.' },
+  { questionId: 'c001#002', category: 'VIOLENCE', band: 'MEDIUM', intervened: false, explanation: 'The murders are the setting; the question asks about a place.' },
+  { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false },
+];
+
+/**
+ * The public set as a publish leaves it — v1 an older share, v2 the active
+ * one — and the org's own version 3 behind it, whose rows have been edited
+ * since and must never be what the card shows.
+ */
+function seedPublic(overrides = {}) {
+  H.seedRow({
+    ...V.setMetadataKey(PUBREF), name: 'True crime', description: 'Infamous cases, solved and not.', engagementType: 'trivia',
+    activeVersion: 2, versions: [{ version: 1, createdAt: '2026-09-01T10:00:00.000Z', questionCount: 1 }, { version: 2, createdAt: '2026-09-18T10:00:00.000Z', questionCount: 3 }],
+    sourceOrgId: 'org_acme', sourceOrgName: 'Acme', sourceSetId: 'crime', sourceVersion: 3, contentHash: HASH, questionCount: 3,
+    ...overrides,
+  });
+  H.seedRow({ PK: V.setPartition(PUBREF, 1), SK: 'QUESTION#c001#001', Title: 'An older wording', Detail: 'From the first share.' });
+  const v2 = V.setPartition(PUBREF, 2);
+  H.seedRow({ PK: v2, SK: 'CATEGORY#c001', Name: 'Cases' });
+  H.seedRow({ PK: v2, SK: 'QUESTION#c001#001', Title: 'The Zodiac', Detail: 'Which newspaper received the first cipher?', AnswerDetails: 'The Chronicle.', optionA: 'The Chronicle', optionB: 'The Examiner' });
+  H.seedRow({ PK: v2, SK: 'QUESTION#c001#002', Title: 'The Ripper', Detail: 'In which district were the murders?', AnswerDetails: 'Whitechapel.' });
+  H.seedRow({ PK: v2, SK: 'QUESTION#c001#003', Title: 'Bow Street', Detail: 'Who founded the Bow Street Runners?' });
+  const org = V.setPartition(SRC, 3);
+  H.seedRow({ PK: org, SK: 'QUESTION#c001#001', Title: 'Edited by the organisation since', Detail: '' });
+  H.seedRow({ PK: org, SK: 'QUESTION#c001#002', Title: 'Edited by the organisation since', Detail: '' });
+}
+/** Escalated for a declared notice, seen at MEDIUM and LOW, approved by staff: the shape production writes. */
+async function seedApproved({ observed = OBSERVED, publicRow = {} } = {}) {
+  H.reset();
+  seedPublic(publicRow);
+  await R.writeReview(db, T, SRC, 3, {
+    status: R.STATUS.ESCALATED, findings: [], note: '4/4 clean', reasons: ['declared'], declaredNotice: ['graphic-violence'],
+    contentHash: HASH, checkedBy: 'sub-amara', tally: TALLY, observed,
+  });
+  await R.transitionReview(db, T, SRC, 3, R.STATUS.ESCALATED, {
+    status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-18T09:55:00.000Z', note: 'Historical, not gratuitous.', notice: ['graphic-violence'],
+  });
+}
+const get = async () => {
+  const res = await handler(H.platformEvent({ method: 'GET', path: { publicSetId: PUB } }), H.ctx());
+  assert.strictEqual(res.statusCode, 200, res.body);
+  return JSON.parse(res.body);
+};
+const observedRow = (card, id, category) => card.review.observed.find((o) => o.questionId === id && o.category === category);
+
+/**
+ * The organisation's set before it is shared, encrypted the way upload writes
+ * it: one partition per version, `counts` questions in each. Its row's
+ * `questionCount` is the ACTIVE version's — upload and promote both set it
+ * so (upload-questions.js, promote-set-version.js) — and publish spreads that
+ * row onto the public one.
+ */
+async function seedOrgVersions(counts, active) {
+  H.reset();
+  H.seedRow({ PK: `ORG#${SRC.orgId}`, SK: 'METADATA', orgId: SRC.orgId, name: 'Acme' });
+  H.seedRow(await C.encryptItem(SRC.orgId, 'set', {
+    ...V.setMetadataKey(SRC), name: 'True crime', description: 'Infamous cases.', engagementType: 'trivia', scope: 'org', orgId: SRC.orgId,
+    activeVersion: active, versions: Object.entries(counts).map(([v, n]) => ({ version: Number(v), questionCount: n })),
+    questionCount: counts[active], createdBy: 'sub-amara',
+  }));
+  for (const [v, n] of Object.entries(counts)) {
+    const pk = V.setPartition(SRC, Number(v));
+    H.seedRow({ PK: pk, SK: 'CATEGORY#c001', Name: 'Cases', QuestionCount: n });
+    for (let i = 1; i <= n; i += 1) {
+      H.seedRow(await C.encryptItem(SRC.orgId, 'question', { // eslint-disable-line no-await-in-loop
+        PK: pk, SK: `QUESTION#c001#${String(i).padStart(3, '0')}`, Title: `Case ${i}`, Detail: `From version ${v}.`,
+        optionA: 'A', optionB: 'B', correctAnswer: 'A', Category: 'c001', Image: '', Active: true,
+      }));
+    }
+  }
+}
+/** The check job a "Share publicly" on version `version` writes. */
+async function shareJob(version) {
+  const jobId = J.newJobId();
+  await J.createJob(db, T, {
+    jobId, kind: 'set-check', requested: 3,
+    request: { setId: SRC.setId, version, publish: true, declaredNotice: [] },
+    caller: { userId: 'sub-amara', username: 'amara', orgId: SRC.orgId, orgRole: 'owner' },
+  });
+  return jobId;
+}
+
+(async () => {
+  console.log('\nthe score card\'s data\n');
+
+  // rejects: standing() carrying on with its old projection, which dropped
+  // everything the card now needs — and with it the reason a set went to a person.
+  await H.test('the review projects the tally, the reasons and every observation, and findings as before', async () => {
+    await seedApproved();
+    const card = await get();
+    assert.deepStrictEqual(card.review.tally, TALLY);
+    assert.deepStrictEqual(card.review.reasons, ['declared']);
+    assert.deepStrictEqual(card.review.findings, []);
+    assert.deepStrictEqual(card.review.observed.map(({ text, ...row }) => row), OBSERVED); // eslint-disable-line no-unused-vars
+    assert.strictEqual(card.review.status, 'passed');
+    assert.strictEqual(card.review.note, 'Historical, not gratuitous.');
+  });
+  // rejects: naming a question by its id, by the organisation's edited row,
+  // or by an older public version's wording.
+  await H.test('each observation carries its question\'s text from the active public copy, matched by id', async () => {
+    await seedApproved();
+    const card = await get();
+    assert.strictEqual(observedRow(card, 'c001#001', 'MISCONDUCT').text, 'The Zodiac\nWhich newspaper received the first cipher?');
+    assert.strictEqual(observedRow(card, 'c001#002', 'VIOLENCE').text, 'The Ripper\nIn which district were the murders?');
+  });
+  await H.test('the set\'s own subject is named by the public set\'s title and description', async () => {
+    await seedApproved();
+    const card = await get();
+    assert.strictEqual(observedRow(card, '(set)', 'VIOLENCE').text, 'True crime\nInfamous cases, solved and not.');
+  });
+  // rejects: a missing row borrowing a neighbour's text, or taking the card down with it.
+  await H.test('an id the public copy does not hold is left without text', async () => {
+    await seedApproved({ observed: [{ questionId: 'c009#001', category: 'HATE', band: 'LOW', intervened: false }] });
+    const card = await get();
+    assert.strictEqual(card.review.observed[0].text, '');
+  });
+  // rejects: a pre-tally review read as "measured, and nothing seen" — the
+  // card must be able to tell that it simply was not measured (decision C).
+  await H.test('a review checked before the tally existed projects without one', async () => {
+    H.reset();
+    seedPublic();
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.PASSED, findings: [], note: '30/30 clean', contentHash: HASH, checkedBy: 'sub-amara' });
+    const card = await get();
+    assert.strictEqual(card.review.tally, null);
+    assert.deepStrictEqual(card.review.observed, []);
+    assert.deepStrictEqual(card.review.reasons, []);
+    assert.strictEqual(card.review.status, 'passed');
+    assert.strictEqual(card.review.note, '30/30 clean');
+  });
+  // rejects: the card saying "Declared: a content notice" of a set whose
+  // author named the notice. The worker keeps what was declared on the REVIEW
+  // row beside the `declared` reason (set-check-worker.js), and the projection
+  // dropped it. A row without one — an older check, or one written from the
+  // worker's catch block — projects none, never a guess.
+  await H.test('the review projects the notices its author declared, and a row without them projects none', async () => {
+    await seedApproved();
+    assert.deepStrictEqual((await get()).review.declaredNotice, ['graphic-violence']);
+    H.reset();
+    seedPublic();
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.PASSED, findings: [], note: '30/30 clean', contentHash: HASH, checkedBy: 'sub-amara' });
+    assert.deepStrictEqual((await get()).review.declaredNotice, []);
+  });
+
+  /*
+    ── A SET SHARED BEFORE VERSIONING EXISTED HAS A REVIEW TOO ───────────────
+
+    The owner, of the four public sets on dev: they show nothing. Three were
+    shared from UNVERSIONED sets, so the public row's `sourceVersion` is NULL
+    and the review sits in the UNSUFFIXED partition — `setPartition(ref, null)`,
+    a different key from v1's, which the repo supports on purpose
+    (set-version.js toVersion/resolvePartitionFromMeta, tenant.setContentPk).
+    `readReview(source, null)` finds it. standing() guarded the read with
+    `Number(meta.sourceVersion) || 0`, which is 0 for NULL, so it never looked
+    and reported `unreviewed` over a row that says `passed`.
+  */
+  await H.test('a set shared before versioning existed: its review is read from the unsuffixed partition', async () => {
+    H.reset();
+    seedPublic({ sourceVersion: null });
+    await R.writeReview(db, T, SRC, null, {
+      status: R.STATUS.PASSED, findings: [], note: '11/11 clean', contentHash: HASH, checkedBy: 'sub-amara', tally: TALLY, observed: OBSERVED,
+    });
+    const card = await get();
+    assert.strictEqual(card.review.status, 'passed', 'a legacy set reads as unreviewed');
+    assert.strictEqual(card.review.note, '11/11 clean');
+    assert.deepStrictEqual(card.review.tally, TALLY);
+    assert.strictEqual(observedRow(card, 'c001#001', 'MISCONDUCT').text, 'The Zodiac\nWhich newspaper received the first cipher?');
+  });
+  // rejects: reporting version 0 for a set that has no version. Nothing in the
+  // table is ever v0 — the card's own log filter matches a check event on it,
+  // and a re-check would be offered a version the library does not serve.
+  await H.test('a set shared before versioning existed reports no source version, not version 0', async () => {
+    H.reset();
+    seedPublic({ sourceVersion: null });
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.PASSED, findings: [], note: '11/11 clean', contentHash: HASH });
+    assert.strictEqual((await get()).sourceVersion, null);
+  });
+  // rejects: a fix for the above that reads the unsuffixed partition for
+  // EVERY set — a versioned set's review must still come from its own.
+  await H.test('a versioned set still reads its own version\'s review, never the unsuffixed one', async () => {
+    H.reset();
+    seedPublic();
+    await R.writeReview(db, T, SRC, null, { status: R.STATUS.FLAGGED, findings: [], note: 'the legacy row, from before v3 existed' });
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.PASSED, findings: [], note: '3/3 clean', contentHash: HASH });
+    const card = await get();
+    assert.strictEqual(card.sourceVersion, 3);
+    assert.strictEqual(card.review.status, 'passed');
+    assert.strictEqual(card.review.note, '3/3 clean');
+  });
+
+  /*
+    An approval KEEPS the row: transitionReview spreads what the row holds, so
+    an escalation or an appeal a person approved still carries the findings
+    that held it, explanations and all, whether or not it was ever measured.
+    For a review checked before measuring existed they are all the card has
+    to show, so they are named the way observations are.
+  */
+  // rejects: findings projected as bare ids, which is how a pre-tally card
+  // lost every row the base card used to list.
+  await H.test('a review checked before the tally existed and approved by staff names what held it, by its text', async () => {
+    H.reset();
+    seedPublic();
+    const findings = [
+      { questionId: 'c001#002', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'The murders are the setting; the question asks about a place.' },
+      { questionId: '(set)', category: 'HATE', band: 'MEDIUM' },
+      { questionId: 'c009#001', category: 'INSULTS', band: 'HIGH' },
+      { questionId: 'c001#003', category: 'ERROR', band: 'NONE', detail: 'Throttled' },
+    ];
+    await R.writeReview(db, T, SRC, 3, { status: R.STATUS.ESCALATED, findings, note: '1/5 clean', reasons: ['guardrail'], contentHash: HASH, checkedBy: 'sub-amara' });
+    await R.transitionReview(db, T, SRC, 3, R.STATUS.ESCALATED, {
+      status: R.STATUS.PASSED, reviewer: 'dai', decidedAt: '2026-09-18T09:55:00.000Z', note: 'Historical, not gratuitous.',
+    });
+    const card = await get();
+    assert.strictEqual(card.review.tally, null);
+    assert.deepStrictEqual(card.review.observed, []);
+    assert.strictEqual(card.review.status, 'passed');
+    // The findings themselves are untouched: same rows, same order, text beside them.
+    assert.deepStrictEqual(card.review.findings.map(({ text, ...row }) => row), findings); // eslint-disable-line no-unused-vars
+    const [ripper, setText, missing, unread] = card.review.findings;
+    assert.strictEqual(ripper.text, 'The Ripper\nIn which district were the murders?');
+    assert.strictEqual(setText.text, 'True crime\nInfamous cases, solved and not.');
+    assert.strictEqual(missing.text, '', 'an id the public copy does not hold is left without text');
+    assert.strictEqual(unread.text, 'Bow Street\nWho founded the Bow Street Runners?');
+  });
+
+  // rejects: the card's question count being the organisation's ACTIVE
+  // version's. Every version row in the editor can be shared, and publish
+  // spreads the org row onto the public one, so sharing v2 (25 questions)
+  // while v3 (30) is active made a complete check read "25 of 30 checked".
+  await H.test('a past version shared while a larger one is active: the card counts the public copy\'s own questions', async () => {
+    await seedOrgVersions({ 2: 25, 3: 30 }, 3);
+    H.state.guardrailReplies = Array.from({ length: 26 }, () => H.guardrailFull());
+    await W.runSetCheck(deps, { jobId: await shareJob(2) }, H.ctx());
+    const card = await get();
+    assert.strictEqual(card.review.status, 'passed', `the share did not publish: ${card.review.status}`);
+    assert.strictEqual(card.sourceVersion, 2);
+    assert.strictEqual(card.review.tally.questions, 25);
+    assert.strictEqual(card.questionCount, 25, `the card counts ${card.questionCount} questions in a 25-question public copy`);
+  });
+  // rejects: a public version recorded without a count of its own reading as
+  // a set of no questions.
+  await H.test('a public version with no count of its own falls back to the row\'s', async () => {
+    await seedApproved({
+      publicRow: { versions: [{ version: 1, createdAt: '2026-09-01T10:00:00.000Z' }, { version: 2, createdAt: '2026-09-18T10:00:00.000Z' }] },
+    });
+    assert.strictEqual((await get()).questionCount, 3);
+  });
+
+  /*
+    WHETHER ANYBODY IS WAITING ON THIS LISTING.
+
+    A staff re-check that came out worse than the decision on record raises a
+    queue row under the listing's own key, and this card is the only surface that
+    can answer it: Take down, or "Leave it serving". A card that cannot see the
+    row cannot offer the second, which left the destructive control as the only
+    exit from a worklist row — on content a person had already approved.
+  */
+  await H.test('the card says when a re-check has left something waiting, and on which key', async () => {
+    await seedApproved();
+    assert.strictEqual((await get()).queued, null, 'a listing nobody is waiting on reports one');
+    await Q.upsertQueueRow(db, T, {
+      ref: PUBREF, version: 3, reason: 'escalated', orgId: 'org_acme', orgName: 'Acme', title: 'True crime',
+      publicSetId: PUB, recheck: true,
+    }, { now: new Date('2026-09-19T08:00:00.000Z') });
+    const card = await get();
+    assert.strictEqual(card.queued.sk, `PUBLIC#${PUB}`);
+    assert.strictEqual(card.queued.recheck, true);
+    assert.strictEqual(card.queued.waitingSince, '2026-09-19T08:00:00.000Z');
+  });
+  // rejects: every waiting row reading as a re-check's. Stage 3's reports land
+  // on the same key, and "Leave it serving" is not the answer to one.
+  await H.test('a row nobody re-checked says so', async () => {
+    await seedApproved();
+    await Q.upsertQueueRow(db, T, { ref: PUBREF, version: 3, reason: 'reported', publicSetId: PUB });
+    assert.strictEqual((await get()).queued.recheck, false);
+  });
+
+  H.summary();
+})();

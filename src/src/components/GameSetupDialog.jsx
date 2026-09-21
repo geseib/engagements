@@ -62,6 +62,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
+import {
+  isUnreadableSet, unreadableSetName, UNREADABLE_REASON,
+} from '../utils/unreadableSet';
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import Modal from './Modal';
@@ -403,8 +406,24 @@ export default function GameSetupDialog({
                 /* KEY AND VALUE ARE THE PAIR. Two libraries can hold the same
                    slug, which under `key={set.id}` is a duplicate React key and
                    two <option>s the browser cannot tell apart. */
-                <option key={setRefKey(set)} value={setRefKey(set)}>
-                  {set.name} ({set.totalQuestions} questions){imageMarkerSuffix(set.hasImages)}
+                /* AND A SET THE SERVER COULD NOT DECRYPT IS NOT A CHOICE.
+                   `{set.name} (n questions)` on a nulled name renders the line
+                   " (42 questions)" — an option with no subject. Worse, this
+                   control ACTS: picking it pins a session to content nobody can
+                   read, and that surfaces in front of a room. So it is named by
+                   the one field that was never encrypted, told apart from a set
+                   nobody titled, and refused. Still OFFERED, though — the
+                   handler keeps the row deliberately, and a set visible in the
+                   console but missing here is a question with no answer. */
+                <option
+                  key={setRefKey(set)}
+                  value={setRefKey(set)}
+                  disabled={isUnreadableSet(set)}
+                  title={isUnreadableSet(set) ? UNREADABLE_REASON : undefined}
+                >
+                  {isUnreadableSet(set)
+                    ? `${unreadableSetName(set)} — unreadable, cannot be used`
+                    : `${set.name} (${set.totalQuestions} questions)${imageMarkerSuffix(set.hasImages)}`}
                 </option>
               ))}
               {/* Editing a session whose set the page's list does not carry —

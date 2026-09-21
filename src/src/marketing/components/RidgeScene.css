@@ -1,0 +1,77 @@
+/* ================================================================= the ridge
+   Four layers, fixed behind the page: sky, back, mid, front. The amber glow is
+   its own element and is clamped to the bottom 40% of the hero band, because
+   --mk-text measures 2.84:1 on --mk-amber-deep and the headline is in the top 55%.
+   Copied from docs/design/marketing-redesign/mk.css, plus a --mk-drift custom
+   property added to each layer's transform for scroll-driven vertical drift.
+   ========================================================================== */
+.mk-ridge { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.mk-ridge-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 70% at 50% 108%, rgba(199,123,74,0.30) 0%, rgba(199,123,74,0) 62%),
+    linear-gradient(180deg, var(--mk-bg) 0%, var(--mk-ridge-front) 34%,
+      var(--mk-ridge-mid) 74%, var(--mk-sky-low) 100%);
+}
+/* The one warm light in the frame. `--mk-ridge-band` is the hero height; the
+   glow's box starts at 60% of it and is gone by its foot. */
+.mk-ridge-glow {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  /* The box starts at 60% of the hero band — the top of the bottom 40% — and the
+     bloom's focal point sits near ITS top, so the light gathers just behind the
+     central summit instead of sinking out of sight behind the front ridge. It
+     still cannot reach the headline: the box never starts above the 60% line. */
+  top: calc(var(--mk-ridge-band, 88vh) * 0.60);
+  height: calc(var(--mk-ridge-band, 88vh) * 0.46);
+  width: min(1700px, 165%);
+  background: radial-gradient(48% 78% at 50% 34%,
+    rgba(246,169,76,0.82) 0%, rgba(246,169,76,0.42) 22%, rgba(199,123,74,0.24) 44%,
+    rgba(199,123,74,0.08) 66%, rgba(199,123,74,0) 82%);
+  filter: blur(6px);
+  /* The box has to stop dead on the 60% line, and a dead stop reads as a seam.
+     The mask fades the first sixth of it so the light arrives rather than
+     switches on — without ever painting a pixel above the line. */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 17%);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 17%);
+}
+/* A thin valley fog between mid and front. Without it the three silhouettes
+   read as flat cut paper — this is what makes the scene a place with air in
+   it rather than a logo. */
+.mk-ridge-haze {
+  position: absolute; left: 0; right: 0;
+  top: calc(var(--mk-ridge-band, 88vh) * 0.74);
+  height: calc(var(--mk-ridge-band, 88vh) * 0.22);
+  background: linear-gradient(180deg,
+    rgba(42,58,87,0) 0%, rgba(58,78,110,0.34) 46%, rgba(42,58,87,0) 100%);
+  filter: blur(8px);
+}
+.mk-ridge-stars { position: absolute; inset: 0 0 auto; height: 52%; opacity: 0.5; }
+.mk-ridge-stars circle { fill: var(--mk-text); }
+
+/* No `will-change: transform` here (fix round 2): these three layers pin a
+   full-viewport compositor layer each on EVERY marketing page, including the
+   pages where --mk-drift never moves (a scroll listener only exists while
+   the page can drift at all — see useScrollProgress.js), so the cost was
+   paid site-wide for a benefit only the pages with drift ever collect. */
+.mk-ridge-layer { position: absolute; left: -5%; width: 110%; bottom: 0; display: block; }
+.mk-ridge-back  { height: 62%; opacity: 0.92; transform: translate3d(-1.2%, var(--mk-drift, 0px), 0); }
+.mk-ridge-mid   { height: 50%; transform: translate3d(-2.6%, var(--mk-drift, 0px), 0); }
+.mk-ridge-front { height: 38%; transform: translate3d(-4.4%, var(--mk-drift, 0px), 0); }
+.mk-ridge-back  .mk-ridge-body { fill: var(--mk-ridge-back); }
+.mk-ridge-mid   .mk-ridge-body { fill: var(--mk-ridge-mid); }
+.mk-ridge-front .mk-ridge-body { fill: var(--mk-ridge-front); }
+
+/* The route is the page's spine: base camp at the foot, the summit where the
+   report is. Dashed because it is a plan, not a path already walked. */
+.mk-ridge-route {
+  fill: none; stroke: var(--mk-amber); stroke-width: 3.2;
+  stroke-dasharray: 11 12; stroke-linecap: round; opacity: 0.78;
+}
+.mk-ridge-climber { fill: var(--mk-amber); stroke: var(--mk-bg); stroke-width: 2.5; }
+.mk-ridge-climber-halo { fill: rgba(246,169,76,0.22); }
+.mk-ridge-flag { fill: var(--mk-amber); }
+.mk-ridge-mast { stroke: var(--mk-amber); stroke-width: 2.4; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-ridge-back, .mk-ridge-mid, .mk-ridge-front { --mk-drift: 0px; }
+}

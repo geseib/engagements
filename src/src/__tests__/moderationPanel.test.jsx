@@ -45,6 +45,26 @@ test('the head says how many and how long, and each row says why in band words',
   expect(within(screen.getByText('Onboarding').closest('tr')).getByText('Appealed: “It is a clinical set.”')).toBeInTheDocument();
   expect(screen.getByText(/these are the ones it flagged as uncertain/i)).toBeInTheDocument();
 });
+/*
+  Rows as GET /admin/moderation projects them (moderation-list.js): bands one
+  per category, and what a check escalation was for. Every one of these once
+  read "Uncertain" — the queue row said only 'escalated', and the bands were
+  read as counts.
+*/
+test('each row says what the check escalated it for, as the endpoint sends it', async () => {
+  const base = { orgName: 'Acme', gameType: 'trivia', questionCount: 3, version: 1, reasons: ['escalated'], bands: {}, uncertainQuestionIds: [], checkReasons: [], declaredNotice: [], waitingSince: '2026-09-17T09:00:00.000Z' };
+  const items = [
+    { ...base, sk: 'org_acme#art#v1', setId: 'art', title: 'Gallery walk', checkReasons: ['images'] },
+    { ...base, sk: 'org_acme#ward#v1', setId: 'ward', title: 'Ward drills', checkReasons: ['declared'], declaredNotice: ['graphic-medical'] },
+    { ...base, sk: 'org_acme#hist#v1', setId: 'hist', title: 'A timeline', checkReasons: ['guardrail'], bands: { VIOLENCE: 'MEDIUM' }, uncertainQuestionIds: ['q002'] },
+  ];
+  global.fetch = jest.fn(async () => json({ count: items.length, oldestWaitingSince: base.waitingSince, items }));
+  render(<ModerationPanel />);
+  const rowOf = async (title) => within((await screen.findByText(title)).closest('tr'));
+  expect((await rowOf('Gallery walk')).getByText('Images')).toBeInTheDocument();
+  expect((await rowOf('Ward drills')).getByText('Declared: graphic medical')).toBeInTheDocument();
+  expect((await rowOf('A timeline')).getByText('1 uncertain question (medium: violence)')).toBeInTheDocument();
+});
 test('an empty queue says the check decided everything, and never lies about an outage', async () => {
   global.fetch = jest.fn(async () => json({ count: 0, oldestWaitingSince: null, items: [] }));
   render(<ModerationPanel />);
@@ -322,4 +342,157 @@ test('a set-level finding with the snapshot gone renders no block to read', asyn
   expect(await within(dialog).findByText(/The set's own text:/)).toBeInTheDocument();
   expect(within(dialog).queryByText('Custom instruction')).toBeNull();
   expect(within(dialog).queryByText('Name')).toBeNull();
+});
+
+/*
+  A ROW A RE-CHECK RAISED IS NOT DECIDED HERE.
+
+  The library is already serving that exact version, so Approve would publish a
+  second public version of it and Reject would stamp its author `flagged` for a
+  check nobody told them about — moderation-decide.js refuses both. A button
+  that can only produce a refusal is not an action, so the row offers the two
+  that are: the score card, which shows the escalation, what held it, and Take
+  down; and leaving it serving, which clears the row and changes nothing else.
+
+  The sk is the LISTING's, which is how the worker keys such a row — never the
+  organisation's version key, which is their own publish request's.
+*/
+const RECHECKED = { count: 1, oldestWaitingSince: '2026-09-16T10:00:00.000Z', items: [
+  {
+    sk: 'PUBLIC#orgacme-crime', orgName: 'Acme', setId: 'orgacme-crime', title: 'True crime', version: 2,
+    gameType: 'trivia', questionCount: 11, reasons: ['escalated'], uncertainQuestionIds: ['c001#003'],
+    waitingSince: '2026-09-16T10:00:00.000Z', publicSetId: 'orgacme-crime', recheck: true,
+  },
+  ...QUEUE.items,
+] };
+
+test('a re-checked listing offers the score card and no Review, and says the library already serves it', async () => {
+  global.fetch = jest.fn(async (url) => (String(url).endsWith('/admin/moderation') ? json(RECHECKED) : json(ITEM)));
+  const opened = [];
+  render(<ModerationPanel onOpenScoreCard={(id) => opened.push(id)} />);
+  const row = (await screen.findByText('True crime')).closest('tr');
+  expect(within(row).getByText('Already in the library · 1 uncertain question')).toBeInTheDocument();
+  expect(within(row).queryByRole('button', { name: /^review$/i })).toBeNull();
+  fireEvent.click(within(row).getByRole('button', { name: /score card/i }));
+  expect(opened).toEqual(['orgacme-crime']);
+  // rejects: hiding Review on every row. An organisation's own escalated share
+  // is still decided here.
+  const ordinary = screen.getByText('Safety walkthrough').closest('tr');
+  expect(within(ordinary).getByRole('button', { name: /^review$/i })).toBeInTheDocument();
+});
+
+test('a re-checked listing with no score card to open still says why it is here', async () => {
+  global.fetch = jest.fn(async (url) => (String(url).endsWith('/admin/moderation') ? json(RECHECKED) : json(ITEM)));
+  // No onOpenScoreCard, and no publicSetId, is the shape a legacy entry can
+  // reach: the row must still not offer a button that can only be refused.
+  render(<ModerationPanel />);
+  const row = (await screen.findByText('True crime')).closest('tr');
+  expect(within(row).queryByRole('button', { name: /^review$/i })).toBeNull();
+  expect(within(row).getByText(/already in the library/i)).toBeInTheDocument();
+});
+
+/*
+  …AND IT IS ANSWERED, not just redirected.
+
+  Neither review-dialog decision applies to a re-check's row, so before "Leave it
+  serving" the only way to clear it was to take down content a person had already
+  approved — and the likely outcome of exactly the re-checks staff run is a
+  medium band somebody already ruled on. The row, and the nav badge it feeds,
+  aged for ever instead.
+*/
+const LEAVE = /leave it serving/i;
+test('a re-checked listing is left serving from the row, and the list reloads without it', async () => {
+  let left = [];
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST' && u.endsWith('/admin/moderation/decide')) { left.push(JSON.parse(options.body)); return json({ decision: 'leave', leftServing: 'orgacme-crime' }); }
+    if (u.endsWith('/admin/moderation')) return json(left.length ? QUEUE : RECHECKED);
+    return json(ITEM);
+  });
+  const counts = [];
+  render(<ModerationPanel onOpenScoreCard={() => {}} onQueueChanged={(n) => counts.push(n)} />);
+  const row = (await screen.findByText('True crime')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: LEAVE }));
+  await waitFor(() => expect(left).toEqual([{ sk: 'PUBLIC#orgacme-crime', decision: 'leave' }]));
+  await waitFor(() => expect(screen.queryByText('True crime')).toBeNull());
+  // The nav badge is told, the same way every decision here tells it.
+  expect(counts[counts.length - 1]).toBe(2);
+  // rejects: offering it on an organisation's own row, which is a decision
+  // somebody owes them rather than a row to sweep away.
+  const ordinary = screen.getByText('Safety walkthrough').closest('tr');
+  expect(within(ordinary).queryByRole('button', { name: LEAVE })).toBeNull();
+});
+
+// rejects: a refusal that switches the table off — the list is still perfectly
+// good, and hiding it would take every other row away over one row's refusal.
+test('a refusal is said on its own line and the queue stays on the screen', async () => {
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST' && u.endsWith('/admin/moderation/decide')) return json({ error: 'This entry also carries a report, which is answered on the report itself.' }, 409);
+    if (u.endsWith('/admin/moderation')) return json(RECHECKED);
+    return json(ITEM);
+  });
+  render(<ModerationPanel onOpenScoreCard={() => {}} />);
+  const row = (await screen.findByText('True crime')).closest('tr');
+  fireEvent.click(within(row).getByRole('button', { name: LEAVE }));
+  expect(await screen.findByTestId('modq-rowerror')).toHaveTextContent(/carries a report/i);
+  expect(screen.getByText('True crime')).toBeInTheDocument();
+  expect(within(screen.getByText('True crime').closest('tr')).getByRole('button', { name: LEAVE })).toBeEnabled();
+});
+
+/*
+  ── ENGAGE'S OWN SET, WHICH BELONGS TO NO ORGANISATION ────────────────────
+
+  A check of one of Engage's shared sets raises `PLATFORM#<setId>` (spec §3.2's
+  third shape; set-check-worker.js). It is `recheck: false` and carries no
+  `publicSetId`, so before this the row offered Review — whose Approve and
+  Reject the server refuses outright ("That is not a queue entry this screen
+  decides"), while the ONE decision it accepts, `leave`, was never drawn. The
+  row could not be cleared by anybody, and aged for ever in the queue and in
+  the nav badge: the failure "Leave it serving" was built to fix, reappearing
+  for a different key.
+*/
+const HOUSE = { count: 1, oldestWaitingSince: '2026-09-19T10:00:00.000Z', items: [
+  {
+    sk: 'PLATFORM#icebreakers', scope: 'platform', orgId: '', orgName: '', setId: 'icebreakers',
+    title: 'Icebreakers', version: 1, gameType: 'poll', questionCount: 12,
+    reasons: ['escalated'], uncertainQuestionIds: ['c001#003'],
+    waitingSince: '2026-09-19T10:00:00.000Z', recheck: false,
+  },
+  ...QUEUE.items,
+] };
+
+test("a check of Engage's own set is answered from the row, not sent to a dialog that refuses it", async () => {
+  const left = [];
+  global.fetch = jest.fn(async (url, options = {}) => {
+    const u = String(url); const method = (options.method || 'GET').toUpperCase();
+    if (method === 'POST' && u.endsWith('/admin/moderation/decide')) { left.push(JSON.parse(options.body)); return json({ decision: 'leave', leftServing: 'icebreakers' }); }
+    if (u.endsWith('/admin/moderation')) return json(left.length ? QUEUE : HOUSE);
+    return json(ITEM);
+  });
+  render(<ModerationPanel onOpenScoreCard={() => {}} />);
+  const row = (await screen.findByText('Icebreakers')).closest('tr');
+  // rejects: the Review button, whose only outcome on this row is a 400.
+  expect(within(row).queryByRole('button', { name: /^review$/i })).toBeNull();
+  // rejects: a Score card button keyed by a publicSetId an Engage set has not got.
+  expect(within(row).queryByRole('button', { name: /score card/i })).toBeNull();
+  fireEvent.click(within(row).getByRole('button', { name: LEAVE }));
+  await waitFor(() => expect(left).toEqual([{ sk: 'PLATFORM#icebreakers', decision: 'leave' }]));
+  await waitFor(() => expect(screen.queryByText('Icebreakers')).toBeNull());
+});
+
+// rejects: a blank Organisation cell on a set that HAS no organisation, which
+// reads as a customer whose name the console could not find.
+test("Engage's own row names Engage in the Organisation column", async () => {
+  global.fetch = jest.fn(async (url) => (String(url).endsWith('/admin/moderation') ? json(HOUSE) : json(ITEM)));
+  render(<ModerationPanel onOpenScoreCard={() => {}} />);
+  const row = (await screen.findByText('Icebreakers')).closest('tr');
+  expect(within(row).getByTestId('modq-org')).toHaveTextContent(/^Engage$/);
+  // rejects: writing "Engage" over every row. A customer's row is unchanged.
+  const ordinary = screen.getByText('Safety walkthrough').closest('tr');
+  expect(within(ordinary).getByTestId('modq-org')).toHaveTextContent('Acme');
+  // The why cell does not borrow the re-check's words: this set is not "already
+  // in the library" in the sense that phrase carries, which is a PUBLIC copy.
+  expect(within(row).queryByText(/already in the library/i)).toBeNull();
+  expect(within(row).getByText(/1 uncertain question/i)).toBeInTheDocument();
 });

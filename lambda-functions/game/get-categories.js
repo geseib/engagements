@@ -1,6 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolvePartitionFromMeta, findSetMetadata, setRef } = require('./set-version');
+const {
+  resolvePartitionFromMeta, findSetMetadata, findSetForSession, setRef,
+} = require('./set-version');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -16,6 +18,14 @@ exports.handler = async (event) => {
     // caller may say which one it means (`?scope=org`); when it does not, the
     // search below tries the caller's own org first, then platform, then public.
     const requestedScope = (event.queryStringParameters || {}).scope;
+    // WHICH LIBRARY, SAID BY A SESSION INSTEAD OF BY THE CALLER. The host
+    // remote loads these names beside the category toggles while it is driving
+    // a room, from a device that has chosen no team — so the search below,
+    // which probes the caller's ACTIVE organisation, found nothing and the
+    // panel reported "No categories in this set" about a set with plenty.
+    // See set-version.js:findSetForSession for what this does and does not
+    // grant; it is gated on being entitled to drive this very session.
+    const gameId = (event.queryStringParameters || {}).gameId;
 
     if (!setId) {
       return {
@@ -36,9 +46,16 @@ exports.handler = async (event) => {
     //
     // An unfound set also keeps the pre-tenancy behaviour of this route, which
     // never 404'd either.
-    const found = await findSetMetadata(
-      db, process.env.TABLE_NAME, event, setId, requestedScope
-    );
+    // A miss falls back to the caller's own libraries, so an unknown or stale
+    // gameId behaves exactly as this route did before it existed.
+    let found = gameId
+      ? await findSetForSession(db, process.env.TABLE_NAME, event, setId, gameId)
+      : null;
+    if (!found) {
+      found = await findSetMetadata(
+        db, process.env.TABLE_NAME, event, setId, requestedScope
+      );
+    }
     const resolved = resolvePartitionFromMeta(
       found ? found.ref : setRef(setId),
       found ? found.item : undefined,

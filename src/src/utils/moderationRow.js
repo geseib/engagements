@@ -3,17 +3,46 @@
  * is waiting; this turns it into the one line the table shows — band words,
  * never scores (spec §10.5). Content-notice labels are Stage 4's vocabulary;
  * until then an id reads as its words ("graphic-medical" → "graphic medical").
+ *
+ * The score card reads a REVIEW row's reasons through the same function, so a
+ * reason reads the same on both screens. Those are the check's own
+ * (set-check-worker.js): 'guardrail' is the escalation the queue already words,
+ * the check unsure. A queue row the check escalated carries the same list as
+ * `checkReasons` (reasonsOf, below), so images, a declared notice, a budget
+ * that ran out, a snapshot that would not save and a check that threw read the
+ * same on the queue as on the card.
  */
 const APPEAL_MAX = 80;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const humanise = (id) => String(id || '').replace(/[-_]+/g, ' ').trim();
+/** One notice id, or the review row's list of what the author declared (up to eight, check-question-set.js). */
+const noticeWords = (notice) => (Array.isArray(notice) ? notice : [notice]).map(humanise).filter(Boolean).join(', ');
+
+const BANDS = ['HIGH', 'MEDIUM', 'LOW'];
+/**
+ * A queue row's `bands` is one band per category — { HATE: 'MEDIUM' } (spec
+ * §3.2), as the check and the appeal write it — so it reads worst band first,
+ * each with the categories seen at it, in the review dialog's own words for
+ * them: "medium: hate, violence". A value that is not a band is skipped, never
+ * printed: no writer has ever stored a count here, and a number on this line
+ * would be a score.
+ */
+function bandWords(bands) {
+  const seen = new Map(BANDS.map((b) => [b, []]));
+  for (const [category, band] of Object.entries(bands && typeof bands === 'object' ? bands : {})) {
+    const b = String(band || '').toUpperCase();
+    if (seen.has(b)) seen.get(b).push(humanise(category).toLowerCase());
+  }
+  return BANDS.filter((b) => seen.get(b).length).map((b) => `${b.toLowerCase()}: ${seen.get(b).sort().join(', ')}`).join('; ');
+}
 
 function escalationWords(item) {
-  const ids = Array.isArray(item.uncertainQuestionIds) ? item.uncertainQuestionIds : [];
-  if (ids.length) return `${plural(ids.length, 'uncertain question')}`;
-  const bands = item.bands && typeof item.bands === 'object' ? item.bands : {};
-  const parts = ['HIGH', 'MEDIUM', 'LOW'].filter((b) => Number(bands[b]) > 0).map((b) => `${b.toLowerCase()} ×${Number(bands[b])}`);
-  return parts.length ? `Uncertain (${parts.join(', ')})` : 'Uncertain';
+  // Questions, not findings: the check writes an id per finding, so a question
+  // held in two categories is on the row twice (set-check-worker.js).
+  const questions = new Set(Array.isArray(item.uncertainQuestionIds) ? item.uncertainQuestionIds : []).size;
+  const head = questions ? plural(questions, 'uncertain question') : 'Uncertain';
+  const detail = bandWords(item.bands);
+  return detail ? `${head} (${detail})` : head;
 }
 
 function appealWords(item) {
@@ -31,14 +60,43 @@ function reportWords(item) {
   return `Reported${count ? ` ×${count}` : ''}${types.length ? ` · ${types.join(', ')}` : ''}`;
 }
 
+/**
+ * What a row is waiting for. A queue row the check escalated says only
+ * 'escalated', and carries beside it what the escalation was for — the check's
+ * own reasons, `checkReasons` (set-check-worker.js). Those replace it, and
+ * 'escalated' keeps its words only for what they leave unexplained: questions
+ * or bands the guardrail could not decide. A row that carries none — an appeal,
+ * or a row written before the check named them — reads as it always did.
+ */
+function reasonsOf(item) {
+  const listed = Array.isArray(item.reasons) ? item.reasons : [];
+  const own = Array.isArray(item.checkReasons) ? item.checkReasons : [];
+  if (!own.length || !listed.includes('escalated')) return listed;
+  const undecided = (Array.isArray(item.uncertainQuestionIds) && item.uncertainQuestionIds.length > 0) || bandWords(item.bands) !== '';
+  return [...listed.filter((r) => r !== 'escalated' || undecided), ...own];
+}
+
 export function whyLabel(item = {}) {
-  const reasons = Array.isArray(item.reasons) ? item.reasons : [];
+  const reasons = reasonsOf(item);
   const parts = [];
-  if (reasons.includes('escalated')) parts.push(escalationWords(item));
+  // FIRST, because it changes what the reader should do with the row: a staff
+  // re-check raised this over a listing the library is already serving, so it is
+  // not decided in the review dialog but opened on its score card. The Why cell
+  // truncates, and the fact that redirects the reader must not be the half cut.
+  // Only a QUEUE row carries this; a REVIEW row never does, so the score card's
+  // own line through this function is unchanged.
+  if (item.recheck) parts.push('Already in the library');
+  if (reasons.includes('escalated') || reasons.includes('guardrail')) parts.push(escalationWords(item));
   if (reasons.includes('appealed')) parts.push(appealWords(item));
   if (reasons.includes('reported')) parts.push(reportWords(item));
-  if (reasons.includes('declared')) parts.push(`Declared: ${humanise(item.declaredNotice) || 'a content notice'}`);
+  if (reasons.includes('declared')) parts.push(`Declared: ${noticeWords(item.declaredNotice) || 'a content notice'}`);
   if (reasons.includes('images')) parts.push('Images');
+  if (reasons.includes('timeout')) parts.push('Out of time');
+  if (reasons.includes('snapshot')) parts.push('Snapshot not saved');
+  if (reasons.includes('error')) parts.push('Error');
+  // A check reason with no words here yet still sent the set to a person: say
+  // what the queue always said of an escalation, not "Waiting".
+  if (!parts.length && Array.isArray(item.reasons) && item.reasons.includes('escalated')) parts.push(escalationWords(item));
   return parts.length ? parts.join(' · ') : 'Waiting';
 }
 

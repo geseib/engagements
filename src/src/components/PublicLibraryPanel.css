@@ -32,4 +32,37 @@
 .publib-btn { height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--publib-rule-strong); background: transparent; color: var(--text); font: 600 var(--publib-t-body)/1 var(--font-ui); cursor: pointer; }
 .publib-btn:hover { background: var(--publib-row-hover); }
 .publib-btn--danger { color: var(--danger-text); border-color: rgba(229, 100, 94, .55); }
+.publib-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--bg); }
+.publib-btn--primary:hover { background: var(--primary); }
+.publib-btn--sm { height: 28px; padding: 0 10px; font-size: var(--publib-t-label); }
 .publib-btn:disabled { opacity: .6; cursor: default; }
+
+/* THE WAY IN, above the table so it survives the empty state. `margin-left:
+   auto` on the child rather than `justify-content: flex-end` on the bar —
+   design rule 9: flex-end overflows toward the start, where the overflow is
+   unreachable. */
+.publib-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.publib-bar > :first-child { margin-left: auto; }
+
+/* THE PICKER'S LIST. A row is name / share chip / Share, and only the name
+   gives way: it is a single text node with min-width 0, so text-overflow is
+   live on it (design rule 8) and its title carries the whole string. */
+.publib-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--publib-rule); }
+.publib-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--publib-rule);
+}
+.publib-item:hover { background: var(--publib-row-hover); }
+.publib-item-nm {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.publib-item > .publib-btn { flex: none; }

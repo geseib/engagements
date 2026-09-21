@@ -7,6 +7,25 @@
  * org, versions, notice), the org's REVIEW facts for the version it came from,
  * and the review log. Reports (Stage 3) and access rows (Stage 5) join later.
  *
+ * ── WHAT THE CHECK MEASURED, NAMED BY TEXT (2026-09-19) ────────────────────
+ *
+ * The owner: the card "doesn't reveal much". The review now carries `tally`
+ * (per category, in questions) and `observed` (every band the check saw), and
+ * GET projects both with `reasons` and the notices an author declared, which
+ * the card's reasons line names. Each observation is named by its question's
+ * TEXT, read from the public copy's own question rows by id: publish copies the
+ * judged snapshot's rows byte-for-byte, keys and all (shared/publish-set.js),
+ * so the review's ids are the public copy's ids. Not the S3 snapshot —
+ * snapshots expire after 30 days and this function has no S3 grant — and not
+ * the org's rows, which are encrypted and may have been edited since. A review
+ * checked before measuring existed projects `tally: null` and no observations.
+ *
+ * Findings are named the same way, from the same one read. For a review
+ * checked before measuring existed they are all the card has to show, and an
+ * approved one still has them: an approval keeps the row (set-review.js
+ * transitionReview), so every escalation or appeal staff approved carries the
+ * findings that held it, explanations and all.
+ *
  * DELETE is takedown. It reads `source*` off the public row, logs `taken-down`
  * with the note on the org set's log, flags the org's share stamp ONLY IF it
  * still names this public set (D11), deletes any queue row for the set, and
@@ -38,12 +57,16 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('./shared/tenant');
-const { setMetadataKey } = require('./shared/set-version');
+const { setMetadataKey, setPartition, toVersion } = require('./shared/set-version');
 const { unpublishSet } = require('./shared/publish-set');
 const { readReview } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
 const { writeShareStamp } = require('./shared/share-stamp');
-const { queueSk, deleteQueueRow } = require('./shared/moderation-queue');
+const { queueSk, queueKey, deleteQueueRow } = require('./shared/moderation-queue');
+// The measurement half of this projection is shared with the AUTHOR's version
+// list (admin/get-set-versions.js), so "what a check measured" is one list
+// rather than two that drift. Everything a reviewer owns stays here.
+const { lines, measurementOf, withText } = require('./shared/review-card');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -62,13 +85,44 @@ async function readPublicMeta(publicSetId) {
   return res && res.Item ? res.Item : null;
 }
 
+/**
+ * Name each row of each list by its text (see the header), from ONE read of
+ * the public copy however many lists name a question — `withText` in
+ * shared/review-card.js, pointed at the ACTIVE PUBLIC VERSION's partition and
+ * given the public set's own title and description as the set's subject.
+ */
+const named = (lists, meta, publicSetId) => withText(db, TABLE(), lists, {
+  partitionPk: setPartition(pubRefOf(publicSetId), meta.activeVersion),
+  setName: lines(meta.name, meta.description),
+});
+
 async function standing(meta, publicSetId) {
   const source = sourceOf(meta);
-  const version = Number(meta.sourceVersion) || 0;
-  const review = source.orgId && source.setId && version ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
+  // NULL IS A VERSION HERE — the legacy one. `toVersion` returns null for a set
+  // shared before versioning existed, and `setPartition(ref, null)` is the
+  // UNSUFFIXED partition, which is where such a set's REVIEW row really is.
+  // This read used to be guarded by `Number(meta.sourceVersion) || 0`, so every
+  // legacy entry — three of the four on dev — reported `unreviewed` over a row
+  // that says `passed`. The guard that matters is only that the public row
+  // names a source at all.
+  const version = toVersion(meta.sourceVersion);
+  const review = source.orgId && source.setId ? await readReview(db, TABLE(), source, version) : { status: 'unreviewed' };
+  const measured = measurementOf(review);
+  const [observed, findings] = await named([measured.observed, review.findings], meta, publicSetId);
   const log = source.orgId && source.setId ? await readReviewLog(db, TABLE(), source) : [];
   const versions = Array.isArray(meta.versions) ? meta.versions : [];
   const latest = versions.find((v) => Number(v.version) === Number(meta.activeVersion)) || versions[versions.length - 1] || {};
+  /*
+    IS ANYBODY WAITING ON THIS LISTING? A staff re-check that came out worse than
+    the decision on record raises a queue row under the listing's own key
+    (set-check-worker.js), and this card is where it is answered: Take down, or
+    "Leave it serving" (moderation-decide.js `leave`). Without this the card could
+    not tell that anybody was waiting at all, and the only exit from the row was
+    the destructive one — take down content a person had already approved.
+  */
+  const waiting = (await db.send(new GetCommand({
+    TableName: TABLE(), Key: queueKey(queueSk(pubRefOf(publicSetId), 0)),
+  }))).Item;
   return {
     publicSetId,
     name: meta.name || '',
@@ -79,7 +133,12 @@ async function standing(meta, publicSetId) {
     sourceSetId: source.setId,
     sourceVersion: version,
     publicVersion: Number(meta.activeVersion) || 0,
-    questionCount: Number(meta.questionCount) || Number(latest.questionCount) || 0,
+    // The public copy's OWN count: publish records the question rows it
+    // copied on the version entry (shared/publish-set.js). The row's top-level
+    // `questionCount` is the organisation's, spread across at publish, and so
+    // counts the org's ACTIVE version — not the one shared, whenever a past
+    // version is. Only a row whose version carries no count falls back to it.
+    questionCount: Number(latest.questionCount) || Number(meta.questionCount) || 0,
     contentHash: meta.contentHash || '',
     sensitivity: Array.isArray(meta.sensitivity) ? meta.sensitivity : [],
     promptDropped: meta.promptDropped === true,
@@ -90,9 +149,26 @@ async function standing(meta, publicSetId) {
       decidedAt: review.decidedAt || null,
       note: review.note || '',
       notice: Array.isArray(review.notice) ? review.notice : [],
-      findings: Array.isArray(review.findings) ? review.findings : [],
+      // Still only what held the set — named, not changed.
+      findings,
       checkedAt: review.checkedAt || null,
+      reasons: Array.isArray(review.reasons) ? review.reasons : [],
+      // What the author declared, which the worker keeps beside a `declared`
+      // reason (set-check-worker.js): the card's reasons line names it.
+      declaredNotice: Array.isArray(review.declaredNotice) ? review.declaredNotice : [],
+      // null, not {}: "checked before measuring existed" is not "measured,
+      // and nothing seen" (content-guardrail.js tallyOf, `scope: 'full'`).
+      tally: measured.tally,
+      observed,
     },
+    // The row itself is never sent — the card needs the key it answers on, and
+    // whether this is a re-check's row (which is what "Leave it serving"
+    // answers) or somebody else's business.
+    queued: waiting ? {
+      sk: waiting.SK,
+      recheck: waiting.recheck === true,
+      waitingSince: waiting.waitingSince || null,
+    } : null,
     log,
   };
 }
@@ -126,14 +202,20 @@ exports.handler = async (event) => {
     if (note.length > NOTE_MAX) return json(400, { error: `The note is over ${NOTE_MAX} characters.` });
 
     const source = sourceOf(meta);
-    const version = Number(meta.sourceVersion) || 0;
+    // Legacy is null, not 0 — the same reason standing() gives above. Read as 0
+    // this named a version 0 in the organisation's own log and stamp, and
+    // `if (version)` then skipped the queue delete: the row the check wrote at
+    // `<org>#<set>#v0` (queueSk counts a legacy version as v0) outlived the
+    // public set it pointed at. The delete is unconditional now — the same key
+    // the check would have written, present or not.
+    const version = toVersion(meta.sourceVersion);
     const reviewer = reviewerOf(event);
     // R10: the organisation is told FIRST — the destructive delete is LAST.
     // See the handler docstring for why.
     if (source.orgId && source.setId) {
       await appendReviewEvent(db, TABLE(), source, 'taken-down', { version, publicSetId, note, reviewer });
       await writeShareStamp(db, TABLE(), source, { version, status: 'flagged', note }, { onlyIfPublicSetId: publicSetId });
-      if (version) await deleteQueueRow(db, TABLE(), queueSk(source, version));
+      await deleteQueueRow(db, TABLE(), queueSk(source, version));
     }
     await deleteQueueRow(db, TABLE(), queueSk(pubRefOf(publicSetId), 0));
     await unpublishSet(db, TABLE(), source, pubRefOf(publicSetId));

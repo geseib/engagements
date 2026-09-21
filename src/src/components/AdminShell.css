@@ -125,6 +125,23 @@
   border-right: 1px solid var(--adm-rule);
 }
 
+/* The brand's contents are one link home. It carries the row's own layout so
+   the mark and the word sit exactly where they did as bare spans. */
+.adm-home {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.adm-home:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 .adm-mark {
   width: 22px;
   height: 22px;

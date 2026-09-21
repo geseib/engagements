@@ -15,6 +15,12 @@ const { PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const EVENTS = Object.freeze([
   'checked', 'escalated', 'appealed', 'decided', 'reported', 'taken-down',
   'unpublished', 'published', 'notice-set', 'notice-cleared', 'access',
+  // Staff looked at what a re-check of a listing the library already serves
+  // found, and left the listing serving. Its own event and NOT `decided`: that
+  // one means a version was approved or rejected, and moderation-decide.js reads
+  // the log for it when it resumes a crashed decision — recording this as
+  // `decided` would tell a resume that somebody had ruled on the version.
+  'left-serving',
 ]);
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 

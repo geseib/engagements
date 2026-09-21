@@ -270,6 +270,9 @@ describe('a host sees their own sets, and only controls they can use', () => {
       HOST_VIEW[0],
       {
         id: 'house-retro', name: 'House Retro', description: 'House content',
+        // Filed: the copy this test makes is a CREATE, and it starts on the
+        // shelf the set it was copied from sits on.
+        topic: 'business-work',
         engagementType: 'call-and-answer', totalQuestions: 12, categoryCount: 2,
         active: true, hasImages: false, canManage: false, mine: false, createdByName: null,
       },
@@ -626,6 +629,42 @@ describe('a host edits the questions in a set they own', () => {
     // Still editing, working copy intact, after four presses that each offered a
     // way out and took none of them.
     expect(screen.getByTestId('unsaved-bar')).toBeTruthy();
+  });
+
+  /*
+   * ESCAPE IN THE PREVIEW'S SEARCH. The editor's Modal answers Escape on
+   * `document` and closes when nothing is unsaved, so an Escape meant for the
+   * search box closed the whole editor. The box answers it first while it
+   * holds text; an empty box has nothing to clear and passes it on.
+   */
+  const previewSearch = () => {
+    fireEvent.click(within(screen.getByRole('group', { name: 'How the questions are shown' }))
+      .getByRole('button', { name: 'Preview' }));
+    return screen.getByRole('searchbox', { name: 'Search titles and details' });
+  };
+
+  test('Escape in the preview\'s search, with text in it, clears the search and leaves the editor open', async () => {
+    // rejects: the Escape reaching the editor's dialog — nothing is unsaved,
+    // so it closed, and clearing a search cost the host the editor.
+    await openDialog();
+    await openEditor();
+    const box = previewSearch();
+    fireEvent.change(box, { target: { value: 'wrong' } });
+    expect(screen.getByTestId('preview-count')).toHaveTextContent('Showing 1 of 2');
+    fireEvent.keyDown(box, { key: 'Escape' });
+    expect(box).toHaveValue('');
+    expect(screen.getByTestId('preview-count')).toHaveTextContent('Showing 2 of 2');
+    expect(screen.getByTestId('questions-panel')).toBeTruthy();
+  });
+
+  test('Escape in an empty preview search goes through to the editor, as it does anywhere else in it', async () => {
+    // rejects: the box swallowing every Escape, which would leave the host no
+    // keyboard way out from the one control that has focus.
+    await openDialog();
+    await openEditor();
+    fireEvent.keyDown(previewSearch(), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
   });
 
   test('Escape declines while an unsaved working copy is open', async () => {
@@ -1192,5 +1231,92 @@ describe('every row says whose set it is', () => {
     const row = screen.getByText('My Retro').closest('tr');
     expect(within(row).getByText('Engage')).toBeInTheDocument();
     expect(within(row).queryByText('Yours')).toBeNull();
+  });
+});
+
+/*
+  C5 — THE HOST'S SHELF, AND WHAT IT DOES *NOT* SAY.
+ 
+  The "Who can see it" tags — Shared / Public / the amber drift warning — are
+  QuestionSetsPanel's visibility column, and this shelf is not that panel: it
+  shares the stylesheet and `utils/setOwnerTag`, and renders its own table with
+  the OWNER chip only (HostQuestionSetsDialog.jsx:602, :758). So the three
+  words cannot collide here, and the row for a set this host shared still reads
+  whose it is.
+ 
+  That is the right answer rather than an omission. The hover on the drift
+  warning says "Click Share to share the latest version", and this shelf has no
+  Share control on any row — naming an exit that is not on the surface is the
+  defect the console's own dead-control ruling exists to prevent.
+*/
+describe("the share vocabulary stays off the host's shelf", () => {
+  const SHARED = [
+    { id: 'ours', name: 'Ours Shared', engagementType: 'trivia', totalQuestions: 5, active: true, canManage: true, mine: true, scope: 'org', activeVersion: 3, share: { status: 'published', version: 2, publicSetId: 'orgacme-ours', publicVersion: 1, at: '2026-09-17T09:00:00.000Z' } },
+    { id: 'theirs', name: 'Theirs Public', engagementType: 'trivia', totalQuestions: 5, active: true, canManage: false, mine: false, scope: 'public' },
+  ];
+
+  // rejects: wiring shareStateOf into this shelf's chip, which would put
+  // "Shared v2, yours is v3" — and the instruction to click a Share button
+  // that is not here — on a row whose question is "whose is it".
+  test('a shared set still reads Yours here, and carries no share tag', async () => {
+    await openDialog({}, { sets: SHARED });
+    const row = rowFor('Ours Shared');
+    expect(within(row).getByText('Yours')).toBeInTheDocument();
+    expect(within(row).queryByText(/^Shared/)).toBeNull();
+    expect(within(row).queryByText(/yours is v/)).toBeNull();
+    expect(row.querySelector('[class*="qsets-chip--vis-"]')).toBeNull();
+  });
+
+  // rejects: renaming the owner tag's PUBLIC label along with the visibility
+  // one. They are two different questions and only the second one changed.
+  test("and the public library's copy still reads Public here", async () => {
+    await openDialog({}, { sets: SHARED });
+    expect(within(rowFor('Theirs Public')).getByText('Public')).toBeInTheDocument();
+  });
+});
+
+/* ------------------------------------------- a row the server could not read */
+
+describe("a host's own set whose content could not be decrypted", () => {
+  /*
+    The shelf reads the same admin list as the console, so it receives the same
+    degraded row — encrypted fields nulled, `decryptFailed: true`. See
+    utils/unreadableSet.js.
+
+    This surface is where it lands hardest, because these are the host's OWN
+    org's sets and org content is the only content that is encrypted at all. The
+    house table below already fell back to `set.id` for a nameless row; this one
+    renders `{set.name}` bare, so a nulled name leaves a row with two live
+    buttons and nothing saying what they act on.
+  */
+  const UNREADABLE = {
+    id: 'q3retro', name: null, description: null,
+    engagementType: 'call-and-answer', totalQuestions: 42, categoryCount: 6,
+    active: true, hasImages: false, canManage: true, mine: true,
+    createdByName: 'ivy', decryptFailed: true,
+  };
+
+  // rejects: `{set.name}` rendered straight through, which leaves the row's
+  // only identifier blank while Rename and Delete stay pointed at it.
+  test('the row is still identifiable, by the field that was never encrypted', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    expect(screen.getByText('q3retro')).toBeInTheDocument();
+  });
+
+  // rejects: letting it pass as an ordinary row. Delete is the recovery here,
+  // so the row must stay actionable — but a host has to be told which state
+  // they are acting on before they act on it.
+  test('it is marked unreadable rather than passing as an ordinary set', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    const row = screen.getByText('q3retro').closest('tr');
+    expect(within(row).getByText(/unreadable/i)).toBeInTheDocument();
+  });
+
+  // rejects: hiding the row. A set a host can see in the console, cannot find
+  // on their own shelf, and cannot delete is worse than one that is merely
+  // broken.
+  test('their readable sets are all still listed beside it', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
   });
 });

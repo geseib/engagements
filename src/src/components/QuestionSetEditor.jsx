@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import './QuestionSetEditor.css';
 import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
@@ -7,8 +8,11 @@ import RoundKindPicker from './RoundKindPicker';
 import QuestionsPanel from './QuestionsPanel';
 import SetMediaPanel from './SetMediaPanel';
 import SetReviewBanner from './SetReviewBanner';
+import SetTopicField from './SetTopicField';
 import { authFetch } from '../auth/authFetch';
 import { versionChip } from '../utils/shareState';
+import { startHouseCheck } from '../utils/houseCheck';
+import { askForTopicSuggestion } from '../utils/topicSuggestion';
 import { GAME_TYPE_LIST, gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import {
   editableSnapshot,
@@ -19,8 +23,10 @@ import {
   normalizeVersions,
   nextVersionNumber,
   interpretVersionDelete,
-  versionDeleteTone
+  versionDeleteTone,
+  latestTopicSuggestion
 } from '../utils/questionSetEditing';
+import { setTopicRefusal } from '../config/setTopics';
 import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 import { editableRows } from '../utils/questionRows';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
@@ -198,6 +204,17 @@ export default function QuestionSetEditor({
   // predate the field. See config/roundKinds.js.
   const [roundKind, setRoundKind] = useState('');
   const [roundKindBrief, setRoundKindBrief] = useState('');
+  // WHICH SHELF THIS SET SITS ON, and the author's own words beside it. '' is
+  // Unfiled — what the forty sets predating the field really carry — and it is
+  // kept as '' rather than resolved, for the same reason roundKind is: the save
+  // is a diff, and a resolved default would file them all on the catch-all one
+  // accidental Save at a time. See config/setTopics.js.
+  const [topic, setTopic] = useState('');
+  const [ownTags, setOwnTags] = useState([]);
+  // ...and the request that asks the content check which shelf it looks like.
+  // See `askForShelf` below for why it exists only on an organisation's set.
+  const [topicAsking, setTopicAsking] = useState(false);
+  const [topicAskNote, setTopicAskNote] = useState('');
   // Snapshot of the set as it was when the editor opened; the save payload is a
   // diff against this. Rebaselined on every successful save, so "dirty" always
   // means "differs from what the server now holds", not "differs from open".
@@ -407,6 +424,8 @@ export default function QuestionSetEditor({
     setPersonaId(snapshot.personaId);
     setRoundKind(snapshot.roundKind);
     setRoundKindBrief(snapshot.roundKindBrief);
+    setTopic(snapshot.topic);
+    setOwnTags(snapshot.tags);
     setOriginal(snapshot);
     setSavedTitle(questionSet?.name || '');
     setSaveStatus('');
@@ -701,11 +720,20 @@ export default function QuestionSetEditor({
     // Only meaningful for `custom`; cleared when the kind moves off it, so a
     // set cannot keep steering the generator with a brief for a direction it
     // no longer has.
-    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : ''
+    roundKindBrief: roundKind === 'custom' ? roundKindBrief.trim() : '',
+    topic,
+    tags: ownTags
   };
 
+  // The body this form would send right now. Built here as well as in the save
+  // so "dirty" and "has something to send" can never disagree: the two filing
+  // fields are NOT in EDITABLE_SET_FIELDS — one cannot be cleared and the other
+  // is a list, so neither survives that whitelist's `!==` loop.
+  const pendingEdit = buildEditPayload(title, currentDetails, original);
+
   const detailsDirty = title.trim() !== savedTitle.trim()
-    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''));
+    || Object.keys(EDITABLE_SET_FIELDS).some((f) => currentDetails[f] !== (original[f] ?? ''))
+    || 'topic' in pendingEdit || 'tags' in pendingEdit;
 
   /*
    * WHAT THE WAY OUT IS CALLED. Reported by the owner: after replacing the
@@ -739,11 +767,87 @@ export default function QuestionSetEditor({
     obvious.
   */
   const isSomebodyElses = questionSet?.canManage === false;
+  /*
+    The library the SET is in, as the list projects it (get-question-sets.js
+    always sends a concrete scope — `setScopeOf(item) || ref.scope` — so an
+    absent one here is a set the editor was handed without a list row, and
+    reads as '' rather than being guessed at as platform).
+  */
+  const setScope = String(questionSet?.scope || '');
+
+  /*
+    ASKING THE CONTENT CHECK WHICH SHELF THIS SET LOOKS LIKE.
+
+    ONLY AN ORGANISATION'S OWN SET, and only for somebody who could submit it:
+    the route behind this is the one a share posts to and is admin-gated the
+    same way, and one of Engage's sets already has the Versions panel's
+    on-demand check a few hundred lines down — which proposes a shelf on
+    exactly this path and costs no organisation anything. Drawing a second
+    control there would be two buttons for one thing.
+
+    THE GAP IT FILLS IS NARROW AND REAL. Sharing an UNFILED set is refused
+    before a check is spent (deliberately: nobody should be charged for a "no"
+    they could be told at once), so the one set whose author is staring at a
+    picker with no idea which of fifteen to choose is the one set the share can
+    never produce a proposal for. This is the request that can.
+
+    THE ANSWER IS NOT IN THE RESPONSE. It is written onto the review row at the
+    END of the run, so `askForTopicSuggestion` waits for the job and the
+    versions are reloaded after it — reloading any earlier reads the row as it
+    was before the check. The proposal then appears in the field above on its
+    own, because that is where `latestTopicSuggestion` reads it from.
+  */
+  const canAskForShelf = setScope === 'org' && canShare;
+  const askForShelf = async () => {
+    setTopicAsking(true);
+    setTopicAskNote('');
+    const out = await askForTopicSuggestion(setId);
+    if (out.ok) {
+      await loadVersions();
+      // The CHECK's verdict is not the same question as whether a shelf came
+      // back, and this sentence must not claim one when there is none — what
+      // it can say honestly is where to look, which is the row above it.
+      setTopicAskNote(out.outcome === 'passed'
+        ? 'The check has read the questions. Anything it proposes is above.'
+        : `The check has read the questions and its verdict (${out.outcome}) is on this set's versions. Anything it proposes is above.`);
+    } else {
+      setTopicAskNote(`The check could not run: ${out.error}`);
+    }
+    setTopicAsking(false);
+  };
 
   const handleSave = async () => {
     if (!title.trim()) {
       setSaveOk(false);
       setSaveStatus('Title is required');
+      return;
+    }
+
+    /*
+      A SET HAS TO SIT ON A SHELF, AND THIS IS WHERE THAT BITES.
+
+      The owner asked for a topic on every set, not only the public ones, and a
+      set that is never asked is a set the library filter cannot show. So the
+      FORM requires one — here, with the picker and, often, the check's own
+      proposal already on screen one click away.
+
+      THE ROUTE DELIBERATELY DOES NOT. `edit-question-set.js` refuses a BLANK
+      topic and requires nothing when the key is absent, because that route also
+      carries a rename from the host's shelf, a Workie re-point and a copy
+      rebind — a requirement reaching backwards into those would be a wall in
+      front of an unrelated edit. Nothing about the forty unfiled sets changes:
+      they list, play and host exactly as they did. This is the one screen that
+      asks, and it asks the person who opened the set to edit it.
+
+      Refused HERE rather than by letting the 400 come back, because this form
+      saves a dozen fields at once and a bounced PUT leaves nobody sure which of
+      them landed. `setTopicRefusal` is the same sentence both writers answer
+      with, so the product says it in one voice.
+    */
+    const refusal = setTopicRefusal(topic);
+    if (refusal) {
+      setSaveOk(false);
+      setSaveStatus(refusal);
       return;
     }
 
@@ -837,6 +941,36 @@ export default function QuestionSetEditor({
 
   /* ----------------------------------------------------------- versions --- */
 
+  /**
+   * RUN THE CONTENT CHECK ON ONE OF ENGAGE'S OWN SETS, ON DEMAND.
+   *
+   * The owner's trigger is the moment a platform set is switched on, and the
+   * console fires it there (AdminPage `handleToggleActive`). This is the other
+   * half of the same rule: a set that was already on when checking arrived, one
+   * whose questions were replaced since, and any activation whose console was
+   * closed before the dispatch went, all need a way to ask. It is the only
+   * control an Engage set has for this — there is no public listing to open a
+   * score card on, because the set already IS what every organisation reads.
+   *
+   * It publishes nothing, moves no share stamp and charges no organisation
+   * (check-question-set.js `checkPlatformSet`); an outcome worse than passed
+   * raises a queue row, which is answered in Moderation.
+   */
+  const runHouseCheck = async (version) => {
+    // `null` is a set that has never been versioned — most of Engage's library
+    // — whose content is in the legacy partition. It is named as "this set"
+    // rather than "version null", and `startHouseCheck` sends no version, so
+    // the server resolves the same partition the room plays.
+    const which = version ? `version ${version}` : 'this set';
+    setBusyVersion(version);
+    setVersionStatus({ text: `Checking ${which}...`, tone: 'pending' });
+    const out = await startHouseCheck(setId, version ? { version } : {});
+    setVersionStatus(out.ok
+      ? { text: `The content check is running on ${which}. Reload the versions in a minute to see what it made of it.`, tone: 'success' }
+      : { text: `The content check could not be started: ${out.error}`, tone: 'error' });
+    setBusyVersion(null);
+  };
+
   const handlePromote = async (version) => {
     setBusyVersion(version);
     setVersionStatus({ text: `Promoting version ${version}...`, tone: 'pending' });
@@ -914,7 +1048,18 @@ export default function QuestionSetEditor({
   const plannedVersion = nextVersionNumber(versions, activeVersion);
 
   return (
-    <div className="admin-section edit-section qs-editor">
+    /*
+      THE THEME IS DECLARED HERE, NOT INHERITED. This editor is mounted twice —
+      as a place in the admin console, and inside the host's set shelf, where
+      `.qsets--onlight` re-points the global tokens to paper on the overlay
+      above it. Custom properties inherit, so a theme taken from an ancestor
+      would have covered one mount and missed the other. The owner: *"the white
+      background really contrasts the rest of the site, as we are entirely dark
+      background throughout, except for question set editors and previews."*
+      components/QuestionSetEditor.css carries the scope's token block and the
+      re-inking of the paper controls this form borrows.
+    */
+    <div className="admin-section edit-section qs-editor" data-theme="dark">
       {/*
         THE TITLE AND THE WAY OUT, ON ONE LINE — the same `.qs-dialog-head` /
         `.qs-dialog-close` pair QuestionsPanel's question dialog already uses,
@@ -1209,6 +1354,26 @@ export default function QuestionSetEditor({
               rows="3"
             />
           </div>
+
+          {/*
+            WHERE THIS SET SITS IN THE LIBRARY. Directly under the description
+            because it answers the same question — what is this about — and the
+            proposal it can offer is drawn from the check that read those very
+            questions. The picker is a closed fifteen; see SetTopicField.jsx for
+            why it is not CategoryPicker's combobox.
+          */}
+          <SetTopicField
+            idPrefix="edit-set"
+            topic={topic}
+            onTopicChange={setTopic}
+            tags={ownTags}
+            onTagsChange={setOwnTags}
+            suggestion={latestTopicSuggestion(versions)}
+            /* Only where there is something to ask — see `askForShelf`. */
+            onAskForSuggestion={canAskForShelf ? askForShelf : null}
+            asking={topicAsking}
+            askNote={topicAskNote}
+          />
 
           {/*
             Engagement type was loaded into state but never rendered and never
@@ -1547,6 +1712,15 @@ export default function QuestionSetEditor({
             {appealStatus && <StatusMessage message={appealStatus.text} tone={appealStatus.tone} />}
             <SetReviewBanner
               entry={entry}
+              /*
+                WHICH LIBRARY THIS SET IS IN. The banner's whole vocabulary is a
+                SHARE's — published, not published, your own private copy — and
+                none of it is true of one of Engage's own sets, which is served
+                to every organisation and submitted by nobody. The list row was
+                already honest about this (`shareStateOf` says "Everyone"); the
+                banner and the version chip were not.
+              */
+              scope={setScope}
               share={shared || null}
               busy={appealBusy}
               /*
@@ -1587,6 +1761,9 @@ export default function QuestionSetEditor({
         onChanged={async () => { await loadVersions(); if (onChanged) onChanged(); }}
         onDirtyChange={setQuestionsDirty}
         focusRequest={focusRequest}
+        // The Custom Instructions field as it stands, saved or not, for the
+        // Questions tab's preview (QuestionsPanel `detailsInstruction`).
+        detailsInstruction={instructions}
       />
 
       {/* ================================================= 3. VERSIONS === */}
@@ -1603,9 +1780,30 @@ export default function QuestionSetEditor({
         </div>
 
         {versions.length === 0 ? (
-          <p className="qs-empty">
-            No version history for this set yet. The next CSV upload creates one.
-          </p>
+          <>
+            <p className="qs-empty">
+              No version history for this set yet. The next CSV upload creates one.
+            </p>
+            {/*
+              AND MOST OF ENGAGE'S LIBRARY IS EXACTLY THIS — unversioned, its
+              content in the legacy partition, and therefore with no version row
+              to hang a control on. The check does not need one: the worker
+              reads the partition a null version resolves to, and the queue row
+              it may raise is keyed by the SET rather than by a version
+              (`PLATFORM#<setId>`). Without this the sets that most need a first
+              measurement are the ones with no way to ask for it.
+            */}
+            {setScope === 'platform' && (
+              <button
+                className="btn-secondary btn-small"
+                onClick={() => runHouseCheck(null)}
+                disabled={busyVersion === null && versionStatus.tone === 'pending'}
+                title="Run the content check on this set's current questions"
+              >
+                <Icon name="ShieldCheck" weight="bold" size={14} color="currentColor" /> Run the content check
+              </button>
+            )}
+          </>
         ) : (
           <ul className="qs-version-list">
             {versions.map((v) => (
@@ -1622,7 +1820,7 @@ export default function QuestionSetEditor({
                       Active
                     </span>
                   )}
-                  {(() => { const chip = versionChip(v); return (
+                  {(() => { const chip = versionChip(v, setScope); return (
                     <span className={`qs-version-chip qs-version-chip--${chip.key}`} title={chip.key === 'public' ? `Public as ${v.published.publicSetId} v${v.published.publicVersion}` : undefined}>
                       {chip.label}
                     </span>
@@ -1641,6 +1839,23 @@ export default function QuestionSetEditor({
                   {v.createdAt && <span>{new Date(v.createdAt).toLocaleString()}</span>}
                 </div>
                 <div className="qs-version-actions">
+                  {/*
+                    ENGAGE'S OWN SET NEVER SHARES — it is already what every
+                    organisation reads — so "Share publicly" is not its control
+                    and `canShare` is false for it. What it has instead is the
+                    check itself, which is the whole of what sharing would have
+                    run.
+                  */}
+                  {setScope === 'platform' && (
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => runHouseCheck(v.version)}
+                      disabled={busyVersion === v.version || v.review === 'checking'}
+                      title={v.review === 'checking' ? 'A check is already running on this version' : `Run the content check on version ${v.version}`}
+                    >
+                      <Icon name="ShieldCheck" weight="bold" size={14} color="currentColor" /> Run the content check
+                    </button>
+                  )}
                   {canShare && onShare && (
                     <button
                       className="btn-secondary btn-small"

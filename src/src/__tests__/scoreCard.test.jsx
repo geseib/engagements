@@ -3,12 +3,34 @@ import { render, screen, fireEvent, within, waitFor } from '@testing-library/rea
 jest.mock('../auth/authFetch', () => ({ __esModule: true, authFetch: (...args) => global.fetch(...args) }));
 import ScoreCard from '../components/ScoreCard';
 
+/*
+  THE FIXTURE IS THE REVIEW PRODUCTION WRITES (2026-09-19).
+
+  It used to put a LOW finding on a passed review, a shape no code path
+  writes: `findings` holds only what INTERVENED, and the guardrail intervenes
+  at HIGH (the set is flagged) or MEDIUM (a person looks), never at LOW. It is
+  now what an escalation leaves once staff approve it — the one MEDIUM that
+  held the set is the finding; the LOW the check saw and let through, and a LOW
+  in the set's own text, are observations beside it; the tally counts them in
+  questions (lambda-functions/admin/shared/content-guardrail.js tallyOf). Each
+  assertion below still checks what it checked — the uncertain question first,
+  with its explanation, the low one after it — with the question named by its
+  text rather than its id.
+*/
+const NONE = { worst: null, low: 0, medium: 0, high: 0 };
 const CARD = {
   publicSetId: 'orgacme-safety', name: 'Safety walkthrough', description: 'Site safety', engagementType: 'trivia',
   sourceOrgId: 'org_acme', sourceOrgName: 'Acme', sourceSetId: 'safety', sourceVersion: 2, publicVersion: 2, questionCount: 30,
   contentHash: 'c'.repeat(64), sensitivity: ['graphic-medical'], promptDropped: true, publishedAt: '2026-08-19T10:01:00.000Z',
   review: { status: 'passed', reviewer: 'dai', decidedAt: '2026-08-19T10:00:00.000Z', note: 'Clinical, not gratuitous.', notice: ['graphic-medical'], checkedAt: '2026-08-19T09:00:00.000Z',
-    findings: [{ questionId: 'c001#001', category: 'VIOLENCE', band: 'LOW' }, { questionId: 'c001#014', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'Injuries in detail.' }] },
+    reasons: ['guardrail'],
+    findings: [{ questionId: 'c001#014', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'Injuries in detail.' }],
+    observed: [
+      { questionId: 'c001#001', category: 'VIOLENCE', band: 'LOW', intervened: false, explanation: 'A fall is named; nothing about it is described.', text: 'Ladders\nHow many points of contact should you keep on a ladder?' },
+      { questionId: 'c001#014', category: 'VIOLENCE', band: 'MEDIUM', intervened: true, explanation: 'Injuries in detail.', text: 'After a fall\nDescribe the injuries a fall from height causes.' },
+      { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Safety walkthrough\nSite safety' },
+    ],
+    tally: { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 28, unread: 0, categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 1, high: 0 }, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } } },
   log: [
     { event: 'checked', at: '2026-08-19T09:00:00.000Z', version: 2, outcome: 'escalated' },
     { event: 'decided', at: '2026-08-19T10:00:00.000Z', version: 2, decision: 'approve', reviewer: 'dai', note: 'Clinical, not gratuitous.' },
@@ -27,7 +49,7 @@ beforeEach(() => {
   });
 });
 
-test('the identity line, the timeline newest first, and the findings uncertain first', async () => {
+test('the identity line, the timeline newest first, and what the check saw, uncertain first', async () => {
   render(<ScoreCard publicSetId="orgacme-safety" onBack={() => {}} onTakenDown={() => {}} />);
   expect(await screen.findByRole('heading', { name: /safety walkthrough/i })).toBeInTheDocument();
   const line = screen.getByTestId('scard-identity');
@@ -39,11 +61,12 @@ test('the identity line, the timeline newest first, and the findings uncertain f
   expect(events[0]).toHaveTextContent(/published/i);
   expect(events[2]).toHaveTextContent(/checked/i);
   expect(events[1]).toHaveTextContent(/clinical, not gratuitous/i);
-  const findings = screen.getAllByTestId('scard-finding');
-  expect(findings[0]).toHaveTextContent('c001#014');
-  expect(findings[0]).toHaveTextContent(/uncertain/i);
-  expect(findings[0]).toHaveTextContent(/injuries in detail/i);
-  expect(findings[1]).toHaveTextContent(/low/i);
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(rows[0]).toHaveTextContent('After a fall — Describe the injuries a fall from height causes.');
+  expect(rows[0]).toHaveTextContent(/medium/i);
+  expect(rows[0]).toHaveTextContent(/sent to a person/i);
+  expect(rows[0]).toHaveTextContent(/injuries in detail/i);
+  expect(rows[1]).toHaveTextContent(/low/i);
 });
 test('Take down states the consequence, needs a note, and hands back the id', async () => {
   const onTakenDown = jest.fn();
@@ -109,4 +132,787 @@ test('a failed takedown keeps the note and shows why, and a retry succeeds (R17 
   await waitFor(() => expect(deleted).toEqual([{ note: 'Reported for graphic detail.' }]));
   await waitFor(() => expect(onTakenDown).toHaveBeenCalledWith('orgacme-safety'));
   expect(onTakenDown).toHaveBeenCalledTimes(1);
+});
+
+/*
+  WHAT THE CHECK MEASURED — the owner, 2026-09-19: the card "doesn't reveal
+  much". A trivia set about serial killers read "Checked — passed" and "The
+  check found nothing to say." Decision A: the card MEASURES — a tally per
+  category, and the questions named by their text. Decision C: a set checked
+  before measuring existed says so plainly and shows what it has — its verdict
+  and its note — with no re-check and no backfill.
+*/
+const TRUE_CRIME = {
+  ...CARD,
+  publicSetId: 'orgacme-crime', name: 'True crime', description: 'Infamous cases, solved and not.', sensitivity: [], questionCount: 30,
+  log: [
+    { event: 'checked', at: '2026-09-19T09:00:00.000Z', version: 3, outcome: 'escalated' },
+    { event: 'escalated', at: '2026-09-19T09:00:01.000Z', version: 3, reasons: ['guardrail'] },
+    { event: 'decided', at: '2026-09-19T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Historical, not gratuitous.' },
+    { event: 'published', at: '2026-09-19T10:01:00.000Z', version: 3, publicVersion: 1 },
+  ],
+  review: {
+    status: 'passed', reviewer: 'dai', decidedAt: '2026-09-19T10:00:00.000Z', note: 'Historical, not gratuitous.', notice: [], checkedAt: '2026-09-19T09:00:00.000Z',
+    reasons: ['guardrail'],
+    findings: [{ questionId: 'c001#005', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'The wounds described in detail are what held it, not the case.' }],
+    // Stored in question order with the set's own subject last, the way the
+    // check writes them — putting the worst first is the card's job.
+    observed: [
+      { questionId: 'c001#001', category: 'MISCONDUCT', band: 'LOW', intervened: false, explanation: 'A cipher is named; nothing is taught.', text: 'The Zodiac\nWhich newspaper received the first cipher?' },
+      { questionId: 'c001#002', category: 'VIOLENCE', band: 'MEDIUM', intervened: false, explanation: 'The murders are the setting; the question asks about a place.', text: 'The Ripper\nIn which district were the murders?' },
+      { questionId: 'c001#003', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Bow Street\nWho founded the Bow Street Runners?' },
+      { questionId: 'c001#005', category: 'VIOLENCE', band: 'MEDIUM', intervened: true, explanation: 'The wounds described in detail are what held it, not the case.', text: 'The Black Dahlia\nDescribe the injuries found on the body.' },
+      { questionId: 'c002#004', category: 'HATE', band: 'LOW', intervened: false, explanation: 'A slur is quoted from a trial record.', text: '' },
+      { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'True crime\nInfamous cases, solved and not.' },
+    ],
+    tally: {
+      scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 25, unread: 0,
+      categories: { VIOLENCE: { worst: 'MEDIUM', low: 1, medium: 2, high: 0 }, SEXUAL: NONE, HATE: { worst: 'LOW', low: 1, medium: 0, high: 0 }, INSULTS: NONE, MISCONDUCT: { worst: 'LOW', low: 1, medium: 0, high: 0 } },
+    },
+  },
+};
+const withReview = (review, extra = {}) => ({ ...TRUE_CRIME, ...extra, review: { ...TRUE_CRIME.review, ...review } });
+async function open(card) {
+  global.fetch = jest.fn(async () => json(card));
+  const view = render(<ScoreCard publicSetId={card.publicSetId} onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: card.name });
+  return view;
+}
+const cells = (row) => within(row).getAllByRole('cell');
+/** The element that names a row's subject: the one that truncates, and carries the full string. */
+const subjectOf = (row) => cells(row)[0].firstElementChild;
+
+test('a measured check: the summary line from the tally, and all five categories with none written out', async () => {
+  await open(TRUE_CRIME);
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("30 questions and the set's own text checked · 25 with nothing in any category");
+  const cats = screen.getAllByTestId('scard-cat');
+  expect(cats.map((c) => cells(c)[0].textContent)).toEqual([
+    'Violence or injury', 'Sexual content', 'Hateful content', 'Insulting or harassing language', 'Dangerous or criminal instructions',
+  ]);
+  expect(cells(cats[0])[1]).toHaveTextContent('medium');
+  // The tally counts questions; the set's own text, seen here too, is named beside them.
+  expect(cells(cats[0])[2].textContent).toBe("2 at medium · 1 at low · the set's own text at low");
+  expect(cells(cats[1])[1]).toHaveTextContent('none');
+  expect(cells(cats[2])[1]).toHaveTextContent('low');
+  expect(cells(cats[2])[2]).toHaveTextContent('1 at low');
+  expect(cells(cats[3])[1]).toHaveTextContent('none');
+  expect(cells(cats[4])[2]).toHaveTextContent('1 at low');
+  expect(screen.queryByText(/nothing to say/i)).toBeNull();
+});
+test('every row is named by its question\'s text, worst first, and the full text survives the truncation', async () => {
+  await open(TRUE_CRIME);
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(rows.map((r) => cells(r)[0].textContent)).toEqual([
+    'The Black Dahlia — Describe the injuries found on the body.',
+    'The Ripper — In which district were the murders?',
+    'The Zodiac — Which newspaper received the first cipher?',
+    'Bow Street — Who founded the Bow Street Runners?',
+    'Not in the public copy',
+    "The set's own text",
+  ]);
+  expect(subjectOf(rows[0])).toHaveAttribute('title', 'The Black Dahlia\nDescribe the injuries found on the body.');
+  expect(subjectOf(rows[4]).getAttribute('title')).toMatch(/c002#004/);
+  expect(subjectOf(rows[5])).toHaveAttribute('title', 'True crime\nInfamous cases, solved and not.');
+  // Hard rule 8: what truncates is ONE text node, never a box of spans, or
+  // the clip is silent rather than an ellipsis.
+  for (const row of rows) {
+    expect(subjectOf(row).childNodes).toHaveLength(1);
+    expect(subjectOf(row).firstChild.nodeType).toBe(Node.TEXT_NODE);
+  }
+  expect(cells(rows[0])[1]).toHaveTextContent('medium');
+  expect(cells(rows[2])[1]).toHaveTextContent('low');
+  expect(cells(rows[2])[2]).toHaveTextContent('dangerous or criminal instructions');
+  expect(cells(rows[4])[2]).toHaveTextContent('hateful content');
+  // Ids are for the machine: no row is named by one where text exists.
+  expect(screen.queryByText(/c00\d#\d{3}/)).toBeNull();
+});
+test('the why column is the explanation, or the band sentence where there is none', async () => {
+  await open(TRUE_CRIME);
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(cells(rows[0])[3]).toHaveTextContent('The wounds described in detail are what held it, not the case.');
+  expect(cells(rows[1])[3]).toHaveTextContent('The murders are the setting; the question asks about a place.');
+  expect(cells(rows[3])[3]).toHaveTextContent('The check noted violence or injury at low confidence and let the question through.');
+  expect(cells(rows[5])[3]).toHaveTextContent("The check noted violence or injury at low confidence and let the set's own text through.");
+});
+test('only a row that held the set says so: a near-miss at the same band was let through', async () => {
+  const view = await open(TRUE_CRIME);
+  const held = (row) => cells(row)[4].textContent;
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(rows.map(held)).toEqual(['sent to a person', 'no', 'no', 'no', 'no', 'no']);
+  view.unmount();
+  // A HIGH that held the set flagged it — on a public card, an appeal a person then approved.
+  await open(withReview({
+    observed: [{ questionId: 'c001#005', category: 'VIOLENCE', band: 'HIGH', intervened: true, explanation: 'A killing described step by step.', text: 'The Black Dahlia\nDescribe the injuries found on the body.' }],
+    tally: { ...TRUE_CRIME.review.tally, spotless: 29, categories: { ...TRUE_CRIME.review.tally.categories, VIOLENCE: { worst: 'HIGH', low: 0, medium: 0, high: 1 }, HATE: NONE, MISCONDUCT: NONE } },
+  }));
+  expect(screen.getAllByTestId('scard-obs').map(held)).toEqual(['needs changes']);
+});
+test('a measured check that saw nothing says every question was clean — never that it had nothing to say', async () => {
+  await open(withReview({
+    reasons: [], findings: [], observed: [], reviewer: '', decidedAt: null, note: '13/13 clean',
+    tally: { scope: 'full', questions: 12, setTextChecked: true, setTextUnread: false, spotless: 12, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+  }, { questionCount: 12 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("12 questions and the set's own text checked · all clean in every category");
+  const cats = screen.getAllByTestId('scard-cat');
+  expect(cats).toHaveLength(5);
+  expect(cats.map((c) => cells(c)[1].textContent)).toEqual(['none', 'none', 'none', 'none', 'none']);
+  expect(screen.queryAllByTestId('scard-obs')).toHaveLength(0);
+  expect(screen.queryByText(/nothing to say/i)).toBeNull();
+  // The summary IS the measurement. "13/13 clean" counts something else — no
+  // question HELD — and printing both asks the reader to reconcile 13 with 12.
+  expect(screen.getByTestId('scard-verdict')).not.toHaveTextContent('13/13');
+});
+test('a question the check could not read is never counted clean', async () => {
+  await open(withReview({
+    reasons: ['error'], findings: [], observed: [],
+    tally: { scope: 'full', questions: 10, setTextChecked: true, setTextUnread: false, spotless: 8, unread: 2, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+  }, { questionCount: 10 }));
+  const summary = screen.getByTestId('scard-summary');
+  expect(summary).toHaveTextContent("10 questions and the set's own text checked · 8 with nothing in any category · 2 could not be read");
+  expect(summary).not.toHaveTextContent(/every question|all clean/);
+});
+/*
+  The same rule for the set's own text. The guardrail threw on it (a throttle,
+  or no guardrail configured) and staff approved the set anyway: the check
+  reached the text and read nothing, so the card neither names it as checked
+  nor counts it in "all clean" — and it is not "not reached" either, which is
+  a check its budget stopped.
+*/
+test('the set\'s own text the check could not read is never named as checked, nor called clean', async () => {
+  await open(withReview({
+    reasons: [], findings: [{ questionId: '(set)', category: 'ERROR', band: 'NONE' }], observed: [],
+    tally: { scope: 'full', questions: 3, setTextChecked: false, setTextUnread: true, spotless: 3, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+  }, { questionCount: 3 }));
+  const summary = screen.getByTestId('scard-summary');
+  expect(summary).toHaveTextContent("3 questions checked · every question clean in every category · the set's own text could not be read");
+  expect(summary).not.toHaveTextContent(/own text checked|all clean|not reached/);
+});
+test('a check its budget stopped says how far it got, and claims nothing about the rest', async () => {
+  const stopped = { scope: 'full', questions: 25, setTextChecked: false, setTextUnread: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+  const view = await open(withReview({ reasons: ['timeout'], findings: [], observed: [], tally: stopped }));
+  const summary = screen.getByTestId('scard-summary');
+  expect(summary).toHaveTextContent("25 of 30 questions checked · all 25 clean in every category · the set's own text was not reached");
+  expect(summary).not.toHaveTextContent(/every question/);
+  view.unmount();
+  // With no count to set it against, it still says only what it checked.
+  await open(withReview({ reasons: ['timeout'], findings: [], observed: [], tally: stopped }, { questionCount: 0 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("25 questions checked · all 25 clean in every category · the set's own text was not reached");
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/every question/);
+});
+/*
+  A past version shared while a bigger one is active: the check reached every
+  question it was given. Only a check its budget stopped reached fewer than
+  the set holds, and only the tally can say it was one — never a question
+  count beside it.
+*/
+test('a complete check is never read as cut short, whatever question count sits beside it', async () => {
+  const complete = { scope: 'full', questions: 25, setTextChecked: true, setTextUnread: false, spotless: 25, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+  const view = await open(withReview({ reasons: [], findings: [], observed: [], tally: complete }, { questionCount: 30 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("25 questions and the set's own text checked · all clean in every category");
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/ of \d/);
+  view.unmount();
+  await open(withReview({
+    reasons: [], findings: [],
+    observed: [{ questionId: 'c001#003', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Bow Street\nWho founded the Bow Street Runners?' }],
+    tally: { ...complete, spotless: 24, categories: { ...complete.categories, VIOLENCE: { worst: 'LOW', low: 1, medium: 0, high: 0 } } },
+  }, { questionCount: 30 }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("25 questions and the set's own text checked · 24 with nothing in any category");
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/ of \d/);
+});
+test('a band seen only in the set\'s own text leaves every question clean, and is listed on its own', async () => {
+  await open(withReview({
+    reasons: [], findings: [],
+    observed: [{ questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'True crime\nInfamous cases, solved and not.' }],
+    tally: { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 30, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } },
+  }));
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent("30 questions and the set's own text checked · every question clean in every category");
+  expect(screen.getAllByTestId('scard-obs').map((r) => cells(r)[0].textContent)).toEqual(["The set's own text"]);
+  // The category block says so too: every category's question count is empty,
+  // and violence was still seen — in the set's own text, never "none".
+  const cats = screen.getAllByTestId('scard-cat');
+  expect(cells(cats[0])[1].textContent).toBe('low');
+  expect(cells(cats[0])[2].textContent).toBe("the set's own text at low");
+  expect(cats.slice(1).map((c) => cells(c)[1].textContent)).toEqual(['none', 'none', 'none', 'none']);
+});
+/*
+  The final review, 2026-09-19: the tally counts QUESTIONS (content-guardrail.js
+  tallyOf skips the set's own subject), so a category seen only in the set's
+  own text had a null `worst`, and the card wrote "none" for it — one line
+  above that text's own row, sending the set to a person.
+*/
+test('the category block never writes none over the set\'s own text, least of all where that text held the set', async () => {
+  const SET_HELD = { questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM', intervened: true, text: 'True crime\nInfamous cases, solved and not.' };
+  const clean = { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 30, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+  const view = await open(withReview({
+    reasons: ['guardrail'], findings: [{ questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM' }], observed: [SET_HELD], tally: clean,
+  }));
+  const violence = screen.getAllByTestId('scard-cat')[0];
+  expect(cells(violence)[1].textContent).toBe('medium');
+  expect(cells(violence)[2].textContent).toBe("the set's own text at medium");
+  expect(cells(screen.getAllByTestId('scard-obs')[0])[4]).toHaveTextContent('sent to a person');
+  view.unmount();
+  // Beside a question seen lower, the set's own text still sets the worst, and says it was the set's.
+  await open(withReview({
+    reasons: ['guardrail'], findings: [{ questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM' }],
+    observed: [{ questionId: 'c001#003', category: 'VIOLENCE', band: 'LOW', intervened: false, text: 'Bow Street\nWho founded the Bow Street Runners?' }, SET_HELD],
+    tally: { ...clean, spotless: 29, categories: { ...clean.categories, VIOLENCE: { worst: 'LOW', low: 1, medium: 0, high: 0 } } },
+  }));
+  const mixed = screen.getAllByTestId('scard-cat')[0];
+  expect(cells(mixed)[1].textContent).toBe('medium');
+  expect(cells(mixed)[2].textContent).toBe("1 at low · the set's own text at medium");
+});
+test('a set checked before measuring existed says so, with its verdict and its note', async () => {
+  await open(withReview({ reasons: [], findings: [], observed: [], tally: null, reviewer: '', decidedAt: null, note: '30/30 clean' }));
+  expect(screen.getByText('Checked before detailed scoring existed — this check recorded only its verdict.')).toBeInTheDocument();
+  const verdict = screen.getByTestId('scard-verdict');
+  expect(verdict).toHaveTextContent('Verdict: checked');
+  expect(verdict).toHaveTextContent('30/30 clean');
+  expect(screen.queryAllByTestId('scard-cat')).toHaveLength(0);
+  expect(screen.queryByTestId('scard-summary')).toBeNull();
+  expect(screen.queryByText(/nothing to say/i)).toBeNull();
+});
+test('a reviewer\'s note is theirs: the verdict does not quote it as the check\'s', async () => {
+  await open(withReview({ reasons: [], findings: [], observed: [], tally: null, note: 'Historical, not gratuitous.' }));
+  expect(screen.getByTestId('scard-verdict')).not.toHaveTextContent(/historical/i);
+  // It is where the reviewer said it: on the decision, in the timeline.
+  expect(screen.getAllByTestId('scard-event')[1]).toHaveTextContent(/historical, not gratuitous/i);
+});
+/*
+  CHECKED BEFORE MEASURING, THEN DECIDED BY A PERSON — the final review,
+  2026-09-19. The pre-tally card printed one line, "this check recorded only
+  its verdict": true of a pass nobody touched, false of every escalation or
+  appeal staff approved. An approval KEEPS the row (set-review.js
+  transitionReview spreads it), so the findings that held the set stay on it
+  with their explanations, and the reviewer's note is written over the
+  check's "N/N clean" — which the check's own `checked` event still carries.
+  The base card listed those findings. The measured card lists them too, by
+  their text, and says what that check did and did not keep.
+*/
+const DECIDED = {
+  ...TRUE_CRIME,
+  sourceVersion: 3,
+  publicVersion: 1,
+  log: [
+    { event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['guardrail'], checked: 31, clean: 29 },
+    { event: 'escalated', at: '2026-09-18T09:00:01.000Z', version: 3, reasons: ['guardrail'] },
+    { event: 'decided', at: '2026-09-18T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Historical, not gratuitous.' },
+    { event: 'published', at: '2026-09-18T10:01:00.000Z', version: 3, publicVersion: 1 },
+  ],
+  review: {
+    status: 'passed', reviewer: 'dai', decidedAt: '2026-09-18T10:00:00.000Z', note: 'Historical, not gratuitous.', notice: [], checkedAt: '2026-09-18T09:00:00.000Z',
+    reasons: ['guardrail'], tally: null, observed: [],
+    // In the order the check stored them; worst first is the card's job.
+    findings: [
+      { questionId: 'c001#005', category: 'VIOLENCE', band: 'MEDIUM', explanation: 'The wounds described in detail are what held it, not the case.', text: 'The Black Dahlia\nDescribe the injuries found on the body.' },
+      { questionId: '(set)', category: 'HATE', band: 'MEDIUM', text: 'True crime\nInfamous cases, solved and not.' },
+    ],
+  },
+};
+const decided = (review, extra = {}) => ({ ...DECIDED, ...extra, review: { ...DECIDED.review, ...review } });
+const PRE_TALLY_HELD = 'Checked before detailed scoring existed — this check recorded only what held the set, nothing it let through.';
+
+// rejects: HEAD's card, which read no findings at all and told the reader the
+// check "recorded only its verdict" above an empty space.
+test('a set checked before measuring and approved by a person still lists what held it, by its text', async () => {
+  await open(DECIDED);
+  expect(screen.getByTestId('scard-pretally')).toHaveTextContent(PRE_TALLY_HELD);
+  expect(screen.queryByText(/only its verdict/)).toBeNull();
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(rows.map((r) => cells(r)[0].textContent)).toEqual(['The Black Dahlia — Describe the injuries found on the body.', "The set's own text"]);
+  expect(subjectOf(rows[0])).toHaveAttribute('title', 'The Black Dahlia\nDescribe the injuries found on the body.');
+  expect(cells(rows[0])[1]).toHaveTextContent('medium');
+  expect(cells(rows[0])[2]).toHaveTextContent('violence or injury');
+  expect(cells(rows[0])[3]).toHaveTextContent('The wounds described in detail are what held it, not the case.');
+  expect(cells(rows[0])[4]).toHaveTextContent('sent to a person');
+  expect(cells(rows[1])[2]).toHaveTextContent('hateful content');
+  expect(cells(rows[1])[3]).toHaveTextContent("The check was unsure (medium confidence) whether the set's own text contains hateful content, so a person will look.");
+  expect(cells(rows[1])[4]).toHaveTextContent('sent to a person');
+  // Nothing was measured, so there is no tally to show and none is invented.
+  expect(screen.queryAllByTestId('scard-cat')).toHaveLength(0);
+  expect(screen.queryByTestId('scard-summary')).toBeNull();
+  expect(screen.queryByText(/c00\d#\d{3}/)).toBeNull();
+});
+test('an approved appeal keeps the finding that flagged it, and it reads first', async () => {
+  await open(decided({
+    findings: [
+      ...DECIDED.review.findings,
+      { questionId: 'c002#001', category: 'MISCONDUCT', band: 'HIGH', explanation: 'The method is set out step by step.', text: 'The Poisoner\nHow was the poison prepared and given?' },
+    ],
+  }));
+  const rows = screen.getAllByTestId('scard-obs');
+  expect(cells(rows[0])[0].textContent).toBe('The Poisoner — How was the poison prepared and given?');
+  expect(cells(rows[0])[1]).toHaveTextContent('high');
+  expect(cells(rows[0])[2]).toHaveTextContent('dangerous or criminal instructions');
+  expect(cells(rows[0])[4]).toHaveTextContent('needs changes');
+  expect(rows).toHaveLength(3);
+});
+// rejects: dropping the check's own note the moment a reviewer's replaced it
+// on the row, and borrowing counts from a check that was not this one.
+test('the check\'s "N/N clean" stays beside the verdict, read from its own logged check once a reviewer\'s note replaced it', async () => {
+  const view = await open(DECIDED);
+  const verdict = screen.getByTestId('scard-verdict');
+  expect(verdict).toHaveTextContent('Verdict: checked · “29/31 clean”');
+  expect(verdict).not.toHaveTextContent(/historical/i);
+  view.unmount();
+  // The latest check of this version crashed and counted nothing; an older one's counts are not its.
+  const crashed = await open(decided({}, {
+    log: [
+      { event: 'checked', at: '2026-09-17T09:00:00.000Z', version: 3, outcome: 'passed', reasons: [], checked: 31, clean: 31 },
+      { event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['error'], error: 'Throttled' },
+      ...DECIDED.log.slice(1),
+    ],
+  }));
+  expect(screen.getByTestId('scard-verdict').textContent).toBe('Verdict: checked');
+  crashed.unmount();
+  // Nor are another version's.
+  await open(decided({}, { log: [{ event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 2, outcome: 'passed', reasons: [], checked: 25, clean: 25 }, ...DECIDED.log.slice(1)] }));
+  expect(screen.getByTestId('scard-verdict').textContent).toBe('Verdict: checked');
+});
+// rejects: a subject the guardrail never read being dressed as a band row —
+// "noted at none confidence and let through" — or left out, which would make
+// "what held the set" point at nothing.
+test('what that check could not read held the set too, and it is said in words, never as a band', async () => {
+  const view = await open(decided({
+    // A subject the guardrail could not read escalates through the outcome and
+    // adds no reason. `error` is the worker's catch block alone — a check that
+    // did not finish — and reads otherwise (below).
+    reasons: [],
+    findings: [
+      { questionId: 'c001#003', category: 'ERROR', band: 'NONE', detail: 'Throttled', text: 'Bow Street\nWho founded the Bow Street Runners?' },
+      { questionId: 'c001#004', category: 'ERROR', band: 'NONE', detail: 'Throttled', text: 'The Yard\nWhere was Scotland Yard first housed?' },
+      { questionId: '(set)', category: 'UNCONFIGURED', band: 'NONE', text: 'True crime\nInfamous cases, solved and not.' },
+    ],
+  }));
+  expect(screen.getByTestId('scard-pretally').textContent).toBe(`${PRE_TALLY_HELD} 2 questions could not be read. The set's own text could not be read.`);
+  expect(screen.queryAllByTestId('scard-obs')).toHaveLength(0);
+  expect(screen.queryByText(/none confidence/)).toBeNull();
+  view.unmount();
+  await open(decided({ reasons: ['timeout'], findings: [{ questionId: null, category: 'TIMEOUT', band: 'NONE', text: '' }] }));
+  expect(screen.getByTestId('scard-pretally').textContent).toBe(`${PRE_TALLY_HELD} The check was stopped before it finished.`);
+  expect(screen.queryAllByTestId('scard-obs')).toHaveLength(0);
+});
+
+/*
+  A CHECK THAT DID NOT FINISH — the final review, 2026-09-19. The worker keeps
+  a tally only once measuring has finished (set-check-worker.js). A check that
+  throws before then writes its review from the catch block: `reasons:
+  ['error']` in place of whatever it had gathered, its error as the note, and
+  no tally or observations, which writeReview drops as null. This one threw
+  after its snapshot was saved, so a person could approve it, and approving
+  keeps the row. The card read every review without a tally as one checked
+  before detailed scoring existed — false of every check since that failed
+  like this.
+*/
+const UNFINISHED = {
+  ...DECIDED,
+  log: [
+    { event: 'checked', at: '2026-09-19T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['error'], error: "Cannot read properties of undefined (reading 'trim')", snapshotKey: 'moderation/org_acme/safety/v3/2026-09-19T09-00-00-000Z.json' },
+    { event: 'escalated', at: '2026-09-19T09:00:01.000Z', version: 3, reasons: ['error'] },
+    { event: 'decided', at: '2026-09-19T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Read every question myself.' },
+    { event: 'published', at: '2026-09-19T10:01:00.000Z', version: 3, publicVersion: 1 },
+  ],
+  review: {
+    status: 'passed', reviewer: 'dai', decidedAt: '2026-09-19T10:00:00.000Z', note: 'Read every question myself.', notice: [], checkedAt: '2026-09-19T09:00:00.000Z',
+    reasons: ['error'], findings: [], tally: null, observed: [],
+  },
+};
+const UNFINISHED_LINE = 'This check did not finish — it recorded no detailed scoring.';
+
+// rejects: HEAD's card, which read the missing tally as the check's age and
+// told the reader a check that never got as far as measuring was "checked
+// before detailed scoring existed".
+test('a check that stopped on an error says it did not finish, never that it came before detailed scoring', async () => {
+  const view = await open(UNFINISHED);
+  expect(screen.getByTestId('scard-pretally').textContent).toBe(UNFINISHED_LINE);
+  expect(screen.queryByText(/before detailed scoring existed/)).toBeNull();
+  expect(screen.getByTestId('scard-verdict').textContent).toBe('Verdict: checked');
+  expect(screen.queryAllByTestId('scard-cat')).toHaveLength(0);
+  expect(screen.queryByTestId('scard-summary')).toBeNull();
+  view.unmount();
+  // Before measuring existed, a check that threw after the guardrail answered
+  // kept what held the set. It did not finish either, and says so above it.
+  await open({ ...UNFINISHED, review: { ...UNFINISHED.review, findings: [DECIDED.review.findings[0]] } });
+  expect(screen.getByTestId('scard-pretally').textContent).toBe(UNFINISHED_LINE);
+  expect(screen.getAllByTestId('scard-obs')).toHaveLength(1);
+});
+
+/*
+  WHY A PERSON WAS NEEDED — the final review, 2026-09-19. The endpoint sends
+  the check's reasons and the card printed none of them. One line under the
+  verdict, measured or not, in the moderation queue's words
+  (utils/moderationRow.js whyLabel) rather than a second vocabulary.
+*/
+const CLEAN = { scope: 'full', questions: 30, setTextChecked: true, setTextUnread: false, spotless: 30, unread: 0, categories: { VIOLENCE: NONE, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE } };
+test('the check\'s reasons read in the queue\'s words under the verdict, whether or not it measured', async () => {
+  const measured = await open(TRUE_CRIME);
+  expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Uncertain');
+  measured.unmount();
+  const before = await open(DECIDED);
+  expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Uncertain');
+  before.unmount();
+  const stopped = await open(UNFINISHED);
+  expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Error');
+  stopped.unmount();
+  // Images the text filters cannot see and the notices the author declared, on
+  // a check that saw nothing. The worker names `declared` only beside the
+  // notices themselves (set-check-worker.js), up to eight of them
+  // (check-question-set.js), and the endpoint projects them: each is named.
+  await open(withReview({ reasons: ['images', 'declared'], declaredNotice: ['graphic-violence', 'strong-language'], findings: [], observed: [], tally: CLEAN }, {
+    log: [
+      { event: 'checked', at: '2026-09-19T09:00:00.000Z', version: 3, outcome: 'escalated', reasons: ['images', 'declared'], checked: 31, clean: 31 },
+      { event: 'escalated', at: '2026-09-19T09:00:01.000Z', version: 3, reasons: ['images', 'declared'] },
+      ...TRUE_CRIME.log.slice(2),
+    ],
+  }));
+  expect(screen.getByTestId('scard-reasons').textContent).toBe('Why a person was needed: Declared: graphic violence, strong language · Images');
+});
+// rejects: whyLabel's "Waiting", its word for a queue row with no reason,
+// printed under every verdict the check reached on its own.
+test('a check that needed no person says nothing about one', async () => {
+  await open(withReview({ reasons: [], findings: [], observed: [], reviewer: '', decidedAt: null, note: '31/31 clean', tally: CLEAN }, {
+    log: [
+      { event: 'checked', at: '2026-09-19T09:00:00.000Z', version: 3, outcome: 'passed', reasons: [], checked: 31, clean: 31 },
+      { event: 'published', at: '2026-09-19T09:00:02.000Z', version: 3, publicVersion: 1 },
+    ],
+  }));
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent('Verdict: checked');
+  expect(screen.queryByTestId('scard-reasons')).toBeNull();
+});
+
+/*
+  ONE WORD FOR A FLAG — the final review, 2026-09-19. The held column said
+  "flagged", the raw status, for a HIGH that held the set, a line below a
+  timeline that says the same outcome the way the rest of the app does
+  (utils/shareState.js versionChip).
+*/
+test('a HIGH that held the set says so in the word the timeline uses for the same flag', async () => {
+  const HIGH = { questionId: 'c002#001', category: 'MISCONDUCT', band: 'HIGH', explanation: 'The method is set out step by step.' };
+  const { container } = await open(withReview({
+    reasons: [], findings: [HIGH],
+    observed: [{ ...HIGH, intervened: true, text: 'The Poisoner\nHow was the poison prepared and given?' }],
+    tally: { ...CLEAN, spotless: 29, categories: { ...CLEAN.categories, MISCONDUCT: { worst: 'HIGH', low: 0, medium: 0, high: 1 } } },
+  }, {
+    sourceVersion: 3,
+    publicVersion: 1,
+    log: [
+      { event: 'checked', at: '2026-09-19T09:00:00.000Z', version: 3, outcome: 'flagged', reasons: [], checked: 31, clean: 30 },
+      { event: 'appealed', at: '2026-09-19T09:30:00.000Z', version: 3, message: 'It is a history set.' },
+      { event: 'decided', at: '2026-09-19T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Historical, not gratuitous.' },
+      { event: 'published', at: '2026-09-19T10:01:00.000Z', version: 3, publicVersion: 1 },
+    ],
+  }));
+  expect(cells(screen.getAllByTestId('scard-obs')[0])[4].textContent).toBe('needs changes');
+  const events = screen.getAllByTestId('scard-event');
+  expect(events[events.length - 1]).toHaveTextContent('Checked — needs changes');
+  expect(container).not.toHaveTextContent(/\bflagged\b/);
+});
+/*
+  THE AUTHOR'S WORDS ON AN APPEAL. The review row and the queue row call them
+  `appealMessage`; the log event appeal-question-set.js appends calls them
+  `message`, and that is the only writer of an appeal to the log. The event
+  below is the row appendReviewEvent puts, keys and all.
+*/
+// rejects: the timeline reading `appealMessage` off an event that has never
+// carried it, so every appeal read as a bare "Appealed".
+test('an appeal on the timeline quotes the author, from the event the appeal logs', async () => {
+  await open(decided({}, {
+    log: [
+      { event: 'checked', at: '2026-09-18T09:00:00.000Z', version: 3, outcome: 'flagged', reasons: [], checked: 31, clean: 30 },
+      {
+        PK: 'REVIEWLOG#org#org_acme#safety', SK: '2026-09-18T09:30:00.000Z#000007#appealed', event: 'appealed', at: '2026-09-18T09:30:00.000Z',
+        version: 3, message: 'It is a history set, not a how-to.', by: 'sub-amara',
+      },
+      { event: 'decided', at: '2026-09-18T10:00:00.000Z', version: 3, decision: 'approve', reviewer: 'dai', note: 'Historical, not gratuitous.' },
+      { event: 'published', at: '2026-09-18T10:01:00.000Z', version: 3, publicVersion: 1 },
+    ],
+  }));
+  const appeal = screen.getAllByTestId('scard-event')[2];
+  expect(appeal).toHaveTextContent('Appealed: “It is a history set, not a how-to.” · v3');
+});
+test('the timeline and the verdict speak the app\'s words, never a raw status', async () => {
+  const { container } = await open({
+    ...TRUE_CRIME,
+    log: [
+      { event: 'checked', at: '2026-09-15T09:00:00.000Z', version: 1, outcome: 'passed' },
+      { event: 'checked', at: '2026-09-17T09:00:00.000Z', version: 2, outcome: 'flagged' },
+      ...TRUE_CRIME.log,
+    ],
+  });
+  const events = screen.getAllByTestId('scard-event');
+  expect(events[events.length - 1]).toHaveTextContent(/Checked · v1$/);
+  expect(events[events.length - 2]).toHaveTextContent(/Checked — needs changes · v2$/);
+  expect(events[events.length - 3]).toHaveTextContent(/Checked — waiting for Engage · v3$/);
+  for (const e of events) expect(e).not.toHaveTextContent(/\bpassed\b|\bescalated\b|\bflagged\b/);
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent('Verdict: checked');
+  expect(container).not.toHaveTextContent(/\bpassed\b|\bescalated\b/);
+});
+test('a version with no check on record says so rather than claiming a verdict', async () => {
+  await open(withReview({ status: 'unreviewed', reviewer: '', decidedAt: null, note: '', findings: [], observed: [], reasons: [], tally: null, checkedAt: null }));
+  expect(screen.getByText('No check is on record for the version this came from.')).toBeInTheDocument();
+  expect(screen.queryByTestId('scard-verdict')).toBeNull();
+  expect(screen.queryByText(/before detailed scoring existed/i)).toBeNull();
+});
+test('a re-check in flight reads as checking, and one that never finished says so', async () => {
+  const running = { reviewer: '', decidedAt: null, note: '', findings: [], observed: [], reasons: [], tally: null };
+  const view = await open(withReview({ ...running, status: 'checking', checkedAt: new Date(Date.now() - 60 * 1000).toISOString() }));
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent('Verdict: checking…');
+  expect(screen.queryByText(/before detailed scoring existed/i)).toBeNull();
+  view.unmount();
+  await open(withReview({ ...running, status: 'checking', checkedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() }));
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent("Verdict: didn't finish");
+});
+
+/*
+  RUNNING THE CHECK AGAIN — the owner, 2026-09-19: their existing public sets
+  show nothing of what the check measured, and there is no way to fill them in.
+  The cure is to run the check again, and the ORDINARY route publishes: for a
+  live listing it would mint a second public version of identical content, move
+  the author's share stamp, and replace the row that records a person's
+  approval. So the platform console gets its own control for the platform
+  re-check (POST { recheck: true }, lambda-functions/admin/check-question-set.js
+  recheckPublished), beside the latest check, and it says what it will and will
+  not do before it runs.
+
+  The route reads WHICH set and WHICH version from the public row, so the only
+  thing the card sends is `recheck` and the version it is looking at — null
+  included, which is the legacy, unversioned content three of the four entries
+  on dev carry.
+*/
+const RECHECK = /run the check again/i;
+const postUrl = (id) => `https://api.test/question-sets/${id}/check`;
+/**
+ * One fetch mock for the three URLs this card uses: the card itself (GET
+ * .../admin/public-library/<id>), the re-check (POST .../check) and the job
+ * (GET .../check/<jobId>). `card` may be a function of the read's ordinal, so a
+ * re-read after the check can answer with what the check measured.
+ */
+function server({ card, post, polls = [] }) {
+  const calls = { posts: [], reads: 0 };
+  let poll = 0;
+  global.fetch = jest.fn(async (url, options = {}) => {
+    if ((options.method || 'GET').toUpperCase() === 'POST') {
+      calls.posts.push({ url, body: JSON.parse(options.body) });
+      return post();
+    }
+    if (/\/check\//.test(url)) {
+      const answer = polls[Math.min(poll, polls.length - 1)];
+      poll += 1;
+      return json(answer);
+    }
+    calls.reads += 1;
+    return json(typeof card === 'function' ? card(calls.reads) : card);
+  });
+  return calls;
+}
+const queued = (version) => json({ jobId: 'job-7', version, status: 'queued', recheck: true }, 202);
+const RUNNING_POLL = { jobId: 'job-7', status: 'running', phase: 'Checking questions', completed: 12, requested: 30 };
+const DONE_POLL = {
+  jobId: 'job-7', status: 'complete', phase: 'Done', completed: 30, requested: 30, items: [],
+  meta: { outcome: 'passed', version: 3, checked: 31, clean: 29, publicSetId: null, publicVersion: null },
+};
+
+test('the re-check is offered to Engage staff, and to nobody else', async () => {
+  server({ card: DECIDED, post: () => queued(3) });
+  const view = render(<ScoreCard publicSetId={DECIDED.publicSetId} onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.queryByRole('button', { name: RECHECK })).toBeNull();
+  view.unmount();
+  render(<ScoreCard publicSetId={DECIDED.publicSetId} mode="platform" onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.getByRole('button', { name: RECHECK })).toBeInTheDocument();
+});
+
+async function openPlatform(card) {
+  const view = render(<ScoreCard publicSetId={card.publicSetId} mode="platform" onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: card.name });
+  return view;
+}
+
+// rejects: a confirmation that says only "are you sure?" — the two things staff
+// have to know before running this are that it publishes nothing and that it
+// cannot erase the decision a person made.
+test('the confirmation says what a re-check does, and what it does not', async () => {
+  server({ card: DECIDED, post: () => queued(3) });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog).toHaveTextContent(/runs the content check again on the version the public library is serving/i);
+  expect(dialog).toHaveTextContent(/so this card can show what it measured/i);
+  expect(dialog).toHaveTextContent(/no new public version/i);
+  expect(dialog).toHaveTextContent(/does not undo a decision a person made/i);
+  expect(dialog).toHaveTextContent(/nothing is taken down/i);
+  // The exits: an X and a bottom Cancel (hard rule 2), and nothing has run yet.
+  expect(within(dialog).getByRole('button', { name: /close/i })).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('a re-check asks for nothing but the version on the card, shows its progress, and the card then reads what it measured', async () => {
+  const calls = server({
+    card: (n) => (n === 1 ? DECIDED : { ...DECIDED, review: TRUE_CRIME.review }),
+    post: () => queued(3),
+    polls: [RUNNING_POLL, DONE_POLL],
+  });
+  await openPlatform(DECIDED);
+  expect(screen.getByTestId('scard-pretally')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^run the check$/i }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: postUrl('orgacme-crime'), body: { recheck: true, version: 3 } },
+  ]));
+  const progress = await screen.findByTestId('scard-recheck-progress');
+  expect(progress).toHaveTextContent('12 / 30');
+  expect(progress).toHaveTextContent(/checking questions/i);
+  // It finishes, the card is re-read, and the measurement replaces the line
+  // that said this check recorded none.
+  await waitFor(() => expect(screen.getByTestId('scard-summary')).toBeInTheDocument(), { timeout: 8000 });
+  expect(screen.queryByTestId('scard-pretally')).toBeNull();
+  expect(screen.queryByTestId('scard-recheck-progress')).toBeNull();
+  expect(calls.reads).toBe(2);
+}, 20000);
+
+// rejects: `version: 0` for a set shared before versioning existed — the route
+// refuses any version but the published one, and 0 is not null.
+test('a legacy entry re-checks the unversioned content the library serves', async () => {
+  const legacy = { ...DECIDED, sourceVersion: null };
+  const calls = server({ card: legacy, post: () => queued(null), polls: [DONE_POLL] });
+  await openPlatform(legacy);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^run the check$/i }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: postUrl('orgacme-crime'), body: { recheck: true, version: null } },
+  ]));
+  await waitFor(() => expect(calls.reads).toBe(2));
+});
+
+// rejects: a refusal swallowed, or shown somewhere other than where it was
+// asked for — the confirm stays live for a retry, as the takedown's does (R17).
+test('a refusal from the route is read in its own words, beside the confirm', async () => {
+  server({ card: DECIDED, post: () => json({ error: 'This version is already being checked.', status: 'checking' }, 409) });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  const dialog = await screen.findByRole('dialog');
+  const confirm = within(dialog).getByRole('button', { name: /^run the check$/i });
+  fireEvent.click(confirm);
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(/already being checked/i);
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(confirm).toBeEnabled();
+  expect(screen.queryByTestId('scard-recheck-progress')).toBeNull();
+});
+
+// rejects: a failed check taking the card down with it — the reader still has
+// to be able to read what the set's last good check said.
+test('a check that does not finish says so, and the card is still readable', async () => {
+  server({
+    card: DECIDED,
+    post: () => queued(3),
+    polls: [{ jobId: 'job-7', status: 'error', errorMessage: 'Bedrock throttled the check.' }],
+  });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: RECHECK }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^run the check$/i }));
+  expect(await screen.findByTestId('scard-recheck-error')).toHaveTextContent(/bedrock throttled the check/i);
+  expect(screen.getByRole('heading', { name: DECIDED.name })).toBeInTheDocument();
+  expect(screen.getByTestId('scard-pretally')).toBeInTheDocument();
+  expect(screen.getAllByTestId('scard-obs').length).toBeGreaterThan(0);
+  // Still offered: the row is where it was, and running it again is the answer.
+  expect(screen.getByRole('button', { name: RECHECK })).toBeEnabled();
+});
+
+/*
+  NOTHING TO RE-CHECK. The route reads the source from the public row, so an
+  entry that names no organisation is a 409 there; a version already being
+  checked is a 409 on the lock. A `checking` past the stale window is neither —
+  the lock is free and nothing is running (set-review.js isUnfinished), which is
+  precisely the state a re-check exists to clear.
+*/
+test('the re-check is not offered where there is nothing to re-check, and is offered for a check that never finished', async () => {
+  const orphan = { ...DECIDED, sourceOrgId: '', sourceSetId: '' };
+  server({ card: orphan, post: () => queued(3) });
+  const view = await openPlatform(orphan);
+  expect(screen.queryByRole('button', { name: RECHECK })).toBeNull();
+  view.unmount();
+
+  const inFlight = { ...DECIDED, review: { ...DECIDED.review, status: 'checking', checkedAt: new Date(Date.now() - 60 * 1000).toISOString() } };
+  server({ card: inFlight, post: () => queued(3) });
+  const live = await openPlatform(inFlight);
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent('checking…');
+  expect(screen.queryByRole('button', { name: RECHECK })).toBeNull();
+  live.unmount();
+
+  const stalled = { ...DECIDED, review: { ...DECIDED.review, status: 'checking', checkedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() } };
+  server({ card: stalled, post: () => queued(3) });
+  await openPlatform(stalled);
+  expect(screen.getByTestId('scard-verdict')).toHaveTextContent("didn't finish");
+  expect(screen.getByRole('button', { name: RECHECK })).toBeInTheDocument();
+});
+
+/*
+  ANSWERING WHAT THE RE-CHECK FOUND, WITHOUT TAKING ANYTHING DOWN.
+
+  A re-check worse than the decision on record takes nothing down: it queues the
+  listing for a person, and this card is the only surface that can answer that
+  row — the review dialog's two buttons would publish it a second time or tell
+  its author off, and the route refuses both. So Take down used to be the ONLY
+  exit from the row, on content a person had already approved. The likely outcome
+  of exactly the re-checks this card offers is a medium band somebody has already
+  ruled on, so "the approval stands" is the common answer.
+*/
+const LEAVE = /leave it serving/i;
+const decideUrl = 'https://api.test/admin/moderation/decide';
+const WAITING = { sk: 'PUBLIC#orgacme-crime', recheck: true, waitingSince: '2026-09-19T08:00:00.000Z' };
+const waiting = (queued) => ({ ...DECIDED, queued });
+
+test('a re-check\'s queue entry is answered on the card: it says who is waiting, and clears without taking anything down', async () => {
+  // The second read is the card after the entry has been answered.
+  const calls = server({
+    card: (read) => (read === 1 ? waiting(WAITING) : waiting(null)),
+    post: () => json({ decision: 'leave', leftServing: 'orgacme-crime' }),
+  });
+  await openPlatform(DECIDED);
+  expect(screen.getByTestId('scard-waiting')).toHaveTextContent(/waiting for a person/i);
+  expect(screen.getByTestId('scard-waiting')).toHaveTextContent(/nothing was taken down/i);
+  fireEvent.click(screen.getByRole('button', { name: LEAVE }));
+  await waitFor(() => expect(calls.posts).toEqual([
+    { url: decideUrl, body: { sk: 'PUBLIC#orgacme-crime', decision: 'leave' } },
+  ]));
+  // Re-read, and the row is gone from the card with it.
+  await waitFor(() => expect(screen.queryByTestId('scard-waiting')).toBeNull());
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(calls.reads).toBe(2);
+  // Take down is untouched by any of it: the destructive answer is still there.
+  expect(screen.getByRole('button', { name: /take down/i })).toBeInTheDocument();
+});
+
+// rejects: one control for every waiting row. Stage 3's reports land on the same
+// key and are answered on the report, not by leaving the listing alone.
+test('a waiting row no re-check raised is not this card\'s to clear', async () => {
+  server({ card: waiting({ ...WAITING, recheck: false }), post: () => json({}) });
+  await openPlatform(DECIDED);
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(screen.queryByTestId('scard-waiting')).toBeNull();
+});
+
+// rejects: a staff control appearing because a caller said nothing about who is
+// looking — the same fail-closed default the re-check's `mode` takes.
+test('leaving it serving is offered to Engage staff and to nobody else', async () => {
+  server({ card: waiting(WAITING), post: () => json({}) });
+  render(<ScoreCard publicSetId={DECIDED.publicSetId} onBack={() => {}} onTakenDown={() => {}} />);
+  await screen.findByRole('heading', { name: DECIDED.name });
+  expect(screen.queryByRole('button', { name: LEAVE })).toBeNull();
+  expect(screen.queryByTestId('scard-waiting')).toBeNull();
+});
+
+// rejects: a refusal swallowed, or the row reported as answered when it was not.
+test('a refusal leaves the entry where it was and says so on the card', async () => {
+  const calls = server({
+    card: waiting(WAITING),
+    post: () => json({ error: 'This entry also carries a report, which is answered on the report itself.' }, 409),
+  });
+  await openPlatform(DECIDED);
+  fireEvent.click(screen.getByRole('button', { name: LEAVE }));
+  expect(await screen.findByTestId('scard-leave-error')).toHaveTextContent(/carries a report/i);
+  expect(screen.getByTestId('scard-waiting')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: LEAVE })).toBeEnabled();
+  expect(calls.reads).toBe(1);
 });

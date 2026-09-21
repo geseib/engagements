@@ -32,7 +32,12 @@
  *    this DECRYPTS on the way out, and getting that backwards produces a public
  *    set full of base64 that still passes a row-count check.
  *
- * ── THE GATE ──────────────────────────────────────────────────────────────
+ * ── THE GATES ─────────────────────────────────────────────────────────────
+ *
+ * A set must be FILED before it is shared — one shelf from shared/set-topics.js
+ * — which is the owner's own *"req at least 1 pretty broad for public ones"*.
+ * An unfiled set goes on living in its own organisation; it does not get into
+ * the library everybody browses.
  *
  * Only a version whose review PASSED may be published, and `mayPublish` tests
  * for that one value rather than listing blockers, so a status added later is
@@ -53,6 +58,7 @@ const {
 const tenant = require('./shared/tenant');
 const { decryptItem } = require('./shared/tenant-crypto');
 const { readReview, mayPublish, STATUS } = require('./shared/set-review');
+const { resolveSetTopic, setTopicRefusal, UNFILED } = require('./shared/set-topics');
 const { buildSnapshot, contentHash } = require('./shared/publishable');
 const { publicSetIdFor, platformPromptExists, publishSnapshot, unpublishSet } = require('./shared/publish-set');
 const { writeShareStamp } = require('./shared/share-stamp');
@@ -119,6 +125,33 @@ async function share(event, source, pubRef, orgId, setId) {
   if (!rows.some((r) => String(r.SK || '').startsWith('QUESTION#'))) return fail(409, 'That version has no questions to share.');
 
   const plainMeta = await decryptItem(orgId, 'set', meta);
+
+  /*
+   * THE SHELF GATE. The owner's sentence was *"req at least 1 pretty broad for
+   * public ones"*, and this is the "public ones": the library everybody
+   * browses, where a topic filter is worth having only if what is on the
+   * shelves is filed.
+   *
+   * A SET MAY GO ON LIVING UNFILED, AND MANY DO — the ~40 that predate the
+   * shelf list, play and are edited untouched, which is the retro-refusal the
+   * design rules out. Sharing is the one journey where that stops being
+   * somebody's own business: an unfiled set in the public library is a row no
+   * filter can place, in front of people who did not make it.
+   *
+   * 409 rather than 400, like the two gates above and the one below: the
+   * request is well formed, the SET is not ready. And it is read from
+   * `plainMeta` rather than `meta` even though `ENCRYPTED_FIELDS.set` does not
+   * name `topic` — a second reader deciding for itself which fields are sealed
+   * is the drift edit-question-set.js warns about, and it presents as a field
+   * silently read in the wrong form with every test still green.
+   *
+   * Placed after the ownership read above, so a stranger aiming at another
+   * organisation's set still gets the 404 and learns nothing from this.
+   */
+  if (resolveSetTopic(plainMeta.topic) === UNFILED) {
+    return fail(409, setTopicRefusal(plainMeta.topic));
+  }
+
   const questions = [];
   const categories = [];
   for (const row of rows) {

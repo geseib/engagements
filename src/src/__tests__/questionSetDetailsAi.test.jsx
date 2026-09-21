@@ -36,6 +36,8 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const SET = {
   id: 'lessons-learned',
   name: 'Lessons Learned',
+  // Filed, because the Details save now requires a shelf before it will send.
+  topic: 'business-work',
   engagementType: 'call-and-answer',
   description: '',
   customInstruction: '',
@@ -145,33 +147,53 @@ const openAiPanel = async () => {
   fireEvent.click(aiButton());
   return screen.findByTestId('ai-details-panel');
 };
+/**
+ * ONE role query, held and PANEL-SCOPED; a 4000ms budget clear of one real
+ * poll cycle; and a suite-wide `testTimeout: 30000` (jest.config.js) that
+ * actually reaches this wait. THREE separate fixes for one intermittent
+ * "Exceeded timeout of 5000 ms", each useless without the others.
+ *
+ * WHAT ACTUALLY WENT WRONG. While a draft runs, the button relabels itself to
+ * "Drafting…" (QuestionSetEditor.jsx: `{aiBusy ? 'Drafting…' : 'Draft it'}`),
+ * so a re-queried `getByRole('button', { name: /^Draft it$/ })` MISSES on
+ * every poll until the job lands. A `getByRole` that misses does not fail
+ * cheaply: it builds its message out of `prettyRoles(container)`, computing
+ * an accessible name for every element in the tree. Measured against the
+ * 70-question fixture below (1,979 nodes), ONE failed poll costs ~1s — and
+ * because that cost is synchronous CPU, it also starves the very job the poll
+ * is waiting for. A busy worker pool adds a poll or two and the 5s test
+ * budget is gone: it timed out once in four consecutive runs on 2026-09-20,
+ * with nothing else actually failed. Raising the wait's own budget alone
+ * makes this WORSE — a longer wait just buys more repetitions of the
+ * expensive scan.
+ *
+ * `pollGenerationJob` polls immediately, so no run in this suite ever sleeps
+ * `POLL_INTERVAL_MS` (2000ms, aiBatchClient.js): every mock answers the first
+ * GET with `status: 'complete'`. The 8000ms this wait used to carry could
+ * never fire anyway, since jest's 5000ms default killed the test first,
+ * turning a precise RTL error into an opaque one. Fixed here two ways: the
+ * wait's own budget comes down to 4000ms (comfortably clear of the real,
+ * single-poll cost, and now actually reachable), and jest.config.js raises
+ * `testTimeout` to 30000ms suite-wide so no wait in this file — this one or a
+ * longer one added later — gets silently overridden by jest's own default.
+ *
+ * Holding the node, scoped to the panel, is not a weaker assertion. React
+ * keeps this button mounted for the whole round trip — only `disabled` and
+ * the label change, verified — so this IS the button the panel is showing.
+ * If it were ever remounted, the held node would stay disabled and this
+ * `waitFor` would fail loudly rather than pass on a stale reference. Scoping
+ * to the panel matters on its own: the editor is ~1980 nodes and this panel
+ * ~250 of them, so an unscoped role query walks all of them (~43ms a call
+ * against ~4ms scoped).
+ *
+ * `questionAddModal.test.jsx` drives the same flow through `findByTestId` on
+ * the 1000ms default. It has not failed yet; if it starts to, this is why.
+ */
 const draftIt = async () => {
-  fireEvent.click(screen.getByRole('button', { name: /^Draft it$/i }));
-  /*
-    THE DEFAULT 1000ms BUDGET IS A RACE HERE, NOT A LIMIT.
-
-    Waiting for this button to come back enabled means waiting for a whole
-    async job: start, then poll, then apply. `pollGenerationJob` does its first
-    poll immediately, so the happy path takes no `POLL_INTERVAL_MS` sleep — but
-    that interval is 2000ms of REAL time (utils/aiBatchClient.js:108), so any
-    run that needs a second poll blows a one-second budget outright, and even
-    the single-poll path is several awaits and a re-render deep.
-
-    It is green on every developer machine and it took the whole dev build down
-    on f68b31b5, which is the signature of contention rather than of a defect.
-
-    Nothing here measures speed — the assertion is "the button comes back
-    enabled" — so the budget is raised clear of one poll cycle rather than the
-    wait being weakened.
-
-    `questionAddModal.test.jsx` drives the same flow through `findByTestId`,
-    which carries the same 1000ms default. It has not failed yet; if it starts
-    to, this is why.
-  */
-  await waitFor(
-    () => expect(screen.getByRole('button', { name: /^Draft it$/i })).toBeEnabled(),
-    { timeout: 8000 },
-  );
+  const draftButton = within(screen.getByTestId('ai-details-panel'))
+    .getByRole('button', { name: /^Draft it$/i });
+  fireEvent.click(draftButton);
+  await waitFor(() => expect(draftButton).toBeEnabled(), { timeout: 4000 });
 };
 
 /**

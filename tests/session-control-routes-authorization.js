@@ -59,7 +59,7 @@
  *
  * The participant journey carries no token at all. `POST /games/{id}/players`
  * (join), `POST /games/{id}/votes`, `POST /games/get-results` and every
- * participant GET must stay public, and `GET /games/{gameId}` is what RootPage
+ * participant GET must stay public, and `GET /games/{gameId}` is what the join field
  * checks a typed code against before anyone has signed in. Section 5 fails the
  * moment one of them acquires an authorizer.
  *
@@ -266,12 +266,27 @@ for (const [method, p] of MUST_STAY_OPEN) {
   });
 }
 
-// RootPage checks a typed code before anyone signs in. If GET /games/{gameId}
-// ever closes, the front door stops working for every participant.
-check('RootPage still checks a code with a plain fetch, and that still works', () => {
-  const src = fs.readFileSync(path.join(REPO, 'src/src/components/RootPage.jsx'), 'utf8');
-  assert.ok(/fetch\(`\$\{window\.API_BASE\}games\/\$\{code\}`\)/.test(src),
-    'RootPage no longer does the unauthenticated code check this asserts about');
+// The join field checks a typed code before anyone signs in. If GET
+// /games/{gameId} ever closes, the front door stops working for every
+// participant.
+//
+// The check used to live in RootPage.jsx. It moved to hooks/useJoinCode.js when
+// the marketing home gained a second join field in its hero, so that the
+// pre-flight rule exists once; RootPage (/join) and JoinCodeEntry (/) both call
+// the hook. So this reads the hook for the fetch, and both callers for the hook
+// -- a caller that grew its own copy of the fetch would be the regression.
+check('the join field still checks a code with a plain fetch, and that still works', () => {
+  const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
+  const hook = read('src/src/hooks/useJoinCode.js');
+  assert.ok(/fetch\(`\$\{window\.API_BASE\}games\/\$\{code\}`\)/.test(hook),
+    'useJoinCode no longer does the unauthenticated code check this asserts about');
+  assert.ok(!/Authorization|getIdToken|authHeaders/.test(hook),
+    'the code check now sends credentials -- a participant has none to send');
+  for (const caller of ['src/src/components/RootPage.jsx', 'src/src/components/JoinCodeEntry.jsx']) {
+    const src = read(caller);
+    assert.ok(/useJoinCode\(\)/.test(src), `${caller} no longer joins through useJoinCode`);
+    assert.ok(!/fetch\(/.test(src), `${caller} grew a fetch of its own -- the check must exist once`);
+  }
   assert.strictEqual(findRoute(routes, 'GET', '/games/{gameId}').authorizer, null,
     'the route it calls is now closed — nobody can check a code before signing in');
 });

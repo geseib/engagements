@@ -31,6 +31,17 @@ export const useAuth = () => {
   return context;
 };
 
+/**
+ * The same context, for a surface that renders with OR without a provider.
+ *
+ * `useAuth` throws outside <AuthProvider>, which is right for everything that
+ * cannot work signed out. The marketing shell is the other case: it is mounted
+ * inside the provider by the app and bare by its tests, and all it wants to know
+ * is whether to offer "Sign in" or "Open the app". Null means "nobody, as far as
+ * I can tell".
+ */
+export const useOptionalAuth = () => useContext(AuthContext) || null;
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);

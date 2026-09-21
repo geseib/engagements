@@ -1,0 +1,28 @@
+/* The bezel around a screen clip — lifted from docs/design/marketing-redesign/mk.css. */
+.mk-device { position: relative; margin: 0; }
+
+.mk-device-bezel {
+  border-radius: 14px; background: var(--mk-device-bezel); border: 1px solid var(--mk-rule-strong);
+  padding: 10px; box-shadow: 0 18px 40px rgba(6, 11, 20, 0.5);
+}
+.mk-device--tv .mk-device-bezel { border-radius: 12px; padding: 11px 11px 13px; }
+.mk-device--laptop .mk-device-bezel { border-radius: 12px; padding: 12px 12px 14px; }
+.mk-device--phone .mk-device-bezel { border-radius: 26px; padding: 8px; }
+
+.mk-device-screen { position: relative; overflow: hidden; border-radius: 6px; background: var(--mk-bg); }
+.mk-device--phone .mk-device-screen { border-radius: 19px; }
+.mk-device--tv .mk-device-screen { aspect-ratio: 16 / 9; }
+.mk-device--laptop .mk-device-screen { aspect-ratio: 16 / 10; }
+.mk-device--phone .mk-device-screen { aspect-ratio: 9 / 19; }
+
+.mk-device-foot {
+  height: 8px; width: 34%; margin: 7px auto 0; border-radius: 0 0 6px 6px;
+  background: var(--mk-device-bezel); border: 1px solid var(--mk-rule); border-top: 0;
+}
+.mk-device--phone .mk-device-notch {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  width: 38%; height: 5px; border-radius: 999px; background: rgba(244, 237, 228, 0.18); z-index: 2;
+}
+
+.mk-device-cap { margin-top: 12px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-device-cap b { color: var(--mk-text); font-weight: 700; }

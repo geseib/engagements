@@ -19,6 +19,14 @@ const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stri
 
 const project = (row) => ({
   sk: row.SK,
+  /*
+    WHICH LIBRARY THE ROW IS ABOUT. `orgId` alone cannot say: it is blank both
+    for a listing's row (a staff re-check, where the organisation is behind the
+    public entry) and for ENGAGE'S OWN SET, which has no organisation at all —
+    so without this the queue drew Engage's own rows as belonging to a customer
+    whose name it could not find. `moderation-queue.js` writes it on every row.
+  */
+  scope: row.scope || '',
   orgId: row.orgId || '',
   orgName: row.orgName || '',
   setId: row.setId || '',
@@ -29,11 +37,19 @@ const project = (row) => ({
   reasons: Array.isArray(row.reasons) ? row.reasons : [],
   bands: row.bands && typeof row.bands === 'object' ? row.bands : {},
   uncertainQuestionIds: Array.isArray(row.uncertainQuestionIds) ? row.uncertainQuestionIds : [],
+  // What a check escalation was for. An appeal carries none, and neither does a
+  // row written before the check named them; the queue's words then read as before.
+  checkReasons: Array.isArray(row.checkReasons) ? row.checkReasons : [],
+  declaredNotice: Array.isArray(row.declaredNotice) ? row.declaredNotice : [],
   appealMessage: row.appealMessage || '',
   reports: row.reports && typeof row.reports === 'object' ? row.reports : null,
   waitingSince: row.waitingSince || null,
   latestAt: row.latestAt || null,
   publicSetId: row.publicSetId || '',
+  // Raised by a staff re-check of a listing the library already serves, so it
+  // is not decided in the review dialog (moderation-decide.js refuses it) and
+  // the row offers its score card instead.
+  recheck: row.recheck === true,
 });
 
 exports.handler = async (event) => {
