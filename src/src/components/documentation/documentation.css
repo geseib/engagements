@@ -123,8 +123,20 @@
   padding: 0;
 }
 
-/* Inline Code */
-code {
+/* Inline Code
+
+   SCOPED TO THE HELP RENDERER, because every component stylesheet lands in one
+   bundle. This was a bare `code { … }` and so it was a rule for every <code> in
+   the app: it put this light grey chip behind inline code on ten other screens,
+   and on the dusk ones that had re-pointed only the TEXT colour — the set
+   editor's Images panel, the phone remote — the result was cream on light grey,
+   unreadable. __tests__/noBareElementSelectors.test.js keeps it from coming back.
+
+   :where() rather than a plain `.help-doc-section code`: that would be (0,1,1),
+   the same as `.help-code-block code` just above, and coming later it would win
+   and put the chip back inside every code BLOCK. :where() adds no specificity,
+   so this stays at (0,0,1) — exactly what the bare selector it replaces was. */
+:where(.help-doc-header, .help-doc-section) code {
   background: #f3f4f6;
   color: var(--danger);
   padding: 2px 6px;
