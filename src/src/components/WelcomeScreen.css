@@ -98,6 +98,8 @@
 }
 
 .wel-brand {
+  /* an <a> since 2026-09-21; it keeps the wordmark's look, not a link's */
+  text-decoration: none;
   display: flex;
   align-items: baseline;
   gap: 9px;

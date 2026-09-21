@@ -304,6 +304,14 @@ function AppRouter() {
   // The focused join page. `/` used to be this; it is now the marketing home
   // with a compact join field, and this stays as the page to send a room to.
   // Exact match, like `/` below.
+  // The marketing home at an address that ALWAYS means the marketing home. `/`
+  // cannot be that: for a signed-in host it is the app (RootGate). The mark on
+  // the host's main screen, in the console and on every marketing page links
+  // here, so a host can get back to the brochure without signing out.
+  if (path === '/home') {
+    return <MarketingRoute page={HomePage} />;
+  }
+
   if (path === '/join') {
     return <RootPage />;
   }

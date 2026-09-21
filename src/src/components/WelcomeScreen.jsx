@@ -91,9 +91,14 @@ export default function WelcomeScreen({
     <div className="wel-page" data-theme="dark">
       <header className="wel-pad">
         <div className="wel-shell wel-top">
-          <span className="wel-brand">
+          {/* THE MARK IS THE WAY HOME. `/home`, not `/`: this screen IS `/` for
+              anybody signed in. Safe here because this screen renders only when
+              no session is open — the stage and the player page deliberately do
+              not link their brand, where one stray tap would take a projector
+              or a participant out of a live round. */}
+          <a className="wel-brand" href="/home">
             Engagements {env && <span className="wel-env">{env}</span>}
-          </span>
+          </a>
 
           {currentUser && (
             <div className="wel-who">

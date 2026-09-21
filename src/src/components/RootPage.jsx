@@ -47,7 +47,7 @@ export default function RootPage() {
     <div className="entry-page">
       <header className="entry-pad">
         <div className="entry-shell entry-top">
-          <a className="entry-brand" href="/">
+          <a className="entry-brand" href="/home">
             Engagements {env && <span className="entry-env">{env}</span>}
           </a>
         </div>

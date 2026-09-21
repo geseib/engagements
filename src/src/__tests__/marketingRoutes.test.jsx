@@ -30,6 +30,7 @@ afterEach(() => goTo('/'));
 
 // Tasks 9–11 append their rows here.
 const PUBLIC = [
+  ['/home', 'home-page'],
   ['/join', 'root-page'],
   ['/how-it-works', 'how-page'],
   ['/use-cases', 'cases-page'],
@@ -53,6 +54,22 @@ test('/join is the join page even for a signed-in host', async () => {
   goTo('/join');
   render(<App />);
   expect(await screen.findByTestId('root-page')).toBeInTheDocument();
+});
+
+test('/home is the marketing home even for a signed-in host, who at / gets the app', async () => {
+  // rejects: linking the brand to `/`, which for anybody signed in is the host's
+  // main screen — the mark in the console would never reach the marketing page
+  mockAuthValue = { currentUser: { groups: ['hosts'] }, loading: false, signOut: jest.fn() };
+  goTo('/home');
+  render(<App />);
+  expect(await screen.findByTestId('home-page')).toBeInTheDocument();
+  expect(screen.queryByTestId('game-host-page')).toBeNull();
+});
+
+test('/homepage is not /home', () => {
+  goTo('/homepage');
+  render(<App />);
+  expect(screen.queryByTestId('home-page')).toBeNull();
 });
 
 test('/joining is not /join', () => {

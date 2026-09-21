@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { navigateTo } from '../auth/navigate';
 import { rememberReturnPath } from '../auth/returnPath';
+import { useOptionalAuth } from '../auth/AuthContext';
 import useScrollProgress from './useScrollProgress';
 import RidgeScene from './components/RidgeScene';
 import './MarketingShell.css';
@@ -53,6 +54,10 @@ class PageBoundary extends React.Component {
 
 export default function MarketingShell({ title, current, scene = true, children }) {
   const [open, setOpen] = useState(false);
+  // Null outside a provider (the page tests mount this bare), and `loading`
+  // counts as signed out: the doors are the safe thing to show for a beat.
+  const auth = useOptionalAuth();
+  const signedIn = Boolean(auth && !auth.loading && auth.currentUser);
   const progress = useScrollProgress();
   const burgerRef = useRef(null);
 
@@ -89,7 +94,7 @@ export default function MarketingShell({ title, current, scene = true, children 
       {scene && <RidgeScene progress={progress} />}
       <header className="mk-nav">
         <div className="mk-shell mk-nav-in">
-          <a className="mk-brand" href="/">
+          <a className="mk-brand" href="/home">
             <svg className="mk-brand-mark" viewBox="0 0 32 32" aria-hidden="true">
               <path d="M2 27 L11 13 L16 20 L22 6 L30 27 Z" />
             </svg>
@@ -120,16 +125,28 @@ export default function MarketingShell({ title, current, scene = true, children 
                 {link.label}
               </a>
             ))}
-            <a className="mk-btn mk-btn-quiet" href="/auth" onClick={goToAuth('/auth')}>
-              Sign in
-            </a>
-            <a
-              className="mk-btn mk-btn-primary"
-              href="/auth?mode=register"
-              onClick={goToAuth('/auth?mode=register')}
-            >
-              Create a host account
-            </a>
+            {/* A SIGNED-IN HOST IS NOT ASKED TO SIGN IN. The mark on the host's
+                main screen and in the console leads here (/home), so somebody
+                already inside the app does land on this page — and two doors
+                inviting them to sign in or register would read as having been
+                signed out. They get the one way back instead. `/` is the app
+                for anybody signed in (App.jsx RootGate). */}
+            {signedIn ? (
+              <a className="mk-btn mk-btn-primary" href="/">Open the app</a>
+            ) : (
+              <>
+                <a className="mk-btn mk-btn-quiet" href="/auth" onClick={goToAuth('/auth')}>
+                  Sign in
+                </a>
+                <a
+                  className="mk-btn mk-btn-primary"
+                  href="/auth?mode=register"
+                  onClick={goToAuth('/auth?mode=register')}
+                >
+                  Create a host account
+                </a>
+              </>
+            )}
           </nav>
 
           <div className="mk-nav-acts">
