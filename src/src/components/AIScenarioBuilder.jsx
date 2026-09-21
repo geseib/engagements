@@ -5,8 +5,7 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
-import CountField from './CountField';
-import { categorySpread } from '../utils/categorySpread';
+import { SetSizeField } from './CountField';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
 import {
@@ -62,7 +61,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     context: '',
     audience: '',
     difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
-    count: 5,
+    count: 6,
     customPrompt: '',
     customTitle: '',
     numberOfCategories: 3,
@@ -1305,14 +1304,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     track's right-hand end, where it is a place rather than a
                     sentence.
                   */}
-                  <CountField
-                    label="Categories to spread them across"
-                    value={scenarioConfig.numberOfCategories}
-                    onChange={(n) => setScenarioConfig((prev) => ({ ...prev, numberOfCategories: n }))}
-                    min={1}
-                    max={24}
-                    presets={[1, 3, 6, 12]}
-                    hint={`${categorySpread(scenarioConfig.count, scenarioConfig.numberOfCategories, itemNoun(engagementType))} Categories are what the host can switch on and off mid-session.`}
+                  <SetSizeField
+                    count={scenarioConfig.count}
+                    categories={scenarioConfig.numberOfCategories}
+                    onChange={({ count, categories }) => setScenarioConfig((prev) => ({ ...prev, count, numberOfCategories: categories }))}
+                    noun={itemNoun(engagementType)}
+                    maxTotal={50}
+                    hint="Categories are what the host can switch on and off mid-session."
                   />
                   <div className="form-group">
                     <div className="label-row">
@@ -1352,15 +1350,6 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                       )}
                     </select>
                   </div>
-
-                  <CountField
-                      label={`${itemNoun(engagementType).replace(/^./, (c) => c.toUpperCase())} to generate`}
-                      value={scenarioConfig.count}
-                      onChange={(n) => setScenarioConfig((prev) => ({ ...prev, count: n }))}
-                      min={1}
-                      max={50}
-                      presets={[3, 5, 10, 20]}
-                    />
                 </div>
 
                 <div className="form-group">

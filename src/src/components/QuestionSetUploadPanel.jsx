@@ -125,6 +125,16 @@ export default function QuestionSetUploadPanel({
    * yank the page on arrival in response to nothing the person did.
    */
   scrollIntoViewOnMount = false,
+  /**
+   * MOUNTED INSIDE A DIALOG THAT ALREADY NAMES IT (components/NewSetDialog.jsx).
+   * The dialog's header carries the title and the card carries the border, so
+   * the panel drops its own `<h3>` and its boxed `.qsets-panel` chrome rather
+   * than stating the title twice and drawing a box inside a box.
+   */
+  bare = false,
+  /** Told `true` once a file is chosen or a title typed, so the dialog can ask
+   *  before throwing the work away. */
+  onDirtyChange = null,
 }) {
   const [file, setFile] = useState(null);
   const [report, setReport] = useState(null);
@@ -329,6 +339,9 @@ export default function QuestionSetUploadPanel({
     }
   };
 
+  const dirty = !!file || !!title.trim() || !!description.trim();
+  useEffect(() => { if (onDirtyChange) onDirtyChange(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const blocked = !!(report && report.blocking.length);
   // The shelf joins the file and the title as a thing a set cannot be made
   // without. Its reason sits under the picker itself and is permanent, so the
@@ -336,8 +349,8 @@ export default function QuestionSetUploadPanel({
   const canUpload = !!file && !!title.trim() && !!topic && !isUploading && !blocked;
 
   return (
-    <div className="qsets qsets-panel">
-      <h3 ref={headingRef} tabIndex={-1}>{heading}</h3>
+    <div className={bare ? 'qsets qsets-panel qsets-panel--bare' : 'qsets qsets-panel'}>
+      {!bare && <h3 ref={headingRef} tabIndex={-1}>{heading}</h3>}
       <p>
         {intro || (
           <>

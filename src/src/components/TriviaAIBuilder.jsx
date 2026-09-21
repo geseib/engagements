@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
-import CountField from './CountField';
-import { categorySpread } from '../utils/categorySpread';
+import { SetSizeField } from './CountField';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -30,7 +29,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
     topic: '',
     audience: '',
     difficulty: 'medium',
-    count: 10,
+    count: 15,
     numChoices: 4,
     numCorrect: 1,
     numberOfCategories: 3,
@@ -439,15 +438,22 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   </div>
                 </div>
 
+                {/*
+                  ONE GROUP FOR THE TWO NUMBERS THAT MULTIPLY. They used to sit
+                  two fields apart — a total here, a category count further
+                  down — with "how many per category" left as arithmetic. It is
+                  now asked directly, 2/3/5/10 per category, and the total is
+                  stated under it.
+                */}
                 <div className="form-row">
-                  <CountField
-                      label="Questions to generate"
-                      value={triviaConfig.count}
-                      onChange={(n) => setTriviaConfig((prev) => ({ ...prev, count: n }))}
-                      min={1}
-                      max={100}
-                      presets={[5, 10, 20, 50]}
-                    />
+                  <SetSizeField
+                    count={triviaConfig.count}
+                    categories={triviaConfig.numberOfCategories}
+                    onChange={({ count, categories }) => setTriviaConfig((prev) => ({ ...prev, count, numberOfCategories: categories }))}
+                    noun="questions"
+                    maxTotal={100}
+                    hint="Categories are what the host can switch on and off mid-session."
+                  />
                 </div>
 
                 <div className="form-row">
@@ -476,15 +482,6 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                 </div>
 
                 <div className="form-row">
-                  <CountField
-                      label="Categories to spread them across"
-                      value={triviaConfig.numberOfCategories}
-                      onChange={(n) => setTriviaConfig((prev) => ({ ...prev, numberOfCategories: n }))}
-                      min={1}
-                      max={24}
-                      presets={[1, 3, 6, 12]}
-                      hint={`${categorySpread(triviaConfig.count, triviaConfig.numberOfCategories)} Categories are what the host can switch on and off mid-session.`}
-                    />
                   <div className="form-group">
                     <div className="label-row">
                       <label>Must Have Categories</label>

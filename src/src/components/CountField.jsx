@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useId, useState, useEffect } from 'react';
 import Icon from './Icon';
 import './CountField.css';
 
@@ -46,6 +46,39 @@ import './CountField.css';
   caller today spans 23, 49 or 99, so every caller gets one.
 */
 export const TRACK_MIN_SPAN = 12;
+
+/**
+ * THE NUMBER BOX, WHICH CAN BE EMPTIED AND RETYPED.
+ *
+ * The box used to be fully controlled by the clamped value, so backspacing it
+ * snapped straight to the minimum and "clear, then type 12" produced 112. The
+ * caller is still only ever handed a clamped integer — an emptied box reports
+ * the minimum, never NaN — but what is DRAWN while the box is empty is the
+ * empty box. It catches up with the real value on blur.
+ */
+function NumberBox({ id, value, min, max, onCommit, className = 'cnt-input', ariaLabel }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => { setDraft((d) => (d === '' ? d : String(value))); }, [value]);
+  return (
+    <input
+      id={id}
+      className={className}
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      value={draft}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        const raw = e.target.value;
+        const next = Math.min(max, Math.max(min, Number(raw) || min));
+        setDraft(raw === '' ? '' : String(next));
+        onCommit(next);
+      }}
+      onBlur={() => setDraft(String(value))}
+    />
+  );
+}
 export default function CountField({
   label,
   value,
@@ -114,16 +147,7 @@ export default function CountField({
         >
           <Icon name="Minus" weight="bold" size={13} color="currentColor" />
         </button>
-        <input
-          id={id}
-          className="cnt-input"
-          type="number"
-          inputMode="numeric"
-          min={min}
-          max={max}
-          value={current}
-          onChange={(e) => set(e.target.value)}
-        />
+        <NumberBox id={id} value={current} min={min} max={max} onCommit={set} />
         <button
           type="button"
           className="cnt-step"
@@ -161,6 +185,95 @@ export default function CountField({
         )}
       </div>
 
+      {hint && <p className="cnt-hint">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * HOW BIG IS THE SET — categories × questions in each, with the total stated.
+ *
+ * The builders used to ask for a TOTAL and, two fields away, a number of
+ * categories, leaving the figure a person actually judges — how many questions
+ * each category gets — as arithmetic to do in their head. The owner's ask:
+ * "modify the question and the category count selectors to be much more user
+ * friendly ... the question count picker [should] default to 2/3/5/10 per
+ * category."
+ *
+ * So the two numbers sit in one group, the second is asked PER CATEGORY, and
+ * the product is printed once underneath. The caller's state does not change
+ * shape: it still holds a total (`count`) and `categories`, and `onChange`
+ * hands back both, already clamped so the total never passes `maxTotal`.
+ *
+ * No steppers and no track here: presets for the usual answer, one box that
+ * can be typed over for any other. Two affordances per number, not four.
+ */
+export const PER_CATEGORY_PRESETS = [2, 3, 5, 10];
+export const CATEGORY_PRESETS = [1, 3, 4, 6, 8];
+
+export function SetSizeField({
+  count,
+  categories,
+  onChange,
+  noun = 'questions',
+  maxTotal = 100,
+  maxCategories = 24,
+  hint = '',
+}) {
+  const catId = useId();
+  const perId = useId();
+  const cats = Math.min(maxCategories, Math.max(1, Number(categories) || 1));
+  const total = Math.min(maxTotal, Math.max(1, Number(count) || 1));
+  const perMax = Math.max(1, Math.floor(maxTotal / cats));
+  const per = Math.min(perMax, Math.max(1, Math.round(total / cats)));
+  // A total that arrived from elsewhere ("generate the 7 that are missing")
+  // may not divide evenly. Say "about" rather than print a false product.
+  const even = per * cats === total;
+
+  const setCats = (n) => {
+    const nextCats = Math.min(maxCategories, Math.max(1, n));
+    const nextPer = Math.min(per, Math.max(1, Math.floor(maxTotal / nextCats)));
+    onChange({ categories: nextCats, count: nextCats * nextPer });
+  };
+  const setPer = (n) => {
+    const nextPer = Math.min(perMax, Math.max(1, n));
+    onChange({ categories: cats, count: cats * nextPer });
+  };
+
+  const row = (id, label, value, presets, max, commit) => (
+    <div className="cnt-size-row">
+      <label className="cnt-label" htmlFor={id}>{label}</label>
+      <div className="cnt-size-pick">
+        <div className="cnt-presets" role="radiogroup" aria-label={label}>
+          {presets.filter((preset) => preset <= max).map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              role="radio"
+              aria-checked={value === preset}
+              className={`cnt-preset${value === preset ? ' is-on' : ''}`}
+              onClick={() => commit(preset)}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+        <span className="cnt-size-or">or</span>
+        <NumberBox id={id} value={value} min={1} max={max} onCommit={commit} />
+        <span className="cnt-range">up to {max}</span>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="cnt cnt-size" role="group" aria-label={`How many ${noun}`}>
+      {row(catId, 'Categories', cats, CATEGORY_PRESETS, maxCategories, setCats)}
+      {row(perId, `${noun.replace(/^./, (c) => c.toUpperCase())} in each category`, per, PER_CATEGORY_PRESETS, perMax, setPer)}
+      <p className="cnt-size-total" data-testid="set-size-total" aria-live="polite">
+        <b>{even ? total : `About ${total}`}</b> {noun} in total
+        {cats > 1 && even ? <span className="cnt-unit"> — {cats} categories × {per}</span> : null}
+        {total >= maxTotal ? <span className="cnt-unit"> · the most one run can write</span> : null}
+      </p>
       {hint && <p className="cnt-hint">{hint}</p>}
     </div>
   );

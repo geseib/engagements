@@ -24,7 +24,7 @@ import QuestionSetsPanel from './components/QuestionSetsPanel';
 import { checkIsDue, houseCheckNotice } from './utils/houseCheck';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
-import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
+import NewSetDialog from './components/NewSetDialog';
 import AdminShell from './components/AdminShell';
 import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
@@ -1400,8 +1400,10 @@ function AdminPage() {
 
   /** The three ranked paths from mockup 02, and the header's New set button. */
   const handleCreatePath = (path) => {
-    setIsCreateOpen((open) => (path === 'new' ? !open : true));
-    if (path === 'ai') handleOpenBuilder(engagementType);
+    // The AI path goes straight to its builder — a dialog of its own, so the
+    // new-set dialog is not opened underneath it (never a modal from a modal).
+    if (path === 'ai') { setIsCreateOpen(false); handleOpenBuilder(engagementType); return; }
+    setIsCreateOpen(true);
   };
 
   /*
@@ -1849,19 +1851,22 @@ function AdminPage() {
               onShare={handleShareSet}
               createOpen={isCreateOpen}
             >
-              {(isCreateOpen || visibleSets.length === 0) && (
-                <QuestionSetUploadPanel
+              {/*
+                THE NEW-SET DIALOG. It used to be a panel appended below the
+                table — below forty-one rows, off the bottom of the screen — and
+                it also rendered itself unasked whenever the library was empty.
+                It is a dialog now, opened only by a press: the header's New set
+                button, or one of the empty state's three ranked paths.
+              */}
+              {isCreateOpen && (
+                <NewSetDialog
+                  onClose={() => setIsCreateOpen(false)}
                   /* In the Engage console a new set belongs to the SHARED
                      library, not to the admin's own space. Without this the
                      server's default picks the caller's organisation — and an
                      Engage admin always has one — so "add to the shared
                      library" would quietly create a personal set. */
                   scope={onPlatform ? 'platform' : ''}
-                  /* Only when the person PRESSED something. The condition above
-                     also renders this panel on arrival when the library is
-                     empty, and scrolling then would move the page in response
-                     to nothing. */
-                  scrollIntoViewOnMount={isCreateOpen}
                   engagementType={engagementType}
                   onEngagementTypeChange={setEngagementType}
                   /* The upload panel draws no empty-library sentence, so it

@@ -737,6 +737,14 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    sized for the confirm dialogs. The 98-character set title that `.qsets-modal`
    guards against is still handled by its `overflow-wrap: anywhere`.
    ========================================================================== */
+/* THE CONSOLE'S "NEW SET" DIALOG — components/NewSetDialog.jsx. Wide, because
+   it carries the route cards and the upload form; tall, with the card itself
+   scrolling, because that form is longer than a laptop screen. The panel inside
+   drops its own box: a bordered panel inside a bordered card is a box in a box. */
+.qsets-modal--create { width: min(920px, 100%); max-height: 90vh; }
+.qsets-modal--create > footer { position: sticky; bottom: 0; background: var(--surface); }
+.qsets-panel--bare { border: 0; padding: 0; margin: 0; background: transparent; }
+
 .qsets-scrim--over { z-index: 10001; }
 .qsets-modal--wide { width: min(760px, 100%); }
 .qsets-modal--wide > header { align-items: flex-start; }
@@ -747,6 +755,11 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    buttons the third is CLIPPED rather than wrapped, because `.qsets-tbl td` is
    `overflow: hidden`. The width comes out of the name column, which has
    `text-overflow: ellipsis` and degrades gracefully. */
+/* THE HOST'S SHELF, at a width a table can breathe in. 760px was reported as
+   "way too narrow": a set name, its type, counts and three row actions do not
+   fit in it, so names ellipsed and actions wrapped. 1120px is the console's
+   own work-field width at 1440; `min()` keeps it inside a small laptop. */
+.qsets-modal--shelf { width: min(1120px, 100%); max-height: 90vh; }
 .qsets-modal--wide .qsets-col-set { width: 30%; }
 .qsets-modal--wide .qsets-col-acts { width: 34%; }
 
@@ -843,8 +856,10 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    because the question dialog inside it is `position: fixed` and so is
    contained by the viewport rather than by this box. */
 .qsets-editor-frame {
-  width: min(960px, 100%);
-  max-height: 86vh;
+  /* Four panels and two tables: the console gives this a whole work area, and
+     960px here was the second half of "way too narrow". */
+  width: min(1280px, 100%);
+  max-height: 92vh;
   overflow: auto;
   border-radius: 12px;
 }
