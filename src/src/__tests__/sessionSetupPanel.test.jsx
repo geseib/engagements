@@ -601,12 +601,14 @@ describe('the Settings tab', () => {
     expect(report.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test('report-a-problem is rendered where the caller puts it', () => {
-    // The IssueFab pulls the auth'd API client in; the panel takes it as a
-    // node so the panel itself stays renderable.
-    renderPanel({ issueControl: <span>Report a problem</span> });
+  test('the panel no longer carries the report control', () => {
+    // It used to be slotted into this tab's footer as `issueControl`, which is
+    // how it came to exist on one tab of one panel and nowhere on the stage. The
+    // router mounts it now (App.jsx `IssueCorner`, __tests__/issueCorner.test.jsx);
+    // a second one here would be two controls on the same screen.
+    renderPanel({});
     openTab('Settings');
-    expect(screen.getByText('Report a problem')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /report a problem/i })).toBeNull();
   });
 });
 

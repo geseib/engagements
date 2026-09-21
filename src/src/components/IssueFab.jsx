@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import IssueReportForm from './IssueReportForm';
 import './IssueFab.css';
 import Icon from './Icon';
+import { getIssueGameId } from '../utils/issueContext';
 
 /**
  * Report a bug, request a feature, ask for help.
@@ -24,15 +25,91 @@ import Icon from './Icon';
  *                The default, because every current mount has somewhere to put
  *                it. The menu opens against the button rather than over the page.
  *   'floating' — the old fixed circle, for a surface with no chrome to host it.
+ *   'corner'   — a small quiet tab fixed to the bottom-LEFT, UNDER every dialog.
  *
- * @param {'inline'|'floating'} placement Where this instance lives.
+ * ── AND WHY 'corner' IS NOW THE ONE THE APP USES ───────────────────────────
+ *
+ * Inline fixed the overlap and lost the control. It lived in the admin header
+ * and in one tab of the host's setup panel — not on the stage, the lobby, the
+ * player page, the phone remote or the builder. Reported plainly again,
+ * 2026-09-20: it "is not showing up in most screens".
+ *
+ * Every screen needs it and no two screens have the same chrome, so it is
+ * mounted ONCE, by the router (App.jsx `IssueCorner`), in a place that exists
+ * on all of them. What was wrong with the original was never that it was
+ * fixed: it was 56px, bottom-right where Submit and Next live, and at
+ * z-index 20000 over every dialog. The corner is 36px, bottom-left, and below
+ * the lowest dialog layer in the app.
+ *
+ * `lifted` raises it over a bottom dock that spans the screen — the player's
+ * and the remote's — instead of covering the dock's first button.
+ *
+ * @param {'inline'|'floating'|'corner'} placement Where this instance lives.
  */
-const IssueFab = ({ context = 'host', gameId = null, placement = 'inline' }) => {
+const PLACEMENTS = ['inline', 'floating', 'corner'];
+
+/**
+ * How far the corner tab must rise to clear a dock that spans the bottom of the
+ * screen, in px — or null when there is nothing to clear or no way to measure.
+ *
+ * A fixed lift was tried first (88px) and was wrong on the first screen it was
+ * looked at: the player's join dock is a button PLUS a line of small print,
+ * about 130px, and the dock's height changes with every phase. So the dock
+ * declares itself (`data-issue-clearance`) and is measured. Only a dock that
+ * actually reaches the bottom edge counts — one scrolled out of view, or
+ * sitting mid-page on a tall screen, is not in the way.
+ */
+function useDockClearance(active) {
+  const [clearance, setClearance] = useState(null);
+
+  useEffect(() => {
+    if (!active || typeof window === 'undefined') return undefined;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      let tallest = 0;
+      document.querySelectorAll('[data-issue-clearance]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.bottom >= window.innerHeight - 1 && r.top < window.innerHeight) {
+          tallest = Math.max(tallest, window.innerHeight - r.top);
+        }
+      });
+      setClearance(tallest > 0 ? Math.round(tallest) : null);
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(measure); };
+
+    measure();
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, { passive: true });
+    // The dock mounts, unmounts and changes height as the session moves through
+    // its phases, none of which resizes the window.
+    const mutations = typeof MutationObserver === 'function' ? new MutationObserver(schedule) : null;
+    if (mutations) mutations.observe(document.body, { childList: true, subtree: true });
+    const resizes = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+    if (resizes) resizes.observe(document.body);
+
+    return () => {
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule);
+      if (mutations) mutations.disconnect();
+      if (resizes) resizes.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [active]);
+
+  return clearance;
+}
+
+const IssueFab = ({ context = 'host', gameId = null, placement = 'inline', lifted = false }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [formConfig, setFormConfig] = useState(null);
+  const isLifted = placement === 'corner' && lifted;
+  const clearance = useDockClearance(isLifted);
 
   const openForm = (type) => {
-    setFormConfig({ type, context, gameId });
+    // Read at the moment of reporting, not at mount: the corner instance
+    // outlives any one session, and the stage publishes its id as it changes.
+    setFormConfig({ type, context, gameId: gameId || getIssueGameId() });
     setIsMenuOpen(false);
   };
 
@@ -45,9 +122,12 @@ const IssueFab = ({ context = 'host', gameId = null, placement = 'inline' }) => 
       <div
         className={[
           'issue-fab-container',
-          `issue-fab-container--${placement === 'floating' ? 'floating' : 'inline'}`,
+          `issue-fab-container--${PLACEMENTS.includes(placement) ? placement : 'inline'}`,
+          isLifted ? 'issue-fab-container--lifted' : '',
           isMenuOpen ? 'menu-open' : '',
         ].filter(Boolean).join(' ')}
+        // Measured, when it can be; the stylesheet's own figure otherwise.
+        style={isLifted && clearance != null ? { '--issue-fab-lift': `${clearance}px` } : undefined}
       >
         {/* Floating Action Menu */}
         {isMenuOpen && (

@@ -9,7 +9,6 @@ import ArchivePanel from './components/ArchivePanel';
 import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
 import HelpButton from './components/HelpButton';
-import IssueFab from './components/IssueFab';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
@@ -1667,10 +1666,10 @@ function AdminPage() {
         contentTheme={editingSet ? 'dark' : section.contentTheme || 'light'}
         actions={(
           <>
-            {/* IN THE HEADER, BESIDE HELP — not floating over the console.
-                These two are the same kind of thing (ask for something, get
-                help), so they belong in the same place and look alike. */}
-            <IssueFab context="admin" placement="inline" />
+            {/* The report control used to sit here, beside Help. It is now the
+                corner tab the router mounts on every working screen
+                (App.jsx `IssueCorner`) — this header was one of only two
+                places that had it. */}
             <HelpButton section="admin" variant="header" size="medium" />
           </>
         )}

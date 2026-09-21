@@ -12,6 +12,7 @@ import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
+import IssueFab from './components/IssueFab';
 
 // Marketing is lazy so that a player on /play and a host on the stage never
 // download a brochure. One chunk per page; AuthLoading is the fallback.
@@ -237,6 +238,55 @@ function RootGate() {
   );
 }
 
+// NOTE ON PLACEMENT: this sits ABOVE AppRouter on purpose.
+// __tests__/setMediaStorage.test.js reads everything from the router function
+// onward as the app's route matchers, to keep every question-rendering route a
+// single path segment. The function below names paths but routes nothing. (And
+// this comment does not spell the router's declaration out, because that test
+// finds it with indexOf and would start reading here instead.)
+/**
+ * Which screens carry the report control, and what a report from one says.
+ *
+ * The control sends a bug, a feature request or a question to GitHub issues.
+ * It used to be placed by each screen, and so most screens did not have it: it
+ * was in the admin header and in one tab of the host's setup panel, and nowhere
+ * on the stage, the lobby, the player page, the remote or the builder. It is
+ * now mounted here, once, so a screen has it by being routed to rather than by
+ * remembering to.
+ *
+ * Returns null for the places that are not the product: the marketing pages,
+ * the focused join page, sign-in, the legal pages, an invitation. A brochure
+ * with a bug button reads as a product that expects bugs.
+ *
+ * `lifted` is for the two surfaces that end in a dock spanning the screen.
+ *
+ * Pure, and exported, so that adding a route is one line here and one test row.
+ */
+export function issueSurfaceFor(path, signedIn) {
+  if (path.startsWith('/play')) return { context: 'player', lifted: true };
+  if (path.startsWith('/remote')) return { context: 'host', lifted: true };
+  if (path.startsWith('/admin')) return { context: 'admin', lifted: false };
+  if (path.startsWith('/builder')) return { context: 'host', lifted: false };
+  if (
+    path === '/join' || path === '/privacy' || path === '/terms'
+    || path === '/how-it-works' || path === '/use-cases' || path === '/reports'
+    || path === '/help' || path.startsWith('/help/')
+    || path.startsWith('/auth') || path.startsWith('/invite/') || path.startsWith('/test/')
+  ) return null;
+  // `/` is the stage for a signed-in host and the marketing home for anybody
+  // else; every other unrecognised path falls through to the stage as well.
+  if (path === '/' && !signedIn) return null;
+  return { context: 'host', lifted: false };
+}
+
+function IssueCorner() {
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
+  const surface = issueSurfaceFor(window.location.pathname, Boolean(currentUser));
+  if (!surface) return null;
+  return <IssueFab placement="corner" context={surface.context} lifted={surface.lifted} />;
+}
+
 // Main app router component
 function AppRouter() {
   // Simple routing based on URL path
@@ -395,6 +445,7 @@ function App() {
   return (
     <AuthProvider>
       <AppRouter />
+      <IssueCorner />
     </AuthProvider>
   );
 }

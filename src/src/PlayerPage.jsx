@@ -116,7 +116,11 @@ export const PlayerShell = ({
     <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>
       {children}
     </main>
-    {dock && <footer className="plr-dock">{dock}</footer>}
+    {/* data-issue-clearance: the report control is a corner tab the router
+        mounts (App.jsx `IssueCorner`). It measures whatever carries this
+        attribute and sits just above it, so it never covers this dock's first
+        button — whatever height the dock is in this phase. */}
+    {dock && <footer className="plr-dock" data-issue-clearance="">{dock}</footer>}
     {/* OVERLAYS, INSIDE THE SCOPE RATHER THAN BESIDE IT.
         A dialog rendered as a sibling of this shell is outside `.plr`, so it
         inherits the data-theme="light" that public/index.html puts on <html>

@@ -26,6 +26,91 @@
   z-index: 20000;
 }
 
+/* THE CORNER — the placement the app uses. One quiet tab, bottom-LEFT, on every
+   working screen, mounted once by the router.
+
+   Bottom-left because the things a person is reaching for live bottom-right:
+   the player's Submit, the host's Next and dock, a dialog's primary button.
+
+   z-index 50, and the number is load-bearing: the lowest dialog or scrim layer
+   in any stylesheet in this app is 60, so this is under every one of them. The
+   original sat at 20000 and covered the dialogs it was supposed to be reporting
+   on. It is above 4, which is the remote's dock, because it sits beside that. */
+.issue-fab-container--corner {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 50;
+  align-items: flex-start;
+}
+
+/* The player page and the phone remote end in a dock that spans the screen, and
+   twelve pixels up from the bottom is that dock's first button. IssueFab.jsx
+   measures whatever carries `data-issue-clearance` and publishes its height as
+   --issue-fab-lift, which already includes the dock's own safe-area padding.
+   88px is only what is used until that measurement exists (or where it cannot
+   be taken): a 64px dock and its padding. */
+.issue-fab-container--corner.issue-fab-container--lifted {
+  bottom: calc(var(--issue-fab-lift, 88px) + 8px);
+}
+
+/* Quiet until wanted. It is on a projector and on forty phones at once, and it
+   is nobody's task — but it must never be invisible to someone tabbing to it. */
+.issue-fab-container--corner .issue-fab-main {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  box-shadow: none;
+  background: var(--surface, #1B2942);
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  color: var(--text, #F4EDE4);
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+.issue-fab-container--corner .issue-fab-main:hover {
+  transform: none;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.issue-fab-container--corner .issue-fab-main:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--primary, #F6A94C);
+  outline-offset: 2px;
+}
+
+.issue-fab-container--corner.menu-open .issue-fab-main,
+.issue-fab-container--corner .issue-fab-main.active {
+  transform: none;
+  opacity: 1;
+}
+
+/* The menu opens upward and to the right — into the screen, not off it. */
+.issue-fab-container--corner .issue-fab-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 1;
+  align-items: flex-start;
+}
+
+/* A finger gets the 44px the player page gives every other control. */
+@media (pointer: coarse) {
+  .issue-fab-container--corner .issue-fab-main {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .issue-fab-container--corner .issue-fab-main { transition: none; }
+}
+
+@media print {
+  .issue-fab-container--corner { display: none; }
+}
+
 /* Inline, it is a header control and matches the Help button beside it rather
    than shouting over it: same 32px box, same radius, no drop shadow. */
 .issue-fab-container--inline .issue-fab-main {
@@ -169,7 +254,10 @@
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
-  .issue-fab-container {
+  /* The FLOATING variant only. These offsets used to be on the bare container,
+     so on a phone they also pushed the inline control 16px out of its header,
+     and would have pinned the corner tab to both edges at once. */
+  .issue-fab-container--floating {
     bottom: 16px;
     right: 16px;
   }
@@ -192,7 +280,7 @@
 
 /* Show simplified version on small screens */
 @media (max-width: 480px) {
-  .issue-fab-container {
+  .issue-fab-container--floating {
     bottom: 12px;
     right: 12px;
   }

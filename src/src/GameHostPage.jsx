@@ -6,7 +6,7 @@ import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
-import IssueFab from './components/IssueFab';
+import { setIssueGameId } from './utils/issueContext';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -85,6 +85,14 @@ function GameHostPage() {
   
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
+  // The report control is mounted by the router, not by this page, so it cannot
+  // be handed the session as a prop. Publish it; the control reads it when a
+  // report is opened. Cleared on unmount so a report from another screen does
+  // not carry a session that is no longer on the stage.
+  useEffect(() => {
+    setIssueGameId(gameId || null);
+    return () => setIssueGameId(null);
+  }, [gameId]);
   /*
     Bumped by every switchToGame(), including one that re-opens the game
     already in `gameId`. It exists ONLY to re-fire the restore effect in that
@@ -6287,7 +6295,6 @@ Focus on actionable business strategy insights.`;
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.
           isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
-          issueControl={<IssueFab context="host" gameId={gameId} placement="inline" />}
         />
       )}
 

@@ -190,7 +190,6 @@ export default function SessionSetupPanel({
   // presentational component with no auth dependency — GameHostPage is the
   // only thing that can reach `useAuth`.
   isAdmin = false,
-  issueControl = null,
   /* The rounds played so far, already normalised by config/sessionHistory.js.
      Props rather than a fetch: this panel is presentational by rule, and the
      page owns the request — the same reason `isAdmin` arrives as a prop rather
@@ -1071,7 +1070,6 @@ export default function SessionSetupPanel({
                     Admin ↗
                   </a>
                 )}
-                {issueControl}
                 <button type="button" onClick={onSignOut}>Sign out</button>
               </div>
 
