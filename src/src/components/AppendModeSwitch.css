@@ -1,0 +1,15 @@
+/* components/AppendModeSwitch.jsx — the add-to-a-set mode, inside a builder.
+   The builders are mounted on paper (console) and on dusk (host), so this sheet
+   sets NO text colour of its own: copy inherits the builder's, the secondary
+   line is the same ink at reduced weight rather than a second grey, and the
+   chosen state is a rule plus the native radio — never colour alone. */
+.append-mode { margin: 0 0 18px; padding: 12px 14px 10px; border: 1px solid rgba(128, 128, 128, .4); border-radius: 10px; min-width: 0; }
+.append-mode legend { padding: 0 6px; font-size: 13px; font-weight: 700; }
+.append-mode__opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.append-mode__opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid rgba(128, 128, 128, .4); border-radius: 8px; cursor: pointer; margin: 0; }
+.append-mode__opt.is-on { border-color: var(--primary-deep, #C77B4A); box-shadow: inset 3px 0 0 var(--primary-deep, #C77B4A); }
+.append-mode__opt input { margin-top: 3px; width: auto; accent-color: var(--primary-deep, #C77B4A); }
+.append-mode__opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.append-mode__opt b { font-size: 15px; }
+.append-mode__opt small { font-size: 13px; font-weight: 400; line-height: 1.45; }
+.append-mode__why { margin: 8px 0 0; font-size: 13px; line-height: 1.45; }

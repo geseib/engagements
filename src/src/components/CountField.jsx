@@ -224,6 +224,14 @@ export function SetSizeField({
    * The picker is replaced by their names, and only "in each" can change.
    */
   lockedCategories = null,
+  /**
+   * ADDING TO A SET THAT ALREADY HAS QUESTIONS — `{ existingTotal }`.
+   * The owner: "its unclear when i select 5 questions (and there are 5
+   * categories) am i adding 25 questions or increasing from what existed to a
+   * total of 25?" So every number here says NEW, and the total line states
+   * both figures: how many are added, and what the set grows from and to.
+   */
+  adding = null,
 }) {
   const catId = useId();
   const perId = useId();
@@ -274,16 +282,21 @@ export function SetSizeField({
     <div className="cnt cnt-size" role="group" aria-label={`How many ${noun}`}>
       {lockedCategories ? (
         <div className="cnt-size-row" data-testid="set-size-locked">
-          <span className="cnt-label">Categories — this set's own {lockedCategories.length}</span>
+          <span className="cnt-label">Categories — this set's own {lockedCategories.length}, no new ones</span>
           <p className="cnt-hint">{lockedCategories.join(' · ')}</p>
         </div>
       ) : row(catId, 'Categories', cats, CATEGORY_PRESETS, maxCategories, setCats)}
-      {row(perId, `${noun.replace(/^./, (c) => c.toUpperCase())} in each category`, per, PER_CATEGORY_PRESETS, perMax, setPer)}
+      {row(perId, adding ? `New ${noun} to add to each category` : `${noun.replace(/^./, (c) => c.toUpperCase())} in each category`, per, PER_CATEGORY_PRESETS, perMax, setPer)}
       <p className="cnt-size-total" data-testid="set-size-total" aria-live="polite">
-        <b>{even ? total : `About ${total}`}</b> {noun} in total
+        {adding ? 'Adding ' : ''}<b>{even ? total : `${adding ? 'about' : 'About'} ${total}`}</b> {adding ? `new ${noun}` : `${noun} in total`}
         {cats > 1 && even ? <span className="cnt-unit"> — {cats} categories × {per}</span> : null}
         {total >= maxTotal ? <span className="cnt-unit"> · the most one run can write</span> : null}
       </p>
+      {adding && (
+        <p className="cnt-hint" data-testid="set-size-grows">
+          On top of the {adding.existingTotal} already in the set — it goes from {adding.existingTotal} to {adding.existingTotal + total}. Nothing existing is replaced.
+        </p>
+      )}
       {hint && <p className="cnt-hint">{hint}</p>}
     </div>
   );

@@ -7,7 +7,9 @@ import path from 'path';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AddQuestionsDialog from '../components/AddQuestionsDialog';
 import { toRow } from '../utils/questionRows';
-import { appendRequirement, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
+import { appendRequirement, appendCategoryDefaults, withAppendRequirement, briefFromSet } from '../utils/appendMode';
+import AppendModeSwitch from '../components/AppendModeSwitch';
+import { SetSizeField } from '../components/CountField';
 
 const rows = [toRow({ Category: 'History', Title: 'a' }), toRow({ Category: 'Method', Title: 'b' })];
 
@@ -101,4 +103,76 @@ describe('what a builder is told when it is adding', () => {
       expect(src).toMatch(/withAppendRequirement\(/);
     },
   );
+});
+
+describe('adding starts from the brief the set was made from', () => {
+  // The owner's own example, verbatim.
+  it('reads the topic and the audience back out of a builder-made title', () => {
+    expect(briefFromSet({
+      name: 'Serial murders throughout time Trivia for Crime buffs',
+      aiContextInstruction: 'These are hard-level trivia questions about Serial murders throughout time. Provide explanations for correct answers and encourage learning.',
+    })).toMatchObject({ topic: 'Serial murders throughout time', audience: 'Crime buffs', difficulty: 'hard' });
+  });
+
+  it('a poll title reverses the same way', () => {
+    expect(briefFromSet({ name: 'Remote work Polls for Managers' })).toMatchObject({ topic: 'Remote work', audience: 'Managers' });
+  });
+
+  it('a set no builder named still prefills: the whole name is the topic', () => {
+    // rejects: an empty topic box over a set that plainly has a subject.
+    expect(briefFromSet({ name: 'Q3 offsite', description: 'Icebreakers.' }))
+      .toMatchObject({ topic: 'Q3 offsite', audience: '', context: 'Icebreakers.' });
+  });
+
+  it.each(['TriviaAIBuilder.jsx', 'PollAIBuilder.jsx', 'AIScenarioBuilder.jsx'])('%s starts from it and shows the mode switch', (file) => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8');
+    expect(src).toMatch(/appendTo\?\.brief\?\.audience/);
+    expect(src).toMatch(/<AppendModeSwitch appendTo=\{appendTo\} \/>/);
+  });
+});
+
+describe('the mode is visible, and changeable, inside the builder', () => {
+  it('shows both destinations and reports a change', () => {
+    const onModeChange = jest.fn();
+    render(<AppendModeSwitch appendTo={{ setName: 'S', mode: 'existing', categories: ['History', 'Method'], onModeChange }} />);
+    expect(screen.getByRole('radio', { name: /into this set’s categories/i })).toBeChecked();
+    fireEvent.click(screen.getByRole('radio', { name: /into new categories/i }));
+    expect(onModeChange).toHaveBeenCalledWith('new');
+  });
+
+  it('renders nothing when a builder is making a new set', () => {
+    const { container } = render(<AppendModeSwitch appendTo={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('adding 25, or growing to 25? — the size field says which', () => {
+  it('every figure says NEW, and the set\'s before and after are both stated', () => {
+    render(<SetSizeField count={25} categories={5} onChange={() => {}} lockedCategories={['a', 'b', 'c', 'd', 'e']} adding={{ existingTotal: 40 }} />);
+    expect(screen.getByText('New questions to add to each category')).toBeInTheDocument();
+    expect(screen.getByTestId('set-size-total')).toHaveTextContent('Adding 25 new questions');
+    expect(screen.getByTestId('set-size-grows')).toHaveTextContent('it goes from 40 to 65. Nothing existing is replaced.');
+  });
+
+  it('a new set says none of that', () => {
+    render(<SetSizeField count={15} categories={3} onChange={() => {}} />);
+    expect(screen.getByTestId('set-size-total')).toHaveTextContent('15 questions in total');
+    expect(screen.queryByTestId('set-size-grows')).toBeNull();
+  });
+});
+
+describe('adding never asks for a set title', () => {
+  it('the scenario builder hides its Question Set Title field when adding', () => {
+    // The owner: "you shouldnt get to set the question set title when adding
+    // questions." Trivia and Poll have no such field; this was the only one.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', 'AIScenarioBuilder.jsx'), 'utf8');
+    const at = src.indexOf('<label>Question Set Title</label>');
+    const opener = src.slice(src.lastIndexOf('<div className="form-group"', at), at);
+    expect(opener).toContain("style={isAppend(appendTo) ? { display: 'none' } : undefined}");
+    // rejects: the bare `hidden` attribute, which `.form-group { display: flex }` defeats.
+    expect(src).not.toMatch(/className="form-group" hidden=/);
+    for (const file of ['TriviaAIBuilder.jsx', 'PollAIBuilder.jsx']) {
+      expect(fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8')).not.toMatch(/Set Title/i);
+    }
+  });
 });

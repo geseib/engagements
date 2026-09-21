@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import CountField from './CountField';
+import AppendModeSwitch from './AppendModeSwitch';
 import { isAppend, appendsToExisting, withAppendRequirement } from '../utils/appendMode';
 import RoundKindPicker from './RoundKindPicker';
 import {
@@ -29,13 +30,14 @@ const ENDPOINT = `${API_BASE}admin/ai-generate-polls`;
 const ASSIST_FORM = BUILDER_FORM_FIELDS.poll;
 
 function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
+  const appendMode = appendTo?.mode;
   const [step, setStep] = useState(1);
   const [pollConfig, setPollConfig] = useState({
-    topic: '',
+    topic: appendTo?.brief?.topic || '',
     // Adding to a set's own categories starts on the first of them.
     category: appendsToExisting(appendTo) ? (appendTo.categories[0] || '') : '',
-    audience: '',
-    difficulty: 'medium',
+    audience: appendTo?.brief?.audience || '',
+    difficulty: appendTo?.brief?.difficulty || 'medium',
     count: 10,
     allowMultiple: false,
     customPrompt: '',
@@ -47,6 +49,15 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
     roundKindBrief: '',
     roundKindInstruction: ''
   });
+  // The category follows the mode: one of the set's own in `existing`, a blank
+  // to be named in `new` (AppendModeSwitch can change it from in here).
+  useEffect(() => {
+    if (!isAppend(appendTo)) return;
+    setPollConfig((prev) => ({
+      ...prev,
+      category: appendsToExisting(appendTo) ? (appendTo.categories[0] || '') : '',
+    }));
+  }, [appendMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [generatedPolls, setGeneratedPolls] = useState([]);
   const [currentPollIndex, setCurrentPollIndex] = useState(0);
   // The last poll response, in the shape jobToResponse() actually sends. Every
@@ -386,6 +397,7 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
           {step === 1 && (
             <div className="poll-configuration">
               <h3>Configure Your Poll Questions</h3>
+              <AppendModeSwitch appendTo={appendTo} />
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -442,7 +454,7 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                   </div>
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Category</label>
+                      <label>{isAppend(appendTo) && !appendsToExisting(appendTo) ? 'New category name' : 'Category'}</label>
                       {lockFor('category')}
                     </div>
                     {appendsToExisting(appendTo) ? (
@@ -494,7 +506,10 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
 
                 <div className="form-row">
                   <CountField
-                      label="Poll questions to generate"
+                      label={isAppend(appendTo) ? 'New poll questions to add' : 'Poll questions to generate'}
+                      hint={isAppend(appendTo)
+                        ? `On top of the ${appendTo.existingTotal || 0} already in the set — it goes from ${appendTo.existingTotal || 0} to ${(appendTo.existingTotal || 0) + pollConfig.count}. Nothing existing is replaced.`
+                        : ''}
                       value={pollConfig.count}
                       onChange={(n) => setPollConfig((prev) => ({ ...prev, count: n }))}
                       min={1}

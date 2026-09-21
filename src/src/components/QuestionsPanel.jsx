@@ -23,6 +23,7 @@ import AIScenarioBuilder from './AIScenarioBuilder';
 import {
   ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
 } from '../utils/addQuestions';
+import { briefFromSet } from '../utils/appendMode';
 import {
   editableRows,
   blankRow,
@@ -1550,7 +1551,19 @@ export default function QuestionsPanel({
       )}
 
       {addBuilder && (() => {
-        const appendTo = { setName: questionSet?.name || setId, ...addBuilder };
+        const live = rows.filter((row) => !row.removed);
+        const appendTo = {
+          setName: questionSet?.name || setId,
+          ...addBuilder,
+          // Re-read on every render, so a mode change inside the builder sees
+          // the set as it is now.
+          categories: existingCategories(rows),
+          // The brief the set was made from — topic, audience, difficulty.
+          brief: briefFromSet(questionSet || {}),
+          // "Am I adding 25 or growing to 25?" — the builder states both.
+          existingTotal: live.length,
+          onModeChange: (mode) => setAddBuilder((current) => (current ? { ...current, mode } : current)),
+        };
         const close = () => setAddBuilder(null);
         if (engagementType === 'trivia') {
           return <TriviaAIBuilder appendTo={appendTo} onClose={close} onTriviaGenerated={acceptGenerated} />;

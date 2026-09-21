@@ -6,6 +6,7 @@ import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
+import AppendModeSwitch from './AppendModeSwitch';
 import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
@@ -59,8 +60,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [scenarioConfig, setScenarioConfig] = useState({
     type: '',
-    context: '',
-    audience: '',
+    // ADDING TO A SET starts from what that set says about itself.
+    context: appendTo?.brief?.context || '',
+    audience: appendTo?.brief?.audience || '',
     difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
     count: 6,
     customPrompt: '',
@@ -448,7 +450,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setScenarioConfig(prev => ({
       ...prev,
       type,
-      ...templateDefaults
+      ...templateDefaults,
+      // ADDING TO A SET: the card chooses the template, but what the set says
+      // about itself — its context and audience — outranks the card's defaults.
+      ...(isAppend(appendTo) ? {
+        context: appendTo.brief?.context || templateDefaults.context,
+        audience: appendTo.brief?.audience || templateDefaults.audience,
+        ...(appendsToExisting(appendTo) ? appendCategoryDefaults(appendTo) : { mustHaveCategories: '' }),
+      } : {}),
     }));
     setStep(2);
   };
@@ -1022,6 +1031,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         <div className="modal-body">
           {step === 1 && (
             <div className="scenario-type-selection">
+              <AppendModeSwitch appendTo={appendTo} />
               {/*
                 TWO CONTROLS, NOT ONE, AND IN THIS ORDER.
 
@@ -1256,7 +1266,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               />
 
               <div className="config-form">
-                <div className="form-group">
+                {/* NO TITLE WHEN ADDING. The set already has one, and these
+                    questions join it — the owner: "you shouldnt get to set the
+                    question set title when adding questions." Hidden, not just
+                    disabled: a title box here implies the run makes a set. */}
+                <div className="form-group" style={isAppend(appendTo) ? { display: 'none' } : undefined}>
                   <div className="label-row">
                     <label>Question Set Title</label>
                     {lockFor('customTitle')}
@@ -1317,11 +1331,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     noun={itemNoun(engagementType)}
                     maxTotal={50}
                     lockedCategories={appendsToExisting(appendTo) ? appendTo.categories : null}
+                    adding={isAppend(appendTo) ? { existingTotal: appendTo.existingTotal || 0 } : null}
+                    maxCategories={isAppend(appendTo) && !appendsToExisting(appendTo) ? Math.max(1, 24 - appendTo.categories.length) : 24}
                     hint="Categories are what the host can switch on and off mid-session."
                   />
-                  <div className="form-group" hidden={appendsToExisting(appendTo)}>
+                  <div className="form-group" style={appendsToExisting(appendTo) ? { display: 'none' } : undefined}>
                     <div className="label-row">
-                      <label>Must Have Categories</label>
+                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Must Have Categories'}</label>
                       {lockFor('mustHaveCategories')}
                     </div>
                     <input

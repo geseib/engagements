@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
+import AppendModeSwitch from './AppendModeSwitch';
 import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
@@ -27,9 +28,10 @@ const ASSIST_FORM = BUILDER_FORM_FIELDS.trivia;
 function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   const [step, setStep] = useState(1);
   const [triviaConfig, setTriviaConfig] = useState({
-    topic: '',
-    audience: '',
-    difficulty: 'medium',
+    // ADDING TO A SET starts from the brief that set was made from.
+    topic: appendTo?.brief?.topic || '',
+    audience: appendTo?.brief?.audience || '',
+    difficulty: appendTo?.brief?.difficulty || 'medium',
     count: 15,
     numChoices: 4,
     numCorrect: 1,
@@ -41,6 +43,21 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     ...appendCategoryDefaults(appendTo),
     ...(appendsToExisting(appendTo) ? { count: Math.min(100, Math.max(1, appendTo.categories.length) * 3) } : {}),
   });
+  // The mode can be changed from inside the builder (AppendModeSwitch). The
+  // category settings follow it: the set's own names and count in `existing`,
+  // a clean slate in `new` — never the existing names left in "must have".
+  const appendMode = appendTo?.mode;
+  useEffect(() => {
+    if (!isAppend(appendTo)) return;
+    setTriviaConfig((prev) => {
+      const per = Math.max(1, Math.round(prev.count / Math.max(1, prev.numberOfCategories)));
+      const next = appendsToExisting(appendTo)
+        ? appendCategoryDefaults(appendTo)
+        : { numberOfCategories: Math.min(3, Math.max(1, 24 - appendTo.categories.length)), mustHaveCategories: '' };
+      return { ...prev, ...next, count: Math.min(100, next.numberOfCategories * per) };
+    });
+  }, [appendMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
   const [currentTriviaIndex, setCurrentTriviaIndex] = useState(0);
   // The last poll response, in the shape jobToResponse() actually sends. EVERY
@@ -384,6 +401,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
           {step === 1 && (
             <div className="trivia-configuration">
               <h3>Configure Your Trivia Questions</h3>
+              <AppendModeSwitch appendTo={appendTo} />
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -459,6 +477,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
                     noun="questions"
                     maxTotal={100}
                     lockedCategories={appendsToExisting(appendTo) ? appendTo.categories : null}
+                    adding={isAppend(appendTo) ? { existingTotal: appendTo.existingTotal || 0 } : null}
+                    maxCategories={isAppend(appendTo) && !appendsToExisting(appendTo) ? Math.max(1, 24 - appendTo.categories.length) : 24}
                     hint="Categories are what the host can switch on and off mid-session."
                   />
                 </div>
@@ -492,7 +512,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Must Have Categories</label>
+                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Must Have Categories'}</label>
                       {lockFor('mustHaveCategories')}
                     </div>
                     <input
