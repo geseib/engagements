@@ -875,18 +875,6 @@ body, .stage-ladder-table{
    rule, once, rather than remembering it at every new display: declaration. */
 .stage [hidden]{display:none !important}
 
-/* The report FAB is fixed bottom-right and would otherwise sit on the dock's
-   primary button. It used to be lifted by `.main-layout.has-host-bar`, which
-   reserved a flat 76px for the OLD fixed action bar; the dock's height is a
-   profile token, so read that instead. --dock-measured first, same as the
-   side panels above: --dock-h is the dock's MIN-height and the dock is an
-   auto grid row that outgrows it — measured at 1280x720 in Table the token
-   (82.8px) was short of the real dock (100px) by 17px, enough for the FAB's
-   box to overlap the dock's top edge by about 1px. --dock-h stays as the
-   fallback for the first paint, and 76px behind it for a surface that mounts
-   this FAB without a stage at all. */
-.issue-fab-container{bottom:calc(var(--dock-measured, var(--dock-h, 76px)) + 16px)}
-
 /* wavelength convergence — the two-beat reveal wrapped around the ranked
    .terms flow above (docs/superpowers/specs/2026-08-09-wavelength-convergence-design.md
    §4–§5). Landed words ride .w1 (hero size, --primary); everything else is

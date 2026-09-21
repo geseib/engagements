@@ -34,13 +34,17 @@ describe('§1 the player has a way in', () => {
 
   test('it opens the player guides', () => {
     render(<PlayerShell phase="ASK" ctx="Round 1" who="Ada" />);
+    // The `?` is a menu of four since 2026-09-21 (HelpButton's `reports`): the
+    // guides are its first row, and reporting a bug is the other three.
     fireEvent.click(screen.getByRole('button', { name: /help/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
     expect(screen.getByRole('heading', { level: 1, name: /For players/i })).toBeInTheDocument();
   });
 
   test('the player guides it opens are the four written for them', () => {
     render(<PlayerShell phase="ASK" ctx="Round 1" who="Ada" />);
     fireEvent.click(screen.getByRole('button', { name: /help/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
     ['Getting started', 'Joining a session', 'Playing', 'Scoring'].forEach((title) => {
       expect(screen.getByRole('button', { name: new RegExp(title, 'i') })).toBeInTheDocument();
     });
@@ -80,7 +84,7 @@ describe('§2 the host has a way in', () => {
   */
   test('the host guides are on screen the moment the panel opens', () => {
     render(<SessionSetupPanel {...panelProps} />);
-    expect(screen.getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Help and feedback/i })).toBeInTheDocument();
   });
 
   test('it lives in the header, beside Close, not inside a tab panel', () => {
@@ -88,7 +92,7 @@ describe('§2 the host has a way in', () => {
     // control in a tabpanel is a control most hosts never see.
     const { container } = render(<SessionSetupPanel {...panelProps} />);
     const header = container.querySelector('.setup-panel__header');
-    expect(within(header).getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: /Help and feedback/i })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: /Close setup/i })).toBeInTheDocument();
   });
 
@@ -96,13 +100,14 @@ describe('§2 the host has a way in', () => {
     render(<SessionSetupPanel {...panelProps} />);
     for (const tab of ['Players', 'Questions', 'Rounds', 'Settings']) {
       fireEvent.click(screen.getByRole('tab', { name: tab }));
-      expect(screen.getByRole('button', { name: /Host guides/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Help and feedback/i })).toBeInTheDocument();
     }
   });
 
   test('it opens the host role index', () => {
     render(<SessionSetupPanel {...panelProps} />);
-    fireEvent.click(screen.getByRole('button', { name: /Host guides/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Help and feedback/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
     expect(screen.getByRole('heading', { level: 1, name: /For hosts/i })).toBeInTheDocument();
   });
 
@@ -118,7 +123,7 @@ describe('§2 the host has a way in', () => {
     expect(screen.getByRole('button', { name: /Show how this works on the stage/i }))
       .toBeInTheDocument();
     // Exactly one help control on the surface — the move was a move, not a copy.
-    expect(screen.getAllByRole('button', { name: /Host guides/i })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Help and feedback/i })).toHaveLength(1);
   });
 });
 

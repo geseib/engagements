@@ -601,14 +601,18 @@ describe('the Settings tab', () => {
     expect(report.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test('the panel no longer carries the report control', () => {
-    // It used to be slotted into this tab's footer as `issueControl`, which is
-    // how it came to exist on one tab of one panel and nowhere on the stage. The
-    // router mounts it now (App.jsx `IssueCorner`, __tests__/issueCorner.test.jsx);
-    // a second one here would be two controls on the same screen.
+  test('reporting is in the header `?`, on every tab — not slotted into this one', () => {
+    // It was an `issueControl` node dropped into this tab's footer, which is how
+    // a host could only report a bug from Settings. It is the help button's menu
+    // now, and the help button is in the header whichever tab is open.
     renderPanel({});
     openTab('Settings');
-    expect(screen.queryByRole('button', { name: /report a problem/i })).toBeNull();
+    const help = document.querySelector('.setup-panel__help');
+    expect(help).toHaveAttribute('aria-haspopup', 'menu');
+    fireEvent.click(help);
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent.trim())).toEqual([
+      'Read the guides', 'Report a bug', 'Request a feature', 'Ask for help',
+    ]);
   });
 });
 

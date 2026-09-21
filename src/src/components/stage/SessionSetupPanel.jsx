@@ -381,8 +381,9 @@ export default function SessionSetupPanel({
             section="host"
             variant="inline"
             size="small"
-            tooltip="Host guides"
+            tooltip="Help and feedback"
             className="setup-panel__help"
+            reports={{ context: 'host', gameId }}
           />
           <button
             type="button"

@@ -888,7 +888,6 @@
   .report-paper .report-state,
   .report-paper button,
   .expanded-qr-overlay,
-  .issue-fab,
   .clipboard-success { display: none !important; }
 
   /* Kill the app chrome: the full-bleed field, the viewport height, the

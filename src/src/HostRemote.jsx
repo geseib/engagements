@@ -1272,9 +1272,7 @@ function HostRemote() {
       </main>
 
       {/* The one control that matters, pinned in the thumb arc. */}
-      {/* data-issue-clearance: see PlayerPage's dock — the corner report tab
-          measures this and sits above it rather than over its first button. */}
-      <div className="hr-dock" data-issue-clearance="">
+      <div className="hr-dock">
         {action ? (
           <>
             {primaryArmed && (

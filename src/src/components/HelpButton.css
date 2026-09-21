@@ -116,3 +116,65 @@
     height: 50px;
   }
 }
+/* ── THE MENU ──────────────────────────────────────────────────────────────
+   When a bar's `?` is also where a bug, a feature request or a question is sent
+   from (HelpButton's `reports` prop), it opens this. It hangs off the button —
+   never off the viewport: the control it replaces was a fixed circle over every
+   dialog, and then a fixed tab in the corner, and neither belonged to a bar.
+
+   Ground and text are a token PAIR (--surface / --text), so the menu is
+   readable whichever theme the bar it sits in has re-pointed them to. */
+.help-menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.help-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--surface, #1B2942);
+  color: var(--text, #F4EDE4);
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  text-align: left;
+}
+
+.help-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.help-menu-item:hover {
+  background: rgba(155, 168, 190, 0.14);
+}
+
+.help-menu-item:focus-visible {
+  outline: 2px solid var(--primary, #F6A94C);
+  outline-offset: -2px;
+}
+
+.help-menu-rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(155, 168, 190, 0.24);
+}

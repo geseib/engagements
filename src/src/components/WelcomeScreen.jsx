@@ -2,6 +2,7 @@ import React from 'react';
 import ActiveOrgSwitcher from './ActiveOrgSwitcher';
 import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
+import HelpButton from './HelpButton';
 
 /**
  * The host's front door: the screen before any session exists.
@@ -131,6 +132,22 @@ export default function WelcomeScreen({
               <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onSignOut?.()}>
                 Sign out
               </button>
+              {/* THE ONE `?` ON THIS SCREEN — and until 2026-09-21 there was none.
+                  The host guides were reachable only from inside a running
+                  session's side panel, and reporting a bug from here meant
+                  opening a session first. One button: the guides, report a bug,
+                  request a feature, ask for help (HelpButton's `reports`).
+                  Last in the row, where the same control sits in the session
+                  panel's header and the console's. No session is open on this
+                  screen, so a report from here carries no game id. */}
+              <HelpButton
+                section="host"
+                variant="inline"
+                size="small"
+                tooltip="Help and feedback"
+                className="wel-helpbtn"
+                reports={{ context: 'host' }}
+              />
             </div>
           )}
         </div>

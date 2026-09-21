@@ -1666,11 +1666,12 @@ function AdminPage() {
         contentTheme={editingSet ? 'dark' : section.contentTheme || 'light'}
         actions={(
           <>
-            {/* The report control used to sit here, beside Help. It is now the
-                corner tab the router mounts on every working screen
-                (App.jsx `IssueCorner`) — this header was one of only two
-                places that had it. */}
-            <HelpButton section="admin" variant="header" size="medium" />
+            {/* ONE `?`: the guides, and the three ways to tell us something.
+                Reporting used to be a second icon here, then a tab in the
+                corner of every screen; it is this button's menu now (see
+                HelpButton's `reports`). The small contextual `?` buttons
+                further down pass no `reports` and open their guide directly. */}
+            <HelpButton section="admin" variant="header" size="medium" tooltip="Help and feedback" reports={{ context: 'admin' }} />
           </>
         )}
       >

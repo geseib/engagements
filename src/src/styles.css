@@ -398,12 +398,6 @@ body {
   padding-bottom: calc(var(--host-bar-h, 76px) + 24px);
 }
 
-/* The report FAB is fixed bottom-right and would otherwise sit on the primary
-   button. */
-.main-layout.has-host-bar .issue-fab-container {
-  bottom: calc(var(--host-bar-h, 76px) + 16px);
-}
-
 @media (max-width: 900px) {
   .host-action-bar__inner {
     padding: 10px 14px;
@@ -714,13 +708,15 @@ body {
   flex-wrap: wrap;
 }
 
-/* The IssueFab is exempt. It is a DOM child of the panel but `position:fixed`,
-   so it is not visually inside it — and the rule below repainted its button to
-   the panel's navy while `.issue-fab-option .label` kept its own `color:#333`
-   at higher specificity. Dark grey on dark navy: the labels were unreadable.
-   Excluding it here restores the FAB's own white-on-dark-text design rather
-   than fighting it with another override. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.issue-fab-main):not(.issue-fab-option) {
+/* The help menu's rows are exempt. They are DOM children of the panel (the `?`
+   in its header opens them: guides, report a bug, request a feature, ask for
+   help) and they are dressed by HelpButton.css as menu rows — full width, 44px,
+   transparent. Without the exemption this rule makes each one a padded navy
+   panel button inside a menu that is already a navy card.
+
+   (This list used to exempt `.issue-fab-main` / `.issue-fab-option`, the
+   separate report control the menu replaced on 2026-09-21.) */
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
