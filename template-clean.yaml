@@ -2547,6 +2547,70 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── Saved reports, findable after the session is gone ─────────────────────
+  GetReportsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-reports'
+      CodeUri: lambda-functions/game/
+      Handler: get-reports.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        GetReports:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /reports
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  DownloadSavedReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-download-saved-report'
+      CodeUri: lambda-functions/game/
+      Handler: download-saved-report.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          REPORTS_BUCKET_NAME: !Ref ReportsBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        - S3ReadPolicy:
+            BucketName: !Ref ReportsBucket
+      Events:
+        DownloadSavedReport:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /reports/download
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   GetGameStateFunction:
     Type: AWS::Serverless::Function
     Properties:

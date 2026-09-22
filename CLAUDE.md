@@ -124,7 +124,7 @@ not repeated here. This section carries only what those two sections do not say.
   prefix: 90 days standard (objects tagged `retention=standard`, which the
   lifecycle rule filters on), 365 for `permanent/`. Before this the report
   existed only as an S3 key in one HTTP response, and the bucket's single
-  90-day rule deleted "1 year" reports at day 90. There is no list UI yet —
+  90-day rule deleted "1 year" reports at day 90. The list is the console's Reports section and the host's "Reports" door (`components/ReportsPanel.jsx`, `GET /reports`, `GET /reports/download`);
   mockup in `docs/design/reports-list/`.
 
 ### Game Flow

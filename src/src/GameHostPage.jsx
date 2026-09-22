@@ -9,6 +9,7 @@ import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
+import HostReportsDialog from './components/HostReportsDialog';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
 import QuestionCard from './components/QuestionCard';
@@ -523,6 +524,7 @@ function GameHostPage() {
     nothing here survives into a session.
   */
   const [showHostSets, setShowHostSets] = useState(false);
+  const [showHostReports, setShowHostReports] = useState(false);
   const [eventTitle, setEventTitle] = useState('');
 
   // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
@@ -4748,6 +4750,7 @@ Focus on actionable business strategy insights.`;
           onCreateEngagement={handleWelcomeNewGame}
           onViewHistory={handleViewGameHistory}
           onQuestionSets={() => setShowHostSets(true)}
+          onReports={() => setShowHostReports(true)}
           onSignOut={handleSignOut}
         />
         {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
@@ -4763,6 +4766,9 @@ Focus on actionable business strategy insights.`;
             opens. */}
         {showHostSets && (
           <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
+        )}
+        {showHostReports && (
+          <HostReportsDialog onClose={() => setShowHostReports(false)} />
         )}
       </>
     );

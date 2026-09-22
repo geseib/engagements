@@ -1,0 +1,343 @@
+/* components/ReportsPanel.jsx — the saved-reports list.
+   ==========================================================================
+   SessionsPanel.css, verbatim, under its own scope. The namespace tests hold
+   one scope class per screen, so `.sp` could not be shared; everything else
+   IS shared on purpose — the two lists sit one tab apart and a host who is
+   also an admin should not learn two vocabularies for one kind of table. The
+   contrast ratios in SessionsPanel.css's header therefore hold here: every
+   pairing is a pairing that sheet already measures, on the same --bg. When a
+   rule changes there, change it here (reportsPanel.test.jsx holds the shared
+   token block identical).
+   ========================================================================== */
+.rp {
+  --rp-t-floor: 12px;
+  --rp-t-label: 13px;
+  --rp-t-body: 15px;
+  --rp-t-head: 19px;
+  --rp-row-h: 36px;
+
+  /* See UserManagement.css: --success-text is not a global token, and an
+     undefined custom property invalidates the whole declaration. */
+  --rp-success-text: #6FD0A4;
+  /* Nor is --font-mono a global token; the mockups' --font-mono lives only in
+     their own shell. The session code is the one string on this screen that has
+     to be compared character by character, so it gets a mono face. */
+  --rp-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --rp-rule: rgba(155, 168, 190, .20);
+  --rp-rule-strong: rgba(155, 168, 190, .34);
+  --rp-row-hover: rgba(155, 168, 190, .055);
+
+  color: var(--text);
+  font: 400 var(--rp-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.rp *,
+.rp *::before,
+.rp *::after { box-sizing: border-box; }
+
+.rp :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* --------------------------------------------------------------- messages -- */
+
+.rp-alert {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(229, 100, 94, .5);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(229, 100, 94, .09);
+  color: var(--danger-text);
+}
+.rp-alert > span { flex: 1 1 auto; min-width: 0; }
+.rp-alert-close {
+  flex: none;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--danger-text);
+  font: 600 var(--rp-t-label)/1 var(--font-ui);
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.rp-alert-close:hover { border-color: var(--danger-text); }
+
+.rp-loading { color: var(--muted); }
+
+/* ----------------------------------------------------------------- empty --- */
+
+.rp-empty {
+  max-width: 64ch;
+  margin: 48px auto;
+  text-align: center;
+}
+.rp-empty h3 {
+  font-family: var(--font-display);
+  font-size: var(--rp-t-head);
+  font-weight: 700;
+  margin: 14px 0 7px;
+}
+.rp-empty p { color: var(--muted); margin: 0 0 14px; line-height: 1.55; }
+.rp-empty-hint { font-size: var(--rp-t-label); }
+.rp-dim { color: var(--muted); }
+
+/* -------------------------------------------------------------- controls --- */
+
+.rp-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+}
+.rp-search { position: relative; flex: 0 1 300px; min-width: 170px; display: flex; align-items: center; }
+.rp-search > svg { position: absolute; left: 9px; pointer-events: none; }
+.rp-input {
+  font: 400 var(--rp-t-body)/1.4 var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rp-rule-strong);
+  border-radius: 6px;
+  padding: 6px 9px 6px 29px;
+  min-height: 32px;
+  width: 100%;
+}
+.rp-select { padding-left: 9px; width: auto; min-width: 138px; }
+.rp-input::placeholder { color: var(--muted); opacity: .62; }
+.rp-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.rp-count { font-size: var(--rp-t-label); color: var(--muted); white-space: nowrap; margin-left: auto; }
+
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--rp-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--rp-t-label)/1 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rp-btn:hover:not(:disabled) { background: var(--rp-row-hover); border-color: var(--muted); }
+.rp-btn:disabled { opacity: .42; cursor: not-allowed; }
+.rp-btn--sm { height: 26px; padding: 0 9px; font-size: var(--rp-t-floor); }
+.rp-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
+.rp-btn--danger:hover:not(:disabled) {
+  background: rgba(229, 100, 94, .12);
+  border-color: var(--danger-text);
+}
+.rp-btn--ghostdanger { border-color: transparent; color: var(--danger-text); }
+.rp-btn--ghostdanger:hover:not(:disabled) {
+  background: rgba(229, 100, 94, .12);
+  border-color: var(--danger-text);
+}
+/* The one filled destructive control in this screen. --danger-deep, not
+   --danger: see the header. */
+.rp-btn--dangersolid {
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
+  color: var(--text);
+}
+.rp-btn--dangersolid:disabled { opacity: .42; }
+.rp-btn--link {
+  height: auto;
+  min-height: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  padding: 0;
+  text-decoration: underline;
+  font: 600 var(--rp-t-label)/1.4 var(--font-ui);
+}
+
+/* "Nothing matches" is a DIFFERENT empty state from "no sessions yet", with
+   different exits, and it is left-aligned because it is a list of actions
+   rather than a poster — the qsets idiom (QuestionSetsPanel.css), re-cut under
+   this screen's scope and tokens. It replaces the dim italic table row that
+   used to sit here with no way out. */
+.rp-nomatch { padding: 8px 0 0; }
+.rp-nomatch h3 {
+  font-family: var(--font-display);
+  font-size: var(--rp-t-head);
+  font-weight: 700;
+  margin: 0 0 7px;
+}
+.rp-nomatch > p { color: var(--muted); margin: 0 0 14px; }
+.rp-drops { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+.rp-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--rp-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--rp-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.rp-drop:hover { background: var(--rp-row-hover); border-color: var(--muted); }
+.rp-drop em { color: var(--muted); font-style: normal; font-weight: 400; }
+
+/* ----------------------------------------------------------------- table --- */
+
+.rp-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--rp-t-body);
+}
+.rp-tbl th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  text-align: left;
+  font-size: var(--rp-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px 7px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--rp-rule-strong);
+}
+.rp-tbl td {
+  padding: 0 10px;
+  height: var(--rp-row-h);
+  border-bottom: 1px solid var(--rp-rule);
+  vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.rp-tbl tbody tr:hover td { background: var(--rp-row-hover); }
+.rp-busy td { opacity: .55; }
+
+
+.rp-nm {
+  font-weight: 600;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-sub {
+  display: block;
+  font-size: var(--rp-t-label);
+  color: var(--muted);
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-tbl td:first-child { padding-top: 4px; padding-bottom: 4px; height: auto; }
+.rp-when { font-size: var(--rp-t-label); color: var(--muted); white-space: nowrap; }
+.rp-mono { font-family: var(--rp-font-mono); font-size: 14px; }
+.rp-danger-text { color: var(--danger-text); }
+
+.rp-rowact { display: flex; gap: 5px; justify-content: flex-end; opacity: 0; }
+.rp-tbl tr:hover .rp-rowact,
+.rp-tbl tr:focus-within .rp-rowact { opacity: 1; }
+
+.rp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--rp-t-floor);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--rp-rule-strong);
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.rp-chip--type { color: var(--text); }
+.rp-chip--on   { color: var(--rp-success-text); border-color: rgba(79, 178, 134, .5); }
+.rp-chip--off  { color: var(--muted); border-style: dashed; }
+
+/* ----------------------------------------------------------------- modal --- */
+
+.rp-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 11, 22, .72);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.rp-modal {
+  background: var(--surface);
+  border: 1px solid var(--rp-rule-strong);
+  border-radius: 12px;
+  width: min(560px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .5);
+  color: var(--text);
+  font: 400 var(--rp-t-body)/1.45 var(--font-ui);
+}
+.rp-modal > header { padding: 16px 18px 10px; display: flex; gap: 10px; align-items: flex-start; }
+.rp-modal > header h2 {
+  margin: 0;
+  font-size: var(--rp-t-head);
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+.rp-modal > header .rp-dim { margin: 4px 0 0; font-size: var(--rp-t-label); }
+.rp-modal-body { padding: 0 18px 4px; }
+
+.rp-impact { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.rp-impact li { display: flex; gap: 9px; align-items: flex-start; line-height: 1.5; }
+.rp-impact li > svg { flex: none; margin-top: 3px; }
+.rp-bad { color: var(--danger-text); }
+.rp-ok { color: var(--rp-success-text); }
+
+.rp-field { display: flex; flex-direction: column; gap: 5px; }
+.rp-field label { font-size: var(--rp-t-label); font-weight: 600; color: var(--muted); }
+.rp-field .rp-input { padding-left: 9px; }
+
+.rp-modal footer {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--rp-rule);
+  margin-top: 12px;
+}
+.rp-grow { flex: 1 1 auto; }
+.rp-envwarn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--rp-t-label);
+  color: var(--muted);
+}
+.rp-envwarn b { color: var(--primary); }
+
+/* ---------------------------------------------------------- reports only -- */
+.rp-col-name  { width: 40%; }
+.rp-col-when  { width: 14%; }
+.rp-col-until { width: 16%; }
+.rp-col-sess  { width: 16%; }
+.rp-col-acts  { width: 14%; }
+/* KEPT UNTIL is a DATE, never a countdown ("3 days left" is a different number
+   tomorrow and lies on a printed page). Red only inside seven days; the pin
+   marks the year-long keep, so the fact never rests on colour alone. */
+.rp-until { white-space: nowrap; font-size: var(--rp-t-label); color: var(--text); }
+.rp-until > svg { vertical-align: -2px; margin-right: 4px; }
+.rp-until--soon { color: var(--danger-text); font-weight: 700; }

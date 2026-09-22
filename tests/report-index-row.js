@@ -37,24 +37,40 @@ class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; }
 class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class QueryCommand { constructor(input) { this.kind = 'query'; this.input = input; } }
 class UpdateCommand { constructor(input) { this.kind = 'update'; this.input = input; } }
+class BatchGetCommand { constructor(input) { this.kind = 'batchGet'; this.input = input; } }
 const doc = {
   send: async (cmd) => {
     const i = cmd.input;
     if (cmd.kind === 'get') return { Item: ddb.get(key(i.Key.PK, i.Key.SK)) };
     if (cmd.kind === 'put') { ddb.set(key(i.Item.PK, i.Item.SK), i.Item); return {}; }
     if (cmd.kind === 'query') return { Items: [...ddb.values()].filter((r) => r.PK === i.ExpressionAttributeValues[':pk']) };
+    if (cmd.kind === 'batchGet') {
+      const [table, spec] = Object.entries(i.RequestItems)[0];
+      return { Responses: { [table]: spec.Keys.map((k) => ddb.get(key(k.PK, k.SK))).filter(Boolean) } };
+    }
     return {};
   },
 };
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
-  DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, UpdateCommand,
+  DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, UpdateCommand, BatchGetCommand,
 });
 const s3Puts = [];
+const s3Objects = new Map();
 class PutObjectCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class GetObjectCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
 stub('@aws-sdk/client-s3', {
-  S3Client: class { async send(cmd) { if (cmd.kind === 'put') s3Puts.push(cmd.input); return {}; } },
+  S3Client: class {
+    async send(cmd) {
+      if (cmd.kind === 'put') { s3Puts.push(cmd.input); s3Objects.set(cmd.input.Key, cmd.input.Body); return {}; }
+      if (cmd.kind === 'get') {
+        if (!s3Objects.has(cmd.input.Key)) { const e = new Error('NoSuchKey'); e.name = 'NoSuchKey'; throw e; }
+        const body = s3Objects.get(cmd.input.Key);
+        return { Body: { transformToString: async () => (Buffer.isBuffer(body) ? body.toString('utf8') : String(body)) } };
+      }
+      return {};
+    }
+  },
   PutObjectCommand, GetObjectCommand,
 });
 stub('@aws-sdk/s3-request-presigner', { getSignedUrl: async () => 'https://signed.example/x' });
@@ -64,6 +80,12 @@ stub('@aws-sdk/client-kms', makeKmsStub().exports);
 
 installTestKeyLoader();
 const { handler } = require(path.join(REPO, 'lambda-functions/game/save-report.js'));
+const listReports = require(path.join(REPO, 'lambda-functions/game/get-reports.js')).handler;
+const downloadSaved = require(path.join(REPO, 'lambda-functions/game/download-saved-report.js')).handler;
+const asMember = (orgId, extra = {}) => ({
+  requestContext: { authorizer: { lambda: { userId: `u-${orgId || 'none'}`, ...(orgId ? { orgId } : {}), groups: 'hosts' } } },
+  ...extra,
+});
 const { reportsIndexPk } = require(path.join(REPO, 'lambda-functions/game/tenant.js'));
 
 let pass = 0; let fail = 0;
@@ -125,6 +147,38 @@ const rowsIn = (pk) => [...ddb.values()].filter((r) => r.PK === pk);
     const block = t.slice(i, t.indexOf('ExpirationInDays: 365', i) + 24);
     assert.ok(/Value: standard/.test(block), 'the 90-day rule is not filtered on the retention tag');
     assert.ok(/Prefix: permanent\/\s+ExpirationInDays: 365/.test(block), 'no 365-day rule on permanent/');
+  });
+
+  await check('GET /reports lists the org\'s reports with plaintext titles, and says which sessions are gone', async () => {
+    ddb.delete(key('GAME#1111', 'METADATA'));   // the session expired
+    const res = await listReports(asMember('org_acme'));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const { reports } = JSON.parse(res.body);
+    assert.strictEqual(reports.length, 2);
+    reports.forEach((r) => assert.strictEqual(r.title, 'Q3 Offsite'));
+    reports.forEach((r) => assert.strictEqual(r.sessionGone, true));
+    assert.ok(reports.some((r) => r.permanent) && reports.some((r) => !r.permanent));
+    assert.ok(reports[0].downloadUrl.startsWith('reports/download?key='));
+  });
+
+  await check('another org sees none of them', async () => {
+    const { reports } = JSON.parse((await listReports(asMember('org_globex'))).body);
+    assert.strictEqual(reports.length, 0);
+  });
+
+  await check('the download works AFTER the session is gone, and returns a real PDF', async () => {
+    const { reports } = JSON.parse((await listReports(asMember('org_acme'))).body);
+    const k = reports.find((r) => !r.permanent).s3Key;
+    const res = await downloadSaved(asMember('org_acme', { queryStringParameters: { key: k } }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(res.headers['Content-Type'], 'application/pdf');
+    assert.strictEqual(Buffer.from(res.body, 'base64').toString('utf8'), '%PDF-');
+  });
+
+  await check('a key that is not in the caller\'s own partition is a 404, not a decrypt', async () => {
+    const { reports } = JSON.parse((await listReports(asMember('org_acme'))).body);
+    const res = await downloadSaved(asMember('org_globex', { queryStringParameters: { key: reports[0].s3Key } }));
+    assert.strictEqual(res.statusCode, 404);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

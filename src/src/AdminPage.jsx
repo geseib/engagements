@@ -8,6 +8,7 @@ import AIGenerationPromptEditor from './components/AIGenerationPromptEditor';
 import ArchivePanel from './components/ArchivePanel';
 import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
+import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import CreateOrgDialog from './components/CreateOrgDialog';
@@ -76,6 +77,14 @@ const ADMIN_SECTIONS = [
     icon: 'GameController',
     title: 'Sessions',
     subtitle: 'What hosts have run. Data here expires: 90 days from creation, 7 days after last play.',
+    contentTheme: 'dark',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: 'FileText',
+    title: 'Reports',
+    subtitle: 'Saved PDFs. They outlive their session: 90 days from saving, a year if kept.',
     contentTheme: 'dark',
   },
   {
@@ -1911,6 +1920,10 @@ function AdminPage() {
               a fade-in written for the paper tabs, and the archive owns its own
               frame now (ArchivePanel.css). */}
           {resolvedTab === 'archive' && <ArchivePanel environment={environment} />}
+
+          {/* THE REPORTS LIST — docs/design/reports-list. A report used to be
+              findable only through its session, which now expires. */}
+          {resolvedTab === 'reports' && <ReportsPanel />}
 
           {/* No .tab-content wrapper: that class carries a 500px min-height and
               a fade-in written for the paper tabs, and the converted screens

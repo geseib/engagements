@@ -65,6 +65,7 @@ export default function WelcomeScreen({
   onQuickStart,
   onCreateEngagement,
   onViewHistory,
+  onReports,
   onQuestionSets,
   onSignOut,
 }) {
@@ -301,6 +302,19 @@ export default function WelcomeScreen({
                     it, or read its report.
                   </p>
                 </div>
+
+                {onReports && (
+                  <div className="wel-link">
+                    {/* Sessions expire a week after they start; a saved report
+                        does not. This is where it is found afterwards. */}
+                    <button type="button" className="wel-btn wel-btn-line" onClick={() => onReports()}>
+                      Reports
+                    </button>
+                    <p className="wel-meta">
+                      Every report you saved — still here after the session itself has expired.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </aside>
