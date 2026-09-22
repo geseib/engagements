@@ -22,10 +22,10 @@
  * written-reason, four-hour, logged request drawn on 10-platform-orgs.html.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { callerOrgId } = require('./shared/tenant');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { callerOrgId, orgPk } = require('./shared/tenant');
 const { readUsage, periodOf, periodBounds, usageSk } = require('./shared/usage');
-const { TEAM_PLAN, projectInvoice } = require('./shared/pricing');
+const { projectInvoice, planFor } = require('./shared/pricing');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -47,7 +47,7 @@ const respond = (statusCode, body) => ({
  * Descending by sort key, which for `USAGE#yyyy-mm` is descending by date —
  * that is the whole reason the period is zero-padded in the key.
  */
-async function recentPeriods(orgId, currentPeriod, limit = 12) {
+async function recentPeriods(orgId, currentPeriod, plan, limit = 12) {
   const page = await db.send(new QueryCommand({
     TableName: process.env.TABLE_NAME,
     KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
@@ -63,7 +63,7 @@ async function recentPeriods(orgId, currentPeriod, limit = 12) {
         sessionsRun: Math.max(0, Math.trunc(Number(item.sessionsRun) || 0)),
         setsPeak: Math.max(0, Math.trunc(Number(item.setsPeak) || 0)),
       };
-      const invoice = projectInvoice(TEAM_PLAN, usage);
+      const invoice = projectInvoice(plan, usage);
       return {
         period: String(item.SK).replace(/^USAGE#/, ''),
         sessionsRun: usage.sessionsRun,
@@ -101,20 +101,37 @@ exports.handler = async (event) => {
     if (!/^\d{4}-\d{2}$/.test(period)) return respond(400, { error: 'period must look like 2026-08' });
 
     const usage = await readUsage(wanted, period, { db, now });
-    const invoice = projectInvoice(TEAM_PLAN, usage);
+    /*
+      THE ORG'S OWN PLAN, NOT TEAM_PLAN. This handler priced every org — and
+      every month of its history — as Team, so a free organisation's history
+      read "$5.00" for months nobody was ever charged for
+      (docs/handoff/billing-experience-2026-09-22.md §1.4). `planFor` is the
+      same reader the gates use, so the screen and the refusal agree.
+    */
+    const orgRow = (await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: orgPk(wanted), SK: 'METADATA' },
+    }))).Item || {};
+    const plan = planFor(orgRow);
+    const invoice = projectInvoice(plan, usage);
     const bounds = periodBounds(period, now);
+    // The day the counters start again, for "or wait until …" on the free
+    // screen — which has rendered nothing since the day it was written.
+    const [py, pm] = period.split('-').map(Number);
+    const resetsOn = new Date(Date.UTC(py, pm, 1)).toISOString().slice(0, 10);
 
     return respond(200, {
       orgId: wanted,
       plan: {
-        id: TEAM_PLAN.id,
-        name: TEAM_PLAN.name,
-        currency: TEAM_PLAN.currency,
-        baseCents: TEAM_PLAN.base,
-        perSessionCents: TEAM_PLAN.perSession,
-        perSetCents: TEAM_PLAN.perSet,
+        id: plan.id,
+        name: plan.name,
+        currency: plan.currency,
+        baseCents: plan.base,
+        perSessionCents: plan.perSession,
+        perSetCents: plan.perSet,
+        metersOverage: plan.metersOverage === true,
       },
-      period: bounds,
+      period: { ...bounds, resetsOn },
       // Both counters. `setsCurrent` is what the "2 of 5" meter shows; setsPeak
       // is what the invoice line bills. They are usually equal and the screen
       // must not assume it — that assumption is what makes a deleted set look
@@ -126,12 +143,12 @@ exports.handler = async (event) => {
         updatedAt: usage.updatedAt,
       },
       allowances: {
-        sessions: TEAM_PLAN.includedSessions,
-        sets: TEAM_PLAN.includedSets,
+        sessions: plan.includedSessions,
+        sets: plan.includedSets,
       },
       overage: {
-        sessions: Math.max(0, usage.sessionsRun - TEAM_PLAN.includedSessions),
-        sets: Math.max(0, usage.setsPeak - TEAM_PLAN.includedSets),
+        sessions: Math.max(0, usage.sessionsRun - plan.includedSessions),
+        sets: Math.max(0, usage.setsPeak - plan.includedSets),
       },
       lines: invoice.lines,
       totalIfPeriodEndedTodayCents: invoice.totalCents,
@@ -141,7 +158,7 @@ exports.handler = async (event) => {
       // than hardcoded in the console, so the rule and the arithmetic that
       // implements it can never be changed independently of one another.
       storageRule: 'peak',
-      history: await recentPeriods(wanted, period),
+      history: await recentPeriods(wanted, period, plan),
     });
   } catch (error) {
     console.error('get-usage failed:', error);

@@ -26,6 +26,7 @@ import { checkIsDue, houseCheckNotice } from './utils/houseCheck';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
 import NewSetDialog from './components/NewSetDialog';
+import { parseUpgradeRequired } from './utils/upgradeRequired';
 import AdminShell from './components/AdminShell';
 import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
@@ -214,6 +215,8 @@ function AdminPage() {
   // The caller's room for one more set, from GET /admin/question-sets — read
   // by the editor before anyone spends a generation on a set they cannot keep.
   const [setAllowance, setSetAllowance] = useState(null);
+  // The last 402 an upload took, handed to BillingPanel as `refusal`.
+  const [uploadRefusal, setUploadRefusal] = useState(null);
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -1088,7 +1091,17 @@ function AdminPage() {
         setNotice({ text: `${result.message} — question set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        // A 402 is a plan fact, not an upload fault: keep it for the Billing
+        // section (which renders the refusal with its numbers and the way
+        // forward) and say so here with the link.
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) setUploadRefusal(limit);
+        setNotice({
+          text: limit
+            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
+            : `Upload failed: ${result.error || 'Unknown error'}`,
+          tone: 'error',
+        });
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1180,7 +1193,17 @@ function AdminPage() {
         setNotice({ text: `${result.message} — trivia set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        // A 402 is a plan fact, not an upload fault: keep it for the Billing
+        // section (which renders the refusal with its numbers and the way
+        // forward) and say so here with the link.
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) setUploadRefusal(limit);
+        setNotice({
+          text: limit
+            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
+            : `Upload failed: ${result.error || 'Unknown error'}`,
+          tone: 'error',
+        });
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1289,7 +1312,17 @@ function AdminPage() {
         setNotice({ text: `${result.message} — poll set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        // A 402 is a plan fact, not an upload fault: keep it for the Billing
+        // section (which renders the refusal with its numbers and the way
+        // forward) and say so here with the link.
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) setUploadRefusal(limit);
+        setNotice({
+          text: limit
+            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
+            : `Upload failed: ${result.error || 'Unknown error'}`,
+          tone: 'error',
+        });
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -2033,7 +2066,14 @@ function AdminPage() {
               period={orgUsage?.period}
               history={orgUsage?.history}
               error={orgUsageError}
-              onUpgrade={() => setCreatingOrg(true)}
+              refusal={uploadRefusal}
+              /*
+                NO `onUpgrade` — deliberately. It opened "Create a team", which
+                creates ANOTHER FREE organisation and upgrades nothing; a
+                person at their limit who pressed it ended up with two capped
+                orgs. Until the plan-request flow exists (billing handoff §2.1)
+                there is no honest control to draw, so the panel draws none.
+              */
             />
           )}
 

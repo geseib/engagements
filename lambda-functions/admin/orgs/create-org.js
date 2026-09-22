@@ -50,7 +50,7 @@ const G = require('./shared/org-guards');
 // two: free while you are the only member, and Team at $5 a month. Anything
 // else is refused rather than stored — an unknown plan string reaching the
 // billing screen renders a blank price, which is worse than a rejection.
-const PLANS = ['free', 'team'];
+const PLANS = ['free', 'team']; // what an org row may carry; only 'free' is ever written here
 
 async function createOrg(event) {
   const sub = G.callerSub(event);
@@ -62,10 +62,17 @@ async function createOrg(event) {
   const named = G.validateName(body.name);
   if (named.error) return G.fail(400, named.error);
 
-  const plan = G.clean(body.plan).toLowerCase() || 'free';
-  if (!PLANS.includes(plan)) {
-    return G.fail(400, `Plan must be one of: ${PLANS.join(', ')}.`);
+  /*
+    A PLAN IS GRANTED, NEVER CHOSEN HERE. This used to read `body.plan` and
+    accept 'team', so any signed-in caller could POST themselves onto the
+    metered plan with no payment and no record. The dialog never sent it; the
+    route allowed it. Every organisation starts free; the Team plan arrives by
+    an approved plan request (docs/handoff/billing-experience-2026-09-22.md).
+  */
+  if (body.plan !== undefined && G.clean(body.plan).toLowerCase() !== 'free') {
+    return G.fail(400, 'A plan cannot be chosen when creating an organisation. Every organisation starts free.');
   }
+  const plan = 'free';
 
   // `seats` is an ALLOWANCE, not an occupancy count, and it is not a gate.
   // RATIONALE.md section 3: "Nothing is ever blocked" — the one moment a hard

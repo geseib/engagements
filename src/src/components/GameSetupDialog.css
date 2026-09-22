@@ -509,3 +509,19 @@
 }
 
 .gsd .btn-secondary:hover { border-color: var(--gsd-muted); }
+
+/* THE REFUSAL, in the dialog instead of a browser alert. A limit is the
+   amber rule (it is a plan fact, not a fault); any other failure is the
+   danger rule. Copy inherits --gsd-text; the link is the one accent. */
+.gsd .gsd-refusal {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger-text);
+  border-radius: 6px;
+  background: rgba(229, 100, 94, .10);
+  color: var(--gsd-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.gsd .gsd-refusal--limit { border-left-color: var(--primary); background: rgba(246, 169, 76, .10); }
+.gsd .gsd-refusal a { color: var(--primary); font-weight: 700; }

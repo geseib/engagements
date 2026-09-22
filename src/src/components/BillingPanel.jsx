@@ -64,6 +64,13 @@ const {
  *                            refused, instead of leaving the reader to infer it
  *                            from two meters.
  */
+/** `2026-10-01` → "1 October"; a label that is already words passes through. */
+export function formatResetsOn(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!m) return String(value || '');
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString(undefined, { day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
 export default function BillingPanel({
   planId = 'personal',
   usage = {},
@@ -146,11 +153,11 @@ export default function BillingPanel({
             <button type="button" className="bill-btn" onClick={onBillingHistory}>
               Billing history
             </button>
-          ) : (
+          ) : onUpgrade ? (
             <button type="button" className="bill-btn bill-btn--primary" onClick={onUpgrade}>
               Create a team
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -209,15 +216,17 @@ export default function BillingPanel({
                     as a toll gate — and waiting really is an exit here, because
                     the allowance is per period. */}
                 <div className="bill-exits">
-                  <button
-                    type="button"
-                    className="bill-btn bill-btn--sm bill-btn--primary"
-                    onClick={onUpgrade}
-                  >
-                    Create a team
-                  </button>
+                  {onUpgrade ? (
+                    <button
+                      type="button"
+                      className="bill-btn bill-btn--sm bill-btn--primary"
+                      onClick={onUpgrade}
+                    >
+                      Create a team
+                    </button>
+                  ) : null}
                   {period.resetsOn ? (
-                    <span className="bill-wait">{`or wait until ${period.resetsOn}`}</span>
+                    <span className="bill-wait">{`${onUpgrade ? 'or wait' : 'Wait'} until ${formatResetsOn(period.resetsOn)}`}</span>
                   ) : null}
                 </div>
               </div>

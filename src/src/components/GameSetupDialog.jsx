@@ -83,6 +83,16 @@ export default function GameSetupDialog({
     what the session is without being able to break its pinned rows.
   */
   mode = 'create',
+  /**
+   * THE LAST REFUSAL, if the previous Create was turned away. `{ blocked,
+   * kind, used, included, message }` from utils/upgradeRequired.js, or a plain
+   * `{ message }` for any other failure. It used to be a browser alert() —
+   * "Failed to create game: …" — with nothing to click; a 402 that says
+   * "upgrade" and offers no way to is the gap the billing handoff opens with.
+   */
+  refusal = null,
+  /** Where the plan lives: the console's Billing section. */
+  billingHref = '/admin?section=billing',
   /** What GET /games/{id}?role=host returned — the host branch of get-game.js. */
   initialValues = null,
   isFirstEngagement = true,
@@ -678,6 +688,23 @@ export default function GameSetupDialog({
           </p>
         )}
       </div>
+
+      {refusal && (
+        <div className={`gsd-refusal${refusal.blocked ? ' gsd-refusal--limit' : ''}`} role="alert" data-testid="gsd-refusal">
+          {refusal.blocked ? (
+            <>
+              <strong>
+                Your plan's {refusal.kind === 'sets' ? 'stored sets' : 'sessions'} for this period are used up
+                {refusal.used != null && refusal.included != null ? ` — ${refusal.used} of ${refusal.included}` : ''}.
+              </strong>{' '}
+              {refusal.message || 'Nothing was created.'}{' '}
+              <a href={billingHref}>Open Plan &amp; usage</a> to request the Team plan, or wait for the period to reset.
+            </>
+          ) : (
+            <>Could not create the session: {refusal.message || 'unknown error'}.</>
+          )}
+        </div>
+      )}
 
       <div className="dialog-actions">
         <button type="button" className="btn-secondary" onClick={() => onCancel?.()}>
