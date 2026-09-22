@@ -1074,6 +1074,85 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── Adjustments and discount codes: the ledger behind a bill (step 3) ──────
+  # docs/handoff/billing-experience-2026-09-22.md §2.2; mockups 16–19. Grants
+  # and codes are staff-only; an organisation's admins read their own ledger.
+  AdjustmentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-adjustments'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/adjustments.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # NO kms:Decrypt — amounts, windows and staff notes; nothing a tenant wrote.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        OrgAdjustments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/adjustments
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformOrgAdjustments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/adjustments
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformGrantAdjustment:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/adjustments
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformRevokeAdjustment:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/adjustments/{adjId}/revoke
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformListCodes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/codes
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformCreateCode:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/codes
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformRetireCode:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/codes/{code}/retire
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   # expressed as an API surface rather than as a promise.
   PlatformOrgsFunction:
     Type: AWS::Serverless::Function

@@ -21,7 +21,7 @@
 |---|---|
 | 1. Honest foundations | Shipped to dev `2ab57fdb` (2026-09-22) |
 | 2. Plan requests | **Shipped to dev 2026-09-22.** `lambda-functions/admin/orgs/plan-requests.js` (five routes, one handler), `components/PlanRequestDialog.jsx` (dialog + the four-state strip on Plan & usage), `components/PlanRequestsPanel.jsx` (the platform section `planrequests` with a waiting-count badge, and the decide dialog), `components/PlanRequests.css` (`.preq`). Tests: `tests/plan-request-flow.js`, `src/__tests__/planRequests.test.jsx`, `planRequestsPalette.test.js`. Mockups 13–15. A code named on a request is carried and shown, not priced — that is step 3. |
-| 3. Adjustments and codes | Not started |
+| 3. Adjustments and codes | **Shipped to dev 2026-09-22.** `shared/pricing-adjust.js` (pure; copied to `game/`; the order of application), `orgs/adjustments.js` (grant/list/revoke, codes create/list/retire, `redeemCodeItems` used by plan-request approval in the same transaction — a declined request burns no use), `get-usage.js` returns `adjusted`. Frontend: `AdjustmentsLedger.jsx` (one list for both sides + the bill in miniature), `OrgBillingDrawer.jsx` (drawer, grant, revoke), `DiscountCodesPanel.jsx` (section `discountcodes`), Plan & usage shows the adjusted bill and the ledger. Tests: `tests/pricing-adjust.js`, `tests/adjustments-ledger.js`, `src/__tests__/adjustments.test.jsx`, `adjustmentsLedgerPalette.test.js`. Mockups 16–19. |
 | 4. Simulated invoices | Not started |
 
 ## PART 1 — Audit

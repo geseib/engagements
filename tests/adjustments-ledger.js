@@ -1,14 +1,10 @@
 /**
- * PLAN REQUESTS — the state machine, the two sides, and the rows.
+ * ADJUSTMENTS AND CODES — the ledger routes (billing step 3).
+ * Harness: tests/plan-request-flow.js's fake table.
  *
- * docs/handoff/billing-experience-2026-09-22.md §2.1; mockups 13–15 in
- * docs/design/tenancy-redesign. The harness is tests/org-lifecycle.js's fake
- * table (conditions evaluated before a transaction, all-or-nothing writes).
- *
- * rejects: a member (not owner) asking; two open requests; a decision with no
- * note; approval that changes only one of the two org rows; a stale second
- * decision winning; staff routes open to anyone signed in; a bare partition
- * literal anywhere in the handler.
+ * rejects: a grant with no reason; a customer granting themselves anything;
+ * a member reading the ledger; revoke deleting the row; a code name reused
+ * while live; a code retired twice; a bare partition literal.
  */
 const path = require('path');
 const fs = require('fs');
@@ -243,7 +239,7 @@ stub('@aws-sdk/lib-dynamodb', {
 process.env.TABLE_NAME = 'test-table';
 
 const ORGS = path.join(REPO, 'lambda-functions/admin/orgs');
-const planRequests = require(path.join(ORGS, 'plan-requests.js')).handler;
+const adjustments = require(path.join(ORGS, 'adjustments.js')).handler;
 const G = require(path.join(ORGS, 'shared/org-guards.js'));
 
 let pass = 0, fail = 0;
@@ -299,157 +295,99 @@ const ORG_A = 'org_1111111111111111111111';
 const ORG_B = 'org_2222222222222222222222';
 
 
+
 (async () => {
   const OWNER = { sub: 'u_owner', email: 'owner@nw.example', role: 'owner' };
   const ADMIN = { sub: 'u_admin', email: 'admin@nw.example', role: 'admin' };
   const MEMBER = { sub: 'u_member', email: 'm@nw.example', role: 'member' };
-  const ORG = 'org_2222222222222222222222';
+  const ORG = 'org_3333333333333333333333';
   const staff = (extra = {}) => evt({ sub: 'u_staff', email: 'staff@engage.example', groups: 'admins', ...extra });
   const as = (m, extra = {}) => evt({ sub: m.sub, email: m.email, orgId: ORG, role: m.role, groups: 'hosts', ...extra });
-  const ask = (m, body = {}) => planRequests(as(m, { method: 'POST', pathParams: { orgId: ORG }, body }));
-  const mine = (m) => planRequests(as(m, { method: 'GET', pathParams: { orgId: ORG } }));
-  const withdraw = (m, reqId) => planRequests(as(m, { method: 'DELETE', pathParams: { orgId: ORG, reqId } }));
-  const queue = (status) => planRequests({ ...staff({ method: 'GET' }), rawPath: '/platform/plan-requests', queryStringParameters: status ? { status } : undefined });
-  const decide = (reqId, body, who = staff) => planRequests({ ...who({ method: 'POST', pathParams: { orgId: ORG, reqId }, body }), rawPath: `/platform/plan-requests/${ORG}/${reqId}/decide` });
-  const meta = () => store.get(key(`ORG#${ORG}`, 'METADATA'));
-  const index = () => store.get(key('ORGS', `ORG#${ORG}`));
-  const queueRows = (status) => [...store.values()].filter((r) => r.PK === 'ORGS' && String(r.SK).startsWith(`PLANREQ#${status}#`));
-  const seedCode = (code, extra = {}) => store.set(key('ORGS', `CODE#${code}`), { PK: 'ORGS', SK: `CODE#${code}`, RecordType: 'CODE', code, percentOff: 30, months: 3, maxUses: 50, uses: 12, validUntil: '2026-12-31', createdAt: '2026-08-01T00:00:00Z', ...extra });
+  const grant = (body, who = staff) => adjustments({ ...who({ method: 'POST', pathParams: { orgId: ORG }, body }), rawPath: `/platform/orgs/${ORG}/adjustments` });
+  const revoke = (adjId, body) => adjustments({ ...staff({ method: 'POST', pathParams: { orgId: ORG, adjId }, body }), rawPath: `/platform/orgs/${ORG}/adjustments/${adjId}/revoke` });
+  const ledgerAs = (m) => adjustments({ ...as(m, { method: 'GET', pathParams: { orgId: ORG } }), rawPath: `/orgs/${ORG}/adjustments` });
+  const ledgerStaff = () => adjustments({ ...staff({ method: 'GET', pathParams: { orgId: ORG } }), rawPath: `/platform/orgs/${ORG}/adjustments` });
+  const createCode = (body, who = staff) => adjustments({ ...who({ method: 'POST', body }), rawPath: '/platform/codes' });
+  const listCodes = () => adjustments({ ...staff({ method: 'GET' }), rawPath: '/platform/codes' });
+  const retire = (code) => adjustments({ ...staff({ method: 'POST', pathParams: { code } }), rawPath: `/platform/codes/${code}/retire` });
   const adjRows = () => [...store.values()].filter((r) => r.PK === `ORG#${ORG}` && String(r.SK).startsWith('ADJ#'));
 
-  await check('only an OWNER can ask; an admin is refused', async () => {
-    reset(); seedOrg(ORG, 'Northwind', [OWNER, ADMIN, MEMBER]); seedCode('WELCOME30');
-    assert.strictEqual((await ask(ADMIN, { toPlan: 'team' })).statusCode, 403);
-    assert.strictEqual((await ask(MEMBER, { toPlan: 'team' })).statusCode, 403);
+  reset(); seedOrg(ORG, 'Northwind', [OWNER, ADMIN, MEMBER]);
+
+  await check('a grant needs a reason, and a kind it knows', async () => {
+    assert.strictEqual((await grant({ kind: 'CREDIT_CENTS', amountCents: 1000 })).statusCode, 400);
+    assert.strictEqual((await grant({ kind: 'GIFT', amountCents: 1000, note: 'x' })).statusCode, 400);
   });
 
-  let reqId;
-  await check('the owner asks: a row on the org, a pointer in the queue, plan untouched', async () => {
-    const res = await ask(OWNER, { toPlan: 'team', note: 'Programme for 40 in October', code: 'welcome30' });
+  await check('a customer cannot grant themselves anything, even the owner', async () => {
+    const res = await grant({ kind: 'CREDIT_CENTS', amountCents: 1000, note: 'me' }, (extra) => as(OWNER, extra));
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(adjRows().length, 0);
+  });
+
+  let creditId;
+  await check('a credit is an append-only row with who, when, why, and its remaining balance', async () => {
+    const res = await grant({ kind: 'CREDIT_CENTS', amountCents: 1000, note: 'pilot goodwill' });
     assert.strictEqual(res.statusCode, 201, res.body);
-    const { request } = bodyOf(res);
-    reqId = request.reqId;
-    assert.deepStrictEqual([request.status, request.fromPlan, request.toPlan, request.code], ['requested', 'free', 'team', 'WELCOME30']);
-    assert.strictEqual(queueRows('requested').length, 1);
-    assert.strictEqual(meta().plan, 'free', 'asking must not change the plan');
+    const { adjustment } = bodyOf(res);
+    creditId = adjustment.adjId;
+    assert.deepStrictEqual([adjustment.kind, adjustment.amountCents, adjustment.remainingCents, adjustment.note, adjustment.status], ['CREDIT_CENTS', 1000, 1000, 'pilot goodwill', 'active']);
+    assert.strictEqual(adjustment.createdBy, 'u_staff');
   });
 
-  await check('a second open request is refused with 409', async () => {
-    assert.strictEqual((await ask(OWNER, { toPlan: 'team' })).statusCode, 409);
+  await check('an offer of "2 months at 50%" from October gets its window', async () => {
+    const res = await grant({ kind: 'OFFER', percentOff: 50, months: 2, validFrom: '2026-10', note: 'education pilot' });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const a = bodyOf(res).adjustment;
+    assert.deepStrictEqual([a.validFrom, a.validTo], ['2026-10', '2026-11']);
+    assert.strictEqual(a.status, 'upcoming');
   });
 
-  await check('an admin can read the history; a member cannot', async () => {
-    const res = await mine(ADMIN);
+  await check('a special rate and extra allowance validate their shape', async () => {
+    assert.strictEqual((await grant({ kind: 'RATE_OVERRIDE', rate: {}, note: 'x' })).statusCode, 400);
+    assert.strictEqual((await grant({ kind: 'RATE_OVERRIDE', rate: { baseCents: 400 }, months: 1, note: 'x' })).statusCode, 201);
+    assert.strictEqual((await grant({ kind: 'CREDIT_UNITS', units: {}, note: 'x' })).statusCode, 400);
+    assert.strictEqual((await grant({ kind: 'CREDIT_UNITS', units: { sessions: 10 }, months: 1, note: 'x' })).statusCode, 201);
+  });
+
+  await check('admins read the ledger; members do not; staff read it too', async () => {
+    const res = await ledgerAs(ADMIN);
     assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(bodyOf(res).requests.length, 1);
-    assert.strictEqual((await mine(MEMBER)).statusCode, 403);
+    assert.strictEqual(bodyOf(res).adjustments.length, 4);
+    assert.strictEqual((await ledgerAs(MEMBER)).statusCode, 403);
+    assert.strictEqual((await ledgerStaff()).statusCode, 200);
   });
 
-  await check('the queue is staff-only, and lists the waiting request with its org name', async () => {
-    const nobody = await planRequests({ ...as(OWNER, { method: 'GET' }), rawPath: '/platform/plan-requests' });
-    assert.strictEqual(nobody.statusCode, 403);
-    const res = await queue();
+  await check('revoke adds a fact and keeps the row; it needs a reason; twice is a 409', async () => {
+    assert.strictEqual((await revoke(creditId, {})).statusCode, 400);
+    const res = await revoke(creditId, { note: 'granted to the wrong org' });
     assert.strictEqual(res.statusCode, 200, res.body);
-    const [row] = bodyOf(res).requests;
-    assert.strictEqual(row.reqId, reqId);
-    assert.strictEqual(row.orgName, 'Northwind');
-    assert.strictEqual(row.note, 'Programme for 40 in October');
+    assert.strictEqual(bodyOf(res).adjustment.status, 'revoked');
+    assert.strictEqual(adjRows().length, 4, 'the row must stay');
+    assert.strictEqual(adjRows().find((r) => r.adjId === creditId).revokeNote, 'granted to the wrong org');
+    assert.strictEqual((await revoke(creditId, { note: 'again' })).statusCode, 409);
   });
 
-  await check('a decision with no note is refused — the customer reads it', async () => {
-    assert.strictEqual((await decide(reqId, { decision: 'approved' })).statusCode, 400);
-    assert.strictEqual((await decide(reqId, { decision: 'maybe', note: 'x' })).statusCode, 400);
+  await check('codes: create, list, one name at a time, retire once', async () => {
+    assert.strictEqual((await createCode({ code: 'x', percentOff: 10 })).statusCode, 400, 'too short');
+    assert.strictEqual((await createCode({ code: 'AUTUMN25', maxUses: 100 })).statusCode, 400, 'gives nothing');
+    const res = await createCode({ code: 'autumn25', percentOff: 25, months: 2, maxUses: 100, validUntil: '2026-11-30', note: 'campaign' });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.deepStrictEqual([bodyOf(res).code.code, bodyOf(res).code.status, bodyOf(res).code.uses], ['AUTUMN25', 'active', 0]);
+    assert.strictEqual((await createCode({ code: 'AUTUMN25', percentOff: 5 })).statusCode, 409);
+    assert.strictEqual(bodyOf(await listCodes()).codes.length, 1);
+    assert.strictEqual((await retire('AUTUMN25')).statusCode, 200);
+    assert.strictEqual(bodyOf(await listCodes()).codes[0].status, 'retired');
+    assert.strictEqual((await retire('AUTUMN25')).statusCode, 409);
   });
 
-  await check('approval changes BOTH org rows, writes a PLAN_CHANGE ledger row, and moves the pointer', async () => {
-    const res = await decide(reqId, { decision: 'approved', note: 'Welcome aboard' });
-    assert.strictEqual(res.statusCode, 200, res.body);
-    assert.strictEqual(bodyOf(res).plan, 'team');
-    assert.strictEqual(meta().plan, 'team');
-    assert.strictEqual(index().plan, 'team', 'the ORGS index row must agree, or the platform list lies');
-    const ledger = [...store.values()].find((r) => r.PK === `ORG#${ORG}` && String(r.SK).includes('#PLAN_CHANGE#'));
-    assert.ok(ledger, 'no PLAN_CHANGE ledger row');
-    assert.deepStrictEqual([ledger.fromPlan, ledger.toPlan, ledger.note], ['free', 'team', 'Welcome aboard']);
-    assert.strictEqual(queueRows('requested').length, 0);
-    assert.strictEqual(queueRows('approved').length, 1);
-    const hist = bodyOf(await mine(OWNER));
-    assert.strictEqual(hist.plan, 'team');
-    assert.strictEqual(hist.requests[0].decisionNote, 'Welcome aboard');
-  });
-
-  await check('approval REDEEMS the code in the same transaction: an ADJ row, a CODEUSE row, the counter up one', async () => {
-    const adj = adjRows();
-    assert.strictEqual(adj.length, 1, 'one CODE_REDEMPTION row');
-    assert.deepStrictEqual([adj[0].kind, adj[0].code, adj[0].percentOff, adj[0].validTo], ['CODE_REDEMPTION', 'WELCOME30', 30, '2026-11']);
-    assert.ok(store.get(key(`ORG#${ORG}`, 'CODEUSE#WELCOME30')), 'no CODEUSE row');
-    assert.strictEqual(store.get(key('ORGS', 'CODE#WELCOME30')).uses, 13);
-    assert.strictEqual(bodyOf(await mine(OWNER)).requests[0].codeApplied, 'WELCOME30');
-  });
-
-  await check('a decided request cannot be decided again', async () => {
-    assert.strictEqual((await decide(reqId, { decision: 'declined', note: 'too late' })).statusCode, 409);
-    assert.strictEqual(meta().plan, 'team');
-  });
-
-  await check('already on the plan → asking again is a 400, not a second request', async () => {
-    assert.strictEqual((await ask(OWNER, { toPlan: 'team' })).statusCode, 400);
-  });
-
-  await check('a code that cannot be redeemed refuses the approval with the reason; dropCode approves without it', async () => {
-    reset(); seedOrg(ORG, 'Northwind', [OWNER]); seedCode('LAUNCH50', { validUntil: '2026-08-31' });
-    const { request } = bodyOf(await ask(OWNER, { toPlan: 'team', code: 'LAUNCH50' }));
-    const res = await decide(request.reqId, { decision: 'approved', note: 'ok' });
-    assert.strictEqual(res.statusCode, 409, res.body);
-    assert.ok(/expired/.test(bodyOf(res).error), bodyOf(res).error);
-    assert.strictEqual(meta().plan, 'free', 'nothing changed on a refused approval');
-    const ok = await decide(request.reqId, { decision: 'approved', note: 'The code had expired; approved without it.', dropCode: true });
-    assert.strictEqual(ok.statusCode, 200, ok.body);
-    assert.strictEqual(meta().plan, 'team');
-    assert.strictEqual(adjRows().length, 0);
-  });
-
-  await check('a declined request burns no use of its code', async () => {
-    reset(); seedOrg(ORG, 'Northwind', [OWNER]); seedCode('WELCOME30');
-    const { request } = bodyOf(await ask(OWNER, { toPlan: 'team', code: 'WELCOME30' }));
-    await decide(request.reqId, { decision: 'declined', note: 'Not yet.' });
-    assert.strictEqual(store.get(key('ORGS', 'CODE#WELCOME30')).uses, 12);
-    assert.strictEqual(adjRows().length, 0);
-  });
-
-  await check('decline leaves the plan alone and quotes the reason; the owner may ask again at once', async () => {
-    reset(); seedOrg(ORG, 'Northwind', [OWNER]);
-    const { request } = bodyOf(await ask(OWNER, { toPlan: 'team' }));
-    const res = await decide(request.reqId, { decision: 'declined', note: 'That code expired in August.' });
-    assert.strictEqual(res.statusCode, 200, res.body);
-    assert.strictEqual(meta().plan, 'free');
-    assert.ok(![...store.values()].some((r) => String(r.SK).includes('#PLAN_CHANGE#')), 'a decline writes no ledger row');
-    assert.strictEqual(bodyOf(await mine(OWNER)).requests[0].decisionNote, 'That code expired in August.');
-    assert.strictEqual((await ask(OWNER, { toPlan: 'team' })).statusCode, 201, 'Q1: re-requestable immediately');
-  });
-
-  await check('withdraw is the owner\'s, only while waiting', async () => {
-    reset(); seedOrg(ORG, 'Northwind', [OWNER, ADMIN]);
-    const { request } = bodyOf(await ask(OWNER, { toPlan: 'team' }));
-    assert.strictEqual((await withdraw(ADMIN, request.reqId)).statusCode, 403);
-    assert.strictEqual((await withdraw(OWNER, request.reqId)).statusCode, 200);
-    assert.strictEqual(queueRows('requested').length, 0);
-    assert.strictEqual(queueRows('withdrawn').length, 1);
-    assert.strictEqual((await withdraw(OWNER, request.reqId)).statusCode, 409);
-  });
-
-  await check('a stale second decision loses when the transaction is cancelled', async () => {
-    reset(); seedOrg(ORG, 'Northwind', [OWNER]);
-    const { request } = bodyOf(await ask(OWNER, { toPlan: 'team' }));
-    control.failNextTransact = 'TransactionCanceledException';
-    const res = await decide(request.reqId, { decision: 'approved', note: 'x' });
-    assert.strictEqual(res.statusCode, 409);
-    assert.strictEqual(meta().plan, 'free');
+  await check('a customer cannot create or list codes', async () => {
+    assert.strictEqual((await createCode({ code: 'FREE100', percentOff: 100 }, (extra) => as(OWNER, extra))).statusCode, 403);
   });
 
   await check('the handler writes no bare partition literal', () => {
-    const src = fs.readFileSync(path.join(ORGS, 'plan-requests.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const src = fs.readFileSync(path.join(ORGS, 'adjustments.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     assert.ok(!/PK:\s*'(SETS|GAMES|ORGS)'/.test(src));
-    assert.ok(/tenant\.ORGS_INDEX_PK/.test(src) && /tenant\.orgPk\(/.test(src));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

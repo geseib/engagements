@@ -186,6 +186,14 @@ const SECTION = {
     section rather than a tab under Organisations because a request nobody
     sees is a customer nobody answered: the nav carries the waiting count.
   */
+  discountcodes: {
+    id: 'discountcodes',
+    label: 'Discount codes',
+    icon: 'FlagCheckered',
+    title: 'Discount codes',
+    subtitle: 'A code is redeemed by a team owner when they request the plan, and applied on approval. Each use is a row on that team.',
+    contentTheme: 'dark',
+  },
   planrequests: {
     id: 'planrequests',
     label: 'Plan requests',
@@ -296,6 +304,7 @@ export function sectionsFor({
     return [group('platform', 'Engage', [
       SECTION.orgs,
       SECTION.planrequests,
+      SECTION.discountcodes,
       SECTION.platformsets,
       SECTION.publiclibrary,
       SECTION.moderation,

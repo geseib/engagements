@@ -26,6 +26,7 @@ const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/l
 const { callerOrgId, orgPk } = require('./shared/tenant');
 const { readUsage, periodOf, periodBounds, usageSk } = require('./shared/usage');
 const { projectInvoice, planFor } = require('./shared/pricing');
+const { applyAdjustments, simulationSentence } = require('./shared/pricing-adjust');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -114,6 +115,20 @@ exports.handler = async (event) => {
     }))).Item || {};
     const plan = planFor(orgRow);
     const invoice = projectInvoice(plan, usage);
+    /*
+      THE BILL WITH ADJUSTMENTS APPLIED — credits, codes, rates, offers (billing
+      step 3). `lines`/`total*` below stay the LIST price the screen has always
+      shown; `adjusted` is the same arithmetic the invoice will be written
+      from, with every step named. Read straight from the ledger rows; no
+      cache, so a grant made a second ago is on the next load.
+    */
+    const adjRows = (await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': orgPk(wanted), ':sk': 'ADJ#' },
+    }))).Items || [];
+    const adjusted = applyAdjustments(plan, usage, adjRows, period);
+    adjusted.sentence = simulationSentence(adjusted);
     const bounds = periodBounds(period, now);
     // The day the counters start again, for "or wait until …" on the free
     // screen — which has rendered nothing since the day it was written.
@@ -158,6 +173,7 @@ exports.handler = async (event) => {
       // than hardcoded in the console, so the rule and the arithmetic that
       // implements it can never be changed independently of one another.
       storageRule: 'peak',
+      adjusted,
       history: await recentPeriods(wanted, period, plan),
     });
   } catch (error) {

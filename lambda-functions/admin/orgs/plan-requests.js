@@ -45,6 +45,7 @@ const { QueryCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { periodOf } = require('../shared/usage');
+const { redeemCodeItems } = require('./adjustments');
 
 const STATUSES = ['requested', 'approved', 'declined', 'withdrawn'];
 const PLANS = ['free', 'team'];
@@ -78,6 +79,8 @@ function publicRequest(row) {
     decidedAt: row.decidedAt || '',
     decisionNote: row.decisionNote || '',
     withdrawnAt: row.withdrawnAt || '',
+    codeApplied: row.codeApplied || '',
+    codeAdjId: row.codeAdjId || '',
   };
 }
 
@@ -277,6 +280,23 @@ async function decide(event, orgId, reqId) {
           ExpressionAttributeValues: { ':plan': row.toPlan, ':now': now },
         },
       });
+    }
+    /*
+      THE CODE IS REDEEMED HERE, IN THE SAME TRANSACTION as the plan change —
+      never on the request, so a declined request burns no use. A code that
+      cannot be redeemed (retired, expired, exhausted, already used by this
+      team) refuses the approval with the reason: the approver decides again
+      with the code cleared, rather than the customer discovering on their
+      invoice that the discount they were promised never landed.
+    */
+    if (row.code && !body.dropCode) {
+      const redeemed = await redeemCodeItems({ orgId, code: row.code, reqId, by, now });
+      if (redeemed.error) {
+        return G.fail(409, `${redeemed.error} Approve with dropCode: true to approve without it, or decline and say why.`);
+      }
+      extra.push(...redeemed.items);
+      patch.codeApplied = row.code;
+      patch.codeAdjId = redeemed.adjustment.adjId;
     }
     extra.push({
       Put: {

@@ -12,6 +12,7 @@ import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
+import DiscountCodesPanel from './components/DiscountCodesPanel';
 import PlanRequestDialog from './components/PlanRequestDialog';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
@@ -225,6 +226,7 @@ function AdminPage() {
   const [showPlanRequest, setShowPlanRequest] = useState(false);
   const [planRequestBusy, setPlanRequestBusy] = useState(false);
   const [planRequestCount, setPlanRequestCount] = useState(null);
+  const [orgAdjustments, setOrgAdjustments] = useState(null);
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -428,6 +430,15 @@ function AdminPage() {
   useEffect(() => {
     if (activeTab !== 'billing' || !activeOrgId) return;
     loadPlanRequest();
+    // The ledger, read-only for the customer (step 3). Members get a 403 and
+    // see no panel, which is the design.
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/adjustments`));
+        const data = await res.json().catch(() => ({}));
+        setOrgAdjustments(res.ok ? (data.adjustments || []) : null);
+      } catch { setOrgAdjustments(null); }
+    })();
   }, [activeTab, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const withdrawPlanRequest = async () => {
@@ -2037,6 +2048,7 @@ function AdminPage() {
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
+          {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 
           {showPlanRequest && activeOrg && (
             <PlanRequestDialog
@@ -2124,6 +2136,8 @@ function AdminPage() {
               error={orgUsageError}
               refusal={uploadRefusal}
               planRequest={planRequest}
+              adjusted={orgUsage?.adjusted || null}
+              adjustments={orgAdjustments}
               /* Owner only (handoff §2.7 Q5 — the same rule as redeeming a
                  code). A personal space has one member and they own it. */
               onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}

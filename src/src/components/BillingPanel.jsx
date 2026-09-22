@@ -19,6 +19,7 @@ import './BillingPanel.css';
  */
 import pricing from '../../../lambda-functions/game/pricing';
 import { PlanRequestStrip } from './PlanRequestDialog';
+import AdjustmentsLedger, { AdjustedBill } from './AdjustmentsLedger';
 
 const {
   TEAM_PLAN, planFor, projectInvoice, allowanceState, formatCents,
@@ -92,6 +93,13 @@ export default function BillingPanel({
   onRequestPlan,
   onWithdrawRequest,
   requestBusy = false,
+  /**
+   * BILLING STEP 3 (mockup 19): `adjusted` is GET /usage's bill with the
+   * ledger applied; `adjustments` is GET /orgs/{id}/adjustments. Both
+   * optional — the host's plain screen and the tests pass neither.
+   */
+  adjusted = null,
+  adjustments = null,
   onBillingHistory,
   onInvoice,
   theme = 'dark',
@@ -306,6 +314,16 @@ export default function BillingPanel({
                 </tbody>
               </table>
 
+              {/* THE BILL WITH THE LEDGER APPLIED — the same arithmetic the
+                  invoice is written from, every step named. Shown under the
+                  list arithmetic only when something actually changes it. */}
+              {adjusted && (adjusted.discounts.length > 0 || adjusted.credits.length > 0) && (
+                <div className="bill-adjusted" data-testid="bill-adjusted">
+                  <h3 className="bill-h3">With your adjustments</h3>
+                  <AdjustedBill adjusted={adjusted} audience="org" />
+                </div>
+              )}
+
               <p className="bill-note bill-note--after">
                 Storage is charged on the <b>highest</b> number of sets you held at once this
                 period, not the number at the end. A set you created and deleted still counted.
@@ -382,6 +400,18 @@ export default function BillingPanel({
       {/* Said unprompted, at the foot, on the free screen: somebody who has just
           hit a wall assumes the worst, and the worst here would be a room
           watching a session stop. */}
+      {adjustments && adjustments.length > 0 && (
+        <section className="bill-panel" aria-labelledby="bill-adj-h" data-testid="bill-adjustments">
+          <div className="bill-panel-head">
+            <h2 id="bill-adj-h">Adjustments on your account</h2>
+            <p className="bill-panel-sub">Granted by Engage, or redeemed by you. Nothing here can be changed from this screen.</p>
+          </div>
+          <div className="bill-panel-body">
+            <AdjustmentsLedger adjustments={adjustments} audience="org" />
+          </div>
+        </section>
+      )}
+
       {!metered ? (
         <p className="bill-notebox bill-notebox--foot">
           <b>The session you are running right now is not affected.</b> A limit only ever stops

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
+import OrgBillingDrawer from './OrgBillingDrawer';
 import './PlatformOrgsPanel.css';
 
 /**
@@ -55,6 +56,7 @@ export function sinceLabel(iso) {
 
 export default function PlatformOrgsPanel() {
   const [orgs, setOrgs] = useState([]);
+  const [billing, setBilling] = useState(null);
   const [counts, setCounts] = useState({ teams: 0, personal: 0, suspended: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -199,6 +201,16 @@ export default function PlatformOrgsPanel() {
                         {/* A home has no Suspend at all — the server refuses it,
                             and offering a control that always fails is worse
                             than not offering one. */}
+                        {/* Billing step 3: the ledger drawer (mockup 16). */}
+                        <button
+                          type="button"
+                          className="porgs-btn"
+                          disabled={busy}
+                          onClick={() => setBilling(org)}
+                          data-testid="porgs-billing"
+                        >
+                          Billing…
+                        </button>
                         {status === 'active' && !personal && (
                           <button
                             type="button"
@@ -218,6 +230,8 @@ export default function PlatformOrgsPanel() {
           </table>
         </div>
       )}
+
+      {billing && <OrgBillingDrawer org={billing} onClose={() => setBilling(null)} />}
 
       <p className="porgs-note">
         <strong>There is no “view their sets” button, and that is the change.</strong>
