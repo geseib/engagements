@@ -59,7 +59,7 @@
  * a regression for every set the host did not just touch.
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { PICKER_GAME_TYPES, gameTypeMeta } from '../config/gameTypes';
+import { PICKER_GAME_TYPES, gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
 import {
@@ -149,6 +149,9 @@ export default function GameSetupDialog({
   const [eventDetails, setEventDetails] = useState(isEdit ? (seed.details || '') : '');
   const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
   const [newGamePersonaId, setNewGamePersonaId] = useState(isEdit ? (seed.personaId || '') : '');
+  // The session's summary approach. '' means "what the set says, else the
+  // format standard" — the designed default, stated by the plan sentence.
+  const [newGamePromptId, setNewGamePromptId] = useState(isEdit ? (seed.promptId || '') : '');
   const [randomizeQuestions, setRandomizeQuestions] = useState(
     isEdit ? seed.randomizeQuestions !== false : true
   );
@@ -232,6 +235,9 @@ export default function GameSetupDialog({
     would be the same over-claim pointed in the other direction.
   */
   const [knownPromptIds, setKnownPromptIds] = useState(null);
+  // The same list, kept whole: the approach picker below offers the summary
+  // prompts written for the chosen format.
+  const [promptList, setPromptList] = useState([]);
   useEffect(() => {
     let live = true;
     (async () => {
@@ -239,8 +245,12 @@ export default function GameSetupDialog({
         const response = await authFetch(adminApiUrl('admin/ai-prompts'));
         if (!response || !response.ok) return;
         const data = await response.json().catch(() => ({}));
-        const ids = (data.prompts || []).map((p) => p && p.promptId).filter(Boolean);
-        if (live) setKnownPromptIds(new Set(ids));
+        const rows = (data.prompts || []).filter((p) => p && p.promptId);
+        const ids = rows.map((p) => p.promptId);
+        if (live) {
+          setKnownPromptIds(new Set(ids));
+          setPromptList(rows);
+        }
       } catch (e) {
         // Left unknown on purpose — see above. The host is told nothing about
         // this request, because nothing on this screen depends on it.
@@ -253,6 +263,21 @@ export default function GameSetupDialog({
   const chosenSetPromptId = allSets.find((s) => s.id === newGameSetId)?.promptId || '';
   const setPromptWillBeUsed = Boolean(chosenSetPromptId)
     && (knownPromptIds === null || knownPromptIds.has(chosenSetPromptId));
+  /*
+    THE APPROACH PICKER'S LIST: summary prompts for THIS format. The same
+    filter the set editor applies (QuestionSetEditor.jsx:willRunAsASummary) —
+    a generator prompt, or one the list already knows cannot drive a summary,
+    is not offered; 'unknown' is the normal verdict and is kept.
+  */
+  const promptChoices = promptList.filter((p) => normalizeGameType(p.gameType) === normalizeGameType(engagementType)
+    && p.summaryPromptStatus !== 'unusable'
+    && p.promptType !== 'generation');
+  const chosenPrompt = promptChoices.find((p) => p.promptId === newGamePromptId) || null;
+  // A pick that no longer suits the format (the format changed under it) is
+  // dropped, so the payload never carries a trivia approach into a poll.
+  useEffect(() => {
+    if (newGamePromptId && !promptChoices.some((p) => p.promptId === newGamePromptId)) setNewGamePromptId('');
+  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The page reloads the voices that suit this format. On mount too, so the
   // default format's list is the one the picker below shows.
@@ -299,6 +324,7 @@ export default function GameSetupDialog({
       eventDetails,
       aiContext: gameAiContext,
       personaId: newGamePersonaId,
+      promptId: newGamePromptId,
       randomizeQuestions,
       anonymousResponses,
     });
@@ -680,11 +706,45 @@ export default function GameSetupDialog({
           having said the opposite here. `setPromptWillBeUsed` is the same
           question asked of the library rather than of the string.
         */}
+        {/*
+          THE SESSION'S SUMMARY APPROACH — the owner (2026-09-22): "how do I
+          select the right prompt for the results screen ... and how can we
+          change it during the session setup". Beside the voice, filtered to
+          the format, and defaulting to what the plan sentence already promised:
+          the set's own approach if it names one, else the format standard.
+          The pick lands on the game record (PromptId) and beats the set's.
+        */}
+        <div className="form-group">
+          <label htmlFor="gsd-prompt">Summary approach (optional)</label>
+          <select
+            id="gsd-prompt"
+            value={newGamePromptId}
+            onChange={(e) => setNewGamePromptId(e.target.value)}
+            className="dialog-select"
+          >
+            <option value="">
+              {setPromptWillBeUsed
+                ? 'What the set says (recommended)'
+                : `The standard ${gameTypeMeta(engagementType).label} way (recommended)`}
+            </option>
+            {promptChoices.map((prompt) => (
+              <option key={prompt.promptId} value={prompt.promptId}>
+                {prompt.name}{prompt.category ? ` (${prompt.category})` : ''}
+              </option>
+            ))}
+          </select>
+          <small className="dialog-help-text">
+            How Workie sums up each round on the results screen — the shape and content, where the voice is only the register. You can change it mid-session; it applies from the next round.
+          </small>
+        </div>
+
         {newGameSetId && (
           <p className="gsd-workie-plan" data-testid="gsd-workie-plan">
-            {setPromptWillBeUsed
-              ? 'This question set brings its own summary approach — Workie follows it. Everything above is optional.'
-              : `Workie summarizes each round the standard ${gameTypeMeta(engagementType).label} way — nothing above needs setting up.`}
+            {chosenPrompt
+              ? `Workie follows "${chosenPrompt.name}" for this session — chosen here, ahead of anything the set says.`
+              : setPromptWillBeUsed
+                ? 'This question set brings its own summary approach — Workie follows it. Everything above is optional.'
+                : `Workie summarizes each round the standard ${gameTypeMeta(engagementType).label} way — nothing above needs setting up.`}
           </p>
         )}
       </div>

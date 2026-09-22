@@ -336,6 +336,9 @@ exports.handler = async (event) => {
         // session" every time a game is resumed, while the game itself still
         // has a persona set — a picker that misreports its own state.
         personaId: gameMetadata.Item.PersonaId || null,
+        // And its summary approach, for the same reason: the in-game picker
+        // must open on what the session actually carries after a reload.
+        promptId: gameMetadata.Item.PromptId || null,
         createdAt: gameMetadata.Item.CreatedAt
       }
     };

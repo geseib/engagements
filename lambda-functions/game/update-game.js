@@ -67,7 +67,7 @@ const reply = (statusCode, body) => ({
 
 const VISIBILITIES = ['public', 'private'];
 const EDITABLE_FIELDS = [
-  'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'visibility', 'anonymousUntilReveal',
+  'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'promptId', 'visibility', 'anonymousUntilReveal',
   'categoryIds'
 ];
 
@@ -226,6 +226,23 @@ exports.handler = async (event) => {
         values[':personaId'] = personaId;
         sets.push('#personaId = :personaId');
         applied.personaId = personaId;
+      }
+    }
+
+    if ('promptId' in body) {
+      // The session's summary approach, with PersonaId's clear semantics: ''
+      // or null REMOVE the attribute, and the round then follows the set's
+      // promptId or the format default (get-ai-summary.js:sessionPromptId).
+      // Applies from the NEXT round; the one on screen is Redo's business.
+      const promptId = body.promptId === null ? '' : String(body.promptId).trim();
+      names['#promptId'] = 'PromptId';
+      if (promptId === '') {
+        removes.push('#promptId');
+        applied.promptId = null;
+      } else {
+        values[':promptId'] = promptId;
+        sets.push('#promptId = :promptId');
+        applied.promptId = promptId;
       }
     }
 
