@@ -1,0 +1,149 @@
+/* ===========================================================================
+   refresh-home.css — the 2026-09-22 refresh of the marketing home, as a DIFF
+   against the approved mk.css (which the build inlines verbatim above this
+   block). Every token, wash and ladder value is mk.css's; this file only adds
+   rules and, where it must, re-declares a component the refresh reshapes.
+   Nothing here paints from a literal outside the two placeholder blocks.
+   Namespaced .mk-* like everything in the set.
+   =========================================================================== */
+
+/* ------------------------------------------------------------- 1. the hero
+   The product is in the first viewport. Copy on the left holds the top 55%
+   (the contrast rule from the art brief §4 is unchanged); the drawn stage still
+   sits right, where it is a dark object with its own contrast and may overlap
+   the amber band. --------------------------------------------------------- */
+.mk-hero { grid-template-rows: auto auto; row-gap: 34px; min-height: var(--mk-ridge-band); }
+.mk-hero-top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 34px 40px; align-items: end; }
+/* Four short lines at a display size the column can hold: the approved 68px
+   three-liner needs 19ch of width the two-column hero no longer has. */
+.mk-hero-copy { max-width: none; font-size: clamp(40px, 3.5vw, 54px); }
+.mk-hero-sub { max-width: 42ch; }
+.mk-hero-stage { position: relative; justify-self: end; width: 100%; max-width: 560px; }
+.mk-hero-stage .mk-device--phone { position: absolute; right: -4%; bottom: -14%; width: 22%; }
+.mk-hero-stage .mk-device-cap { display: none; }
+/* The nav's account door is an outline while the hero's primary is on screen:
+   one filled amber control per viewport. */
+.mk-nav-links .mk-btn-primary, .mk-nav-acts .mk-btn-primary { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-nav-links .mk-btn-primary:hover, .mk-nav-acts .mk-btn-primary:hover { border-color: var(--mk-text); background: transparent; }
+/* Join is the third door, not a second primary. */
+.jce .jce-go { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.jce .jce-go:hover { border-color: var(--mk-text); }
+
+/* The headline's three lines rise once. Visible by default; the animation
+   only offsets what is already painted, so a failed script hides nothing.
+   (react-bits SplitText / motion-primitives text-effect, done by hand.) */
+.mk-rise > span { display: block; animation: mk-rise .62s cubic-bezier(.16, 1, .3, 1) both; }
+.mk-rise > span:nth-child(2) { animation-delay: .09s; }
+.mk-rise > span:nth-child(3) { animation-delay: .18s; }
+.mk-rise > span:nth-child(4) { animation-delay: .27s; }
+.mk-hero-sub, .mk-hero-foot { animation: mk-rise .62s cubic-bezier(.16, 1, .3, 1) .36s both; }
+.mk-hero-stage { animation: mk-rise .7s cubic-bezier(.16, 1, .3, 1) .34s both; }
+@keyframes mk-rise { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* ------------------------------------------------- 2. the route draws itself
+   The climber already moves with scroll in the shipped RidgeScene. The route
+   used to be fully drawn from the first frame, so the plan read as already
+   walked. Now it draws just ahead of the climber (stroke-dashoffset from the
+   same progress value; motion-primitives scroll-progress, on an SVG path). */
+.mk-ridge-route { stroke-dasharray: 1; stroke-dashoffset: 1; pathLength: 1; transition: stroke-dashoffset .12s linear; }
+.mk-ridge-route.mk-route--dashed { stroke-dasharray: none; }
+.mk-ridge-mid .mk-ridge-flag, .mk-ridge-mid .mk-ridge-mast { transition: opacity .4s; }
+.mk-ridge-mid[data-summit="0"] .mk-ridge-flag, .mk-ridge-mid[data-summit="0"] .mk-ridge-mast { opacity: .35; }
+
+/* ------------------------------------------- 3. the scaffold tells removed
+   No kicker on a section heading (the hero and the summit keep theirs: they
+   carry the climb). No 01/02/03. No same-size card grid as page structure. */
+.mk-stmts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px 44px; margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--mk-rule); }
+.mk-stmts h3 { font-size: var(--mk-t-head); line-height: 1.14; max-width: 14ch; }
+.mk-stmts p { margin-top: 12px; color: var(--mk-muted); max-width: 34ch; }
+.mk-seq { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px 28px; margin-top: 40px; position: relative; }
+.mk-seq::before { content: ""; position: absolute; left: 0; right: 0; top: 19px; height: 1px; background: var(--mk-rule); }
+.mk-seq-step { position: relative; padding-top: 30px; }
+/* The numeral carries information here — the reader is being told an order —
+   so it stays, on the rule, as a waypoint rather than a card badge. */
+.mk-seq-n { position: absolute; top: 0; left: 0; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--mk-bg); border: 1px solid var(--mk-amber); color: var(--mk-amber); font: 800 var(--mk-t-label)/1 var(--mk-font-display); }
+.mk-seq-step h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; margin-top: 14px; line-height: 1.35; }
+.mk-seq-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; max-width: 30ch; }
+.mk-material-note { border-left-width: 1px; background: transparent; }
+.mk-material-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px 44px; margin-top: 36px; align-items: center; }
+.mk-material-row .mk-device { max-width: 520px; }
+
+/* ------------------------------------------------ 4. the tally performs once
+   Bars are drawn at zero and grow when the block enters view; the counts
+   count up in the same 700ms. One authored moment for this section, and it is
+   the product's own live moment. (motion-primitives in-view + animated-number;
+   react-bits CountUp.) */
+.mk-tally-track i { width: 0; transition: width .7s cubic-bezier(.16, 1, .3, 1); }
+.mk-tally.is-in .mk-tally-track i { width: var(--w); }
+.mk-tally-row { transition: opacity .4s; }
+.mk-tally-n { font-weight: 700; color: var(--mk-text); }
+
+/* ------------------------------------------------- 5. the one photograph
+   A labelled placeholder carrying the image request. Sits in "the room reacts",
+   beside the tally, so the reader sees people looking up at the thing the tally
+   is. Dark, so the wash keeps its contrast; captioned in --mk-text. */
+.mk-art { position: relative; aspect-ratio: 4 / 3; border-radius: var(--mk-radius); overflow: hidden; border: 1px solid var(--mk-rule-strong);
+  background: linear-gradient(160deg, var(--mk-ridge-back) 0%, var(--mk-ridge-front) 60%, var(--mk-bg) 100%); }
+.mk-art-req { position: absolute; inset: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; font-size: var(--mk-t-label); line-height: 1.5; color: var(--mk-text); }
+.mk-art-req b { font: 800 var(--mk-t-floor)/1 var(--mk-font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--mk-amber); }
+.mk-art-req p { opacity: .9; }
+.mk-art-req .mk-art-sil { margin-top: auto; height: 34%; opacity: .55;
+  background: radial-gradient(28% 60% at 18% 100%, var(--mk-surface-2) 0 60%, transparent 61%), radial-gradient(28% 70% at 50% 100%, var(--mk-surface-2) 0 60%, transparent 61%), radial-gradient(28% 55% at 82% 100%, var(--mk-surface-2) 0 60%, transparent 61%); }
+.mk-art-cap { margin-top: 12px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-react-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.mk-react-side { display: grid; gap: 22px; }
+.mk-react-side .mk-lead { max-width: 34ch; }
+
+/* The supplied photographs (section 4a). Cover-cropped by object-position so
+   no derived file is written; the caption sits in a wash-a band at the foot,
+   where the composite over each image's brightest region was measured:
+   participants #B6C8CF -> #202B3E, --mk-text 12.25:1; paper #DCDED5 -> #242E3F,
+   11.76:1. Only --mk-text may sit in the band (--mk-muted lands at 5.9/5.7
+   over wash-a but 3.5/3.1 over a 70% wash, so it is not used). */
+.mk-art--photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mk-art-wash { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 18px 14px;
+  background: linear-gradient(180deg, rgba(15,26,46,0) 0%, var(--mk-wash-a) 55%);
+  color: var(--mk-text); font-size: var(--mk-t-label); font-weight: 700; letter-spacing: .02em; }
+.mk-art--sheet img { object-position: 54% 50%; }
+
+/* ---------------------------------------- 6. the summit: report and photo
+   The mode section's copy loses its "text" paragraph where the list says the
+   same thing (fact stated once). Nothing else changes in the report block. */
+.mk-summit-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 30px 40px; margin-top: 36px; align-items: start; }
+.mk-summit-grid .mk-report { max-width: none; margin: 0; }
+.mk-summit-aside { display: grid; gap: 18px; position: sticky; top: 90px; }
+.mk-summit-aside .mk-art { aspect-ratio: 3 / 4; }
+
+/* ---------------------------------------------------- reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .mk-rise > span, .mk-hero-sub, .mk-hero-foot, .mk-hero-stage { animation: none; }
+  .mk-tally-track i { transition: none; width: var(--w); }
+  .mk-ridge-route { stroke-dashoffset: 0 !important; transition: none; }
+}
+
+/* ---------------------------------------------------- narrow */
+@media (max-width: 980px) {
+  .mk-hero-top { grid-template-columns: minmax(0, 1fr); }
+  .mk-hero-stage { justify-self: stretch; max-width: 520px; }
+  .mk-stmts, .mk-seq { grid-template-columns: minmax(0, 1fr); }
+  .mk-seq::before { display: none; }
+  .mk-material-row, .mk-summit-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-summit-aside { position: static; }
+  .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
+  .mk-art--sheet img { object-position: 50% 55%; }
+}
+@media (max-width: 720px) {
+  .mk-hero { row-gap: 26px; }
+  /* One column: the four authored lines become natural wraps. */
+  .mk-rise > span { display: inline; animation: none; }
+  .mk-rise > span::after { content: " "; }
+  .mk-hero-copy { animation: mk-rise .62s cubic-bezier(.16, 1, .3, 1) both; }
+  .mk-hero-stage .mk-ss-bar:nth-child(n+3), .mk-hero-stage .mk-clip-badge { display: none; }
+  .mk-hero-copy { max-width: none; }
+  .mk-hero-stage .mk-device--phone { display: none; }
+  .mk-stmts h3, .mk-stmts p, .mk-seq-step p { max-width: none; }
+  .mk-seq { gap: 22px; }
+  .mk-seq-step { padding-top: 0; padding-left: 50px; }
+  .mk-seq-step h3 { margin-top: 0; }
+  .mk-art { aspect-ratio: 16 / 10; }
+}

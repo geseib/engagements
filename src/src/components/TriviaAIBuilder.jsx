@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
-import CountField from './CountField';
-import { categorySpread } from '../utils/categorySpread';
+import { SetSizeField } from './CountField';
+import AppendModeSwitch from './AppendModeSwitch';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -24,19 +25,39 @@ const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-trivia`;
 const ASSIST_FORM = BUILDER_FORM_FIELDS.trivia;
 
-function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
+function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   const [step, setStep] = useState(1);
   const [triviaConfig, setTriviaConfig] = useState({
-    topic: '',
-    audience: '',
-    difficulty: 'medium',
-    count: 10,
+    // ADDING TO A SET starts from the brief that set was made from.
+    topic: appendTo?.brief?.topic || '',
+    audience: appendTo?.brief?.audience || '',
+    difficulty: appendTo?.brief?.difficulty || 'medium',
+    count: 15,
     numChoices: 4,
     numCorrect: 1,
     numberOfCategories: 3,
     mustHaveCategories: '',
-    customPrompt: ''
+    customPrompt: '',
+    // ADDING TO A SET'S OWN CATEGORIES: the count and the names are the set's,
+    // not the form's. Count follows so "in each" starts at a sensible 3.
+    ...appendCategoryDefaults(appendTo),
+    ...(appendsToExisting(appendTo) ? { count: Math.min(100, Math.max(1, appendTo.categories.length) * 3) } : {}),
   });
+  // The mode can be changed from inside the builder (AppendModeSwitch). The
+  // category settings follow it: the set's own names and count in `existing`,
+  // a clean slate in `new` — never the existing names left in "must have".
+  const appendMode = appendTo?.mode;
+  useEffect(() => {
+    if (!isAppend(appendTo)) return;
+    setTriviaConfig((prev) => {
+      const per = Math.max(1, Math.round(prev.count / Math.max(1, prev.numberOfCategories)));
+      const next = appendsToExisting(appendTo)
+        ? appendCategoryDefaults(appendTo)
+        : { numberOfCategories: Math.min(3, Math.max(1, 24 - appendTo.categories.length)), mustHaveCategories: '' };
+      return { ...prev, ...next, count: Math.min(100, next.numberOfCategories * per) };
+    });
+  }, [appendMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
   const [currentTriviaIndex, setCurrentTriviaIndex] = useState(0);
   // The last poll response, in the shape jobToResponse() actually sends. EVERY
@@ -86,6 +107,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   ];
 
   const jobIdRef = useRef(null);
+  /* ONE PRESS, FROM THE SET. The Add questions dialog already knows the brief,
+     the categories and the count, so when it says `autoStart` this builder
+     opens GENERATING rather than on a form repeating what was just decided —
+     only if the brief carries a topic; with nothing to write about, the form
+     is the honest place to land. */
+  const autoStarted = useRef(false);
 
   /**
    * Watch a job to its terminal state.
@@ -164,19 +191,20 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
         topic: triviaConfig.topic,
         audience: triviaConfig.audience,
         difficulty: triviaConfig.difficulty,
-        count: triviaConfig.count,
+        count: appendTo?.count || triviaConfig.count,
         numChoices: triviaConfig.numChoices,
         numCorrect: triviaConfig.numCorrect,
-        numberOfCategories: triviaConfig.numberOfCategories,
+        numberOfCategories: appendTo?.numberOfCategories || triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
-        customPrompt: triviaConfig.customPrompt,
+        customPrompt: withAppendRequirement(triviaConfig.customPrompt, appendTo),
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
         // question set itself now — that is the fix for "Close — this keeps
         // running", which was true about the job and false about the outcome —
         // and it needs a title and a description to do it. Computed in the
         // browser and sent, rather than re-derived in the Lambda, so there is
         // one author of this copy and not two that drift.
-        setMetadata: buildSetMetadata()
+        // ADDING makes no set: the items come back and the editor appends them.
+        ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { topic: triviaConfig.topic });
@@ -189,6 +217,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
   };
 
   /** Done with this job: stop offering to resume it. */
+  useEffect(() => {
+    if (!appendTo?.autoStart || autoStarted.current || !triviaConfig.topic.trim()) return;
+    autoStarted.current = true;
+    handleConfigSubmit();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const dismissJob = () => {
     forgetGenerationJob(ENDPOINT);
     jobIdRef.current = null;
@@ -371,7 +405,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> AI Trivia Builder</h2>
+          <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'AI Trivia Builder'}</h2>
           <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
@@ -379,6 +413,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
           {step === 1 && (
             <div className="trivia-configuration">
               <h3>Configure Your Trivia Questions</h3>
+              <AppendModeSwitch appendTo={appendTo} />
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -439,15 +474,25 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   </div>
                 </div>
 
+                {/*
+                  ONE GROUP FOR THE TWO NUMBERS THAT MULTIPLY. They used to sit
+                  two fields apart — a total here, a category count further
+                  down — with "how many per category" left as arithmetic. It is
+                  now asked directly, 2/3/5/10 per category, and the total is
+                  stated under it.
+                */}
                 <div className="form-row">
-                  <CountField
-                      label="Questions to generate"
-                      value={triviaConfig.count}
-                      onChange={(n) => setTriviaConfig((prev) => ({ ...prev, count: n }))}
-                      min={1}
-                      max={100}
-                      presets={[5, 10, 20, 50]}
-                    />
+                  <SetSizeField
+                    count={triviaConfig.count}
+                    categories={triviaConfig.numberOfCategories}
+                    onChange={({ count, categories }) => setTriviaConfig((prev) => ({ ...prev, count, numberOfCategories: categories }))}
+                    noun="questions"
+                    maxTotal={100}
+                    lockedCategories={appendsToExisting(appendTo) ? appendTo.categories : null}
+                    adding={isAppend(appendTo) ? { existingTotal: appendTo.existingTotal || 0 } : null}
+                    maxCategories={isAppend(appendTo) && !appendsToExisting(appendTo) ? Math.max(1, 24 - appendTo.categories.length) : 24}
+                    hint="Categories are what the host can switch on and off mid-session."
+                  />
                 </div>
 
                 <div className="form-row">
@@ -475,19 +520,11 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                   </div>
                 </div>
 
+                {!appendsToExisting(appendTo) && (
                 <div className="form-row">
-                  <CountField
-                      label="Categories to spread them across"
-                      value={triviaConfig.numberOfCategories}
-                      onChange={(n) => setTriviaConfig((prev) => ({ ...prev, numberOfCategories: n }))}
-                      min={1}
-                      max={24}
-                      presets={[1, 3, 6, 12]}
-                      hint={`${categorySpread(triviaConfig.count, triviaConfig.numberOfCategories)} Categories are what the host can switch on and off mid-session.`}
-                    />
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Must Have Categories</label>
+                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Must Have Categories'}</label>
                       {lockFor('mustHaveCategories')}
                     </div>
                     <input
@@ -498,6 +535,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                     />
                   </div>
                 </div>
+                )}
 
                 <div className="form-group">
                   <div className="label-row">
@@ -584,7 +622,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated }) {
                         </button>
                       ) : (
                         <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptTrivia.length} into System
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptTrivia.length} to “${appendTo.setName}”` : `Load ${keptTrivia.length} into System`}
                         </button>
                       )}
                     </>

@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from './Icon';
 import './AdminShell.css';
+import BrandMark from './BrandMark';
 
 /**
  * THE ADMIN CONSOLE'S SHELL.
@@ -143,7 +144,7 @@ export default function AdminShell({
             link in the bar already goes there. A page load, like every other
             navigation in this app (App.jsx routes on pathname). */}
         <a className="adm-home" href="/home" aria-label={`${brand} home`}>
-          <span className="adm-mark" aria-hidden="true" />
+          <BrandMark size={22} />
           <span className="adm-word">{brand}</span>
         </a>
       </header>

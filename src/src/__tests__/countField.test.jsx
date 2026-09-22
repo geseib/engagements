@@ -24,7 +24,7 @@
  * no layout engine, so nothing here measures anything.
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import CountField from '../components/CountField';
 
 function draw(props = {}) {
@@ -276,7 +276,76 @@ describe('the builders all ask the same way', () => {
   // control, which is the exact field this test was written for.
   it('the scenario builder asks for categories with the shared field', () => {
     const src = source('AIScenarioBuilder.jsx');
-    expect(src).toMatch(/<CountField[\s\S]*?value=\{scenarioConfig\.numberOfCategories\}/);
+    expect(src).toMatch(/<SetSizeField[\s\S]*?categories=\{scenarioConfig\.numberOfCategories\}/);
     expect(src).not.toMatch(/bitmask/i);
+  });
+});
+
+describe('SetSizeField — categories × in each, and the total', () => {
+  const { SetSizeField, PER_CATEGORY_PRESETS } = require('../components/CountField');
+
+  const drawSize = (props = {}) => {
+    const onChange = jest.fn();
+    render(<SetSizeField count={15} categories={3} onChange={onChange} {...props} />);
+    return { onChange };
+  };
+
+  // The owner: "the question count picker [should] default to 2/3/5/10 per category".
+  it('offers 2 / 3 / 5 / 10 per category', () => {
+    expect(PER_CATEGORY_PRESETS).toEqual([2, 3, 5, 10]);
+    drawSize();
+    const group = screen.getByRole('radiogroup', { name: /questions in each category/i });
+    expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['2', '3', '5', '10']);
+    expect(within(group).getByRole('radio', { name: '5' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  // rejects: leaving the product as arithmetic for the reader.
+  it('states the total once, as categories × in-each', () => {
+    drawSize();
+    expect(screen.getByTestId('set-size-total')).toHaveTextContent('15 questions in total');
+    expect(screen.getByTestId('set-size-total')).toHaveTextContent('3 categories × 5');
+  });
+
+  it('a per-category pick hands back the new TOTAL with the categories unchanged', () => {
+    const { onChange } = drawSize();
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: /in each category/i })).getByRole('radio', { name: '10' }));
+    expect(onChange).toHaveBeenCalledWith({ categories: 3, count: 30 });
+  });
+
+  it('changing the categories keeps the per-category figure', () => {
+    const { onChange } = drawSize();
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Categories' })).getByRole('radio', { name: '6' }));
+    expect(onChange).toHaveBeenCalledWith({ categories: 6, count: 30 });
+  });
+
+  // rejects: a product the server will refuse.
+  it('never hands back a total over the cap', () => {
+    const { onChange } = drawSize({ count: 50, categories: 5, maxTotal: 50 });
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Categories' })).getByRole('radio', { name: '8' }));
+    expect(onChange).toHaveBeenCalledWith({ categories: 8, count: 48 });
+  });
+
+  // rejects: offering a preset that cannot fit under the cap.
+  it('drops per-category presets that would pass the cap', () => {
+    drawSize({ count: 48, categories: 8, maxTotal: 50 });
+    expect(within(screen.getByRole('radiogroup', { name: /in each category/i })).getAllByRole('radio').map((r) => r.textContent))
+      .toEqual(['2', '3', '5']);
+  });
+
+  // rejects: a false product when the total arrived from elsewhere.
+  it('says "about" when the total does not divide evenly', () => {
+    drawSize({ count: 7, categories: 3 });
+    expect(screen.getByTestId('set-size-total')).toHaveTextContent('About 7 questions in total');
+  });
+
+  // rejects: the box that snapped to 1 the moment it was emptied, so "clear,
+  // then type 12" produced 112.
+  it('the box can be emptied and retyped', () => {
+    drawSize();
+    const box = screen.getByRole('spinbutton', { name: 'Categories' });
+    fireEvent.change(box, { target: { value: '' } });
+    expect(box).toHaveValue(null);
+    fireEvent.change(box, { target: { value: '4' } });
+    expect(box).toHaveValue(4);
   });
 });

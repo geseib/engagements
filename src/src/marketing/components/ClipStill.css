@@ -30,6 +30,11 @@
 }
 .mk-ss-bar span { grid-column: 1; }
 .mk-ss-bar em { grid-column: 2; font-style: normal; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* The hero's RESULTS still (refresh 2026-09-22): the correct row's letter is
+   amber and its share is carried in --mk-text, so "correct" is a word and a
+   weight, never the bar colour alone. */
+.mk-ss-bar b { color: var(--mk-amber); font-weight: 800; }
+.mk-ss-bar.mk-ss-right em { color: var(--mk-text); font-weight: 700; }
 .mk-ss-track { grid-column: 1 / -1; height: 7px; border-radius: 4px; background: rgba(244, 237, 228, 0.1); overflow: hidden; }
 .mk-ss-track i { display: block; height: 100%; background: var(--mk-amber); border-radius: 4px; }
 .mk-ss-track.mk-ss-cool i { background: var(--mk-blue); }

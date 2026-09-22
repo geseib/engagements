@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
@@ -16,6 +17,14 @@ import { summarizeCsv, describeReplacePlan, rowsForNewSet } from '../utils/quest
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { interpretGenerationJob, generationJobTone } from '../utils/generationJob';
 import { checkIsDue } from '../utils/houseCheck';
+import AddQuestionsDialog from './AddQuestionsDialog';
+import TriviaAIBuilder from './TriviaAIBuilder';
+import PollAIBuilder from './PollAIBuilder';
+import AIScenarioBuilder from './AIScenarioBuilder';
+import {
+  ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
+} from '../utils/addQuestions';
+import { briefFromSet } from '../utils/appendMode';
 import {
   editableRows,
   blankRow,
@@ -117,6 +126,9 @@ export default function QuestionsPanel({
   plannedVersion,
   onChanged,
   onDirtyChange,
+  /** True when the editor has already said a copy cannot be stored: every
+   *  control that would start one — Add, Add questions, Pull, Save — is off. */
+  writesBlocked = false,
   /*
    * ── WHAT THIS PANEL MAY OFFER, WHICH IS NOT THE SAME AS WHO MAY USE IT ────
    *
@@ -223,6 +235,11 @@ export default function QuestionsPanel({
   const [selected, setSelected] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showPull, setShowPull] = useState(false);
+  // ADD QUESTIONS: the dialog, then (AI route only) the builder it hands to.
+  // `addBuilder` holds the mode the person chose, so the rows that come back
+  // are held to the same one they were generated under.
+  const [showAdd, setShowAdd] = useState(false);
+  const [addBuilder, setAddBuilder] = useState(null); // { mode, categories }
   // { mode: 'fork' | 'subset', title, rows, topic, tags }
   const [newSetDialog, setNewSetDialog] = useState(null);
   /* Same reason as `formError` above, and the same mistake this dialog made:
@@ -611,6 +628,88 @@ export default function QuestionsPanel({
     closeForm();
     setConfirmDiscard(false);
     setStatus({ text: 'Unsaved changes discarded. The set is as it was when you opened it.', tone: 'pending' });
+  };
+
+  /* ------------------------------------------------- adding questions --- */
+
+  /** Rows that came through Add questions join the working copy, unsaved. */
+  const acceptAdded = (held, mode) => {
+    setShowAdd(false);
+    setAddBuilder(null);
+    if (held.kept.length) setRows((current) => [...current, ...held.kept]);
+    setStatus({ text: describeAdded(held, mode), tone: held.kept.length ? 'pending' : 'error' });
+  };
+
+  /**
+   * The builder's own `on*Generated`, pointed here instead of at "create a
+   * set". An append-only job carries no `createdSet`, so what arrives is the
+   * kept questions — held to the mode, with strays re-filed rather than lost.
+   */
+  const acceptGenerated = async (payload) => {
+    const mode = addBuilder ? addBuilder.mode : ADD_MODES.EXISTING;
+    const items = (payload && (payload.questions || payload.scenarios || payload.polls)) || [];
+    const held = holdToMode(rowsFromItems(items), rows, mode, { spread: true });
+    /*
+      SAVED THE MOMENT THEY ARRIVE. The owner: "the way you click to add them,
+      and then have to save as a new version, is not super clear and easy to
+      accidentally exit and lose the work that was just done." Generated
+      questions are finished work the moment "Add N" is pressed, so the
+      version is written right then — one press, and closing cannot lose it.
+
+      Two cases still land unsaved, and say so: other unsaved edits already in
+      the list (a save now would carry them too, unasked), and a set that is
+      not ours to replace (the save would fork; that is the person's call).
+    */
+    const nextRows = [...rows, ...held.kept];
+    const nextSummary = summarizeRowChanges(nextRows, baselineOrder);
+    const canSaveNow = held.kept.length > 0 && !dirty && canManage
+      && workingCopyProblems(nextRows, engagementType).length === 0;
+    if (!canSaveNow) { acceptAdded(held, mode); return; }
+
+    setShowAdd(false);
+    setAddBuilder(null);
+    setRows(nextRows);
+    setSaving(true);
+    setStatus({ text: `Adding ${held.kept.length} and saving a new version…`, tone: 'pending' });
+    try {
+      const { response, result } = await saveRows(nextRows, { replaceSetId: setId }, nextSummary);
+      if (response.ok) {
+        const version = result.version != null ? `Version ${result.version}` : 'A new version';
+        setStatus({
+          text: `${held.kept.length} question${held.kept.length === 1 ? '' : 's'} added. ${version} of "${setName}" is saved `
+            + `with ${result.questionCount} questions — you can close this now. The previous version is kept.`
+            + (held.dropped.length ? ` ${held.dropped.length} left out: ${[...new Set(held.dropped.map((d) => d.reason))].join('; ')}.` : ''),
+          tone: 'success',
+        });
+        await load();
+        if (onChanged) onChanged();
+      } else {
+        setStatus({
+          text: `Added ${held.kept.length}, but the save failed: ${result.error || `HTTP ${response.status}`}. `
+            + 'They are still here, unsaved — press Save to try again.',
+          tone: 'error',
+        });
+      }
+    } catch (error) {
+      setStatus({ text: `Added ${held.kept.length}, but the save failed: ${error.message}. They are still here, unsaved — press Save to try again.`, tone: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openAddBuilder = (mode, plan = {}) => {
+    setShowAdd(false);
+    // `plan` is the dialog's decision — how many, into how many categories,
+    // and start at once — so the builder opens generating, not asking.
+    setAddBuilder({ mode, categories: existingCategories(rows), ...plan });
+  };
+
+  const writeOneFromAdd = (mode) => {
+    setShowAdd(false);
+    // New-category mode opens the form with the category EMPTY, so the picker's
+    // "+ New category" is the first thing reached; existing mode seeds as usual.
+    if (mode === ADD_MODES.NEW) openForm(blankRow({ category: '' }), 'add');
+    else startAdd();
   };
 
   /** Questions pulled out of another set arrive here as independent copies. */
@@ -1141,13 +1240,23 @@ export default function QuestionsPanel({
       )}
 
       <div className="qs-panel-actions">
-        <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready'}>
+        <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready' || writesBlocked}>
           <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
+        </button>
+        {/* The New set routes — AI, CSV, by hand — pointed at THIS set. */}
+        <button
+          className="btn-secondary btn-small"
+          onClick={() => setShowAdd(true)}
+          disabled={loadState !== 'ready' || writesBlocked}
+          title={writesBlocked ? 'No room for a copy — delete one of your own sets or upgrade.' : undefined}
+          data-testid="add-questions"
+        >
+          <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" /> Add questions…
         </button>
         <button
           className="btn-secondary btn-small"
           onClick={() => setShowPull(true)}
-          disabled={loadState !== 'ready'}
+          disabled={loadState !== 'ready' || writesBlocked}
         >
           <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
         </button>
@@ -1476,6 +1585,65 @@ export default function QuestionsPanel({
           </div>
         </div>
       )}
+
+      {showAdd && (
+        <AddQuestionsDialog
+          setName={questionSet?.name || setId}
+          engagementType={engagementType}
+          categories={existingCategories(rows)}
+          counts={categoryCounts(rows)}
+          currentRows={rows}
+          /* Survey's AI builder exports a file and makes no questions a set can
+             hold, so it is not offered as a way to add any. */
+          aiAvailable={engagementType !== 'survey'}
+          onClose={() => setShowAdd(false)}
+          onOpenBuilder={openAddBuilder}
+          onWriteOne={writeOneFromAdd}
+          onAddRows={acceptAdded}
+        />
+      )}
+
+      {/*
+        AT THE PAGE ROOT, NOT IN HERE. The builders are hand-rolled white
+        modals styled for the paper console. Rendered as a descendant of this
+        panel they inherit the editor's DUSK tokens and its heading rules —
+        cream text on a white card at 1.4:1, and a title at the editor's h2
+        size — which is the screen the owner sent back as "not easy to read
+        and looks awkward". A portal puts them where AdminPage has always
+        mounted them, under <html data-theme="light">, so they render exactly
+        as they do from New set. (Modal.jsx forbids portals for ITS dialogs
+        because of DOM containment; these are not Modal and need none of it.)
+      */}
+      {addBuilder && typeof document !== 'undefined' && createPortal((() => {
+        const live = rows.filter((row) => !row.removed);
+        const appendTo = {
+          setName: questionSet?.name || setId,
+          ...addBuilder,
+          // Re-read on every render, so a mode change inside the builder sees
+          // the set as it is now.
+          categories: existingCategories(rows),
+          // The brief the set was made from — topic, audience, difficulty.
+          brief: briefFromSet(questionSet || {}),
+          // "Am I adding 25 or growing to 25?" — the builder states both.
+          existingTotal: live.length,
+          onModeChange: (mode) => setAddBuilder((current) => (current ? { ...current, mode } : current)),
+        };
+        const close = () => setAddBuilder(null);
+        if (engagementType === 'trivia') {
+          return <TriviaAIBuilder appendTo={appendTo} onClose={close} onTriviaGenerated={acceptGenerated} />;
+        }
+        if (engagementType === 'poll') {
+          return <PollAIBuilder appendTo={appendTo} onClose={close} onPollGenerated={acceptGenerated} />;
+        }
+        return (
+          <AIScenarioBuilder
+            appendTo={appendTo}
+            engagementType={engagementType}
+            onClose={close}
+            onScenariosGenerated={acceptGenerated}
+          />
+        );
+      })(), document.body)}
 
       {showPull && (
         <QuestionPullDialog

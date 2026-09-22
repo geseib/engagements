@@ -9,6 +9,8 @@ import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
+import HostReportsDialog from './components/HostReportsDialog';
+import { parseUpgradeRequired } from './utils/upgradeRequired';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
 import QuestionCard from './components/QuestionCard';
@@ -523,6 +525,8 @@ function GameHostPage() {
     nothing here survives into a session.
   */
   const [showHostSets, setShowHostSets] = useState(false);
+  const [showHostReports, setShowHostReports] = useState(false);
+  const [createRefusal, setCreateRefusal] = useState(null);
   const [eventTitle, setEventTitle] = useState('');
 
   // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
@@ -4223,8 +4227,9 @@ Focus on actionable business strategy insights.`;
    * the create call used to read them back out of the pre-reset closure.
    */
   const handleStartNewGame = async (form) => {
+    setCreateRefusal(null);
     if (!form?.setId || !form.title?.trim()) {
-      alert('Please select a question set and enter an event title.');
+      setCreateRefusal({ message: 'pick a question set and enter an event title' });
       return;
     }
     /*
@@ -4307,14 +4312,17 @@ Focus on actionable business strategy insights.`;
 
         console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${form.setId}", title "${form.title}" - showing in history`);
       } else {
-        const errorData = await createResponse.json();
+        const errorData = await createResponse.json().catch(() => ({}));
         console.error(`❌ HOST: Failed to create game:`, errorData);
-        alert(`Failed to create game: ${errorData.error || 'Unknown error'}`);
+        // A 402 is a plan fact with a way forward; anything else is a fault.
+        // Both land IN the dialog the person is looking at, not in alert().
+        setCreateRefusal(parseUpgradeRequired(createResponse, errorData)
+          || { message: errorData.error || 'Unknown error' });
         return;
       }
     } catch (error) {
       console.error('Failed to create game:', error);
-      alert('Failed to create game. Please try again.');
+      setCreateRefusal({ message: `${error.message}. Please try again.` });
       return;
     }
     
@@ -4748,6 +4756,7 @@ Focus on actionable business strategy insights.`;
           onCreateEngagement={handleWelcomeNewGame}
           onViewHistory={handleViewGameHistory}
           onQuestionSets={() => setShowHostSets(true)}
+          onReports={() => setShowHostReports(true)}
           onSignOut={handleSignOut}
         />
         {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
@@ -4763,6 +4772,9 @@ Focus on actionable business strategy insights.`;
             opens. */}
         {showHostSets && (
           <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
+        )}
+        {showHostReports && (
+          <HostReportsDialog onClose={() => setShowHostReports(false)} />
         )}
       </>
     );
@@ -4905,6 +4917,7 @@ Focus on actionable business strategy insights.`;
           }
         }}
         onCreate={handleStartNewGame}
+        refusal={createRefusal}
       />
     );
   }

@@ -258,6 +258,12 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'AIContext',
   ]),
 
+  /** A saved PDF report's index row (`report` below is the results report): PK=ORG#<org>#REPORTS, SK=REPORT#<game>#<key>.
+   *  `Title` is the same string as the session's — it is what a person
+   *  recognises in a list, and it is ciphertext on the session row, so it is
+   *  ciphertext here. The S3 key and the dates are not content. */
+  reportIndex: Object.freeze(['Title']),
+
   /** A participant's answer: SK=QUESTION#<num>#ANSWER#<player> (or ROUND#…).
    *  The single most sensitive thing in the table — what a named person said
    *  in a retrospective. */

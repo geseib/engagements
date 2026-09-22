@@ -168,6 +168,8 @@ export default function QuestionSetEditor({
    * copy, and every save after it is an ordinary in-place save of their own set.
    */
   onCopied,
+  /** `{ setsUsed, setsIncluded, mustUpgradeForSet }` from the set list, or null. */
+  setAllowance = null,
   onChanged,
   /**
    * Reports the Questions panel's unsaved working copy upward, so a container
@@ -768,6 +770,15 @@ export default function QuestionSetEditor({
   */
   const isSomebodyElses = questionSet?.canManage === false;
   /*
+    NO ROOM FOR THE COPY. Saving somebody else's set makes a copy, and
+    upload-questions refuses that copy at the stored-set allowance — AFTER the
+    person has edited, or run a generation and paid for it. The owner: "how
+    could we stop them from wasting tokens, and their time but instead
+    instruct them they need to delete one of their own sets to make room, or
+    subscribe." So the refusal is stated on arrival and every write is off.
+  */
+  const noRoomForCopy = isSomebodyElses && setAllowance?.mustUpgradeForSet === true;
+  /*
     The library the SET is in, as the list projects it (get-question-sets.js
     always sends a concrete scope — `setScopeOf(item) || ref.scope` — so an
     absent one here is a set the editor was handed without a list row, and
@@ -1307,7 +1318,19 @@ export default function QuestionSetEditor({
         {/* SAID ON ARRIVAL, not only on the button. The complaint was that it
             was "not obvious" — a label you read at the moment of pressing is
             already too late if you have spent two minutes editing. */}
-        {isSomebodyElses && (
+        {noRoomForCopy && (
+          <p className="qs-ai-provenance qs-ai-provenance--stop" role="alert" data-testid="no-room-notice">
+            <Icon name="Warning" weight="fill" size={14} color="var(--danger-text)" />{' '}
+            <strong>
+              You have no room for a copy of this set
+              {setAllowance.setsIncluded != null ? ` — ${setAllowance.setsUsed} of ${setAllowance.setsIncluded} sets used` : ''}.
+            </strong>{' '}
+            Saving or adding to a set that is not yours makes your own copy, and there is nowhere to
+            put one. Delete one of your own sets to make room, or upgrade your plan. Reading is not
+            affected.
+          </p>
+        )}
+        {isSomebodyElses && !noRoomForCopy && (
           <p className="qs-ai-provenance" data-testid="not-yours-notice">
             <Icon name="Books" weight="duotone" size={14} color="var(--primary)" />{' '}
             <strong>
@@ -1662,7 +1685,8 @@ export default function QuestionSetEditor({
             <button
               className="btn-primary"
               onClick={handleSave}
-              disabled={saveStatus === 'Saving...' || saveStatus === 'Making your copy…'}
+              disabled={noRoomForCopy || saveStatus === 'Saving...' || saveStatus === 'Making your copy…'}
+              title={noRoomForCopy ? 'No room for a copy — delete one of your own sets or upgrade.' : undefined}
             >
               <Icon name="FloppyDisk" weight="bold" size={16} color="currentColor" />{' '}
               {saveStatus === 'Saving...' || saveStatus === 'Making your copy…'
@@ -1754,6 +1778,7 @@ export default function QuestionSetEditor({
       })()}
       <QuestionsPanel
         questionSet={currentSet}
+        writesBlocked={noRoomForCopy}
         availableSets={availableSets}
         plannedVersion={plannedVersion}
         showDownload={showDownload}

@@ -3,6 +3,8 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import CountField from './CountField';
+import AppendModeSwitch from './AppendModeSwitch';
+import { isAppend, appendsToExisting, withAppendRequirement } from '../utils/appendMode';
 import RoundKindPicker from './RoundKindPicker';
 import {
   roundKindParticipantInstruction, roundKindGaps, DEFAULT_ROUND_KIND,
@@ -27,13 +29,15 @@ const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-polls`;
 const ASSIST_FORM = BUILDER_FORM_FIELDS.poll;
 
-function PollAIBuilder({ onClose, onPollGenerated }) {
+function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
+  const appendMode = appendTo?.mode;
   const [step, setStep] = useState(1);
   const [pollConfig, setPollConfig] = useState({
-    topic: '',
-    category: '',
-    audience: '',
-    difficulty: 'medium',
+    topic: appendTo?.brief?.topic || '',
+    // Adding to a set's own categories starts on the first of them.
+    category: appendsToExisting(appendTo) ? (appendTo.categories[0] || '') : '',
+    audience: appendTo?.brief?.audience || '',
+    difficulty: appendTo?.brief?.difficulty || 'medium',
     count: 10,
     allowMultiple: false,
     customPrompt: '',
@@ -45,6 +49,15 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
     roundKindBrief: '',
     roundKindInstruction: ''
   });
+  // The category follows the mode: one of the set's own in `existing`, a blank
+  // to be named in `new` (AppendModeSwitch can change it from in here).
+  useEffect(() => {
+    if (!isAppend(appendTo)) return;
+    setPollConfig((prev) => ({
+      ...prev,
+      category: appendsToExisting(appendTo) ? (appendTo.categories[0] || '') : '',
+    }));
+  }, [appendMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [generatedPolls, setGeneratedPolls] = useState([]);
   const [currentPollIndex, setCurrentPollIndex] = useState(0);
   // The last poll response, in the shape jobToResponse() actually sends. Every
@@ -90,6 +103,12 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
   ];
 
   const jobIdRef = useRef(null);
+  /* ONE PRESS, FROM THE SET. The Add questions dialog already knows the brief,
+     the categories and the count, so when it says `autoStart` this builder
+     opens GENERATING rather than on a form repeating what was just decided —
+     only if the brief carries a topic; with nothing to write about, the form
+     is the honest place to land. */
+  const autoStarted = useRef(false);
 
   /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
   const watchJob = useCallback(async (jobId) => {
@@ -169,9 +188,9 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
         category: pollConfig.category,
         audience: pollConfig.audience,
         difficulty: pollConfig.difficulty,
-        count: pollConfig.count,
+        count: appendTo?.count || pollConfig.count,
         allowMultiple: pollConfig.allowMultiple,
-        customPrompt: pollConfig.customPrompt,
+        customPrompt: withAppendRequirement(pollConfig.customPrompt, appendTo),
         roundKind: pollConfig.roundKind,
         roundKindBrief: pollConfig.roundKindBrief,
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
@@ -181,7 +200,8 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
         // to do it. The instruction in particular can only be computed here:
         // it folds in the operator's own words for a `custom` round kind,
         // which the Lambda never sees.
-        setMetadata: buildSetMetadata()
+        // ADDING makes no set: the items come back and the editor appends them.
+        ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
       rememberGenerationJob(ENDPOINT, jobId, { topic: pollConfig.topic });
@@ -192,6 +212,12 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
       setTransportError(error.message);
     }
   };
+
+  useEffect(() => {
+    if (!appendTo?.autoStart || autoStarted.current || !pollConfig.topic.trim()) return;
+    autoStarted.current = true;
+    handleConfigSubmit();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
     forgetGenerationJob(ENDPOINT);
@@ -375,7 +401,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content poll-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> AI Poll Builder</h2>
+          <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add polls to “${appendTo.setName}”` : 'AI Poll Builder'}</h2>
           <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
@@ -383,6 +409,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
           {step === 1 && (
             <div className="poll-configuration">
               <h3>Configure Your Poll Questions</h3>
+              <AppendModeSwitch appendTo={appendTo} />
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -439,15 +466,27 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                   </div>
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Category</label>
+                      <label>{isAppend(appendTo) && !appendsToExisting(appendTo) ? 'New category name' : 'Category'}</label>
                       {lockFor('category')}
                     </div>
+                    {appendsToExisting(appendTo) ? (
+                      /* This builder writes ONE category per run, so adding to a
+                         set's own categories means choosing which one. */
+                      <select
+                        aria-label="Category"
+                        value={pollConfig.category}
+                        onChange={(e) => setPollConfig(prev => ({ ...prev, category: e.target.value }))}
+                      >
+                        {appendTo.categories.map((name) => <option key={name} value={name}>{name}</option>)}
+                      </select>
+                    ) : (
                     <input
                       type="text"
                       value={pollConfig.category}
                       onChange={(e) => setPollConfig(prev => ({ ...prev, category: e.target.value }))}
                       placeholder="e.g., Team Building, Feedback, Decisions"
                     />
+                    )}
                   </div>
                 </div>
 
@@ -479,7 +518,10 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
 
                 <div className="form-row">
                   <CountField
-                      label="Poll questions to generate"
+                      label={isAppend(appendTo) ? 'New poll questions to add' : 'Poll questions to generate'}
+                      hint={isAppend(appendTo)
+                        ? `On top of the ${appendTo.existingTotal || 0} already in the set — it goes from ${appendTo.existingTotal || 0} to ${(appendTo.existingTotal || 0) + pollConfig.count}. Nothing existing is replaced.`
+                        : ''}
                       value={pollConfig.count}
                       onChange={(n) => setPollConfig((prev) => ({ ...prev, count: n }))}
                       min={1}
@@ -585,7 +627,7 @@ function PollAIBuilder({ onClose, onPollGenerated }) {
                         </button>
                       ) : (
                         <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptPolls.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptPolls.length} into System
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptPolls.length} to “${appendTo.setName}”` : `Load ${keptPolls.length} into System`}
                         </button>
                       )}
                     </>

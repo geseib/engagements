@@ -1007,6 +1007,152 @@ Resources:
   # Engage staff only (tenant.isPlatformAdmin, never an org role). It lists
   # organisations and changes one's status; there is deliberately no route from
   # here into any organisation's content, which is the isolation guarantee
+  # ── Plan requests: how a team gets past free (billing step 2) ──────────────
+  # docs/handoff/billing-experience-2026-09-22.md §2.1. Two route families on
+  # one handler: the organisation's own (owner asks, admins read, owner
+  # withdraws) and Engage's queue (staff list and decide). Both are named in
+  # auth/authorizer.js: the org routes are hosts+admins with the org role
+  # re-checked in the handler; the platform routes are the `admins` group.
+  PlanRequestsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-plan-requests'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/plan-requests.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # NO kms:Decrypt: a request carries a plan name, a code and a note the
+        # customer wrote for Engage to read — none of it tenant content.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        CreatePlanRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan-requests
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ListPlanRequests:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan-requests
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        WithdrawPlanRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan-requests/{reqId}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformPlanQueue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/plan-requests
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformPlanDecide:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/plan-requests/{orgId}/{reqId}/decide
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # ── Adjustments and discount codes: the ledger behind a bill (step 3) ──────
+  # docs/handoff/billing-experience-2026-09-22.md §2.2; mockups 16–19. Grants
+  # and codes are staff-only; an organisation's admins read their own ledger.
+  AdjustmentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-adjustments'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/adjustments.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # NO kms:Decrypt — amounts, windows and staff notes; nothing a tenant wrote.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        OrgAdjustments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/adjustments
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformOrgAdjustments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/adjustments
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformGrantAdjustment:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/adjustments
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformRevokeAdjustment:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/orgs/{orgId}/adjustments/{adjId}/revoke
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformListCodes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/codes
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformCreateCode:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/codes
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformRetireCode:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/codes/{code}/retire
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   # expressed as an API surface rather than as a promise.
   PlatformOrgsFunction:
     Type: AWS::Serverless::Function
@@ -1604,6 +1750,23 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /orgs/{orgId}/usage
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # The closed months (billing step 4) — same handler, same membership rule.
+        ListInvoices:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/invoices
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetInvoice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/invoices/{period}
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
@@ -2541,6 +2704,70 @@ Resources:
             # lambda-functions/auth/authorizer.js, which must name this route
             # explicitly. The two halves only work shipped together, and
             # tests/games-list-authorization.js pins both.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # ── Saved reports, findable after the session is gone ─────────────────────
+  GetReportsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-reports'
+      CodeUri: lambda-functions/game/
+      Handler: get-reports.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        GetReports:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /reports
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  DownloadSavedReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-download-saved-report'
+      CodeUri: lambda-functions/game/
+      Handler: download-saved-report.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          REPORTS_BUCKET_NAME: !Ref ReportsBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        - S3ReadPolicy:
+            BucketName: !Ref ReportsBucket
+      Events:
+        DownloadSavedReport:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /reports/download
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -4504,9 +4731,20 @@ Resources:
         RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
+          # TWO RULES, BY PREFIX. One unfiltered 90-day rule used to cover the
+          # whole bucket, so a report saved as "Permanent (1 year)" — which only
+          # ever meant a `permanent/` prefix — died at day 90 with the rest. The
+          # report's index row (save-report.js) carries a matching ttl.
           - Id: DeleteOldReports
             Status: Enabled
+            TagFilters:
+              - Key: retention
+                Value: standard
             ExpirationInDays: 90
+          - Id: DeletePermanentReportsAfterAYear
+            Status: Enabled
+            Prefix: permanent/
+            ExpirationInDays: 365
       Tags:
         - Key: Environment
           Value: !Ref Environment

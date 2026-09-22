@@ -1,7 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 
-const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
+const { gamesIndexPk, callerMayDriveSession, GAMES_RESERVATION_PK } = require('./tenant');
+const { startedTtl } = require('./session-ttl');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -65,36 +66,50 @@ exports.handler = async (event) => {
 
     // Update game state to STARTED
     const now = new Date().toISOString();
+    // A started session expires 7 days on (session-ttl.js) — on every one of
+    // its rows, including the reservation, or the code stays taken forever.
+    const ttl = startedTtl(now);
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #state = :state, #started = :started, #updatedAt = :updatedAt, #startedAt = :startedAt',
+      UpdateExpression: 'SET #state = :state, #started = :started, #updatedAt = :updatedAt, #startedAt = :startedAt, #ttl = :ttl',
       ExpressionAttributeNames: {
         '#state': 'State',
         '#started': 'Started',
         '#updatedAt': 'UpdatedAt',
-        '#startedAt': 'StartedAt'
+        '#startedAt': 'StartedAt',
+        '#ttl': 'ttl'
       },
       ExpressionAttributeValues: {
         ':state': 'STARTED',
         ':started': true,
         ':updatedAt': now,
-        ':startedAt': now
+        ':startedAt': now,
+        ':ttl': ttl
       }
+    }));
+    await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` },
+      UpdateExpression: 'SET #ttl = :ttl',
+      ExpressionAttributeNames: { '#ttl': 'ttl' },
+      ExpressionAttributeValues: { ':ttl': ttl }
     }));
 
     // Update METADATA with Started flag and LastPlayedAt
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt',
+      UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt, #ttl = :ttl',
       ExpressionAttributeNames: {
         '#started': 'Started',
-        '#lastPlayedAt': 'LastPlayedAt'
+        '#lastPlayedAt': 'LastPlayedAt',
+        '#ttl': 'ttl'
       },
       ExpressionAttributeValues: {
         ':started': true,
-        ':lastPlayedAt': now
+        ':lastPlayedAt': now,
+        ':ttl': ttl
       }
     }));
 
@@ -123,14 +138,16 @@ exports.handler = async (event) => {
       await db.send(new UpdateCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: gamesIndexPk(orgId), SK: `GAME#${gameId}` },
-        UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt',
+        UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt, #ttl = :ttl',
         ExpressionAttributeNames: {
           '#started': 'Started',
-          '#lastPlayedAt': 'LastPlayedAt'
+          '#lastPlayedAt': 'LastPlayedAt',
+        '#ttl': 'ttl'
         },
         ExpressionAttributeValues: {
           ':started': true,
-          ':lastPlayedAt': now
+          ':lastPlayedAt': now,
+        ':ttl': ttl
         }
       }));
     } else {

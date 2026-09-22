@@ -39,7 +39,8 @@ describe('platform staff (mockups 10 and 11)', () => {
     // Engage's OWN library is here (labelled "Shared library"); a customer's
     // content is not, and there is no link that could reach one. See
     // consoleModes.test.js for why "no content at all" stopped being the rule.
-    expect(ids(PLATFORM)).toEqual(['orgs', 'questionsets', 'publiclibrary', 'moderation', 'users', 'archive']);
+    // 'planrequests' joined 2026-09-22 (billing step 2): the one thing staff DO for a customer.
+    expect(ids(PLATFORM)).toEqual(['orgs', 'planrequests', 'discountcodes', 'questionsets', 'publiclibrary', 'moderation', 'users', 'archive']);
     expect(ids(PLATFORM)).not.toContain('games');
     expect(ids(PLATFORM)).not.toContain('prompts');
     expect(ids(PLATFORM)).not.toContain('library');

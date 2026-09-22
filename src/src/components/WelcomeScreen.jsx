@@ -3,6 +3,7 @@ import ActiveOrgSwitcher from './ActiveOrgSwitcher';
 import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 import HelpButton from './HelpButton';
+import BrandMark from './BrandMark';
 
 /**
  * The host's front door: the screen before any session exists.
@@ -64,6 +65,7 @@ export default function WelcomeScreen({
   onQuickStart,
   onCreateEngagement,
   onViewHistory,
+  onReports,
   onQuestionSets,
   onSignOut,
 }) {
@@ -97,6 +99,7 @@ export default function WelcomeScreen({
               not link their brand, where one stray tap would take a projector
               or a participant out of a live round. */}
           <a className="wel-brand" href="/home">
+            <BrandMark size={24} />
             Engagements {env && <span className="wel-env">{env}</span>}
           </a>
 
@@ -299,6 +302,19 @@ export default function WelcomeScreen({
                     it, or read its report.
                   </p>
                 </div>
+
+                {onReports && (
+                  <div className="wel-link">
+                    {/* Sessions expire a week after they start; a saved report
+                        does not. This is where it is found afterwards. */}
+                    <button type="button" className="wel-btn wel-btn-line" onClick={() => onReports()}>
+                      Reports
+                    </button>
+                    <p className="wel-meta">
+                      Every report you saved — still here after the session itself has expired.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </aside>

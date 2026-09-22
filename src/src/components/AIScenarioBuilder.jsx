@@ -5,8 +5,9 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
-import CountField from './CountField';
-import { categorySpread } from '../utils/categorySpread';
+import { SetSizeField } from './CountField';
+import AppendModeSwitch from './AppendModeSwitch';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
 import {
@@ -49,8 +50,10 @@ const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 // words for it, and the game measures how many words overlap across players.
 const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
 
-function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer' }) {
+function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer', appendTo = null }) {
   const [step, setStep] = useState(1);
+  const autoStarted = useRef(false);
+  const [pendingAutoSubmit, setPendingAutoSubmit] = useState(false);
   // The saved-template deck, folded shut where the sample ideas lead. The
   // owner, after the samples landed: "it can still use more work in dealing
   // with the old sample [templates]" — nine admin-tuned cards under three
@@ -59,10 +62,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [scenarioConfig, setScenarioConfig] = useState({
     type: '',
-    context: '',
-    audience: '',
+    // ADDING TO A SET starts from what that set says about itself.
+    context: appendTo?.brief?.context || '',
+    audience: appendTo?.brief?.audience || '',
     difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
-    count: 5,
+    count: 6,
     customPrompt: '',
     customTitle: '',
     numberOfCategories: 3,
@@ -448,7 +452,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setScenarioConfig(prev => ({
       ...prev,
       type,
-      ...templateDefaults
+      ...templateDefaults,
+      // ADDING TO A SET: the card chooses the template, but what the set says
+      // about itself — its context and audience — outranks the card's defaults.
+      ...(isAppend(appendTo) ? {
+        context: appendTo.brief?.context || templateDefaults.context,
+        audience: appendTo.brief?.audience || templateDefaults.audience,
+        ...(appendsToExisting(appendTo) ? appendCategoryDefaults(appendTo) : { mustHaveCategories: '' }),
+      } : {}),
     }));
     setStep(2);
   };
@@ -534,6 +545,66 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setGenerationStatus('Reconnecting to the job you left…');
     watchJob(stored.jobId);
   }, [watchJob]);
+
+  /*
+    ONE PRESS, FROM THE SET. Trivia and Poll auto-start on mount; this builder
+    could not, because generation needs a topic card and a direction. Adding
+    to a set answers both: the card is "custom" (the set is its own topic —
+    context is the set's name or its recorded Context), and the direction is
+    the set's own round kind. So in append mode with `autoStart` the config is
+    filled here and submitted once it has settled, and the person lands on the
+    generating screen — the same experience as trivia. If the set's kind is
+    `custom` with no brief, there is nothing honest to generate from and the
+    form is shown instead.
+  */
+  useEffect(() => {
+    if (!appendTo?.autoStart || autoStarted.current) return;
+    const custom = scenarioTypes.find((t) => /custom/.test(t.id));
+    if (!custom) return;
+    const kind = appendTo.brief?.roundKind || scenarioConfig.roundKind;
+    // A `custom` kind needs its brief AND its instruction; the set carries
+    // both (roundKindBrief, customInstruction). Missing them, the form is the
+    // only honest place — but the person is told why, not just dropped there.
+    const gaps = roundKindApplies(engagementType)
+      ? roundKindGaps(kind, {
+        brief: appendTo.brief?.roundKindBrief || '',
+        instruction: appendTo.brief?.roundKindInstruction || '',
+      })
+      : [];
+    if (gaps.length > 0) {
+      autoStarted.current = true;
+      setScenarioConfig((prev) => ({
+        ...prev,
+        roundKind: kind,
+        roundKindBrief: appendTo.brief?.roundKindBrief || prev.roundKindBrief,
+        roundKindInstruction: appendTo.brief?.roundKindInstruction || prev.roundKindInstruction,
+      }));
+      setGenerationStatus(`This set's direction is "Something else" and it did not record ${gaps.join(' or ')} — fill it in below and pick a topic card to continue.`);
+      return;
+    }
+    autoStarted.current = true;
+    setScenarioConfig((prev) => ({
+      ...prev,
+      type: custom.id,
+      roundKind: kind,
+      roundKindBrief: appendTo.brief?.roundKindBrief || prev.roundKindBrief,
+      roundKindInstruction: appendTo.brief?.roundKindInstruction || prev.roundKindInstruction,
+      context: appendTo.brief?.context || prev.context,
+      audience: appendTo.brief?.audience || prev.audience,
+      count: appendTo.count || prev.count,
+      ...(appendsToExisting(appendTo)
+        ? appendCategoryDefaults(appendTo)
+        : { numberOfCategories: appendTo.numberOfCategories || prev.numberOfCategories, mustHaveCategories: '' }),
+    }));
+    setStep(2);
+    setPendingAutoSubmit(true);
+  }, [scenarioTypes.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!pendingAutoSubmit || !scenarioConfig.type) return;
+    setPendingAutoSubmit(false);
+    handleConfigSubmit();
+  }, [pendingAutoSubmit, scenarioConfig.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
     forgetGenerationJob(ENDPOINT);
@@ -696,10 +767,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         difficulty: scenarioConfig.difficulty,
         context: scenarioConfig.context,
         audience: scenarioConfig.audience,
-        customPrompt: scenarioConfig.customPrompt,
+        customPrompt: withAppendRequirement(scenarioConfig.customPrompt, appendTo),
         customTitle: scenarioConfig.customTitle,
         numberOfCategories: scenarioConfig.numberOfCategories,
         mustHaveCategories: scenarioConfig.mustHaveCategories,
+        // ADDING TO A SET'S OWN CATEGORIES: forced at send time, because
+        // choosing a topic card resets both fields from the prompt's defaults.
+        ...appendCategoryDefaults(appendTo),
+        ...(isAppend(appendTo) ? { appendOnly: true } : {}),
         // DIRECTION. The backend puts this IN FRONT OF the topic's basePrompt,
         // because basePrompt used to be the first thing the model read and
         // first is what a model follows — which is why typing an Apply brief
@@ -717,7 +792,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         // round kind, the chosen topic card's title, the STAR addendum. A
         // second server-side implementation of generateCustomInstructions()
         // would drift from this one on the first change to either.
-        setMetadata: {
+        // An append-only run makes no set, so it is sent no title to make one with.
+        setMetadata: isAppend(appendTo) ? undefined : {
           title: generateTitle(),
           description: generateDescription(),
           customInstructions: generateCustomInstructions(),
@@ -1010,13 +1086,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       <div className="modal-overlay" onClick={onClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder</h2>
+          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder{isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}</h2>
           <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
           {step === 1 && (
             <div className="scenario-type-selection">
+              <AppendModeSwitch appendTo={appendTo} />
               {/*
                 TWO CONTROLS, NOT ONE, AND IN THIS ORDER.
 
@@ -1251,7 +1328,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               />
 
               <div className="config-form">
-                <div className="form-group">
+                {/* NO TITLE WHEN ADDING. The set already has one, and these
+                    questions join it — the owner: "you shouldnt get to set the
+                    question set title when adding questions." Hidden, not just
+                    disabled: a title box here implies the run makes a set. */}
+                <div className="form-group" style={isAppend(appendTo) ? { display: 'none' } : undefined}>
                   <div className="label-row">
                     <label>Question Set Title</label>
                     {lockFor('customTitle')}
@@ -1305,18 +1386,20 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                     track's right-hand end, where it is a place rather than a
                     sentence.
                   */}
-                  <CountField
-                    label="Categories to spread them across"
-                    value={scenarioConfig.numberOfCategories}
-                    onChange={(n) => setScenarioConfig((prev) => ({ ...prev, numberOfCategories: n }))}
-                    min={1}
-                    max={24}
-                    presets={[1, 3, 6, 12]}
-                    hint={`${categorySpread(scenarioConfig.count, scenarioConfig.numberOfCategories, itemNoun(engagementType))} Categories are what the host can switch on and off mid-session.`}
+                  <SetSizeField
+                    count={scenarioConfig.count}
+                    categories={scenarioConfig.numberOfCategories}
+                    onChange={({ count, categories }) => setScenarioConfig((prev) => ({ ...prev, count, numberOfCategories: categories }))}
+                    noun={itemNoun(engagementType)}
+                    maxTotal={50}
+                    lockedCategories={appendsToExisting(appendTo) ? appendTo.categories : null}
+                    adding={isAppend(appendTo) ? { existingTotal: appendTo.existingTotal || 0 } : null}
+                    maxCategories={isAppend(appendTo) && !appendsToExisting(appendTo) ? Math.max(1, 24 - appendTo.categories.length) : 24}
+                    hint="Categories are what the host can switch on and off mid-session."
                   />
-                  <div className="form-group">
+                  <div className="form-group" style={appendsToExisting(appendTo) ? { display: 'none' } : undefined}>
                     <div className="label-row">
-                      <label>Must Have Categories</label>
+                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Must Have Categories'}</label>
                       {lockFor('mustHaveCategories')}
                     </div>
                     <input
@@ -1352,15 +1435,6 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                       )}
                     </select>
                   </div>
-
-                  <CountField
-                      label={`${itemNoun(engagementType).replace(/^./, (c) => c.toUpperCase())} to generate`}
-                      value={scenarioConfig.count}
-                      onChange={(n) => setScenarioConfig((prev) => ({ ...prev, count: n }))}
-                      min={1}
-                      max={50}
-                      presets={[3, 5, 10, 20]}
-                    />
                 </div>
 
                 <div className="form-group">
@@ -1448,7 +1522,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                         </button>
                       ) : (
                         <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> Load {keptScenarios.length} into System
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptScenarios.length} to “${appendTo.setName}”` : `Load ${keptScenarios.length} into System`}
                         </button>
                       )}
                     </>

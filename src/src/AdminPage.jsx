@@ -8,8 +8,13 @@ import AIGenerationPromptEditor from './components/AIGenerationPromptEditor';
 import ArchivePanel from './components/ArchivePanel';
 import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
+import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
+import PlanRequestsPanel from './components/PlanRequestsPanel';
+import DiscountCodesPanel from './components/DiscountCodesPanel';
+import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
+import PlanRequestDialog from './components/PlanRequestDialog';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
 import PublicLibraryPanel from './components/PublicLibraryPanel';
@@ -24,7 +29,8 @@ import QuestionSetsPanel from './components/QuestionSetsPanel';
 import { checkIsDue, houseCheckNotice } from './utils/houseCheck';
 import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
-import QuestionSetUploadPanel from './components/QuestionSetUploadPanel';
+import NewSetDialog from './components/NewSetDialog';
+import { parseUpgradeRequired } from './utils/upgradeRequired';
 import AdminShell from './components/AdminShell';
 import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
@@ -76,6 +82,14 @@ const ADMIN_SECTIONS = [
     icon: 'GameController',
     title: 'Sessions',
     subtitle: 'What hosts have run. Data here expires: 90 days from creation, 7 days after last play.',
+    contentTheme: 'dark',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: 'FileText',
+    title: 'Reports',
+    subtitle: 'Saved PDFs. They outlive their session: 90 days from saving, a year if kept.',
     contentTheme: 'dark',
   },
   {
@@ -202,6 +216,21 @@ function AdminPage() {
   const [sharing, setSharing] = useState(null);
   // Whether the creation panel under the list is open.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // The caller's room for one more set, from GET /admin/question-sets — read
+  // by the editor before anyone spends a generation on a set they cannot keep.
+  const [setAllowance, setSetAllowance] = useState(null);
+  // The last 402 an upload took, handed to BillingPanel as `refusal`.
+  const [uploadRefusal, setUploadRefusal] = useState(null);
+  // BILLING STEP 2 — the org's latest plan request, the dialog, and the
+  // platform queue's waiting count for the nav badge.
+  const [planRequest, setPlanRequest] = useState(null);
+  const [showPlanRequest, setShowPlanRequest] = useState(false);
+  const [planRequestBusy, setPlanRequestBusy] = useState(false);
+  const [planRequestCount, setPlanRequestCount] = useState(null);
+  const [orgAdjustments, setOrgAdjustments] = useState(null);
+  // BILLING STEP 4 — a PLACE inside the Billing section: '' = Plan & usage,
+  // 'history' = Billing history, 'yyyy-mm' = that month's invoice.
+  const [billingPlace, setBillingPlace] = useState('');
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -384,6 +413,48 @@ function AdminPage() {
     })();
     return () => { cancelled = true; };
   }, [activeTab, activeOrgId]);
+
+  /* The latest plan request, read with the Billing section for the same
+     reasons as usage above. Admins may read it; a member's 403 is not an
+     error worth showing — they never see the strip. */
+  const loadPlanRequest = React.useCallback(async () => {
+    if (!activeOrgId) return;
+    try {
+      const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/plan-requests`));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setPlanRequest(null); return; }
+      setPlanRequest((data.requests || [])[0] || null);
+      // The plan may have changed under us (an approval): the route answers
+      // with the org's plan as it is NOW, so the chip and the panel follow it.
+      if (data.plan) {
+        setOrgs((list) => list.map((o) => (o.orgId === activeOrgId && o.plan !== data.plan ? { ...o, plan: data.plan } : o)));
+      }
+    } catch { setPlanRequest(null); }
+  }, [activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeTab !== 'billing' || !activeOrgId) return;
+    loadPlanRequest();
+    // The ledger, read-only for the customer (step 3). Members get a 403 and
+    // see no panel, which is the design.
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/adjustments`));
+        const data = await res.json().catch(() => ({}));
+        setOrgAdjustments(res.ok ? (data.adjustments || []) : null);
+      } catch { setOrgAdjustments(null); }
+    })();
+  }, [activeTab, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const withdrawPlanRequest = async () => {
+    if (!planRequest || !activeOrgId) return;
+    setPlanRequestBusy(true);
+    try {
+      await authFetch(adminApiUrl(`orgs/${activeOrgId}/plan-requests/${encodeURIComponent(planRequest.reqId)}`), { method: 'DELETE' });
+      await loadPlanRequest();
+    } finally {
+      setPlanRequestBusy(false);
+    }
+  };
 
   // The score card is a PLACE inside the platform Public library section, the
   // same way the set editor is a place inside Question sets — see the shell's
@@ -986,6 +1057,7 @@ function AdminPage() {
       const res = await authFetch(`${API_BASE}admin/question-sets`);
       const json = await res.json();
       setQuestionSets(json.questionSets || []);
+      setSetAllowance(json.setAllowance || null);
     } catch (error) {
       console.error('Error fetching question sets:', error);
     } finally {
@@ -1075,7 +1147,17 @@ function AdminPage() {
         setNotice({ text: `${result.message} — question set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        // A 402 is a plan fact, not an upload fault: keep it for the Billing
+        // section (which renders the refusal with its numbers and the way
+        // forward) and say so here with the link.
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) setUploadRefusal(limit);
+        setNotice({
+          text: limit
+            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
+            : `Upload failed: ${result.error || 'Unknown error'}`,
+          tone: 'error',
+        });
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1167,7 +1249,17 @@ function AdminPage() {
         setNotice({ text: `${result.message} — trivia set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        // A 402 is a plan fact, not an upload fault: keep it for the Billing
+        // section (which renders the refusal with its numbers and the way
+        // forward) and say so here with the link.
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) setUploadRefusal(limit);
+        setNotice({
+          text: limit
+            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
+            : `Upload failed: ${result.error || 'Unknown error'}`,
+          tone: 'error',
+        });
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1276,7 +1368,17 @@ function AdminPage() {
         setNotice({ text: `${result.message} — poll set created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        // A 402 is a plan fact, not an upload fault: keep it for the Billing
+        // section (which renders the refusal with its numbers and the way
+        // forward) and say so here with the link.
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) setUploadRefusal(limit);
+        setNotice({
+          text: limit
+            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
+            : `Upload failed: ${result.error || 'Unknown error'}`,
+          tone: 'error',
+        });
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1400,8 +1502,10 @@ function AdminPage() {
 
   /** The three ranked paths from mockup 02, and the header's New set button. */
   const handleCreatePath = (path) => {
-    setIsCreateOpen((open) => (path === 'new' ? !open : true));
-    if (path === 'ai') handleOpenBuilder(engagementType);
+    // The AI path goes straight to its builder — a dialog of its own, so the
+    // new-set dialog is not opened underneath it (never a modal from a modal).
+    if (path === 'ai') { setIsCreateOpen(false); handleOpenBuilder(engagementType); return; }
+    setIsCreateOpen(true);
   };
 
   /*
@@ -1596,6 +1700,11 @@ function AdminPage() {
             if (item.id === 'moderation') {
               return { ...item, count: moderationCount || undefined };
             }
+            // Requests waiting on Engage: the one number here that is a
+            // customer waiting. A badge, not a count, for that reason.
+            if (item.id === 'planrequests') {
+              return { ...item, badge: planRequestCount || undefined };
+            }
             return item;
           }),
         }))}
@@ -1629,19 +1738,25 @@ function AdminPage() {
         currentUser={currentUser}
         onSignOut={handleSignOut}
         breadcrumb={
-          editingSet
+          billingPlace && resolvedTab === 'billing'
+            ? (billingPlace === 'history'
+              ? { parentLabel: 'Plan & usage', onBack: () => setBillingPlace('') }
+              : { parentLabel: 'Billing history', onBack: () => setBillingPlace('history') })
+            : editingSet
             ? { parentLabel: 'Question sets', onBack: handleCancelEdit }
             : (scoreCardId && resolvedTab === 'publiclibrary'
               ? { parentLabel: 'Public library', onBack: () => setScoreCardId('') }
               : null)
         }
         title={
-          editingSet
+          billingPlace && resolvedTab === 'billing'
+            ? (billingPlace === 'history' ? 'Billing history' : `Invoice · ${periodLabel(billingPlace)}`)
+            : editingSet
             ? editingSet.name || editingSet.id
             : (scoreCardId && resolvedTab === 'publiclibrary' ? 'Score card' : section.title)
         }
         subtitle={
-          editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
+          (billingPlace && resolvedTab === 'billing') || editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
             ? undefined
             : section.subtitle
         }
@@ -1684,6 +1799,7 @@ function AdminPage() {
           */
           <QuestionSetEditor
             questionSet={editingSet}
+            setAllowance={setAllowance}
             availablePrompts={availablePrompts}
             availablePersonas={availablePersonas}
             // Every set the caller can see, for the Questions panel's
@@ -1849,19 +1965,22 @@ function AdminPage() {
               onShare={handleShareSet}
               createOpen={isCreateOpen}
             >
-              {(isCreateOpen || visibleSets.length === 0) && (
-                <QuestionSetUploadPanel
+              {/*
+                THE NEW-SET DIALOG. It used to be a panel appended below the
+                table — below forty-one rows, off the bottom of the screen — and
+                it also rendered itself unasked whenever the library was empty.
+                It is a dialog now, opened only by a press: the header's New set
+                button, or one of the empty state's three ranked paths.
+              */}
+              {isCreateOpen && (
+                <NewSetDialog
+                  onClose={() => setIsCreateOpen(false)}
                   /* In the Engage console a new set belongs to the SHARED
                      library, not to the admin's own space. Without this the
                      server's default picks the caller's organisation — and an
                      Engage admin always has one — so "add to the shared
                      library" would quietly create a personal set. */
                   scope={onPlatform ? 'platform' : ''}
-                  /* Only when the person PRESSED something. The condition above
-                     also renders this panel on arrival when the library is
-                     empty, and scrolling then would move the page in response
-                     to nothing. */
-                  scrollIntoViewOnMount={isCreateOpen}
                   engagementType={engagementType}
                   onEngagementTypeChange={setEngagementType}
                   /* The upload panel draws no empty-library sentence, so it
@@ -1907,6 +2026,10 @@ function AdminPage() {
               frame now (ArchivePanel.css). */}
           {resolvedTab === 'archive' && <ArchivePanel environment={environment} />}
 
+          {/* THE REPORTS LIST — docs/design/reports-list. A report used to be
+              findable only through its session, which now expires. */}
+          {resolvedTab === 'reports' && <ReportsPanel />}
+
           {/* No .tab-content wrapper: that class carries a 500px min-height and
               a fade-in written for the paper tabs, and the converted screens
               own their own frame. */}
@@ -1934,6 +2057,17 @@ function AdminPage() {
           )}
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
+          {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
+          {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
+
+          {showPlanRequest && activeOrg && (
+            <PlanRequestDialog
+              orgId={activeOrgId}
+              orgName={activeOrg.name || activeOrgId}
+              onClose={() => setShowPlanRequest(false)}
+              onRequested={(req) => { setShowPlanRequest(false); setPlanRequest(req); setNotice({ text: 'Your request is with Engage. You will see the decision here.', tone: 'success' }); }}
+            />
+          )}
 
           {/* THE ORG CONSOLE'S PUBLIC LIBRARY — every public row, read as a
               member: preview (the read-only editor, the same place the list's
@@ -2003,14 +2137,37 @@ function AdminPage() {
             <TeamPanel orgId={activeOrg.orgId} orgName={activeOrg.name} />
           )}
 
-          {resolvedTab === 'billing' && activeOrg && (
+          {resolvedTab === 'billing' && activeOrg && billingPlace === 'history' && (
+            <BillingHistory orgId={activeOrgId} onOpen={(p) => setBillingPlace(p)} onBack={() => setBillingPlace('')} />
+          )}
+          {resolvedTab === 'billing' && activeOrg && billingPlace && billingPlace !== 'history' && (
+            <Invoice orgId={activeOrgId} period={billingPlace} onBack={() => setBillingPlace('history')} />
+          )}
+          {resolvedTab === 'billing' && activeOrg && !billingPlace && (
             <BillingPanel
               planId={activeOrg.plan || (activeOrg.type === 'personal' ? 'personal' : 'team')}
               usage={orgUsage?.usage}
               period={orgUsage?.period}
               history={orgUsage?.history}
               error={orgUsageError}
-              onUpgrade={() => setCreatingOrg(true)}
+              refusal={uploadRefusal}
+              planRequest={planRequest}
+              adjusted={orgUsage?.adjusted || null}
+              adjustments={orgAdjustments}
+              onBillingHistory={() => setBillingPlace('history')}
+              onInvoice={(row) => setBillingPlace(row.period)}
+              /* Owner only (handoff §2.7 Q5 — the same rule as redeeming a
+                 code). A personal space has one member and they own it. */
+              onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}
+              onWithdrawRequest={withdrawPlanRequest}
+              requestBusy={planRequestBusy}
+              /*
+                NO `onUpgrade` — deliberately. It opened "Create a team", which
+                creates ANOTHER FREE organisation and upgrades nothing; a
+                person at their limit who pressed it ended up with two capped
+                orgs. Until the plan-request flow exists (billing handoff §2.1)
+                there is no honest control to draw, so the panel draws none.
+              */
             />
           )}
 

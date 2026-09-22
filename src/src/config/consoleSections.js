@@ -182,6 +182,27 @@ const SECTION = {
     contentTheme: 'dark',
   },
   /*
+    PLAN REQUESTS — the one thing staff DO for a customer (mockup 15). Its own
+    section rather than a tab under Organisations because a request nobody
+    sees is a customer nobody answered: the nav carries the waiting count.
+  */
+  discountcodes: {
+    id: 'discountcodes',
+    label: 'Discount codes',
+    icon: 'FlagCheckered',
+    title: 'Discount codes',
+    subtitle: 'A code is redeemed by a team owner when they request the plan, and applied on approval. Each use is a row on that team.',
+    contentTheme: 'dark',
+  },
+  planrequests: {
+    id: 'planrequests',
+    label: 'Plan requests',
+    icon: 'CreditCard',
+    title: 'Plan requests',
+    subtitle: 'Teams asking for the Team plan. A decision needs a note — the customer reads it.',
+    contentTheme: 'dark',
+  },
+  /*
     THE PLATFORM CONSOLE'S PUBLIC LIBRARY — the same public rows `library`
     shows an organisation, read as Engage: open the score card or unpublish.
     A separate id from `library` (unlike `platformsets`/`questionsets`
@@ -282,6 +303,8 @@ export function sectionsFor({
        and `defaultSectionIdFor` takes the first item of the first group. */
     return [group('platform', 'Engage', [
       SECTION.orgs,
+      SECTION.planrequests,
+      SECTION.discountcodes,
       SECTION.platformsets,
       SECTION.publiclibrary,
       SECTION.moderation,

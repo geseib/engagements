@@ -1,0 +1,48 @@
+/* components/AdjustmentsLedger.jsx — the ledger list and the bill in miniature.
+   One scope, `.adjl`, mounted inside `.bill` (the customer's Plan & usage) and
+   inside the platform billing drawer; it declares its own locals for the
+   reason every sheet here does. Measured on --bg #0F1A2E and --surface #1B2942
+   (adjustmentsLedgerPalette.test.js): --text 14.97 / 12.5, --muted 7.24 / 6.1,
+   success ink #6FD0A4 8.9 / 7.4 — the negative amounts. */
+.adjl, .adjl-bill, .adjl-empty {
+  --adjl-t-floor: 12px;
+  --adjl-t-label: 13px;
+  --adjl-t-body: 15px;
+  --adjl-t-head: 19px;
+  --adjl-rule: rgba(155, 168, 190, .20);
+  --adjl-rule-strong: rgba(155, 168, 190, .34);
+  --adjl-success-text: #6FD0A4;
+  --adjl-tint-note: rgba(155, 168, 190, .06);
+  color: var(--text);
+  font: 400 var(--adjl-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.adjl { list-style: none; margin: 0; padding: 0; }
+.adjl-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--adjl-rule); }
+.adjl-row:last-child { border-bottom: 0; }
+.adjl-ico { margin-top: 2px; color: var(--primary); }
+.adjl-row--off .adjl-ico, .adjl-row--off .adjl-name, .adjl-row--off .adjl-sub { color: var(--muted); }
+.adjl-main { min-width: 0; }
+.adjl-name { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-weight: 700; }
+.adjl-amt { margin-left: auto; font-family: var(--font-display); font-weight: 800; white-space: nowrap; }
+.adjl-sub { display: block; font-size: var(--adjl-t-label); color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.adjl-chip { display: inline-flex; align-items: center; font-size: var(--adjl-t-floor); font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--adjl-rule-strong); color: var(--text); }
+.adjl-chip--active { border-color: rgba(79, 178, 134, .5); }
+.adjl-chip--upcoming { color: var(--muted); }
+.adjl-chip--ended { color: var(--muted); border-style: dashed; }
+.adjl-chip--revoked { color: var(--danger-text); border-color: rgba(229, 100, 94, .5); }
+.adjl-btn { height: 26px; padding: 0 9px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--danger-text); font: 600 var(--adjl-t-floor)/1 var(--font-ui); cursor: pointer; white-space: nowrap; }
+.adjl-btn:hover { border-color: rgba(229, 100, 94, .55); }
+.adjl-empty { margin: 0; color: var(--muted); }
+
+/* the bill */
+.adjl-bill { border: 1px solid var(--adjl-rule); border-radius: 10px; overflow: hidden; }
+.adjl-bill-r { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--adjl-rule); font-size: var(--adjl-t-label); }
+.adjl-bill-r > span:first-child { min-width: 0; }
+.adjl-bill-tot { font-size: var(--adjl-t-body); font-weight: 700; }
+.adjl-bill-tot b { font-family: var(--font-display); font-size: var(--adjl-t-head); font-weight: 800; }
+.adjl-neg { color: var(--adjl-success-text); white-space: nowrap; }
+.adjl-dim { color: var(--muted); }
+.adjl-sim { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 14px; border-top: 1px solid var(--adjl-rule); border-left: 3px solid var(--primary); background: var(--adjl-tint-note); font-size: var(--adjl-t-label); line-height: 1.5; }
+.adjl-sim svg { flex: none; margin-top: 2px; color: var(--primary); }
+.adjl-order { margin: 0; padding: 8px 14px 10px; font-size: var(--adjl-t-floor); color: var(--muted); line-height: 1.5; }

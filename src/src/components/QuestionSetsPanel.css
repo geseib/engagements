@@ -737,6 +737,51 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    sized for the confirm dialogs. The 98-character set title that `.qsets-modal`
    guards against is still handled by its `overflow-wrap: anywhere`.
    ========================================================================== */
+/* THE CONSOLE'S "NEW SET" DIALOG — components/NewSetDialog.jsx. Wide, because
+   it carries the route cards and the upload form; tall, with the card itself
+   scrolling, because that form is longer than a laptop screen. The panel inside
+   drops its own box: a bordered panel inside a bordered card is a box in a box. */
+.qsets-modal--create { width: min(920px, 100%); max-height: 90vh; }
+.qsets-modal--create > footer { position: sticky; bottom: 0; background: var(--surface); }
+.qsets-panel--bare { border: 0; padding: 0; margin: 0; background: transparent; }
+
+/* ADD QUESTIONS — components/AddQuestionsDialog.jsx. The set is the hero, its
+   balance is drawn, the ask is one sentence and one button. Tokens are the
+   `.qsets` scope's; the "added" band is --primary at full so the change reads
+   before the number does. */
+.qsets .addq { width: min(640px, 100%); }
+.qsets .addq-head { padding: 22px 24px 6px; display: flex; gap: 10px; align-items: flex-start; }
+.qsets .addq-kicker { margin: 0 0 4px; font-size: var(--qsets-t-floor); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.qsets .addq-title { margin: 0; font: 800 24px/1.15 var(--font-display); overflow-wrap: anywhere; }
+.qsets .addq-body { padding: 8px 24px 24px; display: flex; flex-direction: column; gap: 18px; }
+.qsets .addq-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.qsets .addq-bar { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 76px; gap: 12px; align-items: center; min-height: 24px; }
+.qsets .addq-bar-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--qsets-t-label); font-weight: 600; }
+.qsets .addq-bar--new .addq-bar-name { color: var(--muted); font-style: italic; }
+.qsets .addq-bar-track { position: relative; height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.qsets .addq-bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--muted); border-radius: 5px; }
+.qsets .addq-bar-add { position: absolute; top: 0; bottom: 0; background: var(--primary); border-radius: 0 5px 5px 0; transition: width .18s ease, left .18s ease; }
+.qsets .addq-bar-n { font-size: var(--qsets-t-label); font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); }
+.qsets .addq-bar-n b { color: var(--text); }
+.qsets .addq-say { display: flex; flex-direction: column; gap: 8px; }
+.qsets .addq-line { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--qsets-rule); border-radius: 10px; cursor: pointer; font-size: var(--qsets-t-body); line-height: 1.5; }
+.qsets .addq-line.is-on { border-color: var(--primary); }
+.qsets .addq-line.is-off { opacity: .55; cursor: not-allowed; }
+.qsets .addq-line input { accent-color: var(--primary); flex: none; }
+.qsets .addq-line small { color: var(--muted); }
+.qsets .addq-num { display: inline-flex; gap: 3px; margin: 0 2px; vertical-align: middle; }
+.qsets .addq-pill { height: 28px; min-width: 32px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--qsets-rule-strong); background: transparent; color: var(--text); font: 700 var(--qsets-t-label)/1 var(--font-ui); cursor: pointer; font-variant-numeric: tabular-nums; }
+.qsets .addq-pill.is-on { background: var(--primary); border-color: var(--primary-deep); color: var(--bg); }
+.qsets .addq-sum { margin: 2px 0 0 4px; color: var(--muted); font-size: var(--qsets-t-label); }
+.qsets .addq-sum b { color: var(--text); font-size: var(--qsets-t-head); }
+.qsets .addq-go { display: inline-flex; align-items: center; justify-content: center; gap: 10px; align-self: flex-start; height: 48px; padding: 0 22px; border-radius: 12px; border: 1px solid var(--primary-deep); background: var(--primary); color: var(--bg); font: 800 var(--qsets-t-head)/1 var(--font-display); cursor: pointer; }
+.qsets .addq-go:hover { filter: brightness(1.05); }
+.qsets .addq-alt { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: var(--qsets-t-label); }
+.qsets .addq-csv { display: flex; flex-direction: column; gap: 10px; }
+.qsets .qsets-addq-held { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.qsets .qsets-addq-held p, .qsets .qsets-addq-held ul { margin: 0; }
+.qsets .qsets-addq-held ul { padding-left: 18px; color: var(--muted); font-size: var(--qsets-t-label); }
+
 .qsets-scrim--over { z-index: 10001; }
 .qsets-modal--wide { width: min(760px, 100%); }
 .qsets-modal--wide > header { align-items: flex-start; }
@@ -747,6 +792,11 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    buttons the third is CLIPPED rather than wrapped, because `.qsets-tbl td` is
    `overflow: hidden`. The width comes out of the name column, which has
    `text-overflow: ellipsis` and degrades gracefully. */
+/* THE HOST'S SHELF, at a width a table can breathe in. 760px was reported as
+   "way too narrow": a set name, its type, counts and three row actions do not
+   fit in it, so names ellipsed and actions wrapped. 1120px is the console's
+   own work-field width at 1440; `min()` keeps it inside a small laptop. */
+.qsets-modal--shelf { width: min(1120px, 100%); max-height: 90vh; }
 .qsets-modal--wide .qsets-col-set { width: 30%; }
 .qsets-modal--wide .qsets-col-acts { width: 34%; }
 
@@ -843,8 +893,10 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
    because the question dialog inside it is `position: fixed` and so is
    contained by the viewport rather than by this box. */
 .qsets-editor-frame {
-  width: min(960px, 100%);
-  max-height: 86vh;
+  /* Four panels and two tables: the console gives this a whole work area, and
+     960px here was the second half of "way too narrow". */
+  width: min(1280px, 100%);
+  max-height: 92vh;
   overflow: auto;
   border-radius: 12px;
 }

@@ -87,6 +87,7 @@ export default function HostQuestionSetsDialog({
   onSetsChanged,
 }) {
   const [sets, setSets] = useState([]);
+  const [setAllowance, setSetAllowance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);       // { text, tone }
@@ -217,6 +218,7 @@ export default function HostQuestionSetsDialog({
       }
       const all = result.questionSets || [];
       setSets(all);
+      setSetAllowance(result.setAllowance || null);
       if (onSetsChanged) onSetsChanged(toPickerSets(all));
       if (announce) setNotice({ text: announce, tone: 'success' });
       // Returned so a caller that is showing ONE of these rows can re-point at
@@ -398,8 +400,16 @@ export default function HostQuestionSetsDialog({
 
   return (
     <Modal
-      overlayClassName="qsets qsets--onlight qsets-scrim qsets-scrim--over"
-      contentClassName="qsets-modal qsets-modal--wide"
+      /* DUSK, LIKE THE TWO SCREENS THAT OPEN IT. This was `.qsets--onlight` — a
+         paper re-tint written when the create-session card was white. That card
+         (`.gsd`) and the welcome screen are both dusk now, which left this the
+         one white dialog in the host's path: "slightly the wrong style". The
+         theme is DECLARED, not inherited, because from the welcome screen this
+         overlay is a sibling of `.wel-page` and would otherwise resolve to
+         `<html data-theme="light">`. */
+      overlayClassName="qsets qsets-scrim qsets-scrim--over"
+      contentClassName="qsets-modal qsets-modal--wide qsets-modal--shelf"
+      theme="dark"
       labelledBy="hqs-title"
       onClose={() => onClose && onClose()}
     >
@@ -959,6 +969,7 @@ export default function HostQuestionSetsDialog({
         >
           <QuestionSetEditor
             questionSet={editingQuestions}
+            setAllowance={setAllowance}
             availableSets={sets}
             /*
               OFF, AND EACH FOR A ROUTE REASON. Download and the three version

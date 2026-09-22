@@ -315,3 +315,8 @@
    of the cell, where an `overflow: hidden` clip is unreachable. */
 .bill-rowacts { display: flex; gap: 6px; flex-wrap: wrap; }
 .bill-rowacts > :first-child { margin-left: auto; }
+
+/* step 3 — the adjusted bill under the list arithmetic, and the ledger panel */
+.bill .bill-adjusted { margin-top: 16px; }
+.bill .bill-h3 { margin: 0 0 8px; font: 700 var(--bill-t-label)/1.2 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bill .bill-panel-sub { margin: 4px 0 0; font-size: var(--bill-t-label); color: var(--muted); }

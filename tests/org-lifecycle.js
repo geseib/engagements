@@ -343,6 +343,18 @@ const ORG_B = 'org_2222222222222222222222';
     assert.strictEqual(store.get(key(`USER#u_amara`, `ORG#${org.orgId}`)).role, 'owner');
   });
 
+  await check('a plan cannot be chosen at creation — every organisation starts free', async () => {
+    // rejects: the shipped route, which accepted `plan: 'team'` from any
+    // signed-in caller and wrote the metered plan with no payment and no
+    // record (docs/handoff/billing-experience-2026-09-22.md §1.5).
+    reset();
+    const res = await createOrg(evt({ sub: 'u_x', email: 'x@x.example', body: { name: 'Sneaky', plan: 'team' } }));
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.ok(/starts free/i.test(bodyOf(res).error || ''), bodyOf(res).error);
+    const ok = await createOrg(evt({ sub: 'u_y', email: 'y@x.example', body: { name: 'Honest' } }));
+    assert.strictEqual(store.get(key(`ORG#${bodyOf(ok).org.orgId}`, 'METADATA')).plan, 'free');
+  });
+
   await check('the id is MINTED — two organisations of the same name do not collide', async () => {
     reset();
     const a = bodyOf(await createOrg(evt({ sub: 'u_a', email: 'a@x.example', body: { name: 'Team Retro' } })));

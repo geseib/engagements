@@ -127,6 +127,14 @@ export default function Modal({
    * of being clipped inside it.
    */
   afterContent = null,
+  /**
+   * `'dark'` | `'light'` — written as `data-theme` on the overlay. `<html>`
+   * carries `data-theme="light"`, so a dialog that is not a DOM descendant of
+   * a dusk surface (a sibling of `.wel-page`, say) resolves every token to
+   * paper unless it declares its own theme here. Omitted = inherit, which is
+   * what every caller did before this prop existed.
+   */
+  theme,
 }) {
   const overlayRef = useRef(null);
   const contentRef = useRef(null);
@@ -222,6 +230,7 @@ export default function Modal({
     <div
       ref={overlayRef}
       className={overlayClassName}
+      {...(theme ? { 'data-theme': theme } : {})}
       onClick={onOverlayClick}
     >
       <div

@@ -42,6 +42,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { ORGS_INDEX_PK } = require('./shared/tenant');
+const { closeInvoice } = require('./shared/invoices');
 const {
   countSets, countBilledSessions, recordSetCount, setSessionsRun, readUsage, periodOf,
 } = require('./shared/usage');
@@ -126,6 +127,11 @@ exports.handler = async (event = {}) => {
         repaired.push({ orgId, period: p, was: counted.sessionsRun, now: billed });
         console.warn(`🔧 usage-reconcile: ${orgId} ${p} sessionsRun ${counted.sessionsRun} -> ${billed}`);
       }
+      // THE PREVIOUS MONTH'S INVOICE, closed once (shared/invoices.js). Runs
+      // AFTER the counters above are reconciled, so it freezes the repaired
+      // numbers; a conditional put makes every later night a no-op.
+      const closed = await closeInvoice({ db, tableName: process.env.TABLE_NAME, orgId, period: previous, now });
+      if (closed.written) console.log(`🧾 usage-reconcile: ${orgId} ${previous} invoice ${closed.doc.number} closed at ${closed.doc.totalDisplay}`);
     } catch (error) {
       // One org's failure must not stop the rest; the next run tries again.
       console.error(`⚠️ usage-reconcile: ${orgId} failed:`, error);

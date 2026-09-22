@@ -505,8 +505,13 @@ const evt = (orgId, pathOrg) => ({
   queryStringParameters: { period: '2026-08' },
 });
 
+// The org row, with its plan. get-usage prices with `planFor(orgRow)` now —
+// it used to hard-code TEAM_PLAN, so a free org's history read "$5.00".
+const setPlan = (org, plan) => store.set(key(`ORG#${org}`, 'METADATA'), { PK: `ORG#${org}`, SK: 'METADATA', orgId: org, plan });
+
 async function mockupFixture() {
   reset();
+  setPlan(ORG, 'team');
   setRow(ORG, 'teamretro'); setRow(ORG, 'onboarding');
   await streamHandler.handler({ Records: [streamRecord(`ORG#${ORG}#SETS`, 'SET#teamretro')] });
   for (let i = 0; i < 20; i++) {
@@ -547,8 +552,22 @@ check('the period reads "1–31 August 2026", as drawn', async () => {
   assert.strictEqual(body.period.id, '2026-08');
 });
 
+check('a FREE org is priced as free: $0.00 now and in every history row, and it says when it resets', async () => {
+  // rejects: the shipped get-usage, which projected TEAM_PLAN for every org
+  // (docs/handoff/billing-experience-2026-09-22.md §1.4).
+  await mockupFixture();
+  setPlan(ORG, 'free');
+  const body = JSON.parse((await getUsage.handler(evt(ORG))).body);
+  assert.strictEqual(body.plan.id, 'personal');
+  assert.strictEqual(body.plan.metersOverage, false);
+  assert.strictEqual(body.totalIfPeriodEndedTodayCents, 0);
+  body.history.forEach((row) => assert.strictEqual(row.totalCents, 0, `history ${row.period} charged ${row.totalCents}`));
+  assert.strictEqual(body.period.resetsOn, '2026-09-01');
+});
+
 check('a period nobody used is a zeroed $5.00, not a 404', async () => {
   reset();
+  setPlan(ORG, 'team');
   const response = await getUsage.handler(evt(ORG));
   assert.strictEqual(response.statusCode, 200);
   const body = JSON.parse(response.body);
@@ -558,6 +577,7 @@ check('a period nobody used is a zeroed $5.00, not a 404', async () => {
 
 check('recent periods are listed newest first, priced by the same function', async () => {
   reset();
+  setPlan(ORG, 'team');
   for (const [p, sessions, peak] of [['2026-07', 11, 2], ['2026-06', 4, 1]]) {
     store.set(key(`ORG#${ORG}`, `USAGE#${p}`), {
       PK: `ORG#${ORG}`, SK: `USAGE#${p}`, sessionsRun: sessions, setsPeak: peak, setsCurrent: peak,

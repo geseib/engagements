@@ -229,6 +229,17 @@ async function createSetForJob({
 }) {
   if (!spec || typeof spec.toCsv !== 'function') return null;
   if (!Array.isArray(items) || items.length === 0) return null;
+  /*
+    APPEND-ONLY RUNS MAKE NO SET. "Add questions" in the set editor runs the
+    same generators to write MORE questions for a set that already exists; the
+    items go back to the editor, which appends them to its working rows and
+    saves a new VERSION of that set. Creating a set here as well would leave a
+    stray inactive duplicate in the library after every such run. Returned
+    before the title check on purpose: a missing title is not an error for a
+    run that was never going to create anything, and must not be recorded as
+    one on the job.
+  */
+  if (payload && payload.appendOnly === true) return null;
 
   try {
     const metadata = readSetMetadata(payload);

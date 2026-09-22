@@ -3,38 +3,43 @@
  * docs/design/marketing-redesign/01-home.html. Every string here should be
  * traceable to that file; HTML entities (&rsquo; &mdash; &middot; &ldquo;
  * &rdquo; &rarr;) are decoded to their real characters.
+ *
+ * Refreshed 2026-09-22 against docs/design/refresh-2026-09-22/RATIONALE.md
+ * section 1 (ranked changes 1, 3 and finding 6): the headline is carried as
+ * four authored lines; only the two kickers that carry the climb survive
+ * (Base camp, The summit); the problem statements lose their 01/02/03; each
+ * mode says its fact once, in the list, rather than in a paragraph and again
+ * as the first list item. The room's list is left as it is on purpose (open
+ * question 1's recommended answer).
  */
 export const HOME = {
   hero: {
     kicker: 'Base camp',
-    headline: 'Turn your team’s own material into decisions everyone climbed toward.',
+    // Open question 5's recommended answer: the approved sentence, re-broken
+    // into four short lines the two-column hero can hold.
+    headlineLines: ['Your team’s own', 'material, turned into', 'decisions everyone', 'climbed toward.'],
     lead: 'Build question sets from what your team already has. Run them as trivia to warm the room up, or as call and answer to collect every idea and put it to a vote. Everyone plays from their phone. The session ends with a report.',
     ctaPrimary: 'Create a host account',
     ctaSecondary: 'Sign in',
   },
   problem: {
-    kicker: 'The climb starts here',
     title: 'Most sessions lose the thing they were for.',
     items: [
       {
-        n: '01',
         title: 'A few voices decide',
         text: 'The same three people talk. The quiet half of the room has the answer and no way into the conversation.',
       },
       {
-        n: '02',
         title: 'Ideas leave with the people',
         text: 'Written on a whiteboard, photographed by two of them, typed up by nobody.',
       },
       {
-        n: '03',
         title: 'Nobody remembers what was decided',
         text: 'Six weeks later the decision is folklore, and the reasoning that produced it is gone.',
       },
     ],
   },
   modes: {
-    kicker: 'Two ways to play',
     title: 'One set of questions, two shapes of round.',
     lead: 'Both run on the screen at the front of the room while everyone answers on their own phone.',
     items: [
@@ -42,10 +47,9 @@ export const HOME = {
         id: 'trivia',
         tag: 'Trivia',
         heading: 'Warm the room up, or check what landed.',
-        text: 'A question, four options, one right answer. The room answers, the answer is revealed with its explanation, and the standings move.',
         list: [
+          'A question, four options, one right answer — revealed with its explanation.',
           'Ask, then results. Trivia has no vote phase.',
-          'Each question carries its own category, difficulty and explanation.',
           'Running standings after every question.',
         ],
         slots: ['trivia-host', 'trivia-player'],
@@ -54,11 +58,10 @@ export const HOME = {
         id: 'poll',
         tag: 'Call and answer',
         heading: 'Pose a prompt, collect every idea, then vote.',
-        text: 'Everyone writes at once, so the room hears from the people it usually does not. Then the room reads the answers and votes on them.',
         list: [
+          'Everyone writes at once, so the room hears from the people it usually does not.',
           'Ask, vote, results — three phases you move through.',
-          'Every answer is kept, not only the ones that won votes.',
-          'The vote breakdown is kept per answer and goes into the report.',
+          'Every answer is kept, not only the ones that won votes, and the breakdown goes into the report.',
         ],
         slots: ['poll-host', 'poll-player'],
         flip: true,
@@ -66,7 +69,6 @@ export const HOME = {
     ],
   },
   material: {
-    kicker: 'Your own material',
     title: 'The questions come from your work, not from a quiz pack.',
     lead: 'Hand the builder the strategy document, the retro notes, the deck you are about to present. It drafts a set. You decide what runs.',
     steps: [
@@ -97,7 +99,6 @@ export const HOME = {
     },
   },
   room: {
-    kicker: 'The room reacts',
     title: 'Answers arrive live. The team votes. The strongest ideas rise.',
     tally: {
       question: 'What should we stop doing?',
@@ -124,8 +125,19 @@ export const HOME = {
     lead: 'The report is written as the session runs. Nobody has to type the whiteboard up afterwards.',
     link: 'See a full report, annotated →',
   },
+  photos: {
+    room: {
+      src: '/assets/hero/room-looking-up-1024.webp',
+      alt: 'A room of people looking up from their phones toward a screen out of frame',
+      caption: 'The moment a result lands.',
+    },
+    sheet: {
+      src: '/assets/hero/summit-held-768.webp',
+      alt: 'Two people holding one sheet of paper across a table',
+      caption: 'One sheet, read by everyone.',
+    },
+  },
   start: {
-    kicker: 'Ready when you are',
     title: 'Bring your own material. Leave with a decision.',
     ctaPrimary: 'Create a host account',
     ctaSecondary: 'See how it works',

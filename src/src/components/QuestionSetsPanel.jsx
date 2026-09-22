@@ -320,7 +320,7 @@ export default function QuestionSetsPanel({
               <span className="qsets-head-grow" />
               <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate('new')}>
                 <Icon name="Plus" weight="bold" size={14} color="currentColor" />
-                {createOpen ? 'Hide new set' : 'New set'}
+                New set
               </button>
             </div>
           )}

@@ -1,8 +1,10 @@
+const crypto = require('crypto');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { encryptValue } = require('./tenant-crypto');
+const { DynamoDBDocumentClient, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { encryptValue, encryptItem } = require('./tenant-crypto');
+const { reportsIndexPk } = require('./tenant');
 
 const s3Client = new S3Client({});
 const dynamoClient = new DynamoDBClient({});
@@ -98,6 +100,10 @@ exports.handler = async (event) => {
       Body: objectBody,
       ContentType: orgId ? 'application/json' : 'application/pdf',
       ContentDisposition: `attachment; filename="${baseFileName}"`,
+      // The bucket's 90-day rule is filtered on this tag so it cannot reach
+      // `permanent/` (S3 lifecycle has no "every prefix but one"). S3CrudPolicy
+      // grants s3:PutObjectTagging, which a tagged PutObject requires.
+      ...(permanent ? {} : { Tagging: 'retention=standard' }),
       Metadata: {
         'permanent': permanent ? 'true' : 'false',
         'game-id': gameId,
@@ -142,6 +148,39 @@ exports.handler = async (event) => {
         expiresIn: 24 * 60 * 60 // 24 hours in seconds
       });
     
+    /*
+      THE ROW THAT OUTLIVES THE SESSION. The session's rows expire (7 days
+      from start, session-ttl.js) and this was the only record of the report —
+      a key in one HTTP response. The list a person will find it in reads this
+      partition: per org, or the platform's for an orgless session.
+
+      Its own `ttl` matches the bucket rule for its prefix (template
+      ReportsBucket: 90 days, `permanent/` 365), so the row never lists a
+      report the bucket has already deleted, give or take DynamoDB's lag.
+    */
+    const savedAt = new Date().toISOString();
+    const retentionDays = permanent ? 365 : 90;
+    const reportRow = {
+      PK: reportsIndexPk(orgId),
+      // A short random tail after the timestamp: two saves of one session in
+      // the same millisecond would otherwise be one row, and the second would
+      // silently overwrite the first (seen in tests/report-index-row.js).
+      SK: `REPORT#${gameId}#${savedAt}#${crypto.randomBytes(3).toString('hex')}`,
+      gameId,
+      Title: eventTitle,
+      ...(orgId ? { orgId } : {}),
+      s3Key: fileName,
+      encrypted: !!orgId,
+      permanent: !!permanent,
+      savedAt,
+      expiresAt: new Date(Date.parse(savedAt) + retentionDays * 86400000).toISOString(),
+      ttl: Math.floor(Date.parse(savedAt) / 1000) + retentionDays * 86400,
+    };
+    await db.send(new PutCommand({
+      TableName: process.env.TABLE_NAME,
+      Item: orgId ? await encryptItem(orgId, 'reportIndex', reportRow) : reportRow,
+    }));
+
     console.log(`✅ PDF report saved: ${fileName}`);
     
     return {

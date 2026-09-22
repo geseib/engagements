@@ -31,7 +31,8 @@ const page = stripComments(fs.readFileSync(path.join(__dirname, '..', 'AdminPage
 describe('the three extracted components are actually mounted', () => {
   test.each([
     ['QuestionSetsPanel', /import QuestionSetsPanel from '\.\/components\/QuestionSetsPanel'/, /<QuestionSetsPanel[\s>]/],
-    ['QuestionSetUploadPanel', /import QuestionSetUploadPanel from '\.\/components\/QuestionSetUploadPanel'/, /<QuestionSetUploadPanel[\s>]/],
+    // The upload panel reaches the console THROUGH the new-set dialog now.
+    ['NewSetDialog', /import NewSetDialog from '\.\/components\/NewSetDialog'/, /<NewSetDialog[\s>]/],
     ['QuestionSetDeleteDialog', /import QuestionSetDeleteDialog from '\.\/components\/QuestionSetDeleteDialog'/, /<QuestionSetDeleteDialog[\s>]/],
   ])('%s is imported and rendered', (_name, importRe, useRe) => {
     expect(page).toMatch(importRe);
@@ -138,14 +139,31 @@ describe('Q6 — one engagement-type control', () => {
   });
 });
 
-describe('the console scrolls to the create form only when it was asked to', () => {
-  test('the flag is bound to the press, not to the render condition', () => {
-    // The panel is mounted by `isCreateOpen || questionSets.length === 0`, so
-    // `scrollIntoViewOnMount` and the mount condition are NOT the same
-    // predicate. rejects: passing it bare, which yanks the page on arrival for
-    // every admin whose library is empty — a scroll in response to nothing they
-    // did. The literal `={isCreateOpen}` is the whole assertion.
-    expect(page).toMatch(/scrollIntoViewOnMount=\{isCreateOpen\}/);
+describe('New set is a dialog, not a panel below the table', () => {
+  const dialog = stripComments(fs.readFileSync(path.join(__dirname, '..', 'components', 'NewSetDialog.jsx'), 'utf8'));
+
+  test('the console mounts it only on a press', () => {
+    // rejects: the old `isCreateOpen || visibleSets.length === 0`, which drew
+    // the form unasked on an empty library, and the below-the-table panel that
+    // had to scroll itself into view ("you click new but ... it is not obvious
+    // that it opened a section").
+    expect(page).toMatch(/\{isCreateOpen && \(\s*<NewSetDialog/);
+    expect(page).not.toMatch(/scrollIntoViewOnMount/);
+    expect(page).not.toMatch(/<QuestionSetUploadPanel/);
+  });
+
+  test('it is the shared Modal in the qsets shell, with an X and a bottom exit through one function', () => {
+    expect(dialog).toMatch(/<Modal/);
+    expect(dialog).toMatch(/overlayClassName="qsets qsets-scrim"/);
+    expect(dialog).toMatch(/contentClassName="qsets-modal qsets-modal--create"/);
+    // Both exits, and Modal's own onClose, are the same function.
+    expect((dialog.match(/onClick=\{requestClose\}/g) || []).length).toBe(2);
+    expect(dialog).toMatch(/onClose=\{requestClose\}/);
+  });
+
+  test('the AI path hands over instead of stacking a second dialog', () => {
+    // rejects: a modal opened from inside a modal.
+    expect(page).toMatch(/if \(path === 'ai'\) \{ setIsCreateOpen\(false\); handleOpenBuilder\(engagementType\); return; \}/);
   });
 });
 

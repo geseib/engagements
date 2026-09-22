@@ -264,3 +264,20 @@
 @media (prefers-reduced-motion: reduce) {
   .cnt-preset { transition: none; }
 }
+
+/* ── SetSizeField: categories × in-each, and the product ─────────────────────
+   Two rows of [label] [presets · or · box], then one line stating the total.
+   Everything is built from the pieces above; only the arrangement is new. */
+.cnt-size { display: flex; flex-direction: column; gap: 12px; }
+.cnt-size-row { display: flex; flex-direction: column; gap: 6px; }
+.cnt-size-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cnt-size-or { color: var(--muted); font-size: var(--cnt-t-floor); }
+.cnt-size-total {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--cnt-rule);
+  font-size: var(--cnt-t-body);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cnt-size-total b { font-size: var(--cnt-t-value); font-weight: 800; }

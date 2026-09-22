@@ -12,6 +12,7 @@ import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { queuePosition } from '../../config/questionQueue';
 import QueueList from './QueueList';
 import HelpButton from '../HelpButton';
+import BrandMark from '../BrandMark';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -340,6 +341,8 @@ export default function SessionSetupPanel({
         onKeyDown={trapFocus}
       >
         <div className="setup-panel__header">
+          {/* The mark, NOT a link: a tap here must never leave a live round. */}
+          <BrandMark size={20} />
           <h2 className="setup-panel__title">Session setup</h2>
           {/* THE FIRST THING A HOST LOOKS AT WHEN THE ROOM STOPS UPDATING, so
               it is in the header rather than behind a tab. It is also the only

@@ -93,8 +93,23 @@ const driftStyle = (depth, progress) => ({
   '--mk-drift': `${(-TRAVEL * depth * progress).toFixed(1)}px`,
 });
 
+/** The route draws just AHEAD of the climber (refresh 2026-09-22 §1 change 4):
+ * `pathLength="1"` makes a dashoffset of `1 - drawn` the undrawn fraction, and
+ * the plan is drawn 8% further than the reader has climbed. The flag lights
+ * once progress passes the report, at 0.86. */
+const ROUTE_LEAD = 0.08;
+const SUMMIT_AT = 0.86;
+
+export function routeDashOffset(progress) {
+  const numeric = Number(progress);
+  const p = Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0;
+  return Number((1 - Math.min(1, p + ROUTE_LEAD)).toFixed(3));
+}
+
 export default function RidgeScene({ progress = 0 }) {
   const climber = pointOnRoute(progress);
+  const dashOffset = routeDashOffset(progress);
+  const atSummit = Number(progress) > SUMMIT_AT;
 
   return (
     <div className="mk-ridge" aria-hidden="true">
@@ -129,9 +144,15 @@ export default function RidgeScene({ progress = 0 }) {
         viewBox="0 0 1200 420"
         preserveAspectRatio="xMidYMax slice"
         style={driftStyle(DEPTH.mid, progress)}
+        data-summit={atSummit ? '1' : '0'}
       >
         <path className="mk-ridge-body" d="M0 352 L150 300 L280 330 L420 244 L540 292 L600 214 L680 270 L810 226 L940 300 L1060 262 L1200 318 L1200 420 L0 420 Z" />
-        <path className="mk-ridge-route" d="M92 418 C 196 398 238 352 328 338 S 468 302 520 270 S 572 236 600 216" />
+        <path
+          className="mk-ridge-route"
+          pathLength="1"
+          style={{ strokeDashoffset: dashOffset }}
+          d="M92 418 C 196 398 238 352 328 338 S 468 302 520 270 S 572 236 600 216"
+        />
         <circle className="mk-ridge-climber-halo" cx={climber.x} cy={climber.y} r="15" />
         <circle className="mk-ridge-climber" cx={climber.x} cy={climber.y} r="6.5" />
         <line className="mk-ridge-mast" x1="600" y1="216" x2="600" y2="186" />

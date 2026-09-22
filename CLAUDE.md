@@ -100,25 +100,32 @@ not repeated here. This section carries only what those two sections do not say.
 ### Database Design
 - Single-table DynamoDB pattern
 - Key prefixes: `GAME#`, `PLAYER#`, `ROUND#`, `GAMES`, plus the three tenancy scopes built in `lambda-functions/*/tenant.js` (`SETS`, `ORG#<org>#SETS`, `PUBLIC#SETS`). Nothing outside tenant.js may write a bare `SETS`/`GAMES` literal — `tests/no-global-partition-literals.js` fails the build if one appears.
-- TTL: **THE SESSION ROW NEVER EXPIRES.** Corrected 2026-09-20 against the shipped
-  code, after the owner asked why a session last played on 27 August was still
-  listed: it is still listed because nothing deletes it, ever.
+- TTL: **90 days from creation, 7 days from start — since 2026-09-21.** Every
+  one of a session's four rows (the `GAMES` reservation, the org's
+  `ORG#<org>#GAMES` index row, METADATA, STATE) carries `ttl`. It is written at
+  creation by `websocket/schema-compliant-manager.js` (`unstartedTtl`) and
+  rewritten to started + 7 days by `game/start-game.js` (`startedTtl`). The rule
+  lives in `session-ttl.js`, copied identically into `game/` and `websocket/`
+  (`tests/tenant-session-scoping.js` §9 holds them equal).
 
-  This line claimed "90 days from creation" and before that "90 days (creation),
-  7 days (active)". Both were wrong. The deployed creator is
-  `CreateGameFunction`, `CodeUri: lambda-functions/websocket/`, and
-  `websocket/create-game.js` writes **no `ttl`, and no expiry attribute of any
-  name**. `game/start-game.js` writes none either. The table's TTL attribute is
-  `ttl` (`template-clean.yaml` `TimeToLiveSpecification`), so a row without one
-  lives until something deletes it — and nothing does. Whether sessions SHOULD
-  expire is an open product question; today they do not.
+  History, so nobody re-derives it: this line said "90 days (creation), 7 days
+  (active)", then "never expires — create-game.js writes no ttl". Both were
+  wrong in different ways. The manager DID write a 90-day `ttl` at creation
+  all along; what never happened was the rewrite to 7 days at start, which is
+  why a session played in August was still listed in September. DynamoDB
+  deletes lazily (up to ~48h late); no reader may treat `ttl` as "gone".
 
-  The 7-day TTLs are on CONTENTS, not on the session: player rows
-  (`game/join-game.js:338`), vote rows (`game/submit-vote.js:66`) and one results
-  row (`game/get-results.js:1214`). Score rows and summaries are 30d, some caches
-  24h. So a session outlives its own player rows indefinitely, which is why
-  `get-games-list.js` counts participants across every `PLAYER#` row rather than
-  the main ones — see the note there.
+  Contents expire on their own clocks: player rows and vote rows 7d, score
+  rows and summaries 30d, some caches 24h.
+
+- **Saved PDF reports outlive the session.** `game/save-report.js` writes
+  `REPORT#<game>#<savedAt>` under `ORG#<org>#REPORTS` (platform: `REPORTS`),
+  Title encrypted as the session's is, `ttl` matching the bucket rule for its
+  prefix: 90 days standard (objects tagged `retention=standard`, which the
+  lifecycle rule filters on), 365 for `permanent/`. Before this the report
+  existed only as an S3 key in one HTTP response, and the bucket's single
+  90-day rule deleted "1 year" reports at day 90. The list is the console's Reports section and the host's "Reports" door (`components/ReportsPanel.jsx`, `GET /reports`, `GET /reports/download`);
+  mockup in `docs/design/reports-list/`.
 
 ### Game Flow
 ```

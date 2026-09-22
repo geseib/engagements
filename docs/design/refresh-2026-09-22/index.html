@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Refresh 2026-09-22 — mockups</title>
+<style>
+:root{--bg:#0F1A2E;--text:#F4EDE4;--muted:#9BA8BE;--primary:#F6A94C;--rule:rgba(155,168,190,.22)}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.55 "Inter",system-ui,sans-serif;padding:52px 26px 90px}
+.wrap{max-width:860px;margin:0 auto}h1{font-family:"Archivo Expanded","Archivo",system-ui,sans-serif;font-weight:800;font-size:clamp(28px,4vw,40px);line-height:1.05;margin:0 0 12px}
+p{color:var(--muted);max-width:74ch}ol{list-style:none;padding:0;margin:26px 0 0;counter-reset:m}
+li{counter-increment:m;border-bottom:1px solid var(--rule);padding:15px 0 15px 52px;position:relative}
+li::before{content:counter(m,decimal-leading-zero);position:absolute;left:0;top:17px;font-family:"Archivo Expanded",system-ui,sans-serif;font-weight:800;color:var(--primary);font-size:14px}
+li a{color:var(--text);text-decoration:none;font-weight:700;font-size:18px}li a:hover{color:var(--primary)}
+li span{display:block;color:var(--muted);font-size:15px;margin-top:4px}code{color:var(--primary)}
+</style></head><body><div class="wrap">
+<h1>Front page and session page — refresh mockups</h1>
+<p>Built from the approved <code>marketing-redesign</code> and <code>host-redesign</code> shells: tokens, washes, ladders and floors are read from those files at build time and only the refresh rules are new (<code>_src/refresh-home.css</code>, <code>_src/refresh-stage.css</code>). Press <b>N</b> to hide the design notes. Reload a stage page to replay its one performing sequence. <a href="RATIONALE.md" style="color:var(--primary)">RATIONALE.md</a> has the critique, the sources, the image requests and the implementation sequence.</p>
+<ol>
+<li><a href="01-home.html">01 — Home</a><span>The product in the first viewport, one filled amber per view, the route that draws itself, the tally that performs, two photographs requested.</span></li>
+<li><a href="01m-home-mobile.html">01m — Home at 390px</a><span>Same markup in a 390px column; the stage still stacks under the claim and above the buttons.</span></li>
+<li><a href="02-stage-ask.html">02 — Stage · ASK (call and answer, Room)</a><span>The phase wipe shipped, arrivals on the wall, a join code a latecomer can read. Simulated arrival at 2.5s.</span></li>
+<li><a href="03-stage-results.html">03 — Stage · RESULTS (trivia, Room)</a><span>Recap, explanation and CORRECT flag restored; the reveal performs once; the standings move.</span></li>
+</ol>
+<p style="margin-top:30px">Switch profile on a stage page by editing the <code>&lt;html class="d-room"&gt;</code> class to <code>d-tv</code>, <code>d-call</code> or <code>d-table</code>, or open it through <code>../host-redesign/view.html</code>'s 1&ndash;4 keys.</p>
+</div></body></html>

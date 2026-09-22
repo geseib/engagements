@@ -18,6 +18,8 @@ import './BillingPanel.css';
  * that works in the bundle AND in the test run.
  */
 import pricing from '../../../lambda-functions/game/pricing';
+import { PlanRequestStrip } from './PlanRequestDialog';
+import AdjustmentsLedger, { AdjustedBill } from './AdjustmentsLedger';
 
 const {
   TEAM_PLAN, planFor, projectInvoice, allowanceState, formatCents,
@@ -64,6 +66,13 @@ const {
  *                            refused, instead of leaving the reader to infer it
  *                            from two meters.
  */
+/** `2026-10-01` → "1 October"; a label that is already words passes through. */
+export function formatResetsOn(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!m) return String(value || '');
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString(undefined, { day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
 export default function BillingPanel({
   planId = 'personal',
   usage = {},
@@ -73,6 +82,24 @@ export default function BillingPanel({
   refusal = null,
   error = '',
   onUpgrade,
+  /**
+   * BILLING STEP 2 — the plan request (docs/design/tenancy-redesign/13, 14).
+   * `planRequest` is the latest request row for this organisation, or null;
+   * `onRequestPlan` opens the dialog; `onWithdrawRequest` withdraws the open
+   * one. All three optional: the personal space and the host's plain screen
+   * pass none and see neither the strip nor the button.
+   */
+  planRequest = null,
+  onRequestPlan,
+  onWithdrawRequest,
+  requestBusy = false,
+  /**
+   * BILLING STEP 3 (mockup 19): `adjusted` is GET /usage's bill with the
+   * ledger applied; `adjustments` is GET /orgs/{id}/adjustments. Both
+   * optional — the host's plain screen and the tests pass neither.
+   */
+  adjusted = null,
+  adjustments = null,
   onBillingHistory,
   onInvoice,
   theme = 'dark',
@@ -142,17 +169,38 @@ export default function BillingPanel({
           <p className="bill-sub">{sub}</p>
         </div>
         <div className="bill-head-actions">
+          {/* Free months have invoices too (mockup 21), so history is offered
+              to everyone the console knows how to open it for. */}
+          {!metered && onBillingHistory && (
+            <button type="button" className="bill-btn" onClick={onBillingHistory}>Billing history</button>
+          )}
           {metered ? (
             <button type="button" className="bill-btn" onClick={onBillingHistory}>
               Billing history
             </button>
-          ) : (
+          ) : onRequestPlan && (!planRequest || planRequest.status !== 'requested') ? (
+            <button type="button" className="bill-btn bill-btn--primary" onClick={onRequestPlan} data-testid="bill-request-plan">
+              Request the Team plan
+            </button>
+          ) : onUpgrade ? (
             <button type="button" className="bill-btn bill-btn--primary" onClick={onUpgrade}>
               Create a team
             </button>
-          )}
+          ) : null}
         </div>
       </div>
+
+      {/* The request's state, above the meters — mockup 14. Shown for a free
+          org with any request on record; a metered org sees only an approval
+          (the others would be history it has already acted on). */}
+      {planRequest && (!metered || planRequest.status === 'approved') && (
+        <PlanRequestStrip
+          request={planRequest}
+          onWithdraw={onWithdrawRequest}
+          onRequestAgain={onRequestPlan}
+          busy={requestBusy}
+        />
+      )}
 
       {error ? (
         <p className="bill-notebox bill-notebox--bad" role="alert">
@@ -209,15 +257,21 @@ export default function BillingPanel({
                     as a toll gate — and waiting really is an exit here, because
                     the allowance is per period. */}
                 <div className="bill-exits">
-                  <button
-                    type="button"
-                    className="bill-btn bill-btn--sm bill-btn--primary"
-                    onClick={onUpgrade}
-                  >
-                    Create a team
-                  </button>
+                  {onRequestPlan && (!planRequest || planRequest.status !== 'requested') ? (
+                    <button type="button" className="bill-btn bill-btn--sm bill-btn--primary" onClick={onRequestPlan}>
+                      Request the Team plan
+                    </button>
+                  ) : onUpgrade ? (
+                    <button
+                      type="button"
+                      className="bill-btn bill-btn--sm bill-btn--primary"
+                      onClick={onUpgrade}
+                    >
+                      Create a team
+                    </button>
+                  ) : null}
                   {period.resetsOn ? (
-                    <span className="bill-wait">{`or wait until ${period.resetsOn}`}</span>
+                    <span className="bill-wait">{`${onUpgrade ? 'or wait' : 'Wait'} until ${formatResetsOn(period.resetsOn)}`}</span>
                   ) : null}
                 </div>
               </div>
@@ -264,6 +318,16 @@ export default function BillingPanel({
                   </tr>
                 </tbody>
               </table>
+
+              {/* THE BILL WITH THE LEDGER APPLIED — the same arithmetic the
+                  invoice is written from, every step named. Shown under the
+                  list arithmetic only when something actually changes it. */}
+              {adjusted && (adjusted.discounts.length > 0 || adjusted.credits.length > 0) && (
+                <div className="bill-adjusted" data-testid="bill-adjusted">
+                  <h3 className="bill-h3">With your adjustments</h3>
+                  <AdjustedBill adjusted={adjusted} audience="org" />
+                </div>
+              )}
 
               <p className="bill-note bill-note--after">
                 Storage is charged on the <b>highest</b> number of sets you held at once this
@@ -341,6 +405,18 @@ export default function BillingPanel({
       {/* Said unprompted, at the foot, on the free screen: somebody who has just
           hit a wall assumes the worst, and the worst here would be a room
           watching a session stop. */}
+      {adjustments && adjustments.length > 0 && (
+        <section className="bill-panel" aria-labelledby="bill-adj-h" data-testid="bill-adjustments">
+          <div className="bill-panel-head">
+            <h2 id="bill-adj-h">Adjustments on your account</h2>
+            <p className="bill-panel-sub">Granted by Engage, or redeemed by you. Nothing here can be changed from this screen.</p>
+          </div>
+          <div className="bill-panel-body">
+            <AdjustmentsLedger adjustments={adjustments} audience="org" />
+          </div>
+        </section>
+      )}
+
       {!metered ? (
         <p className="bill-notebox bill-notebox--foot">
           <b>The session you are running right now is not affected.</b> A limit only ever stops

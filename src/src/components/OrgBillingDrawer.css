@@ -1,0 +1,58 @@
+/* components/OrgBillingDrawer.jsx — the platform's billing drawer, the grant
+   dialog and the revoke dialog. Scope `.obill`. Tokens and ladder restated as
+   locals; measured on --surface #1B2942 (obillPalette in
+   adjustmentsLedgerPalette.test.js): --text 12.5, --muted 6.1, ink #1B2942 on
+   --primary 7.42, --danger-text 6.1. */
+.obill {
+  --obill-t-floor: 12px;
+  --obill-t-label: 13px;
+  --obill-t-body: 15px;
+  --obill-t-head: 19px;
+  --obill-rule: rgba(155, 168, 190, .20);
+  --obill-rule-strong: rgba(155, 168, 190, .34);
+  --obill-row-hover: rgba(155, 168, 190, .055);
+  --obill-tint-bad: rgba(229, 100, 94, .10);
+  --obill-on-accent: #1B2942;
+  color: var(--text);
+  font: 400 var(--obill-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.obill *, .obill *::before, .obill *::after { box-sizing: border-box; }
+.obill :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+.obill-grow { flex: 1 1 auto; min-width: 0; }
+.obill-dim { color: var(--muted); }
+.obill-lab { display: block; font-size: var(--obill-t-label); font-weight: 700; color: var(--muted); margin: 0 0 6px; }
+.obill-h3 { margin: 16px 0 8px; font: 700 var(--obill-t-label)/1.2 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.obill-h3:first-child { margin-top: 0; }
+
+.obill-scrim { position: fixed; inset: 0; z-index: 10001; background: rgba(6, 11, 22, .72); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 24px; }
+.obill-scrim--over { z-index: 10002; }
+.obill-modal { margin: auto; width: min(880px, 100%); background: var(--surface); border: 1px solid var(--obill-rule-strong); border-radius: 12px; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); overflow-wrap: anywhere; }
+.obill-modal--narrow { width: min(620px, 100%); }
+.obill-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.obill-head h2 { margin: 0; font: 800 var(--obill-t-head)/1.2 var(--font-display); }
+.obill-head .obill-dim { margin: 4px 0 0; font-size: var(--obill-t-label); }
+.obill-body { padding: 4px 18px 6px; display: flex; flex-direction: column; gap: 12px; }
+.obill-foot { display: flex; gap: 9px; justify-content: flex-end; padding: 14px 18px 16px; border-top: 1px solid var(--obill-rule); margin-top: 8px; }
+.obill-x { flex: 0 0 auto; background: none; border: 0; cursor: pointer; font-size: 1.6rem; line-height: 1; padding: 0 4px; color: var(--muted); min-width: 44px; min-height: 44px; }
+.obill-x:hover:not(:disabled) { color: var(--text); }
+
+.obill-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--obill-rule-strong); background: transparent; color: var(--text); font: 600 var(--obill-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap; }
+.obill-btn:hover:not(:disabled) { background: var(--obill-row-hover); border-color: var(--muted); }
+.obill-btn:disabled { opacity: .42; cursor: not-allowed; }
+.obill-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--obill-on-accent); }
+.obill-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
+.obill-btn--danger:hover:not(:disabled) { background: var(--obill-tint-bad); }
+.obill-alert { margin: 0; padding: 9px 12px; border: 1px solid rgba(229, 100, 94, .5); border-left-width: 3px; border-radius: 0 6px 6px 0; background: var(--obill-tint-bad); color: var(--danger-text); font-size: var(--obill-t-label); }
+
+.obill-kinds { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.obill-kinds > legend { padding: 0; width: 100%; }
+.obill-kind { display: flex; gap: 9px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--obill-rule-strong); border-radius: 8px; cursor: pointer; }
+.obill-kind.is-on { border-color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); }
+.obill-kind input { accent-color: var(--primary); margin-top: 3px; }
+.obill-kind b { display: block; }
+.obill-kind small { color: var(--muted); font-size: var(--obill-t-floor); line-height: 1.4; }
+.obill-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.obill-field { display: flex; flex-direction: column; min-width: 0; }
+.obill-input { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--obill-rule-strong); background: var(--bg); color: var(--text); font: 400 var(--obill-t-body)/1.5 var(--font-ui); }
+.obill-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }

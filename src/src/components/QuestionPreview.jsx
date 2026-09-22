@@ -378,6 +378,19 @@ export default function QuestionPreview({
         <div className="qprev-screen stage-ladder-table" data-theme="dark" data-testid="preview-screen">
           {staged ? (
             <div className="qprev-card">
+              {/* THE CATEGORY, AS THE CARD'S EYEBROW. The owner: "when
+                  previewing questions, only change is adding the category at
+                  the top of the preview card." It is the stage's own `.kicker`
+                  — the small-caps line RESULTS and VOTE already open with — so
+                  it reads as the card's first line and this sheet still styles
+                  nothing inside the screen. It lives HERE and not in
+                  QuestionCard because the live stage does not print a category
+                  at ASK, and a preview-only line must not reach the room. A
+                  question with no category gets no line rather than the word
+                  "Uncategorised" dressed up as a category. */}
+              {selectedRow && selectedRow.category && (
+                <div className="kicker" data-testid="preview-category">{selectedRow.category}</div>
+              )}
               <QuestionCard
                 phase={reveal && gameType === 'trivia' ? 'REVEAL' : 'ASK'}
                 question={staged}
