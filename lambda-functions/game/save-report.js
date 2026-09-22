@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -161,7 +162,10 @@ exports.handler = async (event) => {
     const retentionDays = permanent ? 365 : 90;
     const reportRow = {
       PK: reportsIndexPk(orgId),
-      SK: `REPORT#${gameId}#${savedAt}`,
+      // A short random tail after the timestamp: two saves of one session in
+      // the same millisecond would otherwise be one row, and the second would
+      // silently overwrite the first (seen in tests/report-index-row.js).
+      SK: `REPORT#${gameId}#${savedAt}#${crypto.randomBytes(3).toString('hex')}`,
       gameId,
       Title: eventTitle,
       ...(orgId ? { orgId } : {}),
