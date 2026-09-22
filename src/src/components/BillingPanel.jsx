@@ -169,6 +169,11 @@ export default function BillingPanel({
           <p className="bill-sub">{sub}</p>
         </div>
         <div className="bill-head-actions">
+          {/* Free months have invoices too (mockup 21), so history is offered
+              to everyone the console knows how to open it for. */}
+          {!metered && onBillingHistory && (
+            <button type="button" className="bill-btn" onClick={onBillingHistory}>Billing history</button>
+          )}
           {metered ? (
             <button type="button" className="bill-btn" onClick={onBillingHistory}>
               Billing history

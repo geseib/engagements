@@ -1753,6 +1753,23 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
+        # The closed months (billing step 4) — same handler, same membership rule.
+        ListInvoices:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/invoices
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetInvoice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/invoices/{period}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

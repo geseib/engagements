@@ -13,6 +13,7 @@ import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
+import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
 import PlanRequestDialog from './components/PlanRequestDialog';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
@@ -227,6 +228,9 @@ function AdminPage() {
   const [planRequestBusy, setPlanRequestBusy] = useState(false);
   const [planRequestCount, setPlanRequestCount] = useState(null);
   const [orgAdjustments, setOrgAdjustments] = useState(null);
+  // BILLING STEP 4 — a PLACE inside the Billing section: '' = Plan & usage,
+  // 'history' = Billing history, 'yyyy-mm' = that month's invoice.
+  const [billingPlace, setBillingPlace] = useState('');
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -1734,19 +1738,25 @@ function AdminPage() {
         currentUser={currentUser}
         onSignOut={handleSignOut}
         breadcrumb={
-          editingSet
+          billingPlace && resolvedTab === 'billing'
+            ? (billingPlace === 'history'
+              ? { parentLabel: 'Plan & usage', onBack: () => setBillingPlace('') }
+              : { parentLabel: 'Billing history', onBack: () => setBillingPlace('history') })
+            : editingSet
             ? { parentLabel: 'Question sets', onBack: handleCancelEdit }
             : (scoreCardId && resolvedTab === 'publiclibrary'
               ? { parentLabel: 'Public library', onBack: () => setScoreCardId('') }
               : null)
         }
         title={
-          editingSet
+          billingPlace && resolvedTab === 'billing'
+            ? (billingPlace === 'history' ? 'Billing history' : `Invoice · ${periodLabel(billingPlace)}`)
+            : editingSet
             ? editingSet.name || editingSet.id
             : (scoreCardId && resolvedTab === 'publiclibrary' ? 'Score card' : section.title)
         }
         subtitle={
-          editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
+          (billingPlace && resolvedTab === 'billing') || editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
             ? undefined
             : section.subtitle
         }
@@ -2127,7 +2137,13 @@ function AdminPage() {
             <TeamPanel orgId={activeOrg.orgId} orgName={activeOrg.name} />
           )}
 
-          {resolvedTab === 'billing' && activeOrg && (
+          {resolvedTab === 'billing' && activeOrg && billingPlace === 'history' && (
+            <BillingHistory orgId={activeOrgId} onOpen={(p) => setBillingPlace(p)} onBack={() => setBillingPlace('')} />
+          )}
+          {resolvedTab === 'billing' && activeOrg && billingPlace && billingPlace !== 'history' && (
+            <Invoice orgId={activeOrgId} period={billingPlace} onBack={() => setBillingPlace('history')} />
+          )}
+          {resolvedTab === 'billing' && activeOrg && !billingPlace && (
             <BillingPanel
               planId={activeOrg.plan || (activeOrg.type === 'personal' ? 'personal' : 'team')}
               usage={orgUsage?.usage}
@@ -2138,6 +2154,8 @@ function AdminPage() {
               planRequest={planRequest}
               adjusted={orgUsage?.adjusted || null}
               adjustments={orgAdjustments}
+              onBillingHistory={() => setBillingPlace('history')}
+              onInvoice={(row) => setBillingPlace(row.period)}
               /* Owner only (handoff §2.7 Q5 — the same rule as redeeming a
                  code). A personal space has one member and they own it. */
               onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}

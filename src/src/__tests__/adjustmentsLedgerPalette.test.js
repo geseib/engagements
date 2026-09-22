@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'components', f), 'utf8');
-const SHEETS = [['AdjustmentsLedger.css', 'adjl'], ['OrgBillingDrawer.css', 'obill'], ['DiscountCodes.css', 'dcode']];
+const SHEETS = [['AdjustmentsLedger.css', 'adjl'], ['OrgBillingDrawer.css', 'obill'], ['DiscountCodes.css', 'dcode'], ['InvoicePanel.css', 'inv']];
 
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
 function lum([r, g, b]) { return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); }

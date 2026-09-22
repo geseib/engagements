@@ -27,6 +27,7 @@ const { callerOrgId, orgPk } = require('./shared/tenant');
 const { readUsage, periodOf, periodBounds, usageSk } = require('./shared/usage');
 const { projectInvoice, planFor } = require('./shared/pricing');
 const { applyAdjustments, simulationSentence } = require('./shared/pricing-adjust');
+const { listInvoices, getInvoice } = require('./shared/invoices');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -95,6 +96,25 @@ exports.handler = async (event) => {
     // leaked — "not yours" and "not there" answer the same.
     if (!acting || acting !== wanted) {
       return respond(403, { error: 'Only a member of this organisation can see its usage.' });
+    }
+
+    /*
+      THE CLOSED MONTHS (billing step 4). Same function, same membership
+      check, two more routes: GET /orgs/{orgId}/invoices lists the simulated
+      invoices newest first; /invoices/{period} returns one, frozen as it
+      was closed. Read from the rows, never recomputed — that is what makes
+      an invoice read the same in a year.
+    */
+    const rawPath = String(event?.rawPath || '');
+    if (/\/invoices(?:\/|$)/.test(rawPath)) {
+      const which = String(event?.pathParameters?.period || '').trim();
+      if (which) {
+        if (!/^\d{4}-\d{2}$/.test(which)) return respond(400, { error: 'period must look like 2026-08' });
+        const invoice = await getInvoice(db, process.env.TABLE_NAME, wanted, which);
+        if (!invoice) return respond(404, { error: `No invoice for ${which}. Months close on the 1st.` });
+        return respond(200, { invoice });
+      }
+      return respond(200, { invoices: await listInvoices(db, process.env.TABLE_NAME, wanted) });
     }
 
     const now = new Date();
