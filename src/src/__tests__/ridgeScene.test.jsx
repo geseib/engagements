@@ -74,3 +74,33 @@ test('reduced motion is read without a matchMedia to read it from', () => {
   // jsdom has no matchMedia; the hook must not throw there
   expect(prefersReducedMotion()).toBe(false);
 });
+
+/* ------------------------------------------------ refresh 2026-09-22 §1 change 4
+ * The route draws itself with scroll, 8% ahead of the climber, and the flag
+ * lights once the reader reaches the report (progress > 0.86). */
+import { routeDashOffset } from '../marketing/components/RidgeScene';
+
+test('the route is drawn just ahead of the climber: undrawn fraction = 1 - min(1, p + 0.08)', () => {
+  expect(routeDashOffset(0)).toBeCloseTo(0.92, 3);
+  expect(routeDashOffset(0.5)).toBeCloseTo(0.42, 3);
+  expect(routeDashOffset(0.92)).toBe(0);
+  expect(routeDashOffset(1)).toBe(0);
+  expect(routeDashOffset(7)).toBe(0);
+  expect(routeDashOffset(-1)).toBeCloseTo(0.92, 3);
+  expect(routeDashOffset(NaN)).toBeCloseTo(0.92, 3);
+});
+
+test('the path is normalised to a unit length and carries the offset inline, so the CSS dasharray of 1 reads as a fraction', () => {
+  const { container } = render(<RidgeScene progress={0.25} />);
+  const route = container.querySelector('.mk-ridge-route');
+  expect(route).toHaveAttribute('pathLength', '1');
+  expect(Number(route.style.strokeDashoffset)).toBeCloseTo(0.67, 3);
+});
+
+test('the flag is dim until the reader reaches the report, then lit', () => {
+  const mid = (p) => render(<RidgeScene progress={p} />).container.querySelector('.mk-ridge-mid');
+  expect(mid(0)).toHaveAttribute('data-summit', '0');
+  expect(mid(0.86)).toHaveAttribute('data-summit', '0');
+  expect(mid(0.9)).toHaveAttribute('data-summit', '1');
+  expect(mid(1)).toHaveAttribute('data-summit', '1');
+});

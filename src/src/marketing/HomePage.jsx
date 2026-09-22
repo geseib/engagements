@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import MarketingShell, { goToAuth } from './MarketingShell';
 import ClipFrame from './components/ClipFrame';
+import ClipStill from './components/ClipStill';
+import DeviceFrame from './components/DeviceFrame';
 import SampleReport from './components/SampleReport';
 import JoinCodeEntry from '../components/JoinCodeEntry';
+import useInViewOnce, { useCountUp } from './useInViewOnce';
+import useHeroBand from './useHeroBand';
 import { HOME } from './content/home';
 import { SAMPLE_REPORT_HOME } from './content/sampleReport';
 import './HomePage.css';
@@ -25,17 +29,88 @@ const Doors = ({ primary, secondary }) => (
   </div>
 );
 
+/**
+ * The product in the first viewport (refresh 2026-09-22 §1 change 1): the
+ * drawn trivia-RESULTS still on a TV, with a phone overlay that has just been
+ * told its score. Decoration beside the headline, so the block is
+ * `aria-hidden`; the stills still carry alt text for anything that reads
+ * past that. No captions — the headline is the caption.
+ */
+const HeroStage = () => (
+  <div className="mk-hero-stage" aria-hidden="true">
+    <DeviceFrame kind="tv">
+      <ClipStill slot="hero-results" alt="The front screen at results: the correct answer carries the headline, with every option's share beside it" />
+    </DeviceFrame>
+    <DeviceFrame kind="phone">
+      <ClipStill slot="hero-phone" alt="A player's phone after the reveal: the option they picked, and the points it earned" />
+    </DeviceFrame>
+  </div>
+);
+
+/** A photograph with its caption in the wash band at its foot (§4a). */
+const Photo = ({ photo, extraClass = '' }) => (
+  <figure className={`mk-art mk-art--photo${extraClass ? ` ${extraClass}` : ''}`}>
+    <img src={photo.src} alt={photo.alt} loading="lazy" />
+    <figcaption className="mk-art-wash">{photo.caption}</figcaption>
+  </figure>
+);
+
+/**
+ * The tally performs once (§1 change 5): bars are declared at zero with the
+ * real value in `--w`, and once the block is 35% in view `.mk-tally--in` lands, the
+ * bars grow and the counts count up in the same 700ms. Then stillness.
+ */
+const TallyRow = ({ row, go }) => {
+  const votes = useCountUp(row.votes, go);
+  return (
+    <div className={`mk-tally-row${row.cool ? ' mk-tally-row--cool' : ''}`}>
+      <div className="mk-tally-top">
+        <b>{row.text}</b>
+        <span className="mk-tally-n"><span data-count={row.votes}>{votes}</span> votes</span>
+      </div>
+      <div className="mk-tally-track"><i style={{ '--w': `${row.width}%` }} /></div>
+    </div>
+  );
+};
+
+const Tally = ({ tally }) => {
+  const ref = useRef(null);
+  const inView = useInViewOnce(ref, 0.35);
+  return (
+    <div ref={ref} className={`mk-tally${inView ? ' mk-tally--in' : ''}`}>
+      <div className="mk-tally-head">
+        <h3>{tally.question}</h3>
+      </div>
+      <p className="mk-muted">{tally.meta}</p>
+      <div className="mk-tally-rows">
+        {tally.rows.map((row) => <TallyRow key={row.text} row={row} go={inView} />)}
+      </div>
+      <p className="mk-tally-note">{tally.note}</p>
+    </div>
+  );
+};
+
 export default function HomePage() {
-  const { hero, problem, modes, material, room, summit, start } = HOME;
+  const { hero, problem, modes, material, room, summit, start, photos } = HOME;
+  const heroRef = useRef(null);
+  useHeroBand(heroRef);
 
   return (
-    <MarketingShell title="" current="home">
+    <MarketingShell title="" current="home" rootClass="mk-home">
       <div>
-        <section id="top" className="mk-hero">
+        <section id="top" className="mk-hero" ref={heroRef}>
           <div className="mk-shell mk-hero-top">
-            <p className="mk-kicker">{hero.kicker}</p>
-            <h1 className="mk-display mk-hero-copy">{hero.headline}</h1>
-            <p className="mk-lead mk-hero-sub">{hero.lead}</p>
+            <div>
+              <p className="mk-kicker">{hero.kicker}</p>
+              {/* Four authored lines that rise once, 90ms apart, from an
+                  already-painted default (§1 change 6). Under 720px the spans
+                  go inline and the h1 rises as one. */}
+              <h1 className="mk-display mk-hero-copy mk-rise">
+                {hero.headlineLines.map((line) => <span key={line}>{line}</span>)}
+              </h1>
+              <p className="mk-lead mk-hero-sub">{hero.lead}</p>
+            </div>
+            <HeroStage />
           </div>
           <div className="mk-shell mk-hero-foot">
             <Doors primary={hero.ctaPrimary} secondary={hero.ctaSecondary} />
@@ -46,13 +121,13 @@ export default function HomePage() {
         <section id="problem" className="mk-section mk-section--a">
           <div className="mk-shell">
             <div className="mk-section-head">
-              <p className="mk-kicker">{problem.kicker}</p>
               <h2 className="mk-title">{problem.title}</h2>
             </div>
-            <div className="mk-problem-grid">
+            {/* Three statements on a hairline: no cards, no 01/02/03 (§1
+                change 3). */}
+            <div className="mk-stmts">
               {problem.items.map((item) => (
-                <article key={item.n} className="mk-stmt">
-                  <span className="mk-stmt-n">{item.n}</span>
+                <article key={item.title}>
                   <h3>{item.title}</h3>
                   <p>{item.text}</p>
                 </article>
@@ -64,7 +139,6 @@ export default function HomePage() {
         <section id="modes" className="mk-section mk-section--b">
           <div className="mk-shell">
             <div className="mk-section-head">
-              <p className="mk-kicker">{modes.kicker}</p>
               <h2 className="mk-title">{modes.title}</h2>
               <p className="mk-lead">{modes.lead}</p>
             </div>
@@ -80,7 +154,6 @@ export default function HomePage() {
                     <span className="mk-mode-tag">{mode.tag}</span>
                     {mode.heading}
                   </h3>
-                  <p>{mode.text}</p>
                   <ul className="mk-mode-list">
                     {mode.list.map((line) => <li key={line}>{line}</li>)}
                   </ul>
@@ -96,54 +169,38 @@ export default function HomePage() {
         <section id="material" className="mk-section mk-section--a">
           <div className="mk-shell">
             <div className="mk-section-head">
-              <p className="mk-kicker">{material.kicker}</p>
               <h2 className="mk-title">{material.title}</h2>
               <p className="mk-lead">{material.lead}</p>
             </div>
-            <div className="mk-flow">
+            {/* A sequence on a rule with waypoint numerals: the order IS
+                information here, so the numbers survive (§1 change 3). */}
+            <ol className="mk-seq" role="list">
               {material.steps.map((step) => (
-                <article key={step.n} className="mk-flow-step">
-                  <div className="mk-flow-n">{step.n}</div>
+                <li key={step.n} className="mk-seq-step">
+                  <span className="mk-seq-n" aria-hidden="true">{step.n}</span>
                   <h3>{step.title}</h3>
                   <p>{step.text}</p>
-                </article>
+                </li>
               ))}
-            </div>
-            <div className="mk-material-clip">
+            </ol>
+            <div className="mk-material-row">
               <ClipFrame slot="builder" />
+              <p className="mk-material-note">
+                <b>{material.note.strong}</b> {material.note.text}
+              </p>
             </div>
-            <p className="mk-material-note">
-              <b>{material.note.strong}</b> {material.note.text}
-            </p>
           </div>
         </section>
 
         <section id="room" className="mk-section mk-section--b">
           <div className="mk-shell">
             <div className="mk-section-head">
-              <p className="mk-kicker">{room.kicker}</p>
               <h2 className="mk-title">{room.title}</h2>
             </div>
             <div className="mk-react-grid">
-              <div className="mk-tally">
-                <div className="mk-tally-head">
-                  <h3>{room.tally.question}</h3>
-                </div>
-                <p className="mk-muted">{room.tally.meta}</p>
-                <div className="mk-tally-rows">
-                  {room.tally.rows.map((row) => (
-                    <div key={row.text} className={`mk-tally-row${row.cool ? ' mk-tally-row--cool' : ''}`}>
-                      <div className="mk-tally-top">
-                        <b>{row.text}</b>
-                        <span className="mk-tally-n">{row.votes} votes</span>
-                      </div>
-                      <div className="mk-tally-track"><i style={{ width: `${row.width}%` }} /></div>
-                    </div>
-                  ))}
-                </div>
-                <p className="mk-tally-note">{room.tally.note}</p>
-              </div>
-              <div>
+              <Tally tally={room.tally} />
+              <div className="mk-react-side">
+                <Photo photo={photos.room} />
                 <p className="mk-lead">{room.lead}</p>
                 <ul className="mk-mode-list mk-room-list">
                   {room.list.map((line) => <li key={line}>{line}</li>)}
@@ -160,16 +217,20 @@ export default function HomePage() {
               <h2 className="mk-title">{summit.title}</h2>
               <p className="mk-lead">{summit.lead}</p>
             </div>
-            <SampleReport report={SAMPLE_REPORT_HOME} />
-            <p className="mk-muted mk-summit-link">
-              <a href="/reports">{summit.link}</a>
-            </p>
+            <div className="mk-summit-grid">
+              <SampleReport report={SAMPLE_REPORT_HOME} />
+              <div className="mk-summit-aside">
+                <Photo photo={photos.sheet} extraClass="mk-art--sheet" />
+                <p className="mk-muted mk-summit-link">
+                  <a href="/reports">{summit.link}</a>
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
         <section id="start" className="mk-cta">
           <div className="mk-shell mk-cta-in">
-            <p className="mk-kicker">{start.kicker}</p>
             <h2 className="mk-title">{start.title}</h2>
             <div className="mk-cta-row">
               <a className="mk-btn mk-btn-primary mk-btn-lg" href="/auth?mode=register" onClick={goToAuth('/auth?mode=register')}>

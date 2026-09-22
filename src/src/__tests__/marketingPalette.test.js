@@ -681,3 +681,183 @@ describe('every class the marketing markup uses is a class some marketing styles
     });
   });
 });
+
+/* ======================================================= refresh 2026-09-22
+ * docs/design/refresh-2026-09-22/RATIONALE.md §6 steps 1–2, the CSS-as-text
+ * half. Everything here reads a stylesheet as text and does arithmetic or
+ * structural matching on it; nothing measures geometry (jsdom has none).
+ */
+describe('the front page refresh (2026-09-22): motion, washes and the scaffold tells', () => {
+  const HOME_CSS = SHEETS['HomePage.css'];
+  const RIDGE_CSS = SHEETS['RidgeScene.css'];
+
+  /** Every selector (split on commas, whitespace-normalised) of every rule
+   * whose body declares `animation:` or `transition:`, partitioned by whether
+   * the rule sits inside a `prefers-reduced-motion: reduce` block. The walker
+   * above descends into @media without telling us which one, so this splits
+   * the sheet on the reduced-motion block first and walks each half. */
+  function motionSelectors(css) {
+    const norm = (sel) => sel.trim().replace(/\s+/g, ' ');
+    const collect = (text, prop) => {
+      const out = new Set();
+      walkRules(text, {
+        onRule: (head, body) => {
+          if (new RegExp(`(^|[;\\s])${prop}\\s*:`).test(body)) head.split(',').forEach((s) => out.add(norm(s)));
+        },
+      });
+      return out;
+    };
+    const s = stripped(css);
+    const reducedBlocks = [];
+    const rest = [];
+    let cursor = 0;
+    const re = /@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      let depth = 1;
+      let i = m.index + m[0].length;
+      while (i < s.length && depth > 0) { if (s[i] === '{') depth += 1; else if (s[i] === '}') depth -= 1; i += 1; }
+      rest.push(s.slice(cursor, m.index));
+      reducedBlocks.push(s.slice(m.index + m[0].length, i - 1));
+      cursor = i;
+      re.lastIndex = i;
+    }
+    rest.push(s.slice(cursor));
+    const live = rest.join('\n');
+    const reduced = reducedBlocks.join('\n');
+    const stilled = (text, prop) => {
+      const out = new Set();
+      walkRules(text, {
+        onRule: (head, body) => {
+          if (new RegExp(`(^|[;\\s])${prop}\\s*:\\s*none`).test(body)) head.split(',').forEach((s2) => out.add(norm(s2)));
+        },
+      });
+      return out;
+    };
+    return {
+      animated: collect(live, 'animation'),
+      transitioned: collect(live, 'transition'),
+      animationStilled: stilled(reduced, 'animation'),
+      transitionStilled: stilled(reduced, 'transition'),
+      reducedBlocks: reducedBlocks.length,
+    };
+  }
+
+  describe('every animation and transition has a prefers-reduced-motion counterpart', () => {
+    test.each([['HomePage.css', HOME_CSS], ['RidgeScene.css', RIDGE_CSS]])('%s', (_file, css) => {
+      const m = motionSelectors(css);
+      expect(m.reducedBlocks).toBeGreaterThan(0);
+      // The suite cannot silently check nothing: the refresh added motion to
+      // both files, so both must have something to still.
+      expect(m.animated.size + m.transitioned.size).toBeGreaterThan(0);
+      expect([...m.animated].filter((sel) => !m.animationStilled.has(sel))).toEqual([]);
+      expect([...m.transitioned].filter((sel) => !m.transitionStilled.has(sel))).toEqual([]);
+    });
+
+    test('the motion helper can actually fail', () => {
+      const m = motionSelectors('.mk-a { animation: x 1s; } .mk-b { transition: width .2s; } @media (prefers-reduced-motion: reduce) { .mk-a { animation: none; } }');
+      expect([...m.animated]).toEqual(['.mk-a']);
+      expect([...m.transitioned]).toEqual(['.mk-b']);
+      expect(m.animationStilled.has('.mk-a')).toBe(true);
+      expect(m.transitionStilled.has('.mk-b')).toBe(false);
+    });
+  });
+
+  test('the home page has no idle motion: nothing loops, and the only keyframes are the one-shot rise', () => {
+    const names = [];
+    walkRules(HOME_CSS, { onKeyframesName: (n) => names.push(n) });
+    expect(names).toEqual(['mk-rise']);
+    expect(stripped(HOME_CSS)).not.toMatch(/infinite|alternate/);
+  });
+
+  test('the headline is visible by default: the rise animation only offsets what is already painted (fill-mode both, from a keyframe, never display/visibility)', () => {
+    const rise = stripped(HOME_CSS).match(/@keyframes mk-rise\s*\{([\s\S]*?)\}\s*\}/)[1];
+    expect(rise).not.toMatch(/visibility|display/);
+    expect(stripped(HOME_CSS)).toMatch(/\.mk-rise > span \{[^}]*animation:\s*mk-rise[^;]*both/);
+  });
+
+  test('the tally bars are declared at zero with the value in --w, and grow only under .mk-tally--in', () => {
+    const css = stripped(HOME_CSS);
+    expect(css).toMatch(/\.mk-tally-track i \{[^}]*--w:\s*0%/);
+    expect(css).toMatch(/\.mk-tally-track i \{[^}]*width:\s*0;/);
+    expect(css).toMatch(/\.mk-tally--in \.mk-tally-track i \{\s*width:\s*var\(--w\)/);
+    // Under reduced motion the final frame, not a bar stuck at zero.
+    expect(css).toMatch(/prefers-reduced-motion:\s*reduce[\s\S]*\.mk-tally-track i \{[^}]*width:\s*var\(--w\)/);
+  });
+
+  test('the route draws itself: unit dasharray, unit offset, stilled and fully drawn under reduced motion', () => {
+    const css = stripped(RIDGE_CSS);
+    expect(css).toMatch(/\.mk-ridge-route \{[^}]*stroke-dasharray:\s*1;/);
+    expect(css).toMatch(/\.mk-ridge-route \{[^}]*stroke-dashoffset:\s*1;/);
+    expect(css).toMatch(/prefers-reduced-motion:\s*reduce[\s\S]*\.mk-ridge-route \{[^}]*stroke-dashoffset:\s*0 !important/);
+  });
+
+  describe('the scaffold tells, in the stylesheet', () => {
+    test('no border-left above 1px anywhere on the home page (.mk-material-note used to carry 3px)', () => {
+      const offenders = [];
+      walkRules(HOME_CSS, {
+        onRule: (head, body) => {
+          for (const m of body.matchAll(/border-left(?:-width)?\s*:\s*([\d.]+)px/g)) if (Number(m[1]) > 1) offenders.push(`${head}: ${m[0]}`);
+        },
+      });
+      expect(offenders).toEqual([]);
+      expect(stripped(HOME_CSS)).toMatch(/\.mk-material-note \{[^}]*border-left:\s*1px/);
+      expect(stripped(HOME_CSS)).toMatch(/\.mk-material-note \{[^}]*background:\s*transparent/);
+    });
+    test('the problem numerals and the card grids are not declared any more', () => {
+      const declared = new Set([...stripped(HOME_CSS).matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+      for (const gone of ['mk-stmt-n', 'mk-stmt', 'mk-problem-grid', 'mk-flow', 'mk-flow-n', 'mk-flow-step']) expect(declared.has(gone)).toBe(false);
+    });
+    test('the nav-door and Join outlines are scoped to the home root, so no other page inherits them', () => {
+      const heads = [];
+      walkRules(HOME_CSS, { onRule: (head) => heads.push(head) });
+      const navRules = heads.filter((h) => /mk-btn-primary|jce-go/.test(h));
+      expect(navRules.length).toBeGreaterThan(0);
+      for (const h of navRules) expect(h).toMatch(/^\.mk-home /);
+    });
+  });
+
+  /* ------------------------------------------------------- the photo wash
+   * RATIONALE §4a measured the brightest 16x16 block of each crop; the
+   * caption band composites --mk-wash-a over that and carries --mk-text.
+   * Pinned here so a lighter wash, or --mk-muted in the band, goes red. */
+  describe('the photograph caption band', () => {
+    const BRIGHTEST = { 'participants (a window, not a face)': '#B6C8CF', 'paper (the sheet)': '#DCDED5' };
+    const behind = (hex) => `rgb(${parseHex(hex).join(',')})`;
+
+    test.each(Object.entries(BRIGHTEST))('--mk-text over wash-a over the brightest region of %s clears AA', (_l, hex) => {
+      expect(on(T.text, [behind(hex), WASH.a])).toBeGreaterThanOrEqual(AA);
+    });
+    test.each(Object.entries(BRIGHTEST))('bare, --mk-text on %s does NOT clear AA (the premise: only the band may carry a word)', (_l, hex) => {
+      expect(on(T.text, [behind(hex)])).toBeLessThan(AA);
+    });
+    test.each(Object.entries(BRIGHTEST))('--mk-muted would fail over a 70%% wash on %s (why the wash stays at .9 and muted is not used)', (_l, hex) => {
+      expect(on(T.muted, [behind(hex), 'rgba(15, 26, 46, 0.7)'])).toBeLessThan(AA);
+    });
+    test('the band paints --mk-wash-a and only --mk-text', () => {
+      const band = stripped(HOME_CSS).match(/\.mk-art-wash \{([^}]*)\}/)[1];
+      expect(band).toMatch(/var\(--mk-wash-a\)/);
+      expect(band).toMatch(/color:\s*var\(--mk-text\)/);
+      expect(band).not.toMatch(/--mk-muted/);
+    });
+    test('no rule on the photo figure carries --mk-muted as text', () => {
+      const offenders = [];
+      walkRules(HOME_CSS, {
+        onRule: (head, body) => { if (/\.mk-art/.test(head) && /(^|[^-])\bcolor\s*:\s*var\(--mk-muted\)/.test(body)) offenders.push(head); },
+      });
+      expect(offenders).toEqual([]);
+    });
+  });
+
+  /* The hero still's chips (--mk-muted) sit on ClipStill's .mk-ss gradient,
+   * ridge-front at the top to bg at the foot. Both ends, both AA. */
+  test.each([
+    ['the still chips at the top of the gradient (ridge-front)', T.muted, [T.ridgeFront]],
+    ['the still chips at the foot of the gradient (bg)', T.muted, [T.bg]],
+    ['the still question copy on ridge-front', T.text, [T.ridgeFront]],
+    ['the correct row’s amber letter on ridge-front', T.amber, [T.ridgeFront]],
+    ['the correct row’s amber letter on bg', T.amber, [T.bg]],
+  ])('%s clears AA', (_l, fg, layers) => {
+    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  });
+});

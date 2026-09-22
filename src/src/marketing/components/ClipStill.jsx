@@ -195,7 +195,62 @@ const TOUR_RESULTS = (
   </>
 );
 
+/*
+ * The two stills the refreshed hero draws (docs/design/refresh-2026-09-22/
+ * _src/build.py HERO_STAGE): trivia RESULTS with the correct row carrying the
+ * headline and shares beside every option (open question 2's recommended
+ * answer — one green row and four bars read at thumbnail size where a vote
+ * page does not), and the phone that has just been told its score.
+ */
+
+const HERO_RESULTS = (
+  <>
+    <div className="mk-ss-top">
+      <span className="mk-ss-dot" />
+      <span className="mk-ss-chip">Results · Q4 of 10</span>
+      <span className="mk-ss-code">4821</span>
+    </div>
+    <p className="mk-ss-q">Which did the retro name as the biggest cause of rework?</p>
+    <div className="mk-ss-bars">
+      <div className="mk-ss-bar mk-ss-right">
+        <span><b>C</b> Requirements agreed in a call and never written down</span><em>58%</em>
+        <span className="mk-ss-track"><i style={{ width: '58%' }} /></span>
+      </div>
+      <div className="mk-ss-bar">
+        <span>A Unclear acceptance criteria</span><em>22%</em>
+        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '22%' }} /></span>
+      </div>
+      <div className="mk-ss-bar">
+        <span>B Late design changes</span><em>14%</em>
+        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '14%' }} /></span>
+      </div>
+      <div className="mk-ss-bar">
+        <span>D Environment drift</span><em>6%</em>
+        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '6%' }} /></span>
+      </div>
+    </div>
+    <div className="mk-ss-foot">
+      <span className="mk-ss-chip">20 of 20 answered</span>
+      <span className="mk-ss-grow" />
+      <span className="mk-ss-chip">Next question</span>
+    </div>
+  </>
+);
+
+const HERO_PHONE = (
+  <>
+    <div className="mk-ss-top"><span className="mk-ss-dot" /><span className="mk-ss-chip">Priya</span></div>
+    <p className="mk-ss-q">You picked C</p>
+    <div className="mk-ss-opts">
+      <div className="mk-ss-opt mk-ss-right"><b>C</b> Never written</div>
+    </div>
+    <div className="mk-ss-cta">+120 pts</div>
+  </>
+);
+
 const STILLS = {
+  'hero-results': { content: HERO_RESULTS, extraClass: '' },
+  'hero-phone': { content: HERO_PHONE, extraClass: '' },
   'trivia-host': { content: TRIVIA_HOST, extraClass: '' },
   'trivia-player': { content: TRIVIA_PLAYER, extraClass: '' },
   'poll-host': { content: POLL_HOST, extraClass: '' },

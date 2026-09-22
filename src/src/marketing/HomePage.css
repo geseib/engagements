@@ -1,50 +1,84 @@
 /* ===========================================================================
-   HomePage.css — the home-only rule groups from
-   docs/design/marketing-redesign/mk.css: hero, problem, modes, material,
-   the room reacts, and the summit's page-level layout (the report itself is
-   SampleReport.css). Nothing here is declared in MarketingShell.css,
+   HomePage.css — the home-only rule groups. Refreshed 2026-09-22 against
+   docs/design/refresh-2026-09-22/_src/refresh-home.css (the diff over the
+   approved mk.css; RATIONALE.md §1 has the critique and the ranked changes).
+   Every token, wash and ladder value is MarketingShell.css's; nothing here
+   paints from a literal. Nothing here is declared in MarketingShell.css,
    RidgeScene.css, DeviceFrame.css, ClipFrame.css or ClipStill.css.
+
+   Motion on this page is the two authored moments (the route drawing with
+   scroll — RidgeScene.css — and the tally growing and counting up once in
+   view) plus the headline rising once. No idle motion. Every animation and
+   transition below has its counterpart in the reduced-motion block at the
+   foot, and marketingPalette.test.js asserts that.
+
+   Contrast, measured (marketingPalette.test.js composites these):
+     --mk-text on the photo caption band (--mk-wash-a over each image's
+       brightest region): participants #B6C8CF -> 12.25:1, paper #DCDED5 ->
+       11.76:1. --mk-muted would land at 5.9 / 5.7 there but 3.5 / 3.1 over a
+       70% wash, so only --mk-text sits in the band and the wash stays at .9.
+     the still's chips (--mk-muted) on the .mk-ss gradient, ridge-front -> bg:
+       7.1:1 / 7.6:1.
    =========================================================================== */
 
-/* The scene now renders from MarketingShell (task 9), as a sibling of <main>
-   rather than a child of this page's own wrapper, and MarketingShell.css
-   gives <main> itself the stacking context that used to live here per-section.
-   Fix round 1, finding 3: the page's own outer wrapper and five of its
-   section elements carried a bare `mk-home`/`mk-problem`/`mk-modes`/
-   `mk-material`/`mk-react` class that no stylesheet, script or test ever
-   read — dead hooks duplicating each section's own `id`. Removed from
-   HomePage.jsx rather than declared here; the sections keep their ids and
-   their `.mk-section`/`.mk-section--a`/`.mk-section--b` classes. */
-
-/* ==================================================================== hero = */
+/* ==================================================================== hero =
+   The product is in the first viewport: copy left holds the top 55% (the
+   contrast rule from the art brief §4 is unchanged); the drawn stage still
+   sits right, where it is a dark object with its own contrast and may enter
+   the amber band. */
 .mk-hero {
   min-height: var(--mk-ridge-band);
   display: grid;
-  grid-template-rows: 55fr 45fr;
+  grid-template-rows: auto auto;
+  row-gap: 34px;
   padding-block: clamp(36px, 7vh, 76px) clamp(30px, 6vh, 64px);
 }
-/* Row one is the top 55% of the hero and is the only place headline text
-   lands. Row two carries the CTAs and the join card. */
-.mk-hero-top { align-self: start; }
+.mk-hero-top {
+  align-self: start;
+  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 34px 40px; align-items: end;
+}
 .mk-hero-foot { align-self: end; display: flex; flex-wrap: wrap; gap: 22px 30px; align-items: flex-end; }
-/* mockup: style="margin-top:18px" on the h1 folded into this class. */
-.mk-hero-copy { max-width: 19ch; margin-top: 18px; }
-.mk-hero-sub { max-width: 46ch; margin-top: 20px; }
+/* Four short lines at a display size the column can hold: the approved 68px
+   three-liner needs 19ch of width the two-column hero no longer has
+   (RATIONALE §1 change 1). The clamp is this one rule's departure from the
+   ladder, and it never drops under --mk-t-display's narrow value. */
+.mk-hero-copy { max-width: none; margin-top: 18px; font-size: clamp(40px, 3.5vw, 54px); }
+.mk-hero-sub { max-width: 42ch; margin-top: 20px; }
 .mk-hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.mk-hero-stage { position: relative; justify-self: end; width: 100%; max-width: 560px; }
+.mk-hero-stage .mk-device--phone { position: absolute; right: -4%; bottom: -14%; width: 22%; }
 
-/* --------------------------------------------------------------- problem -- */
-.mk-problem-grid { display: grid; gap: 18px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); }
-.mk-stmt {
-  border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
-  background: var(--mk-surface); padding: 30px 26px 32px;
-  border-top: 3px solid var(--mk-amber-deep);
+/* One filled amber control per viewport (§1 change 2): while the hero's
+   primary is on screen the nav's account door and Join are outlines. Scoped
+   to `.mk-home` (MarketingShell's `rootClass`) so no other page is touched. */
+.mk-home .mk-nav-links .mk-btn-primary { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-home .mk-nav-links .mk-btn-primary:hover { background: transparent; border-color: var(--mk-text); }
+.mk-home .mk-hero-foot .jce-go { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-home .mk-hero-foot .jce-go:hover { border-color: var(--mk-text); }
+
+/* The headline's four lines rise once (§1 change 6). Visible by default; the
+   animation only offsets what is already painted, so a failed script hides
+   nothing. */
+.mk-rise > span { display: block; animation: mk-rise 0.62s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.mk-rise > span:nth-child(2) { animation-delay: 0.09s; }
+.mk-rise > span:nth-child(3) { animation-delay: 0.18s; }
+.mk-rise > span:nth-child(4) { animation-delay: 0.27s; }
+.mk-hero-sub, .mk-hero-foot { animation: mk-rise 0.62s cubic-bezier(0.16, 1, 0.3, 1) 0.36s both; }
+.mk-hero-stage { animation: mk-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.34s both; }
+@keyframes mk-rise {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
 }
-.mk-stmt-n {
-  font: 800 var(--mk-t-label)/1 var(--mk-font-display); letter-spacing: 0.1em;
-  color: var(--mk-amber); display: block; margin-bottom: 12px;
+
+/* --------------------------------------------------------------- problem --
+   Three statements on a hairline: no cards, no 01/02/03 (§1 change 3). */
+.mk-stmts {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px 44px;
+  margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--mk-rule);
 }
-.mk-stmt h3 { font-size: var(--mk-t-head); line-height: 1.14; }
-.mk-stmt p { margin-top: 12px; color: var(--mk-muted); }
+.mk-stmts h3 { font-size: var(--mk-t-head); line-height: 1.14; max-width: 14ch; }
+.mk-stmts p { margin-top: 12px; color: var(--mk-muted); max-width: 34ch; }
 
 /* ----------------------------------------------------------------- modes -- */
 .mk-mode {
@@ -75,7 +109,6 @@
   display: flex; flex-direction: column; align-items: flex-start; gap: 16px;
   font-size: var(--mk-t-title); line-height: 1.08; margin-top: 16px; letter-spacing: -0.018em;
 }
-.mk-mode-copy > p { margin-top: 16px; color: var(--mk-muted); max-width: 44ch; }
 .mk-mode-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 10px; }
 .mk-mode-list li { display: flex; gap: 11px; align-items: flex-start; color: var(--mk-text); }
 .mk-mode-list li::before {
@@ -84,30 +117,39 @@
 }
 .mk-mode-screens { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 18px; align-items: end; }
 
-/* ---------------------------------------------------------- your material -- */
-.mk-flow { display: grid; gap: 16px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); }
-.mk-flow-step {
-  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
-  padding: 22px 20px; position: relative;
+/* ---------------------------------------------------------- your material --
+   The four steps are a sequence on a rule with waypoint numerals: the reader
+   is being told an order, so the numeral carries information and stays — on
+   the rule, not as a card badge (§1 change 3). */
+.mk-seq {
+  list-style: none; padding: 0; margin: 40px 0 0; position: relative;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px 28px;
 }
-.mk-flow-step h3 { font-size: var(--mk-t-body); margin-top: 12px; font-family: var(--mk-font-ui); font-weight: 700; }
-.mk-flow-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
-.mk-flow-n {
-  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
-  background: rgba(246, 169, 76, 0.14); border: 1px solid var(--mk-amber);
-  font: 800 var(--mk-t-label)/1 var(--mk-font-display); color: var(--mk-amber);
+.mk-seq::before { content: ""; position: absolute; left: 0; right: 0; top: 19px; height: 1px; background: var(--mk-rule); }
+.mk-seq-step { position: relative; padding-top: 30px; }
+.mk-seq-n {
+  position: absolute; top: 0; left: 0; width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--mk-bg);
+  border: 1px solid var(--mk-amber); color: var(--mk-amber);
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display);
 }
-/* mockup's second `.mk-flow` (a single-column row for the builder clip). */
-.mk-material-clip { margin-top: 26px; max-width: 560px; }
+.mk-seq-step h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; margin-top: 14px; line-height: 1.35; }
+.mk-seq-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; max-width: 30ch; }
+.mk-material-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px 44px; margin-top: 36px; align-items: center; }
+.mk-material-row .mk-device { max-width: 520px; }
+/* 1px rule, no tint: the coloured border-left above 1px was a scaffold tell. */
 .mk-material-note {
-  margin-top: 26px; padding: 18px 20px; border-radius: var(--mk-radius);
-  border: 1px solid var(--mk-rule); border-left: 3px solid var(--mk-amber);
-  background: rgba(246, 169, 76, 0.07); color: var(--mk-text); max-width: 74ch;
+  padding: 18px 20px; border-radius: var(--mk-radius);
+  border: 1px solid var(--mk-rule); border-left: 1px solid var(--mk-amber);
+  background: transparent; color: var(--mk-text); max-width: 74ch;
 }
 .mk-material-note b { color: var(--mk-amber); }
 
-/* ------------------------------------------------------------ the reaction */
-.mk-react-grid { display: grid; gap: 34px 44px; margin-top: 44px; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: center; }
+/* ------------------------------------------------------------ the reaction
+   The tally performs once (§1 change 5): bars are drawn at zero and grow when
+   the block enters view, the counts count up in the same 700ms. It is the
+   product's own live moment and the one motion this section gets. */
+.mk-react-grid { display: grid; gap: 34px 44px; margin-top: 44px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 .mk-tally {
   background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
   padding: 24px 22px 26px;
@@ -119,25 +161,93 @@
 .mk-tally-row { display: grid; gap: 6px; }
 .mk-tally-top { display: flex; gap: 12px; align-items: baseline; }
 .mk-tally-top b { font-weight: 700; }
-.mk-tally-n { margin-left: auto; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-tally-n { margin-left: auto; color: var(--mk-text); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mk-tally-track { height: 10px; border-radius: 5px; background: rgba(244, 237, 228, 0.1); overflow: hidden; }
-.mk-tally-track i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-tally-track i {
+  display: block; height: 100%; background: var(--mk-amber);
+  /* `--w` is the bar's real width, set inline from content/home.js; the bar
+     is declared at zero until the block is in view. */
+  --w: 0%;
+  width: 0;
+  transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mk-tally--in .mk-tally-track i { width: var(--w); }
 .mk-tally-row--cool .mk-tally-track i { background: var(--mk-blue); }
 .mk-tally-note { margin-top: 20px; font-size: var(--mk-t-label); color: var(--mk-muted); }
-.mk-room-list { margin-top: 22px; }
+.mk-react-side { display: grid; gap: 22px; }
+.mk-react-side .mk-lead { max-width: 34ch; }
+.mk-room-list { margin-top: 0; }
+
+/* ------------------------------------------------------- the photographs
+   Cover-cropped files (assets/hero/CREDITS.json records the crops); the
+   caption sits in a wash-a band at the foot. Only --mk-text may sit in the
+   band — see the measurements at the top of this file. */
+.mk-art {
+  position: relative; margin: 0; aspect-ratio: 4 / 3; border-radius: var(--mk-radius); overflow: hidden;
+  border: 1px solid var(--mk-rule-strong); background: var(--mk-ridge-front);
+}
+.mk-art--photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; object-position: 50% 52%; }
+.mk-art-wash {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 18px 14px;
+  background: linear-gradient(180deg, rgba(15, 26, 46, 0) 0%, var(--mk-wash-a) 55%);
+  color: var(--mk-text); font-size: var(--mk-t-label); font-weight: 700; letter-spacing: 0.02em;
+}
+.mk-art--sheet img { object-position: 54% 50%; }
 
 /* -------------------------------------------------------- summit page frame */
-.mk-summit-link { margin-top: 22px; }
+.mk-summit-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 30px 40px; margin-top: 36px; align-items: start; }
+.mk-summit .mk-summit-grid .mk-report { max-width: none; margin: 0; }
+.mk-summit-aside { display: grid; gap: 18px; position: sticky; top: 90px; }
+.mk-summit-aside .mk-art { aspect-ratio: 3 / 4; }
+.mk-summit-link { margin-top: 0; }
 
-@media (max-width: 720px) {
-  .mk-root { --mk-ridge-band: 92vh; }
-  .mk-hero-foot { flex-direction: column; align-items: stretch; }
-  .mk-hero-copy { max-width: none; }
-  .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
-}
+/* ------------------------------------------------------------------ narrow */
 @media (max-width: 980px) {
+  .mk-hero-top { grid-template-columns: minmax(0, 1fr); }
+  .mk-hero-stage { justify-self: stretch; max-width: 520px; }
+  .mk-stmts, .mk-seq { grid-template-columns: minmax(0, 1fr); }
+  .mk-seq::before { display: none; }
+  .mk-material-row, .mk-summit-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-summit-aside { position: static; }
+  .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
+  .mk-art--sheet img { object-position: 50% 55%; }
   .mk-mode, .mk-react-grid { grid-template-columns: minmax(0, 1fr); }
   .mk-mode--flip .mk-mode-copy { order: 0; }
   .mk-mode-screens { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .mk-mode-screens .mk-device--phone { width: 190px; }
+}
+@media (max-width: 720px) {
+  /* The stylesheet's value is the fallback only: useHeroBand publishes the
+     hero's MEASURED height on .mk-root at this width, because with the still
+     in the hero the content out-measures a phone viewport and a glow clamped
+     to 60% of 92vh rose into the lead. The hero itself no longer takes the
+     band as a minimum here, or the measurement would ratchet. */
+  .mk-root { --mk-ridge-band: 92vh; }
+  .mk-hero { min-height: 0; row-gap: 26px; }
+  /* One column: the four authored lines become natural wraps and the h1
+     rises as one. */
+  .mk-rise > span { display: inline; animation: none; }
+  .mk-rise > span::after { content: " "; }
+  .mk-hero-copy { animation: mk-rise 0.62s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .mk-hero-stage .mk-device--phone { display: none; }
+  /* The 16:9 screen is short at this width: the third and fourth bars go,
+     and the foot's two chips, which wrapped inside themselves and ran off
+     the bottom of the screen (seen rendered at 390px). */
+  .mk-hero-stage .mk-ss-bar:nth-child(n+3), .mk-hero-stage .mk-ss-foot { display: none; }
+  .mk-hero-foot { flex-direction: column; align-items: stretch; }
+  .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
+  .mk-stmts h3, .mk-stmts p, .mk-seq-step p { max-width: none; }
+  .mk-seq { gap: 22px; }
+  .mk-seq-step { padding-top: 0; padding-left: 50px; }
+  .mk-seq-step h3 { margin-top: 0; }
+  .mk-art { aspect-ratio: 16 / 10; }
+}
+
+/* ---------------------------------------------------------- reduced motion
+   Every animation and transition above, stilled. The tally lands on its
+   final frame; the headline is simply there. Last in the file on purpose:
+   the narrow block above re-declares the h1's animation, and this must win. */
+@media (prefers-reduced-motion: reduce) {
+  .mk-rise > span, .mk-hero-sub, .mk-hero-foot, .mk-hero-stage, .mk-hero-copy { animation: none; }
+  .mk-tally-track i { transition: none; width: var(--w); }
 }

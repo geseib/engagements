@@ -62,16 +62,37 @@
 .mk-ridge-front .mk-ridge-body { fill: var(--mk-ridge-front); }
 
 /* The route is the page's spine: base camp at the foot, the summit where the
-   report is. Dashed because it is a plan, not a path already walked. */
+   report is. Refresh 2026-09-22 §1 change 4: it used to be fully drawn (and
+   dashed) from the first frame, so the plan read as already walked. Now the
+   path has `pathLength="1"` and RidgeScene.jsx sets `stroke-dashoffset` to
+   the undrawn fraction from the same scroll progress that moves the climber,
+   8% ahead of it, so the route draws itself as the reader climbs. */
 .mk-ridge-route {
   fill: none; stroke: var(--mk-amber); stroke-width: 3.2;
-  stroke-dasharray: 11 12; stroke-linecap: round; opacity: 0.78;
+  stroke-dasharray: 1; stroke-dashoffset: 1; stroke-linecap: round; opacity: 0.78;
+  transition: stroke-dashoffset 0.12s linear;
 }
+/* The flag is dim until the reader reaches the report. */
+.mk-ridge-mid .mk-ridge-flag, .mk-ridge-mid .mk-ridge-mast { transition: opacity 0.4s; }
+.mk-ridge-mid[data-summit="0"] .mk-ridge-flag, .mk-ridge-mid[data-summit="0"] .mk-ridge-mast { opacity: 0.35; }
 .mk-ridge-climber { fill: var(--mk-amber); stroke: var(--mk-bg); stroke-width: 2.5; }
 .mk-ridge-climber-halo { fill: rgba(246,169,76,0.22); }
 .mk-ridge-flag { fill: var(--mk-amber); }
 .mk-ridge-mast { stroke: var(--mk-amber); stroke-width: 2.4; }
 
+/* mk.css's own narrow rule (its ≤720px block), which had not been carried
+   over: on a phone the route, the climber and the flag are hidden — the
+   drawn plan needs width to read, and at 390px the flag was showing through
+   the section washes as a stray triangle (seen rendered, 2026-09-22). */
+@media (max-width: 720px) {
+  .mk-ridge-route, .mk-ridge-climber, .mk-ridge-climber-halo,
+  .mk-ridge-mast, .mk-ridge-flag { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mk-ridge-back, .mk-ridge-mid, .mk-ridge-front { --mk-drift: 0px; }
+  /* Drawn in full, still; the flag lit. useScrollProgress also pins progress
+     to 1, but the stylesheet stills it on its own. */
+  .mk-ridge-route { stroke-dashoffset: 0 !important; transition: none; }
+  .mk-ridge-mid .mk-ridge-flag, .mk-ridge-mid .mk-ridge-mast { transition: none; opacity: 1 !important; }
 }

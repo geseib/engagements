@@ -4,6 +4,7 @@ import HomePage from '../marketing/HomePage';
 import { navigateTo } from '../auth/navigate';
 import { RETURN_KEY } from '../auth/returnPath';
 import { SAMPLE_REPORT_HOME, SAMPLE_REPORT } from '../marketing/content/sampleReport';
+import { HOME } from '../marketing/content/home';
 
 jest.mock('../auth/navigate', () => ({ navigateTo: jest.fn() }));
 beforeEach(() => {
@@ -152,4 +153,162 @@ test('the home page still has its own, real link to /reports outside the sheet',
   const reportsLink = screen.getByRole('link', { name: /see a full report, annotated/i });
   expect(reportsLink).toHaveAttribute('href', '/reports');
   expect(article).not.toContainElement(reportsLink);
+});
+
+/* =========================================================== refresh 2026-09-22
+ * docs/design/refresh-2026-09-22/RATIONALE.md §1 (the front page) and §6
+ * steps 1–2. Behaviour and DOM structure only: jsdom has no layout engine,
+ * so nothing below measures a width, an offset or a viewport. The CSS-as-text
+ * half of the contract (reduced motion, the wash contrast, the 1px rule) is
+ * in marketingPalette.test.js.
+ */
+describe('the front page, refreshed (2026-09-22)', () => {
+  test('the product is in the first viewport: the hero carries the drawn RESULTS still and the phone, as decoration', () => {
+    render(<HomePage />);
+    const hero = document.getElementById('top');
+    const stage = hero.querySelector('.mk-hero-stage');
+    expect(stage).not.toBeNull();
+    expect(stage).toHaveAttribute('aria-hidden', 'true');
+    expect(stage.querySelector('.mk-device--tv')).not.toBeNull();
+    expect(stage.querySelector('.mk-device--phone')).not.toBeNull();
+    // Open question 2's recommended answer: RESULTS trivia, not VOTE — one
+    // correct row carrying the headline, shares beside every option.
+    expect(stage.querySelector('.mk-ss-bar.mk-ss-right')).not.toBeNull();
+    expect(stage.querySelectorAll('.mk-ss-bar')).toHaveLength(4);
+    expect(within(stage).getByText('+120 pts')).toBeInTheDocument();
+    // No caption under either device: the headline is the caption.
+    expect(stage.querySelector('.mk-device-cap')).toBeNull();
+  });
+
+  test('the headline is the approved sentence, carried as four authored lines that rise once', () => {
+    render(<HomePage />);
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1).toHaveClass('mk-rise');
+    const lines = [...h1.querySelectorAll(':scope > span')].map((s) => s.textContent);
+    expect(lines).toEqual(HOME.hero.headlineLines);
+    expect(lines).toHaveLength(4);
+    expect(lines.join(' ')).toBe('Your team’s own material, turned into decisions everyone climbed toward.');
+  });
+
+  test('one filled amber control above the fold: exactly one mk-btn-primary inside .mk-hero', () => {
+    render(<HomePage />);
+    const hero = document.querySelector('.mk-hero');
+    expect(hero.querySelectorAll('.mk-btn-primary')).toHaveLength(1);
+    // Join is still a button and still works (the test above proves the
+    // navigation); it is just not a second primary.
+    expect(within(hero).getByRole('button', { name: /join/i })).not.toHaveClass('mk-btn-primary');
+    // The shell root carries the class HomePage.css scopes the nav-door
+    // outline to, so no other marketing page inherits it.
+    expect(document.querySelector('.mk-root')).toHaveClass('mk-home');
+  });
+
+  test('kickers survive only where they carry the climb: #top and #summit', () => {
+    render(<HomePage />);
+    const kickers = [...document.querySelectorAll('.mk-kicker')];
+    expect(kickers).toHaveLength(2);
+    expect(kickers.map((k) => k.closest('section').id)).toEqual(['top', 'summit']);
+    expect(kickers.map((k) => k.textContent)).toEqual(['Base camp', 'The summit']);
+  });
+
+  test('the scaffold tells are gone: no 01/02/03 numerals, no problem cards, no flow cards', () => {
+    render(<HomePage />);
+    expect(document.querySelector('.mk-stmt-n')).toBeNull();
+    expect(document.querySelector('.mk-stmt')).toBeNull();
+    expect(document.querySelector('.mk-problem-grid')).toBeNull();
+    expect(document.querySelector('.mk-flow')).toBeNull();
+    expect(document.querySelector('.mk-flow-n')).toBeNull();
+    const problem = document.getElementById('problem');
+    expect(problem.querySelectorAll('.mk-stmts article')).toHaveLength(3);
+    expect(problem.textContent).not.toMatch(/\b0[123]\b/);
+  });
+
+  test('the four steps are an ordered sequence — the order is information, so those numerals stay', () => {
+    render(<HomePage />);
+    const material = document.getElementById('material');
+    const seq = within(material).getByRole('list');
+    expect(seq.tagName).toBe('OL');
+    expect(seq).toHaveClass('mk-seq');
+    const numerals = [...seq.querySelectorAll('.mk-seq-n')].map((n) => n.textContent);
+    expect(numerals).toEqual(['1', '2', '3', '4']);
+    // The material note keeps its copy; its 1px rule is asserted in the palette test.
+    expect(material.querySelector('.mk-material-note')).toHaveTextContent(/private stays private/i);
+  });
+
+  test('each mode states its fact once: no paragraph repeating the first list item', () => {
+    render(<HomePage />);
+    const modes = document.getElementById('modes');
+    expect(modes.querySelector('.mk-mode-copy > p')).toBeNull();
+    for (const mode of HOME.modes.items) {
+      expect(mode.text).toBeUndefined();
+      expect(mode.list).toHaveLength(3);
+    }
+    // The honesty line is still on the page.
+    expect(within(modes).getByText(/trivia has no vote phase/i)).toBeInTheDocument();
+  });
+
+  test('the tally is a performing block: bars declared at zero with the real value in --w, counts that land on the content’s votes', async () => {
+    render(<HomePage />);
+    const tally = document.querySelector('.mk-tally');
+    // jsdom has no IntersectionObserver, so the hook falls back to "in view"
+    // at once — the final frame, never a blank block.
+    expect(tally).toHaveClass('mk-tally--in');
+    const bars = [...tally.querySelectorAll('.mk-tally-track i')];
+    expect(bars.map((b) => b.style.getPropertyValue('--w'))).toEqual(HOME.room.tally.rows.map((r) => `${r.width}%`));
+    // No inline width: the CSS owns the growth from 0 to --w.
+    for (const bar of bars) expect(bar.style.width).toBe('');
+    const counts = [...tally.querySelectorAll('[data-count]')];
+    expect(counts.map((c) => Number(c.dataset.count))).toEqual(HOME.room.tally.rows.map((r) => r.votes));
+    await waitFor(() => {
+      expect(counts.map((c) => c.textContent)).toEqual(HOME.room.tally.rows.map((r) => String(r.votes)));
+    });
+    // The zero-vote answer is still kept, and still says so.
+    expect(within(tally).getByText(/no votes is kept too/i)).toBeInTheDocument();
+  });
+
+  test('the room’s list is left as it is (open question 1): arrivals on the front screen are still promised', () => {
+    render(<HomePage />);
+    expect(within(document.getElementById('room')).getByText(/answers appear on the front screen/i)).toBeInTheDocument();
+  });
+
+  test('the two photographs sit where §4 places them, captioned in the wash band, served from our own origin', () => {
+    render(<HomePage />);
+    const room = document.getElementById('room');
+    const summit = document.getElementById('summit');
+    const roomPhoto = room.querySelector('.mk-art--photo');
+    const sheetPhoto = summit.querySelector('.mk-art--photo');
+    expect(roomPhoto).not.toBeNull();
+    expect(sheetPhoto).not.toBeNull();
+    expect(sheetPhoto).toHaveClass('mk-art--sheet');
+    for (const fig of [roomPhoto, sheetPhoto]) {
+      expect(fig.tagName).toBe('FIGURE');
+      const img = fig.querySelector('img');
+      expect(img.getAttribute('src')).toMatch(/^\/assets\/hero\/[a-z0-9-]+\.webp$/);
+      expect(img.getAttribute('alt')).toMatch(/\S/);
+      expect(img).toHaveAttribute('loading', 'lazy');
+      const cap = fig.querySelector('figcaption.mk-art-wash');
+      expect(cap).not.toBeNull();
+      expect(cap.textContent).toMatch(/\S/);
+    }
+    // The room photo is beside the tally; the sheet photo is beside the report.
+    expect(room.querySelector('.mk-react-grid')).toContainElement(roomPhoto);
+    expect(summit.querySelector('.mk-summit-grid')).toContainElement(sheetPhoto);
+    expect(summit.querySelector('.mk-summit-aside')).toContainElement(sheetPhoto);
+  });
+
+  test('every hero photograph exists on disk under budget and has a CREDITS.json entry with its licence', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(__dirname, '..', '..', 'public', 'assets', 'hero');
+    const credits = JSON.parse(fs.readFileSync(path.join(dir, 'CREDITS.json'), 'utf8'));
+    const byFile = Object.fromEntries(credits.images.map((i) => [i.file, i]));
+    const BUDGET = { 'room-looking-up-1024.webp': 180 * 1024, 'summit-held-768.webp': 160 * 1024 };
+    const used = Object.values(HOME.photos).map((p) => path.basename(p.src));
+    expect(used.sort()).toEqual(Object.keys(BUDGET).sort());
+    for (const file of used) {
+      expect(fs.statSync(path.join(dir, file)).size).toBeLessThanOrEqual(BUDGET[file]);
+      expect(byFile[file]).toBeDefined();
+      expect(byFile[file].license).toMatch(/\S/);
+      expect(byFile[file].source).toMatch(/\S/);
+    }
+  });
 });

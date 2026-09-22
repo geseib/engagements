@@ -52,7 +52,14 @@ class PageBoundary extends React.Component {
   }
 }
 
-export default function MarketingShell({ title, current, scene = true, children }) {
+/**
+ * `rootClass` lets one page add a class to `.mk-root` so that page's own
+ * stylesheet can restyle a SHELL primitive (the home turns the nav's account
+ * door into an outline while the hero's filled button is on screen — one
+ * filled amber per viewport, RATIONALE 2026-09-22 §1 change 2) without that
+ * rule leaking onto every other marketing page.
+ */
+export default function MarketingShell({ title, current, scene = true, rootClass, children }) {
   const [open, setOpen] = useState(false);
   // Null outside a provider (the page tests mount this bare), and `loading`
   // counts as signed out: the doors are the safe thing to show for a beat.
@@ -81,7 +88,7 @@ export default function MarketingShell({ title, current, scene = true, children 
   }, [open]);
 
   return (
-    <div className="mk-root">
+    <div className={rootClass ? `mk-root ${rootClass}` : 'mk-root'}>
       {/*
         The ridge scene, moved here from HomePage so every inner page carries
         it too (mockups 02-05 all draw the identical `.mk-ridge` block as the
