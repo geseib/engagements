@@ -133,6 +133,11 @@ exports.handler = async (event) => {
         // an art set, name its persona, or show which summary prompt it uses.
         promptId: item.promptId || null,
         personaId: item.personaId || null,
+        // The set's DIRECTION, so "Add questions" from the host's dialog can
+        // start the scenario builder on the set's own kind rather than the
+        // default. The admin projection already carries both.
+        roundKind: item.roundKind || '',
+        roundKindBrief: item.roundKindBrief || '',
         roundNoun: item.roundNoun || null,
         // The shelf and the author's own words, carried so both list routes
         // describe the same set — NOT because anything here reads them yet.
