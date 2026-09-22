@@ -36,6 +36,7 @@
  * implementation before being kept.
  */
 const path = require('path');
+const fs = require('fs');
 const assert = require('assert');
 
 const REPO = path.join(__dirname, '..');
@@ -606,6 +607,40 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
   await check('with neither, the link is relative rather than a wrong host', async () => {
     const g = await createFor(ACME);
     assert.strictEqual(g.joinUrl, `/play?gameId=${g.gameId}`);
+  });
+
+  // ------------------------------------------------------------------------
+  say('9. a session expires: 90 days unstarted, 7 days once started');
+  // The owner, 2026-09-21: sessions from August were still listed. The row
+  // carried no ttl at all. rejects: any of the four rows missing it, or a
+  // start leaving the 90-day figure in place.
+  reset();
+  const { unstartedTtl, startedTtl, DAY } = require(path.join(REPO, 'lambda-functions/game/session-ttl.js'));
+  const ttlGame = await createFor(ACME, { eventTitle: 'Expiring' });
+  const fourRows = (id) => [
+    reservationOf(id),
+    store.get(key(gamesIndexPk(ACME), `GAME#${id}`)),
+    metadataOf(id),
+    store.get(key(`GAME#${id}`, 'STATE')),
+  ];
+  await check('every row of a new session expires 90 days from creation', () => {
+    const rows = fourRows(ttlGame.gameId);
+    const expected = unstartedTtl(metadataOf(ttlGame.gameId).CreatedAt);
+    rows.forEach((row, i) => assert.strictEqual(row.ttl, expected, `row ${i} (${row && row.SK}) ttl=${row && row.ttl}`));
+    assert.ok(Math.abs(expected - (Date.now() / 1000 + 90 * DAY)) < 60, 'not ~90 days out');
+  });
+  await check('starting it moves every row to 7 days from the start', async () => {
+    const res = await startGame(asHost(ACME, { pathParameters: { gameId: ttlGame.gameId } }));
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const rows = fourRows(ttlGame.gameId);
+    const expected = startedTtl(rows[3].StartedAt);
+    rows.forEach((row, i) => assert.strictEqual(row.ttl, expected, `row ${i} (${row.SK}) ttl=${row.ttl}`));
+    assert.ok(Math.abs(expected - (Date.now() / 1000 + 7 * DAY)) < 60, 'not ~7 days out');
+  });
+  await check('the two copies of session-ttl.js are identical', () => {
+    const a = fs.readFileSync(path.join(REPO, 'lambda-functions/game/session-ttl.js'), 'utf8');
+    const b = fs.readFileSync(path.join(REPO, 'lambda-functions/websocket/session-ttl.js'), 'utf8');
+    assert.strictEqual(a, b);
   });
 
   say(`\n${pass} passed, ${fail} failed`);

@@ -160,6 +160,20 @@ function gamesIndexPk(orgId) {
   return `ORG#${id}#GAMES`;
 }
 
+/**
+ * WHERE SAVED REPORTS ARE LISTED. A report used to exist ONLY as an S3 object
+ * whose key the session's save response handed back once; when the session
+ * row expires (session-ttl.js) nothing could ever find it again. This is the
+ * row that outlives the session. Orgless sessions — pre-tenancy, or a host
+ * with no org — file under the platform's own partition, plaintext, as their
+ * PDFs already are.
+ */
+const REPORTS_PLATFORM_PK = 'REPORTS';
+function reportsIndexPk(orgId) {
+  const id = clean(orgId);
+  return id ? `ORG#${id}#REPORTS` : REPORTS_PLATFORM_PK;
+}
+
 const orgPk = (orgId) => `ORG#${clean(orgId)}`;
 const userPk = (sub) => `USER#${clean(sub)}`;
 /** The platform's index of organisations. Carries no tenant content. */
@@ -414,7 +428,7 @@ function tenantStamp(event) {
 
 module.exports = {
   PLATFORM, ORG, PUBLIC, SCOPES, ORG_ROLES,
-  GAMES_RESERVATION_PK, ORGS_INDEX_PK,
+  GAMES_RESERVATION_PK, ORGS_INDEX_PK, REPORTS_PLATFORM_PK, reportsIndexPk,
   scopePrefix, setsMetadataPk, setContentPk, promptsMetadataPk, personasPk, gamesIndexPk, orgPk, userPk,
   callerOrgId, callerOrgRole, callerOrgIds, callerGroups, isPlatformAdmin,
   roleAtLeast, readableScopes, canManageScope,

@@ -4504,9 +4504,20 @@ Resources:
         RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
+          # TWO RULES, BY PREFIX. One unfiltered 90-day rule used to cover the
+          # whole bucket, so a report saved as "Permanent (1 year)" — which only
+          # ever meant a `permanent/` prefix — died at day 90 with the rest. The
+          # report's index row (save-report.js) carries a matching ttl.
           - Id: DeleteOldReports
             Status: Enabled
+            TagFilters:
+              - Key: retention
+                Value: standard
             ExpirationInDays: 90
+          - Id: DeletePermanentReportsAfterAYear
+            Status: Enabled
+            Prefix: permanent/
+            ExpirationInDays: 365
       Tags:
         - Key: Environment
           Value: !Ref Environment

@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteComm
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { resolveSetPartition } = require('./set-version');
 const { GAMES_RESERVATION_PK, gamesIndexPk, PLATFORM } = require('./tenant');
+const { unstartedTtl } = require('./session-ttl');
 const { encryptItem } = require('./tenant-crypto');
 
 const dynamoClient = new DynamoDBClient({});
@@ -46,8 +47,13 @@ const createGame = async (gameId, gameData) => {
   const orgId = typeof gameData.orgId === 'string' ? gameData.orgId.trim() : '';
   let reserved = false;
   try {
-    const ttl = Math.floor(Date.now() / 1000) + TTL_CREATION_PHASE;
     const now = new Date().toISOString();
+    // created + 90 days on every row of the session. It was written here all
+    // along — what never happened was start-game rewriting it to started +
+    // 7 days, which is why August's sessions were still listed in September.
+    // session-ttl.js holds the rule; TTL_CREATION_PHASE below is kept for the
+    // exporters that read it.
+    const ttl = unstartedTtl(now);
 
     console.log(`🎮 Creating game ${gameId} for org ${orgId || '(none)'} with schema compliance`);
 
@@ -150,7 +156,7 @@ const createGame = async (gameId, gameData) => {
         Item: await encryptSession({
           PK: gamesIndexPk(orgId),
           SK: `GAME#${gameId}`,
-          orgId,
+            orgId,
           Title: gameData.title || 'Engagement Session',
           CreatedAt: now,
           HostName: gameData.hostName || 'Host',
