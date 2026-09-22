@@ -78,6 +78,14 @@ describe('createGameBody', () => {
     expect(createGameBody({ ...form, personaId: '' }).personaId).toBe('');
   });
 
+  // The session's summary approach travels beside its voice, with the same
+  // '' semantics: create-game.js stores PromptId only when non-empty.
+  test('carries the chosen summary approach, and an unset one is the empty string', () => {
+    expect(createGameBody({ ...form, promptId: 'trivia-vj' }).promptId).toBe('trivia-vj');
+    expect(createGameBody({ ...form, promptId: '' }).promptId).toBe('');
+    expect(createGameBody(form).promptId).toBe('');
+  });
+
   test('keeps the title, type, set and shuffle flag the host chose', () => {
     const body = createGameBody({ ...form, randomizeQuestions: false });
     expect(body.eventTitle).toBe('Q3 Leadership Offsite');
@@ -97,7 +105,7 @@ describe('updateGameBody', () => {
     // categoryIds joined the whitelist when the backend grew mask support; the
     // still-pinned fields (gameType, setId, randomizeQuestions) still vanish.
     expect(Object.keys(updateGameBody(form)).sort()).toEqual([
-      'aiContext', 'anonymousUntilReveal', 'categoryIds', 'engagementInfo', 'eventTitle', 'personaId',
+      'aiContext', 'anonymousUntilReveal', 'categoryIds', 'engagementInfo', 'eventTitle', 'personaId', 'promptId',
     ]);
   });
 

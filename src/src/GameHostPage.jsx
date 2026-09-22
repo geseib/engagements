@@ -54,7 +54,7 @@ import {
 import { createGameBody, updateGameBody } from './config/createGame';
 import { fetchComments } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
-import { gameTypeMeta, gameTypeLabel } from './config/gameTypes';
+import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat,
@@ -549,6 +549,12 @@ function GameHostPage() {
   const [gamePersonas, setGamePersonas] = useState([]);   // live game
   const [gamePersonaId, setGamePersonaId] = useState('');       // the live game's voice
   const [personaSwitchStatus, setPersonaSwitchStatus] = useState('');
+  // Workie's summary approach for the live game — the prompt template, where
+  // the voice is only the register. '' means "what the set says, else the
+  // format standard". Same next-round semantics as the voice.
+  const [gamePrompts, setGamePrompts] = useState([]);
+  const [gamePromptId, setGamePromptId] = useState('');
+  const [promptSwitchStatus, setPromptSwitchStatus] = useState('');
 
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -981,6 +987,8 @@ function GameHostPage() {
     isTogglingCategory: setIsTogglingCategory,
     gamePersonaId: setGamePersonaId,
     personaSwitchStatus: setPersonaSwitchStatus,
+    gamePromptId: setGamePromptId,
+    promptSwitchStatus: setPromptSwitchStatus,
     aiSummaries: setAiSummaries,
     currentAIInsights: setCurrentAIInsights,
     loadingAIInsights: setLoadingAIInsights,
@@ -1130,6 +1138,64 @@ function GameHostPage() {
   useEffect(() => {
     fetchPersonas(currentGameType, setGamePersonas);
   }, [currentGameType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * The summary prompts written for this format, for the mid-round approach
+   * switch. The same filter the set editor and the setup dialog apply; a
+   * failure leaves the picker with its default option only.
+   */
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const response = await authFetch(`${API_BASE}admin/ai-prompts`);
+        if (!response.ok) { if (live) setGamePrompts([]); return; }
+        const data = await response.json();
+        const wanted = normalizeGameType(currentGameType);
+        const rows = (data.prompts || []).filter((p) => p && p.promptId
+          && normalizeGameType(p.gameType) === wanted
+          && p.summaryPromptStatus !== 'unusable'
+          && p.promptType !== 'generation');
+        if (live) setGamePrompts(rows);
+      } catch (error) {
+        console.warn('⚠️ HOST: could not load summary prompts — the approach picker offers the default only:', error.message);
+        if (live) setGamePrompts([]);
+      }
+    })();
+    return () => { live = false; };
+  }, [currentGameType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Switch Workie's summary approach mid-session. Like the voice: it applies
+   * from the NEXT round, and Redo rewrites the one on screen. Written through
+   * PUT /games/{gameId}, which already scopes the caller to this session.
+   */
+  const handleChangeGamePrompt = async (promptId) => {
+    const previous = gamePromptId;
+    setGamePromptId(promptId);
+    setPromptSwitchStatus('Saving...');
+    try {
+      const response = await authFetch(`${API_BASE}games/${gameId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promptId: promptId || '' })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+      const picked = gamePrompts.find((p) => p.promptId === promptId);
+      setPromptSwitchStatus(
+        picked
+          ? `"${picked.name}" shapes the summary from the next question.`
+          : 'Workie follows the set, or the standard way, from the next question.'
+      );
+    } catch (error) {
+      console.error('❌ HOST: failed to switch summary approach:', error);
+      setGamePromptId(previous);
+      setPromptSwitchStatus(`Could not switch approach: ${error.message}`);
+    }
+  };
 
   /**
    * Switch Workie's voice mid-session.
@@ -2127,6 +2193,8 @@ Focus on actionable business strategy insights.`;
           setGameCreatedAt(gameStateData.gameMetadata.createdAt || null);
           // Show the voice the game is actually set to, not a fresh default.
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
+          // And the approach, for the same reason.
+          setGamePromptId(gameStateData.gameMetadata.promptId || '');
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           // The scope the SESSION pinned, not a fresh search. A session plays
           // one partition for its whole life; reloading the host screen must
@@ -4332,6 +4400,8 @@ Focus on actionable business strategy insights.`;
     // it. The dialog's own fields need no clearing: closing it unmounts it.
     setGamePersonaId(form.personaId || '');
     setPersonaSwitchStatus('');
+    setGamePromptId(form.promptId || '');
+    setPromptSwitchStatus('');
   };
 
   const updateGameTitle = async (gameId, title) => {
@@ -6069,6 +6139,28 @@ Focus on actionable business strategy insights.`;
                   </button>
                   {personaSwitchStatus && (
                     <span className="ai-persona-switch-status">{personaSwitchStatus}</span>
+                  )}
+                  {/* The approach: the prompt template, where the voice is only
+                      the register. Same next-round rule, same Redo. */}
+                  <label className="ai-persona-switch-label" htmlFor="game-prompt">
+                    {`Approach (next ${getHostRoundNoun().toLowerCase()})`}
+                  </label>
+                  <select
+                    id="game-prompt"
+                    className="ai-persona-select"
+                    value={gamePromptId}
+                    onChange={(e) => handleChangeGamePrompt(e.target.value)}
+                    title="Changes how Workie sums up each round from the next question onwards"
+                  >
+                    <option value="">What the set says</option>
+                    {gamePrompts.map((prompt) => (
+                      <option key={prompt.promptId} value={prompt.promptId}>
+                        {prompt.name}
+                      </option>
+                    ))}
+                  </select>
+                  {promptSwitchStatus && (
+                    <span className="ai-persona-switch-status">{promptSwitchStatus}</span>
                   )}
                 </div>
 

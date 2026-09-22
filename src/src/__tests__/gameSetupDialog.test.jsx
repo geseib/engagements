@@ -7,8 +7,24 @@
  * function or not at all. The extraction is what buys these assertions.
  */
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
+
+/*
+  THE CATALOG'S SUMMARY PROMPTS. The dialog fetches `admin/ai-prompts` itself
+  (for the plan sentence, and now for the approach picker). One list, served to
+  every test: the two live tests about the plan sentence rely on `lp-behavioral`
+  being a prompt the library knows.
+*/
+const PROMPTS = [
+  { promptId: 'lp-behavioral', name: 'LP Behavioural', gameType: 'call-and-answer', summaryPromptStatus: 'ok' },
+  { promptId: 'trivia-vj', name: 'Trivia — VJ', gameType: 'trivia', summaryPromptStatus: 'ok' },
+  { promptId: 'trivia-gen', name: 'Trivia generator', gameType: 'trivia', summaryPromptStatus: 'unusable' },
+];
+jest.mock('../auth/authFetch', () => ({
+  __esModule: true,
+  authFetch: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ prompts: PROMPTS }) })),
+}));
 import { GAME_TYPE_LIST, GAME_TYPES, PICKER_GAME_TYPES, UNPLAYABLE_GAME_TYPES } from '../config/gameTypes';
 
 const SETS = [
@@ -511,6 +527,52 @@ describe('the zero-setup plan line', () => {
     const plan = screen.getByTestId('gsd-workie-plan');
     expect(plan.textContent).toMatch(/standard Call & Answer way/);
     expect(plan.textContent).toMatch(/nothing above needs setting up/i);
+  });
+
+  /*
+    THE SESSION'S OWN PICK. Beside the voice, and with the same shape of
+    default: nothing chosen means the set's approach if it has one, else the
+    format standard. The list is the catalog's summary prompts for THIS
+    format only; a generator prompt is not offered.
+  */
+  test('the approach picker offers the summary prompts for the chosen format', async () => {
+    setup();
+    fireEvent.click(pill('Trivia'));
+    fireEvent.change(setSelect(), { target: { value: 'platform:space' } });
+    const picker = await screen.findByLabelText(/summary approach/i);
+    await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
+    expect(within(picker).queryByRole('option', { name: /LP Behavioural/ })).toBeNull();
+    expect(within(picker).queryByRole('option', { name: /Trivia generator/ })).toBeNull();
+    expect(within(picker).getByRole('option', { name: /standard Trivia way/i })).toBeInTheDocument();
+  });
+
+  test('a chosen approach reaches the payload, and none is the empty string', async () => {
+    const { props } = setup({ eventTitle: 'Quiz night' });
+    fireEvent.click(pill('Trivia'));
+    fireEvent.change(setSelect(), { target: { value: 'platform:space' } });
+    const picker = await screen.findByLabelText(/summary approach/i);
+    await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
+    expect(props.onCreate.mock.calls[0][0].promptId).toBe('');
+    fireEvent.change(picker, { target: { value: 'trivia-vj' } });
+    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
+    expect(props.onCreate.mock.calls[1][0].promptId).toBe('trivia-vj');
+  });
+
+  test('the plan sentence names the session\'s pick over the set\'s', async () => {
+    setup({
+      questionSets: [
+        { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
+      ],
+    });
+    fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
+    const picker = await screen.findByLabelText(/summary approach/i);
+    await waitFor(() => expect(within(picker).getByRole('option', { name: /LP Behavioural/ })).toBeInTheDocument());
+    // The default option says where the default comes from.
+    expect(within(picker).getByRole('option', { name: /what the set says/i })).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: 'lp-behavioral' } });
+    expect(screen.getByTestId('gsd-workie-plan').textContent).toMatch(/LP Behavioural/);
+    expect(screen.getByTestId('gsd-workie-plan').textContent).toMatch(/this session/i);
   });
 
   test('a set that names its own prompt is followed, and says so', () => {

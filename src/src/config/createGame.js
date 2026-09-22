@@ -40,6 +40,7 @@ export function createGameBody(form = {}) {
     eventDetails = '',
     aiContext = '',
     personaId = '',
+    promptId = '',
     randomizeQuestions = true,
     anonymousResponses = true,
   } = form;
@@ -62,6 +63,9 @@ export function createGameBody(form = {}) {
     // '' means "adapt to the session" — create-game.js only stores PersonaId
     // when it is non-empty, so the empty string has to survive as one.
     personaId: personaId || '',
+    // Same convention for the summary approach: '' means "what the set says,
+    // else the format standard", and create-game.js stores nothing for it.
+    promptId: promptId || '',
     hostName: 'Host',
     ...createPayloadFor({ gameType, anonymousResponses }),
   };
@@ -103,6 +107,7 @@ export function updateGameBody(form = {}) {
     eventDetails = '',
     aiContext = '',
     personaId = '',
+    promptId = '',
     anonymousResponses = true,
   } = form;
 
@@ -114,6 +119,8 @@ export function updateGameBody(form = {}) {
     aiContext: aiContext || null,
     // '' means "adapt to the session"; the backend REMOVEs the attribute.
     personaId: personaId || '',
+    // '' REMOVEs PromptId, the same way.
+    promptId: promptId || '',
     ...('visibility' in form ? { visibility: form.visibility } : {}),
     ...(Array.isArray(form.categoryIds) && form.categoryIds.length > 0
       ? { categoryIds: form.categoryIds } : {}),

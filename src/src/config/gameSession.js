@@ -28,7 +28,8 @@
  *     since the extraction they live inside components/GameSetupDialog.jsx,
  *     which unmounts when the dialog closes: engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
- *     newGamePersonaId, localSets, localTitle, editCategoryNames, knownPromptIds.
+ *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
+ *     editCategoryNames, knownPromptIds.
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a
  *     session from history, not the one on stage, so it must not live in the
@@ -157,6 +158,9 @@ export function initialGameSession() {
     // --- Workie's voice for this session --------------------------------
     gamePersonaId: '',
     personaSwitchStatus: '',
+    // --- and its summary approach — same lifetime, same reset ------------
+    gamePromptId: '',
+    promptSwitchStatus: '',
 
     // --- AI summaries ---------------------------------------------------
     aiSummaries: {},

@@ -759,6 +759,74 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
       assert.strictEqual(legacy.status, 200, `got ${legacy.status}`));
   }
 
+  /* ── THE SUMMARY APPROACH, SESSION-LEVEL ──────────────────────────────────
+     The owner (2026-09-22): "how do I select the right prompt for the results
+     screen ... and how can we change it during the session setup and configs?"
+     Until now only the question set carried a promptId; the session had a
+     voice picker and no approach picker. Same three-edit trap as PersonaId
+     (create-game destructure, createGame() argument, the METADATA item). */
+  console.log('\nthe summary approach on the session (PromptId)\n');
+
+  const updateGameHandler = require(path.join(REPO, 'lambda-functions', 'game', 'update-game.js')).handler;
+  const fs = require('fs');
+
+  quiet();
+  const withPrompt = await createGame({
+    eventTitle: 'Approach session', gameType: 'trivia', questionSetId: 'set-a',
+    promptId: 'trivia-vj', visibility: 'private', accessCode: '4321',
+  });
+  loud();
+
+  await acheck('a promptId in the create payload reaches METADATA as PromptId', async () => {
+    assert.strictEqual(withPrompt.status, 201);
+    const md = metadataOf(withPrompt.body.gameId);
+    assert.strictEqual(md.PromptId, 'trivia-vj',
+      'promptId was dropped — check all THREE edit sites, as for PersonaId');
+  });
+
+  check('omitting promptId leaves no PromptId attribute at all', () => {
+    const md = metadataOf(withoutPersona.body.gameId);
+    assert(!('PromptId' in md), 'absent means "what the set says, else the format standard"');
+  });
+
+  const putGame = async (gameId, body) => {
+    quiet();
+    const res = await updateGameHandler({
+      pathParameters: { gameId },
+      body: JSON.stringify(body),
+    });
+    loud();
+    return { status: res.statusCode, body: JSON.parse(res.body) };
+  };
+
+  await acheck('PUT /games/{id} with promptId switches the approach and touches nothing else', async () => {
+    const gameId = withPrompt.body.gameId;
+    const before = structuredClone(metadataOf(gameId));
+    const res = await putGame(gameId, { promptId: 'trivia-quiet' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const after = metadataOf(gameId);
+    assert.strictEqual(after.PromptId, 'trivia-quiet');
+    assert.deepStrictEqual(after.ScoringConfig, before.ScoringConfig, 'ScoringConfig was clobbered');
+    assert.strictEqual(after.PersonaId, before.PersonaId, 'PersonaId was clobbered');
+    const added = Object.keys(after).filter((k) => !(k in before));
+    assert.deepStrictEqual(added, [], `unexpected new attributes: ${added.join(', ')}`);
+  });
+
+  await acheck('clearing the approach removes the attribute rather than writing an empty one', async () => {
+    const gameId = withPrompt.body.gameId;
+    const res = await putGame(gameId, { promptId: '' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert(!('PromptId' in metadataOf(gameId)), 'an empty pick must not write an empty attribute');
+  });
+
+  check('get-game-state projects the session approach for the host picker to restore', () => {
+    // Same whitelist trap as personaId there: without this line the in-game
+    // picker resets to "what the set says" on every reload while the game
+    // itself still carries a PromptId.
+    const src = fs.readFileSync(path.join(REPO, 'lambda-functions', 'game', 'get-game-state.js'), 'utf8');
+    assert(/promptId:\s*gameMetadata\.Item\.PromptId/.test(src), 'gameMetadata.promptId is not projected');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

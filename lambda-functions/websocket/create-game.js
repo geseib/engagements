@@ -88,7 +88,7 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, questionSetScope } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope } = JSON.parse(event.body || '{}');
 
   /*
     THE OWNING ORGANISATION. Until this line a session had no owner attribute of
@@ -217,6 +217,9 @@ exports.handler = async (event) => {
       // The host's voice pick. Empty means "adapt to the session" — the
       // designed default — not "fall back to the legacy template".
       personaId: (personaId || '').trim(),
+      // The host's summary-approach pick. Empty means "what the set says, else
+      // the format's standard" — get-ai-summary.js:sessionPromptId.
+      promptId: (promptId || '').trim(),
       details: engagementInfo || '',
       hostName: hostName || 'Host',
       visibility: visibility || 'public',

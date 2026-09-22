@@ -208,6 +208,10 @@ const createGame = async (gameId, gameData) => {
         // `metadata.PersonaId`, and `PUT /games/{id}/persona` updates this one
         // attribute mid-game. Absent/empty means "adapt to the session".
         ...(gameData.personaId ? { PersonaId: gameData.personaId } : {}),
+        // The session's summary approach. Read by get-ai-summary.js ahead of
+        // the set's own promptId; PUT /games/{id} switches it mid-game. Absent
+        // means "what the set says, else the format standard".
+        ...(gameData.promptId ? { PromptId: gameData.promptId } : {}),
         Details: gameData.details || '',
         Visibility: gameData.visibility || 'public',
         AccessCode: gameData.accessCode || null,

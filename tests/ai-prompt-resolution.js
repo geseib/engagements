@@ -325,6 +325,25 @@ function check(label, fn) {
         'S3 was asked for the public body, so the row was found first'));
   }
 
+  /* ── WHICH promptId THE ROUND STARTS FROM ─────────────────────────────────
+     The session's pick (METADATA.PromptId, from setup or the mid-round switch)
+     beats the set's, which beats nothing — and nothing is what sends the
+     resolver to the game-type default above. The precedence is one pure
+     function so it can be pinned without a round. */
+  console.log('\nsessionPromptId: the session beats the set beats the default\n');
+  check('get-ai-summary exports sessionPromptId', () =>
+    assert.strictEqual(typeof mod.sessionPromptId, 'function'));
+  check('a PromptId on the game beats one on the question set', () =>
+    assert.strictEqual(mod.sessionPromptId({ PromptId: 'game-pick' }, { promptId: 'set-pick' }), 'game-pick'));
+  check('with no game pick the set\'s promptId is used', () =>
+    assert.strictEqual(mod.sessionPromptId({}, { promptId: 'set-pick' }), 'set-pick'));
+  check('neither is the empty string, which the resolver reads as "the default"', () =>
+    assert.strictEqual(mod.sessionPromptId({}, {}), ''));
+  check('a blank PromptId on the game does not shadow the set', () =>
+    assert.strictEqual(mod.sessionPromptId({ PromptId: '  ' }, { promptId: 'set-pick' }), 'set-pick'));
+  check('a missing set item is tolerated', () =>
+    assert.strictEqual(mod.sessionPromptId({ PromptId: 'game-pick' }, null), 'game-pick'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

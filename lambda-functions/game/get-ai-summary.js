@@ -556,6 +556,23 @@ const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
 
 // Exported for tests/ai-prompt-resolution.js
 exports.resolvePromptTemplate = resolvePromptTemplate;
+
+/**
+ * WHICH promptId A ROUND STARTS FROM — the session's pick first.
+ *
+ * `METADATA.PromptId` is what the host chose at setup or switched to mid-game
+ * (PUT /games/{id}); the set's `promptId` is what its author attached. The
+ * session wins because it is the later, more specific decision, exactly as the
+ * host's PersonaId beats the set's. '' is the answer "nothing chosen", which
+ * resolvePromptTemplate turns into the game-type default. Pure, so
+ * tests/ai-prompt-resolution.js can pin the order without a round.
+ */
+const sessionPromptId = (metadata, setItem) => {
+  const game = String((metadata && metadata.PromptId) || '').trim();
+  if (game) return game;
+  return String((setItem && setItem.promptId) || '').trim();
+};
+exports.sessionPromptId = sessionPromptId;
 // Exported so admin surfaces can grey out prompts that cannot serve as summary
 // prompts, instead of letting someone attach one and watch nothing happen.
 exports.isUsableSummaryPrompt = isUsableSummaryPrompt;
@@ -1128,6 +1145,21 @@ exports.handler = async (event) => {
       }
     }
     
+    // THE SESSION'S OWN PICK, ahead of the set's. Chosen at setup or switched
+    // mid-round through PUT /games/{id}; provenance names it so the report can.
+    const sessionPick = sessionPromptId(metadata, { promptId });
+    if (sessionPick && sessionPick !== promptId) {
+      promptId = sessionPick;
+      console.log('🎨 Session-level prompt ID takes precedence:', promptId);
+      promptProvenance = {
+        source: 'game',
+        details: `Summary approach "${promptId}" chosen for this session by the host`,
+        promptId,
+        promptName: promptId,
+        hierarchy: promptProvenance.hierarchy,
+      };
+    }
+
     // Default prompt ID if none specified - find default prompt for the game type
     if (!promptId) {
       promptId = await findDefaultPromptId(metadata.GameType || 'call-and-answer');
