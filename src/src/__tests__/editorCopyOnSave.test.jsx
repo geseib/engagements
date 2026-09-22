@@ -179,3 +179,35 @@ describe('a set that IS yours', () => {
     expect(calls[0].kind).toBe('edit');
   });
 });
+
+describe('a set that is not yours, when there is no room for the copy', () => {
+  // The owner: "how could we stop them from wasting tokens, and their time but
+  // instead instruct them they need to delete one of their own sets to make
+  // room, or subscribe."
+  const FULL = { setsUsed: 5, setsIncluded: 5, mustUpgradeForSet: true, planId: 'personal' };
+
+  it('refuses on arrival, names the numbers and the two ways out, and turns every write off', async () => {
+    serve();
+    draw(ENGAGE_SET, { setAllowance: FULL });
+    const notice = screen.getByTestId('no-room-notice');
+    expect(notice).toHaveTextContent('5 of 5 sets used');
+    expect(notice).toHaveTextContent(/delete one of your own sets/i);
+    expect(notice).toHaveTextContent(/upgrade/i);
+    // The friendlier "you can change anything here" notice would now be a lie.
+    expect(screen.queryByTestId('not-yours-notice')).toBeNull();
+    expect(saveButton()).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /add a question/i })).toBeDisabled());
+    expect(screen.getByTestId('add-questions')).toBeDisabled();
+  });
+
+  it('says nothing, and blocks nothing, on your OWN set or when there is room', async () => {
+    serve();
+    const { unmount } = draw(MY_SET, { setAllowance: FULL });
+    expect(screen.queryByTestId('no-room-notice')).toBeNull();
+    expect(saveButton()).not.toBeDisabled();
+    unmount();
+    draw(ENGAGE_SET, { setAllowance: { ...FULL, setsUsed: 2, mustUpgradeForSet: false } });
+    expect(screen.queryByTestId('no-room-notice')).toBeNull();
+    expect(screen.getByTestId('not-yours-notice')).toBeInTheDocument();
+  });
+});

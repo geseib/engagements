@@ -5,7 +5,8 @@ const {
   canManageSet, isSetOwner, setOwnerId, setScopeOf, setOrgOf,
 } = require('./shared/question-set-access');
 const { isAdminCaller } = require('./shared/require-admin');
-const { ORG, PLATFORM, canManageScope } = require('./shared/tenant');
+const { ORG, PLATFORM, canManageScope, callerOrgId } = require('./shared/tenant');
+const { readAllowance } = require('./shared/usage');
 const { decryptItem, isEnvelope } = require('./shared/tenant-crypto');
 
 const client = new DynamoDBClient({});
@@ -263,9 +264,30 @@ exports.handler = async (event) => {
         `served without content: ${unreadable.map((s) => s.id).join(', ')}`);
     }
 
+    /*
+      THE CALLER'S ROOM FOR ONE MORE SET, sent with the list. Editing a set
+      that is not yours saves as a COPY, and upload-questions refuses that copy
+      at the stored-set allowance (its `!isReplace` gate). The console needs to
+      know that BEFORE the person runs a generation against a set they cannot
+      keep — the owner: "how could we stop them from wasting tokens." The same
+      shape readAllowance hands the gate, so the two cannot disagree.
+    */
+    let setAllowance = null;
+    try {
+      const a = await readAllowance(callerOrgId(event));
+      setAllowance = {
+        setsUsed: a.setsUsed ?? null,
+        setsIncluded: a.setsIncluded ?? null,
+        mustUpgradeForSet: a.mustUpgradeForSet === true,
+        planId: a.planId || null,
+      };
+    } catch (e) {
+      console.warn('⚠️ could not read the set allowance; the list is served without it:', e.message);
+    }
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ questionSets }),
+      body: JSON.stringify({ questionSets, setAllowance }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
     

@@ -10795,6 +10795,9 @@ body {
   background: var(--qs-tint-warn);
   font-size: 0.85rem;
 }
+/* The refusal that is said on arrival: no room to store a copy of this set.
+   Danger rule, and the same tint — it is a stop, not a warning about content. */
+.qs-ai-provenance--stop { border-left-color: var(--danger-text); }
 
 /* --- drafting the SET's own four fields (QuestionSetEditor Details panel) --- */
 

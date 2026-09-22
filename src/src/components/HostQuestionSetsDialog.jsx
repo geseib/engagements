@@ -87,6 +87,7 @@ export default function HostQuestionSetsDialog({
   onSetsChanged,
 }) {
   const [sets, setSets] = useState([]);
+  const [setAllowance, setSetAllowance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);       // { text, tone }
@@ -217,6 +218,7 @@ export default function HostQuestionSetsDialog({
       }
       const all = result.questionSets || [];
       setSets(all);
+      setSetAllowance(result.setAllowance || null);
       if (onSetsChanged) onSetsChanged(toPickerSets(all));
       if (announce) setNotice({ text: announce, tone: 'success' });
       // Returned so a caller that is showing ONE of these rows can re-point at
@@ -967,6 +969,7 @@ export default function HostQuestionSetsDialog({
         >
           <QuestionSetEditor
             questionSet={editingQuestions}
+            setAllowance={setAllowance}
             availableSets={sets}
             /*
               OFF, AND EACH FOR A ROUTE REASON. Download and the three version

@@ -78,5 +78,7 @@ export function briefFromSet(set = {}) {
     context: (contextInProse && contextInProse[1].trim()) || name,
     roundKind: String(set.roundKind ?? '').trim(),
     roundKindBrief: String(set.roundKindBrief ?? '').trim(),
+    // What the room is told, for a `custom` kind: the set's own instruction.
+    roundKindInstruction: String(set.customInstruction ?? '').trim(),
   };
 }

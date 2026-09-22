@@ -562,14 +562,33 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     const custom = scenarioTypes.find((t) => /custom/.test(t.id));
     if (!custom) return;
     const kind = appendTo.brief?.roundKind || scenarioConfig.roundKind;
-    if (roundKindApplies(engagementType)
-      && roundKindGaps(kind, { brief: appendTo.brief?.roundKindBrief || '' }).length > 0) return;
+    // A `custom` kind needs its brief AND its instruction; the set carries
+    // both (roundKindBrief, customInstruction). Missing them, the form is the
+    // only honest place — but the person is told why, not just dropped there.
+    const gaps = roundKindApplies(engagementType)
+      ? roundKindGaps(kind, {
+        brief: appendTo.brief?.roundKindBrief || '',
+        instruction: appendTo.brief?.roundKindInstruction || '',
+      })
+      : [];
+    if (gaps.length > 0) {
+      autoStarted.current = true;
+      setScenarioConfig((prev) => ({
+        ...prev,
+        roundKind: kind,
+        roundKindBrief: appendTo.brief?.roundKindBrief || prev.roundKindBrief,
+        roundKindInstruction: appendTo.brief?.roundKindInstruction || prev.roundKindInstruction,
+      }));
+      setGenerationStatus(`This set's direction is "Something else" and it did not record ${gaps.join(' or ')} — fill it in below and pick a topic card to continue.`);
+      return;
+    }
     autoStarted.current = true;
     setScenarioConfig((prev) => ({
       ...prev,
       type: custom.id,
       roundKind: kind,
       roundKindBrief: appendTo.brief?.roundKindBrief || prev.roundKindBrief,
+      roundKindInstruction: appendTo.brief?.roundKindInstruction || prev.roundKindInstruction,
       context: appendTo.brief?.context || prev.context,
       audience: appendTo.brief?.audience || prev.audience,
       count: appendTo.count || prev.count,

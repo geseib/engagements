@@ -211,6 +211,9 @@ function AdminPage() {
   const [sharing, setSharing] = useState(null);
   // Whether the creation panel under the list is open.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // The caller's room for one more set, from GET /admin/question-sets — read
+  // by the editor before anyone spends a generation on a set they cannot keep.
+  const [setAllowance, setSetAllowance] = useState(null);
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -995,6 +998,7 @@ function AdminPage() {
       const res = await authFetch(`${API_BASE}admin/question-sets`);
       const json = await res.json();
       setQuestionSets(json.questionSets || []);
+      setSetAllowance(json.setAllowance || null);
     } catch (error) {
       console.error('Error fetching question sets:', error);
     } finally {
@@ -1695,6 +1699,7 @@ function AdminPage() {
           */
           <QuestionSetEditor
             questionSet={editingSet}
+            setAllowance={setAllowance}
             availablePrompts={availablePrompts}
             availablePersonas={availablePersonas}
             // Every set the caller can see, for the Questions panel's

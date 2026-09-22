@@ -126,6 +126,9 @@ export default function QuestionsPanel({
   plannedVersion,
   onChanged,
   onDirtyChange,
+  /** True when the editor has already said a copy cannot be stored: every
+   *  control that would start one — Add, Add questions, Pull, Save — is off. */
+  writesBlocked = false,
   /*
    * ── WHAT THIS PANEL MAY OFFER, WHICH IS NOT THE SAME AS WHO MAY USE IT ────
    *
@@ -1237,14 +1240,15 @@ export default function QuestionsPanel({
       )}
 
       <div className="qs-panel-actions">
-        <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready'}>
+        <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready' || writesBlocked}>
           <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
         </button>
         {/* The New set routes — AI, CSV, by hand — pointed at THIS set. */}
         <button
           className="btn-secondary btn-small"
           onClick={() => setShowAdd(true)}
-          disabled={loadState !== 'ready'}
+          disabled={loadState !== 'ready' || writesBlocked}
+          title={writesBlocked ? 'No room for a copy — delete one of your own sets or upgrade.' : undefined}
           data-testid="add-questions"
         >
           <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" /> Add questions…
@@ -1252,7 +1256,7 @@ export default function QuestionsPanel({
         <button
           className="btn-secondary btn-small"
           onClick={() => setShowPull(true)}
-          disabled={loadState !== 'ready'}
+          disabled={loadState !== 'ready' || writesBlocked}
         >
           <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
         </button>

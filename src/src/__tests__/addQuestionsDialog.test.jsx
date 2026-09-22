@@ -222,3 +222,14 @@ describe('the scenario builder starts from the set too', () => {
     expect(src).toMatch(/setPendingAutoSubmit\(true\)/);
   });
 });
+
+describe('a "Something else" set still auto-starts when it recorded its brief and instruction', () => {
+  it('the brief carries the set\'s instruction, and the builder checks both', () => {
+    expect(briefFromSet({ name: 'X', roundKind: 'custom', roundKindBrief: 'Rank the options', customInstruction: 'Pick your top three.' }))
+      .toMatchObject({ roundKind: 'custom', roundKindBrief: 'Rank the options', roundKindInstruction: 'Pick your top three.' });
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', 'AIScenarioBuilder.jsx'), 'utf8');
+    expect(src).toMatch(/instruction: appendTo\.brief\?\.roundKindInstruction \|\| ''/);
+    // rejects: dropping the person on the form with no word about why.
+    expect(src).toMatch(/did not record \$\{gaps\.join\(' or '\)\}/);
+  });
+});
