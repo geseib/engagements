@@ -451,6 +451,29 @@ const say = (s) => console.log(s);
     assert.deepStrictEqual(orgs.map((o) => o.type), ['team', 'personal']);
   });
 
+  // rejects: a row without this period's counters. Staff cannot call the org's
+  // usage route (they have no scope inside it), so the billing drawer previews
+  // against `org.usage` and read zero for every organisation until this was
+  // sent — Plan & usage said 2 of 5, the drawer said 0 stored (test, 2026-09-22).
+  await check('each row carries this period\'s usage counters, and only counters', async () => {
+    reset();
+    await seedOrg(NW, 'Northwind');
+    const period = new Date().toISOString().slice(0, 7);
+    store.set(key(`ORG#${NW}`, `USAGE#${period}`), {
+      PK: `ORG#${NW}`, SK: `USAGE#${period}`, sessionsRun: 3, setsCurrent: 2, setsPeak: 4,
+    });
+    const { orgs } = bodyOf(await platformOrgs(evt({ method: 'GET', ...STAFF })));
+    assert.deepStrictEqual(orgs[0].usage, { period, sessionsRun: 3, setsCurrent: 2, setsPeak: 4 });
+  });
+
+  await check('an organisation with no usage row this period reads as zero, not as missing', async () => {
+    reset();
+    await seedOrg(NW, 'Northwind');
+    const { orgs } = bodyOf(await platformOrgs(evt({ method: 'GET', ...STAFF })));
+    assert.strictEqual(orgs[0].usage.sessionsRun, 0);
+    assert.strictEqual(orgs[0].usage.setsCurrent, 0);
+  });
+
   await check('member counts are real, not a stored guess', async () => {
     reset();
     await seedOrg(NW, 'Northwind', { members: ['u_a', 'u_b', 'u_c'] });

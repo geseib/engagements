@@ -129,6 +129,22 @@ describe('platform mode', () => {
     await settle();
     await waitFor(() => expect(mounted()).toEqual(['Organisations']));
     expect(document.querySelector('h1')).toHaveTextContent('Organisations');
+    // rejects: the fallback chain's subtitle. Organisations, Plan requests and
+    // Discount codes were all headed with Question sets' sentence on test.
+    expect(document.querySelector('.adm-sub')).toHaveTextContent(/Every organisation on this tier/);
+    expect(document.querySelector('.adm-sub')).not.toHaveTextContent(/every session is built from/);
+  });
+
+  it.each([
+    ['planrequests', /Teams asking for the Team plan/],
+    ['discountcodes', /redeemed by a team owner/],
+  ])('%s is headed with its own sentence, not Question sets\'', async (id, sentence) => {
+    mockActiveOrg = PLATFORM_MODE;
+    window.history.pushState({}, '', `/admin?section=${id}`);
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(document.querySelector('.adm-sub')).toHaveTextContent(sentence));
   });
 
   // rejects: the Shared library being unreachable, or mounting a customer's

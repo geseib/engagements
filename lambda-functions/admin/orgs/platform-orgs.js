@@ -32,6 +32,7 @@
 const { QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
+const { readUsage } = require('../shared/usage');
 
 /** The statuses an organisation can be in, and who may move it between them. */
 const STATUSES = ['pending', 'active', 'suspended'];
@@ -61,6 +62,32 @@ async function memberCount(orgId) {
   return res.Count || 0;
 }
 
+/*
+  THIS PERIOD'S COUNTERS, ON THE ROW — because staff are not members.
+
+  OrgBillingDrawer.jsx (Organisations → "Billing…") previews "if it ended
+  today" and every grant against `org.usage`, and there is no org-side usage
+  route a platform admin may call (the tenancy split gives them no scope inside
+  the org). Without this field the drawer read 0 sessions / 0 sets for an
+  organisation Plan & usage showed at 2 of 5 — seen on test 2026-09-22. One Get
+  per row, next to the member-count query this list already accepts.
+
+  Counters, not content: sessionsRun / setsCurrent / setsPeak are the same three
+  numbers the org's own Plan & usage shows, and the isolation assertion in
+  tests/platform-console.js still holds — no set, game, question or report
+  reaches this row. Fails open to null so a blip in one USAGE# read cannot
+  blank the staff landing page.
+*/
+async function usageFor(orgId) {
+  try {
+    const u = await readUsage(orgId);
+    return { period: u.period, sessionsRun: u.sessionsRun, setsCurrent: u.setsCurrent, setsPeak: u.setsPeak };
+  } catch (e) {
+    console.warn(`usage read failed for ${orgId}: ${e.message}`);
+    return null;
+  }
+}
+
 async function listOrgs(event) {
   const refusal = requirePlatformAdmin(event);
   if (refusal) return refusal;
@@ -82,6 +109,7 @@ async function listOrgs(event) {
       status: G.clean(row.status) || 'active',
       createdAt: row.createdAt || null,
       members: await memberCount(orgId),
+      usage: await usageFor(orgId),
     };
   }));
 
