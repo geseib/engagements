@@ -61,13 +61,22 @@ export function briefFromSet(set = {}) {
   const titled = /^(.+?)\s+(?:Trivia|Polls)(?:\s+for\s+(.+))?$/i.exec(name);
   const about = /questions about (.+?)\.(?:\s|$)/i.exec(aiContext);
   const level = /These are (\w+)-level/i.exec(aiContext);
-  const audienceInProse = /Target audience:\s*(.+?)\.(?:\s|$)/i.exec(`${description} ${aiContext}`);
+  const audienceInProse = /(?:Target audience|The target audience)(?: is|:)\s*(.+?)\.(?:\s|$)/i.exec(`${description} ${aiContext}`);
   const trailingFor = /\s+for\s+(.+)$/i.exec(name);
+  // The scenario builder writes `... for ${difficulty} difficulty level.` and
+  // ` Context: ${context}` (truncated at 100). A description that carries no
+  // "Context:" was written for people, not the model — the owner's sports set
+  // came back with one question's blurb as its context — so the NAME is the
+  // subject then, exactly as it is for trivia.
+  const scenarioLevel = /for (\w+) difficulty level/i.exec(description);
+  const contextInProse = /Context:\s*(.+?)(?:\.\.\.)?$/i.exec(description);
 
   return {
     topic: (titled && titled[1]) || (about && about[1]) || name,
     audience: (titled && titled[2]) || (audienceInProse && audienceInProse[1]) || (trailingFor && trailingFor[1]) || '',
-    difficulty: level ? level[1].toLowerCase() : '',
-    context: description,
+    difficulty: (level || scenarioLevel) ? (level || scenarioLevel)[1].toLowerCase() : '',
+    context: (contextInProse && contextInProse[1].trim()) || name,
+    roundKind: String(set.roundKind ?? '').trim(),
+    roundKindBrief: String(set.roundKindBrief ?? '').trim(),
   };
 }

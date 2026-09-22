@@ -136,7 +136,7 @@ describe('adding starts from the brief the set was made from', () => {
   it('a set no builder named still prefills: the whole name is the topic', () => {
     // rejects: an empty topic box over a set that plainly has a subject.
     expect(briefFromSet({ name: 'Q3 offsite', description: 'Icebreakers.' }))
-      .toMatchObject({ topic: 'Q3 offsite', audience: '', context: 'Icebreakers.' });
+      .toMatchObject({ topic: 'Q3 offsite', audience: '', context: 'Q3 offsite' });
   });
 
   it.each(['TriviaAIBuilder.jsx', 'PollAIBuilder.jsx', 'AIScenarioBuilder.jsx'])('%s starts from it and shows the mode switch', (file) => {
@@ -202,5 +202,23 @@ describe('generated questions are saved the moment they are added', () => {
     // …but never over somebody else's unsaved edits, and never a fork unasked.
     expect(body).toMatch(/!dirty && canManage/);
     expect(body).toMatch(/you can close this now/);
+  });
+});
+
+describe('the scenario builder starts from the set too', () => {
+  it('a set\'s description is not its context unless it carries one; the name is the subject', () => {
+    // The owner's sports set came back with one question's blurb as context.
+    expect(briefFromSet({ name: 'Sports leadership', description: "Questions from John Wooden's UCLA program", roundKind: 'produce' }))
+      .toMatchObject({ context: 'Sports leadership', roundKind: 'produce' });
+    expect(briefFromSet({ name: 'X', description: 'AI-generated scenarios for detailed difficulty level. Target audience: Managers. Context: Vendor negotiations...' }))
+      .toMatchObject({ context: 'Vendor negotiations', audience: 'Managers', difficulty: 'detailed' });
+  });
+
+  it('auto-starts on the custom card with the set\'s own round kind', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', 'AIScenarioBuilder.jsx'), 'utf8');
+    expect(src).toMatch(/appendTo\?\.autoStart/);
+    expect(src).toMatch(/scenarioTypes\.find\(\(t\) => \/custom\/\.test\(t\.id\)\)/);
+    expect(src).toMatch(/roundKind: kind,/);
+    expect(src).toMatch(/setPendingAutoSubmit\(true\)/);
   });
 });

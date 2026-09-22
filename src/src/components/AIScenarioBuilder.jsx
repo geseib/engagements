@@ -52,6 +52,8 @@ const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association 
 
 function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer', appendTo = null }) {
   const [step, setStep] = useState(1);
+  const autoStarted = useRef(false);
+  const [pendingAutoSubmit, setPendingAutoSubmit] = useState(false);
   // The saved-template deck, folded shut where the sample ideas lead. The
   // owner, after the samples landed: "it can still use more work in dealing
   // with the old sample [templates]" — nine admin-tuned cards under three
@@ -543,6 +545,47 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setGenerationStatus('Reconnecting to the job you left…');
     watchJob(stored.jobId);
   }, [watchJob]);
+
+  /*
+    ONE PRESS, FROM THE SET. Trivia and Poll auto-start on mount; this builder
+    could not, because generation needs a topic card and a direction. Adding
+    to a set answers both: the card is "custom" (the set is its own topic —
+    context is the set's name or its recorded Context), and the direction is
+    the set's own round kind. So in append mode with `autoStart` the config is
+    filled here and submitted once it has settled, and the person lands on the
+    generating screen — the same experience as trivia. If the set's kind is
+    `custom` with no brief, there is nothing honest to generate from and the
+    form is shown instead.
+  */
+  useEffect(() => {
+    if (!appendTo?.autoStart || autoStarted.current) return;
+    const custom = scenarioTypes.find((t) => /custom/.test(t.id));
+    if (!custom) return;
+    const kind = appendTo.brief?.roundKind || scenarioConfig.roundKind;
+    if (roundKindApplies(engagementType)
+      && roundKindGaps(kind, { brief: appendTo.brief?.roundKindBrief || '' }).length > 0) return;
+    autoStarted.current = true;
+    setScenarioConfig((prev) => ({
+      ...prev,
+      type: custom.id,
+      roundKind: kind,
+      roundKindBrief: appendTo.brief?.roundKindBrief || prev.roundKindBrief,
+      context: appendTo.brief?.context || prev.context,
+      audience: appendTo.brief?.audience || prev.audience,
+      count: appendTo.count || prev.count,
+      ...(appendsToExisting(appendTo)
+        ? appendCategoryDefaults(appendTo)
+        : { numberOfCategories: appendTo.numberOfCategories || prev.numberOfCategories, mustHaveCategories: '' }),
+    }));
+    setStep(2);
+    setPendingAutoSubmit(true);
+  }, [scenarioTypes.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!pendingAutoSubmit || !scenarioConfig.type) return;
+    setPendingAutoSubmit(false);
+    handleConfigSubmit();
+  }, [pendingAutoSubmit, scenarioConfig.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
     forgetGenerationJob(ENDPOINT);
