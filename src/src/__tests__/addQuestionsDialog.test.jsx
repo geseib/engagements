@@ -29,50 +29,65 @@ const draw = (props = {}) => {
   return handlers;
 };
 
-describe('AddQuestionsDialog', () => {
-  it('asks where they go first — one mode or the other, the set\'s own by default', () => {
+describe('AddQuestionsDialog — the set is the hero, the ask is one sentence', () => {
+  it('names the set, draws its balance, and shows what each category becomes', () => {
     draw();
-    const existing = screen.getByRole('radio', { name: /categories this set already has/i });
-    const fresh = screen.getByRole('radio', { name: /as new categories/i });
-    expect(existing).toBeChecked();
-    expect(fresh).not.toBeChecked();
-    // The balance the mode protects is on screen: each category with its count.
-    expect(screen.getByText('History (1) · Method (1)')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'True crime' })).toBeInTheDocument();
+    const bars = screen.getByTestId('addq-balance');
+    expect(bars).toHaveTextContent('History');
+    expect(bars).toHaveTextContent('1 → 4'); // 1 now, +3 in each by default
   });
 
-  it('offers the same three routes as a new set', () => {
+  it('one sentence, one total, and the before/after — "adding 6" is never "growing to 6"', () => {
     draw();
-    expect(screen.getByRole('button', { name: /^AI .* builder/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/CSV of questions to add/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /add a question/i })).toBeInTheDocument();
+    expect(screen.getByTestId('addq-sum')).toHaveTextContent('6 new questions · the set goes from 2 to 8');
+    fireEvent.click(screen.getByRole('group', { name: 'More in each' }).querySelector('[aria-pressed="false"]'));
+    expect(screen.getByTestId('addq-sum')).toHaveTextContent('new questions · the set goes from 2 to');
   });
 
-  it('every route carries the chosen mode out with it', () => {
-    const { onOpenBuilder, onWriteOne } = draw();
-    fireEvent.click(screen.getByRole('radio', { name: /as new categories/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^AI .* builder/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add a question/i }));
-    expect(onOpenBuilder).toHaveBeenCalledWith('new');
-    expect(onWriteOne).toHaveBeenCalledWith('new');
+  it('the one button hands the whole plan to the builder and tells it to start', () => {
+    const { onOpenBuilder } = draw();
+    fireEvent.click(screen.getByTestId('addq-go'));
+    expect(onOpenBuilder).toHaveBeenCalledWith('existing', { per: 3, numberOfCategories: 2, count: 6, autoStart: true });
   });
 
-  it('a set with no categories can only add new ones, and is told why', () => {
+  it('new categories are the second line of the same sentence, and the bars show them', () => {
+    const { onOpenBuilder } = draw();
+    fireEvent.click(screen.getByRole('radio', { name: /new categor/i }));
+    expect(screen.getByTestId('addq-balance')).toHaveTextContent('New category 1');
+    fireEvent.click(screen.getByTestId('addq-go'));
+    expect(onOpenBuilder).toHaveBeenCalledWith('new', expect.objectContaining({ numberOfCategories: 2, count: 6 }));
+  });
+
+  it('a set with no categories can only add new ones', () => {
     draw({ categories: [], counts: new Map(), currentRows: [] });
-    expect(screen.getByRole('radio', { name: /categories this set already has/i })).toBeDisabled();
-    expect(screen.getByText('This set has no categories yet.')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /as new categories/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /more in each of its/i })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /new categor/i })).toBeChecked();
   });
 
-  it('survey sets are not offered a builder that makes no questions', () => {
+  it('CSV and by-hand survive as quiet routes, carrying the mode', () => {
+    const { onWriteOne } = draw();
+    fireEvent.click(screen.getByRole('button', { name: /upload a csv/i }));
+    expect(screen.getByLabelText(/CSV of questions to add/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /write one by hand/i }));
+    expect(onWriteOne).toHaveBeenCalledWith('existing');
+  });
+
+  it('survey sets are not offered Workie', () => {
     draw({ engagementType: 'survey', aiAvailable: false });
-    expect(screen.queryByRole('button', { name: /^AI .* builder/i })).toBeNull();
+    expect(screen.queryByTestId('addq-go')).toBeNull();
   });
 
-  it('has an X and a bottom exit', () => {
+  it('has an X that closes it', () => {
     const { onClose } = draw();
     fireEvent.click(screen.getByTestId('addq-close'));
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['TriviaAIBuilder.jsx', 'PollAIBuilder.jsx'])('%s starts generating at once when told to', (file) => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8');
+    expect(src).toMatch(/appendTo\?\.autoStart/);
+    expect(src).toMatch(/count: appendTo\?\.count \|\| \w+\.count/);
   });
 });
 

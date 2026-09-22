@@ -2,30 +2,30 @@ import React, { useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
 import { ADD_MODES, MAX_CATEGORIES, rowsFromCsv, holdToMode } from '../utils/addQuestions';
+import { PER_CATEGORY_PRESETS } from './CountField';
 import { gameTypeLabel } from '../config/gameTypes';
 
 /**
- * "ADD QUESTIONS" — the New set dialog's routes, pointed at a set that exists.
+ * "ADD QUESTIONS" — the set is the hero, and the whole job is one sentence.
  *
- * The owner: "You should be able to add additional questions to a question set
- * using the exact same AI/csv/1by1 etc. it should be identical to the create
- * new. of course it should ask if you want the same categories, or are adding
- * new categories ... should either be one or the other at a time."
+ * What it replaced: a dialog that asked a question, then offered three routes,
+ * then opened a builder whose form asked everything again. The owner's brief:
+ * the experience that would thrill Jobs, Ive, Spielberg. So: REMOVE.
  *
- * So it asks ONE question first — where do they go? — and then offers the same
- * three ways in, in the same order and the same words as creating a set:
- * generate with AI, upload a CSV, write one by hand.
+ *   1. The set's name, as the headline. Under it, the balance — every
+ *      category with its count, drawn as bars — because "is Method thin?" is
+ *      the question a person is actually here to answer.
+ *   2. One sentence: "Write **3** more in each of its **5** categories", or
+ *      "…in **2** new categories". The bars answer live: History 8 → 11.
+ *   3. One button: "Write 15 more". Workie starts at once — the builder opens
+ *      already generating, with the set's own topic, audience and difficulty —
+ *      and comes back to "Add 15 to the set".
  *
- * WHY THE MODE IS ASKED AT ALL. Twelve new questions spread over a set's six
- * categories AND two new ones leaves the old categories at 7 and the new at 3:
- * a category the host switches on mid-session and exhausts in three rounds.
- * One mode per pass keeps each pass even.
+ * The CSV and by-hand routes survive as two quiet links at the foot: real,
+ * reachable, and not in the way.
  *
- * NOTHING IS WRITTEN HERE. Every route ends by handing rows to the editor's
- * working copy; they are saved, as a new version, by the editor's own Save.
- *
- * NEVER A MODAL FROM A MODAL: the AI route closes this dialog and hands over
- * to the builder; the by-hand route closes it and opens the question form.
+ * NOTHING IS WRITTEN HERE. Rows join the editor's working copy and are saved,
+ * as a new version, by the editor's own Save.
  */
 export default function AddQuestionsDialog({
   setName,
@@ -33,18 +33,25 @@ export default function AddQuestionsDialog({
   categories = [],
   counts = new Map(),
   currentRows = [],
-  /** false where the caller has no builder for this format (survey). */
   aiAvailable = true,
   onClose,
   onOpenBuilder,
   onWriteOne,
   onAddRows,
-  onDownloadTemplate,
 }) {
   const hasCategories = categories.length > 0;
   const room = Math.max(0, MAX_CATEGORIES - categories.length);
   const [mode, setMode] = useState(hasCategories ? ADD_MODES.EXISTING : ADD_MODES.NEW);
-  const [csv, setCsv] = useState(null); // { fileName, kept, dropped, error }
+  const [per, setPer] = useState(3);
+  const [newCats, setNewCats] = useState(Math.min(2, Math.max(1, room)));
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [csv, setCsv] = useState(null);
+
+  const existing = mode === ADD_MODES.EXISTING;
+  const catCount = existing ? categories.length : newCats;
+  const total = Math.min(100, per * Math.max(1, catCount));
+  const existingTotal = categories.reduce((n, c) => n + (counts.get(c) || 0), 0);
+  const max = Math.max(1, ...categories.map((c) => counts.get(c) || 0), existing ? per : 0) + (existing ? per : 0);
 
   const readFile = (event) => {
     const file = event.target.files && event.target.files[0];
@@ -52,176 +59,133 @@ export default function AddQuestionsDialog({
     const reader = new FileReader();
     reader.onload = (e) => {
       const parsed = rowsFromCsv(e.target.result);
-      if (parsed.error) { setCsv({ fileName: file.name, kept: [], dropped: [], error: parsed.error }); return; }
-      setCsv({ fileName: file.name, error: '', parsedRows: parsed.rows });
+      setCsv(parsed.error ? { fileName: file.name, error: parsed.error } : { fileName: file.name, parsedRows: parsed.rows });
     };
-    reader.onerror = () => setCsv({ fileName: file.name, kept: [], dropped: [], error: `Could not read ${file.name}.` });
     reader.readAsText(file);
   };
-
-  // Re-held whenever the mode changes, so the count on the button is always
-  // the count for the mode on screen.
   const held = csv && csv.parsedRows ? holdToMode(csv.parsedRows, currentRows, mode) : null;
-  const dirty = Boolean(csv && csv.parsedRows);
-
+  const dirty = Boolean(held);
   const requestClose = () => {
-    if (dirty && !window.confirm('Close without adding? The file you chose has not been added to the set.')) return;
+    if (dirty && !window.confirm('Close without adding? The file you chose has not been added.')) return;
     if (onClose) onClose();
   };
 
-  const modeCard = (value, title, body, disabled, why) => (
-    <label className={`qsets-mode${mode === value ? ' is-on' : ''}${disabled ? ' is-off' : ''}`}>
-      <input
-        type="radio"
-        name="addq-mode"
-        value={value}
-        checked={mode === value}
-        disabled={disabled}
-        onChange={() => setMode(value)}
-      />
-      <span className="qsets-mode-body">
-        <span className="qsets-route-nm">{title}</span>
-        <span className="qsets-route-when">{disabled ? why : body}</span>
-      </span>
-    </label>
+  const num = (value, set, maxV, label) => (
+    <span className="addq-num" role="group" aria-label={label}>
+      {PER_CATEGORY_PRESETS.filter((p) => p <= maxV).map((p) => (
+        <button
+          key={p}
+          type="button"
+          className={`addq-pill${value === p ? ' is-on' : ''}`}
+          aria-pressed={value === p}
+          onClick={() => set(p)}
+        >
+          {p}
+        </button>
+      ))}
+    </span>
   );
 
   return (
     <Modal
       overlayClassName="qsets qsets-scrim qsets-scrim--over"
-      contentClassName="qsets-modal qsets-modal--create"
-      labelledBy="qsets-addq-title"
+      contentClassName="qsets-modal addq"
+      labelledBy="addq-title"
       onClose={requestClose}
       closeOnBackdrop={() => !dirty}
       closeOnEscape={() => !dirty}
     >
-      <header>
-        <Icon name="NotePencil" weight="duotone" size={20} color="var(--primary)" />
+      <header className="addq-head">
         <div className="qsets-grow">
-          <h2 id="qsets-addq-title">Add questions</h2>
-          <p className="qsets-dim">
-            To “{setName}” · {gameTypeLabel(engagementType)}. They join the questions below and are saved,
-            as a new version, when you press Save.
-          </p>
+          <p className="addq-kicker">Add to · {gameTypeLabel(engagementType)}</p>
+          <h2 id="addq-title" className="addq-title">{setName}</h2>
         </div>
-        <button
-          type="button"
-          className="qs-dialog-close"
-          onClick={requestClose}
-          aria-label="Close add questions"
-          title="Close"
-          data-testid="addq-close"
-        >
-          ×
-        </button>
+        <button type="button" className="qs-dialog-close" onClick={requestClose} aria-label="Close add questions" title="Close" data-testid="addq-close">×</button>
       </header>
 
-      <div className="qsets-modal-body">
-        <div className="qsets-section" role="radiogroup" aria-labelledby="addq-where">
-          <h4 id="addq-where">Where do they go?</h4>
-          <p className="qsets-route-when" style={{ margin: '-4px 0 10px' }}>
-            One or the other per pass. Mixing the two leaves the new categories thin beside the old ones.
+      <div className="addq-body">
+        {/* THE BALANCE. Every category, its count, and — live — what it becomes. */}
+        <ol className="addq-bars" data-testid="addq-balance" aria-label="Questions in each category">
+          {categories.map((name) => {
+            const now = counts.get(name) || 0;
+            const after = existing ? now + per : now;
+            return (
+              <li key={name} className="addq-bar">
+                <span className="addq-bar-name" title={name}>{name}</span>
+                <span className="addq-bar-track">
+                  <span className="addq-bar-fill" style={{ width: `${(now / max) * 100}%` }} />
+                  {existing && <span className="addq-bar-add" style={{ left: `${(now / max) * 100}%`, width: `${(per / max) * 100}%` }} />}
+                </span>
+                <span className="addq-bar-n">{existing ? <>{now} <b>→ {after}</b></> : now}</span>
+              </li>
+            );
+          })}
+          {!existing && Array.from({ length: newCats }).map((_, i) => (
+            <li key={`new-${i}`} className="addq-bar addq-bar--new">
+              <span className="addq-bar-name">New category {i + 1}</span>
+              <span className="addq-bar-track"><span className="addq-bar-add" style={{ left: 0, width: `${(per / max) * 100}%` }} /></span>
+              <span className="addq-bar-n"><b>+{per}</b></span>
+            </li>
+          ))}
+          {!hasCategories && existing && <li className="qsets-dim">This set has no categories yet.</li>}
+        </ol>
+
+        {/* THE SENTENCE. */}
+        <div className="addq-say" role="radiogroup" aria-label="Where the new questions go">
+          <label className={`addq-line${existing ? ' is-on' : ''}${!hasCategories ? ' is-off' : ''}`}>
+            <input type="radio" name="addq-mode" checked={existing} disabled={!hasCategories} onChange={() => setMode(ADD_MODES.EXISTING)} />
+            <span>Write {num(per, setPer, 10, 'More in each')} more in each of its <b>{categories.length}</b> categor{categories.length === 1 ? 'y' : 'ies'}</span>
+          </label>
+          <label className={`addq-line${!existing ? ' is-on' : ''}${room === 0 ? ' is-off' : ''}`}>
+            <input type="radio" name="addq-mode" checked={!existing} disabled={room === 0} onChange={() => setMode(ADD_MODES.NEW)} />
+            <span>
+              Write {num(per, setPer, 10, 'In each new')} in each of {num(newCats, setNewCats, Math.min(10, room), 'New categories')} <b>new</b> categor{newCats === 1 ? 'y' : 'ies'}
+              {room === 0 && <small> — the set already holds all {MAX_CATEGORIES}</small>}
+            </span>
+          </label>
+          <p className="addq-sum" data-testid="addq-sum">
+            <b>{total}</b> new questions · the set goes from {existingTotal} to {existingTotal + total}. Nothing existing changes.
           </p>
-          <div className="qsets-modes">
-            {modeCard(
-              ADD_MODES.EXISTING,
-              'Into the categories this set already has',
-              hasCategories
-                ? categories.map((name) => `${name} (${counts.get(name) || 0})`).join(' · ')
-                : '',
-              !hasCategories,
-              'This set has no categories yet.',
-            )}
-            {modeCard(
-              ADD_MODES.NEW,
-              'As new categories',
-              `Room for ${room} more — a set holds ${MAX_CATEGORIES}.`,
-              room === 0,
-              `This set already has all ${MAX_CATEGORIES} categories it can hold.`,
-            )}
-          </div>
         </div>
 
-        <div className="qsets-section">
-          <h4>How do you want to make them?</h4>
-          <div className="qsets-routes">
-            {aiAvailable && (
-              <div className="qsets-route qsets-route--lead">
-                <span className="qsets-route-nm">Generate with AI</span>
-                <p className="qsets-route-when">
-                  The same builder that makes a new set
-                  {mode === ADD_MODES.EXISTING
-                    ? ', told to write into this set’s categories and nothing else.'
-                    : ', told which category names are already taken.'}
-                </p>
-                <button
-                  type="button"
-                  className="qsets-btn qsets-btn--primary"
-                  onClick={() => onOpenBuilder && onOpenBuilder(mode)}
-                >
-                  <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />
-                  AI {gameTypeLabel(engagementType)} builder
+        {aiAvailable ? (
+          <button
+            type="button"
+            className="addq-go"
+            data-testid="addq-go"
+            onClick={() => onOpenBuilder && onOpenBuilder(mode, { per, numberOfCategories: catCount, count: total, autoStart: true })}
+          >
+            <Icon name="Sparkle" weight="duotone" size={18} color="currentColor" />
+            Write {total} more
+          </button>
+        ) : (
+          <p className="qsets-dim">Survey questions are written by hand or uploaded — Workie does not draft them.</p>
+        )}
+
+        {/* THE QUIET WAYS. */}
+        <div className="addq-alt">
+          <button type="button" className="qsets-btn qsets-btn--link" onClick={() => setCsvOpen((o) => !o)} aria-expanded={csvOpen}>Upload a CSV instead</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" className="qsets-btn qsets-btn--link" onClick={() => onWriteOne && onWriteOne(mode)}>Write one by hand</button>
+        </div>
+        {csvOpen && (
+          <div className="addq-csv">
+            <input type="file" accept=".csv" onChange={readFile} aria-label="CSV of questions to add" />
+            {csv && csv.error && <p className="qsets-alert qsets-alert--error" role="alert">{csv.error}</p>}
+            {held && (
+              <div className="qsets-addq-held" data-testid="addq-held">
+                <p><b>{held.kept.length}</b> of {csv.parsedRows.length} in {csv.fileName} fit “{existing ? 'its categories' : 'new categories'}”.</p>
+                {held.dropped.length > 0 && (
+                  <ul>{[...new Set(held.dropped.map((d) => d.reason))].map((r) => <li key={r}>{held.dropped.filter((d) => d.reason === r).length} left out — {r}</li>)}</ul>
+                )}
+                <button type="button" className="qsets-btn qsets-btn--primary" disabled={held.kept.length === 0} onClick={() => onAddRows && onAddRows(held, mode)}>
+                  Add {held.kept.length}
                 </button>
               </div>
             )}
-
-            <div className="qsets-route">
-              <span className="qsets-route-nm">Upload a CSV</span>
-              <p className="qsets-route-when">
-                The template’s columns. Only rows that fit the choice above are added; the rest are
-                listed with the reason.
-              </p>
-              <div className="qsets-file">
-                <input type="file" accept=".csv" onChange={readFile} aria-label="CSV of questions to add" />
-                {onDownloadTemplate && (
-                  <button type="button" className="qsets-btn qsets-btn--link" onClick={onDownloadTemplate}>
-                    Download the template
-                  </button>
-                )}
-              </div>
-              {csv && csv.error && <p className="qsets-alert qsets-alert--error" role="alert">{csv.error}</p>}
-              {held && (
-                <div className="qsets-addq-held" data-testid="addq-held">
-                  <p>
-                    <b>{held.kept.length}</b> of {csv.parsedRows.length} in {csv.fileName} will be added.
-                  </p>
-                  {held.dropped.length > 0 && (
-                    <ul>
-                      {[...new Set(held.dropped.map((d) => d.reason))].map((reason) => (
-                        <li key={reason}>
-                          {held.dropped.filter((d) => d.reason === reason).length} left out — {reason}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <button
-                    type="button"
-                    className="qsets-btn qsets-btn--primary"
-                    disabled={held.kept.length === 0}
-                    onClick={() => onAddRows && onAddRows(held, mode)}
-                  >
-                    Add {held.kept.length} question{held.kept.length === 1 ? '' : 's'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="qsets-route">
-              <span className="qsets-route-nm">Write one by hand</span>
-              <p className="qsets-route-when">
-                The question form, with AI drafting available inside it.
-              </p>
-              <button type="button" className="qsets-btn" onClick={() => onWriteOne && onWriteOne(mode)}>
-                <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
-              </button>
-            </div>
           </div>
-        </div>
+        )}
       </div>
-
-      <footer>
-        <button type="button" className="qsets-btn" onClick={requestClose}>Close</button>
-      </footer>
     </Modal>
   );
 }

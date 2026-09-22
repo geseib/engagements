@@ -745,26 +745,42 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
 .qsets-modal--create > footer { position: sticky; bottom: 0; background: var(--surface); }
 .qsets-panel--bare { border: 0; padding: 0; margin: 0; background: transparent; }
 
-/* ADD QUESTIONS — components/AddQuestionsDialog.jsx. The mode is a pair of
-   radio cards: the whole card is the label, the chosen one carries an amber
-   rule AND the native radio, so the state never rests on colour alone. */
-.qsets-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
-.qsets-mode {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 12px 14px;
-  border: 1px solid var(--qsets-rule-strong);
-  border-radius: 10px;
-  cursor: pointer;
-}
-.qsets-mode.is-on { border-color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); }
-.qsets-mode.is-off { cursor: not-allowed; opacity: .6; }
-.qsets-mode input { margin-top: 3px; accent-color: var(--primary); }
-.qsets-mode-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
-.qsets-addq-held { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.qsets-addq-held p, .qsets-addq-held ul { margin: 0; }
-.qsets-addq-held ul { padding-left: 18px; color: var(--muted); font-size: var(--qsets-t-label); }
+/* ADD QUESTIONS — components/AddQuestionsDialog.jsx. The set is the hero, its
+   balance is drawn, the ask is one sentence and one button. Tokens are the
+   `.qsets` scope's; the "added" band is --primary at full so the change reads
+   before the number does. */
+.qsets .addq { width: min(640px, 100%); }
+.qsets .addq-head { padding: 22px 24px 6px; display: flex; gap: 10px; align-items: flex-start; }
+.qsets .addq-kicker { margin: 0 0 4px; font-size: var(--qsets-t-floor); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.qsets .addq-title { margin: 0; font: 800 24px/1.15 var(--font-display); overflow-wrap: anywhere; }
+.qsets .addq-body { padding: 8px 24px 24px; display: flex; flex-direction: column; gap: 18px; }
+.qsets .addq-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.qsets .addq-bar { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 76px; gap: 12px; align-items: center; min-height: 24px; }
+.qsets .addq-bar-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--qsets-t-label); font-weight: 600; }
+.qsets .addq-bar--new .addq-bar-name { color: var(--muted); font-style: italic; }
+.qsets .addq-bar-track { position: relative; height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.qsets .addq-bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--muted); border-radius: 5px; }
+.qsets .addq-bar-add { position: absolute; top: 0; bottom: 0; background: var(--primary); border-radius: 0 5px 5px 0; transition: width .18s ease, left .18s ease; }
+.qsets .addq-bar-n { font-size: var(--qsets-t-label); font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); }
+.qsets .addq-bar-n b { color: var(--text); }
+.qsets .addq-say { display: flex; flex-direction: column; gap: 8px; }
+.qsets .addq-line { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--qsets-rule); border-radius: 10px; cursor: pointer; font-size: var(--qsets-t-body); line-height: 1.5; }
+.qsets .addq-line.is-on { border-color: var(--primary); }
+.qsets .addq-line.is-off { opacity: .55; cursor: not-allowed; }
+.qsets .addq-line input { accent-color: var(--primary); flex: none; }
+.qsets .addq-line small { color: var(--muted); }
+.qsets .addq-num { display: inline-flex; gap: 3px; margin: 0 2px; vertical-align: middle; }
+.qsets .addq-pill { height: 28px; min-width: 32px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--qsets-rule-strong); background: transparent; color: var(--text); font: 700 var(--qsets-t-label)/1 var(--font-ui); cursor: pointer; font-variant-numeric: tabular-nums; }
+.qsets .addq-pill.is-on { background: var(--primary); border-color: var(--primary-deep); color: var(--bg); }
+.qsets .addq-sum { margin: 2px 0 0 4px; color: var(--muted); font-size: var(--qsets-t-label); }
+.qsets .addq-sum b { color: var(--text); font-size: var(--qsets-t-head); }
+.qsets .addq-go { display: inline-flex; align-items: center; justify-content: center; gap: 10px; align-self: flex-start; height: 48px; padding: 0 22px; border-radius: 12px; border: 1px solid var(--primary-deep); background: var(--primary); color: var(--bg); font: 800 var(--qsets-t-head)/1 var(--font-display); cursor: pointer; }
+.qsets .addq-go:hover { filter: brightness(1.05); }
+.qsets .addq-alt { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: var(--qsets-t-label); }
+.qsets .addq-csv { display: flex; flex-direction: column; gap: 10px; }
+.qsets .qsets-addq-held { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.qsets .qsets-addq-held p, .qsets .qsets-addq-held ul { margin: 0; }
+.qsets .qsets-addq-held ul { padding-left: 18px; color: var(--muted); font-size: var(--qsets-t-label); }
 
 .qsets-scrim--over { z-index: 10001; }
 .qsets-modal--wide { width: min(760px, 100%); }

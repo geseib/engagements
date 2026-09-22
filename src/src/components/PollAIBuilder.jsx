@@ -103,6 +103,12 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
   ];
 
   const jobIdRef = useRef(null);
+  /* ONE PRESS, FROM THE SET. The Add questions dialog already knows the brief,
+     the categories and the count, so when it says `autoStart` this builder
+     opens GENERATING rather than on a form repeating what was just decided —
+     only if the brief carries a topic; with nothing to write about, the form
+     is the honest place to land. */
+  const autoStarted = useRef(false);
 
   /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
   const watchJob = useCallback(async (jobId) => {
@@ -182,7 +188,7 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
         category: pollConfig.category,
         audience: pollConfig.audience,
         difficulty: pollConfig.difficulty,
-        count: pollConfig.count,
+        count: appendTo?.count || pollConfig.count,
         allowMultiple: pollConfig.allowMultiple,
         customPrompt: withAppendRequirement(pollConfig.customPrompt, appendTo),
         roundKind: pollConfig.roundKind,
@@ -206,6 +212,12 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
       setTransportError(error.message);
     }
   };
+
+  useEffect(() => {
+    if (!appendTo?.autoStart || autoStarted.current || !pollConfig.topic.trim()) return;
+    autoStarted.current = true;
+    handleConfigSubmit();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
     forgetGenerationJob(ENDPOINT);

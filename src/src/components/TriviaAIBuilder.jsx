@@ -107,6 +107,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   ];
 
   const jobIdRef = useRef(null);
+  /* ONE PRESS, FROM THE SET. The Add questions dialog already knows the brief,
+     the categories and the count, so when it says `autoStart` this builder
+     opens GENERATING rather than on a form repeating what was just decided —
+     only if the brief carries a topic; with nothing to write about, the form
+     is the honest place to land. */
+  const autoStarted = useRef(false);
 
   /**
    * Watch a job to its terminal state.
@@ -185,10 +191,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         topic: triviaConfig.topic,
         audience: triviaConfig.audience,
         difficulty: triviaConfig.difficulty,
-        count: triviaConfig.count,
+        count: appendTo?.count || triviaConfig.count,
         numChoices: triviaConfig.numChoices,
         numCorrect: triviaConfig.numCorrect,
-        numberOfCategories: triviaConfig.numberOfCategories,
+        numberOfCategories: appendTo?.numberOfCategories || triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
         customPrompt: withAppendRequirement(triviaConfig.customPrompt, appendTo),
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
@@ -211,6 +217,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   };
 
   /** Done with this job: stop offering to resume it. */
+  useEffect(() => {
+    if (!appendTo?.autoStart || autoStarted.current || !triviaConfig.topic.trim()) return;
+    autoStarted.current = true;
+    handleConfigSubmit();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const dismissJob = () => {
     forgetGenerationJob(ENDPOINT);
     jobIdRef.current = null;

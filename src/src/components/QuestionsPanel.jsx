@@ -647,9 +647,11 @@ export default function QuestionsPanel({
     acceptAdded(holdToMode(rowsFromItems(items), rows, mode, { spread: true }), mode);
   };
 
-  const openAddBuilder = (mode) => {
+  const openAddBuilder = (mode, plan = {}) => {
     setShowAdd(false);
-    setAddBuilder({ mode, categories: existingCategories(rows) });
+    // `plan` is the dialog's decision — how many, into how many categories,
+    // and start at once — so the builder opens generating, not asking.
+    setAddBuilder({ mode, categories: existingCategories(rows), ...plan });
   };
 
   const writeOneFromAdd = (mode) => {
