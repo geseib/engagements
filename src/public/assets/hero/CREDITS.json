@@ -1,5 +1,5 @@
 {
-  "note": "Photographs on the marketing home (docs/design/refresh-2026-09-22/RATIONALE.md section 4a). Owner-supplied candidates from docs/design/test-images/, cropped to the brief there (participants: 4:3 centred at 52% height, source rows 133-901, which drops the badge and the watermark; paper: 3:4 at 54% width, source columns 170-938, which keeps both parties' hands) and re-encoded to WebP with cwebp -q 82. Served from the app origin so the page never depends on an external host. Only --mk-text may sit over either, and only inside the .mk-art-wash band: bare, the text measures 1.49:1 and 1.17:1 on their brightest regions.",
+  "note": "Photographs on the marketing home (docs/design/refresh-2026-09-22/RATIONALE.md section 4a). Owner-supplied candidates from docs/design/test-images/, cropped to the brief there (participants: 4:3 centred at 52% height, source rows 133-901, which drops the badge and the watermark; sheet: the second candidate, a 1161x1355 PNG, cropped 3:4 full height at source columns 72-1088 so both hands stay in frame, then scaled to 768x1024) and re-encoded to WebP with cwebp -q 82. Served from the app origin so the page never depends on an external host. Only --mk-text may sit over either, and only inside the .mk-art-wash band: bare, the text measures 1.49:1 and 1.06:1 on their brightest regions (#B6C8CF, and the sheet's #F3F5F7).",
   "images": [
     {
       "file": "room-looking-up-1024.webp",
@@ -12,7 +12,7 @@
       "file": "summit-held-768.webp",
       "title": "THE SUMMIT, HELD",
       "credit": "owner-supplied, 2026",
-      "source": "docs/design/test-images/engage_photo_paper.jpeg, cropped and re-encoded for this project",
+      "source": "docs/design/test-images/ChatGPT Image Sep 22, 2026, 10_08_15 AM.png, cropped and re-encoded for this project; the sheet in it carries a rendering of this project's own sample report",
       "license": "owner-supplied, licence to confirm"
     }
   ]

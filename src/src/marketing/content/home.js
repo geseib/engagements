@@ -133,7 +133,7 @@ export const HOME = {
     },
     sheet: {
       src: '/assets/hero/summit-held-768.webp',
-      alt: 'Two people holding one sheet of paper across a table',
+      alt: 'Two hands from opposite sides of a dark table holding one printed session report flat',
       caption: 'One sheet, read by everyone.',
     },
   },

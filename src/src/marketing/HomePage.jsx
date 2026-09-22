@@ -217,6 +217,21 @@ export default function HomePage() {
               <h2 className="mk-title">{summit.title}</h2>
               <p className="mk-lead">{summit.lead}</p>
             </div>
+            {/* The second candidate for "The summit, held" (2026-09-22) has
+                the sheet carrying a rendering of this very report, not a blank
+                page. Two options were weighed: retire the drawn report and let
+                the photo be it, or keep the drawn report as the product image
+                and let the photo carry only the gesture. The drawn report
+                stays. At the widths this aside renders (≈500px on desktop, 358px
+                at 390) the photographed body copy is under 7px and reads as
+                texture, so the photo could not carry the report's content; a
+                photographed screen dates the moment the report changes, where
+                SampleReport is the live component; and the report on the sheet
+                is the one thing on this page that must stay a paper surface
+                with its own contract (the [data-theme="light"] tests). So the
+                photo is cropped to the gesture: 3:4 here, and a top-anchored
+                16:9 on phones that keeps the hands and the sheet's head with
+                the body out of frame. The caption band alone carries a word. */}
             <div className="mk-summit-grid">
               <SampleReport report={SAMPLE_REPORT_HOME} />
               <div className="mk-summit-aside">

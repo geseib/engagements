@@ -822,7 +822,10 @@ describe('the front page refresh (2026-09-22): motion, washes and the scaffold t
    * caption band composites --mk-wash-a over that and carries --mk-text.
    * Pinned here so a lighter wash, or --mk-muted in the band, goes red. */
   describe('the photograph caption band', () => {
-    const BRIGHTEST = { 'participants (a window, not a face)': '#B6C8CF', 'paper (the sheet)': '#DCDED5' };
+    // Measured 2026-09-22 with a pure-Python PNG decode of the encoded
+    // crops (brightest 16x16 block): the second sheet candidate is a white
+    // printed page, #F3F5F7 — the case the .9 wash exists for.
+    const BRIGHTEST = { 'participants (a window, not a face)': '#B6C8CF', 'the sheet (white, printed)': '#F3F5F7' };
     const behind = (hex) => `rgb(${parseHex(hex).join(',')})`;
 
     test.each(Object.entries(BRIGHTEST))('--mk-text over wash-a over the brightest region of %s clears AA', (_l, hex) => {
