@@ -642,10 +642,56 @@ export default function QuestionsPanel({
    * set". An append-only job carries no `createdSet`, so what arrives is the
    * kept questions — held to the mode, with strays re-filed rather than lost.
    */
-  const acceptGenerated = (payload) => {
+  const acceptGenerated = async (payload) => {
     const mode = addBuilder ? addBuilder.mode : ADD_MODES.EXISTING;
     const items = (payload && (payload.questions || payload.scenarios || payload.polls)) || [];
-    acceptAdded(holdToMode(rowsFromItems(items), rows, mode, { spread: true }), mode);
+    const held = holdToMode(rowsFromItems(items), rows, mode, { spread: true });
+    /*
+      SAVED THE MOMENT THEY ARRIVE. The owner: "the way you click to add them,
+      and then have to save as a new version, is not super clear and easy to
+      accidentally exit and lose the work that was just done." Generated
+      questions are finished work the moment "Add N" is pressed, so the
+      version is written right then — one press, and closing cannot lose it.
+
+      Two cases still land unsaved, and say so: other unsaved edits already in
+      the list (a save now would carry them too, unasked), and a set that is
+      not ours to replace (the save would fork; that is the person's call).
+    */
+    const nextRows = [...rows, ...held.kept];
+    const nextSummary = summarizeRowChanges(nextRows, baselineOrder);
+    const canSaveNow = held.kept.length > 0 && !dirty && canManage
+      && workingCopyProblems(nextRows, engagementType).length === 0;
+    if (!canSaveNow) { acceptAdded(held, mode); return; }
+
+    setShowAdd(false);
+    setAddBuilder(null);
+    setRows(nextRows);
+    setSaving(true);
+    setStatus({ text: `Adding ${held.kept.length} and saving a new version…`, tone: 'pending' });
+    try {
+      const { response, result } = await saveRows(nextRows, { replaceSetId: setId }, nextSummary);
+      if (response.ok) {
+        const version = result.version != null ? `Version ${result.version}` : 'A new version';
+        setStatus({
+          text: `${held.kept.length} question${held.kept.length === 1 ? '' : 's'} added. ${version} of "${setName}" is saved `
+            + `with ${result.questionCount} questions — you can close this now. The previous version is kept.`
+            + (held.dropped.length ? ` ${held.dropped.length} left out: ${[...new Set(held.dropped.map((d) => d.reason))].join('; ')}.` : ''),
+          tone: 'success',
+        });
+        await load();
+        if (onChanged) onChanged();
+      } else {
+        setStatus({
+          text: `Added ${held.kept.length}, but the save failed: ${result.error || `HTTP ${response.status}`}. `
+            + 'They are still here, unsaved — press Save to try again.',
+          tone: 'error',
+        });
+      }
+    } catch (error) {
+      setStatus({ text: `Added ${held.kept.length}, but the save failed: ${error.message}. They are still here, unsaved — press Save to try again.`, tone: 'error' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openAddBuilder = (mode, plan = {}) => {

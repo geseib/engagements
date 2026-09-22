@@ -191,3 +191,16 @@ describe('adding never asks for a set title', () => {
     }
   });
 });
+
+describe('generated questions are saved the moment they are added', () => {
+  it('"Add N" writes the new version itself, so closing cannot lose the work', () => {
+    // The owner: "then have to save as a new version ... easy to accidentally
+    // exit and lose the work that was just done."
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', 'QuestionsPanel.jsx'), 'utf8');
+    const body = src.slice(src.indexOf('const acceptGenerated = async'), src.indexOf('const openAddBuilder'));
+    expect(body).toMatch(/saveRows\(nextRows, \{ replaceSetId: setId \}, nextSummary\)/);
+    // …but never over somebody else's unsaved edits, and never a fork unasked.
+    expect(body).toMatch(/!dirty && canManage/);
+    expect(body).toMatch(/you can close this now/);
+  });
+});
