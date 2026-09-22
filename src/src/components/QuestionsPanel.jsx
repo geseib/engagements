@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
@@ -1552,7 +1553,18 @@ export default function QuestionsPanel({
         />
       )}
 
-      {addBuilder && (() => {
+      {/*
+        AT THE PAGE ROOT, NOT IN HERE. The builders are hand-rolled white
+        modals styled for the paper console. Rendered as a descendant of this
+        panel they inherit the editor's DUSK tokens and its heading rules —
+        cream text on a white card at 1.4:1, and a title at the editor's h2
+        size — which is the screen the owner sent back as "not easy to read
+        and looks awkward". A portal puts them where AdminPage has always
+        mounted them, under <html data-theme="light">, so they render exactly
+        as they do from New set. (Modal.jsx forbids portals for ITS dialogs
+        because of DOM containment; these are not Modal and need none of it.)
+      */}
+      {addBuilder && typeof document !== 'undefined' && createPortal((() => {
         const live = rows.filter((row) => !row.removed);
         const appendTo = {
           setName: questionSet?.name || setId,
@@ -1581,7 +1593,7 @@ export default function QuestionsPanel({
             onScenariosGenerated={acceptGenerated}
           />
         );
-      })()}
+      })(), document.body)}
 
       {showPull && (
         <QuestionPullDialog
