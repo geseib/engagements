@@ -14,8 +14,8 @@
 
    Contrast, measured (marketingPalette.test.js composites these):
      --mk-text on the photo caption band (--mk-wash-a over each image's
-       brightest region): participants #B6C8CF -> 12.25:1, paper #DCDED5 ->
-       11.76:1. --mk-muted would land at 5.9 / 5.7 there but 3.5 / 3.1 over a
+       brightest region): participants #B6C8CF -> 12.25:1, the sheet #F3F5F7
+       -> #263042, 11.43:1. --mk-muted would land at 5.9 / 5.7 there but 3.5 / 3.1 over a
        70% wash, so only --mk-text sits in the band and the wash stays at .9.
      the still's chips (--mk-muted) on the .mk-ss gradient, ridge-front -> bg:
        7.1:1 / 7.6:1.
@@ -192,7 +192,7 @@
   background: linear-gradient(180deg, rgba(15, 26, 46, 0) 0%, var(--mk-wash-a) 55%);
   color: var(--mk-text); font-size: var(--mk-t-label); font-weight: 700; letter-spacing: 0.02em;
 }
-.mk-art--sheet img { object-position: 54% 50%; }
+.mk-art--sheet img { object-position: 50% 0; }
 
 /* -------------------------------------------------------- summit page frame */
 .mk-summit-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 30px 40px; margin-top: 36px; align-items: start; }
@@ -209,8 +209,10 @@
   .mk-seq::before { display: none; }
   .mk-material-row, .mk-summit-grid { grid-template-columns: minmax(0, 1fr); }
   .mk-summit-aside { position: static; }
+  /* Top-anchored 16:9: the two hands and the sheet's head, the printed
+     body out of frame (HomePage.jsx, the summit section, says why). */
   .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
-  .mk-art--sheet img { object-position: 50% 55%; }
+  .mk-art--sheet img { object-position: 50% 0; }
   .mk-mode, .mk-react-grid { grid-template-columns: minmax(0, 1fr); }
   .mk-mode--flip .mk-mode-copy { order: 0; }
   .mk-mode-screens { grid-template-columns: minmax(0, 1fr); justify-items: center; }
