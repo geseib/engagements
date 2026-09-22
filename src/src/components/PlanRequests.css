@@ -1,0 +1,149 @@
+/* ==========================================================================
+   PLAN REQUESTS — components/PlanRequestDialog.jsx (the owner's dialog and
+   the four-state strip on Plan & usage) and components/PlanRequestsPanel.jsx
+   (Engage's queue and the decide dialog).
+   From docs/design/tenancy-redesign/13, 14, 15. One scope, `.preq`; the
+   ladder and tokens are BillingPanel.css's, restated as locals because an
+   undefined custom property invalidates the whole declaration.
+
+   Measured on --bg #0F1A2E (planRequestsPalette.test.js composites the tints):
+     --text  #F4EDE4 on --bg           14.97:1     copy, headings
+     --muted #9BA8BE on --bg            7.24:1     labels, help, dates
+     --text  on the code tint (ok)     ≥ 12:1      the discount row
+     #1B2942 on --primary               7.42:1     ink on the filled button
+     --danger-text on --bg              6.7:1      the Decline button, the no-rule
+   ========================================================================== */
+.preq {
+  --preq-t-floor: 12px;
+  --preq-t-label: 13px;
+  --preq-t-body: 15px;
+  --preq-t-head: 19px;
+  --preq-row-h: 36px;
+  --preq-rule: rgba(155, 168, 190, .20);
+  --preq-rule-strong: rgba(155, 168, 190, .34);
+  --preq-row-hover: rgba(155, 168, 190, .055);
+  --preq-tint-note: rgba(155, 168, 190, .06);
+  --preq-tint-ok: rgba(79, 178, 134, .10);
+  --preq-tint-bad: rgba(229, 100, 94, .10);
+  --preq-on-accent: #1B2942;
+  --preq-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text);
+  font: 400 var(--preq-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.preq *, .preq *::before, .preq *::after { box-sizing: border-box; }
+.preq :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+.preq-grow { flex: 1 1 auto; min-width: 0; }
+.preq-dim { color: var(--muted); }
+.preq-lab { display: block; font-size: var(--preq-t-label); font-weight: 700; color: var(--muted); margin: 0 0 6px; }
+.preq-help { display: block; margin-top: 5px; font-size: var(--preq-t-floor); color: var(--muted); line-height: 1.45; }
+.preq-code { font-family: var(--preq-font-mono); font-size: 13px; padding: 1px 6px; border: 1px solid var(--preq-rule-strong); border-radius: 5px; }
+
+/* ---------------------------------------------------------------- alerts -- */
+.preq-alert {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; margin: 0 0 14px;
+  border: 1px solid rgba(229, 100, 94, .5); border-left-width: 3px; border-radius: 0 6px 6px 0;
+  background: var(--preq-tint-bad); color: var(--danger-text); font-size: var(--preq-t-label);
+}
+.preq-alert--ok { border-color: rgba(79, 178, 134, .5); background: var(--preq-tint-ok); color: var(--text); }
+.preq-alert > span { flex: 1 1 auto; min-width: 0; }
+
+/* --------------------------------------------------------------- buttons -- */
+.preq-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: 6px; border: 1px solid var(--preq-rule-strong); background: transparent;
+  color: var(--text); font: 600 var(--preq-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.preq-btn:hover:not(:disabled) { background: var(--preq-row-hover); border-color: var(--muted); }
+.preq-btn:disabled { opacity: .42; cursor: not-allowed; }
+.preq-btn--sm { height: 26px; padding: 0 9px; font-size: var(--preq-t-floor); }
+.preq-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--preq-on-accent); }
+.preq-btn--primary:hover:not(:disabled) { background: var(--primary); filter: brightness(1.05); }
+.preq-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
+.preq-btn--danger:hover:not(:disabled) { background: var(--preq-tint-bad); }
+.preq-btn--link { height: auto; border: 0; background: none; color: var(--primary); padding: 0; text-decoration: underline; }
+.preq-x { flex: 0 0 auto; background: none; border: 0; cursor: pointer; font-size: 1.6rem; line-height: 1; padding: 0 4px; color: var(--muted); min-width: 44px; min-height: 44px; }
+.preq-x:hover:not(:disabled) { color: var(--text); }
+.preq-x:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- the strip */
+.preq-strip {
+  display: flex; gap: 14px; align-items: center;
+  padding: 12px 14px; margin: 0 0 18px;
+  border: 1px solid var(--preq-rule-strong); border-left: 3px solid var(--primary); border-radius: 10px;
+  font-size: var(--preq-t-body);
+}
+.preq-strip--ok { border-left-color: var(--success); }
+.preq-strip--no { border-left-color: var(--danger-text); }
+.preq-strip q { font-style: italic; quotes: "“" "”"; }
+.preq-who { color: var(--muted); font-size: var(--preq-t-label); margin-top: 2px; }
+
+/* --------------------------------------------------------------- dialog -- */
+.preq-scrim {
+  position: fixed; inset: 0; z-index: 10001;
+  background: rgba(6, 11, 22, .72);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto; padding: 24px;
+}
+.preq-modal {
+  margin: auto; width: min(600px, 100%);
+  background: var(--surface); border: 1px solid var(--preq-rule-strong); border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .5); overflow-wrap: anywhere;
+}
+.preq-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.preq-modal-head h2 { margin: 0; font: 800 var(--preq-t-head)/1.2 var(--font-display); }
+.preq-modal-head .preq-dim { margin: 4px 0 0; font-size: var(--preq-t-label); }
+.preq-modal-body { padding: 4px 18px 6px; display: flex; flex-direction: column; gap: 14px; }
+.preq-modal-foot { display: flex; gap: 9px; justify-content: flex-end; padding: 14px 18px 16px; border-top: 1px solid var(--preq-rule); margin-top: 8px; }
+
+.preq-sum { border: 1px solid var(--preq-rule); border-radius: 10px; overflow: hidden; }
+.preq-sum-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--preq-rule); }
+.preq-sum-row:last-child { border-bottom: 0; }
+.preq-sum-row > b { font: 800 var(--preq-t-head)/1 var(--font-display); white-space: nowrap; }
+.preq-sum-row > b small { font: 600 var(--preq-t-label)/1 var(--font-ui); color: var(--muted); }
+.preq-sum-row--code { background: var(--preq-tint-ok); }
+
+.preq-field { display: flex; flex-direction: column; }
+.preq-input {
+  width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--preq-rule-strong);
+  background: var(--bg); color: var(--text); font: 400 var(--preq-t-body)/1.5 var(--font-ui);
+}
+.preq-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.preq-input::placeholder { color: var(--muted); opacity: .62; }
+.preq-input--code { max-width: 220px; font-family: var(--preq-font-mono); font-size: 14px; text-transform: uppercase; }
+.preq-note { margin: 0; padding: 10px 13px; border-left: 3px solid var(--muted); border-radius: 0 6px 6px 0; background: var(--preq-tint-note); font-size: var(--preq-t-label); color: var(--text); line-height: 1.5; }
+.preq-quote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--preq-rule-strong); color: var(--text); font-style: italic; }
+.preq-fieldset { border: 0; margin: 0; padding: 0; display: flex; gap: 10px; flex-wrap: wrap; }
+.preq-fieldset > legend { padding: 0; margin: 0 0 6px; width: 100%; }
+.preq-opt { display: inline-flex; gap: 8px; align-items: center; padding: 8px 12px; border: 1px solid var(--preq-rule-strong); border-radius: 8px; cursor: pointer; }
+.preq-opt.is-on { border-color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); }
+.preq-opt input { accent-color: var(--primary); }
+
+/* ---------------------------------------------------------------- queue -- */
+.preq-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.preq-filter { display: inline-flex; align-items: center; gap: 8px; }
+.preq-filter .preq-lab { margin: 0; }
+.preq-select { height: 32px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--preq-rule-strong); background: var(--bg); color: var(--text); font: 500 var(--preq-t-label)/1 var(--font-ui); }
+.preq-count { margin-left: auto; font-size: var(--preq-t-label); color: var(--muted); white-space: nowrap; }
+.preq-empty { padding: 24px 0 8px; max-width: 60ch; }
+.preq-empty h3 { margin: 0 0 6px; font: 700 var(--preq-t-head)/1.2 var(--font-display); }
+.preq-empty p { margin: 0; color: var(--muted); line-height: 1.55; }
+
+.preq-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--preq-t-body); }
+.preq-tbl th { position: sticky; top: 0; z-index: 2; background: var(--bg); text-align: left; font-size: var(--preq-t-floor); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); padding: 0 10px 6px; border-bottom: 1px solid var(--preq-rule); font-weight: 700; }
+.preq-tbl td { padding: 0 10px; height: var(--preq-row-h); border-bottom: 1px solid var(--preq-rule); vertical-align: middle; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.preq-tbl td:first-child { padding-top: 4px; padding-bottom: 4px; height: auto; }
+.preq-tbl tbody tr:hover td { background: var(--preq-row-hover); }
+.preq-tbl td.preq-wrap { white-space: normal; text-overflow: clip; padding-top: 6px; padding-bottom: 6px; height: auto; font-size: var(--preq-t-label); }
+.preq-col-org { width: 26%; } .preq-col-when { width: 14%; } .preq-col-plan { width: 12%; } .preq-col-code { width: 12%; } .preq-col-note { width: 26%; } .preq-col-acts { width: 10%; }
+.preq-name { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.preq-sub { display: block; font-size: var(--preq-t-label); color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.preq-when { font-size: var(--preq-t-label); color: var(--muted); white-space: nowrap; }
+.preq-rowact { display: flex; flex-wrap: wrap; gap: 5px; }
+.preq-rowact > :first-child { margin-left: auto; }
+.preq-chip { display: inline-flex; align-items: center; font-size: var(--preq-t-floor); font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--preq-rule-strong); }
+.preq-chip--approved { color: var(--text); border-color: rgba(79, 178, 134, .5); }
+.preq-chip--declined { color: var(--danger-text); border-color: rgba(229, 100, 94, .5); }
+.preq-chip--withdrawn { color: var(--muted); border-style: dashed; }

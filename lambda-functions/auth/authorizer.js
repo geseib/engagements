@@ -454,6 +454,14 @@ function requiredGroupsForRoute(method, path) {
   if (PLATFORM_ROUTE.test(path)) {
     return ['admins'];
   }
+  // The plan-request QUEUE and its decisions are Engage's; the same shape as
+  // the rule above, anchored for the same reason. The organisation's own
+  // plan-request routes fall through to ORG_ROUTE below (hosts+admins), and
+  // the handler re-checks the org ROLE — owner to ask, admin to read.
+  const PLATFORM_PLAN_ROUTE = /^platform\/plan-requests(\/[^/]+\/[^/]+\/decide)?$/;
+  if (PLATFORM_PLAN_ROUTE.test(path)) {
+    return ['admins'];
+  }
 
   // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
   //

@@ -15,6 +15,15 @@
 
 ---
 
+## STATUS (kept current)
+
+| Step | State |
+|---|---|
+| 1. Honest foundations | Shipped to dev `2ab57fdb` (2026-09-22) |
+| 2. Plan requests | **Shipped to dev 2026-09-22.** `lambda-functions/admin/orgs/plan-requests.js` (five routes, one handler), `components/PlanRequestDialog.jsx` (dialog + the four-state strip on Plan & usage), `components/PlanRequestsPanel.jsx` (the platform section `planrequests` with a waiting-count badge, and the decide dialog), `components/PlanRequests.css` (`.preq`). Tests: `tests/plan-request-flow.js`, `src/__tests__/planRequests.test.jsx`, `planRequestsPalette.test.js`. Mockups 13–15. A code named on a request is carried and shown, not priced — that is step 3. |
+| 3. Adjustments and codes | Not started |
+| 4. Simulated invoices | Not started |
+
 ## PART 1 — Audit
 
 ### 1.1 Plans and arithmetic (`lambda-functions/admin/shared/pricing.js`, duplicated byte-for-byte at `lambda-functions/websocket/pricing.js` and `lambda-functions/game/pricing.js`; `tests/pricing.js` pins the copies)

@@ -11,6 +11,8 @@ import SessionsPanel from './components/SessionsPanel';
 import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
+import PlanRequestsPanel from './components/PlanRequestsPanel';
+import PlanRequestDialog from './components/PlanRequestDialog';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
 import PublicLibraryPanel from './components/PublicLibraryPanel';
@@ -217,6 +219,12 @@ function AdminPage() {
   const [setAllowance, setSetAllowance] = useState(null);
   // The last 402 an upload took, handed to BillingPanel as `refusal`.
   const [uploadRefusal, setUploadRefusal] = useState(null);
+  // BILLING STEP 2 — the org's latest plan request, the dialog, and the
+  // platform queue's waiting count for the nav badge.
+  const [planRequest, setPlanRequest] = useState(null);
+  const [showPlanRequest, setShowPlanRequest] = useState(false);
+  const [planRequestBusy, setPlanRequestBusy] = useState(false);
+  const [planRequestCount, setPlanRequestCount] = useState(null);
 
   // Debug mode
   const [debugMode, setDebugMode] = useState(() => {
@@ -399,6 +407,39 @@ function AdminPage() {
     })();
     return () => { cancelled = true; };
   }, [activeTab, activeOrgId]);
+
+  /* The latest plan request, read with the Billing section for the same
+     reasons as usage above. Admins may read it; a member's 403 is not an
+     error worth showing — they never see the strip. */
+  const loadPlanRequest = React.useCallback(async () => {
+    if (!activeOrgId) return;
+    try {
+      const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/plan-requests`));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setPlanRequest(null); return; }
+      setPlanRequest((data.requests || [])[0] || null);
+      // The plan may have changed under us (an approval): the route answers
+      // with the org's plan as it is NOW, so the chip and the panel follow it.
+      if (data.plan) {
+        setOrgs((list) => list.map((o) => (o.orgId === activeOrgId && o.plan !== data.plan ? { ...o, plan: data.plan } : o)));
+      }
+    } catch { setPlanRequest(null); }
+  }, [activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeTab !== 'billing' || !activeOrgId) return;
+    loadPlanRequest();
+  }, [activeTab, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const withdrawPlanRequest = async () => {
+    if (!planRequest || !activeOrgId) return;
+    setPlanRequestBusy(true);
+    try {
+      await authFetch(adminApiUrl(`orgs/${activeOrgId}/plan-requests/${encodeURIComponent(planRequest.reqId)}`), { method: 'DELETE' });
+      await loadPlanRequest();
+    } finally {
+      setPlanRequestBusy(false);
+    }
+  };
 
   // The score card is a PLACE inside the platform Public library section, the
   // same way the set editor is a place inside Question sets — see the shell's
@@ -1644,6 +1685,11 @@ function AdminPage() {
             if (item.id === 'moderation') {
               return { ...item, count: moderationCount || undefined };
             }
+            // Requests waiting on Engage: the one number here that is a
+            // customer waiting. A badge, not a count, for that reason.
+            if (item.id === 'planrequests') {
+              return { ...item, badge: planRequestCount || undefined };
+            }
             return item;
           }),
         }))}
@@ -1990,6 +2036,16 @@ function AdminPage() {
           )}
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
+          {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
+
+          {showPlanRequest && activeOrg && (
+            <PlanRequestDialog
+              orgId={activeOrgId}
+              orgName={activeOrg.name || activeOrgId}
+              onClose={() => setShowPlanRequest(false)}
+              onRequested={(req) => { setShowPlanRequest(false); setPlanRequest(req); setNotice({ text: 'Your request is with Engage. You will see the decision here.', tone: 'success' }); }}
+            />
+          )}
 
           {/* THE ORG CONSOLE'S PUBLIC LIBRARY — every public row, read as a
               member: preview (the read-only editor, the same place the list's
@@ -2067,6 +2123,12 @@ function AdminPage() {
               history={orgUsage?.history}
               error={orgUsageError}
               refusal={uploadRefusal}
+              planRequest={planRequest}
+              /* Owner only (handoff §2.7 Q5 — the same rule as redeeming a
+                 code). A personal space has one member and they own it. */
+              onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}
+              onWithdrawRequest={withdrawPlanRequest}
+              requestBusy={planRequestBusy}
               /*
                 NO `onUpgrade` — deliberately. It opened "Create a team", which
                 creates ANOTHER FREE organisation and upgrades nothing; a

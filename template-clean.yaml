@@ -1007,6 +1007,73 @@ Resources:
   # Engage staff only (tenant.isPlatformAdmin, never an org role). It lists
   # organisations and changes one's status; there is deliberately no route from
   # here into any organisation's content, which is the isolation guarantee
+  # ── Plan requests: how a team gets past free (billing step 2) ──────────────
+  # docs/handoff/billing-experience-2026-09-22.md §2.1. Two route families on
+  # one handler: the organisation's own (owner asks, admins read, owner
+  # withdraws) and Engage's queue (staff list and decide). Both are named in
+  # auth/authorizer.js: the org routes are hosts+admins with the org role
+  # re-checked in the handler; the platform routes are the `admins` group.
+  PlanRequestsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-plan-requests'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/plan-requests.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+      Policies:
+        # NO kms:Decrypt: a request carries a plan name, a code and a note the
+        # customer wrote for Engage to read — none of it tenant content.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        CreatePlanRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan-requests
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ListPlanRequests:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan-requests
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        WithdrawPlanRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan-requests/{reqId}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformPlanQueue:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/plan-requests
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PlatformPlanDecide:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/plan-requests/{orgId}/{reqId}/decide
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   # expressed as an API surface rather than as a promise.
   PlatformOrgsFunction:
     Type: AWS::Serverless::Function

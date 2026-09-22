@@ -18,6 +18,7 @@ import './BillingPanel.css';
  * that works in the bundle AND in the test run.
  */
 import pricing from '../../../lambda-functions/game/pricing';
+import { PlanRequestStrip } from './PlanRequestDialog';
 
 const {
   TEAM_PLAN, planFor, projectInvoice, allowanceState, formatCents,
@@ -80,6 +81,17 @@ export default function BillingPanel({
   refusal = null,
   error = '',
   onUpgrade,
+  /**
+   * BILLING STEP 2 — the plan request (docs/design/tenancy-redesign/13, 14).
+   * `planRequest` is the latest request row for this organisation, or null;
+   * `onRequestPlan` opens the dialog; `onWithdrawRequest` withdraws the open
+   * one. All three optional: the personal space and the host's plain screen
+   * pass none and see neither the strip nor the button.
+   */
+  planRequest = null,
+  onRequestPlan,
+  onWithdrawRequest,
+  requestBusy = false,
   onBillingHistory,
   onInvoice,
   theme = 'dark',
@@ -153,6 +165,10 @@ export default function BillingPanel({
             <button type="button" className="bill-btn" onClick={onBillingHistory}>
               Billing history
             </button>
+          ) : onRequestPlan && (!planRequest || planRequest.status !== 'requested') ? (
+            <button type="button" className="bill-btn bill-btn--primary" onClick={onRequestPlan} data-testid="bill-request-plan">
+              Request the Team plan
+            </button>
           ) : onUpgrade ? (
             <button type="button" className="bill-btn bill-btn--primary" onClick={onUpgrade}>
               Create a team
@@ -160,6 +176,18 @@ export default function BillingPanel({
           ) : null}
         </div>
       </div>
+
+      {/* The request's state, above the meters — mockup 14. Shown for a free
+          org with any request on record; a metered org sees only an approval
+          (the others would be history it has already acted on). */}
+      {planRequest && (!metered || planRequest.status === 'approved') && (
+        <PlanRequestStrip
+          request={planRequest}
+          onWithdraw={onWithdrawRequest}
+          onRequestAgain={onRequestPlan}
+          busy={requestBusy}
+        />
+      )}
 
       {error ? (
         <p className="bill-notebox bill-notebox--bad" role="alert">
@@ -216,7 +244,11 @@ export default function BillingPanel({
                     as a toll gate — and waiting really is an exit here, because
                     the allowance is per period. */}
                 <div className="bill-exits">
-                  {onUpgrade ? (
+                  {onRequestPlan && (!planRequest || planRequest.status !== 'requested') ? (
+                    <button type="button" className="bill-btn bill-btn--sm bill-btn--primary" onClick={onRequestPlan}>
+                      Request the Team plan
+                    </button>
+                  ) : onUpgrade ? (
                     <button
                       type="button"
                       className="bill-btn bill-btn--sm bill-btn--primary"
