@@ -1669,11 +1669,24 @@ function AdminPage() {
     So: the label wins wherever the nav knows the section, and this page
     supplies only the subtitle and the theme.
   */
-  const base = NEW_SECTION_HEADS[resolvedTab]
-    || ADMIN_SECTION_BY_ID[resolvedTab]
-    || ADMIN_SECTION_BY_ID.questionsets;
+  const known = NEW_SECTION_HEADS[resolvedTab] || ADMIN_SECTION_BY_ID[resolvedTab];
+  const base = known || ADMIN_SECTION_BY_ID.questionsets;
+  /*
+    AND THE NAV'S SENTENCE, WHEN THIS PAGE HAS NONE. The fallback above lands
+    every unknown id on Question sets, subtitle included — which is how
+    Organisations, Plan requests and Discount codes were all headed "The thing
+    every session is built from." on test (2026-09-22). consoleSections.js
+    carries a true sentence for each, so an id this page does not know reads
+    it from there; an id it DOES know keeps this page's copy, which is the
+    newer of the two where they differ (Sessions' expiry line).
+  */
   const section = navSection
-    ? { ...base, id: resolvedTab, title: navSection.label }
+    ? {
+      ...base,
+      id: resolvedTab,
+      title: navSection.label,
+      subtitle: known ? base.subtitle : (navSection.subtitle || base.subtitle),
+    }
     : base;
 
   return (
