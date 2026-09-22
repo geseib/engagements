@@ -860,6 +860,18 @@ body.mk-anno-off .mk-anno-rail { display: none; }
 .mk-react-side { display: grid; gap: 22px; }
 .mk-react-side .mk-lead { max-width: 34ch; }
 
+/* The supplied photographs (section 4a). Cover-cropped by object-position so
+   no derived file is written; the caption sits in a wash-a band at the foot,
+   where the composite over each image's brightest region was measured:
+   participants #B6C8CF -> #202B3E, --mk-text 12.25:1; paper #DCDED5 -> #242E3F,
+   11.76:1. Only --mk-text may sit in the band (--mk-muted lands at 5.9/5.7
+   over wash-a but 3.5/3.1 over a 70% wash, so it is not used). */
+.mk-art--photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mk-art-wash { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 18px 14px;
+  background: linear-gradient(180deg, rgba(15,26,46,0) 0%, var(--mk-wash-a) 55%);
+  color: var(--mk-text); font-size: var(--mk-t-label); font-weight: 700; letter-spacing: .02em; }
+.mk-art--sheet img { object-position: 54% 50%; }
+
 /* ---------------------------------------- 6. the summit: report and photo
    The mode section's copy loses its "text" paragraph where the list says the
    same thing (fact stated once). Nothing else changes in the report block. */
@@ -884,6 +896,7 @@ body.mk-anno-off .mk-anno-rail { display: none; }
   .mk-material-row, .mk-summit-grid { grid-template-columns: minmax(0, 1fr); }
   .mk-summit-aside { position: static; }
   .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
+  .mk-art--sheet img { object-position: 50% 55%; }
 }
 @media (max-width: 720px) {
   .mk-hero { row-gap: 26px; }
@@ -1121,9 +1134,10 @@ body.mk-anno-off .mk-anno-rail { display: none; }
         <p class="mk-tally-note">The answer with no votes is kept too. A session that quietly discards it is a session you cannot go back to.</p>
       </div>
       <div class="mk-react-side">
-        <div class="mk-art " role="img" aria-label="The room, looking up">
-  <div class="mk-art-req"><b>Image request &middot; The room, looking up</b><p>A real meeting room, dusk-lit, 12&ndash;20 people seated, most holding phones, all faces turned up toward an off-frame screen at the front &mdash; the moment a result lands. Shot from behind and slightly above the back row so the screen glow is on their faces and the screen itself is out of frame (the product still is drawn beside it; a photographed screen would date). Warm amber key from the screen, cool blue ambient. 4:3, ~1600px, WebP &le;180KB. Low-key: no face brighter than mid-grey so --mk-text over any 70% wash still clears 4.5:1. No laptops, no lanyards, no brand marks.</p><div class="mk-art-sil"></div></div>
-</div>
+        <figure class="mk-art mk-art--photo " style="margin:0">
+  <img src="../test-images/engage_photo_participants.jpeg" alt="A room of people looking up from their phones toward a screen out of frame" style="object-position:50% 52%">
+  <figcaption class="mk-art-wash">The moment a result lands.</figcaption>
+</figure>
         <p class="mk-lead">Everyone writes at the same time, so the room does not have to take turns to be heard.</p>
         <ul class="mk-mode-list">
           <li>The room reads every answer, then votes &mdash; on what was said, not on who said it loudest.</li>
@@ -1159,9 +1173,10 @@ body.mk-anno-off .mk-anno-rail { display: none; }
         <div class="mk-report-foot"><a class="mk-report-btn" href="../marketing-redesign/04-reports.html">Export PDF</a><a class="mk-report-btn" href="../marketing-redesign/04-reports.html">Copy shareable link</a><span class="mk-report-note">Every answer, every vote and every comment is kept.</span></div>
       </div>
       <div class="mk-summit-aside">
-        <div class="mk-art " role="img" aria-label="The summit, held">
-  <div class="mk-art-req"><b>Image request &middot; The summit, held</b><p>A single sheet of paper on a dark table, held at its top corners by two hands from opposite sides &mdash; two people reading the same page. Overhead, tight crop; the sheet is the brightest thing in frame and is blank or out of focus (the report is drawn, not photographed). 3:4 on desktop, 16:9 crop on mobile, ~1400px tall, WebP &le;160KB. This is the payoff frame; it should feel like agreement, not paperwork.</p><div class="mk-art-sil"></div></div>
-</div>
+        <figure class="mk-art mk-art--photo mk-art--sheet" style="margin:0">
+  <img src="../test-images/engage_photo_paper.jpeg" alt="Two people holding one sheet of paper across a table" style="object-position:54% 50%">
+  <figcaption class="mk-art-wash">One sheet, read by everyone.</figcaption>
+</figure>
         <p class="mk-muted"><a href="../marketing-redesign/04-reports.html">See a full report, annotated &rarr;</a></p>
       </div>
     </div>

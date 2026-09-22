@@ -22,7 +22,7 @@ the lead; and the results reveal was playing underneath the phase wipe.
 2. Impeccable's craft floor names five scaffold tells; the shipped home uses all five. Kickers survive only where they carry the climb (Base camp, The summit).
 3. Three filled-amber controls above the fold become one: the nav door and Join are outlines.
 4. Motion on the home is one authored moment (the route draws itself with scroll, ahead of the climber that already moves) plus one performing block (the tally grows and counts up, once, in view). Headline rises once from an already-painted default.
-5. Two photographs are requested, with placeholders that carry the request; both keep the screen and the sheet out of focus so the drawn stills stay the product image.
+5. Two photographs were requested and the owner supplied one candidate each; both are placed at the specified crops with a measured caption wash (§4a). A is usable as-is with the crop; B is usable but earns a re-shoot.
 6. The stage's largest defect is a regression: shipped trivia RESULTS shows no question, no explanation and no CORRECT word — "correct" is a border colour alone. Restored.
 7. The approved phase wipe never shipped; the band changes colour with no transition. A room heads-down on phones needs one beat. Shipped here as transforms and opacity, 1.4s, gone by itself.
 8. The results reveal performs once: shares grow, percentages count up, the correct row lands last, standings show their deltas. Then stillness.
@@ -110,6 +110,54 @@ Two for the home page. None for the working stage states — the art brief alrea
 **B. "The summit, held"** — sits beside the report in *The summit*, 3:4 on desktop and a 16:9 crop on mobile, ~1400px tall, WebP ≤160KB. A single sheet on a dark table held at its top corners by two hands from opposite sides. Overhead, tight crop; the sheet is the brightest thing in frame and blank or out of focus (the report is drawn). It should feel like agreement, not paperwork. Contrast: the sheet is never under text.
 
 Both go in `src/public/assets/hero/` with a `CREDITS.json` entry per the art brief §7, licence filled in for real.
+
+### 4a. The supplied images
+
+The owner supplied one 1024×1024 JPEG per request in `docs/design/test-images/`
+(2×2 grids were expected; a single candidate each means there is no choice to
+make within a set — the verdicts below are against the brief, not against
+siblings). They are now referenced from `01-home.html` and `01m-home-mobile.html`
+by relative path (`../test-images/…`), an exception to the self-contained rule
+recorded in `_src/build.py`'s `photo()`; no derived file was written — the crops
+are `object-fit: cover` + `object-position`.
+
+**A. `engage_photo_participants.jpeg` — usable with a crop, as a figure.**
+Subject and mood are right: faces turned up toward an off-frame screen, phones in
+hand, amber key on the faces, cool blue ambient, the screen out of frame. Two
+departures from the brief: it is a three-quarter view from the front-side, not
+from behind the back row (so faces are lit, and the front woman's cheek is well
+above mid-grey), and there is a lanyard badge bottom-left and a small watermark
+bottom-right. *Treatment:* 4:3 cover crop centred at 52% height (source rows
+≈133–901), which drops both the badge and the watermark; used as a figure with
+its caption in a `wash-a` band at the foot — no body text sits over it, so the
+mid-grey face rule is moot. *Re-shoot only if* the from-behind framing is wanted;
+if so the prompt should add "no badges, no lanyards, no watermark, faces in
+shadow lit only by the screen".
+
+**B. `engage_photo_paper.jpeg` — usable with a crop; a re-shoot would be better.**
+Overhead, the sheet is the brightest thing in frame and effectively blank. But it
+reads as a legal handover: three hands, a suit with French cuffs, a document
+sliding across a desk — not two people reading one page. The tiny printed block
+near the sheet's foot is illegible at any size the page uses but is still text on
+a "blank" sheet. *Treatment:* 3:4 cover crop at 54% width (source columns
+≈170–938), which keeps both parties' hands; 16:9 at 55% height on mobile. *Prompt
+for the re-shoot:* "one sheet held flat at its top corners by two hands from
+opposite sides, shirtsleeves, no jacket cuffs, sheet fully blank, overhead,
+tight crop, dark table" — the current frame is the fallback.
+
+**Contrast, measured.** Brightest 16×16 block of each crop, composited under the
+caption band (`--mk-wash-a`, rgba(15,26,46,.9)), against `--mk-text` #F4EDE4:
+
+| image | brightest region | under wash-a | `--mk-text` | `--mk-muted` |
+|---|---|---|---|---|
+| participants (a window, not a face) | #B6C8CF | #202B3E | **12.25:1** | 5.92:1 |
+| paper (the sheet) | #DCDED5 | #242E3F | **11.76:1** | 5.68:1 |
+
+Bare, `--mk-text` on those regions is 1.49:1 and 1.17:1, which is why nothing
+but the wash band may carry a word. Over a 70% wash the figures fall to 7.30:1 /
+6.49:1 for `--mk-text` and **3.53:1 / 3.14:1 for `--mk-muted`** — under AA — so
+only `--mk-text` is used in the band and the wash stays at .9. Measured with a
+pure-Python PNG decode of `sips`-converted copies (no PIL on this machine).
 
 ## 5. What must not change, and why
 

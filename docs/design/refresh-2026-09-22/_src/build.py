@@ -122,6 +122,15 @@ HERO_STAGE = """
 </div>
 """
 
+def photo(src, alt, cap, pos, extra=""):
+    # EXCEPTION to the self-contained rule, on purpose: the owner's candidate
+    # photographs are referenced by relative path so the two files stay in
+    # test-images/ with their provenance. RATIONALE.md section 4a records it.
+    return f"""<figure class="mk-art mk-art--photo {extra}" style="margin:0">
+  <img src="{src}" alt="{alt}" style="object-position:{pos}">
+  <figcaption class="mk-art-wash">{cap}</figcaption>
+</figure>"""
+
 def art(label, req, extra=""):
     return f"""<div class="mk-art {extra}" role="img" aria-label="{label}">
   <div class="mk-art-req"><b>Image request &middot; {label}</b><p>{req}</p><div class="mk-art-sil"></div></div>
@@ -264,8 +273,7 @@ HOME_BODY = f"""
         <p class="mk-tally-note">The answer with no votes is kept too. A session that quietly discards it is a session you cannot go back to.</p>
       </div>
       <div class="mk-react-side">
-        {art("The room, looking up",
-             "A real meeting room, dusk-lit, 12&ndash;20 people seated, most holding phones, all faces turned up toward an off-frame screen at the front &mdash; the moment a result lands. Shot from behind and slightly above the back row so the screen glow is on their faces and the screen itself is out of frame (the product still is drawn beside it; a photographed screen would date). Warm amber key from the screen, cool blue ambient. 4:3, ~1600px, WebP &le;180KB. Low-key: no face brighter than mid-grey so --mk-text over any 70% wash still clears 4.5:1. No laptops, no lanyards, no brand marks.")}
+        {photo("../test-images/engage_photo_participants.jpeg", "A room of people looking up from their phones toward a screen out of frame", "The moment a result lands.", "50% 52%")}
         <p class="mk-lead">Everyone writes at the same time, so the room does not have to take turns to be heard.</p>
         <ul class="mk-mode-list">
           <li>The room reads every answer, then votes &mdash; on what was said, not on who said it loudest.</li>
@@ -301,8 +309,7 @@ HOME_BODY = f"""
         <div class="mk-report-foot"><a class="mk-report-btn" href="../marketing-redesign/04-reports.html">Export PDF</a><a class="mk-report-btn" href="../marketing-redesign/04-reports.html">Copy shareable link</a><span class="mk-report-note">Every answer, every vote and every comment is kept.</span></div>
       </div>
       <div class="mk-summit-aside">
-        {art("The summit, held",
-             "A single sheet of paper on a dark table, held at its top corners by two hands from opposite sides &mdash; two people reading the same page. Overhead, tight crop; the sheet is the brightest thing in frame and is blank or out of focus (the report is drawn, not photographed). 3:4 on desktop, 16:9 crop on mobile, ~1400px tall, WebP &le;160KB. This is the payoff frame; it should feel like agreement, not paperwork.")}
+        {photo("../test-images/engage_photo_paper.jpeg", "Two people holding one sheet of paper across a table", "One sheet, read by everyone.", "54% 50%", "mk-art--sheet")}
         <p class="mk-muted"><a href="../marketing-redesign/04-reports.html">See a full report, annotated &rarr;</a></p>
       </div>
     </div>
@@ -423,7 +430,7 @@ body { background: #070C16; }
 .mk-frame .mk-mode--flip .mk-mode-copy { order: 0; }
 .mk-frame .mk-mode-screens { grid-template-columns: minmax(0,1fr); justify-items: center; }
 .mk-frame .mk-mode-screens .mk-device--phone { width: 190px; }
-.mk-frame .mk-summit-aside { position: static; } .mk-frame .mk-summit-aside .mk-art { aspect-ratio: 16/9; }
+.mk-frame .mk-summit-aside { position: static; } .mk-frame .mk-summit-aside .mk-art { aspect-ratio: 16/9; } .mk-frame .mk-art--sheet img { object-position: 50% 55%; }
 .mk-frame .mk-art { aspect-ratio: 16/10; }
 .mk-frame .mk-report-head, .mk-frame .mk-report-body, .mk-frame .mk-report-foot { padding-inline: 18px; }
 .mk-frame .mk-report-note { margin-left: 0; }
@@ -619,5 +626,5 @@ write("index.html", INDEX)
 # The self-containment rule: nothing fetched from anywhere.
 for n in ["01-home.html", "01m-home-mobile.html", "02-stage-ask.html", "03-stage-results.html"]:
     s = read(os.path.join(OUT, n))
-    assert not re.search(r'https?://|<link |src="(?!data:)', s), n + " fetches something"
+    assert not re.search(r'https?://|<link |src="(?!data:|\.\./test-images/)', s), n + " fetches something"
 print("ok: no external asset in any mockup")

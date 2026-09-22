@@ -94,6 +94,18 @@
 .mk-react-side { display: grid; gap: 22px; }
 .mk-react-side .mk-lead { max-width: 34ch; }
 
+/* The supplied photographs (section 4a). Cover-cropped by object-position so
+   no derived file is written; the caption sits in a wash-a band at the foot,
+   where the composite over each image's brightest region was measured:
+   participants #B6C8CF -> #202B3E, --mk-text 12.25:1; paper #DCDED5 -> #242E3F,
+   11.76:1. Only --mk-text may sit in the band (--mk-muted lands at 5.9/5.7
+   over wash-a but 3.5/3.1 over a 70% wash, so it is not used). */
+.mk-art--photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mk-art-wash { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 18px 14px;
+  background: linear-gradient(180deg, rgba(15,26,46,0) 0%, var(--mk-wash-a) 55%);
+  color: var(--mk-text); font-size: var(--mk-t-label); font-weight: 700; letter-spacing: .02em; }
+.mk-art--sheet img { object-position: 54% 50%; }
+
 /* ---------------------------------------- 6. the summit: report and photo
    The mode section's copy loses its "text" paragraph where the list says the
    same thing (fact stated once). Nothing else changes in the report block. */
@@ -118,6 +130,7 @@
   .mk-material-row, .mk-summit-grid { grid-template-columns: minmax(0, 1fr); }
   .mk-summit-aside { position: static; }
   .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
+  .mk-art--sheet img { object-position: 50% 55%; }
 }
 @media (max-width: 720px) {
   .mk-hero { row-gap: 26px; }
