@@ -1,0 +1,110 @@
+/* ===========================================================================
+   refresh-stage.css — the 2026-09-22 refresh of the host stage, as a DIFF
+   against the audited 02-ask-call-and-answer.html stylesheet (inlined verbatim
+   above this block by the build). The four ladders, the floors, the fitter's
+   scaling block and every token are untouched. Every rule here is either a
+   PERFORMING motion (a phase change, an arrival, a reveal, a tally) or a
+   room-facing legibility change. Nothing loops; nothing moves while the room
+   is reading. Every animation has a reduced-motion path that keeps the final
+   state. --------------------------------------------------------------------- */
+
+/* ---------------------------------------------------- 1. the phase wipe
+   16-phase-wipe.html, which shipped nowhere: today PhaseBar.jsx:21 flips a
+   data attribute and the band changes colour with no transition. A room that
+   is heads-down on phones needs one unmissable beat. 1.4s total, gone by
+   itself, transforms + opacity only. In Call the backdrop blur is dropped
+   (encoder). Plays once on load here to stand in for the phase change. */
+.wipe{position:absolute;z-index:6;left:0;right:0;top:36%;
+  background:rgba(11,18,32,.93);border-top:2px solid var(--primary);border-bottom:2px solid var(--primary);
+  padding:calc(2vh + 10px) calc(3vw + 16px);
+  font-family:var(--font-display);font-weight:800;font-size:max(var(--floor),calc(var(--t-primary)*.95));
+  letter-spacing:.13em;text-transform:uppercase;color:var(--primary);text-align:center;
+  pointer-events:none;transform-origin:50% 50%;
+  animation:wipe 1.4s cubic-bezier(.16,1,.3,1) both}
+.wipe small{display:block;margin-top:.35em;font-family:var(--font-ui);font-weight:600;letter-spacing:.02em;
+  text-transform:none;color:var(--text);font-size:var(--t-body)}
+.wipe.results{border-color:var(--success);color:var(--success-text)}
+@keyframes wipe{0%{opacity:0;transform:scaleY(.18)}14%{opacity:1;transform:none}72%{opacity:1;transform:none}100%{opacity:0;transform:none;visibility:hidden}}
+/* The bar itself now moves with the phase: a 260ms colour cross-fade, so a
+   viewer who blinked through the wipe still sees the band change, not jump. */
+.bar{transition:background-color .26s ease-out,height .26s ease-out}
+
+/* ---------------------------------------- 2. the join code a latecomer can read
+   stage.css:202-203 sets the rail's code at 1.3x the label tier — 26-31px at
+   Room, ~10.7 arcminutes at 25ft. The lobby QR is gone once ASK begins, so this
+   is the only route in for anyone who arrives late. Secondary tier; the rail's
+   sacrifice order (title first) is unchanged. */
+.rail-join code{font-size:var(--t-secondary)}
+
+/* -------------------------------------------------- 3. arrivals on the wall
+   The marketing page promises "answers appear on the front screen as they are
+   submitted" (content/home.js:115) and the stage shows a count. This is the
+   count plus the last three arrivals, unattributed, in the meter's column —
+   which widens for it. Each arrival is an EVENT, so it may move: one 240ms
+   rise on entry, then still. The count ticks the same way. */
+.meter.arrivals{max-width:clamp(300px, 31vw, 640px);gap:calc(1.1vh + 4px)}
+.meter.arrivals h5{margin:calc(.8vh + 4px) 0 0;font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase}
+.arr{background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);border-radius:var(--radius);
+  padding:calc(.8vh + 5px) calc(.8vw + 9px);min-width:0;
+  animation:arrive .24s cubic-bezier(.16,1,.3,1) both}
+.arr + .arr{margin-top:calc(.6vh + 3px)}
+.arr .ans{font-size:var(--t-body);font-weight:600;line-height:1.22;color:var(--text);margin:0}
+.arr .n{display:block;margin-top:.25em;font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.arr.older{opacity:.7}
+.arr.oldest{opacity:.45}
+@keyframes arrive{from{opacity:0;transform:translateY(.5em)}to{opacity:1;transform:none}}
+.meter .count .n{display:inline-block;transition:transform .2s cubic-bezier(.16,1,.3,1)}
+.meter .count .n.tick{animation:tick .28s cubic-bezier(.16,1,.3,1)}
+@keyframes tick{0%{transform:translateY(.35em);opacity:.4}100%{transform:none;opacity:1}}
+
+/* --------------------------------------------------- 4. the results reveal
+   07-results-trivia is the best screen in the set and the shipped stage lost
+   three things from it: the question recap (GameHostPage.jsx:5798 passes no
+   withQuestion; QuestionCard.jsx:74 returns options alone), the explanation,
+   and the CORRECT word-flag — so "correct" is colour alone. All three back.
+   Then the reveal PERFORMS: shares grow from zero, percentages count up, rows
+   land 80ms apart (capped at 480ms), and the correct row's flag arrives last.
+   Transforms and opacity only, so Call renders it identically; TV and Table
+   inherit their ladders and the timing does not depend on size.
+   --rv is the wipe's dwell: the reveal begins as the band lifts, not under it.
+   A phase change with no wipe (reduced motion) sets it to 0. */
+.stage{--rv:1s}
+.opt .fill{transform-origin:left center;animation:grow .62s cubic-bezier(.16,1,.3,1) both}
+.opts .opt:nth-child(1) .fill{animation-delay:calc(var(--rv) + .05s)}
+.opts .opt:nth-child(2) .fill{animation-delay:calc(var(--rv) + .13s)}
+.opts .opt:nth-child(3) .fill{animation-delay:calc(var(--rv) + .21s)}
+.opts .opt:nth-child(4) .fill{animation-delay:calc(var(--rv) + .29s)}
+.opts .opt:nth-child(5) .fill{animation-delay:calc(var(--rv) + .37s)}
+.opts .opt:nth-child(6) .fill{animation-delay:calc(var(--rv) + .45s)}
+@keyframes grow{from{transform:scaleX(0)}to{transform:none}}
+.opt .pct{font-variant-numeric:tabular-nums}
+.opt.correct{animation:land .4s cubic-bezier(.16,1,.3,1) calc(var(--rv) + .55s) both}
+@keyframes land{from{border-color:var(--rule)}to{border-color:var(--success)}}
+.opt .flag{animation:flagin .32s cubic-bezier(.16,1,.3,1) calc(var(--rv) + .72s) both}
+@keyframes flagin{from{opacity:0;transform:translateX(.4em)}to{opacity:1;transform:none}}
+.qdetail.explain{animation:arrive .4s cubic-bezier(.16,1,.3,1) calc(var(--rv) + .9s) both}
+/* The standings move: a row that climbed carries its delta for this screen
+   only. Trivia has no anonymity, so a score beside a name is allowed here. */
+.roster li .delta{flex:none;font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);
+  color:var(--success-text);margin-left:.4em;animation:arrive .3s cubic-bezier(.16,1,.3,1) calc(var(--rv) + 1.05s) both}
+.roster li .delta.down{color:var(--muted)}
+.roster li{animation:arrive .3s cubic-bezier(.16,1,.3,1) var(--rv) both}
+.roster li:nth-child(2){animation-delay:calc(var(--rv) + .06s)}
+.roster li:nth-child(3){animation-delay:calc(var(--rv) + .12s)}
+.roster li:nth-child(4){animation-delay:calc(var(--rv) + .18s)}
+.roster li:nth-child(5){animation-delay:calc(var(--rv) + .24s)}
+.roster li:nth-child(6){animation-delay:calc(var(--rv) + .30s)}
+.roster li .nm{max-width:none;white-space:normal;overflow:visible;text-overflow:clip}
+
+/* ---------------------------------------------------- reduced motion:
+   the final state, immediately. Every animation above resolves to it. */
+@media (prefers-reduced-motion:reduce){
+  .wipe{animation:none;display:none}
+  .bar{transition:none}
+  .arr,.meter .count .n.tick,.opt .fill,.opt.correct,.opt .flag,.qdetail.explain,
+  .roster li,.roster li .delta{animation:none}
+}
+/* Call: flat field already; no blur anywhere in this sheet, so nothing to
+   remove — the band is a solid plate and the wipe is a solid plate. */
+:root.d-call .wipe{background:var(--bg)}

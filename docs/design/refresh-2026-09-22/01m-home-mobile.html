@@ -1,0 +1,1305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Engagements — turn your team's own material into decisions (390px)</title>
+<style>
+/* ===========================================================================
+   mk.css — the marketing surface.
+
+   Everything here is namespaced `.mk-*` (the compact join entry is `.jce-*`).
+   The removed scene's class names are banned by three suites; this one is `.mk-ridge*`
+   throughout, and no rule here reuses a name from it.
+
+   No raster images, no webfonts, no third-party origins, no http(s) URLs.
+   The ridge is inline SVG; the screen stills are plain divs.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   THE TOKEN BLOCK. Copied verbatim into MarketingShell.css in Task 4.
+   Do not edit a value here without editing it there.
+   --------------------------------------------------------------------------- */
+.mk-root {
+  --mk-bg: #0F1A2E;
+  --mk-surface: #1B2942;
+  --mk-surface-2: #25375A;
+  --mk-text: #F4EDE4;
+  --mk-muted: #9BA8BE;
+  --mk-amber: #F6A94C;
+  --mk-amber-deep: #C77B4A;
+  --mk-blue: #7CA7E6;
+  --mk-ridge-front: #16233B;
+  --mk-ridge-mid: #22344F;
+  --mk-ridge-back: #2E4262;
+  --mk-paper: #FBF7F1;
+  --mk-paper-surface: #FFFFFF;
+  --mk-paper-text: #1B2942;
+  --mk-paper-muted: #5E6167;
+  --mk-amber-ink: #8a5300;
+  --mk-hair: rgba(244, 237, 228, 0.14);
+
+  --mk-t-floor: 12px;
+  --mk-t-label: 13px;
+  --mk-t-body: 17px;
+  --mk-t-lead: 21px;
+  --mk-t-head: 30px;
+  --mk-t-title: 44px;
+  --mk-t-display: 68px;
+
+  --mk-shell: 1160px;
+  --mk-gutter: 24px;
+  background: var(--mk-bg);
+  color: var(--mk-text);
+  font-size: var(--mk-t-body);
+  line-height: 1.55;
+
+  /* additional tokens
+     Every colour this stylesheet needs that the block above does not already
+     name. Nothing below this line paints from a literal. Four candidates were
+     MERGED into an existing token rather than added, because they sat within a
+     hair of one: the screen still's gradient top and the sky gradient's top
+     stop, the mobile page's surround, and every restatement of the background
+     colour that had been written out by hand. See RATIONALE.md §9. */
+  --mk-amber-hi: #FFBB63;        /* the primary button under the pointer */
+  --mk-sky-low: #2A3A57;         /* the sky gradient's lowest stop (art brief §3) */
+  --mk-device-bezel: #0B1322;    /* the frame and foot around a device screen */
+  --mk-paper-edge: #EFE7DA;      /* the second sheet showing under the report */
+  --mk-paper-edge-deep: #E2D8C8; /* and the third */
+  --mk-paper-rule: rgba(27, 41, 66, 0.14); /* the hairline on a paper surface */
+}
+@media (max-width: 720px) {
+  .mk-root { --mk-t-head: 25px; --mk-t-title: 32px; --mk-t-display: 42px; --mk-gutter: 16px; }
+}
+/* --------------------------------------------------------------------------- */
+
+/* Second rule, deliberately separate so the block above stays byte-identical
+   to the one Task 4 copies. System stack only — no font is fetched from
+   anywhere, so the named faces are a preference, not a dependency. */
+.mk-root {
+  --mk-font-display: "Archivo Expanded", "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mk-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --mk-rule: var(--mk-hair);
+  --mk-rule-strong: rgba(244, 237, 228, 0.26);
+  --mk-radius: 16px;
+  --mk-radius-sm: 10px;
+  --mk-tap: 48px;
+
+  /* The hero's height. The scene reads it so the glow can be clamped to the
+     bottom 40% of the hero band and nothing else has to know the number. */
+  --mk-ridge-band: 88vh;
+
+  /* The four translucent washes. A later suite pins these exact strings. */
+  --mk-wash-nav: rgba(15, 26, 46, 0.86);
+  --mk-wash-card: rgba(27, 41, 66, 0.82);
+  --mk-wash-a: rgba(15, 26, 46, 0.9);
+  --mk-wash-b: rgba(27, 41, 66, 0.92);
+
+  font-family: var(--mk-font-ui);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+/* `body` is an ANCESTOR of `.mk-root`, so it cannot read a `--mk-*` token.
+   `.mk-root` paints the canvas itself (it already carries `background:
+   var(--mk-bg)` and `min-height: 100dvh`); body only clears its margin. */
+body { margin: 0; }
+[hidden] { display: none !important; }
+
+.mk-root :focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 2px; border-radius: 6px; }
+.mk-root ::selection { background: var(--mk-amber); color: var(--mk-bg); }
+
+/* ------------------------------------------------------------------ layout */
+.mk-shell { width: 100%; max-width: var(--mk-shell); margin-inline: auto; padding-inline: var(--mk-gutter); }
+.mk-prose { max-width: 62ch; }
+
+/* ================================================================= the ridge
+   Four layers, fixed behind the page: sky, back, mid, front. The amber glow is
+   its own element and is clamped to the bottom 40% of the hero band, because
+   --mk-text measures 2.84:1 on --mk-amber-deep and the headline is in the top 55%.
+   ========================================================================== */
+.mk-ridge { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.mk-ridge-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 70% at 50% 108%, rgba(199,123,74,0.30) 0%, rgba(199,123,74,0) 62%),
+    linear-gradient(180deg, var(--mk-bg) 0%, var(--mk-ridge-front) 34%,
+      var(--mk-ridge-mid) 74%, var(--mk-sky-low) 100%);
+}
+/* The one warm light in the frame. `--mk-ridge-band` is the hero height; the
+   glow's box starts at 60% of it and is gone by its foot. */
+.mk-ridge-glow {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  /* The box starts at 60% of the hero band — the top of the bottom 40% — and the
+     bloom's focal point sits near ITS top, so the light gathers just behind the
+     central summit instead of sinking out of sight behind the front ridge. It
+     still cannot reach the headline: the box never starts above the 60% line. */
+  top: calc(var(--mk-ridge-band, 88vh) * 0.60);
+  height: calc(var(--mk-ridge-band, 88vh) * 0.46);
+  width: min(1700px, 165%);
+  background: radial-gradient(48% 78% at 50% 34%,
+    rgba(246,169,76,0.82) 0%, rgba(246,169,76,0.42) 22%, rgba(199,123,74,0.24) 44%,
+    rgba(199,123,74,0.08) 66%, rgba(199,123,74,0) 82%);
+  filter: blur(6px);
+  /* The box has to stop dead on the 60% line, and a dead stop reads as a seam.
+     The mask fades the first sixth of it so the light arrives rather than
+     switches on — without ever painting a pixel above the line. */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 17%);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 17%);
+}
+/* Art brief §5's optional fourth layer: a thin valley fog between mid and front.
+   Without it the three silhouettes read as flat cut paper — this is what makes
+   the scene a place with air in it rather than a logo. */
+.mk-ridge-haze {
+  position: absolute; left: 0; right: 0;
+  top: calc(var(--mk-ridge-band, 88vh) * 0.74);
+  height: calc(var(--mk-ridge-band, 88vh) * 0.22);
+  background: linear-gradient(180deg,
+    rgba(42,58,87,0) 0%, rgba(58,78,110,0.34) 46%, rgba(42,58,87,0) 100%);
+  filter: blur(8px);
+}
+.mk-ridge-stars { position: absolute; inset: 0 0 auto; height: 52%; opacity: 0.5; }
+.mk-ridge-stars circle { fill: var(--mk-text); }
+
+.mk-ridge-layer { position: absolute; left: -5%; width: 110%; bottom: 0; display: block; }
+.mk-ridge-back  { height: 62%; opacity: 0.92; transform: translateX(-1.2%); }
+.mk-ridge-mid   { height: 50%; transform: translateX(-2.6%); }
+.mk-ridge-front { height: 38%; transform: translateX(-4.4%); }
+.mk-ridge-back  path.mk-ridge-body { fill: var(--mk-ridge-back); }
+.mk-ridge-mid   path.mk-ridge-body { fill: var(--mk-ridge-mid); }
+.mk-ridge-front path.mk-ridge-body { fill: var(--mk-ridge-front); }
+
+/* The route is the page's spine: base camp at the foot, the summit where the
+   report is. Dashed because it is a plan, not a path already walked. */
+.mk-ridge-route {
+  fill: none; stroke: var(--mk-amber); stroke-width: 3.2;
+  stroke-dasharray: 11 12; stroke-linecap: round; opacity: 0.78;
+}
+.mk-ridge-climber { fill: var(--mk-amber); stroke: var(--mk-bg); stroke-width: 2.5; }
+.mk-ridge-climber-halo { fill: rgba(246,169,76,0.22); }
+.mk-ridge-flag { fill: var(--mk-amber); }
+.mk-ridge-mast { stroke: var(--mk-amber); stroke-width: 2.4; }
+
+/* Everything above the scene. */
+.mk-page { position: relative; z-index: 1; }
+
+/* ==================================================================== nav == */
+.mk-nav {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--mk-wash-nav);
+  backdrop-filter: blur(9px);
+  border-bottom: 1px solid var(--mk-rule);
+}
+.mk-nav-in { display: flex; align-items: center; gap: 18px; min-height: 66px; padding-block: 10px; }
+.mk-brand {
+  display: flex; align-items: center; gap: 10px; margin-right: auto;
+  font-family: var(--mk-font-display); font-weight: 800; font-size: var(--mk-t-lead);
+  letter-spacing: -0.01em; color: var(--mk-text); text-decoration: none; white-space: nowrap;
+}
+.mk-brand-mark { flex: none; width: 26px; height: 26px; }
+.mk-brand-mark path { fill: var(--mk-amber); }
+.mk-nav-links { display: flex; align-items: center; gap: 4px; }
+.mk-nav-link {
+  display: inline-flex; align-items: center; min-height: var(--mk-tap);
+  padding: 0 12px; border-radius: var(--mk-radius-sm);
+  color: var(--mk-muted); text-decoration: none; font-weight: 600; font-size: var(--mk-t-body);
+}
+.mk-nav-link:hover { color: var(--mk-text); }
+.mk-nav-link[aria-current="page"] { color: var(--mk-text); box-shadow: inset 0 -2px 0 var(--mk-amber); }
+.mk-nav-acts { display: flex; align-items: center; gap: 10px; }
+.mk-nav-burger { display: none; }
+
+/* ================================================================ buttons == */
+.mk-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: var(--mk-tap); padding: 12px 20px; border-radius: var(--mk-radius-sm);
+  font: 700 var(--mk-t-body)/1.2 var(--mk-font-ui);
+  border: 2px solid transparent; text-decoration: none; cursor: pointer; text-align: center;
+}
+.mk-btn-primary { background: var(--mk-amber); color: var(--mk-bg); border-color: var(--mk-amber); }
+.mk-btn-primary:hover { background: var(--mk-amber-hi); border-color: var(--mk-amber-hi); }
+.mk-btn-ghost { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-btn-ghost:hover { border-color: var(--mk-text); }
+.mk-btn-quiet { background: transparent; color: var(--mk-text); border-color: transparent; font-weight: 600; }
+.mk-btn-quiet:hover { color: var(--mk-amber); }
+.mk-btn-lg { min-height: 56px; padding: 15px 28px; font-size: var(--mk-t-lead); }
+
+/* ============================================================== typography = */
+/* Headings set their own leading. Inheriting the 1.55 body line-height put a
+   whole blank line inside a two-line card title and swallowed the margin under
+   it — "one / plan" on the use-cases page read as two separate headings. */
+.mk-root h1, .mk-root h2, .mk-root h3 {
+  margin: 0; font-family: var(--mk-font-display); font-weight: 800; line-height: 1.14;
+}
+/* The ones that are UI labels rather than display type keep a readable leading. */
+.mk-flow-step h3, .mk-callout h3, .mk-export-card h3, .mk-help-role > h3 { line-height: 1.35; }
+.mk-root p { margin: 0; }
+.mk-display { font-size: var(--mk-t-display); line-height: 1.03; letter-spacing: -0.022em; }
+.mk-title { font-size: var(--mk-t-title); line-height: 1.08; letter-spacing: -0.018em; }
+.mk-head { font-size: var(--mk-t-head); line-height: 1.16; letter-spacing: -0.012em; }
+.mk-lead { font-size: var(--mk-t-lead); line-height: 1.45; color: var(--mk-text); }
+.mk-body { font-size: var(--mk-t-body); }
+.mk-muted { color: var(--mk-muted); }
+.mk-kicker {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--mk-amber);
+}
+.mk-micro { font-size: var(--mk-t-floor); color: var(--mk-muted); letter-spacing: 0.02em; }
+.mk-stack > * + * { margin-top: var(--mk-s, 16px); }
+.mk-s8 { --mk-s: 8px } .mk-s12 { --mk-s: 12px } .mk-s20 { --mk-s: 20px }
+.mk-s24 { --mk-s: 24px } .mk-s32 { --mk-s: 32px }
+/* The generic link colour is scoped to PROSE, not to every `a` in the surface.
+   `.mk-root a` is 0,1,1 and every component rule here is 0,1,0, so a blanket
+   rule wins against all of them regardless of order — it painted the primary
+   button's label, the nav links and the report's buttons blue (1.25:1 on amber),
+   which is exactly what audit A4 caught. */
+.mk-root p a, .mk-root li a, .mk-root dd a { color: var(--mk-blue); }
+.mk-root p a:hover, .mk-root li a:hover, .mk-root dd a:hover { color: var(--mk-amber); }
+
+/* ==================================================================== hero = */
+.mk-hero {
+  min-height: var(--mk-ridge-band); display: grid; grid-template-rows: 55fr 45fr;
+  padding-block: clamp(36px, 7vh, 76px) clamp(30px, 6vh, 64px);
+}
+/* Row one is the top 55% of the hero and is the only place headline text lands.
+   Row two carries the CTAs and the join card, both on their own washes. */
+.mk-hero-top { align-self: start; }
+.mk-hero-foot { align-self: end; display: flex; flex-wrap: wrap; gap: 22px 30px; align-items: flex-end; }
+.mk-hero-copy { max-width: 19ch; }
+.mk-hero-sub { max-width: 46ch; margin-top: 20px; }
+.mk-hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* ------------------------------------------------- the compact join entry -- */
+/* Only `--mk-text` carries copy in here: the card's 0.82 wash over the amber
+   glow leaves --mk-muted at 4.26:1, which is under AA. */
+.jce {
+  background: var(--mk-wash-card);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--mk-rule-strong);
+  border-radius: var(--mk-radius);
+  padding: 18px 20px 20px; min-width: 288px;
+}
+.jce-label {
+  display: block; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-text); margin-bottom: 12px;
+}
+.jce-row { display: flex; gap: 10px; align-items: center; }
+.jce-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1 1 auto; }
+.jce-cell {
+  height: 54px; display: grid; place-items: center; border-radius: var(--mk-radius-sm);
+  background: rgba(15,26,46,0.55); border: 2px solid var(--mk-rule-strong);
+  font: 800 var(--mk-t-head)/1 var(--mk-font-display); color: var(--mk-text);
+}
+.jce-cell.jce-next { border-color: var(--mk-amber); }
+.jce-go { flex: none; padding-inline: 20px; height: 54px; min-height: 54px; }
+.jce-hint { margin-top: 10px; font-size: var(--mk-t-label); color: var(--mk-text); opacity: 0.86; }
+
+/* ================================================================ sections = */
+.mk-section { position: relative; padding-block: clamp(56px, 8vw, 104px); }
+.mk-section--a { background: var(--mk-wash-a); }
+.mk-section--b { background: var(--mk-wash-b); }
+.mk-section--a + .mk-section--a, .mk-section--b + .mk-section--b { border-top: 1px solid var(--mk-rule); }
+.mk-section-head { max-width: 68ch; }
+.mk-section-head .mk-lead { max-width: 58ch; }
+.mk-section-head .mk-title { margin-top: 12px; }
+.mk-section-head .mk-lead { margin-top: 18px; color: var(--mk-muted); }
+
+/* --------------------------------------------------------------- problem -- */
+.mk-problem-grid { display: grid; gap: 18px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); }
+.mk-stmt {
+  border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  background: var(--mk-surface); padding: 30px 26px 32px;
+  border-top: 3px solid var(--mk-amber-deep);
+}
+.mk-stmt-n {
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display); letter-spacing: 0.1em;
+  color: var(--mk-amber); display: block; margin-bottom: 12px;
+}
+.mk-stmt h3 { font-size: var(--mk-t-head); line-height: 1.14; }
+.mk-stmt p { margin-top: 12px; color: var(--mk-muted); }
+
+/* ----------------------------------------------------------------- modes -- */
+.mk-mode {
+  display: grid; gap: 30px 44px; margin-top: 46px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  padding-top: 46px; border-top: 1px solid var(--mk-rule);
+}
+.mk-mode:first-of-type { border-top: 0; padding-top: 0; }
+.mk-mode--flip .mk-mode-copy { order: 2; }
+.mk-mode-tag {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px; border-radius: 999px;
+  border: 1px solid var(--mk-amber); color: var(--mk-amber);
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.mk-mode-copy h3 { font-size: var(--mk-t-title); line-height: 1.08; margin-top: 16px; letter-spacing: -0.018em; }
+.mk-mode-copy > p { margin-top: 16px; color: var(--mk-muted); max-width: 44ch; }
+.mk-mode-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 10px; }
+.mk-mode-list li { display: flex; gap: 11px; align-items: flex-start; color: var(--mk-text); }
+.mk-mode-list li::before {
+  content: ""; flex: none; width: 9px; height: 9px; margin-top: 9px; border-radius: 2px;
+  background: var(--mk-amber); transform: rotate(45deg);
+}
+.mk-mode-screens { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 18px; align-items: end; }
+
+/* =================================================== devices and clip slots */
+.mk-device { position: relative; }
+.mk-device-bezel {
+  border-radius: 14px; background: var(--mk-device-bezel); border: 1px solid var(--mk-rule-strong);
+  padding: 10px; box-shadow: 0 18px 40px rgba(6, 11, 20, 0.5);
+}
+.mk-device--tv .mk-device-bezel { border-radius: 12px; padding: 11px 11px 13px; }
+.mk-device--laptop .mk-device-bezel { border-radius: 12px; padding: 12px 12px 14px; }
+.mk-device--phone .mk-device-bezel { border-radius: 26px; padding: 8px; }
+.mk-device-screen { position: relative; overflow: hidden; border-radius: 6px; background: var(--mk-bg); }
+.mk-device--phone .mk-device-screen { border-radius: 19px; }
+.mk-device--tv .mk-device-screen { aspect-ratio: 16 / 9; }
+.mk-device--laptop .mk-device-screen { aspect-ratio: 16 / 10; }
+.mk-device--phone .mk-device-screen { aspect-ratio: 9 / 19; }
+.mk-device-foot {
+  height: 8px; width: 34%; margin: 7px auto 0; border-radius: 0 0 6px 6px;
+  background: var(--mk-device-bezel); border: 1px solid var(--mk-rule); border-top: 0;
+}
+.mk-device--phone .mk-device-notch {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  width: 38%; height: 5px; border-radius: 999px; background: rgba(244,237,228,0.18); z-index: 2;
+}
+.mk-device-cap { margin-top: 12px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-device-cap b { color: var(--mk-text); font-weight: 700; }
+
+/* A clip slot is a poster still today and a muted looping video later. The
+   still is drawn in CSS: no file is fetched, from here or anywhere. */
+.mk-clip { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.mk-clip-badge {
+  position: absolute; right: 8px; top: 8px; z-index: 3;
+  font-size: var(--mk-t-floor); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-text); background: rgba(15,26,46,0.9);
+  border: 1px solid var(--mk-rule-strong); border-radius: 999px; padding: 3px 9px;
+}
+
+/* ------------------------------------------------ the sketched product UI -- */
+/* Plain divs at a deliberately small scale. This is a recognisable drawing of
+   the real screen, not a screenshot and not an empty grey rectangle. */
+.mk-ss { position: absolute; inset: 0; padding: 4.4% 4.6%; display: flex; flex-direction: column; gap: 3.2%;
+  background: linear-gradient(180deg, var(--mk-ridge-front) 0%, var(--mk-bg) 100%); }
+/* The slot badge is pinned to the top right of the screen, so the sketched
+   header reserves that corner rather than drawing the session code underneath
+   it — the code chip and the badge were landing on each other. */
+.mk-ss-top { display: flex; align-items: center; gap: 8px; padding-right: 74px; }
+.mk-device--phone .mk-ss-top { padding-right: 44px; }
+.mk-ss-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-amber); flex: none; }
+.mk-ss-chip {
+  font-size: var(--mk-t-floor); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-muted); border: 1px solid var(--mk-rule); border-radius: 999px; padding: 2px 8px;
+}
+.mk-ss-code { margin-left: auto; font: 800 var(--mk-t-label)/1 var(--mk-font-display); color: var(--mk-amber); letter-spacing: 0.08em; }
+.mk-ss-q { font-weight: 700; color: var(--mk-text); font-size: var(--mk-t-label); line-height: 1.3; }
+.mk-ss-opts { display: grid; gap: 6px; }
+.mk-ss-opt {
+  display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px;
+  background: var(--mk-surface); border: 1px solid var(--mk-rule);
+  font-size: var(--mk-t-floor); color: var(--mk-text);
+}
+.mk-ss-opt b { flex: none; color: var(--mk-amber); font-weight: 800; }
+.mk-ss-opt.mk-ss-right { border-color: var(--mk-amber); background: rgba(246,169,76,0.12); }
+.mk-ss-bars { display: grid; gap: 7px; }
+.mk-ss-bar { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center;
+  font-size: var(--mk-t-floor); color: var(--mk-text); }
+.mk-ss-bar span { grid-column: 1; }
+.mk-ss-bar em { grid-column: 2; font-style: normal; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.mk-ss-track { grid-column: 1 / -1; height: 7px; border-radius: 4px; background: rgba(244,237,228,0.1); overflow: hidden; }
+.mk-ss-track i { display: block; height: 100%; background: var(--mk-amber); border-radius: 4px; }
+.mk-ss-track.mk-ss-cool i { background: var(--mk-blue); }
+.mk-ss-qr { width: 42%; aspect-ratio: 1; align-self: center; margin-top: auto; margin-bottom: auto;
+  background:
+    repeating-linear-gradient(90deg, var(--mk-text) 0 12%, transparent 12% 20%),
+    repeating-linear-gradient(0deg, var(--mk-text) 0 12%, transparent 12% 20%),
+    var(--mk-bg);
+  border: 5px solid var(--mk-text); border-radius: 4px; }
+.mk-ss-people { display: flex; flex-wrap: wrap; gap: 5px; }
+.mk-ss-person { font-size: var(--mk-t-floor); color: var(--mk-text); background: var(--mk-surface-2);
+  border-radius: 999px; padding: 2px 9px; }
+.mk-ss-field { border: 1px solid var(--mk-rule-strong); border-radius: 7px; padding: 8px 9px;
+  font-size: var(--mk-t-floor); color: var(--mk-text); background: rgba(15,26,46,0.6); }
+.mk-ss-cta { margin-top: auto; text-align: center; background: var(--mk-amber); color: var(--mk-bg);
+  border-radius: 7px; padding: 8px; font: 800 var(--mk-t-floor)/1.2 var(--mk-font-ui); }
+.mk-ss-foot { margin-top: auto; display: flex; gap: 8px; align-items: center; }
+.mk-ss-grow { flex: 1 1 auto; }
+.mk-ss-doc { display: grid; gap: 5px; }
+.mk-ss-line { height: 6px; border-radius: 3px; background: rgba(244,237,228,0.16); }
+.mk-ss-line.mk-ss-short { width: 56%; }
+.mk-ss-line.mk-ss-warm { background: rgba(246,169,76,0.5); width: 72%; }
+
+/* A still of the report, drawn on the paper field rather than the dusk one, so
+   a reader recognises it as a different kind of object before reading a word. */
+.mk-ss--paper { background: var(--mk-paper); }
+.mk-ss--paper .mk-ss-line { background: var(--mk-paper-rule); }
+.mk-ss--paper .mk-ss-line.mk-ss-title { background: var(--mk-paper-text); height: 9px; }
+.mk-ss--paper .mk-ss-line.mk-ss-warm { background: var(--mk-amber); }
+
+/* ---------------------------------------------------------- your material -- */
+.mk-flow { display: grid; gap: 16px; margin-top: 44px; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); }
+.mk-flow-step {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 22px 20px; position: relative;
+}
+.mk-flow-step h3 { font-size: var(--mk-t-body); margin-top: 12px; font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-flow-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+.mk-flow-n {
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: rgba(246,169,76,0.14); border: 1px solid var(--mk-amber);
+  font: 800 var(--mk-t-label)/1 var(--mk-font-display); color: var(--mk-amber);
+}
+.mk-material-note {
+  margin-top: 26px; padding: 18px 20px; border-radius: var(--mk-radius);
+  border: 1px solid var(--mk-rule); border-left: 3px solid var(--mk-amber);
+  background: rgba(246,169,76,0.07); color: var(--mk-text); max-width: 74ch;
+}
+.mk-material-note b { color: var(--mk-amber); }
+
+/* ------------------------------------------------------------ the reaction */
+.mk-react-grid { display: grid; gap: 34px 44px; margin-top: 44px; grid-template-columns: minmax(0,1.05fr) minmax(0,1fr); align-items: center; }
+.mk-tally {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 24px 22px 26px;
+}
+.mk-tally-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mk-tally-head h3 { font-size: var(--mk-t-head); }
+.mk-tally-rows { display: grid; gap: 16px; margin-top: 22px; }
+.mk-tally-row { display: grid; gap: 6px; }
+.mk-tally-top { display: flex; gap: 12px; align-items: baseline; }
+.mk-tally-top b { font-weight: 700; }
+.mk-tally-n { margin-left: auto; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-tally-track { height: 10px; border-radius: 5px; background: rgba(244,237,228,0.1); overflow: hidden; }
+.mk-tally-track i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-tally-row--cool .mk-tally-track i { background: var(--mk-blue); }
+.mk-tally-note { margin-top: 20px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+
+/* ============================================================ the report ==
+   The one paper surface. `data-theme="light"` and paper markup convert in the
+   same change — dusk copy on this sheet would measure 1.2:1.
+   ========================================================================== */
+.mk-summit .mk-shell { position: relative; }
+/* On the home page the sheet is narrower than the shell and centred, so the dusk
+   page shows all the way round it: paper laid on a dark desk, not a light band
+   across the page. On /reports it fills its grid column beside the callouts. */
+.mk-summit .mk-report { max-width: 920px; margin-inline: auto; }
+.mk-report {
+  position: relative;
+  background: var(--mk-paper); color: var(--mk-paper-text);
+  border-radius: 14px;
+  /* The two sheets under the sheet, drawn as offset shadows with negative
+     spread so only their bottom edge shows. Two millimetres of a second page is
+     the whole difference between "a light panel" and "something you could pick
+     up". Outer shadows paint behind the element, so no stacking games. */
+  box-shadow:
+    0 7px 0 -2px var(--mk-paper-edge),
+    0 13px 0 -5px var(--mk-paper-edge-deep),
+    0 38px 80px rgba(3, 7, 15, 0.7),
+    0 8px 20px rgba(3, 7, 15, 0.45);
+  font-size: var(--mk-t-body);
+}
+.mk-report > :first-child { border-radius: 14px 14px 0 0; }
+.mk-report > :last-child { border-radius: 0 0 14px 14px; }
+.mk-report * { border-color: var(--mk-paper-rule); }
+.mk-report-head { padding: 26px 30px 22px; border-bottom: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface); }
+.mk-report-kicker {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mk-amber-ink);
+}
+.mk-report-head h3 { font-size: var(--mk-t-head); margin-top: 8px; color: var(--mk-paper-text); font-family: var(--mk-font-display); }
+.mk-report-meta { margin-top: 10px; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+.mk-report-body { padding: 26px 30px 30px; display: grid; gap: 26px; }
+.mk-report-block h4 {
+  margin: 0; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-paper-muted);
+}
+.mk-report-block > * + * { margin-top: 12px; }
+.mk-report-q { font-weight: 700; color: var(--mk-paper-text); }
+.mk-report-answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.mk-report-answers li {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: baseline;
+  padding-bottom: 10px; border-bottom: 1px solid rgba(27,41,66,0.12);
+}
+.mk-report-answers li:last-child { border-bottom: 0; padding-bottom: 0; }
+.mk-report-answers .mk-report-votes {
+  color: var(--mk-amber-ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mk-report-answers .mk-report-by { grid-column: 1 / -1; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+/* Amber never carries text on paper — --mk-amber is 1.84:1 on --mk-paper. It draws
+   the bar; --mk-amber-ink says the number. */
+.mk-report-meter { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: rgba(27,41,66,0.10); overflow: hidden; }
+.mk-report-meter i { display: block; height: 100%; background: var(--mk-amber); }
+.mk-report-summary {
+  background: var(--mk-paper-surface); border: 1px solid var(--mk-paper-rule);
+  border-left: 3px solid var(--mk-amber); border-radius: 0 10px 10px 0; padding: 18px 20px;
+}
+.mk-report-summary p { color: var(--mk-paper-text); }
+.mk-report-list { margin: 10px 0 0; padding-left: 20px; color: var(--mk-paper-text); }
+.mk-report-list li + li { margin-top: 6px; }
+.mk-report-standings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.mk-report-standings th {
+  text-align: left; font-size: var(--mk-t-label); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mk-paper-muted); padding: 0 10px 7px; border-bottom: 1px solid rgba(27,41,66,0.18); font-weight: 800;
+}
+.mk-report-standings td { padding: 8px 10px; border-bottom: 1px solid rgba(27,41,66,0.1); color: var(--mk-paper-text); }
+.mk-report-standings tr:last-child td { border-bottom: 0; }
+.mk-report-foot {
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+  padding: 18px 30px 22px; border-top: 1px solid var(--mk-paper-rule); background: var(--mk-paper-surface);
+}
+.mk-report-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px;
+  border-radius: 8px; border: 1.5px solid rgba(27,41,66,0.3); color: var(--mk-paper-text);
+  font: 700 var(--mk-t-label)/1 var(--mk-font-ui); text-decoration: none; background: transparent;
+}
+.mk-report-note { margin-left: auto; color: var(--mk-paper-muted); font-size: var(--mk-t-label); }
+/* Dusk link colours must not reach the paper subtree: --mk-blue is 2.46:1 on it. */
+.mk-root .mk-report p a, .mk-root .mk-report li a { color: var(--mk-amber-ink); }
+
+/* ================================================================ big CTA = */
+.mk-cta { position: relative; padding-block: clamp(64px, 9vw, 116px); background: var(--mk-wash-a); border-top: 1px solid var(--mk-rule); }
+.mk-cta-in { display: grid; gap: 26px; justify-items: center; text-align: center; }
+.mk-cta-in .mk-title { max-width: 20ch; }
+.mk-cta-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.mk-cta-fine { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ================================================================== footer = */
+.mk-foot { background: var(--mk-wash-a); border-top: 1px solid var(--mk-rule); padding-block: 34px 44px; }
+.mk-foot-in { display: flex; flex-wrap: wrap; gap: 16px 30px; align-items: center; }
+.mk-foot-links { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-left: auto; }
+.mk-foot-links a { color: var(--mk-muted); text-decoration: none; font-size: var(--mk-t-label); }
+.mk-foot-links a:hover { color: var(--mk-text); text-decoration: underline; }
+.mk-foot-legal { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ========================================================== /how-it-works = */
+.mk-steps { display: grid; gap: 0; margin-top: 46px; }
+.mk-step {
+  display: grid; gap: 26px 48px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  padding-block: clamp(34px, 5vw, 54px); border-top: 1px solid var(--mk-rule);
+}
+.mk-step:first-child { border-top: 0; padding-top: 0; }
+.mk-step--flip .mk-step-copy { order: 2; }
+.mk-step-n {
+  display: inline-grid; place-items: center; width: 46px; height: 46px; border-radius: 12px;
+  background: rgba(246,169,76,0.13); border: 1px solid var(--mk-amber);
+  font: 800 var(--mk-t-lead)/1 var(--mk-font-display); color: var(--mk-amber);
+}
+.mk-step-copy h3 { font-size: var(--mk-t-head); margin-top: 16px; }
+.mk-step-copy p { margin-top: 14px; color: var(--mk-muted); max-width: 48ch; }
+.mk-step-copy p + p { margin-top: 10px; }
+.mk-profiles { display: grid; gap: 12px; margin-top: 26px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.mk-profile {
+  border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm); padding: 14px 16px;
+  background: var(--mk-surface);
+}
+.mk-profile b { display: block; }
+.mk-profile span { color: var(--mk-muted); font-size: var(--mk-t-label); }
+
+/* ============================================================== /use-cases = */
+.mk-cases { display: grid; gap: 22px; margin-top: 46px; }
+.mk-case {
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius);
+  padding: 28px 26px 26px; display: grid; gap: 22px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
+.mk-case-head h3 { font-size: var(--mk-t-head); }
+.mk-case-head .mk-kicker { display: block; margin-bottom: 10px; }
+.mk-case-set { margin-top: 16px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-case-set b { color: var(--mk-text); }
+.mk-case-ba { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.mk-case-panel { border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm); padding: 16px 17px; background: rgba(15,26,46,0.5); }
+.mk-case-panel h4 {
+  margin: 0 0 9px; font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mk-muted);
+}
+.mk-case-panel--with { border-left: 3px solid var(--mk-amber); }
+.mk-case-panel--with h4 { color: var(--mk-amber); }
+.mk-case-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; padding-top: 4px; border-top: 1px solid var(--mk-rule); margin-top: 2px; padding-top: 20px; }
+
+/* ================================================================ /reports = */
+.mk-annot { display: grid; gap: 30px; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); margin-top: 44px; align-items: start; }
+.mk-callouts { display: grid; gap: 14px; position: sticky; top: 90px; }
+.mk-callout {
+  display: grid; grid-template-columns: 34px 1fr; gap: 12px;
+  background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius-sm);
+  padding: 15px 16px;
+}
+.mk-callout-n {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--mk-amber); color: var(--mk-bg); font: 800 var(--mk-t-label)/1 var(--mk-font-display);
+}
+.mk-callout h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-callout p { margin-top: 5px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+/* The marker pinned into the paper sheet. Amber field, ink-dark numeral — the
+   one place a number sits on amber, and --mk-bg on --mk-amber is 8.9:1. */
+.mk-pin {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--mk-amber); color: var(--mk-bg); font: 800 var(--mk-t-floor)/1 var(--mk-font-display);
+  vertical-align: 2px; margin-right: 8px;
+}
+.mk-export { display: grid; gap: 16px; margin-top: 30px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.mk-export-card { background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius); padding: 22px 20px; }
+.mk-export-card h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; }
+.mk-export-card p { margin-top: 9px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; }
+
+/* =================================================================== /help = */
+.mk-help { display: grid; gap: 34px; grid-template-columns: 272px minmax(0, 1fr); margin-top: 38px; align-items: start; }
+.mk-help-side { background: var(--mk-surface); border: 1px solid var(--mk-rule); border-radius: var(--mk-radius); padding: 18px 16px 22px; position: sticky; top: 90px; }
+.mk-help-role + .mk-help-role { margin-top: 20px; }
+.mk-help-role > h3 {
+  font-size: var(--mk-t-label); font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--mk-amber); margin-bottom: 8px; font-family: var(--mk-font-ui);
+}
+.mk-help-guides { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.mk-help-guides a {
+  display: block; padding: 9px 11px; border-radius: 8px; color: var(--mk-muted);
+  text-decoration: none; font-size: var(--mk-t-body); line-height: 1.35;
+}
+.mk-help-guides a:hover { background: var(--mk-surface-2); color: var(--mk-text); }
+.mk-help-guides a[aria-current="page"] { background: var(--mk-surface-2); color: var(--mk-text); font-weight: 700; box-shadow: inset 3px 0 0 var(--mk-amber); }
+.mk-help-body { max-width: 72ch; }
+.mk-help-crumb { font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-help-crumb a { color: var(--mk-muted); }
+.mk-help-body h2 { font-size: var(--mk-t-title); margin-top: 10px; letter-spacing: -0.018em; line-height: 1.1; }
+.mk-help-body h3 { font-size: var(--mk-t-head); margin-top: 34px; }
+.mk-help-body p { margin-top: 14px; color: var(--mk-text); }
+.mk-help-body p.mk-muted { color: var(--mk-muted); }
+.mk-help-body ol, .mk-help-body ul { margin: 14px 0 0; padding-left: 22px; }
+.mk-help-body li + li { margin-top: 8px; }
+.mk-help-kbd {
+  display: inline-block; padding: 1px 7px; border-radius: 5px; border: 1px solid var(--mk-rule-strong);
+  background: var(--mk-surface-2); font: 700 var(--mk-t-label)/1.6 var(--mk-font-mono); color: var(--mk-text);
+}
+.mk-help-search {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--mk-tap);
+  padding: 10px 14px; border-radius: var(--mk-radius-sm); background: var(--mk-bg);
+  border: 1px solid var(--mk-rule-strong); color: var(--mk-muted); margin-bottom: 18px;
+  font-size: var(--mk-t-body);
+}
+
+/* ================================================================ responsive */
+@media (max-width: 980px) {
+  .mk-mode, .mk-step, .mk-case, .mk-annot, .mk-help, .mk-react-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-mode--flip .mk-mode-copy, .mk-step--flip .mk-step-copy { order: 0; }
+  .mk-callouts, .mk-help-side { position: static; }
+  .mk-mode-screens { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .mk-mode-screens .mk-device--phone { width: 190px; }
+}
+@media (max-width: 860px) {
+  .mk-nav-links { display: none; }
+  .mk-nav-burger {
+    display: inline-grid; place-items: center; width: var(--mk-tap); height: var(--mk-tap);
+    border-radius: var(--mk-radius-sm); background: transparent; color: var(--mk-text);
+    border: 1px solid var(--mk-rule-strong); cursor: pointer;
+  }
+  .mk-nav-burger svg { width: 20px; height: 20px; }
+  .mk-nav-burger path { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .mk-nav-acts .mk-btn-primary { display: none; }
+}
+@media (max-width: 720px) {
+  .mk-root { --mk-ridge-band: 92vh; }
+  /* Under 720 the hero is one column and the route, the climber and the flag
+     land underneath the buttons — a dashed line crossing a call to action is
+     noise, not atmosphere. The mountain stays; the waypoints go. */
+  .mk-ridge-route, .mk-ridge-climber, .mk-ridge-climber-halo,
+  .mk-ridge-mast, .mk-ridge-flag { display: none; }
+  .mk-hero-foot { flex-direction: column; align-items: stretch; }
+  .mk-hero-copy { max-width: none; }
+  .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
+  .jce { min-width: 0; }
+  .mk-report-head, .mk-report-body, .mk-report-foot { padding-inline: 18px; }
+  .mk-report-note { margin-left: 0; }
+  .mk-case { padding: 22px 18px; }
+}
+
+/* ===== MOCKUP TOOLING BELOW — never copied to React =====================
+   Everything past this banner exists only so these six files can be reviewed:
+   the design-notes rail and its toggle. It is exempt from the token rule and
+   from the type ladder on purpose, and no rule below it names a product class.
+   ======================================================================== */
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+/* ===========================================================================
+   refresh-home.css — the 2026-09-22 refresh of the marketing home, as a DIFF
+   against the approved mk.css (which the build inlines verbatim above this
+   block). Every token, wash and ladder value is mk.css's; this file only adds
+   rules and, where it must, re-declares a component the refresh reshapes.
+   Nothing here paints from a literal outside the two placeholder blocks.
+   Namespaced .mk-* like everything in the set.
+   =========================================================================== */
+
+/* ------------------------------------------------------------- 1. the hero
+   The product is in the first viewport. Copy on the left holds the top 55%
+   (the contrast rule from the art brief §4 is unchanged); the drawn stage still
+   sits right, where it is a dark object with its own contrast and may overlap
+   the amber band. --------------------------------------------------------- */
+.mk-hero { grid-template-rows: auto auto; row-gap: 34px; min-height: var(--mk-ridge-band); }
+.mk-hero-top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 34px 40px; align-items: end; }
+/* Four short lines at a display size the column can hold: the approved 68px
+   three-liner needs 19ch of width the two-column hero no longer has. */
+.mk-hero-copy { max-width: none; font-size: clamp(40px, 3.5vw, 54px); }
+.mk-hero-sub { max-width: 42ch; }
+.mk-hero-stage { position: relative; justify-self: end; width: 100%; max-width: 560px; }
+.mk-hero-stage .mk-device--phone { position: absolute; right: -4%; bottom: -14%; width: 22%; }
+.mk-hero-stage .mk-device-cap { display: none; }
+/* The nav's account door is an outline while the hero's primary is on screen:
+   one filled amber control per viewport. */
+.mk-nav-links .mk-btn-primary, .mk-nav-acts .mk-btn-primary { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.mk-nav-links .mk-btn-primary:hover, .mk-nav-acts .mk-btn-primary:hover { border-color: var(--mk-text); background: transparent; }
+/* Join is the third door, not a second primary. */
+.jce .jce-go { background: transparent; color: var(--mk-text); border-color: var(--mk-rule-strong); }
+.jce .jce-go:hover { border-color: var(--mk-text); }
+
+/* The headline's three lines rise once. Visible by default; the animation
+   only offsets what is already painted, so a failed script hides nothing.
+   (react-bits SplitText / motion-primitives text-effect, done by hand.) */
+.mk-rise > span { display: block; animation: mk-rise .62s cubic-bezier(.16, 1, .3, 1) both; }
+.mk-rise > span:nth-child(2) { animation-delay: .09s; }
+.mk-rise > span:nth-child(3) { animation-delay: .18s; }
+.mk-rise > span:nth-child(4) { animation-delay: .27s; }
+.mk-hero-sub, .mk-hero-foot { animation: mk-rise .62s cubic-bezier(.16, 1, .3, 1) .36s both; }
+.mk-hero-stage { animation: mk-rise .7s cubic-bezier(.16, 1, .3, 1) .34s both; }
+@keyframes mk-rise { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* ------------------------------------------------- 2. the route draws itself
+   The climber already moves with scroll in the shipped RidgeScene. The route
+   used to be fully drawn from the first frame, so the plan read as already
+   walked. Now it draws just ahead of the climber (stroke-dashoffset from the
+   same progress value; motion-primitives scroll-progress, on an SVG path). */
+.mk-ridge-route { stroke-dasharray: 1; stroke-dashoffset: 1; pathLength: 1; transition: stroke-dashoffset .12s linear; }
+.mk-ridge-route.mk-route--dashed { stroke-dasharray: none; }
+.mk-ridge-mid .mk-ridge-flag, .mk-ridge-mid .mk-ridge-mast { transition: opacity .4s; }
+.mk-ridge-mid[data-summit="0"] .mk-ridge-flag, .mk-ridge-mid[data-summit="0"] .mk-ridge-mast { opacity: .35; }
+
+/* ------------------------------------------- 3. the scaffold tells removed
+   No kicker on a section heading (the hero and the summit keep theirs: they
+   carry the climb). No 01/02/03. No same-size card grid as page structure. */
+.mk-stmts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px 44px; margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--mk-rule); }
+.mk-stmts h3 { font-size: var(--mk-t-head); line-height: 1.14; max-width: 14ch; }
+.mk-stmts p { margin-top: 12px; color: var(--mk-muted); max-width: 34ch; }
+.mk-seq { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px 28px; margin-top: 40px; position: relative; }
+.mk-seq::before { content: ""; position: absolute; left: 0; right: 0; top: 19px; height: 1px; background: var(--mk-rule); }
+.mk-seq-step { position: relative; padding-top: 30px; }
+/* The numeral carries information here — the reader is being told an order —
+   so it stays, on the rule, as a waypoint rather than a card badge. */
+.mk-seq-n { position: absolute; top: 0; left: 0; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--mk-bg); border: 1px solid var(--mk-amber); color: var(--mk-amber); font: 800 var(--mk-t-label)/1 var(--mk-font-display); }
+.mk-seq-step h3 { font-size: var(--mk-t-body); font-family: var(--mk-font-ui); font-weight: 700; margin-top: 14px; line-height: 1.35; }
+.mk-seq-step p { margin-top: 8px; color: var(--mk-muted); font-size: var(--mk-t-label); line-height: 1.5; max-width: 30ch; }
+.mk-material-note { border-left-width: 1px; background: transparent; }
+.mk-material-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px 44px; margin-top: 36px; align-items: center; }
+.mk-material-row .mk-device { max-width: 520px; }
+
+/* ------------------------------------------------ 4. the tally performs once
+   Bars are drawn at zero and grow when the block enters view; the counts
+   count up in the same 700ms. One authored moment for this section, and it is
+   the product's own live moment. (motion-primitives in-view + animated-number;
+   react-bits CountUp.) */
+.mk-tally-track i { width: 0; transition: width .7s cubic-bezier(.16, 1, .3, 1); }
+.mk-tally.is-in .mk-tally-track i { width: var(--w); }
+.mk-tally-row { transition: opacity .4s; }
+.mk-tally-n { font-weight: 700; color: var(--mk-text); }
+
+/* ------------------------------------------------- 5. the one photograph
+   A labelled placeholder carrying the image request. Sits in "the room reacts",
+   beside the tally, so the reader sees people looking up at the thing the tally
+   is. Dark, so the wash keeps its contrast; captioned in --mk-text. */
+.mk-art { position: relative; aspect-ratio: 4 / 3; border-radius: var(--mk-radius); overflow: hidden; border: 1px solid var(--mk-rule-strong);
+  background: linear-gradient(160deg, var(--mk-ridge-back) 0%, var(--mk-ridge-front) 60%, var(--mk-bg) 100%); }
+.mk-art-req { position: absolute; inset: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; font-size: var(--mk-t-label); line-height: 1.5; color: var(--mk-text); }
+.mk-art-req b { font: 800 var(--mk-t-floor)/1 var(--mk-font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--mk-amber); }
+.mk-art-req p { opacity: .9; }
+.mk-art-req .mk-art-sil { margin-top: auto; height: 34%; opacity: .55;
+  background: radial-gradient(28% 60% at 18% 100%, var(--mk-surface-2) 0 60%, transparent 61%), radial-gradient(28% 70% at 50% 100%, var(--mk-surface-2) 0 60%, transparent 61%), radial-gradient(28% 55% at 82% 100%, var(--mk-surface-2) 0 60%, transparent 61%); }
+.mk-art-cap { margin-top: 12px; font-size: var(--mk-t-label); color: var(--mk-muted); }
+.mk-react-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.mk-react-side { display: grid; gap: 22px; }
+.mk-react-side .mk-lead { max-width: 34ch; }
+
+/* ---------------------------------------- 6. the summit: report and photo
+   The mode section's copy loses its "text" paragraph where the list says the
+   same thing (fact stated once). Nothing else changes in the report block. */
+.mk-summit-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 30px 40px; margin-top: 36px; align-items: start; }
+.mk-summit-grid .mk-report { max-width: none; margin: 0; }
+.mk-summit-aside { display: grid; gap: 18px; position: sticky; top: 90px; }
+.mk-summit-aside .mk-art { aspect-ratio: 3 / 4; }
+
+/* ---------------------------------------------------- reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .mk-rise > span, .mk-hero-sub, .mk-hero-foot, .mk-hero-stage { animation: none; }
+  .mk-tally-track i { transition: none; width: var(--w); }
+  .mk-ridge-route { stroke-dashoffset: 0 !important; transition: none; }
+}
+
+/* ---------------------------------------------------- narrow */
+@media (max-width: 980px) {
+  .mk-hero-top { grid-template-columns: minmax(0, 1fr); }
+  .mk-hero-stage { justify-self: stretch; max-width: 520px; }
+  .mk-stmts, .mk-seq { grid-template-columns: minmax(0, 1fr); }
+  .mk-seq::before { display: none; }
+  .mk-material-row, .mk-summit-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-summit-aside { position: static; }
+  .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
+}
+@media (max-width: 720px) {
+  .mk-hero { row-gap: 26px; }
+  /* One column: the four authored lines become natural wraps. */
+  .mk-rise > span { display: inline; animation: none; }
+  .mk-rise > span::after { content: " "; }
+  .mk-hero-copy { animation: mk-rise .62s cubic-bezier(.16, 1, .3, 1) both; }
+  .mk-hero-stage .mk-ss-bar:nth-child(n+3), .mk-hero-stage .mk-clip-badge { display: none; }
+  .mk-hero-copy { max-width: none; }
+  .mk-hero-stage .mk-device--phone { display: none; }
+  .mk-stmts h3, .mk-stmts p, .mk-seq-step p { max-width: none; }
+  .mk-seq { gap: 22px; }
+  .mk-seq-step { padding-top: 0; padding-left: 50px; }
+  .mk-seq-step h3 { margin-top: 0; }
+  .mk-art { aspect-ratio: 16 / 10; }
+}
+
+
+/* ---- 390px review frame: mk.css's narrow branches, forced on. ---- */
+body { background: #070C16; }
+.mk-frame { width: 390px; margin: 0 auto; box-shadow: 0 0 0 1px rgba(244,237,228,.14); }
+.mk-frame .mk-root { --mk-t-head: 25px; --mk-t-title: 32px; --mk-t-display: 42px; --mk-gutter: 16px;
+  /* The band is the hero's REAL height here, not 92vh: with the still in the
+     hero the content out-measures a phone viewport, and a glow clamped to 60%
+     of 92vh rose into the lead. In React the scene reads the hero's measured
+     height on narrow viewports (RATIONALE step 1). */
+  --mk-ridge-band: 1080px; }
+.mk-frame .mk-ridge { position: absolute; }
+.mk-frame .mk-ridge-route, .mk-frame .mk-ridge-climber, .mk-frame .mk-ridge-climber-halo, .mk-frame .mk-ridge-mast, .mk-frame .mk-ridge-flag { display: none; }
+.mk-frame .mk-nav-links { display: none; }
+.mk-frame .mk-nav-acts .mk-btn-primary { display: none; }
+.mk-frame .mk-nav-burger { display: inline-grid; place-items: center; width: var(--mk-tap); height: var(--mk-tap); border-radius: var(--mk-radius-sm); background: transparent; color: var(--mk-text); border: 1px solid var(--mk-rule-strong); }
+.mk-frame .mk-nav-burger svg { width: 20px; height: 20px; } .mk-frame .mk-nav-burger path { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.mk-frame .mk-hero { row-gap: 26px; }
+.mk-frame .mk-hero-top { grid-template-columns: minmax(0,1fr); }
+.mk-frame .mk-hero-copy { max-width: none; }
+.mk-frame .mk-hero-stage { justify-self: stretch; }
+.mk-frame .mk-hero-stage .mk-device--phone { display: none; }
+.mk-frame .mk-rise > span { display: inline; animation: none; } .mk-frame .mk-rise > span::after { content: " "; }
+.mk-frame .mk-hero-stage .mk-ss-bar:nth-child(n+3), .mk-frame .mk-hero-stage .mk-clip-badge { display: none; }
+.mk-frame .mk-hero-foot { flex-direction: column; align-items: stretch; }
+.mk-frame .mk-hero-ctas .mk-btn { flex: 1 1 100%; }
+.mk-frame .jce { min-width: 0; }
+.mk-frame .mk-stmts, .mk-frame .mk-seq, .mk-frame .mk-material-row, .mk-frame .mk-react-grid, .mk-frame .mk-summit-grid, .mk-frame .mk-mode { grid-template-columns: minmax(0,1fr); }
+.mk-frame .mk-seq::before { display: none; }
+.mk-frame .mk-seq-step { padding-top: 0; padding-left: 50px; } .mk-frame .mk-seq-step h3 { margin-top: 0; }
+.mk-frame .mk-stmts h3, .mk-frame .mk-stmts p, .mk-frame .mk-seq-step p { max-width: none; }
+.mk-frame .mk-mode--flip .mk-mode-copy { order: 0; }
+.mk-frame .mk-mode-screens { grid-template-columns: minmax(0,1fr); justify-items: center; }
+.mk-frame .mk-mode-screens .mk-device--phone { width: 190px; }
+.mk-frame .mk-summit-aside { position: static; } .mk-frame .mk-summit-aside .mk-art { aspect-ratio: 16/9; }
+.mk-frame .mk-art { aspect-ratio: 16/10; }
+.mk-frame .mk-report-head, .mk-frame .mk-report-body, .mk-frame .mk-report-foot { padding-inline: 18px; }
+.mk-frame .mk-report-note { margin-left: 0; }
+
+</style>
+</head>
+<body class="mk-anno-on">
+<div class="mk-frame">
+<div class="mk-root">
+<div class="mk-ridge" aria-hidden="true">
+  <div class="mk-ridge-sky"></div>
+  <svg class="mk-ridge-stars" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMin slice">
+    <circle cx="88" cy="54" r="1.5"/><circle cx="212" cy="122" r="1.1"/><circle cx="318" cy="40" r="1.7"/>
+    <circle cx="404" cy="150" r="1"/><circle cx="512" cy="76" r="1.3"/><circle cx="596" cy="34" r="1"/>
+    <circle cx="688" cy="118" r="1.6"/><circle cx="770" cy="58" r="1.1"/><circle cx="866" cy="142" r="1.2"/>
+    <circle cx="944" cy="46" r="1.5"/><circle cx="1042" cy="104" r="1"/><circle cx="1136" cy="66" r="1.4"/>
+    <circle cx="150" cy="196" r="1"/><circle cx="1004" cy="180" r="1.1"/>
+  </svg>
+  <div class="mk-ridge-glow"></div>
+  <div class="mk-ridge-haze"></div>
+  <svg class="mk-ridge-layer mk-ridge-back" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 300 L120 236 L230 268 L360 176 L470 232 L600 108 L720 196 L840 150 L960 224 L1080 180 L1200 246 L1200 420 L0 420 Z"/>
+  </svg>
+  <svg class="mk-ridge-layer mk-ridge-mid" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice" data-summit="0">
+    <path class="mk-ridge-body" d="M0 352 L150 300 L280 330 L420 244 L540 292 L600 214 L680 270 L810 226 L940 300 L1060 262 L1200 318 L1200 420 L0 420 Z"/>
+    <path class="mk-ridge-route" id="mkRoute" pathLength="1" d="M92 418 C 196 398 238 352 328 338 S 468 302 520 270 S 572 236 600 216"/>
+    <circle class="mk-ridge-climber-halo" id="mkHalo" cx="92" cy="418" r="15"/>
+    <circle class="mk-ridge-climber" id="mkClimber" cx="92" cy="418" r="6.5"/>
+    <line class="mk-ridge-mast" x1="600" y1="216" x2="600" y2="186"/>
+    <path class="mk-ridge-flag" d="M601 186 L628 195 L601 204 Z"/>
+  </svg>
+  <svg class="mk-ridge-layer mk-ridge-front" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice">
+    <path class="mk-ridge-body" d="M0 400 L110 360 L240 388 L380 322 L500 364 L600 300 L700 348 L830 310 L980 368 L1110 336 L1200 372 L1200 420 L0 420 Z"/>
+  </svg>
+</div>
+
+<div class="mk-page">
+
+<header class="mk-nav">
+  <div class="mk-shell mk-nav-in">
+    <a class="mk-brand" href="01-home.html">
+      <svg class="mk-brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 27 L11 13 L16 20 L22 6 L30 27 Z"/></svg>
+      Engagements
+    </a>
+    <nav class="mk-nav-links" aria-label="Main">
+      <a class="mk-nav-link" href="../marketing-redesign/02-how-it-works.html">How it works</a>
+      <a class="mk-nav-link" href="../marketing-redesign/03-use-cases.html">Use cases</a>
+      <a class="mk-nav-link" href="../marketing-redesign/04-reports.html">Reports</a>
+      <a class="mk-nav-link" href="../marketing-redesign/05-help.html">Help</a>
+    </nav>
+    <div class="mk-nav-acts">
+      <a class="mk-btn mk-btn-quiet" href="#">Sign in</a>
+      <a class="mk-btn mk-btn-primary" href="#">Create a host account</a>
+      <button class="mk-nav-burger" type="button" aria-label="Menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="mk-hero" id="top">
+  <div class="mk-shell mk-hero-top">
+    <div>
+      <p class="mk-kicker">Base camp</p>
+      <h1 class="mk-display mk-hero-copy mk-rise" style="margin-top:18px"><span>Your team&rsquo;s own</span><span>material, turned into</span><span>decisions everyone</span><span>climbed toward.</span></h1>
+      <p class="mk-lead mk-hero-sub">Build question sets from what your team already has. Run them as trivia to warm the room up, or as call and answer to collect every idea and put it to a vote. Everyone plays from their phone. The session ends with a report.</p>
+    </div>
+    
+<div class="mk-hero-stage" aria-hidden="true">
+  <figure class="mk-device mk-device--tv" style="margin:0">
+    <div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-clip">
+      <span class="mk-clip-badge">Clip slot</span>
+      <div class="mk-ss">
+        <div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Results &middot; Q4 of 10</span><span class="mk-ss-code">4821</span></div>
+        <p class="mk-ss-q">Which did the retro name as the biggest cause of rework?</p>
+        <div class="mk-ss-bars">
+          <div class="mk-ss-bar mk-ss-right"><span><b style="color:var(--mk-amber)">C</b> Requirements agreed in a call and never written down</span><em>58%</em><span class="mk-ss-track"><i style="width:58%"></i></span></div>
+          <div class="mk-ss-bar"><span>A Unclear acceptance criteria</span><em>22%</em><span class="mk-ss-track mk-ss-cool"><i style="width:22%"></i></span></div>
+          <div class="mk-ss-bar"><span>B Late design changes</span><em>14%</em><span class="mk-ss-track mk-ss-cool"><i style="width:14%"></i></span></div>
+          <div class="mk-ss-bar"><span>D Environment drift</span><em>6%</em><span class="mk-ss-track mk-ss-cool"><i style="width:6%"></i></span></div>
+        </div>
+        <div class="mk-ss-foot"><span class="mk-ss-chip">20 of 20 answered</span><span class="mk-ss-grow"></span><span class="mk-ss-chip">Next question</span></div>
+      </div>
+    </div></div></div>
+    <div class="mk-device-foot"></div>
+  </figure>
+  <figure class="mk-device mk-device--phone" style="margin:0">
+    <div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-device-notch"></div><div class="mk-clip">
+      <div class="mk-ss">
+        <div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Priya</span></div>
+        <p class="mk-ss-q">You picked C</p>
+        <div class="mk-ss-opts"><div class="mk-ss-opt mk-ss-right"><b>C</b> Never written</div></div>
+        <div class="mk-ss-cta">+120 pts</div>
+      </div>
+    </div></div></div>
+  </figure>
+</div>
+
+  </div>
+  <div class="mk-shell mk-hero-foot">
+    <div class="mk-hero-ctas">
+      <a class="mk-btn mk-btn-primary mk-btn-lg" href="#">Create a host account</a>
+      <a class="mk-btn mk-btn-ghost mk-btn-lg" href="#">Sign in</a>
+    </div>
+    <form class="jce" onsubmit="return false">
+      <label class="jce-label" for="jce-code">Have a code?</label>
+      <div class="jce-row">
+        <div class="jce-cells" aria-hidden="true"><div class="jce-cell">4</div><div class="jce-cell">8</div><div class="jce-cell">2</div><div class="jce-cell jce-next"></div></div>
+        <button class="mk-btn jce-go" type="submit">Join</button>
+      </div>
+      <input id="jce-code" type="text" inputmode="numeric" maxlength="4" hidden aria-label="Session code, 4 digits">
+      <p class="jce-hint">No account and no app. The code is on the screen at the front of the room.</p>
+    </form>
+  </div>
+</section>
+
+<section class="mk-section mk-section--a" id="problem">
+  <div class="mk-shell">
+    <div class="mk-section-head"><h2 class="mk-title">Most sessions lose the thing they were for.</h2></div>
+    <div class="mk-stmts">
+      <div><h3>A few voices decide</h3><p>The same three people talk. The quiet half of the room has the answer and no way into the conversation.</p></div>
+      <div><h3>Ideas leave with the people</h3><p>Written on a whiteboard, photographed by two of them, typed up by nobody.</p></div>
+      <div><h3>Nobody remembers what was decided</h3><p>Six weeks later the decision is folklore, and the reasoning that produced it is gone.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--b" id="modes">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <h2 class="mk-title">One set of questions, two shapes of round.</h2>
+      <p class="mk-lead">Both run on the screen at the front of the room while everyone answers on their own phone.</p>
+    </div>
+    <div class="mk-mode">
+      <div class="mk-mode-copy">
+        <span class="mk-mode-tag">Trivia</span>
+        <h3>Warm the room up, or check what landed.</h3>
+        <ul class="mk-mode-list">
+          <li>A question, four options, one right answer &mdash; revealed with its explanation.</li>
+          <li>Ask, then results. Trivia has no vote phase.</li>
+          <li>Running standings after every question.</li>
+        </ul>
+      </div>
+      <div class="mk-mode-screens">
+        <figure class="mk-device mk-device--tv" style="margin:0"><div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-clip"><span class="mk-clip-badge">Clip slot</span>
+          <div class="mk-ss"><div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Trivia &middot; Question 4 of 10</span><span class="mk-ss-code">4821</span></div>
+          <p class="mk-ss-q">Which of these did the 2025 retro name as the single biggest cause of rework?</p>
+          <div class="mk-ss-opts"><div class="mk-ss-opt"><b>A</b> Unclear acceptance criteria</div><div class="mk-ss-opt"><b>B</b> Late design changes</div><div class="mk-ss-opt mk-ss-right"><b>C</b> Requirements agreed in a call and never written down</div><div class="mk-ss-opt"><b>D</b> Environment drift</div></div>
+          <div class="mk-ss-foot"><span class="mk-ss-chip">18 of 20 answered</span><span class="mk-ss-grow"></span><span class="mk-ss-chip">Reveal</span></div></div>
+        </div></div></div><div class="mk-device-foot"></div>
+        <figcaption class="mk-device-cap"><b>trivia-host</b> &mdash; question, answers lock, the right answer and the standings.</figcaption></figure>
+        <figure class="mk-device mk-device--phone" style="margin:0"><div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-device-notch"></div><div class="mk-clip"><span class="mk-clip-badge">Clip</span>
+          <div class="mk-ss"><div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Priya</span></div><p class="mk-ss-q">Biggest cause of rework?</p>
+          <div class="mk-ss-opts"><div class="mk-ss-opt"><b>A</b> Criteria</div><div class="mk-ss-opt"><b>B</b> Design</div><div class="mk-ss-opt mk-ss-right"><b>C</b> Never written</div><div class="mk-ss-opt"><b>D</b> Drift</div></div><div class="mk-ss-cta">Locked in</div></div>
+        </div></div></div><figcaption class="mk-device-cap"><b>trivia-player</b> &mdash; answering.</figcaption></figure>
+      </div>
+    </div>
+    <div class="mk-mode mk-mode--flip">
+      <div class="mk-mode-copy">
+        <span class="mk-mode-tag">Call and answer</span>
+        <h3>Pose a prompt, collect every idea, then vote.</h3>
+        <ul class="mk-mode-list">
+          <li>Everyone writes at once, so the room hears from the people it usually does not.</li>
+          <li>Ask, vote, results &mdash; three phases you move through.</li>
+          <li>Every answer is kept, not only the ones that won votes, and the breakdown goes into the report.</li>
+        </ul>
+      </div>
+      <div class="mk-mode-screens">
+        <figure class="mk-device mk-device--tv" style="margin:0"><div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-clip"><span class="mk-clip-badge">Clip slot</span>
+          <div class="mk-ss"><div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Call and answer &middot; Vote</span><span class="mk-ss-code">4821</span></div>
+          <p class="mk-ss-q">What should we stop doing in the next quarter?</p>
+          <div class="mk-ss-bars"><div class="mk-ss-bar"><span>Parallel discovery on three products</span><em>9</em><span class="mk-ss-track"><i style="width:82%"></i></span></div><div class="mk-ss-bar"><span>Weekly status meeting nobody reads</span><em>7</em><span class="mk-ss-track"><i style="width:64%"></i></span></div><div class="mk-ss-bar"><span>Hand-built release notes</span><em>4</em><span class="mk-ss-track mk-ss-cool"><i style="width:36%"></i></span></div></div>
+          <div class="mk-ss-foot"><span class="mk-ss-chip">20 votes cast</span><span class="mk-ss-grow"></span><span class="mk-ss-chip">Results</span></div></div>
+        </div></div></div><div class="mk-device-foot"></div>
+        <figcaption class="mk-device-cap"><b>poll-host</b> &mdash; prompt, answers arriving, the vote, results revealed.</figcaption></figure>
+        <figure class="mk-device mk-device--phone" style="margin:0"><div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-device-notch"></div><div class="mk-clip"><span class="mk-clip-badge">Clip</span>
+          <div class="mk-ss"><div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Your idea</span></div><p class="mk-ss-q">What should we stop doing?</p><div class="mk-ss-field">Parallel discovery on three products at once</div><div class="mk-ss-doc"><span class="mk-ss-line"></span><span class="mk-ss-line mk-ss-short"></span></div><div class="mk-ss-cta">Send</div></div>
+        </div></div></div><figcaption class="mk-device-cap"><b>poll-player</b> &mdash; writing, then voting.</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--a" id="material">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <h2 class="mk-title">The questions come from your work, not from a quiz pack.</h2>
+      <p class="mk-lead">Hand the builder the strategy document, the retro notes, the deck you are about to present. It drafts a set. You decide what runs.</p>
+    </div>
+    <ol class="mk-seq" style="list-style:none;padding:0;margin-top:40px">
+      <li class="mk-seq-step"><span class="mk-seq-n">1</span><h3>Supply the material</h3><p>Documents and topics you already have. Or write the questions yourself &mdash; the builder is a convenience, not a requirement.</p></li>
+      <li class="mk-seq-step"><span class="mk-seq-n">2</span><h3>A set is drafted</h3><p>Trivia questions or call-and-answer prompts, each with its category and its detail.</p></li>
+      <li class="mk-seq-step"><span class="mk-seq-n">3</span><h3>You review and edit</h3><p>Preview the set as a player will see it, change anything, drop anything. Nothing runs until you start a session.</p></li>
+      <li class="mk-seq-step"><span class="mk-seq-n">4</span><h3>It is stored where it belongs</h3><p>In your organisation&rsquo;s private library, encrypted. Or start from the moderated public library.</p></li>
+    </ol>
+    <div class="mk-material-row">
+      <figure class="mk-device mk-device--laptop" style="margin:0"><div class="mk-device-bezel"><div class="mk-device-screen"><div class="mk-clip"><span class="mk-clip-badge">Clip slot</span>
+        <div class="mk-ss"><div class="mk-ss-top"><span class="mk-ss-dot"></span><span class="mk-ss-chip">Builder &middot; drafting</span><span class="mk-ss-code">14 / 20</span></div>
+        <div class="mk-ss-doc"><span class="mk-ss-line"></span><span class="mk-ss-line"></span><span class="mk-ss-line mk-ss-warm"></span><span class="mk-ss-line mk-ss-short"></span></div>
+        <div class="mk-ss-opts"><div class="mk-ss-opt"><b>Q12</b> Which constraint did the plan name first?</div><div class="mk-ss-opt"><b>Q13</b> What does &ldquo;done&rdquo; mean for a discovery spike?</div></div>
+        <div class="mk-ss-foot"><span class="mk-ss-chip">Review before anything runs</span></div></div>
+      </div></div></div><div class="mk-device-foot"></div>
+      <figcaption class="mk-device-cap"><b>builder</b> &mdash; a set being drafted from supplied material.</figcaption></figure>
+      <p class="mk-material-note"><b>Private stays private.</b> An organisation&rsquo;s sets are encrypted and are readable only inside that organisation. The public library is separate, moderated, and nothing reaches it without being published on purpose.</p>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--b" id="room">
+  <div class="mk-shell">
+    <div class="mk-section-head"><h2 class="mk-title">Answers arrive live. The team votes. The strongest ideas rise.</h2></div>
+    <div class="mk-react-grid">
+      <div class="mk-tally" id="mkTally">
+        <div class="mk-tally-head"><h3>What should we stop doing?</h3></div>
+        <p class="mk-muted" style="margin-top:10px">20 people answered. 20 votes cast.</p>
+        <div class="mk-tally-rows">
+          <div class="mk-tally-row"><div class="mk-tally-top"><b>Parallel discovery on three products at once</b><span class="mk-tally-n"><span data-count="9">0</span> votes</span></div><div class="mk-tally-track"><i style="--w:82%"></i></div></div>
+          <div class="mk-tally-row"><div class="mk-tally-top"><b>The weekly status meeting nobody reads</b><span class="mk-tally-n"><span data-count="7">0</span> votes</span></div><div class="mk-tally-track"><i style="--w:64%"></i></div></div>
+          <div class="mk-tally-row mk-tally-row--cool"><div class="mk-tally-top"><b>Hand-built release notes</b><span class="mk-tally-n"><span data-count="4">0</span> votes</span></div><div class="mk-tally-track"><i style="--w:36%"></i></div></div>
+          <div class="mk-tally-row mk-tally-row--cool"><div class="mk-tally-top"><b>Two-week estimates on unscoped work</b><span class="mk-tally-n"><span data-count="0">0</span> votes</span></div><div class="mk-tally-track"><i style="--w:2%"></i></div></div>
+        </div>
+        <p class="mk-tally-note">The answer with no votes is kept too. A session that quietly discards it is a session you cannot go back to.</p>
+      </div>
+      <div class="mk-react-side">
+        <div class="mk-art " role="img" aria-label="The room, looking up">
+  <div class="mk-art-req"><b>Image request &middot; The room, looking up</b><p>A real meeting room, dusk-lit, 12&ndash;20 people seated, most holding phones, all faces turned up toward an off-frame screen at the front &mdash; the moment a result lands. Shot from behind and slightly above the back row so the screen glow is on their faces and the screen itself is out of frame (the product still is drawn beside it; a photographed screen would date). Warm amber key from the screen, cool blue ambient. 4:3, ~1600px, WebP &le;180KB. Low-key: no face brighter than mid-grey so --mk-text over any 70% wash still clears 4.5:1. No laptops, no lanyards, no brand marks.</p><div class="mk-art-sil"></div></div>
+</div>
+        <p class="mk-lead">Everyone writes at the same time, so the room does not have to take turns to be heard.</p>
+        <ul class="mk-mode-list">
+          <li>The room reads every answer, then votes &mdash; on what was said, not on who said it loudest.</li>
+          <li>The count is a vote count. It is not a quality score and the report never calls it one.</li>
+          <li>Names can be hidden for a whole session if the subject needs it.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-section mk-section--a mk-summit" id="summit">
+  <div class="mk-shell">
+    <div class="mk-section-head">
+      <p class="mk-kicker">The summit</p>
+      <h2 class="mk-title">Everyone leaves with the same page.</h2>
+      <p class="mk-lead">The report is written as the session runs. Nobody has to type the whiteboard up afterwards.</p>
+    </div>
+    <div class="mk-summit-grid">
+      <div class="mk-report" data-theme="light">
+        <div class="mk-report-head"><p class="mk-report-kicker">Session report</p><h3>Q3 planning &mdash; what we stop, what we start</h3><p class="mk-report-meta">Thursday 18 September &middot; 20 participants &middot; 6 questions &middot; code 4821</p></div>
+        <div class="mk-report-body">
+          <section class="mk-report-block"><h4>Question 3 &middot; call and answer</h4><p class="mk-report-q">What should we stop doing in the next quarter?</p>
+            <ul class="mk-report-answers">
+              <li><span>Parallel discovery on three products at once</span><span class="mk-report-votes">9 votes</span><span class="mk-report-meter"><i style="width:82%"></i></span><span class="mk-report-by">Priya N. &middot; &ldquo;We are three deep on everything and finished on nothing.&rdquo;</span></li>
+              <li><span>The weekly status meeting nobody reads</span><span class="mk-report-votes">7 votes</span><span class="mk-report-meter"><i style="width:64%"></i></span><span class="mk-report-by">Tomas B.</span></li>
+              <li><span>Hand-built release notes</span><span class="mk-report-votes">4 votes</span><span class="mk-report-meter"><i style="width:36%"></i></span><span class="mk-report-by">Alina K. &middot; &ldquo;Forty minutes a week, every week.&rdquo;</span></li>
+              <li><span>Two-week estimates on unscoped work</span><span class="mk-report-votes">0 votes</span><span class="mk-report-meter"><i style="width:2%"></i></span><span class="mk-report-by">Sam O.</span></li>
+            </ul></section>
+          <section class="mk-report-block"><h4>Summary and next steps</h4><div class="mk-report-summary"><p>The room agreed on one thing far more strongly than on anything else: too much discovery is running at once. Two of the four answers describe recurring process cost rather than product work, which suggests the quarter&rsquo;s real constraint is attention, not capacity.</p>
+            <ol class="mk-report-list"><li>Name one product as the discovery focus before the next planning session.</li><li>Decide who owns release notes, or decide to stop writing them.</li><li>Revisit the status meeting with the four people who said they read it.</li></ol></div></section>
+        </div>
+        <div class="mk-report-foot"><a class="mk-report-btn" href="../marketing-redesign/04-reports.html">Export PDF</a><a class="mk-report-btn" href="../marketing-redesign/04-reports.html">Copy shareable link</a><span class="mk-report-note">Every answer, every vote and every comment is kept.</span></div>
+      </div>
+      <div class="mk-summit-aside">
+        <div class="mk-art " role="img" aria-label="The summit, held">
+  <div class="mk-art-req"><b>Image request &middot; The summit, held</b><p>A single sheet of paper on a dark table, held at its top corners by two hands from opposite sides &mdash; two people reading the same page. Overhead, tight crop; the sheet is the brightest thing in frame and is blank or out of focus (the report is drawn, not photographed). 3:4 on desktop, 16:9 crop on mobile, ~1400px tall, WebP &le;160KB. This is the payoff frame; it should feel like agreement, not paperwork.</p><div class="mk-art-sil"></div></div>
+</div>
+        <p class="mk-muted"><a href="../marketing-redesign/04-reports.html">See a full report, annotated &rarr;</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mk-cta" id="start">
+  <div class="mk-shell mk-cta-in">
+    <h2 class="mk-title">Bring your own material. Leave with a decision.</h2>
+    <div class="mk-cta-row"><a class="mk-btn mk-btn-primary mk-btn-lg" href="#">Create a host account</a><a class="mk-btn mk-btn-ghost mk-btn-lg" href="../marketing-redesign/02-how-it-works.html">See how it works</a></div>
+    <p class="mk-cta-fine">Players never need an account. Hosts sign in once.</p>
+  </div>
+</section>
+
+<footer class="mk-foot"><div class="mk-shell mk-foot-in"><span class="mk-foot-legal">Engagements</span><nav class="mk-foot-links" aria-label="Footer"><a href="#">Privacy</a><a href="#">Terms</a><a href="../marketing-redesign/05-help.html">Help</a><a href="#">Join with a code</a></nav></div></footer>
+</div>
+</div>
+</div>
+
+<aside class="mk-anno-rail" aria-label="Design notes">
+  <h6>Design notes — 01m home at 390px</h6><div class="mk-anno"><b>What changes at 390</b>The stage still stacks under the headline and keeps its place above the buttons: the room screen is still the first thing after the claim. The phone overlay goes (it would cover the still). The nav keeps Sign in and drops the account door — the hero's first button is that action. Route, climber and flag are hidden under 720px as before.</div>
+  <div class="mk-anno"><b>The product is in the first viewport</b>The shipped hero is 88vh of sky over two buttons; a cold visitor cannot tell what this is until the third screen. The drawn RESULTS still now sits right of the headline. It is a dark object with its own contrast, so it may enter the amber band the headline may not.</div>
+  <div class="mk-anno"><b>One filled amber per viewport</b>Shipped: nav primary, hero primary and the Join button are all filled amber above the fold. Here the nav door and Join are outlines; the hero's primary is the only filled control in view.</div>
+  <div class="mk-anno"><b>The route draws itself</b>The climber already moves with scroll (RidgeScene.jsx:97). The route was fully drawn from frame one, so the plan read as already walked. Now <code>stroke-dashoffset</code> follows the same progress and the flag lights when you reach the report. Reduced motion: drawn in full, still.</div>
+  <div class="mk-anno"><b>Headline rises once</b>Three lines, 620ms, 90ms apart, <code>cubic-bezier(.16,1,.3,1)</code>, from an already-painted default (react-bits SplitText / motion-primitives text-effect). A failed script hides nothing.</div>
+  <div class="mk-anno"><b>Scaffold tells removed</b>Impeccable's craft floor names each one the shipped page uses: a kicker on every heading, 01/02/03 numerals, same-size card grids as page structure, a 3px coloured border-left. The kicker survives twice — Base camp and The summit — because it carries the climb. The sequence numbers survive because the order is information.</div>
+  <div class="mk-anno"><b>The tally performs</b>Bars grow from zero and counts count up when the block enters view, once, in 700ms (motion-primitives in-view + animated-number). It is the product's own live moment and the one motion this section gets.</div>
+  <div class="mk-anno"><b>Two photographs, requested</b>Placeholders carry the request text. Both are low-key so the wash keeps AA; both keep the screen and the sheet out of focus so the drawn stills stay the product image and the photos stay true after the next UI change.</div>
+  <div class="mk-anno"><b>Unchanged on purpose</b>The glow stays in the bottom 40%; every word in the join card is <code>--mk-text</code>; trivia says it has no vote phase; the zero-vote answer is kept; the paper sheet converts markup and theme together.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+
+
+<script>
+/* The route draws with scroll, just ahead of the climber. Same progress the
+   shipped useScrollProgress produces; reduced motion pins it to 1. */
+(function () {
+  var route = document.getElementById('mkRoute'), climber = document.getElementById('mkClimber'),
+      halo = document.getElementById('mkHalo'), mid = route && route.closest('.mk-ridge-mid');
+  if (!route || !climber) return;
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var len = route.getTotalLength();
+  function progress() {
+    var max = document.documentElement.scrollHeight - innerHeight;
+    return max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0;
+  }
+  function paint() {
+    var p = reduced ? 1 : progress();
+    var ahead = Math.min(1, p + 0.08);
+    route.style.strokeDashoffset = (1 - ahead).toFixed(3);
+    var pt = route.getPointAtLength(len * p);
+    climber.setAttribute('cx', pt.x.toFixed(1)); climber.setAttribute('cy', pt.y.toFixed(1));
+    halo.setAttribute('cx', pt.x.toFixed(1)); halo.setAttribute('cy', pt.y.toFixed(1));
+    if (mid) mid.dataset.summit = p > 0.86 ? '1' : '0';
+  }
+  paint();
+  if (!reduced) { addEventListener('scroll', paint, { passive: true }); addEventListener('resize', paint); }
+})();
+/* The tally: bars grow and counts count up once the block is in view. */
+(function () {
+  var box = document.getElementById('mkTally'); if (!box) return;
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function countUp(el) {
+    var target = +el.dataset.count, t0 = performance.now(), dur = 700;
+    if (reduced) { el.textContent = target; return; }
+    (function step(t) {
+      var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = Math.round(target * e);
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  function go() { box.classList.add('is-in'); box.querySelectorAll('[data-count]').forEach(countUp); }
+  if (!('IntersectionObserver' in window)) return go();
+  var io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) { go(); io.disconnect(); } }, { threshold: .35 });
+  io.observe(box);
+})();
+</script>
+
+<script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>
