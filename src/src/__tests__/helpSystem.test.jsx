@@ -186,8 +186,10 @@ describe('§7 derived blocks render from the real tables', () => {
     const text = document.body.textContent;
     expect(text).toContain('Call & Answer');
     expect(text).toContain('Wavelength');
-    // Survey is not playable, so it must not be offered as an option.
-    expect(text).not.toContain('Survey');
+    // Surveys phase 2: a session plays a survey now, so the guide lists it —
+    // with its real phases, which are not a round's.
+    expect(text).toContain('Survey');
+    expect(text).toContain('COLLECTING → CLOSED');
   });
 
   /*

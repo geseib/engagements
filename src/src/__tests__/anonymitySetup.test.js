@@ -13,13 +13,18 @@ import {
 
 describe('which formats offer anonymous responses', () => {
   // Not a new taxonomy — exactly the set that holds a vote.
-  test.each(['call-and-answer', 'poll', 'survey'])('%s offers it', (type) => {
+  test.each(['call-and-answer', 'poll'])('%s offers it', (type) => {
     expect(anonymityApplies(type)).toBe(true);
   });
 
   // An option that cannot do anything is a question a host should not be asked,
   // so these hide it rather than showing it disabled.
-  test.each(['trivia', 'wavelength'])('%s hides it', (type) => {
+  //
+  // SURVEY JOINED THIS LIST in phase 2. It holds no vote (no rounds at all),
+  // and what it records about people is its own three-way setting, Names
+  // (config/surveyNames.js) — a second, voting-shaped anonymity card beside it
+  // would be two answers to one question.
+  test.each(['trivia', 'wavelength', 'survey'])('%s hides it', (type) => {
     expect(anonymityApplies(type)).toBe(false);
   });
 

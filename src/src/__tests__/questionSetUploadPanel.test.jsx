@@ -120,18 +120,13 @@ describe('one engagement-type control, once', () => {
     expect(document.querySelectorAll('#engagement-type')).toHaveLength(1);
   });
 
-  test('the type is derived from the table, with Survey present and labelled', () => {
+  test('the type is derived from the table, with Survey present — and playable', () => {
     // rejects: hand-writing the options here too — the drift Q4 fixes in the
-    // filter is the same drift, in the same tab.
+    // filter is the same drift, in the same tab. Surveys phase 2: a session
+    // runs a survey now, so its option carries no "not playable" suffix.
     mount();
     const labels = within(typeSelect()).getAllByRole('option').map((o) => o.textContent);
-    expect(labels).toEqual([
-      'Call & Answer',
-      'Trivia',
-      'Poll',
-      'Wavelength',
-      expect.stringContaining('not playable'),
-    ]);
+    expect(labels).toEqual(['Call & Answer', 'Trivia', 'Poll', 'Wavelength', 'Survey']);
   });
 
   test('the one control drives the builder, the template and the prompt list', () => {
@@ -511,13 +506,14 @@ describe('a survey has four ways in (mockup 01)', () => {
     expect(screen.queryByText(/A blank survey/i)).toBeNull();
   });
 
-  test('nothing on screen says a survey cannot be imported — and it says it cannot be run yet', () => {
+  test('nothing on screen says a survey cannot be imported — or that it cannot be run', () => {
     // rejects: the retired "(exports JSON)" button suffix and the importer-
-    // rejects copy; and rejects dropping the one thing that is still true.
+    // rejects copy; and, since surveys phase 2 made a survey playable, the
+    // phase-1 sentence "no session can run one yet", which is now false.
     mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
     const panel = document.querySelector('.qsets-panel');
     expect(panel.textContent).not.toMatch(/exports JSON|rejects survey|cannot be imported|can.t be imported/i);
-    expect(panel.textContent).toMatch(/no session can run one yet/i);
+    expect(panel.textContent).not.toMatch(/no session can run one yet/i);
   });
 
   test('a survey CSV with a Kind column preflights clean and uploads as a survey', async () => {

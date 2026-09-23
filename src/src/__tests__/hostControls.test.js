@@ -80,9 +80,11 @@ describe('runtime phase graph', () => {
     expect(hostRunsVotePhase('wavelength')).toBe(false);
     expect(hostRunsVotePhase('call-and-answer')).toBe(true);
     expect(hostRunsVotePhase('poll')).toBe(true);
-    // survey has no special case in handleFinishQuestion(), so it votes —
-    // even though GAME_TYPES.survey.phases claims ASK -> RESULTS.
-    expect(hostRunsVotePhase('survey')).toBe(true);
+    // Surveys phase 2: a survey is a session with no rounds, so it never
+    // opens a vote. It used to fall through handleFinishQuestion() and run
+    // one; that is what made anonymityApplies('survey') true and put the
+    // call-and-answer "Anonymous responses" card on a survey's setup.
+    expect(hostRunsVotePhase('survey')).toBe(false);
   });
 
   it('normalises storage spellings', () => {
@@ -90,12 +92,16 @@ describe('runtime phase graph', () => {
     expect(hostRunsVotePhase('quiz')).toBe(false); // alias for trivia
   });
 
-  it('always starts at the lobby and ends at results', () => {
+  it('always starts at the lobby, and a round type ends at results', () => {
     ALL_TYPES.forEach((type) => {
       const seq = hostPhaseSequence(type);
       expect(seq[0]).toBe('LOBBY');
-      expect(seq[seq.length - 1]).toBe('RESULTS');
+      expect(seq[seq.length - 1]).toBe(type === 'survey' ? 'CLOSED' : 'RESULTS');
     });
+  });
+
+  it('a survey passes through collecting and closed, never a round phase', () => {
+    expect(hostPhaseSequence('survey')).toEqual(['LOBBY', 'COLLECTING', 'CLOSED']);
   });
 });
 
@@ -132,10 +138,17 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
           secondary must never duplicate the primary's intent. That still holds
           for all four.
         */
+        /*
+          A FIFTH: WARN_SURVEY, the collecting survey's "Two-minute warning".
+          It moves nothing — the survey stays open and nobody's answers are
+          touched — so it is not a second way to advance either; it tells the
+          phones the close is coming.
+        */
         if (controls.secondary) {
           expect([
             HOST_INTENTS.SKIP, HOST_INTENTS.LEAVE,
             HOST_INTENTS.FEEDBACK, HOST_INTENTS.FIELD_NOTES,
+            HOST_INTENTS.WARN_SURVEY,
           ]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }
@@ -165,8 +178,10 @@ describe('the primary action per phase', () => {
   it('opens voting for vote types and reveals for the rest', () => {
     expect(hostControlsFor({ gameType: 'poll', phase: 'ASK', ...READY }).primary.label)
       .toBe('Start Voting');
+    // A survey never reaches ASK (it has no rounds); if bad state puts it
+    // there, it is a no-vote type like trivia and gets a way out, not a vote.
     expect(hostControlsFor({ gameType: 'survey', phase: 'ASK', ...READY }).primary.label)
-      .toBe('Start Voting');
+      .toBe('Show Results');
     expect(hostControlsFor({ gameType: 'trivia', phase: 'ASK', ...READY }).primary.label)
       .toBe('Show Results');
     expect(hostControlsFor({ gameType: 'wavelength', phase: 'ASK', ...READY }).primary.label)
@@ -656,4 +671,86 @@ describe('FIELD_NOTES pages before it advances', () => {
     expect(code).toMatch(/notesPage,\s*notesPages,\s*\}\)/);
     expect(code).toContain('prosePageSlice(');
   });
+});
+
+/**
+ * SURVEYS PHASE 2 — a session with no rounds.
+ *
+ * STATE goes CREATED → SURVEY#OPEN → SURVEY#CLOSED → ENDED
+ * (docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2) and never touches
+ * ASK#/VOTE#/RESULTS#. The host phases are COLLECTING and CLOSED; the lobby
+ * and ENDED keep their names but get a survey's own controls.
+ */
+describe('a survey: the four phases, each with exactly one primary', () => {
+  const survey = (phase, extra = {}) => hostControlsFor({ gameType: 'survey', phase, ...READY, ...extra });
+
+  test('the two survey states map onto their own host phases, not the lobby', () => {
+    expect(phaseOfGameState('SURVEY#OPEN')).toBe('COLLECTING');
+    expect(phaseOfGameState('SURVEY#CLOSED')).toBe('CLOSED');
+    // Not the lobby: isLobbyState() drives set auto-selection and "Start
+    // First Round", and a survey that is collecting is neither.
+    expect(isLobbyState('SURVEY#OPEN')).toBe(false);
+    expect(isLobbyState('SURVEY#CLOSED')).toBe(false);
+  });
+
+  test('both phases are recognised rather than falling back to LOBBY', () => {
+    expect(HOST_PHASES).toContain('COLLECTING');
+    expect(HOST_PHASES).toContain('CLOSED');
+    expect(survey('COLLECTING').phase).toBe('COLLECTING');
+    expect(survey('CLOSED').phase).toBe('CLOSED');
+  });
+
+  test('LOBBY: "Open the survey", with no player requirement', () => {
+    // rejects: "Start First Question" on a survey, and the "at least one
+    // player has to join first" gate — nobody can join a survey until it
+    // opens (session-gate.js refuses joins before Started).
+    const lobby = survey('LOBBY', { playerCount: 0 });
+    expect(lobby.primary).toMatchObject({ label: 'Open the survey', intent: HOST_INTENTS.OPEN_SURVEY, disabled: false });
+    expect(survey('LOBBY', { hasQuestionSet: false }).primary.disabled).toBe(true);
+  });
+
+  test('COLLECTING: "Close the survey" always confirms; the warning is the secondary', () => {
+    const c = survey('COLLECTING');
+    expect(c.primary).toMatchObject({ label: 'Close the survey', intent: HOST_INTENTS.CLOSE_SURVEY, confirm: true, disabled: false });
+    expect(c.secondary).toMatchObject({ label: 'Two-minute warning', intent: HOST_INTENTS.WARN_SURVEY });
+  });
+
+  test('CLOSED: "End the session", and nothing beside it', () => {
+    const c = survey('CLOSED');
+    expect(c.primary).toMatchObject({ label: 'End the session', intent: HOST_INTENTS.END_SURVEY, disabled: false });
+    expect(c.secondary).toBeNull();
+  });
+
+  test('ENDED: "Back to Menu" is the primary — a survey has no round report to open', () => {
+    const c = survey('ENDED');
+    expect(c.primary).toMatchObject({ label: 'Back to Menu', intent: HOST_INTENTS.LEAVE });
+    expect(c.secondary).toBeNull();
+    // Every other type keeps its report.
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).primary.intent).toBe(HOST_INTENTS.REPORT);
+  });
+
+  test('the close is the ONLY primary that asks first', () => {
+    // SPACE and → fire the primary (HostActionBar), so an irreversible
+    // primary must confirm; nothing else should grow a speed bump.
+    for (const type of ALL_TYPES) {
+      for (const phase of HOST_PHASES) {
+        const { primary } = hostControlsFor({ gameType: type, phase, ...READY });
+        if (primary.intent === HOST_INTENTS.CLOSE_SURVEY) expect(primary.confirm).toBe(true);
+        else expect(primary.confirm).toBeFalsy();
+      }
+    }
+  });
+
+  test('the dock says where the room is: finished · partway · not started', () => {
+    const c = survey('COLLECTING', { survey: { finished: 21, partway: 15, notStarted: 6 } });
+    expect(c.status.text).toBe('21 finished · 15 partway · 6 not started');
+    // No counts yet (the first /progress read has not landed): a sentence,
+    // never the lobby's "Waiting for players to join…".
+    const early = survey('COLLECTING', { playerCount: 0 }).status.text;
+    expect(early).not.toBe(survey('LOBBY', { playerCount: 0, gameType: 'poll' }).status.text);
+    expect(early.length).toBeGreaterThan(0);
+    expect(survey('CLOSED').status.text).toMatch(/closed/i);
+    expect(survey('ENDED').status.text).not.toMatch(/rounds/i);
+  });
+
 });

@@ -29,7 +29,7 @@
  *     which unmounts when the dialog closes: engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
- *     editCategoryNames, knownPromptIds.
+ *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names).
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a
  *     session from history, not the one on stage, so it must not live in the

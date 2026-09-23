@@ -86,6 +86,25 @@ describe('every pairing is measured, composited from the real paint stack', () =
     expect(ratio(muted(), tinted)).toBeGreaterThanOrEqual(AA);
   });
 
+  /*
+    A SURVEY'S NAMES CARD (07-start-survey). The card is the option-card
+    field; each of the three choices is a --gsd-card button on it, and the
+    CHOSEN one swaps its background for an amber wash — so the wash sits on the
+    FIELD, not the card, and that is the stack measured. The hostLine under
+    each label is muted, the pairing the wash endangers.
+  */
+  test('the Names card: the chosen option\'s words on its amber wash over the field', () => {
+    const m = SCOPE.match(/--gsd-row-sel:\s*rgba\(\s*246,\s*169,\s*76,\s*([0-9.]+)\s*\)/);
+    expect(m).not.toBeNull();
+    const chosen = alphaOver(token('--gsd-primary'), field(), Number(m[1]));
+    expect(ratio(text(), chosen)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(muted(), chosen)).toBeGreaterThanOrEqual(AA);
+    // The unchosen options sit on the card.
+    expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
+    // …and the selector that paints the wash is the checked radio.
+    expect(CSS).toMatch(/\.gsd-three-opt\[aria-checked="true"\]\s*\{[^}]*background:\s*var\(--gsd-row-sel\)/);
+  });
+
   test('the filled primary button carries DARK text, never white', () => {
     // #F6A94C under white is 1.9:1 in either theme. The dark navy clears 7:1.
     const m = CSS.match(/\.gsd \.btn-primary \{[^}]*color:\s*(#[0-9A-Fa-f]{6})/);

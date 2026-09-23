@@ -58,9 +58,11 @@
  * copy carries what the public picker endpoint returns, and losing it would be
  * a regression for every set the host did not just touch.
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
+import { NAMES_MODES, NAMES_DEFAULT, namesMode } from '../config/surveyNames';
+import Icon from './Icon';
 import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
 import {
   isUnreadableSet, unreadableSetName, UNREADABLE_REASON,
@@ -159,6 +161,22 @@ export default function GameSetupDialog({
   const [anonymousResponses, setAnonymousResponses] = useState(
     isEdit ? seed.anonymousUntilReveal !== false : true
   );
+  /*
+    A SURVEY'S NAMES — what the server records about people (config/
+    surveyNames.js; 07-start-survey). Seeded from the session on an edit, else
+    Anonymous, and then from the chosen set's own `namesDefault` when it carries
+    one — UNTIL the host picks, after which the next set they look at must not
+    quietly undo their choice. The ref, not state: whether they have touched it
+    changes nothing on screen.
+  */
+  const [namesChoice, setNamesChoice] = useState(
+    isEdit ? namesMode(seed.names).id : NAMES_DEFAULT
+  );
+  const namesTouched = useRef(isEdit);
+  const pickNames = (id) => {
+    namesTouched.current = true;
+    setNamesChoice(namesMode(id).id);
+  };
   const [showSetsDialog, setShowSetsDialog] = useState(false);
   /** Sets seen by <HostQuestionSetsDialog>, including any just created. */
   const [localSets, setLocalSets] = useState(null);
@@ -211,6 +229,19 @@ export default function GameSetupDialog({
   }, [questionSets, localSets]);
 
   const setsForType = allSets.filter((set) => set.engagementType === engagementType);
+  /*
+    A SURVEY IS A SESSION WITH NO ROUNDS (surveys phase 2). Three cards on this
+    screen are about rounds and hide for it: the categories grid (a survey set
+    exposes none), the shuffle (a survey is a form, read in the order it was
+    written — createGameBody forces it off too), and the call-and-answer
+    "Anonymous responses" card, which `anonymityApplies` already hides because
+    a survey holds no vote. Names replaces it.
+  */
+  const isSurvey = normalizeGameType(engagementType) === 'survey';
+  const chosenSet = allSets.find((s) => sameSetRef(s, newGameSetRef)) || null;
+  const setNamesDefault = isSurvey && chosenSet && chosenSet.namesDefault
+    ? namesMode(chosenSet.namesDefault) : null;
+  const names = namesMode(namesChoice);
 
   /*
     ── THE ONE FETCH IN THIS FILE, AND WHY IT IS ALLOWED TO BE HERE ───────────
@@ -304,6 +335,28 @@ export default function GameSetupDialog({
     // instruction from this, and both of those reads are per-partition too.
     const ref = parseSetRefKey(key);
     onQuestionSetChange?.(ref.id, ref.scope);
+    // A survey set may carry its own Names default (phase 2's optional
+    // set-level setting). It seeds the card only until the host has chosen.
+    if (isSurvey && !namesTouched.current) {
+      const set = allSets.find((s) => sameSetRef(s, ref));
+      setNamesChoice(namesMode(set && set.namesDefault).id);
+    }
+  };
+
+  /*
+    ONE RADIO GROUP, KEYBOARD INCLUDED. Three buttons with role="radio" are a
+    radio group only if they behave as one: a single tab stop (the checked
+    option), and the arrow keys move the choice — wrapping at the ends, the
+    way a native radio group does.
+  */
+  const namesRefs = useRef([]);
+  const onNamesKey = (event, index) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const next = (index + step + NAMES_MODES.length) % NAMES_MODES.length;
+    pickNames(NAMES_MODES[next].id);
+    namesRefs.current[next]?.focus?.();
   };
 
   const submit = () => {
@@ -326,8 +379,11 @@ export default function GameSetupDialog({
       aiContext: gameAiContext,
       personaId: newGamePersonaId,
       promptId: newGamePromptId,
-      randomizeQuestions,
+      // A survey is never shuffled, whatever the (hidden) card last said.
+      randomizeQuestions: isSurvey ? false : randomizeQuestions,
       anonymousResponses,
+      // Only a survey carries Names; createGameBody drops it for anything else.
+      ...(isSurvey ? { names: namesChoice } : {}),
     });
   };
 
@@ -500,7 +556,7 @@ export default function GameSetupDialog({
           {/* The app's multi-select grid, kept deliberately. A set carries
               4-24 categories with wildly different counts; a single-value
               <select> cannot say "these three, not those five". */}
-          {newGameSetId && (
+          {newGameSetId && !isSurvey && (
             <div className="form-group">
               <span className="gsd-label" id="gsd-categories-label">Categories</span>
               <div className="category-selection">
@@ -600,6 +656,91 @@ export default function GameSetupDialog({
           </div>
         )}
 
+        {isSurvey && (
+          /*
+            THE NAMES CARD — 07-start-survey.html, which draws it as "the
+            shipped card, one control wider": the option card above, with its
+            checkbox become a three-way choice. Every sentence is the value's
+            own, from config/surveyNames.js — the chooser line, what it does,
+            the phone's promise — so what the host chose and what the room is
+            told cannot drift.
+
+            "What you get" is a SAMPLE of the host's view in each mode, drawn
+            from 07's own example and 33-people's statuses. It shows the shape
+            of what comes back, not this survey's answers.
+          */
+          <>
+            <div className="gsd-names">
+              <div className="gsd-names-hd">
+                <span className="gsd-opt-name">Names</span>
+                <span className="gsd-names-st" aria-hidden="true">{names.label}</span>
+              </div>
+              <div className="gsd-three" role="radiogroup" aria-label="Names">
+                {NAMES_MODES.map((mode, i) => {
+                  const on = mode.id === names.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      ref={(el) => { namesRefs.current[i] = el; }}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      tabIndex={on ? 0 : -1}
+                      className="gsd-three-opt"
+                      onClick={() => pickNames(mode.id)}
+                      onKeyDown={(event) => onNamesKey(event, i)}
+                    >
+                      <b><i aria-hidden="true" />{mode.label}</b>
+                      <span>{mode.hostLine}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="gsd-opt-does">{names.does}</p>
+              <div className="gsd-preview">
+                <div className="gsd-pv">
+                  <h6>What their phone says</h6>
+                  <p className="gsd-pv-ans" data-testid="names-phone-preview">
+                    {names.phoneLead && <b>{names.phoneLead}</b>}
+                    {names.phoneLead ? ' ' : ''}
+                    {names.phoneLine}
+                  </p>
+                </div>
+                <div className="gsd-pv">
+                  <h6>What you get</h6>
+                  <p className="gsd-pv-ans">&ldquo;Seeing the console actually run beat every slide about it.&rdquo;</p>
+                  {names.id === 'named' ? (
+                    <p className="gsd-pv-who named">Priya Raghavan</p>
+                  ) : (
+                    <p className="gsd-pv-who">Response 12 &middot; no name</p>
+                  )}
+                  {names.id === 'finished' && (
+                    <>
+                      <p className="gsd-pv-ans gsd-pv-gap">Priya Raghavan &middot; finished 2:12pm</p>
+                      <p className="gsd-pv-who">People list &middot; no answers</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              {/* Never overclaim. The shipped card's own sentence, verbatim. */}
+              <p className="gsd-opt-limit">
+                This hides names, not identities. In a small group, people may still
+                recognise each other’s answers.
+              </p>
+            </div>
+            <p className="gsd-names-lock">
+              <Icon name="Lock" weight="bold" size={13} color="currentColor" />
+              {' Fixed once the survey opens — people answer on the promise their phone made them.'}
+              {/* Only when the set really carries one: pointing the host at a
+                  set-level default that does not exist would be a lie. */}
+              {setNamesDefault && (
+                <>{' This set’s default is '}<b>{setNamesDefault.label}</b>.</>
+              )}
+            </p>
+          </>
+        )}
+
+        {!isSurvey && (
         <div className={`gsd-opt${randomizeQuestions ? ' is-on' : ''}`}>
           <label className="gsd-opt-head">
             {/* Disabled in edit mode: the per-category order rows were
@@ -628,6 +769,7 @@ export default function GameSetupDialog({
             </p>
           )}
         </div>
+        )}
 
         <h3 className="gsd-section">Context for Workie</h3>
 
@@ -768,8 +910,11 @@ export default function GameSetupDialog({
         </button>
         {/* The guard the mockup drops. Without a set the game has no
             questions; without a title the live screen has nothing to name. */}
+        {/* A survey is created AND opened by this press (the page posts
+            /start straight after the create), so the button says what it
+            does: phones can answer the moment it lands. */}
         <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate}>
-          {isEdit ? 'Save changes' : 'Create engagement'}
+          {isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement')}
         </button>
       </div>
     </Modal>

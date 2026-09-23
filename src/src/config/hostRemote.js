@@ -96,7 +96,7 @@ export function parseGamePhase(state) {
  * been corrected, and having a second answer to "does this type vote?" is what
  * let the two drift apart unnoticed in the first place.
  */
-export const TYPES_WITH_NO_VOTE_AT_RUNTIME = ['trivia', 'wavelength'];
+export const TYPES_WITH_NO_VOTE_AT_RUNTIME = ['trivia', 'wavelength', 'survey'];
 
 export function runsVotePhase(gameType) {
   return gameTypeMeta(normalizeGameType(gameType)).phases.includes('VOTE');
@@ -177,8 +177,15 @@ export function primaryAction(state, gameType, stageBeat) {
   switch (phase) {
     // No round has been dealt yet. `next-question` accepts CREATED and STARTED,
     // so the same endpoint that advances also opens.
+    //
+    // NOT FOR A SURVEY, which has no first round: next-question refuses one
+    // (409, surveys phase 2), and the remote cannot open, warn or close a
+    // survey yet — its own states parse as UNKNOWN below. No button beats a
+    // button that fails in front of the room (IMPLEMENTATION-phase-2.md §5
+    // risk 10).
     case 'CREATED':
     case 'STARTED':
+      if (normalizeGameType(gameType) === 'survey') return null;
       return { ...ACTIONS.next, label: 'Start First Round' };
 
     case 'ASK':

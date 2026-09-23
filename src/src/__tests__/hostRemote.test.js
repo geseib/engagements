@@ -69,7 +69,9 @@ describe('runsVotePhase', () => {
 
     expect(runsVotePhase('wavelength')).toBe(false);
     expect(runsVotePhase('trivia')).toBe(false);
-    expect(runsVotePhase('survey')).toBe(true);
+    // Surveys phase 2: a survey has no rounds, so no vote — the config table
+    // says COLLECTING → CLOSED and the remote reads the same table.
+    expect(runsVotePhase('survey')).toBe(false);
   });
 
   it('normalises legacy spellings rather than defaulting them to no-vote', () => {
@@ -82,6 +84,8 @@ describe('runsVotePhase', () => {
 describe('primaryAction — every game type x every phase', () => {
   it('opens the first round from CREATED and STARTED', () => {
     for (const type of ALL_TYPES) {
+      // A survey has no first round; the remote cannot drive one (below).
+      if (type === 'survey') continue;
       for (const state of ['CREATED', 'STARTED']) {
         const action = primaryAction(state, type);
         expect(action).not.toBeNull();
@@ -89,6 +93,20 @@ describe('primaryAction — every game type x every phase', () => {
         expect(action.label).toBe('Start First Round');
       }
     }
+  });
+
+  /*
+    THE REMOTE CANNOT DRIVE A SURVEY YET (IMPLEMENTATION-phase-2.md §5 risk 10).
+    SURVEY#OPEN / SURVEY#CLOSED parse as UNKNOWN, so there is nothing to press
+    — and on CREATED, "Start First Round" would reach next-question.js, which
+    refuses a survey. Nothing is better than a button that 409s.
+  */
+  it('offers nothing for a survey — open, closed, or not yet opened', () => {
+    expect(primaryAction('SURVEY#OPEN', 'survey')).toBeNull();
+    expect(primaryAction('SURVEY#CLOSED', 'survey')).toBeNull();
+    expect(primaryAction('CREATED', 'survey')).toBeNull();
+    expect(primaryAction('STARTED', 'survey')).toBeNull();
+    expect(skipAction('SURVEY#OPEN')).toBeNull();
   });
 
   it('offers voting from ASK only for the types that actually vote', () => {
