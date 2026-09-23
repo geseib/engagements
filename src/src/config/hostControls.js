@@ -269,8 +269,36 @@ export const HOST_INTENTS = {
   END_SURVEY: 'end-survey',     // SURVEY#CLOSED → ENDED
 };
 
+/**
+ * WHAT "CLOSE THE SURVEY" ASKS — the dock's confirm for the one control that
+ * carries one (IMPLEMENTATION-phase-2.md §5 risk 6). GameHostPage's
+ * runHostAction honours `confirm` on any control, before it dispatches; the
+ * copy lives here with every other word the dock says.
+ *
+ * It states the CONSEQUENCE and the counts before it asks (hard rules §12):
+ * every phone stops, the counts freeze, nothing reopens — and it names the
+ * reversible neighbour, the warning. `irreversible` makes the dialog refuse →
+ * as yes (ConfirmDialog `arrowConfirms`), since → is the key that pressed it.
+ *
+ * @param counts surveyRoomCounts() — {joined, finished, partway} — or null
+ *               before the first /progress read, when the counts are left out.
+ */
+export function surveyCloseConfirm(counts) {
+  const known = counts && Number.isFinite(counts.joined) && Number.isFinite(counts.finished)
+    && Number.isFinite(counts.partway);
+  const where = known
+    ? `${counts.finished} of ${counts.joined} have finished and ${counts.partway} ${counts.partway === 1 ? 'is' : 'are'} partway — what they have answered so far still counts. `
+    : '';
+  return {
+    title: 'Close the survey?',
+    message: `Every phone stops taking answers now and the counts are frozen. ${where}A closed survey cannot be reopened. Not yet? The two-minute warning tells every phone the close is coming.`,
+    confirmText: 'Close the survey',
+    irreversible: true,
+  };
+}
+
 function primaryFor(phase, {
-  runsVote, isSurvey, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages,
+  runsVote, isSurvey, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages, survey,
 }) {
   switch (phase) {
     /*
@@ -365,12 +393,13 @@ function primaryFor(phase, {
         hint: '',
       };
     /*
-      CLOSING IS THE ONE PRIMARY THAT ASKS FIRST — `confirm: true`, honoured by
-      GameHostPage's closeSurveyNow. The dock binds SPACE and → to the primary
-      (HostActionBar), and a presenter's clicker sends exactly those; every
-      other primary is safe to fire by accident because the next beat can be
-      stepped back from, or discards nothing. This one stops every phone
-      mid-answer and freezes the counts, and there is no reopen.
+      CLOSING IS THE ONE PRIMARY THAT ASKS FIRST — `confirm` (surveyCloseConfirm
+      above), honoured by GameHostPage's runHostAction for whatever control
+      carries it. The dock binds SPACE and → to the primary (HostActionBar),
+      and a presenter's clicker sends exactly those; every other primary is
+      safe to fire by accident because the next beat can be stepped back from,
+      or discards nothing. This one stops every phone mid-answer and freezes
+      the counts, and there is no reopen.
     */
     case 'COLLECTING':
       return {
@@ -378,7 +407,7 @@ function primaryFor(phase, {
         label: 'Close the survey',
         icon: 'Lock',
         intent: HOST_INTENTS.CLOSE_SURVEY,
-        confirm: true,
+        confirm: surveyCloseConfirm(survey),
         disabled: false,
         hint: '',
       };
@@ -549,7 +578,7 @@ export function hostControlsFor({
   const noun = String(roundNoun || 'Question').trim() || 'Question';
 
   const primary = primaryFor(resolvedPhase, {
-    runsVote, isSurvey, roundNoun: noun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages,
+    runsVote, isSurvey, roundNoun: noun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages, survey,
   });
 
   /*

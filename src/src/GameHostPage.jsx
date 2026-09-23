@@ -638,6 +638,7 @@ function GameHostPage() {
     title: '',
     message: '',
     confirmText: 'Proceed',
+    arrowConfirms: true,
     onConfirm: () => {},
     onCancel: () => {}
   });
@@ -4819,13 +4820,16 @@ Focus on actionable business strategy insights.`;
     closeQuestionBrowser();
   };
 
-  // Function to show custom confirmation modal
-  const showConfirmation = (title, message, confirmText = 'Proceed') => {
+  // Function to show custom confirmation modal. `arrowConfirms: false` for an
+  // act that cannot be undone — → then cancels nothing and confirms nothing
+  // (components/ConfirmDialog.jsx).
+  const showConfirmation = (title, message, confirmText = 'Proceed', { arrowConfirms = true } = {}) => {
     return new Promise((resolve) => {
       setConfirmModalProps({
         title,
         message,
         confirmText,
+        arrowConfirms,
         onConfirm: () => {
           setShowConfirmModal(false);
           resolve(true);
@@ -5286,26 +5290,11 @@ Focus on actionable business strategy insights.`;
   */
 
   /**
-   * CLOSE ASKS FIRST, EVERY TIME (IMPLEMENTATION-phase-2.md §5 risk 6).
-   *
-   * The dock binds SPACE and → to the primary, and a presenter's clicker sends
-   * exactly those, so the one irreversible primary on the stage gets the
-   * confirmation — here, where the key and the button both arrive, so neither
-   * route can skip it. The question states the CONSEQUENCE and counts before
-   * it asks (hard rules §7): every phone stops, the counts freeze, nothing
-   * reopens — and it names the reversible neighbour, the warning.
+   * CLOSE — once the host has said yes. The ask is not here: it is the
+   * control's `confirm` (config/hostControls.js surveyCloseConfirm), which
+   * runHostAction honours before it dispatches, on every route to the control.
    */
   const closeSurveyNow = async () => {
-    const counts = surveyCounts;
-    const where = counts
-      ? `${counts.finished} of ${counts.joined} have finished and ${counts.partway} ${counts.partway === 1 ? 'is' : 'are'} partway — what they have answered so far still counts. `
-      : '';
-    const ok = await showConfirmation(
-      'Close the survey?',
-      `Every phone stops taking answers now and the counts are frozen. ${where}A closed survey cannot be reopened. Not yet? The two-minute warning tells every phone the close is coming.`,
-      'Close the survey',
-    );
-    if (!ok) return;
     const result = await closeSurvey({ fetchFn: authFetch, apiBase: API_BASE, gameId });
     if (!result.ok) {
       setSurveyActionError(`The survey did not close: ${result.error}`);
@@ -5336,8 +5325,24 @@ Focus on actionable business strategy insights.`;
     setGameState('ENDED');
   };
 
-  const runHostAction = (action) => {
+  const runHostAction = async (action) => {
     if (!action) return;
+    /*
+      A CONTROL THAT ASKS FIRST. config/hostControls.js marks an act that
+      cannot be undone with `confirm` — {title, message, confirmText,
+      irreversible} — and every route to a control comes through here: the
+      dock's button, SPACE and → (HostActionBar), auto-mode's timer. So asking
+      here is asking on every route, and no handler has to remember to. An
+      irreversible ask does not take → as yes: → is the key that pressed the
+      control, and a clicker sends it twice.
+    */
+    if (action.confirm) {
+      const ask = action.confirm;
+      const ok = await showConfirmation(ask.title, ask.message, ask.confirmText, {
+        arrowConfirms: !ask.irreversible,
+      });
+      if (!ok) return;
+    }
     // A page turn is a content move, not a round advance — it must not close
     // the panel the host is reading beside, nor unpin anything.
     if (action.intent !== HOST_INTENTS.PAGE) {
@@ -6969,6 +6974,7 @@ Focus on actionable business strategy insights.`;
           title={confirmModalProps.title}
           message={confirmModalProps.message}
           confirmText={confirmModalProps.confirmText}
+          arrowConfirms={confirmModalProps.arrowConfirms !== false}
           onConfirm={confirmModalProps.onConfirm}
           onCancel={confirmModalProps.onCancel}
         />
