@@ -39,6 +39,7 @@
  * handler stores, encrypted by the real encryptItem, and the round is closed by
  * the real get-results.js reading those rows back.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const util = require('util');
 const crypto = require('crypto');
@@ -310,5 +311,6 @@ const toHost = () => frames.filter((f) => f.connectionId === HOST).map((f) => f.
   }
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();
