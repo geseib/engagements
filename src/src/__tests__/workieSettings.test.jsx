@@ -454,7 +454,9 @@ function renderDialog(overrides = {}) {
 }
 
 const setSelect = () => screen.getByLabelText(/question set/i);
-const plan = () => screen.getByTestId('gsd-workie-plan');
+// The Advanced line now states the plan (session-setup-redesign 01); the old
+// green plan sentence it replaced made the same promise these tests guard.
+const plan = () => screen.getByTestId('gsd-adv-summary');
 
 describe('the setup dialog only promises what will happen', () => {
   // rejects: reading `promptId` as proof. The id is a reference into a library
@@ -464,7 +466,7 @@ describe('the setup dialog only promises what will happen', () => {
     mockPromptApi();
     renderDialog();
     fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
-    await waitFor(() => expect(plan().textContent).toMatch(/brings its own summary approach/i));
+    await waitFor(() => expect(plan().textContent).toMatch(/this set’s own summary approach/i));
     expect(plan().textContent).not.toMatch(/standard/i);
   });
 
@@ -474,8 +476,8 @@ describe('the setup dialog only promises what will happen', () => {
     mockPromptApi();
     renderDialog();
     fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
-    await waitFor(() => expect(plan().textContent).toMatch(/standard Call & Answer way/));
-    expect(plan().textContent).not.toMatch(/brings its own/i);
+    await waitFor(() => expect(plan().textContent).toMatch(/standard Call & Answer summary/));
+    expect(plan().textContent).not.toMatch(/set’s own/i);
   });
 
   // rejects: treating a list that never arrived as proof of absence. A 403, a
@@ -487,7 +489,7 @@ describe('the setup dialog only promises what will happen', () => {
     renderDialog();
     fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
     await waitFor(() => expect(plan()).toBeTruthy());
-    expect(plan().textContent).toMatch(/brings its own summary approach/i);
+    expect(plan().textContent).toMatch(/this set’s own summary approach/i);
   });
 
   // POINTED AT THE SET THAT CAN TELL THE DIFFERENCE. This chose `plain` — a set
@@ -498,7 +500,7 @@ describe('the setup dialog only promises what will happen', () => {
     mockPromptApi({ throws: true });
     renderDialog();
     fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
-    await waitFor(() => expect(plan().textContent).toMatch(/brings its own summary approach/i));
+    await waitFor(() => expect(plan().textContent).toMatch(/this set’s own summary approach/i));
     // and the dialog is still a dialog: an unhandled rejection in the effect
     // would have taken it down with it.
     expect(screen.getByRole('button', { name: /create engagement/i })).toBeTruthy();

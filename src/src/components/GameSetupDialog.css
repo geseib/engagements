@@ -35,6 +35,10 @@
                                                   the paper block needed
                                                   --primary-deep — dusk does not)
      success-text #6FD0A4 on the is-on tint       5.4:1
+     primary #F6A94C on card                      7.4:1  (the "Changed:" words on
+                                                  the Advanced line)
+     text    on the confirm foot #2A2E42         11.5:1  muted on it 6.5:1
+     text    on --danger-deep #B03A34             5.2:1  (the Discard button)
 
    Ladder: the laptop ladder (12/13/15/19/24) — this is a one-person surface at
    arm's length, not a stage. Inputs render at body (15px), never label.
@@ -65,6 +69,9 @@
      the option's card background, so it sits on the Names card's field:
      muted on it measures 4.8:1, text 8.9:1 (gameSetupPalette.test.js). */
   --gsd-row-sel: rgba(246, 169, 76, 0.10);
+  /* The discard question's ground (session-setup-redesign ss-dialog.css): a
+     step warmer and darker than the card, so the foot visibly changes mode. */
+  --gsd-confirm: #2A2E42;
   --gsd-t-floor: 12px;
   --gsd-t-label: 13px;
   --gsd-t-body: 15px;
@@ -86,8 +93,8 @@
 }
 
 .gsd h2 {
-  margin: 0 0 4px;
-  padding: 22px 26px 0;
+  margin: 0;
+  padding: 22px 64px 0 26px;
   font-family: var(--font-display, inherit);
   font-size: var(--gsd-t-title);
   font-weight: 800;
@@ -101,11 +108,24 @@
   padding: 14px 26px 22px;
 }
 
-/* ------------------------------------------------------------------- the X */
+/* ----------------------------------------------------------- the head + X
+   THE HEAD STICKS (session-setup-redesign 01/02). The card is the scroll
+   container (styles.css .new-game-dialog: max-height 90vh, overflow-y auto),
+   so the absolute X used to scroll away with the title. On an opaque ground,
+   or the fields scroll visibly through it. The X is positioned against the
+   head, which a sticky element is. */
+.gsd .gsd-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--gsd-card);
+  border-bottom: 1px solid var(--gsd-rule);
+  padding-bottom: 12px;
+}
 
 .gsd-close {
   position: absolute;
-  top: 12px;
+  top: 14px;
   right: 12px;
   width: 34px;
   height: 34px;
@@ -313,6 +333,12 @@
   background: rgba(246, 169, 76, 0.12);
 }
 
+/* FOUND BY RENDERING THE TWO SHEETS TOGETHER: styles.css colours
+   .category-name #333 directly, which beats the colour the chip hands down —
+   an UNSELECTED name read 1.15:1 on the card. Selected names were white by
+   another styles.css rule, which is why the selected chip looked fine. */
+.gsd .category-button .category-name { color: inherit; }
+
 .gsd .category-button .category-count {
   font-size: var(--gsd-t-floor);
   font-weight: 700;
@@ -368,17 +394,16 @@
 .gsd-opt-state {
   flex: none;
   font-family: var(--font-display, inherit);
-  font-size: 11px;
+  font-size: var(--gsd-t-floor);
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--gsd-muted);
 }
 
-/* 11px is under the 12px floor and stays DELIBERATELY: the ON/OFF word is a
-   state echo beside an 18px checkbox that already carries the fact — the same
-   glance-only dispensation the old sheet gave it. The floor protects things
-   read in runs; this is read never and glanced twice. */
+/* At the floor now. It was 11px on a glance-only dispensation inherited from
+   the paper sheet; the survey start dialog raised its captions to 12px and
+   session-setup-redesign raises these — one dialog family, one floor. */
 .gsd-opt.is-on .gsd-opt-state { color: var(--gsd-success-text); }
 
 .gsd-opt-does {
@@ -396,21 +421,6 @@
 }
 
 .gsd-opt-else b { color: var(--gsd-text); font-weight: 700; }
-
-/* THE ZERO-SETUP LINE. One sentence naming what Workie will do with nothing
-   configured, so the optional fields above read as options rather than
-   homework. Same set-apart treatment as .gsd-opt-limit — it is the other
-   sentence that qualifies the section — keyed green because it is a promise
-   that things already work, not a caveat. --gsd-success-text #6FD0A4 on the
-   dialog's #1B2942 surface is 7.6:1. */
-.gsd-workie-plan {
-  margin: 0;
-  font-size: var(--gsd-t-floor);
-  line-height: 1.5;
-  color: var(--gsd-success-text);
-  border-left: 3px solid var(--gsd-success);
-  padding-left: 11px;
-}
 
 /* NEVER OVERCLAIM. The limits sentence is set apart rather than tucked into
    the paragraph above, because it is the one line that qualifies the promise. */
@@ -444,8 +454,7 @@
 
 .gsd-pv h6 {
   margin: 0 0 7px;
-  font-size: 10.5px;   /* glance-only card caption; same dispensation as
-                          .gsd-opt-state, inherited from the old sheet */
+  font-size: var(--gsd-t-floor);
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -461,7 +470,7 @@
 
 .gsd-pv-who {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: var(--gsd-t-floor);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -477,9 +486,8 @@
 /* ------------------------------------------------------- a survey's Names
    07-start-survey.html's `.sv-card2` / `.sv-three` / `.sv-pvs`, cut into this
    scope: the option card above with its checkbox become a three-way choice.
-   The preview captions here sit AT the 12px floor — 07's own note raises the
-   shipped card's 10.5px/11px glance-only captions for this card, and the
-   older dispensation is not extended to new copy. */
+   Its preview captions sit at the 12px floor through the base .gsd-pv rules
+   above, which session-setup-redesign raised for every card. */
 .gsd-names {
   border: 1px solid var(--gsd-rule);
   border-radius: 12px;
@@ -573,11 +581,7 @@
   background: radial-gradient(circle, var(--gsd-primary) 0 45%, transparent 50%);
 }
 
-.gsd-names .gsd-pv h6 { font-size: var(--gsd-t-floor); }
-
 .gsd-names .gsd-pv-ans b { color: var(--gsd-text); font-weight: 700; }
-
-.gsd-names .gsd-pv-who { font-size: var(--gsd-t-floor); }
 
 /* Named: the one mode where the host's own view carries a name. Text colour,
    not amber — amber on the card is for the choice, not the person. */
@@ -594,16 +598,179 @@
 
 .gsd-names-lock b { color: var(--gsd-text); font-weight: 700; }
 
-/* ------------------------------------------------------------------ footer */
-
-.gsd .dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 8px;
-  padding-top: 16px;
+/* ------------------------------------------------------- ADVANCED
+   A native <details>, closed by default (session-setup-redesign 01/02). The
+   summary line IS the promise: it names every default in force, and a changed
+   value is named in amber in the same sentence, so closing the section never
+   hides a decision. */
+.gsd .gsd-adv {
+  margin: 10px 0 2px;
   border-top: 1px solid var(--gsd-rule);
 }
+
+.gsd .gsd-adv > summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 14px;
+  align-items: baseline;
+  padding: 14px 0 6px;
+  border-radius: 6px;
+}
+
+/* On a phone the sentence goes under the label rather than beside it. */
+@media (max-width: 480px) {
+  .gsd .gsd-adv > summary { grid-template-columns: minmax(0, 1fr); }
+}
+
+.gsd .gsd-adv > summary::-webkit-details-marker { display: none; }
+
+.gsd .gsd-adv > summary:focus-visible {
+  outline: 2px solid var(--gsd-primary);
+  outline-offset: 3px;
+}
+
+.gsd .gsd-adv-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gsd-text);
+  white-space: nowrap;
+}
+
+/* A drawn chevron: right when closed, down when open — a shape, not a colour. */
+.gsd .gsd-chev {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 2px;
+  border-right: 2px solid var(--gsd-muted);
+  border-bottom: 2px solid var(--gsd-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.gsd .gsd-adv[open] .gsd-chev { transform: rotate(45deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gsd .gsd-chev { transition: none; }
+}
+
+.gsd .gsd-adv-s {
+  margin: 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-adv-s b { color: var(--gsd-primary); font-weight: 700; }
+
+.gsd .gsd-adv-s .gsd-adv-open-only { display: none; }
+
+.gsd .gsd-adv[open] .gsd-adv-s .gsd-adv-open-only { display: inline; }
+
+.gsd .gsd-adv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 2px;
+}
+
+.gsd .gsd-adv-body .gsd-section { margin-top: 12px; }
+
+.gsd .gsd-adv-body .gsd-section:first-child {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 0;
+}
+
+/* ------------------------------------------------------------------ footer
+   THE FOOT STICKS, like the head, so Cancel is on screen whatever is open.
+   Opaque for the same reason. */
+
+.gsd .dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--gsd-card);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 0;
+  padding: 14px 26px 18px;
+  border-top: 1px solid var(--gsd-rule);
+}
+
+/* ON A PHONE the stuck foot must not eat the screen: the two buttons share one
+   row (styles.css gives each a 120px min-width, which forced three rows at
+   375px) and the padding tightens. */
+@media (max-width: 480px) {
+  .gsd .dialog-actions { padding: 10px 16px 12px; gap: 8px; }
+  .gsd .dialog-actions .btn-secondary,
+  .gsd .dialog-actions .btn-primary,
+  .gsd .dialog-actions .gsd-discard { min-width: 0; flex: 1 1 auto; }
+}
+
+/* Who can get in, stated at the moment the host commits. A flex BASIS, not
+   its text width: in a wrapping row an item is placed at its max-content size,
+   so a long note pushed the buttons onto a line of their own instead of
+   wrapping its own words. */
+.gsd .gsd-foot-note {
+  flex: 1 1 180px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin: 0 auto 0 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.4;
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-foot-note svg { flex: none; color: var(--gsd-secondary); }
+
+/* THE DISCARD QUESTION, inline in the foot — never a modal from a modal.
+   The rule on top turns danger-toned so the mode change is not colour alone:
+   the words change too. */
+.gsd .dialog-actions.is-confirm {
+  background: var(--gsd-confirm);
+  border-top-color: rgba(229, 100, 94, 0.55);
+}
+
+.gsd .gsd-confirm-t {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0 auto 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--gsd-text);
+}
+
+.gsd .gsd-confirm-t b { font-weight: 700; }
+
+/* Filled deep danger carrying the dialog's text: 5.2:1. --danger itself never
+   carries words (skill §1). */
+.gsd .gsd-discard {
+  min-width: 120px;
+  padding: 10px 18px;
+  border: 1px solid var(--danger-deep);
+  border-radius: 8px;
+  background: var(--danger-deep);
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gsd .gsd-discard:hover { filter: brightness(1.08); }
 
 .gsd .btn-primary,
 .gsd .btn-secondary {
@@ -638,7 +805,7 @@
    amber rule (it is a plan fact, not a fault); any other failure is the
    danger rule. Copy inherits --gsd-text; the link is the one accent. */
 .gsd .gsd-refusal {
-  margin: 0 0 12px;
+  margin: 0 26px 12px;
   padding: 10px 12px;
   border-left: 3px solid var(--danger-text);
   border-radius: 6px;

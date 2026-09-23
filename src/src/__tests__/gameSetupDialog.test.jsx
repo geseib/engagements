@@ -211,10 +211,13 @@ describe('the fields the mockup drops', () => {
   // rejects: building 20-setup.html as drawn. Details reaches participants,
   // AIContext reaches the Bedrock prompt, PersonaId picks Workie's voice —
   // silence in a mockup is not an instruction to delete.
-  test('keeps event details, AI context and Workie\'s voice', () => {
+  // "AI context" is now "Instructions for Workie" — the name says what the
+  // prompt does with it (personas.js: THE HOST'S INSTRUCTIONS, enforced in
+  // every section of the summary).
+  test('keeps event details, instructions for Workie and Workie\'s voice', () => {
     setup();
     expect(screen.getByLabelText(/event details/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/ai context/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/instructions for workie/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/workie's voice/i)).toBeInTheDocument();
   });
 });
@@ -274,7 +277,7 @@ describe('creating', () => {
   test('hands the page every value on the form', () => {
     const { props } = ready();
     fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'Pricing day.' } });
-    fireEvent.change(screen.getByLabelText(/ai context/i), { target: { value: 'Mid-market SaaS.' } });
+    fireEvent.change(screen.getByLabelText(/instructions for workie/i), { target: { value: 'Mid-market SaaS.' } });
     fireEvent.change(screen.getByLabelText(/workie's voice/i), { target: { value: 'coach' } });
     fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
 
@@ -307,10 +310,12 @@ describe('creating', () => {
     expect(props.onCreate.mock.calls[0][0].randomizeQuestions).toBe(false);
   });
 
-  test('Cancel leaves without creating', () => {
+  test('Cancel on a filled form asks first, and Discard leaves without creating', () => {
     const { props } = ready();
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
-    expect(props.onCancel).toHaveBeenCalled();
+    expect(props.onCancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
+    expect(props.onCancel).toHaveBeenCalledTimes(1);
     expect(props.onCreate).not.toHaveBeenCalled();
   });
 });
@@ -358,7 +363,7 @@ describe('edit mode', () => {
     setupEdit();
     expect(screen.getByLabelText(/event title/i).value).toBe('Pricing Workshop');
     expect(screen.getByLabelText(/event details/i).value).toBe('Pricing day.');
-    expect(screen.getByLabelText(/ai context/i).value).toBe('Mid-market SaaS.');
+    expect(screen.getByLabelText(/instructions for workie/i).value).toBe('Mid-market SaaS.');
     expect(screen.getByLabelText(/workie's voice/i).value).toBe('coach');
     expect(setSelect().value).toBe('platform:pricing');
     expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'true');
@@ -395,6 +400,37 @@ describe('edit mode', () => {
     expect(screen.getByText('Leadership').closest('button')).not.toBeDisabled();
     expect(screen.getByRole('checkbox', { name: /shuffle the question order/i })).toBeDisabled();
     expect(screen.getAllByText(/fixed once a session is created/i).length).toBeGreaterThan(0);
+  });
+
+  // rejects: the note that said "the format, question set and categories are
+  // fixed" directly above a category grid that is live and saves.
+  test('the edit note names only what is really fixed', () => {
+    setupEdit();
+    const note = screen.getByText(/format and question set are fixed once a session is created/i);
+    expect(note.textContent).not.toMatch(/categor/i);
+  });
+
+  /*
+    THE SESSION'S APPROACH SURVIVES AN EDIT. Two holes, both closed here: the
+    prefill never carried promptId (get-game.js), and the "a pick that no
+    longer suits the format" effect ran on MOUNT, before the prompt list had
+    loaded, and cleared whatever was seeded. Either one sent promptId: '' on
+    Save — and '' REMOVEs the session's PromptId.
+  */
+  test('a seeded summary approach is kept, shown and saved', async () => {
+    const { props } = setupEdit({ promptId: 'lp-behavioral' });
+    const picker = screen.getByLabelText(/summary approach/i);
+    await waitFor(() => expect(within(picker).getByRole('option', { name: /LP Behavioural/ })).toBeInTheDocument());
+    expect(picker.value).toBe('lp-behavioral');
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate.mock.calls[0][0].promptId).toBe('lp-behavioral');
+  });
+
+  test('an untouched edit with a seeded approach closes at once — nothing changed', async () => {
+    const { props } = setupEdit({ promptId: 'lp-behavioral' });
+    await waitFor(() => expect(screen.getByRole('option', { name: /LP Behavioural/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /close without saving/i }));
+    expect(props.onCancel).toHaveBeenCalledTimes(1);
   });
 
   test('a category toggled in edit mode flips locally and lands in the payload', () => {
@@ -512,21 +548,92 @@ describe('the title', () => {
   });
 });
 
-describe('the zero-setup plan line', () => {
-  // The owner's redesign brief: a session should work well with none of the
-  // optional Workie fields touched. The line states the plan; these pin that
-  // it tells the truth about WHERE the summary approach comes from.
-  test('absent until a set is picked — there is no plan to describe yet', () => {
+/*
+  THE ADVANCED SECTION — docs/design/session-setup-redesign 01/02/04 and PLAN
+  Phase 1. Title, format, set and categories stay in view; everything with a
+  safe default folds under a native <details>, closed on open. The line on the
+  fold names every default in force and any change first, in amber, so closing
+  it never hides a decision. It replaces the old green plan sentence.
+*/
+const advanced = () => document.querySelector('details.gsd-adv');
+const advLine = () => screen.getByTestId('gsd-adv-summary');
+
+describe('the Advanced section', () => {
+  test('is closed when the dialog opens, and the line names the defaults', () => {
     setup();
-    expect(screen.queryByTestId('gsd-workie-plan')).toBeNull();
+    expect(advanced()).not.toBeNull();
+    expect(advanced().open).toBe(false);
+    expect(advLine().textContent).toMatch(
+      /Using the defaults — answers anonymous until voting closes, questions shuffled; Workie adapts its voice and gives the standard Call & Answer summary\./);
   });
 
-  test('a set with no prompt of its own promises the format standard', () => {
+  test('opens from its summary, like any disclosure', () => {
+    setup();
+    fireEvent.click(within(advanced()).getByText(/^Advanced$/));
+    expect(advanced().open).toBe(true);
+  });
+
+  // rejects: a fold that hides the choices that define the session.
+  test('title, format, set and categories stay in the main view', () => {
     setup();
     fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
-    const plan = screen.getByTestId('gsd-workie-plan');
-    expect(plan.textContent).toMatch(/standard Call & Answer way/);
-    expect(plan.textContent).toMatch(/nothing above needs setting up/i);
+    for (const el of [
+      screen.getByLabelText(/event title/i),
+      pill('Call & Answer'),
+      setSelect(),
+      screen.getByText('Leadership').closest('button'),
+    ]) {
+      expect(advanced().contains(el)).toBe(false);
+    }
+  });
+
+  test('anonymity, shuffle, voice, approach, instructions and details are folded under it', () => {
+    setup();
+    for (const el of [
+      screen.getByRole('checkbox', { name: /anonymous responses/i }),
+      screen.getByRole('checkbox', { name: /shuffle the question order/i }),
+      screen.getByLabelText(/workie's voice/i),
+      screen.getByLabelText(/summary approach/i),
+      screen.getByLabelText(/instructions for workie/i),
+      screen.getByLabelText(/event details/i),
+    ]) {
+      expect(advanced().contains(el)).toBe(true);
+    }
+  });
+
+  test('its four groups, in order: Responses, Questions, Workie, What people see', () => {
+    setup();
+    const heads = Array.from(advanced().querySelectorAll('.gsd-section')).map((h) => h.textContent);
+    expect(heads).toEqual(['Responses', 'Questions', 'Workie', 'What people see when they join']);
+  });
+
+  // rejects: a "Responses" heading over nothing, which is what trivia showed.
+  test.each(['Trivia', 'Wavelength'])('has no Responses group for %s', (label) => {
+    setup();
+    fireEvent.click(pill(label));
+    const heads = Array.from(advanced().querySelectorAll('.gsd-section')).map((h) => h.textContent);
+    expect(heads).toEqual(['Questions', 'Workie', 'What people see when they join']);
+    expect(advLine().textContent).not.toMatch(/anonymous/);
+  });
+
+  test('a changed voice is named first, in amber, and the rest are still the defaults', () => {
+    setup();
+    fireEvent.change(screen.getByLabelText(/workie's voice/i), { target: { value: 'coach' } });
+    const lead = advLine().querySelector('b');
+    expect(lead.textContent).toBe('Changed: Workie speaks as Coach.');
+    expect(advLine().textContent).toMatch(/Otherwise the defaults — answers anonymous until voting closes, questions shuffled, the standard Call & Answer summary\./);
+  });
+
+  test('turning anonymity off is named as what it does', () => {
+    setup();
+    fireEvent.click(screen.getByRole('checkbox', { name: /anonymous responses/i }));
+    expect(advLine().querySelector('b').textContent).toBe('Changed: answers named from the start.');
+  });
+
+  test('the old plan sentence is gone — one statement of the plan, not two', () => {
+    setup();
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    expect(screen.queryByTestId('gsd-workie-plan')).toBeNull();
   });
 
   /*
@@ -559,7 +666,20 @@ describe('the zero-setup plan line', () => {
     expect(props.onCreate.mock.calls[1][0].promptId).toBe('trivia-vj');
   });
 
-  test('the plan sentence names the session\'s pick over the set\'s', async () => {
+  // A prompt belongs to one format: switching format drops the pick.
+  test('switching format drops an approach picked for the old one', async () => {
+    const { props } = setup({ eventTitle: 'Quiz night' });
+    fireEvent.click(pill('Trivia'));
+    const picker = screen.getByLabelText(/summary approach/i);
+    await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
+    fireEvent.change(picker, { target: { value: 'trivia-vj' } });
+    fireEvent.click(pill('Poll'));
+    fireEvent.change(setSelect(), { target: { value: 'platform:mood' } });
+    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
+    expect(props.onCreate.mock.calls[0][0].promptId).toBe('');
+  });
+
+  test('the line names the session\'s pick over the set\'s', async () => {
     setup({
       questionSets: [
         { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
@@ -571,20 +691,128 @@ describe('the zero-setup plan line', () => {
     // The default option says where the default comes from.
     expect(within(picker).getByRole('option', { name: /what the set says/i })).toBeInTheDocument();
     fireEvent.change(picker, { target: { value: 'lp-behavioral' } });
-    expect(screen.getByTestId('gsd-workie-plan').textContent).toMatch(/LP Behavioural/);
-    expect(screen.getByTestId('gsd-workie-plan').textContent).toMatch(/this session/i);
+    expect(advLine().querySelector('b').textContent).toMatch(/Workie sums up with “LP Behavioural”/);
   });
 
-  test('a set that names its own prompt is followed, and says so', () => {
+  test('a set that names its own prompt is followed, and the line says so', () => {
     setup({
       questionSets: [
         { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
       ],
     });
     fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
-    const plan = screen.getByTestId('gsd-workie-plan');
-    expect(plan.textContent).toMatch(/brings its own summary approach/i);
-    expect(plan.textContent).not.toMatch(/standard/i);
+    expect(advLine().textContent).toMatch(/follows this set’s own summary approach/i);
+    expect(advLine().textContent).not.toMatch(/standard/i);
+  });
+});
+
+/*
+  CLOSING — one requestClose() behind the X, Cancel and Escape (engage-design
+  hard rules 2 and 3). A clean form closes at once; with work in hand the foot
+  turns into an inline "Discard?" — never a second modal.
+*/
+describe('closing the dialog', () => {
+  const x = () => screen.getByRole('button', { name: /close without creating/i });
+  const cancel = () => screen.getByRole('button', { name: /^cancel$/i });
+  const escape = () => fireEvent.keyDown(document, { key: 'Escape' });
+  const dirty = () => {
+    const r = setup();
+    fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'Half a thought' } });
+    return r;
+  };
+
+  test.each([['the X', () => x()], ['Cancel', () => cancel()]])(
+    '%s on an untouched form closes at once', (_, button) => {
+      const { props } = setup();
+      fireEvent.click(button());
+      expect(props.onCancel).toHaveBeenCalledTimes(1);
+    });
+
+  test('Escape on an untouched form closes at once', () => {
+    const { props } = setup();
+    escape();
+    expect(props.onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([['the X', () => x()], ['Cancel', () => cancel()], ['Escape', null]])(
+    '%s on a form with work in hand asks, and does not close', (_, button) => {
+      const { props } = dirty();
+      if (button) fireEvent.click(button()); else escape();
+      expect(props.onCancel).not.toHaveBeenCalled();
+      expect(screen.getByRole('alertdialog', { name: /discard/i })).toBeInTheDocument();
+      // The safe answer takes the focus.
+      expect(screen.getByRole('button', { name: /keep editing/i })).toHaveFocus();
+    });
+
+  test('Keep editing puts the foot back and keeps the work', () => {
+    const { props } = dirty();
+    fireEvent.click(cancel());
+    fireEvent.click(screen.getByRole('button', { name: /keep editing/i }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByLabelText(/event details/i).value).toBe('Half a thought');
+    expect(props.onCancel).not.toHaveBeenCalled();
+  });
+
+  test('Escape while it asks is Keep editing, not a second close', () => {
+    const { props } = dirty();
+    fireEvent.click(cancel());
+    escape();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(props.onCancel).not.toHaveBeenCalled();
+  });
+
+  test('Discard closes', () => {
+    const { props } = dirty();
+    fireEvent.click(x());
+    fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
+    expect(props.onCancel).toHaveBeenCalledTimes(1);
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('an edit with a change asks too, and says the session stays as it was', () => {
+    const { props } = setup({
+      mode: 'edit',
+      initialValues: { title: 'Pricing Workshop', gameType: 'call-and-answer', questionSetId: 'pricing' },
+    });
+    fireEvent.change(screen.getByLabelText(/event title/i), { target: { value: 'Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: /close without saving/i }));
+    expect(props.onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog').textContent).toMatch(/stays as it was/i);
+  });
+});
+
+describe('the foot says who can get in', () => {
+  // True today: a created session sits in history until Start, and every
+  // phone is refused until it has started (session-gate.js).
+  test('creating: nobody can join until it is started', () => {
+    setup();
+    expect(screen.getByText(/nobody can join until you start it/i)).toBeInTheDocument();
+  });
+
+  // A survey is created AND opened by this press — the note would be false.
+  test('a survey, which opens on this press, makes no such claim', () => {
+    setup();
+    fireEvent.click(pill('Survey'));
+    expect(screen.queryByText(/nobody can join/i)).toBeNull();
+  });
+
+  test('editing: the session has not started', () => {
+    setup({ mode: 'edit', initialValues: { title: 'T', gameType: 'call-and-answer', questionSetId: 'pricing' } });
+    expect(screen.getByText(/has not started/i)).toBeInTheDocument();
+  });
+});
+
+describe('the category helper counts questions', () => {
+  test('none picked: all of them are in, with the total', () => {
+    setup({ activeCategoryIds: new Set() });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    expect(screen.getByText('None picked, so all 2 are in · 47 questions')).toBeInTheDocument();
+  });
+
+  test('some picked: how many of how many, and their questions', () => {
+    setup({ activeCategoryIds: new Set(['Leadership']) });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    expect(screen.getByText('1 of 2 categories · 20 questions')).toBeInTheDocument();
   });
 });
 

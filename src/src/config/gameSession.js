@@ -26,7 +26,7 @@
  *     those, and resetting them here would fight the caller.
  *   - the create dialog's own inputs — they are the form, not the game, and
  *     since the extraction they live inside components/GameSetupDialog.jsx,
- *     which unmounts when the dialog closes: engagementType, newGameSetKey,
+ *     which unmounts when the dialog closes: confirmingClose, engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
  *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names).

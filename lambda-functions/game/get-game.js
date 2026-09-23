@@ -141,6 +141,10 @@ exports.handler = async (event) => {
         // are already in baseGameInfo above. `accessCode` is deliberately NOT
         // re-added; the comment above records why it was removed.
         personaId: gameMetadata.Item.PersonaId || '',
+        // The summary approach, for the same prefill — and it has to be here:
+        // the edit's PUT sends promptId, '' REMOVEs it, so a prefill without
+        // it erased the approach chosen at create on any edit at all.
+        promptId: gameMetadata.Item.PromptId || '',
         // Same default-ON rule as anonymousUntilReveal above: only an explicit
         // false means "in written order" (schema-compliant-manager.js:106).
         randomizeQuestions: hostPreferences.randomizeQuestions !== false,

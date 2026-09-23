@@ -37,9 +37,8 @@
  *
  * PURE-PROPS, WITH ONE NAMED EXCEPTION. Every FORM field arrives as a prop and
  * leaves in one payload, and that stays. The single `authFetch` in this file
- * reads the prompt library so the plan sentence at the bottom of the screen can
- * check a claim instead of asserting one — evidence for a sentence, never a
- * value the form owns. Its reasoning is at the fetch itself.
+ * reads the prompt library so the Advanced line can check a claim instead of
+ * asserting one — evidence for a sentence, never a value the form owns. Its reasoning is at the fetch itself.
  *
  * WHERE A HOST MAKES A QUESTION SET, per the owner: *"the interface for entry to
  * this is create engagements."* This screen is the only place in the product
@@ -57,11 +56,28 @@
  * and they are merged by id for the picker. Merged, not replaced: the page's
  * copy carries what the public picker endpoint returns, and losing it would be
  * a regression for every set the host did not just touch.
+ *
+ * ADVANCED (docs/design/session-setup-redesign, PLAN Phase 1). The owner:
+ * "anonymous and random all belong under advance, same goes for workie and
+ * voice… this advance section should be an expanding click section." Title,
+ * format, set and categories stay in view — they decide WHAT gets asked.
+ * Everything with a safe default folds under a native <details>, closed on
+ * open: responses, question order, Workie, and what people see on joining.
+ * The line on the fold (config/setupDefaults.js) names every default in force
+ * and any change first, in amber, so closing it never hides a decision; it
+ * replaces the old green plan sentence.
+ *
+ * ONE WAY OUT, THREE DOORS. The X, Cancel and Escape all go through
+ * `requestClose()`: an untouched form closes at once, and a form with work in
+ * hand turns the foot into an inline "Discard?" — never a second modal. The
+ * head and foot stick, so both exits stay on screen however far the host has
+ * scrolled.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { NAMES_MODES, NAMES_DEFAULT, namesMode } from '../config/surveyNames';
+import { advancedSummary } from '../config/setupDefaults';
 import Icon from './Icon';
 import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
 import {
@@ -81,9 +97,10 @@ export default function GameSetupDialog({
     unstarted session: the page fetches `GET /games/{id}?role=host`, hands the
     result in as `initialValues`, and this component seeds its state from it.
     Still pure-props — no fetch enters this file — and in edit mode the fields
-    the backend's PUT whitelist refuses (format, question set, categories,
-    shuffle) are shown disabled with a note, not hidden, so the host can see
-    what the session is without being able to break its pinned rows.
+    the backend's PUT whitelist refuses (format, question set, shuffle) are
+    shown disabled with a note, not hidden, so the host can see what the
+    session is without being able to break its pinned rows. The category
+    subset is live here: it is mask state, and the PUT rewrites it.
   */
   mode = 'create',
   /**
@@ -153,7 +170,7 @@ export default function GameSetupDialog({
   const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
   const [newGamePersonaId, setNewGamePersonaId] = useState(isEdit ? (seed.personaId || '') : '');
   // The session's summary approach. '' means "what the set says, else the
-  // format standard" — the designed default, stated by the plan sentence.
+  // format standard" — the designed default, stated by the Advanced line.
   const [newGamePromptId, setNewGamePromptId] = useState(isEdit ? (seed.promptId || '') : '');
   const [randomizeQuestions, setRandomizeQuestions] = useState(
     isEdit ? seed.randomizeQuestions !== false : true
@@ -249,9 +266,9 @@ export default function GameSetupDialog({
     This component's header says it is pure-props, and that is still the rule
     for everything the FORM owns — every field above arrives as a prop and every
     value leaves in one payload. This is not a form field. It is the evidence
-    behind a CLAIM the dialog makes at the bottom of the screen ("this set
-    brings its own summary approach"), and that claim was being made from the
-    mere presence of a string.
+    behind a CLAIM the dialog makes on the Advanced line ("follows this set's
+    own summary approach"), and that claim was once made from the mere presence
+    of a string.
 
     Handing it down as a prop would mean the page fetching a list purely so this
     sentence could be honest, through a component that does not otherwise care
@@ -262,7 +279,7 @@ export default function GameSetupDialog({
     NULL IS "NOT KNOWN", AND IT IS NOT THE SAME AS EMPTY. A 403, a 500 or a
     request that could not be signed says nothing whatever about the set; a
     fetched list that does not contain the id says the id resolves to nothing.
-    Only the second is evidence, so a failure leaves this null and the sentence
+    Only the second is evidence, so a failure leaves this null and the line
     stays where it was. Answering an unreadable list with "the standard way"
     would be the same over-claim pointed in the other direction.
   */
@@ -304,12 +321,12 @@ export default function GameSetupDialog({
   const promptChoices = promptList.filter((p) => normalizeGameType(p.gameType) === normalizeGameType(engagementType)
     && p.summaryPromptStatus !== 'unusable'
     && p.promptType !== 'generation');
-  const chosenPrompt = promptChoices.find((p) => p.promptId === newGamePromptId) || null;
-  // A pick that no longer suits the format (the format changed under it) is
-  // dropped, so the payload never carries a trivia approach into a poll.
-  useEffect(() => {
-    if (newGamePromptId && !promptChoices.some((p) => p.promptId === newGamePromptId)) setNewGamePromptId('');
-  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
+  /*
+    A pick that no longer suits the format is dropped by chooseFormat, below —
+    not by an effect on the format. The effect this replaced also ran on MOUNT,
+    before the prompt list had loaded, so it cleared an edit's seeded approach
+    on open and Save then sent promptId: '', which REMOVEs it.
+  */
 
   // The page reloads the voices that suit this format. On mount too, so the
   // default format's list is the one the picker below shows.
@@ -325,8 +342,10 @@ export default function GameSetupDialog({
     // categories and custom instruction rather than leaving them stale.
     setNewGameSetKey('');
     onQuestionSetChange?.('', DEFAULT_SCOPE);
-    // A voice picked for the old format may not exist for the new one.
+    // A voice picked for the old format may not exist for the new one, and an
+    // approach is written for exactly one format.
     setNewGamePersonaId('');
+    setNewGamePromptId('');
   };
 
   const chooseSet = (key) => {
@@ -387,17 +406,100 @@ export default function GameSetupDialog({
     });
   };
 
+  /*
+    ── WHAT THE ADVANCED LINE SAYS ────────────────────────────────────────────
+    Every default in force, any change first. config/setupDefaults.js decides
+    what "default" means; the names come from the lists this dialog already
+    holds (the whole prompt list, so an edit's seeded approach is named even
+    when it is not one this format offers).
+  */
+  const summary = advancedSummary({
+    gameType: engagementType,
+    anonymousResponses,
+    randomizeQuestions,
+    names: namesChoice,
+    namesDefault: chosenSet && chosenSet.namesDefault,
+    personaId: newGamePersonaId,
+    promptId: newGamePromptId,
+    eventDetails,
+    aiContext: gameAiContext,
+    personas,
+    promptChoices: promptList,
+    setPromptWillBeUsed,
+  });
+
+  /*
+    ── WORK IN HAND ────────────────────────────────────────────────────────────
+    The form as a string, compared with the form as it opened. Categories count
+    only in edit mode, where this dialog owns them: in create mode the PAGE owns
+    the selection and can move it without the host touching anything, and the
+    grid only appears once a set is picked — which is already a change.
+  */
+  const snapshot = JSON.stringify([
+    title, engagementType, newGameSetKey, eventDetails, gameAiContext,
+    newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice,
+    isEdit ? Array.from(editCategoryNames).sort() : null,
+  ]);
+  const openedAs = useRef(snapshot);
+  const dirty = snapshot !== openedAs.current;
+
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const keepEditingRef = useRef(null);
+  const cancelRef = useRef(null);
+  const confirmShown = useRef(false);
+  // The safe answer takes the focus when the question appears, and Cancel
+  // gets it back when the question goes — a keyboard user is never dropped at
+  // the top of the document by a foot that re-rendered under them.
+  useEffect(() => {
+    if (confirmingClose) {
+      confirmShown.current = true;
+      keepEditingRef.current?.focus();
+    } else if (confirmShown.current) {
+      cancelRef.current?.focus();
+    }
+  }, [confirmingClose]);
+
+  /** The X and Cancel. Untouched: close. Work in hand: ask, in the foot. */
+  const requestClose = () => {
+    if (!dirty) { onCancel?.(); return; }
+    setConfirmingClose(true);
+  };
+  /** Escape — the Modal's one close path, since the backdrop is inert. While
+      the foot is asking, Escape is "Keep editing", not a second close. */
+  const escape = () => {
+    if (confirmingClose) setConfirmingClose(false);
+    else requestClose();
+  };
+
+  // "None picked, so all 4 are in · 12 questions" — the count of what will be
+  // asked, not just of the chips.
+  const pickedCategories = categories.filter((c) => selectedCats.has(c.name));
+  const questionsIn = (list) => {
+    const n = list.reduce((sum, c) => sum + (Number(c.questionCount) || 0), 0);
+    return `${n} question${n === 1 ? '' : 's'}`;
+  };
+
+  /*
+    THE FOOT SAYS WHO CAN GET IN, at the moment the host commits. True today:
+    a created session waits in history for Start, and every phone is refused
+    until it has started (game/session-gate.js). A survey is created AND opened
+    by this press, so the sentence would be false there and is not shown.
+  */
+  const footNote = isEdit
+    ? 'This session has not started, so nobody can join it yet.'
+    : (isSurvey ? null : 'Nobody can join until you start it.');
+
   return (
     <Modal
       overlayClassName="new-game-overlay"
       contentClassName="new-game-dialog gsd"
       labelledBy="gsd-heading"
-      onClose={() => onCancel?.()}
+      onClose={escape}
       /* THE BACKDROP STAYS INERT. This is not a dialog over a screen — the page
          early-returns it, so there is nothing behind the overlay to go back to,
          and a stray click on the margin would throw away a half-filled form
          with no way to recover it. Escape is offered because it is deliberate
-         in a way a mis-aimed click is not. */
+         in a way a mis-aimed click is not — and it asks first, like the X. */
       closeOnBackdrop={false}
       afterContent={showSetsDialog ? (
         /* A SIBLING OF THE DIALOG, INSIDE THE OVERLAY — not a child of it.
@@ -411,28 +513,28 @@ export default function GameSetupDialog({
         />
       ) : null}
     >
-      {/*
-        THE X — reported missing: "when editing, there is no 'x' to close the
-        box without saving changes." Same exit Escape already offers (the Modal
-        wires it), surfaced where people actually look for it. It DISCARDS, and
-        that is consistent: this dialog has never confirmed an Escape either,
-        and two exits with different rules would make one of them a trap.
-        The backdrop stays inert for the reason the Modal props state.
-      */}
-      <button
-        type="button"
-        className="gsd-close"
-        onClick={() => onCancel?.()}
-        aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
-        title={isEdit ? 'Close without saving changes' : 'Close without creating'}
-      >
-        ×
-      </button>
-      <h2 id="gsd-heading">
-        {isEdit
-          ? 'Edit session'
-          : (isFirstEngagement ? 'New engagement' : 'Start a new engagement')}
-      </h2>
+      {/* THE HEAD STICKS, so the X is on screen however far down the host is. */}
+      <div className="gsd-head">
+        <h2 id="gsd-heading">
+          {isEdit
+            ? 'Edit session'
+            : (isFirstEngagement ? 'New engagement' : 'Start a new engagement')}
+        </h2>
+        {/*
+          THE X — reported missing: "when editing, there is no 'x' to close the
+          box without saving changes." It goes through requestClose(), exactly
+          like Cancel and Escape: one rule for all three, so none is a trap.
+        */}
+        <button
+          type="button"
+          className="gsd-close"
+          onClick={requestClose}
+          aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
+          title={isEdit ? 'Close without saving changes' : 'Close without creating'}
+        >
+          ×
+        </button>
+      </div>
 
       <div className="dialog-content">
         <div className="form-group">
@@ -471,15 +573,15 @@ export default function GameSetupDialog({
               of one line. */}
           <p className="gsd-blurb">{gameTypeMeta(engagementType).blurb}</p>
           {isEdit && (
-            /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY. The format, set and
-               categories pin derived rows at create time (question-set version,
-               per-category order shuffles, category state); the PUT whitelist
-               refuses them, so offering live controls here would be a form
-               that lies about what saving does. Phase 2, if ever, rebuilds
-               those rows. */
+            /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY. The format and set
+               pin derived rows at create time (question-set version, the
+               per-category order shuffles); the PUT whitelist refuses them, so
+               live controls here would be a form that lies about what saving
+               does. It used to say "and categories" too — above a category
+               grid that is live and saves. */
             <small className="dialog-help-text">
-              The format, question set and categories are fixed once a session is
-              created. Create a new session to change them.
+              The format and question set are fixed once a session is created — create a
+              new session to change either.
             </small>
           )}
         </div>
@@ -588,308 +690,317 @@ export default function GameSetupDialog({
                       ? 'Select at least one category — a session with none has no questions to ask.'
                       : `${editCategoryNames.size} of ${categories.length} categories enabled`)
                     : (activeCategoryIds.size === 0
-                      ? 'No categories selected - all categories will be included'
-                      : `${activeCategoryIds.size} category(ies) selected`)}
+                      ? `None picked, so all ${categories.length} are in · ${questionsIn(categories)}`
+                      : `${pickedCategories.length} of ${categories.length} categories · ${questionsIn(pickedCategories)}`)}
                 </small>
               </div>
             </div>
           )}
         </div>
 
-        <h3 className="gsd-section">Responses</h3>
+        {/*
+          ── ADVANCED ─────────────────────────────────────────────────────────
+          A native <details>, closed on open. Its summary is the plan in one
+          sentence; the controls inside keep their shipped copy, grouped.
+          Always rendered, so a value set and folded away is still in the form.
+        */}
+        <details className="gsd-adv">
+          <summary>
+            <span className="gsd-adv-k"><i className="gsd-chev" aria-hidden="true" />Advanced</span>
+            <span className="gsd-adv-s" data-testid="gsd-adv-summary">
+              {summary.lead && <b>{summary.lead}</b>}
+              {summary.lead && summary.rest ? ' ' : ''}
+              {summary.rest}
+              {!summary.lead && <span className="gsd-adv-open-only"> Change any of them here.</span>}
+            </span>
+          </summary>
 
-        {/* Checked against this dialog's own type picker, not the live game's
-            `currentGameType`, which still names whatever is on screen until
-            the new game is created. */}
-        {anonymityApplies(engagementType) && (
-          <div className={`gsd-opt${anonymousResponses ? ' is-on' : ''}`}>
-            <label className="gsd-opt-head">
-              <input
-                type="checkbox"
-                checked={anonymousResponses}
-                onChange={(e) => setAnonymousResponses(e.target.checked)}
-              />
-              <span className="gsd-opt-name">Anonymous responses</span>
-              {/* aria-hidden: the checkbox already announces its own state,
-                  and without this the browser folds "On" into the control's
-                  accessible name and calls it "on". */}
-              <span className="gsd-opt-state" aria-hidden="true">{anonymousResponses ? 'On' : 'Off'}</span>
-            </label>
+          <div className="gsd-adv-body">
+            {/* Checked against this dialog's own type picker, not the live
+                game's `currentGameType`, which still names whatever is on
+                screen until the new game is created. A survey's Names takes
+                the anonymity card's place. */}
+            {(anonymityApplies(engagementType) || isSurvey) && (
+              <h3 className="gsd-section">Responses</h3>
+            )}
 
-            {/* KEEP THIS SENTENCE. The mockup says "Until you reveal them",
-                which tells the host they hold a switch they do not hold:
-                get-results.js:207-217 sets AuthorsRevealed UNCONDITIONALLY on
-                entering RESULTS, and /reveal-authors is only an *early*
-                reveal. A host who read the mockup's line and then closed
-                voting to show the tally would have attributed every answer
-                believing they had not. */}
-            <p className="gsd-opt-does">
-              Until voting closes, nobody sees who wrote which answer — not the room,
-              not you. The room votes on the answers, not on the people. You can also
-              reveal the names earlier if you want to.
-            </p>
+            {anonymityApplies(engagementType) && (
+              <div className={`gsd-opt${anonymousResponses ? ' is-on' : ''}`}>
+                <label className="gsd-opt-head">
+                  <input
+                    type="checkbox"
+                    checked={anonymousResponses}
+                    onChange={(e) => setAnonymousResponses(e.target.checked)}
+                  />
+                  <span className="gsd-opt-name">Anonymous responses</span>
+                  {/* aria-hidden: the checkbox already announces its own state,
+                      and without this the browser folds "On" into the control's
+                      accessible name and calls it "on". */}
+                  <span className="gsd-opt-state" aria-hidden="true">{anonymousResponses ? 'On' : 'Off'}</span>
+                </label>
 
-            <div className="gsd-preview">
-              <div className="gsd-pv">
-                <h6>While voting</h6>
-                <p className="gsd-pv-ans">&ldquo;Freeze all discretionary discounting for thirty days&hellip;&rdquo;</p>
-                <p className="gsd-pv-who">Response 1</p>
+                {/* KEEP THIS SENTENCE. The mockup says "Until you reveal them",
+                    which tells the host they hold a switch they do not hold:
+                    get-results.js:207-217 sets AuthorsRevealed UNCONDITIONALLY on
+                    entering RESULTS, and /reveal-authors is only an *early*
+                    reveal. A host who read the mockup's line and then closed
+                    voting to show the tally would have attributed every answer
+                    believing they had not. */}
+                <p className="gsd-opt-does">
+                  Until voting closes, nobody sees who wrote which answer — not the room,
+                  not you. The room votes on the answers, not on the people. You can also
+                  reveal the names earlier if you want to.
+                </p>
+
+                <div className="gsd-preview">
+                  <div className="gsd-pv">
+                    <h6>While voting</h6>
+                    <p className="gsd-pv-ans">&ldquo;Freeze all discretionary discounting for thirty days&hellip;&rdquo;</p>
+                    <p className="gsd-pv-who">Response 1</p>
+                  </div>
+                  <div className="gsd-pv">
+                    <h6>After voting closes</h6>
+                    <p className="gsd-pv-ans">&ldquo;Freeze all discretionary discounting for thirty days&hellip;&rdquo;</p>
+                    <p className="gsd-pv-who named">Priya Raghavan &middot; +180 pts</p>
+                  </div>
+                </div>
+
+                <p className="gsd-opt-else">
+                  {anonymousResponses
+                    ? <><b>Turn it off</b> and every answer is labelled with its author from the moment voting opens.</>
+                    : <><b>It is off</b> — every answer is labelled with its author from the moment voting opens.</>}
+                </p>
+
+                {/* Never overclaim. Shipped verbatim. */}
+                <p className="gsd-opt-limit">
+                  This hides names, not identities. In a small group, people may still
+                  recognise each other’s answers.
+                </p>
               </div>
-              <div className="gsd-pv">
-                <h6>After voting closes</h6>
-                <p className="gsd-pv-ans">&ldquo;Freeze all discretionary discounting for thirty days&hellip;&rdquo;</p>
-                <p className="gsd-pv-who named">Priya Raghavan &middot; +180 pts</p>
-              </div>
-            </div>
+            )}
 
-            <p className="gsd-opt-else">
-              {anonymousResponses
-                ? <><b>Turn it off</b> and every answer is labelled with its author from the moment voting opens.</>
-                : <><b>It is off</b> — every answer is labelled with its author from the moment voting opens.</>}
-            </p>
+            {isSurvey && (
+              /*
+                THE NAMES CARD — 07-start-survey.html, which draws it as "the
+                shipped card, one control wider": the option card above, with its
+                checkbox become a three-way choice. Every sentence is the value's
+                own, from config/surveyNames.js — the chooser line, what it does,
+                the phone's promise — so what the host chose and what the room is
+                told cannot drift.
 
-            {/* Never overclaim. Shipped verbatim. */}
-            <p className="gsd-opt-limit">
-              This hides names, not identities. In a small group, people may still
-              recognise each other’s answers.
-            </p>
-          </div>
-        )}
-
-        {isSurvey && (
-          /*
-            THE NAMES CARD — 07-start-survey.html, which draws it as "the
-            shipped card, one control wider": the option card above, with its
-            checkbox become a three-way choice. Every sentence is the value's
-            own, from config/surveyNames.js — the chooser line, what it does,
-            the phone's promise — so what the host chose and what the room is
-            told cannot drift.
-
-            "What you get" is a SAMPLE of the host's view in each mode, drawn
-            from 07's own example and 33-people's statuses. It shows the shape
-            of what comes back, not this survey's answers.
-          */
-          <>
-            <div className="gsd-names">
-              <div className="gsd-names-hd">
-                <span className="gsd-opt-name">Names</span>
-                <span className="gsd-names-st" aria-hidden="true">{names.label}</span>
-              </div>
-              <div className="gsd-three" role="radiogroup" aria-label="Names">
-                {NAMES_MODES.map((mode, i) => {
-                  const on = mode.id === names.id;
-                  return (
-                    <button
-                      key={mode.id}
-                      ref={(el) => { namesRefs.current[i] = el; }}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      tabIndex={on ? 0 : -1}
-                      className="gsd-three-opt"
-                      onClick={() => pickNames(mode.id)}
-                      onKeyDown={(event) => onNamesKey(event, i)}
-                    >
-                      <b><i aria-hidden="true" />{mode.label}</b>
-                      <span>{mode.hostLine}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="gsd-opt-does">{names.does}</p>
-              <div className="gsd-preview">
-                <div className="gsd-pv">
-                  <h6>What their phone says</h6>
-                  <p className="gsd-pv-ans" data-testid="names-phone-preview">
-                    {names.phoneLead && <b>{names.phoneLead}</b>}
-                    {names.phoneLead ? ' ' : ''}
-                    {names.phoneLine}
+                "What you get" is a SAMPLE of the host's view in each mode, drawn
+                from 07's own example and 33-people's statuses. It shows the shape
+                of what comes back, not this survey's answers.
+              */
+              <>
+                <div className="gsd-names">
+                  <div className="gsd-names-hd">
+                    <span className="gsd-opt-name">Names</span>
+                    <span className="gsd-names-st" aria-hidden="true">{names.label}</span>
+                  </div>
+                  <div className="gsd-three" role="radiogroup" aria-label="Names">
+                    {NAMES_MODES.map((mode, i) => {
+                      const on = mode.id === names.id;
+                      return (
+                        <button
+                          key={mode.id}
+                          ref={(el) => { namesRefs.current[i] = el; }}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          tabIndex={on ? 0 : -1}
+                          className="gsd-three-opt"
+                          onClick={() => pickNames(mode.id)}
+                          onKeyDown={(event) => onNamesKey(event, i)}
+                        >
+                          <b><i aria-hidden="true" />{mode.label}</b>
+                          <span>{mode.hostLine}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="gsd-opt-does">{names.does}</p>
+                  <div className="gsd-preview">
+                    <div className="gsd-pv">
+                      <h6>What their phone says</h6>
+                      <p className="gsd-pv-ans" data-testid="names-phone-preview">
+                        {names.phoneLead && <b>{names.phoneLead}</b>}
+                        {names.phoneLead ? ' ' : ''}
+                        {names.phoneLine}
+                      </p>
+                    </div>
+                    <div className="gsd-pv">
+                      <h6>What you get</h6>
+                      <p className="gsd-pv-ans">&ldquo;Seeing the console actually run beat every slide about it.&rdquo;</p>
+                      {names.id === 'named' ? (
+                        <p className="gsd-pv-who named">Priya Raghavan</p>
+                      ) : (
+                        <p className="gsd-pv-who">Response 12 &middot; no name</p>
+                      )}
+                      {names.id === 'finished' && (
+                        <>
+                          <p className="gsd-pv-ans gsd-pv-gap">Priya Raghavan &middot; finished 2:12pm</p>
+                          <p className="gsd-pv-who">People list &middot; no answers</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {/* Never overclaim. The shipped card's own sentence, verbatim. */}
+                  <p className="gsd-opt-limit">
+                    This hides names, not identities. In a small group, people may still
+                    recognise each other’s answers.
                   </p>
                 </div>
-                <div className="gsd-pv">
-                  <h6>What you get</h6>
-                  <p className="gsd-pv-ans">&ldquo;Seeing the console actually run beat every slide about it.&rdquo;</p>
-                  {names.id === 'named' ? (
-                    <p className="gsd-pv-who named">Priya Raghavan</p>
-                  ) : (
-                    <p className="gsd-pv-who">Response 12 &middot; no name</p>
+                <p className="gsd-names-lock">
+                  <Icon name="Lock" weight="bold" size={13} color="currentColor" />
+                  {' Fixed once the survey opens — people answer on the promise their phone made them.'}
+                  {/* Only when the set really carries one: pointing the host at a
+                      set-level default that does not exist would be a lie. */}
+                  {setNamesDefault && (
+                    <>{' This set’s default is '}<b>{setNamesDefault.label}</b>.</>
                   )}
-                  {names.id === 'finished' && (
-                    <>
-                      <p className="gsd-pv-ans gsd-pv-gap">Priya Raghavan &middot; finished 2:12pm</p>
-                      <p className="gsd-pv-who">People list &middot; no answers</p>
-                    </>
+                </p>
+              </>
+            )}
+
+            {!isSurvey && (
+              <>
+                <h3 className="gsd-section">Questions</h3>
+                <div className={`gsd-opt${randomizeQuestions ? ' is-on' : ''}`}>
+                  <label className="gsd-opt-head">
+                    {/* Disabled in edit mode: the per-category order rows were
+                        shuffled (or not) when the session was created, so the PUT
+                        whitelist refuses this flag — a live checkbox here would
+                        toggle something that silently fails to save. */}
+                    <input
+                      type="checkbox"
+                      checked={randomizeQuestions}
+                      disabled={isEdit}
+                      onChange={(e) => setRandomizeQuestions(e.target.checked)}
+                    />
+                    <span className="gsd-opt-name">Shuffle the question order</span>
+                    <span className="gsd-opt-state" aria-hidden="true">{randomizeQuestions ? 'On' : 'Off'}</span>
+                  </label>
+                  {/* Both branches, because the off state is the one nobody guesses. */}
+                  <p className="gsd-opt-does">
+                    {randomizeQuestions
+                      ? 'Questions are drawn at random from the categories you picked, rather than in the order they were written.'
+                      : 'Questions are asked in order, completing each category before moving to the next.'}
+                  </p>
+                  {isEdit && (
+                    <p className="gsd-opt-limit">
+                      Fixed once the session is created — the question order was drawn when
+                      this session was set up.
+                    </p>
                   )}
                 </div>
-              </div>
-              {/* Never overclaim. The shipped card's own sentence, verbatim. */}
-              <p className="gsd-opt-limit">
-                This hides names, not identities. In a small group, people may still
-                recognise each other’s answers.
-              </p>
+              </>
+            )}
+
+            <h3 className="gsd-section">Workie</h3>
+
+            <div className="form-group">
+              <label htmlFor="gsd-persona">Workie's voice</label>
+              <select
+                id="gsd-persona"
+                value={newGamePersonaId}
+                onChange={(e) => setNewGamePersonaId(e.target.value)}
+                className="dialog-select"
+              >
+                {/* Adapting to the session is the designed default, not a
+                    fallback — a fixed persona is what made Workie refuse a
+                    holiday icebreaker as "insufficient for business analysis". */}
+                <option value="">Adapt to the session (recommended)</option>
+                {personas.map((persona) => (
+                  <option key={persona.personaId} value={persona.personaId}>
+                    {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
+                  </option>
+                ))}
+              </select>
+              <small className="dialog-help-text">
+                {newGamePersonaId
+                  ? 'Workie keeps this voice for the whole session. You can change it between rounds.'
+                  : 'Workie reads the room and picks its own register — playful for an icebreaker, analytical for a retro.'}
+              </small>
             </div>
-            <p className="gsd-names-lock">
-              <Icon name="Lock" weight="bold" size={13} color="currentColor" />
-              {' Fixed once the survey opens — people answer on the promise their phone made them.'}
-              {/* Only when the set really carries one: pointing the host at a
-                  set-level default that does not exist would be a lie. */}
-              {setNamesDefault && (
-                <>{' This set’s default is '}<b>{setNamesDefault.label}</b>.</>
-              )}
-            </p>
-          </>
-        )}
 
-        {!isSurvey && (
-        <div className={`gsd-opt${randomizeQuestions ? ' is-on' : ''}`}>
-          <label className="gsd-opt-head">
-            {/* Disabled in edit mode: the per-category order rows were
-                shuffled (or not) when the session was created, so the PUT
-                whitelist refuses this flag — a live checkbox here would
-                toggle something that silently fails to save. */}
-            <input
-              type="checkbox"
-              checked={randomizeQuestions}
-              disabled={isEdit}
-              onChange={(e) => setRandomizeQuestions(e.target.checked)}
-            />
-            <span className="gsd-opt-name">Shuffle the question order</span>
-            <span className="gsd-opt-state" aria-hidden="true">{randomizeQuestions ? 'On' : 'Off'}</span>
-          </label>
-          {/* Both branches, because the off state is the one nobody guesses. */}
-          <p className="gsd-opt-does">
-            {randomizeQuestions
-              ? 'Questions are drawn at random from the categories you picked, rather than in the order they were written.'
-              : 'Questions are asked in order, completing each category before moving to the next.'}
-          </p>
-          {isEdit && (
-            <p className="gsd-opt-limit">
-              Fixed once the session is created — the question order was drawn when
-              this session was set up.
-            </p>
-          )}
-        </div>
-        )}
+            {/*
+              THE SESSION'S SUMMARY APPROACH — the owner (2026-09-22): "how do I
+              select the right prompt for the results screen ... and how can we
+              change it during the session setup". Beside the voice, filtered to
+              the format, and defaulting to what the Advanced line promises: the
+              set's own approach if it names one, else the format standard. The
+              pick lands on the game record (PromptId) and beats the set's.
+            */}
+            <div className="form-group">
+              <label htmlFor="gsd-prompt">Summary approach</label>
+              <select
+                id="gsd-prompt"
+                value={newGamePromptId}
+                onChange={(e) => setNewGamePromptId(e.target.value)}
+                className="dialog-select"
+              >
+                <option value="">
+                  {setPromptWillBeUsed
+                    ? 'What the set says (recommended)'
+                    : `The standard ${gameTypeMeta(engagementType).label} way (recommended)`}
+                </option>
+                {promptChoices.map((prompt) => (
+                  <option key={prompt.promptId} value={prompt.promptId}>
+                    {prompt.name}{prompt.category ? ` (${prompt.category})` : ''}
+                  </option>
+                ))}
+              </select>
+              <small className="dialog-help-text">
+                How Workie sums up each round on the results screen — the shape and content, where the voice is only the register. You can change it mid-session; it applies from the next round.
+              </small>
+            </div>
 
-        <h3 className="gsd-section">Context for Workie</h3>
 
-        <div className="form-group">
-          <label htmlFor="gsd-details">Event details (optional)</label>
-          <textarea
-            id="gsd-details"
-            value={eventDetails}
-            onChange={(e) => setEventDetails(e.target.value)}
-            placeholder="What this session is for, in a sentence or two."
-            className="dialog-textarea"
-            rows="2"
-            maxLength="300"
-          />
-          <small className="dialog-help-text">
-            Shown to participants on the screen they land on after joining.
-            {' '}{eventDetails.length}/300 characters
-          </small>
-        </div>
+            {/*
+              "AI CONTEXT", RENAMED FOR WHAT IT DOES. The prompt carries it as
+              THE HOST'S INSTRUCTIONS and demands it in every section of the
+              summary (personas.js) — rules, not background. Facts about the
+              session are Event details' job, and the prompt reads those too.
+            */}
+            <div className="form-group">
+              <label htmlFor="gsd-ai-context">Instructions for Workie</label>
+              <textarea
+                id="gsd-ai-context"
+                value={gameAiContext}
+                onChange={(e) => setGameAiContext(e.target.value)}
+                placeholder="Anything Workie must always do — e.g. ‘end every round with one question for the ops leads’"
+                className="dialog-textarea"
+                rows="2"
+                maxLength="500"
+              />
+              <small className="dialog-help-text">
+                Workie follows these in every round’s summary. Facts about the session belong in
+                Event details, below.
+                {' '}{gameAiContext.length}/500 characters
+              </small>
+            </div>
 
-        <div className="form-group">
-          <label htmlFor="gsd-ai-context">AI context (optional)</label>
-          <textarea
-            id="gsd-ai-context"
-            value={gameAiContext}
-            onChange={(e) => setGameAiContext(e.target.value)}
-            placeholder="Your project, team or goals — e.g. 'Team working on improving collaboration'"
-            className="dialog-textarea"
-            rows="3"
-            maxLength="500"
-          />
-          <small className="dialog-help-text">
-            This helps AI provide more contextual analysis during the session.
-            {' '}{gameAiContext.length}/500 characters
-          </small>
-        </div>
+            <h3 className="gsd-section">What people see when they join</h3>
 
-        <div className="form-group">
-          <label htmlFor="gsd-persona">Workie's voice (optional)</label>
-          <select
-            id="gsd-persona"
-            value={newGamePersonaId}
-            onChange={(e) => setNewGamePersonaId(e.target.value)}
-            className="dialog-select"
-          >
-            {/* Adapting to the session is the designed default, not a
-                fallback — a fixed persona is what made Workie refuse a
-                holiday icebreaker as "insufficient for business analysis". */}
-            <option value="">Adapt to the session (recommended)</option>
-            {personas.map((persona) => (
-              <option key={persona.personaId} value={persona.personaId}>
-                {persona.name}{persona.tagline ? ` — ${persona.tagline}` : ''}
-              </option>
-            ))}
-          </select>
-          <small className="dialog-help-text">
-            {newGamePersonaId
-              ? 'Workie will keep this voice for the whole session. You can change it mid-game.'
-              : 'Workie reads the room and picks its own register — playful for an icebreaker, analytical for a retro.'}
-          </small>
-        </div>
-
-        {/*
-          THE ZERO-SETUP PROMISE, STATED. Everything above this line is
-          optional, and the owner's redesign brief says the session should
-          work well with none of it touched — but a screen of optional fields
-          reads as homework unless it says so. One sentence names the plan:
-          the summary approach comes from the set when the set names one, and
-          from the format's standard otherwise, with no third state where the
-          host must go configure a prompt somewhere first.
-
-          AND IT ONLY PROMISES WHAT WILL HAPPEN. This read `?.promptId` — the
-          presence of a string — and said the set's approach would be followed.
-          A set can carry an id that resolves to nothing (an org's prompt
-          survived a copy into another org until Task 2; an id can simply be
-          old), and `get-ai-summary.js` then falls back to the format default
-          having said the opposite here. `setPromptWillBeUsed` is the same
-          question asked of the library rather than of the string.
-        */}
-        {/*
-          THE SESSION'S SUMMARY APPROACH — the owner (2026-09-22): "how do I
-          select the right prompt for the results screen ... and how can we
-          change it during the session setup". Beside the voice, filtered to
-          the format, and defaulting to what the plan sentence already promised:
-          the set's own approach if it names one, else the format standard.
-          The pick lands on the game record (PromptId) and beats the set's.
-        */}
-        <div className="form-group">
-          <label htmlFor="gsd-prompt">Summary approach (optional)</label>
-          <select
-            id="gsd-prompt"
-            value={newGamePromptId}
-            onChange={(e) => setNewGamePromptId(e.target.value)}
-            className="dialog-select"
-          >
-            <option value="">
-              {setPromptWillBeUsed
-                ? 'What the set says (recommended)'
-                : `The standard ${gameTypeMeta(engagementType).label} way (recommended)`}
-            </option>
-            {promptChoices.map((prompt) => (
-              <option key={prompt.promptId} value={prompt.promptId}>
-                {prompt.name}{prompt.category ? ` (${prompt.category})` : ''}
-              </option>
-            ))}
-          </select>
-          <small className="dialog-help-text">
-            How Workie sums up each round on the results screen — the shape and content, where the voice is only the register. You can change it mid-session; it applies from the next round.
-          </small>
-        </div>
-
-        {newGameSetId && (
-          <p className="gsd-workie-plan" data-testid="gsd-workie-plan">
-            {chosenPrompt
-              ? `Workie follows "${chosenPrompt.name}" for this session — chosen here, ahead of anything the set says.`
-              : setPromptWillBeUsed
-                ? 'This question set brings its own summary approach — Workie follows it. Everything above is optional.'
-                : `Workie summarizes each round the standard ${gameTypeMeta(engagementType).label} way — nothing above needs setting up.`}
-          </p>
-        )}
+            <div className="form-group">
+              <label htmlFor="gsd-details">Event details</label>
+              <textarea
+                id="gsd-details"
+                value={eventDetails}
+                onChange={(e) => setEventDetails(e.target.value)}
+                placeholder="What this session is for, in a sentence or two."
+                className="dialog-textarea"
+                rows="2"
+                maxLength="300"
+              />
+              <small className="dialog-help-text">
+                Shown to people on the screen they land on after joining. Workie reads it too.
+                {' '}{eventDetails.length}/300 characters
+              </small>
+            </div>
+          </div>
+        </details>
       </div>
 
       {/* A PLAN LIMIT is the shared notice (22-plan-limit-notice.html): what
@@ -904,19 +1015,50 @@ export default function GameSetupDialog({
         </div>
       ) : null}
 
-      <div className="dialog-actions">
-        <button type="button" className="btn-secondary" onClick={() => onCancel?.()}>
-          Cancel
-        </button>
-        {/* The guard the mockup drops. Without a set the game has no
-            questions; without a title the live screen has nothing to name. */}
-        {/* A survey is created AND opened by this press (the page posts
-            /start straight after the create), so the button says what it
-            does: phones can answer the moment it lands. */}
-        <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate}>
-          {isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement')}
-        </button>
-      </div>
+      {/*
+        THE FOOT STICKS, like the head. With work in hand, the X, Cancel and
+        Escape turn it into the question — inline, never a second modal.
+      */}
+      {confirmingClose ? (
+        <div className="dialog-actions is-confirm" role="alertdialog" aria-labelledby="gsd-confirm-t">
+          <p className="gsd-confirm-t" id="gsd-confirm-t">
+            {isEdit
+              ? <><b>Discard your changes?</b> The session stays as it was.</>
+              : <><b>Discard this engagement?</b> Nothing has been created yet, and what you filled in is lost.</>}
+          </p>
+          <button
+            type="button"
+            className="btn-secondary"
+            ref={keepEditingRef}
+            onClick={() => setConfirmingClose(false)}
+          >
+            Keep editing
+          </button>
+          <button type="button" className="gsd-discard" onClick={() => onCancel?.()}>
+            Discard
+          </button>
+        </div>
+      ) : (
+        <div className="dialog-actions">
+          {footNote && (
+            <p className="gsd-foot-note">
+              <Icon name="Lock" weight="bold" size={14} color="currentColor" />
+              <span>{footNote}</span>
+            </p>
+          )}
+          <button type="button" className="btn-secondary" ref={cancelRef} onClick={requestClose}>
+            Cancel
+          </button>
+          {/* The guard the mockup drops. Without a set the game has no
+              questions; without a title the live screen has nothing to name. */}
+          {/* A survey is created AND opened by this press (the page posts
+              /start straight after the create), so the button says what it
+              does: phones can answer the moment it lands. */}
+          <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate}>
+            {isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement')}
+          </button>
+        </div>
+      )}
     </Modal>
   );
 }

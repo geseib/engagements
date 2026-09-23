@@ -161,7 +161,7 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 | Host front door | `components/WelcomeScreen.{jsx,css}` | ok `.wel-` | ok | ok `:88` | FAIL⁸ | ok | — | ok | ok `welcomeScreen.test.jsx` |
 | Host stage (lobby/ask/vote/results/ended) | `components/stage/*`, `styles/stage.css` | ok | ok | ok | ok (profiles) | ok | — | ok (lifted model) | ok `stageShell`, `stageCompletion`, `displayProfile` |
 | Host page chrome + overlays | `GameHostPage.jsx` + `styles.css` | FAIL⁴ | FAIL⁴ | part | part | FAIL⁷ | FAIL⁷ | part | part — call-site tests only, cannot mount |
-| Create engagement | `components/GameSetupDialog.jsx` + `styles.css:2643` | part | FAIL | part | part | ok (Modal) | **FAIL⁹** | part | ok `gameSetupDialog.test.jsx` |
+| Create engagement | `components/GameSetupDialog.{jsx,css}` | ok `.gsd` | ok `--gsd-*` | ok — scoped tokens (Modal owns the root) | ok — 12px floor, no dispensations | ok (Modal) | ok⁹ | ok | ok `gameSetupDialog`, `gameSetupPalette`, `setupDefaults` |
 | Quickstart menu | `components/QuickstartMenu.jsx` + `styles.css` | part | part | ok `:195` | part | FAIL⁷ | part | n/a | ok `quickstartMenu.test.jsx` |
 | Host question-set shelf | `components/HostQuestionSetsDialog.jsx` | ok `.qsets--onlight` | ok | ok | ok | ok | ok `:193` + footer | ok | ok `hostQuestionSetsPalette` |
 | Host remote (phone) | `HostRemote.{jsx,css}`, `RemoteCategoryList`, `RemoteQuestionBrowser`, `RemoteSessionPanel` | ok `.hr-/.hrc-/.hrq-/.hrs-` | ok | ok `HostRemote.jsx`³⁰ | ok — one phone ladder, **not** a stage profile³¹ | ok | ok³² | part³⁰ — no palette test; every pairing is a measured `styles.css` token | ok `hostRemote`, `hostRemoteScreen`, `hostRemoteBrowser`, `hostRemoteSession` |
@@ -233,9 +233,12 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
    `GameHostPage.jsx:5245`, `GameReport.jsx:281`, `GameReport.jsx:341`. **Twenty-one.**
 8. `components/WelcomeScreen.css:140-142` — `.wel-badge` at `font-size: 11px`, below the
    12px floor. Same class of defect at `components/RoundKindPicker.css:166`.
-9. `components/GameSetupDialog.jsx:150-160` is `closeOnBackdrop={false}` on a long form
-   whose only exit is the Cancel at `:424-425`. **No X.** Named in commit `4fd425d6` as
-   the weakest remaining case, and unchanged since.
+9. **Fixed 2026-09-23** (session-setup-redesign Phase 1). It was `closeOnBackdrop={false}`
+   on a long form whose only exit was a Cancel below the last field. Now: an X in a sticky
+   head, Cancel in a sticky foot, and Escape, all through one `requestClose()` — an
+   untouched form closes at once, one with work in hand turns the foot into an inline
+   "Discard?" (never a second modal). The backdrop stays inert on purpose; the dialog is an
+   early return, so there is nothing behind it to go back to.
 10. `styles.css:10012-10060` (`.qs-editor`, `.qs-panel`, `.qs-empty` + ~16 more) is the
     paper-theme block that collided with the first `.qs`-scoped cut of the question sets
     screen. Still paper, still in the monolith.
