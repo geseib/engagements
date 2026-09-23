@@ -37,6 +37,14 @@ check('normalizeNames folds case and falls back to the default', () => {
   assert.strictEqual(server.normalizeNames('everyone'), 'anonymous');
   assert.strictEqual(server.normalizeNames(undefined), 'anonymous');
 });
+// rejects: editing the game/ copy and not the websocket/ one. Create lives in
+// websocket/ (create-game.js → schema-compliant-manager.js) and stores Names;
+// every other reader is in game/. A Lambda bundle is its CodeUri, so the two
+// directories cannot share one file — they share its bytes instead.
+check('the websocket/ copy is byte-identical to the game/ copy', () => {
+  const read = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8');
+  assert.strictEqual(read('lambda-functions/websocket/survey-names.js'), read('lambda-functions/game/survey-names.js'));
+});
 check('the two survey states carry no digits after #, so every round parser treats them as inert', () => {
   assert.strictEqual(server.SURVEY_OPEN, 'SURVEY#OPEN');
   assert.strictEqual(server.SURVEY_CLOSED, 'SURVEY#CLOSED');
