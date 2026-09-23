@@ -26,6 +26,14 @@
  *   §12 after close nothing is written — including by a PUT racing the close
  *   §13 the warning, the end, progress and people
  *   §14 get-game and get-game-state report the survey's own facts
+ *   §15 the platform console counts a survey
+ *   §16 transaction conflicts on STATE are retried; retryable failures are 503
+ *   §17 the frozen words are paged by bytes, so a big room still closes
+ *   §18 Send: nothing answered is 422; a DONE that did not land is retryable
+ *   §19 end freezes first when the close's freeze never landed
+ *   §22 people leaves out removed players
+ *   §23 the player row is read strongly; a legacy row is accepted
+ *   §24 two closes at once freeze and announce once
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -68,6 +76,16 @@ const getGame = require(path.join(REPO, 'lambda-functions/game/get-game.js')).ha
 const getGameState = require(path.join(REPO, 'lambda-functions/game/get-game-state.js')).handler;
 const surveyAnswers = require(path.join(REPO, 'lambda-functions/game/survey-answers.js'));
 const surveyHost = require(path.join(REPO, 'lambda-functions/game/survey-host.js'));
+const removePlayer = require(path.join(REPO, 'lambda-functions/game/remove-player.js')).handler;
+const { transactionCancelled, ITEM_LIMIT_BYTES, itemBytes } = require('./helpers/player-table');
+
+// The conflict backoff, shortened so a suite that exhausts the budget does not
+// sleep for real. The budget itself (the number of tries) is left alone and
+// asserted below. Loaded softly: before the retry module existed this suite
+// had to report its absence as failures, not crash.
+let surveyRetry = null;
+try { surveyRetry = require(path.join(REPO, 'lambda-functions/game/survey-retry.js')); } catch { surveyRetry = null; }
+if (surveyRetry) Object.assign(surveyRetry.timing, { baseMs: 1, capMs: 2 });
 
 if (!process.env.DEBUG) { console.log = () => {}; console.warn = () => {}; console.error = () => {}; }
 const say = (...a) => process.stdout.write(`${a.join(' ')}\n`);
@@ -103,20 +121,29 @@ const QUESTIONS = [
 ];
 const qid = (n) => `c001#${n}`;
 
-async function seedSet({ namesDefault } = {}) {
+async function seedSet({ namesDefault, setId = SET, questions = QUESTIONS } = {}) {
+  const contentPk = `ORG#${ACME}#SET#${setId}#v1`;
   table.put({
-    PK: `ORG#${ACME}#SETS`, SK: `SET#${SET}`, orgId: ACME, name: 'Staff pulse',
+    PK: `ORG#${ACME}#SETS`, SK: `SET#${setId}`, orgId: ACME, name: 'Staff pulse',
     engagementType: 'survey', activeVersion: 1, versions: [{ version: 1 }],
     ...(namesDefault ? { namesDefault } : {}),
   });
-  table.put({ PK: CONTENT_PK, SK: 'CATEGORY#c001', Name: 'Survey', QuestionCount: QUESTIONS.length });
-  for (const q of QUESTIONS) {
+  table.put({ PK: contentPk, SK: 'CATEGORY#c001', Name: 'Survey', QuestionCount: questions.length });
+  for (const q of questions) {
     const { n, ...fields } = q;
     table.put(await C.encryptItem(ACME, 'question', {
-      PK: CONTENT_PK, SK: `QUESTION#c001#${n}`, Category: 'Survey', Detail: '', QuestionNumber: n, Active: true, ...fields,
+      PK: contentPk, SK: `QUESTION#c001#${n}`, Category: 'Survey', Detail: '', QuestionNumber: n, Active: true, ...fields,
     }));
   }
 }
+
+/** A long-form set, for the close that has to page its texts: 2,000-character answers. */
+const LONG_SET = 'long-form';
+const LONG_QUESTIONS = [
+  { n: '001', Title: 'Tell us everything', kind: 'text', required: false, textLength: 'long', maxLength: 2000 },
+  { n: '002', Title: 'Would you come back?', kind: 'yesno', required: false, followUpWhen: 'no', followUpPrompt: 'Why not?' },
+  { n: '003', Title: 'Best part?', kind: 'choice', required: false, options: ['Talks', 'Food'], allowOther: true },
+];
 
 /** The shape the Lambda authorizer really emits — see tenant-session-scoping.js. */
 const hostCtx = (orgId) => ({ authorizer: { lambda: { userId: `user-${orgId}`, orgId, orgRole: 'admin', groups: 'hosts' } } });
@@ -170,12 +197,12 @@ function reset() {
  * draws a fresh code (and retries a taken one) exactly as it does live. Each
  * check reads its own session's partition.
  */
-async function surveySession({ names, namesDefault, gameType = 'survey', randomizeQuestions } = {}) {
+async function surveySession({ names, namesDefault, gameType = 'survey', randomizeQuestions, setId = SET, questions = QUESTIONS } = {}) {
   table.pageSize = null;
   sent.length = 0;
   frames.length = 0;
-  await seedSet({ namesDefault });
-  const payload = { eventTitle: 'Offsite pulse', gameType, questionSetId: SET, questionSetScope: 'org' };
+  await seedSet({ namesDefault, setId, questions });
+  const payload = { eventTitle: 'Offsite pulse', gameType, questionSetId: setId, questionSetScope: 'org' };
   if (names !== undefined) payload.names = names;
   if (randomizeQuestions !== undefined) payload.randomizeQuestions = randomizeQuestions;
   const res = await createGame(asHost(ACME, { body: JSON.stringify(payload) }));
@@ -255,6 +282,45 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     } while (ExclusiveStartKey);
     assert.deepStrictEqual(seen, ['R#0', 'R#1', 'R#2', 'R#3', 'R#4']);
     assert.strictEqual(pages, 3);
+  });
+
+  // rejects: a fake that stores an item of any size — SURVEY#RESULTS grew one
+  // encrypted blob per open answer and passed every check here while DynamoDB
+  // would refuse it at a few hundred respondents.
+  await check('an item over 400 KB is refused as DynamoDB refuses it, and nothing is stored', async () => {
+    reset();
+    const { PutCommand, TransactWriteCommand } = require('./helpers/player-table');
+    const big = { PK: 'P', SK: 'BIG', blob: 'x'.repeat(ITEM_LIMIT_BYTES) };
+    assert.ok(itemBytes(big) > ITEM_LIMIT_BYTES);
+    await assert.rejects(table.doc.send(new PutCommand({ Item: big })), (e) => e.name === 'ValidationException');
+    await assert.rejects(table.doc.send(new TransactWriteCommand({ TransactItems: [{ Put: { Item: big } }] })), (e) => e.name === 'ValidationException');
+    assert.strictEqual(row('P', 'BIG'), undefined);
+    await table.doc.send(new PutCommand({ Item: { PK: 'P', SK: 'SMALL', blob: 'x'.repeat(1000) } }));
+    assert.ok(row('P', 'SMALL'));
+  });
+
+  // rejects: a fake that can never conflict — the handler that treats a
+  // TransactionConflict as fatal would pass here and 500 in a real room.
+  await check('injected transaction conflicts fire the number of times asked, then the table behaves', async () => {
+    reset();
+    const { TransactWriteCommand, UpdateCommand } = require('./helpers/player-table');
+    table.conflictTransactions(2);
+    const tx = () => table.doc.send(new TransactWriteCommand({ TransactItems: [
+      { ConditionCheck: { Key: { PK: 'P', SK: 'STATE' }, ConditionExpression: 'attribute_not_exists(PK)' } },
+      { Put: { Item: { PK: 'P', SK: 'ROW' } } },
+    ] }));
+    for (let i = 0; i < 2; i++) {
+      await assert.rejects(tx(), (e) => e.name === 'TransactionCanceledException'
+        && e.CancellationReasons[0].Code === 'TransactionConflict' && e.CancellationReasons[1].Code === 'None');
+    }
+    assert.strictEqual(row('P', 'ROW'), undefined, 'a conflicted transaction wrote');
+    await tx();
+    assert.ok(row('P', 'ROW'));
+    table.conflictUpdates(1, (c) => c.input.Key.SK === 'STATE');
+    const up = () => table.doc.send(new UpdateCommand({ Key: { PK: 'P', SK: 'STATE' }, UpdateExpression: 'SET a = :a', ExpressionAttributeValues: { ':a': 1 } }));
+    await assert.rejects(up(), (e) => e.name === 'TransactionConflictException');
+    await up();
+    assert.strictEqual(row('P', 'STATE').a, 1);
   });
 
   /* ----------------------------------------------------------------------- */
@@ -415,6 +481,12 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(b.questions[6].maxLength, 500);
     assert.strictEqual(b.questions[6].textLength, 'long');
     assert.strictEqual(b.questions[5].rankTop, 3);
+  });
+  // rejects: the phone's bar with no name for the session, or the session's
+  // title handed over as the envelope it is at rest.
+  await check('200 carries the session title, decrypted with the session\'s org', () => {
+    assert.ok(C.isEnvelope(row(`GAME#${readable}`, 'METADATA').Title), 'the fixture\'s title is not encrypted at rest');
+    assert.strictEqual(bodyOf(got).title, 'Offsite pulse');
   });
   // rejects: a question payload carrying fields another kind would use.
   await check('each question carries its own kind\'s fields and no other kind\'s', () => {
@@ -821,7 +893,7 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(bodyOf(closed).texts, undefined);
   });
   // rejects: results that depend on 7-day rows, or quote answers in the clear.
-  await check('SURVEY#RESULTS is frozen, self-contained, and its Texts are ciphertext', () => {
+  await check('SURVEY#RESULTS is frozen and self-contained; its words live on ciphertext text pages', () => {
     assert.ok(results, 'no SURVEY#RESULTS row');
     const meta = row(`GAME#${closing}`, 'METADATA');
     const state = row(`GAME#${closing}`, 'STATE');
@@ -837,10 +909,18 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(results.QuestionSetScope, 'org');
     assert.strictEqual(results.QuestionSetVersion, 1);
     assert.strictEqual(results.ttl, Math.floor(Date.parse(results.ClosedAt) / 1000) + 30 * DAY);
-    assert.ok(C.isEnvelope(results.Texts), `Texts shipped as ${JSON.stringify(results.Texts)}`);
+    // The words are NOT on the main item — it would outgrow 400 KB — but on
+    // pages it names: one page here, for the one open answer.
+    assert.strictEqual(results.Texts, undefined, 'the texts are still on the main item');
+    assert.deepStrictEqual(results.TextPages, { [qid('007')]: 1 });
+    const page = row(`GAME#${closing}`, `SURVEY#RESULTS#TEXT#${qid('007')}#000`);
+    assert.ok(page, 'no text page');
+    assert.ok(C.isEnvelope(page.Texts), `Texts shipped as ${JSON.stringify(page.Texts)}`);
+    assert.strictEqual(page.Session, results.Session);
+    assert.strictEqual(page.ttl, results.ttl);
     assert.ok(!JSON.stringify(partition(closing)).includes('roadmap session'), 'answer text at rest');
-    const plain = kmsStubs.plainRow(ACME, results);
-    assert.ok(JSON.stringify(plain.Texts).includes(SECRET_ANSWER), 'the open answer was not frozen');
+    const plain = kmsStubs.plainRow(ACME, page);
+    assert.deepStrictEqual(plain.Texts, [{ id: `${qid('007')}:0`, text: SECRET_ANSWER }]);
   });
   await check('STATE is SURVEY#CLOSED with ClosedAt', () => {
     assert.strictEqual(row(`GAME#${closing}`, 'STATE').State, SURVEY_CLOSED);
@@ -1057,6 +1137,392 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(delta(afterOpen, monthRow(), 'answersStored'), 3);
     await host('close', counted);
     assert.strictEqual(delta(afterOpen, monthRow(), 'answersStored'), 3);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§16 a room answering together: transaction conflicts are retried, never a 500');
+
+  const txCount = () => table.log.filter((l) => l.type === 'transactWrite').length;
+  const stateUpdates = () => table.log.filter((l) => l.type === 'update' && l.input.Key && l.input.Key.SK === 'STATE').length;
+  const clearFaults = () => { table.faults.length = 0; };
+
+  await check('the conflict backoff lives in survey-retry.js, eight tries', () => {
+    assert.ok(surveyRetry, 'lambda-functions/game/survey-retry.js does not exist');
+    assert.strictEqual(surveyRetry.timing.tries, 8);
+  });
+  // rejects: TransactionConflict on the STATE ConditionCheck rethrown as a 500
+  // — every answer in a room that answers together holds that same item.
+  await check('a PUT that meets two transaction conflicts retries and saves', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    table.log.length = 0;
+    table.conflictTransactions(2);
+    const res = await answer(g, r, '001', 4);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(txCount(), 3, 'the PUT did not try exactly three times');
+    assert.strictEqual(respRows(g).length, 1);
+    assert.deepStrictEqual(respRows(g)[0].Answered, [qid('001')]);
+  });
+  // rejects: a retry budget that never ends, or one exhausted into a 409 — the
+  // phone reads 409 as "this survey is closed" and stops.
+  await check('conflicts that never clear: 503 {code: BUSY} after eight tries, nothing written', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    table.log.length = 0;
+    table.conflictTransactions(50);
+    const res = await answer(g, r, '001', 4);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
+    assert.strictEqual(bodyOf(res).code, 'BUSY');
+    assert.strictEqual(txCount(), 8);
+    assert.strictEqual(respRows(g).length, 0);
+  });
+  await check('Send meets a conflict and still sends', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 4);
+    await answer(g, r, '007', 'ok');
+    table.conflictTransactions(2);
+    const res = await phone('submit', g, { respondentId: r });
+    clearFaults();
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(respRows(g)[0].Complete, true);
+  });
+  // rejects: the optimistic lock losing three times reported as 409 — a
+  // retryable failure must never read as a state problem.
+  await check('a Rev lost three times: 503 {code: CONFLICT}, not 409', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 4);
+    table.inject((c) => c.type === 'transactWrite', () => transactionCancelled(['None', 'ConditionalCheckFailed']), 3);
+    const res = await answer(g, r, '002', 5);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
+    assert.strictEqual(bodyOf(res).code, 'CONFLICT');
+  });
+  // rejects: a read-modify-write that loses a key when two saves for one
+  // person cross — the second save's key overwritten by the first's stale copy.
+  await check('two PUTs to one row interleaved: one loses the Rev, re-reads, and every key is kept', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 4);
+    const held = table.hold((c) => c.type === 'transactWrite');
+    const slow = answer(g, r, '002', 7);
+    await held.reached;
+    const fast = await answer(g, r, '003', [1]);
+    assert.strictEqual(fast.statusCode, 200, fast.body);
+    held.release();
+    const late = await slow;
+    assert.strictEqual(late.statusCode, 200, late.body);
+    const mine = bodyOf(await phone('mine', g, { respondentId: r }));
+    assert.deepStrictEqual(mine.answers, { [qid('001')]: 4, [qid('002')]: 7, [qid('003')]: [1] });
+    assert.strictEqual(mine.rev, 3);
+  });
+  // rejects: the host's close failing with TransactionConflictException because
+  // a phone's answer held STATE at that instant.
+  await check('close meets a transaction holding STATE and still closes', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 3);
+    table.log.length = 0;
+    table.conflictUpdates(2, (c) => c.input.Key.SK === 'STATE');
+    const res = await host('close', g);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_CLOSED);
+    assert.strictEqual(stateUpdates(), 3);
+    assert.strictEqual(bodyOf(res).n, 1);
+  });
+  await check('the warning meets one and still warns', async () => {
+    const g = await openSurvey({});
+    table.conflictUpdates(1, (c) => c.input.Key.SK === 'STATE');
+    const res = await host('warning', g);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.ok(row(`GAME#${g}`, 'STATE').WarnedAt);
+  });
+  await check('a close that never gets through: 503 {code: BUSY}, still open', async () => {
+    const g = await openSurvey({});
+    table.conflictUpdates(50, (c) => c.input.Key.SK === 'STATE');
+    const res = await host('close', g);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
+    assert.strictEqual(bodyOf(res).code, 'BUSY');
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_OPEN);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§17 the frozen words are paged, so a big room still closes');
+
+  // 400 respondents, each with a 2,000-character answer, a why and a write-in:
+  // about 1 MB of words, over twice what one item may hold.
+  const big = await openSurvey({ setId: LONG_SET, questions: LONG_QUESTIONS });
+  const bigMeta = row(`GAME#${big}`, 'METADATA');
+  const bigState = row(`GAME#${big}`, 'STATE');
+  const seeded = { [qid('001')]: [], [qid('002')]: [], [qid('003')]: [] };
+  for (let i = 0; i < 400; i++) {
+    // Trimmed as the PUT stores them — the aggregate trims too.
+    const long = `${String(i).padStart(4, '0')} ${'Everything about the day, at length. '.repeat(60)}`.slice(0, 2000).trim();
+    const why = `Why not ${i}: ${'too far '.repeat(40)}`.slice(0, 280).trim();
+    const other = `Other ${i}: ${'the coffee '.repeat(30)}`.slice(0, 280).trim();
+    seeded[qid('001')].push(long);
+    seeded[qid('002')].push(why);
+    seeded[qid('003')].push(other);
+    table.put(await C.encryptItem(ACME, 'surveyResponse', {
+      PK: `GAME#${big}`, SK: `SURVEY#RESP#${newRespondent()}`,
+      Answers: { [qid('001')]: long, [qid('002')]: { v: 'no', why }, [qid('003')]: [{ other }] },
+      Answered: [qid('001'), qid('002'), qid('003')], Complete: true, Rev: 1,
+      Session: bigMeta.CreatedAt, ttl: bigState.ttl,
+    }));
+  }
+  table.log.length = 0;
+  const bigClosed = await host('close', big);
+  const bigResults = row(`GAME#${big}`, 'SURVEY#RESULTS');
+  const pagesOf = (q) => partition(big)
+    .filter((i) => String(i.SK).startsWith(`SURVEY#RESULTS#TEXT#${q}#`))
+    .sort((a, b) => (a.SK < b.SK ? -1 : 1));
+  // rejects: one results item carrying every word — over 400 KB at a few
+  // hundred respondents, so close 500s forever and nothing is ever frozen.
+  await check('400 respondents with long answers: the close succeeds and freezes 400', () => {
+    assert.strictEqual(bigClosed.statusCode, 200, bigClosed.body);
+    assert.strictEqual(bodyOf(bigClosed).n, 400);
+    assert.ok(bigResults, 'no SURVEY#RESULTS');
+    assert.strictEqual(bigResults.N, 400);
+    assert.ok(itemBytes(bigResults) < ITEM_LIMIT_BYTES);
+  });
+  await check('the main item keeps the counts and names each question\'s page count; no words on it', () => {
+    assert.strictEqual(bigResults.Texts, undefined);
+    assert.ok(bigResults.TextPages[qid('001')] >= 3, `2,000-char answers in ${bigResults.TextPages[qid('001')]} page(s)`);
+    for (const q of [qid('001'), qid('002'), qid('003')]) {
+      assert.strictEqual(pagesOf(q).length, bigResults.TextPages[q], `${q}: pages on the table ≠ pages named`);
+      assert.deepStrictEqual(pagesOf(q).map((p) => p.SK.slice(-3)), [...Array(bigResults.TextPages[q]).keys()].map((k) => String(k).padStart(3, '0')));
+    }
+    assert.strictEqual(bigResults.PerQuestion[qid('001')].n, 400);
+  });
+  // rejects: a page sized by count rather than by bytes — 2,000-character
+  // answers would still overflow it.
+  await check('every page is ciphertext, well under 400 KB, on the results\' Session and ttl', () => {
+    for (const q of Object.keys(bigResults.TextPages)) {
+      for (const p of pagesOf(q)) {
+        assert.ok(C.isEnvelope(p.Texts), `${p.SK} Texts in the clear`);
+        assert.ok(itemBytes(p) < 380 * 1024, `${p.SK} is ${itemBytes(p)} bytes`);
+        assert.strictEqual(p.Session, bigResults.Session);
+        assert.strictEqual(p.ttl, bigResults.ttl);
+      }
+    }
+    assert.ok(!JSON.stringify(partition(big).filter((i) => /^SURVEY#RESULTS/.test(i.SK))).includes('the coffee'), 'a word at rest');
+  });
+  // rejects: pages that lose, repeat or reorder a text — or ids that stop
+  // being <qid>:<k> in order once split across pages.
+  await check('every text round-trips: all pages together are the aggregate\'s Texts, ids in order', () => {
+    for (const q of Object.keys(seeded)) {
+      const texts = pagesOf(q).flatMap((p) => kmsStubs.plainRow(ACME, p).Texts);
+      assert.strictEqual(texts.length, 400, `${q}: ${texts.length} texts`);
+      assert.deepStrictEqual(texts.map((t) => t.id), [...Array(400).keys()].map((k) => `${q}:${k}`));
+      assert.deepStrictEqual(texts.map((t) => t.text).sort(), seeded[q].slice().sort());
+    }
+    const why = pagesOf(qid('002')).flatMap((p) => kmsStubs.plainRow(ACME, p).Texts);
+    assert.ok(why.every((t) => t.v === 'no'), 'a why lost the answer it explains');
+  });
+  // rejects: the main item written first — a reader that finds it would trust
+  // pages a failed close never wrote.
+  await check('the pages are written before the main item', () => {
+    const puts = table.log.filter((l) => l.type === 'put' && /^SURVEY#RESULTS/.test(l.input.Item.SK)).map((l) => l.input.Item.SK);
+    const pageCount = Object.values(bigResults.TextPages || {}).reduce((a, b) => a + b, 0);
+    assert.ok(pageCount >= 5, `only ${pageCount} pages`);
+    assert.strictEqual(puts.length, pageCount + 1, `puts: ${puts.join(', ')}`);
+    assert.strictEqual(puts[puts.length - 1], 'SURVEY#RESULTS');
+    assert.strictEqual(puts.filter((sk) => sk === 'SURVEY#RESULTS').length, 1);
+  });
+  await check('progress and a second close still answer without reading a word', async () => {
+    const p = await host('progress', big);
+    assert.strictEqual(p.statusCode, 200, p.body);
+    const again = await host('close', big);
+    assert.strictEqual(again.statusCode, 200, again.body);
+    assert.strictEqual(bodyOf(again).n, 400);
+    assert.ok(!again.body.includes('the coffee'));
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§18 Send: nothing answered, and a DONE that did not land');
+
+  // rejects: Send with nothing answered counting in Finished but not in N.
+  await check('Send with nothing answered: 422 {code: NOTHING_ANSWERED, missing: the required qids}', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    const res = await phone('submit', g, { respondentId: r });
+    assert.strictEqual(res.statusCode, 422, res.body);
+    assert.strictEqual(bodyOf(res).code, 'NOTHING_ANSWERED');
+    assert.deepStrictEqual(bodyOf(res).missing, [qid('001'), qid('007')]);
+    assert.deepStrictEqual(respRows(g), []);
+    // …and a person who answered and then cleared everything is the same.
+    await answer(g, r, '002', 5);
+    await answer(g, r, '002', null);
+    const again = await phone('submit', g, { respondentId: r });
+    assert.strictEqual(again.statusCode, 422, again.body);
+    assert.strictEqual(bodyOf(again).code, 'NOTHING_ANSWERED');
+    assert.strictEqual(respRows(g)[0].Complete, false);
+  });
+  await check('a person who sent has finished: clearing an answer afterwards leaves them complete', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 4);
+    await answer(g, r, '002', 8);
+    await answer(g, r, '007', 'ok');
+    assert.strictEqual((await phone('submit', g, { respondentId: r })).statusCode, 200);
+    const res = await answer(g, r, '002', null);
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).complete, true);
+    assert.strictEqual(respRows(g)[0].Complete, true);
+  });
+  // rejects: the DONE "finished" write outside the retry — a failure after the
+  // row went Complete left the name "partway" forever, because the retry took
+  // the already-complete branch and skipped DONE and the broadcast.
+  await check('Who finished: a DONE write that fails makes Send retryable (503), and the retry finishes the name', async () => {
+    const g = await openSurvey({ names: 'finished' });
+    await join(g, 'Hal', 'b-hal');
+    const hal = { name: 'Hal', clientId: 'b-hal' };
+    const r = newRespondent();
+    await answer(g, r, '001', 4, { player: hal });
+    await answer(g, r, '007', 'fine', { player: hal });
+    const boom = table.inject((c) => c.type === 'put' && c.input.Item.SK === 'SURVEY#DONE#Hal' && c.input.Item.Status === 'finished',
+      () => new Error('DynamoDB is having a day'), 1);
+    const first = await phone('submit', g, { respondentId: r, player: hal });
+    assert.strictEqual(boom.thrown, 1, 'the DONE write was never attempted');
+    assert.strictEqual(first.statusCode, 503, first.body);
+    assert.strictEqual(bodyOf(first).code, 'BUSY');
+    assert.strictEqual(respRows(g)[0].Complete, true);
+    assert.strictEqual(row(`GAME#${g}`, 'SURVEY#DONE#Hal').Status, 'started');
+    frames.length = 0;
+    const retry = await phone('submit', g, { respondentId: r, player: hal });
+    assert.strictEqual(retry.statusCode, 200, retry.body);
+    assert.strictEqual(row(`GAME#${g}`, 'SURVEY#DONE#Hal').Status, 'finished');
+    assert.ok(row(`GAME#${g}`, 'SURVEY#DONE#Hal').FinishedAt);
+    assert.strictEqual(hostFrames('surveyProgress').length, 2, 'the retry did not tell the host');
+    const people = bodyOf(await host('people', g)).people;
+    assert.deepStrictEqual(people.find((p) => p.name === 'Hal'), { name: 'Hal', status: 'finished' });
+  });
+  await check('Who finished: sending again once finished changes nothing and tells nobody', async () => {
+    const g = await openSurvey({ names: 'finished' });
+    await join(g, 'Ivy', 'b-ivy');
+    const ivy = { name: 'Ivy', clientId: 'b-ivy' };
+    const r = newRespondent();
+    await answer(g, r, '001', 4, { player: ivy });
+    await answer(g, r, '007', 'fine', { player: ivy });
+    await phone('submit', g, { respondentId: r, player: ivy });
+    const finishedAt = row(`GAME#${g}`, 'SURVEY#DONE#Ivy').FinishedAt;
+    frames.length = 0;
+    const again = await phone('submit', g, { respondentId: r, player: ivy });
+    assert.strictEqual(again.statusCode, 200, again.body);
+    assert.strictEqual(row(`GAME#${g}`, 'SURVEY#DONE#Ivy').FinishedAt, finishedAt);
+    assert.deepStrictEqual(hostFrames('surveyProgress'), []);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§19 end makes sure the results were frozen');
+
+  // rejects: end moving a survey to ENDED whose freeze never landed — the
+  // answer rows expire at 7 days and the results are simply gone.
+  await check('end after a close whose freeze failed: freezes first, then ends', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 3);
+    await answer(g, newRespondent(), '001', 5);
+    table.inject((c) => c.type === 'put' && c.input.Item.SK === 'SURVEY#RESULTS', () => new Error('write failed'), 1);
+    const closed = await host('close', g);
+    assert.notStrictEqual(closed.statusCode, 200, 'the injected failure did not bite');
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_CLOSED);
+    assert.strictEqual(row(`GAME#${g}`, 'SURVEY#RESULTS'), undefined);
+    frames.length = 0;
+    const res = await host('end', g);
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, 'ENDED');
+    const results = row(`GAME#${g}`, 'SURVEY#RESULTS');
+    assert.ok(results, 'end did not freeze');
+    assert.strictEqual(results.N, 2);
+    assert.strictEqual(results.ClosedAt, row(`GAME#${g}`, 'STATE').ClosedAt);
+    assert.strictEqual(frames.filter((f) => f.message.type === 'surveyClosed').length, 3);
+    assert.strictEqual(frames.filter((f) => f.message.type === 'gameEnded').length, 3);
+  });
+  await check('end after a good close does not freeze again', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 3);
+    await host('close', g);
+    table.log.length = 0;
+    frames.length = 0;
+    assert.strictEqual((await host('end', g)).statusCode, 200);
+    assert.deepStrictEqual(table.log.filter((l) => l.type === 'put' && /^SURVEY#RESULTS/.test(l.input.Item.SK)), []);
+    assert.deepStrictEqual(frames.filter((f) => f.message.type === 'surveyClosed'), []);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§22 people leaves out whoever the host removed');
+
+  // rejects: a removed player listed as not-started — the host chases someone
+  // they asked to leave.
+  await check('a removed player who never answered is not listed', async () => {
+    const g = await openSurvey({ names: 'finished' });
+    await join(g, 'Jo', 'b-jo');
+    await join(g, 'Kit', 'b-kit');
+    const removed = await removePlayer(asHost(ACME, { pathParameters: { gameId: g, playerName: 'Kit' }, body: JSON.stringify({}) }));
+    assert.strictEqual(removed.statusCode, 200, removed.body);
+    assert.ok(row(`GAME#${g}`, 'PLAYER#Kit').RemovedAt);
+    const res = await host('people', g);
+    assert.deepStrictEqual(bodyOf(res).people, [{ name: 'Jo', status: 'not-started' }]);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§23 whose browser: read strongly, so a handover takes at once');
+
+  // rejects: an eventually-consistent PLAYER read — right after a handover the
+  // new browser is refused and the old one still accepted.
+  await check('Named: straight after a handover the new browser saves and the old one is refused; the read is strong', async () => {
+    const g = await openSurvey({ names: 'named' });
+    await join(g, 'Lee', 'lee-phone');
+    await phone('answers', g, { qid: qid('001'), value: 3, player: { name: 'Lee', clientId: 'lee-phone' } });
+    await grantHandover(asHost(ACME, { pathParameters: { gameId: g, playerName: 'Lee' }, body: JSON.stringify({}) }));
+    await join(g, 'Lee', 'lee-laptop', { claimExisting: true });
+    table.log.length = 0;
+    const now = await phone('answers', g, { qid: qid('002'), value: 9, player: { name: 'Lee', clientId: 'lee-laptop' } });
+    assert.strictEqual(now.statusCode, 200, now.body);
+    const reads = table.log.filter((l) => l.type === 'get' && l.input.Key.SK === 'PLAYER#Lee');
+    assert.ok(reads.length >= 1, 'the player row was not read');
+    assert.ok(reads.every((l) => l.input.ConsistentRead === true), 'the player row was read eventually-consistently');
+    const old = await phone('answers', g, { qid: qid('002'), value: 1, player: { name: 'Lee', clientId: 'lee-phone' } });
+    assert.strictEqual(old.statusCode, 403, old.body);
+    assert.strictEqual(bodyOf(await phone('mine', g, { player: { name: 'Lee', clientId: 'lee-laptop' } })).answers[qid('002')], 9);
+  });
+  // rejects: refusing a legacy player row with no ClientId — join-game accepts
+  // it, so its owner would be let into the room and refused every answer.
+  await check('Named: a legacy player row with no ClientId is accepted', async () => {
+    const g = await openSurvey({ names: 'named' });
+    table.put({ PK: `GAME#${g}`, SK: 'PLAYER#Old Timer', PlayerName: 'Old Timer', JoinedAt: new Date().toISOString() });
+    const res = await phone('answers', g, { qid: qid('001'), value: 2, player: { name: 'Old Timer', clientId: 'any-browser' } });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(row(`GAME#${g}`, 'SURVEY#RESP#Old Timer').Name, 'Old Timer');
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§24 two closes at once freeze and announce once');
+
+  // rejects: two presses both freezing and both broadcasting surveyClosed (and
+  // both counting the answers into the platform metrics).
+  await check('two simultaneous closes: one writes and tells the room, the other returns what it wrote', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 3);
+    await answer(g, newRespondent(), '002', 7);
+    const metricsBefore = monthRow();
+    frames.length = 0;
+    const held = table.hold((c) => c.type === 'put' && c.input.Item.SK === 'SURVEY#RESULTS');
+    const first = host('close', g);
+    await held.reached;
+    const second = await host('close', g);
+    held.release();
+    const firstRes = await first;
+    assert.strictEqual(second.statusCode, 200, second.body);
+    assert.strictEqual(firstRes.statusCode, 200, firstRes.body);
+    assert.deepStrictEqual(bodyOf(firstRes), bodyOf(second));
+    assert.strictEqual(frames.filter((f) => f.message.type === 'surveyClosed').length, 3, 'surveyClosed went out more than once per screen');
+    assert.strictEqual(delta(metricsBefore, monthRow(), 'answersStored'), 2, 'the answers were counted twice');
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);

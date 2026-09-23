@@ -404,15 +404,21 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  docs/design/survey-redesign/IMPLEMENTATION-phase-2.md, "Rows". */
   surveyResponse: Object.freeze(['Answers']),
 
-  /** A closed survey's frozen results: PK=GAME#<id>, SK=SURVEY#RESULTS.
+  /** A closed survey's frozen results, two shapes of row under one entity:
+   *
+   *    PK=GAME#<id>, SK=SURVEY#RESULTS                 the counts, and
+   *                                                   `TextPages` naming —
+   *    PK=GAME#<id>, SK=SURVEY#RESULTS#TEXT#<qid>#<p>  one page of `Texts`
    *
    *  `Texts` is the words people wrote — open answers, write-ins, the whys
-   *  under a yes/no — copied here at close because the rows they came from
-   *  expire at 7 days and the results are read for 30. Encrypting the answer
-   *  rows and not this would be the `results.answers` mistake again: the same
-   *  sentence one Query away in the clear. `N`, `Finished`, `PerQuestion` and
-   *  `Order` are counts and question ids and stay plaintext, like
-   *  `results.VoteTallies`. */
+   *  under a yes/no — copied at close because the rows they came from expire
+   *  at 7 days and the results are read for 30. They live on the PAGES, cut by
+   *  bytes, because one item holding all of them passes DynamoDB's 400 KB
+   *  limit at a few hundred respondents (survey-host.js). Encrypting the
+   *  answer rows and not this would be the `results.answers` mistake again:
+   *  the same sentence one Query away in the clear. `N`, `Finished`,
+   *  `PerQuestion`, `Order` and `TextPages` are counts, question ids and page
+   *  counts and stay plaintext, like `results.VoteTallies`. */
   surveyResults: Object.freeze(['Texts']),
 });
 

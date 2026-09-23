@@ -31,11 +31,33 @@
  * of THIS session is read, page by page, opened, and counted by
  * survey-aggregate.js — the one function that counts a survey — into
  * SURVEY#RESULTS: self-contained (Names, OpenedAt, the pinned set) because
- * METADATA expires at start + 7 days and the results live 30, with the words
- * people wrote frozen into `Texts` under the org's key (the rows they came from
- * go at 7 days). A close of a survey already closed returns what was frozen and
- * tells nobody again; a close whose freeze never landed (the flip succeeded,
- * the write did not) freezes now.
+ * METADATA expires at start + 7 days and the results live 30. A close of a
+ * survey already closed returns what was frozen and tells nobody again; a
+ * close whose freeze never landed (the flip succeeded, the write did not)
+ * freezes now — and so does `end`, so a survey never reaches ENDED without
+ * its results.
+ *
+ * ── THE WORDS ARE PAGED ──────────────────────────────────────────────────────
+ *
+ * The words people wrote (open answers, write-ins, whys — the rows they came
+ * from go at 7 days) do NOT ride on SURVEY#RESULTS. One item holding every
+ * one of them, encrypted, passes DynamoDB's 400 KB limit at a few hundred
+ * respondents, and then close fails on every press and nothing is ever
+ * frozen. They go to SURVEY#RESULTS#TEXT#<qid>#<page>, each page cut by the
+ * BYTES of its entries (TEXT_PAGE_BYTES), not by a count, each sealed under
+ * the org's key, on the same Session and ttl. The main item names the pages
+ * (`TextPages: {qid: count}`) and is written LAST, conditionally: its
+ * existence means every page it names is there, so a reader that finds it may
+ * trust them, and of two closes racing through the freeze only the one whose
+ * write lands tells the room — the other hands back what that one froze.
+ *
+ * ── A BUSY STATE ROW ─────────────────────────────────────────────────────────
+ *
+ * Close, the warning and end are UpdateItems on STATE, and every answer in
+ * flight holds STATE inside its transaction (survey-answers.js), so they can
+ * be refused with TransactionConflictException while a room is answering.
+ * That is retried with jittered backoff (survey-retry.js); a budget spent is
+ * 503 {code:'BUSY'}, never a 500.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -47,7 +69,7 @@ const { loadSurveyQuestions } = require('./survey-questions');
 const { aggregate } = require('./survey-aggregate');
 const { toAll } = require('./survey-broadcast');
 const {
-  RESP_PREFIX, DONE_PREFIX, RESULTS_SK,
+  RESP_PREFIX, DONE_PREFIX, RESULTS_SK, textPageSk,
   isSurvey, sessionOf, orgOf, readSession, queryAll, progressFor, respond,
 } = require('./survey-rows');
 const { encryptItem, decryptItems } = require('./tenant-crypto');
@@ -55,6 +77,8 @@ const { callerMayDriveSession } = require('./tenant');
 const { ttlFrom } = require('./session-ttl');
 const { recordSurveyClosed } = require('./platform-metrics');
 const { uniquePlayerRecords } = require('./player-rows');
+const { isPresent } = require('./player-presence');
+const retry = require('./survey-retry');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client, { marshallOptions: { removeUndefinedValues: true } });
@@ -63,16 +87,26 @@ const TABLE = () => process.env.TABLE_NAME;
 /** Frozen results are kept as long as the durable content tier: 30 days from close. */
 const RESULTS_DAYS = 30;
 
+/**
+ * The most plaintext one text page carries, measured as the JSON the sealed
+ * value is made from. Sealing is AES-GCM, base64'd: ×4/3 plus a few dozen
+ * bytes, so 256 KB of words is ~342 KB on the table — under 400 KB with room
+ * for the key and the stamps. A single entry is at most 2,000 characters
+ * (survey-aggregate.js TEXT_CAP), so one always fits.
+ */
+const TEXT_PAGE_BYTES = 256 * 1024;
+
 const notFound = () => respond(404, { error: 'Game not found' });
+const busy = () => respond(503, { error: 'The survey is busy taking answers. Try again in a moment.', code: 'BUSY' });
 const stateKey = (gameId) => ({ PK: `GAME#${gameId}`, SK: 'STATE' });
 const isConditionFailure = (e) => Boolean(e && e.name === 'ConditionalCheckFailedException');
 
 /**
- * What a close answers with: counts, never the words (those stay in Texts).
- * `perQuestion` is the SAME shape as the live progress — `[{qid, answered}]`
- * in survey order, every question, zeros included — so the stage reads one
- * shape before and after the close. `answered` is the frozen `n`. The full
- * per-kind counts stay on SURVEY#RESULTS for the results pages.
+ * What a close answers with: counts, never the words (those are on the text
+ * pages). `perQuestion` is the SAME shape as the live progress —
+ * `[{qid, answered}]` in survey order, every question, zeros included — so the
+ * stage reads one shape before and after the close. `answered` is the frozen
+ * `n`. The full per-kind counts stay on SURVEY#RESULTS for the results pages.
  */
 const closeBody = (r) => {
   const per = r.PerQuestion || {};
@@ -85,16 +119,71 @@ const closeBody = (r) => {
   };
 };
 
-/** This session's frozen results, as stored (Texts still sealed), or null. */
+/** This session's frozen results, as stored (counts only; the words are on the pages), or null. */
 async function storedResults(gameId, meta) {
   const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: `GAME#${gameId}`, SK: RESULTS_SK }, ConsistentRead: true }));
   const item = res && res.Item;
   return item && item.Session === sessionOf(meta) ? item : null;
 }
 
+/** Cut one question's texts into pages of at most TEXT_PAGE_BYTES of JSON, in order. */
+function pageTexts(entries) {
+  const pages = [];
+  let page = [];
+  let bytes = 2; // the brackets
+  for (const entry of entries) {
+    const size = Buffer.byteLength(JSON.stringify(entry), 'utf8') + 1; // and its comma
+    if (page.length && bytes + size > TEXT_PAGE_BYTES) {
+      pages.push(page);
+      page = [];
+      bytes = 2;
+    }
+    page.push(entry);
+    bytes += size;
+  }
+  if (page.length) pages.push(page);
+  return pages;
+}
+
 /**
- * Count every answer row of this session and write SURVEY#RESULTS; tell the
- * room. `closedAt` is STATE's, so a retried freeze stamps the same moment.
+ * Write every question's texts as sealed pages; returns `{qid: pageCount}`.
+ * Pages of a previous session on the same code are overwritten where the keys
+ * meet and otherwise left to their ttl: nothing reads a page the main item
+ * does not name, and a reader can check the page's Session besides.
+ */
+async function writeTextPages(gameId, orgId, texts, stamp) {
+  const counts = {};
+  for (const [qid, entries] of Object.entries(texts || {})) {
+    if (!Array.isArray(entries) || !entries.length) continue;
+    const pages = pageTexts(entries);
+    for (let i = 0; i < pages.length; i += 1) {
+      const item = {
+        PK: `GAME#${gameId}`,
+        SK: textPageSk(qid, i),
+        Qid: qid,
+        Page: i,
+        Texts: pages[i],
+        ...stamp,
+      };
+      await db.send(new PutCommand({
+        TableName: TABLE(),
+        Item: orgId ? await encryptItem(orgId, 'surveyResults', item) : item,
+      }));
+    }
+    counts[qid] = pages.length;
+  }
+  return counts;
+}
+
+/**
+ * Count every answer row of this session, write the text pages and then
+ * SURVEY#RESULTS; tell the room. `closedAt` is STATE's, so a retried freeze
+ * stamps the same moment.
+ *
+ * The main item's write is conditional — it may replace only a previous
+ * session's results — so when two closes race through here only one lands.
+ * That one records the metrics and broadcasts `surveyClosed`; the other
+ * answers with what it wrote, and tells nobody.
  */
 async function freeze(gameId, meta, closedAt) {
   const { questions, set } = await loadSurveyQuestions(db, TABLE(), meta);
@@ -111,6 +200,11 @@ async function freeze(gameId, meta, closedAt) {
   }));
   const counted = aggregate(questions, rows);
 
+  const ttl = ttlFrom(closedAt, RESULTS_DAYS);
+  const stamp = { ...(orgId ? { orgId } : {}), Session: session, ttl };
+  // FIRST the pages, so the main item's existence means they are all there.
+  const textPages = await writeTextPages(gameId, orgId, counted.Texts, stamp);
+
   const results = {
     PK: `GAME#${gameId}`,
     SK: RESULTS_SK,
@@ -119,7 +213,7 @@ async function freeze(gameId, meta, closedAt) {
     Finished: counted.Finished,
     Order: counted.Order,
     PerQuestion: counted.PerQuestion,
-    Texts: counted.Texts || {},
+    TextPages: textPages,
     ...(orgId ? { orgId } : {}),
     Names: normalizeNames(meta.Names),
     OpenedAt: meta.OpenedAt || null,
@@ -128,12 +222,26 @@ async function freeze(gameId, meta, closedAt) {
     QuestionSetId: set.setId || meta.QuestionSetId || null,
     QuestionSetScope: set.scope || meta.QuestionSetScope || null,
     ...(set.version !== null && set.version !== undefined ? { QuestionSetVersion: set.version } : {}),
-    ttl: ttlFrom(closedAt, RESULTS_DAYS),
+    ttl,
   };
-  await db.send(new PutCommand({
-    TableName: TABLE(),
-    Item: orgId ? await encryptItem(orgId, 'surveyResults', results) : results,
-  }));
+  try {
+    await db.send(new PutCommand({
+      TableName: TABLE(),
+      // No field of the main item is sealed now that the words are on the
+      // pages; it still goes through the entity so a field added to it later
+      // is sealed without anyone remembering to.
+      Item: orgId ? await encryptItem(orgId, 'surveyResults', results) : results,
+      ConditionExpression: 'attribute_not_exists(PK) OR #session <> :session',
+      ExpressionAttributeNames: { '#session': 'Session' },
+      ExpressionAttributeValues: { ':session': session },
+    }));
+  } catch (err) {
+    if (!isConditionFailure(err)) throw err;
+    // Another close froze this session a moment ago, from the same rows.
+    const stored = await storedResults(gameId, meta);
+    if (stored) return respond(200, closeBody(stored));
+    throw err;
+  }
 
   // Answers GIVEN — one per person per question, what one ANSWER# row is for
   // a round. Never throws (platform-metrics.js).
@@ -155,14 +263,14 @@ async function close(gameId, meta, state) {
   if (current === SURVEY_OPEN) {
     closedAt = new Date().toISOString();
     try {
-      await db.send(new UpdateCommand({
+      await retry.retryOnConflict(() => db.send(new UpdateCommand({
         TableName: TABLE(),
         Key: stateKey(gameId),
         UpdateExpression: 'SET #state = :closed, #closedAt = :at, #updatedAt = :at',
         ConditionExpression: '#state = :open',
         ExpressionAttributeNames: { '#state': 'State', '#closedAt': 'ClosedAt', '#updatedAt': 'UpdatedAt' },
         ExpressionAttributeValues: { ':closed': SURVEY_CLOSED, ':open': SURVEY_OPEN, ':at': closedAt },
-      }));
+      })));
       return await freeze(gameId, meta, closedAt);
     } catch (err) {
       if (!isConditionFailure(err)) throw err;
@@ -189,7 +297,7 @@ async function warn(gameId, state) {
   }
   const warnedAt = new Date().toISOString();
   try {
-    await db.send(new UpdateCommand({
+    await retry.retryOnConflict(() => db.send(new UpdateCommand({
       TableName: TABLE(),
       Key: stateKey(gameId),
       // On STATE, so a phone or a stage that reloads inside the two minutes
@@ -198,7 +306,7 @@ async function warn(gameId, state) {
       ConditionExpression: '#state = :open',
       ExpressionAttributeNames: { '#warnedAt': 'WarnedAt', '#state': 'State' },
       ExpressionAttributeValues: { ':at': warnedAt, ':open': SURVEY_OPEN },
-    }));
+    })));
   } catch (err) {
     if (!isConditionFailure(err)) throw err;
     return respond(409, { error: 'Only an open survey can be warned.', code: 'NOT_OPEN' });
@@ -209,22 +317,34 @@ async function warn(gameId, state) {
 
 // ─────────────────────────────────────────────────────────── end ───────────
 
-async function end(gameId, state) {
+/**
+ * CLOSED → ENDED — but never past a close whose freeze did not land. A close
+ * can flip STATE and then fail to write the results (a 500, a timeout); the
+ * next close would freeze, but a host who presses End instead would leave a
+ * survey ENDED with its answers expiring at 7 days and nothing frozen. So the
+ * results are looked for first, and frozen here if they are missing — with
+ * STATE's own ClosedAt, as a retried close would.
+ */
+async function end(gameId, meta, state) {
   const current = state && state.State;
-  if (current === 'ENDED') return respond(200, { state: 'ENDED' });
-  if (current !== SURVEY_CLOSED) {
+  if (current !== SURVEY_CLOSED && current !== 'ENDED') {
     return respond(409, { error: 'Close the survey before ending the session.', code: 'NOT_CLOSED', state: current || null });
   }
+  if (!(await storedResults(gameId, meta))) {
+    const frozen = await freeze(gameId, meta, (state && state.ClosedAt) || new Date().toISOString());
+    if (frozen.statusCode !== 200) return frozen;
+  }
+  if (current === 'ENDED') return respond(200, { state: 'ENDED' });
   const now = new Date().toISOString();
   try {
-    await db.send(new UpdateCommand({
+    await retry.retryOnConflict(() => db.send(new UpdateCommand({
       TableName: TABLE(),
       Key: stateKey(gameId),
       UpdateExpression: 'SET #state = :ended, #endedAt = :at, #updatedAt = :at',
       ConditionExpression: '#state = :closed',
       ExpressionAttributeNames: { '#state': 'State', '#endedAt': 'EndedAt', '#updatedAt': 'UpdatedAt' },
       ExpressionAttributeValues: { ':ended': 'ENDED', ':closed': SURVEY_CLOSED, ':at': now },
-    }));
+    })));
   } catch (err) {
     if (!isConditionFailure(err)) throw err;
     // A second press that lost the race has nothing more to say.
@@ -274,9 +394,13 @@ async function people(gameId, meta) {
     }
   }
   // Everyone who joined THIS session and has not answered yet. A player row
-  // older than the session is a previous session's on the same code.
+  // older than the session is a previous session's on the same code. A player
+  // the host REMOVED is not waited on (player-presence.js: counts about the
+  // room right now drop them) — though anything they answered before leaving
+  // still shows above, because it still counts.
   const joined = uniquePlayerRecords(await queryAll(db, TABLE(), gameId, 'PLAYER#'))
     .filter((p) => !p.JoinedAt || !meta.CreatedAt || p.JoinedAt >= meta.CreatedAt)
+    .filter(isPresent)
     .map((p) => p.PlayerName || p.playerName)
     .filter(Boolean);
   for (const name of joined) if (!status.has(name)) status.set(name, 'not-started');
@@ -316,10 +440,13 @@ exports.handler = async (event) => {
 
     if (route === 'close') return await close(gameId, meta, state);
     if (route === 'warning') return await warn(gameId, state);
-    if (route === 'end') return await end(gameId, state);
+    if (route === 'end') return await end(gameId, meta, state);
     if (route === 'progress') return await progress(gameId, meta);
     return await people(gameId, meta);
   } catch (error) {
+    // STATE held by the answers in flight for the whole retry budget: busy,
+    // not broken — the host presses again.
+    if (retry.isConflictError(error)) return busy();
     console.error('❌ SURVEY HOST: error:', error);
     return respond(500, { error: 'Failed to handle the survey request' });
   }

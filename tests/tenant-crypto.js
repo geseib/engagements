@@ -272,13 +272,15 @@ check('surveyResponse encrypts the Answers map and nothing the live counts read'
     assert.ok(!C.ENCRYPTED_FIELDS.surveyResponse.includes(f), `${f} is a count or a coordinate`);
   }
 });
-// SURVEY#RESULTS, frozen at close. `Texts` holds the open answers, write-ins
-// and whys — the words people wrote — kept past their 7-day rows so results
-// can be read for 30 days. The counts beside it are conceded visible, as
+// SURVEY#RESULTS, frozen at close, and its text pages
+// (SURVEY#RESULTS#TEXT#<qid>#<page>). `Texts` — on the pages — holds the open
+// answers, write-ins and whys, the words people wrote, kept past their 7-day
+// rows so results can be read for 30 days. The counts on the main item, and
+// the page counts naming the pages, are conceded visible, as
 // `results.VoteTallies` is.
 check('surveyResults encrypts the frozen Texts, not the counts', () => {
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.surveyResults], ['Texts']);
-  for (const f of ['N', 'Finished', 'PerQuestion', 'Order']) {
+  for (const f of ['N', 'Finished', 'PerQuestion', 'Order', 'TextPages']) {
     assert.ok(!C.ENCRYPTED_FIELDS.surveyResults.includes(f), `${f} is a count`);
   }
 });
