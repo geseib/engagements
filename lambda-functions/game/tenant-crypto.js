@@ -216,13 +216,41 @@ const ENCRYPTED_FIELDS = Object.freeze({
 
   /** A question: PK=<scope>SET#<id>[#v<n>], SK=QUESTION#<cat>#<num>.
    *  Note optionA..optionF are lower-case in the table and Title/Detail are
-   *  capitalised — that asymmetry is real, see admin/upload-questions.js:842. */
+   *  capitalised — that asymmetry is real, see admin/upload-questions.js:842.
+   *
+   *  THE SEVEN AFTER CustomInstructions WERE ADDED 2026-09-23, on the owner's
+   *  ruling that question content is encrypted for org sets — "options, labels,
+   *  prompts and placeholder, surveys and polls alike"
+   *  (docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md, "Encryption").
+   *  `options` is a poll's answers and a survey choice's or ranking's list, and
+   *  was the one piece of a poll a person typed that sat in the clear while
+   *  trivia's optionA..F two rows over were ciphertext. The six labels and
+   *  prompts are the words a survey question wraps around its scale, its
+   *  buttons, its "why?" and its answer box (shared/survey-kinds.js).
+   *
+   *  NO BACKFILL, as ever: every poll row written before this has plaintext
+   *  `options`, which `decryptValue` passes through untouched, and it becomes
+   *  ciphertext on its next save. `options` is an ARRAY — encryptValue
+   *  JSON-serialises it, so it comes back as the array, not its string form.
+   *
+   *  WHAT STAYS PLAINTEXT ON A SURVEY ROW, and why: `kind`, `scale`,
+   *  `followUpWhen` and `textLength` are closed vocabularies — the same kind of
+   *  thing as `correctAnswer` above — and `required`, `allowMultiple`,
+   *  `maxPicks`, `allowOther`, `shuffle`, `unsure`, `rankTop`, `maxLength` and
+   *  `themes` are switches and counts. None is prose, and a reader that has to
+   *  ask KMS whether a question is a rating before it can draw it would be
+   *  paying for nothing. */
   question: Object.freeze([
     'Title',
     'Detail',
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF',
     'AnswerDetails',
     'CustomInstructions',
+    'options',
+    'lowLabel', 'highLabel',
+    'yesLabel', 'noLabel',
+    'followUpPrompt',
+    'placeholder',
   ]),
 
   /** A category row. EMPTY ON PURPOSE — see the `Name` note above. Present as
