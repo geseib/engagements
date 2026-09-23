@@ -22,6 +22,16 @@
  *   personaId           → PersonaId        ('' clears, matching PUT /persona)
  *   visibility          → Visibility       (mirrored onto the GAMES row)
  *   anonymousUntilReveal→ HostPreferences.anonymousUntilReveal (nested path)
+ *   names               → Names            (survey only; see below)
+ *
+ * NAMES LOCKS WHEN THE SURVEY OPENS. What a survey writes about people
+ * (survey-names.js) is promised on every phone from the first question, so it
+ * may change only while nobody has been promised anything: the write is
+ * conditioned on `attribute_not_exists(OpenedAt)`, which startSession stamps
+ * when the room opens. The CREATED gate below is read first and would miss an
+ * open landing between that read and this write; the condition does not. A
+ * value outside the three is refused, not folded to the default — a host who
+ * typed something should be told, not silently given Anonymous.
  *
  *   - categoryIds IS accepted (see buildHostMasks) — the enabled SUBSET within
  *     the pinned set is mask state, not derived state.
@@ -54,6 +64,7 @@ const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = requ
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
 const { encryptValue } = require('./tenant-crypto');
+const { NAMES } = require('./survey-names');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -68,7 +79,7 @@ const reply = (statusCode, body) => ({
 const VISIBILITIES = ['public', 'private'];
 const EDITABLE_FIELDS = [
   'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'promptId', 'visibility', 'anonymousUntilReveal',
-  'categoryIds'
+  'categoryIds', 'names'
 ];
 
 /**
@@ -131,7 +142,7 @@ exports.handler = async (event) => {
       db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-        ProjectionExpression: 'orgId'
+        ProjectionExpression: 'orgId, GameType, OpenedAt'
       })),
     ]);
     const ownerOrgId = (gameMeta.Item && gameMeta.Item.orgId) || '';
@@ -278,6 +289,23 @@ exports.handler = async (event) => {
       applied.anonymousUntilReveal = body.anonymousUntilReveal;
     }
 
+    if ('names' in body) {
+      if (!gameMeta.Item || gameMeta.Item.GameType !== 'survey') {
+        return reply(400, { error: 'names applies to a survey only' });
+      }
+      const mode = typeof body.names === 'string' ? body.names.trim().toLowerCase() : '';
+      if (!NAMES.includes(mode)) {
+        return reply(400, { error: `Unknown names "${body.names}". Expected one of: ${NAMES.join(', ')}` });
+      }
+      if (gameMeta.Item.OpenedAt) {
+        return reply(400, { error: 'Names is fixed once the survey has opened', code: 'NAMES_LOCKED' });
+      }
+      names['#names'] = 'Names';
+      values[':names'] = mode;
+      sets.push('#names = :names');
+      applied.names = mode;
+    }
+
     /*
       Categories are validated and staged HERE, written LAST (below, after the
       METADATA update succeeds) — the mask write targets a different item
@@ -361,12 +389,21 @@ exports.handler = async (event) => {
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
         UpdateExpression: updateExpression,
-        ExpressionAttributeNames: names,
+        ExpressionAttributeNames: {
+          ...names,
+          ...('names' in applied ? { '#openedAt': 'OpenedAt' } : {})
+        },
         ...(Object.keys(values).length ? { ExpressionAttributeValues: values } : {}),
-        ConditionExpression: 'attribute_exists(PK)'
+        // The Names lock rides the write itself — see the header.
+        ConditionExpression: 'names' in applied
+          ? 'attribute_exists(PK) AND attribute_not_exists(#openedAt)'
+          : 'attribute_exists(PK)'
       }));
     } catch (err) {
       if (err.name === 'ConditionalCheckFailedException') {
+        if ('names' in applied && gameMeta.Item) {
+          return reply(400, { error: 'Names is fixed once the survey has opened', code: 'NAMES_LOCKED' });
+        }
         return reply(404, { error: 'Game not found', gameId });
       }
       throw err;

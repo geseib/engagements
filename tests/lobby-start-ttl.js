@@ -25,8 +25,10 @@
  * The fix routes both doors through session-start.js. §1 and §2 drive the lobby
  * door through the real create and next-question handlers and read the ROWS;
  * §3 pins that it happens once, at the start, and not on every round; §4 that
- * a first round with nothing to ask is refused and starts nothing; §5 is the
- * structural half — one writer, so the two doors cannot drift apart again.
+ * a first round with nothing to ask is refused and starts nothing; §4b that a
+ * survey opens through the same function, straight into SURVEY#OPEN, with
+ * METADATA.OpenedAt; §5 is the structural half — one writer, so the doors
+ * cannot drift apart again.
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -285,6 +287,53 @@ function assertStartedRows(gameId) {
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(JSON.parse(res.body).gameEnded, true);
     assert.strictEqual(fourRows(g).state.State, 'ENDED');
+  });
+
+  say('\n4b. a survey opens through the same door, into SURVEY#OPEN');
+  // docs/design/survey-redesign/IMPLEMENTATION-phase-2.md: a survey has no
+  // rounds. POST /start opens it straight into SURVEY#OPEN — through
+  // startSession, so it is on the 7-day clock and joinable like any session.
+  const asSurvey = (gameId, kind) => {
+    Object.assign(row(`GAME#${gameId}`, 'METADATA'), { GameType: 'survey' });
+    for (const n of ['001', '002', '003']) {
+      const q = row(SETPK, `QUESTION#${n}`);
+      if (kind) Object.assign(q, { kind, scale: '1-5' });
+    }
+  };
+  const surveyGame = await createdSession();
+  asSurvey(surveyGame, 'rating');
+  const opened = await startGame(asHost(ACME, { pathParameters: { gameId: surveyGame } }));
+  // rejects: a survey opening into STARTED (the lobby's behaviour), or opening
+  // by some write other than startSession's.
+  await check('opened: STATE SURVEY#OPEN, all four rows on started + 7 days', () => {
+    assert.strictEqual(opened.statusCode, 200, opened.body);
+    assert.strictEqual(JSON.parse(opened.body).state, 'SURVEY#OPEN');
+    const rows = assertStartedRows(surveyGame);
+    assert.strictEqual(rows.state.State, 'SURVEY#OPEN');
+    assert.strictEqual(rows.metadata.Started, true);
+    assert.strictEqual(rows.index.Started, true);
+  });
+  // rejects: OpenedAt written from a second clock, or not at all — it is what
+  // locks Names and what a shared link counts from.
+  await check('METADATA.OpenedAt is the StartedAt', () => {
+    const { state, metadata } = fourRows(surveyGame);
+    assert.strictEqual(metadata.OpenedAt, state.StartedAt);
+  });
+  await check('every session type gets OpenedAt, not only a survey', async () => {
+    const g = await createdSession();
+    await startGame(asHost(ACME, { pathParameters: { gameId: g } }));
+    const { state, metadata } = fourRows(g);
+    assert.strictEqual(metadata.OpenedAt, state.StartedAt);
+  });
+  // rejects: opening a survey with nothing in it that anyone can answer.
+  await check('a survey with no answerable question: 409, still CREATED, all four rows untouched', async () => {
+    const g = await createdSession();
+    asSurvey(g, null);
+    const snap = JSON.parse(JSON.stringify(fourRows(g)));
+    const res = await startGame(asHost(ACME, { pathParameters: { gameId: g } }));
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(JSON.parse(res.body).nothingToAsk, true);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(fourRows(g))), snap);
   });
 
   say('\n5. one writer');
