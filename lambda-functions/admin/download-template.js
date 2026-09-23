@@ -1,3 +1,76 @@
+const { SURVEY_CATEGORY, itemsToSurveyCsv } = require('./shared/survey-kinds');
+
+/*
+  SURVEY TEMPLATES, as contract-shaped items (shared/survey-kinds.js). Each is a
+  starting point a person downloads, edits and imports — or that the New set
+  dialog's "A template" route offers (docs/design/survey-redesign mockup 01).
+  They mix kinds on purpose, so every template also shows what the kinds look
+  like in the CSV. tests/survey-upload.js imports every one of them and requires
+  zero skipped rows.
+*/
+
+/** The default: one question of every kind, in the Add-menu order. */
+const EVERY_KIND_TEMPLATE = [
+  { kind: 'rating', title: 'How useful was this session for your work?', required: true, scale: '1-5', lowLabel: 'Not useful', highLabel: 'Very useful', tags: ['usefulness'] },
+  { kind: 'choice', title: 'Which part was most valuable to you?', options: ['The live demo', 'The case studies', 'The Q&A'], allowOther: true, tags: ['content'] },
+  { kind: 'yesno', title: 'Was the length about right?', required: true, unsure: true, followUpWhen: 'no', followUpPrompt: 'What would you cut or add?', tags: ['format'] },
+  { kind: 'rank', title: 'Rank these topics for next time', options: ['Customer stories', 'Product roadmap', 'Team wins', 'Culture & hiring'], rankTop: 2, tags: ['topics'] },
+  { kind: 'text', title: 'What would you like to see added or changed?', textLength: 'long', placeholder: 'A sentence or two is plenty.', tags: ['suggestions'] },
+];
+
+const SURVEY_TEMPLATES = Object.freeze({
+  // THE MOCKUPS' SURVEY — docs/design/survey-redesign/_src/content.py, the one
+  // every screen in that folder draws, so the template a person starts from is
+  // the survey they were shown. Its answer lists are that talk's, which is the
+  // point of a template: replace them with yours.
+  'presentation-feedback': [
+    { kind: 'rating', title: 'How useful was today’s session for your work?', required: true, scale: '1-5', lowLabel: 'Not useful', highLabel: 'Very useful' },
+    { kind: 'rating', title: 'How likely are you to recommend this session to a colleague?', scale: '0-10', lowLabel: 'Not at all likely', highLabel: 'Extremely likely' },
+    { kind: 'choice', title: 'Which part of the presentation was most valuable to you?', required: true, options: ['Live demo of the new console', 'The three customer case studies, with their renewal numbers', 'Pricing roadmap for FY27', 'The open Q&A', 'Hiring plan update'] },
+    { kind: 'choice', title: 'Which formats would you want more of next time?', options: ['More time for questions', 'A hands-on breakout', 'Slides sent a day ahead', 'A recording afterwards'], allowMultiple: true, maxPicks: 2, allowOther: true },
+    { kind: 'yesno', title: 'Was the length about right?', required: true, unsure: true, followUpWhen: 'no', followUpPrompt: 'What would you cut or add?' },
+    { kind: 'rank', title: 'Rank these topics for the next all-hands', options: ['Customer stories', 'Product roadmap', 'Team wins', 'Culture & hiring', 'Financials'], rankTop: 3 },
+    { kind: 'text', title: 'What was the best part of the presentation?', textLength: 'long', maxLength: 500 },
+    { kind: 'text', title: 'What would you like to see added or changed?', textLength: 'short', maxLength: 280 },
+  ],
+  'event-feedback': [
+    { kind: 'rating', title: 'Overall, how would you rate the event?', required: true, scale: '1-5', lowLabel: 'Poor', highLabel: 'Excellent' },
+    { kind: 'rating', title: 'How likely are you to recommend this event to a colleague?', scale: '0-10', lowLabel: 'Not at all likely', highLabel: 'Extremely likely' },
+    { kind: 'choice', title: 'What did you come for?', options: ['The talks', 'Meeting people', 'The workshops', 'Hearing what is next'], allowMultiple: true, allowOther: true },
+    { kind: 'rating', title: 'How was the venue?', scale: 'stars' },
+    { kind: 'yesno', title: 'Would you come back next year?', required: true, unsure: true, followUpWhen: 'no', followUpPrompt: 'What would make it worth your time?' },
+    { kind: 'text', title: 'What was the highlight for you?', textLength: 'long' },
+    { kind: 'text', title: 'What one thing should we change?', textLength: 'short' },
+  ],
+  'workshop-retro': [
+    { kind: 'rating', title: 'How well did the workshop meet its goals?', required: true, scale: '1-5', lowLabel: 'Not at all', highLabel: 'Completely' },
+    { kind: 'choice', title: 'How was the pace?', options: ['Too slow', 'About right', 'Too fast'] },
+    { kind: 'rank', title: 'Rank the activities by how useful they were', options: ['The opening exercise', 'Small-group work', 'The group discussion', 'The action planning'] },
+    { kind: 'yesno', title: 'Did you leave with a clear next step?', required: true, followUpWhen: 'no', followUpPrompt: 'What would have made it clearer?' },
+    { kind: 'text', title: 'What went well?', textLength: 'long' },
+    { kind: 'text', title: 'What should we do differently next time?', textLength: 'long' },
+    { kind: 'rating', title: 'How confident are you about applying this?', scale: '1-10', lowLabel: 'Not confident', highLabel: 'Very confident' },
+  ],
+  'training-evaluation': [
+    { kind: 'rating', title: 'How relevant was the training to your role?', required: true, scale: '1-5', lowLabel: 'Not relevant', highLabel: 'Very relevant' },
+    { kind: 'rating', title: 'How clear was the trainer?', required: true, scale: '1-5', lowLabel: 'Hard to follow', highLabel: 'Very clear' },
+    { kind: 'choice', title: 'How much of the material was new to you?', options: ['Almost none of it', 'Some of it', 'Most of it', 'All of it'] },
+    { kind: 'choice', title: 'Which formats worked for you?', options: ['Live demonstrations', 'Hands-on exercises', 'Group discussion', 'Reading material'], allowMultiple: true, allowOther: true },
+    { kind: 'yesno', title: 'Do you feel ready to use what you learned?', unsure: true, followUpWhen: 'no', followUpPrompt: 'What would help you get there?' },
+    { kind: 'rating', title: 'How likely are you to recommend this training to a colleague?', scale: '0-10', lowLabel: 'Not at all likely', highLabel: 'Extremely likely' },
+    { kind: 'text', title: 'What will you do differently as a result?', textLength: 'long' },
+    { kind: 'text', title: 'What should the next session cover?', textLength: 'short' },
+  ],
+  'team-pulse': [
+    { kind: 'rating', title: 'How manageable is your workload right now?', required: true, scale: '1-5', lowLabel: 'Overwhelming', highLabel: 'Very manageable' },
+    { kind: 'rating', title: 'How supported do you feel by the team?', required: true, scale: '1-5', lowLabel: 'Not supported', highLabel: 'Fully supported' },
+    { kind: 'yesno', title: 'Do you have what you need to do your job well?', unsure: true, followUpWhen: 'no', followUpPrompt: 'What is missing?' },
+    { kind: 'choice', title: 'What is getting in the way most this month?', options: ['Too many meetings', 'Unclear priorities', 'Waiting on others', 'Tools and systems'], allowOther: true },
+    { kind: 'rank', title: 'Rank what would help most', options: ['Fewer meetings', 'Clearer priorities', 'More time to focus', 'Better tools'], rankTop: 2 },
+    { kind: 'text', title: 'Anything else the team should know?', textLength: 'short', placeholder: 'Optional — only if there is something on your mind.' },
+  ],
+});
+
 exports.handler = async (event) => {
   try {
     const templateType = event.queryStringParameters?.type || 'call-and-answer';
@@ -17,47 +90,25 @@ exports.handler = async (event) => {
         '"Communication",2,"Which communication tools do you use most?","Communication tool preferences vary by generation and work style.","Business School","You may select multiple options.","Email|Slack|Teams|Phone|Video calls|In-person","true","communication|tools"\n' +
         '"Development",3,"What skills would you like to develop?","Professional development priorities help guide training programs.","Business School","Choose your top priorities.","Leadership|Technical skills|Communication|Project management|Data analysis","true","professional-development"';
     } else if (templateType === 'survey') {
-      filename = 'survey-template.json';
-      const surveyTemplate = {
-        title: "Sample Survey Template",
-        description: "This is a sample survey with different question types",
-        questions: [
-          {
-            id: 1,
-            question: "How satisfied are you with our service?",
-            type: "rating",
-            scale: { type: "1-5", lowLabel: "Very Dissatisfied", highLabel: "Very Satisfied" },
-            required: true
-          },
-          {
-            id: 2,
-            question: "Which features do you use most?",
-            type: "multiple_choice",
-            options: ["Feature A", "Feature B", "Feature C", "Feature D"],
-            allowMultiple: true,
-            required: true
-          },
-          {
-            id: 3,
-            question: "What improvements would you suggest?",
-            type: "text_entry",
-            textType: "long",
-            placeholder: "Please share your suggestions...",
-            required: false
-          }
-        ]
-      };
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          filename: filename,
-          content: JSON.stringify(surveyTemplate, null, 2)
-        }),
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        }
-      };
+      // A SURVEY TEMPLATE IS A CSV NOW — the contract's survey branch, built by
+      // the same shared/survey-kinds.js the importer validates with, so a
+      // template can never carry a row the importer would skip. It used to be a
+      // JSON document the importer refused, which made it a template for
+      // nothing. `?template=<id>` picks one of the named starting points in
+      // SURVEY_TEMPLATES below; without it you get one question of every kind.
+      const templateId = String(event.queryStringParameters?.template || '').trim();
+      if (templateId && !SURVEY_TEMPLATES[templateId]) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: `There is no survey template called "${templateId}". The templates are: ${Object.keys(SURVEY_TEMPLATES).join(', ')}.`
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      filename = templateId ? `survey-${templateId}.csv` : 'survey-template.csv';
+      csvTemplate = itemsToSurveyCsv(templateId ? SURVEY_TEMPLATES[templateId] : EVERY_KIND_TEMPLATE,
+        { category: SURVEY_CATEGORY });
     } else if (templateType === 'wavelength') {
       // Wavelength: short evocative SUBJECTS players free-associate on
       // (up to 10 words each); the game measures word overlap across players

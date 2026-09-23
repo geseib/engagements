@@ -59,14 +59,22 @@
  *
  * ── WHY OPT-IN PER HANDLER ────────────────────────────────────────────────
  *
- * `makeGenerationHandler` is shared by six handlers and only THREE of them
+ * `makeGenerationHandler` is shared by six handlers and only FOUR of them
  * generate a whole set. `ai-generate-questions` adds ONE question to a set that
  * already exists and `ai-draft-set-metadata` writes four metadata fields;
  * either of them minting a set would be a new defect, not a feature. So the
  * capability is a config key a handler must supply — absent means structurally
- * incapable, not merely switched off. `ai-generate-survey` is also absent, and
- * deliberately: survey is not a playable type and upload-questions.js rejects
- * it outright (SurveyAIBuilder exports JSON instead of loading).
+ * incapable, not merely switched off.
+ *
+ * `ai-generate-survey` OPTED IN with Phase 1 of the survey redesign. It was
+ * deliberately absent while upload-questions.js refused every survey — a
+ * worker creating one would have been asking for a 400 on every run, which is
+ * why SurveyAIBuilder could only export JSON. The importer now takes the
+ * contract's survey CSV, so its `toCsv` is shared/survey-kinds.js's
+ * itemsToSurveyCsv rather than a shape defined in this file: the survey's
+ * columns live beside the validator that reads them. Survey is still not a
+ * PLAYABLE type — that is a property of sessions, not of sets — and the draft
+ * lands inactive like every other.
  */
 
 const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');

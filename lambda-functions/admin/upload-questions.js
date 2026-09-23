@@ -28,6 +28,9 @@ const { ORG, PLATFORM } = require('./shared/tenant');
 const { encryptItem } = require('./shared/tenant-crypto');
 const { resolvePromptRef, refusal } = require('./shared/workie-refs');
 const { dispatchHouseCheck } = require('./shared/house-check');
+const {
+  SURVEY_CATEGORY, SURVEY_CSV_COLUMNS, surveyFieldsFromCells, validateSurvey, itemFields, legacySurveyJsonToCsv,
+} = require('./shared/survey-kinds');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -283,21 +286,46 @@ exports.handler = async (event) => {
     console.log(`Replace target: ${isReplace ? replaceSetId : '(new set)'}`);
     console.log(`CSV content length: ${fileContent.length} characters`);
 
-    // Survey uploads (JSON template) are not yet supported: surveys have no
-    // game-side support (host/player pages and game lambdas only play
-    // call-and-answer, trivia, poll and wavelength sets), so importing a
-    // survey would create a set that can never be played.
+    /*
+      SURVEYS IMPORT NOW, and JSON imports only as a survey.
+
+      This block used to refuse every survey outright, because no session
+      could play one and a set nobody can play looked like a trap. Phase 1 of
+      the survey redesign (docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md)
+      makes surveys AUTHORABLE — made, generated, imported, edited, versioned
+      and downloaded — while `survey` stays in the browser's
+      UNPLAYABLE_GAME_TYPES and the "Not playable" chip stays truthful. So the
+      set this creates is exactly what it says it is: a survey you can work
+      on, that no session runs yet.
+
+      A survey arrives two ways. A CSV with a Kind column — the contract's
+      branch of the one CSV every set travels through — and the survey
+      builder's OLD JSON export, which was the only thing it could produce
+      while the importer refused it and which people are holding. The JSON is
+      converted to the contract CSV (shared/survey-kinds.js) BEFORE parsing,
+      so there is one parser, one validator and one writer; a question the
+      JSON gets wrong comes out as a row skipped with its reason, not as a
+      refused file.
+
+      JSON for any other type is still refused. Trivia, polls, call-and-answer
+      and wavelength have only ever been CSV, and a JSON file for one of them
+      is a wrong file, not a new format.
+    */
     const isJsonFile = typeof fileName === 'string' && /\.json$/i.test(fileName);
     const looksLikeJson = typeof fileContent === 'string' && /^[\[{]/.test(fileContent.trim());
-    if (engagementType === 'survey' || isJsonFile || looksLikeJson) {
-      console.log('⚠️ Survey/JSON upload detected - not yet supported');
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          error: 'Survey upload is not yet supported. Survey JSON templates can be downloaded and edited, but surveys cannot be imported as playable question sets until game sessions support the survey engagement type.'
-        }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
+    const isSurvey = engagementType === 'survey';
+    let csvText = fileContent;
+    if (isJsonFile || looksLikeJson) {
+      if (!isSurvey) {
+        console.log('⚠️ JSON upload for a non-survey set - refused');
+        return badRequest('This kind of question set is imported from a CSV file, not JSON. Save the questions as a CSV (download the template to see the columns) and try again.');
+      }
+      try {
+        csvText = legacySurveyJsonToCsv(fileContent);
+        console.log('↻ Survey JSON converted to the survey CSV before parsing');
+      } catch (e) {
+        return badRequest(e.message);
+      }
     }
 
     // Parse CSV content with proper multi-line field support
@@ -363,7 +391,7 @@ exports.handler = async (event) => {
       return rows;
     };
     
-    const rows = parseCSV(fileContent);
+    const rows = parseCSV(csvText);
     console.log(`📊 Parsed ${rows.length} rows from CSV`);
     
     if (rows.length < 2) {
@@ -459,6 +487,15 @@ exports.handler = async (event) => {
       allowMultipleIndex = getColumnIndex('AllowMultiple');
     }
 
+    // THE SURVEY'S TWENTY COLUMNS, Kind … Themes, found by EXACT name only.
+    // No loose fallback for any of them: a loose `includes('label')` or
+    // `includes('max')` would claim some other column's prose and feed it to a
+    // validated vocabulary, which is the failure the RoundKind note below
+    // describes. An absent column simply reads blank, so its default applies.
+    const surveyIndex = isSurvey
+      ? Object.fromEntries(SURVEY_CSV_COLUMNS.map((column) => [column, getColumnIndex(column)]))
+      : null;
+
     // Fallback to generic column names if exact matches not found
     if (categoryIndex === -1) categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
     if (titleIndex === -1) titleIndex = headers.findIndex(h => h.toLowerCase().includes('title') && !h.toLowerCase().includes('#'));
@@ -494,7 +531,14 @@ exports.handler = async (event) => {
     const looseMatch = (names) => headers.findIndex(h => names.includes(
       h.toLowerCase().trim().replace(/[\s_-]/g, '')
     ));
-    if (roundKindIndex === -1) roundKindIndex = looseMatch(['roundkind', 'kind', 'direction']);
+    // NOT `kind` ON A SURVEY. A survey CSV's `Kind` column is the question's
+    // kind (rating, choice…), and the bare-`kind` spelling below would claim
+    // it as the RoundKind override — then refuse the whole file for carrying
+    // "unrecognised round kinds" on every row. An exact `RoundKind` header is
+    // still read, so a survey set that somehow carries one round-trips.
+    if (roundKindIndex === -1) {
+      roundKindIndex = looseMatch(isSurvey ? ['roundkind', 'direction'] : ['roundkind', 'kind', 'direction']);
+    }
     if (sourceAttributionIndex === -1) sourceAttributionIndex = looseMatch(['sourceattribution', 'attribution']);
     // Only the normalised spelling ("Source Set Id" as well as "SourceSetId").
     // Nothing looser: a bare `source` would claim the SourceAttribution column
@@ -510,10 +554,16 @@ exports.handler = async (event) => {
     console.log(`  Image: ${imageIndex >= 0 ? headers[imageIndex] : 'NOT FOUND'} (index: ${imageIndex})`);
     console.log(`  Tags: ${tagsIndex >= 0 ? headers[tagsIndex] : 'NOT FOUND'} (index: ${tagsIndex})`);
 
-    // Check required columns
-    if (categoryIndex === -1 || titleIndex === -1) {
+    // Check required columns. A SURVEY needs no Category column — surveys
+    // expose no categories and every row is filed under `Survey` below — but
+    // it does need its Kind, or every row would be skipped as "needs a kind"
+    // and the author told only that nothing imported.
+    if (isSurvey && surveyIndex.Kind === -1) {
+      return badRequest(`This file has no Kind column. A survey CSV needs one, saying on every row what kind of question it is (rating, choice, yesno, rank or text) — download the survey template to see all the columns.\nDetected headers: [${headers.join(', ')}]`);
+    }
+    if ((categoryIndex === -1 && !isSurvey) || titleIndex === -1) {
       const missing = [];
-      if (categoryIndex === -1) missing.push('Category');
+      if (categoryIndex === -1 && !isSurvey) missing.push('Category');
       if (titleIndex === -1) missing.push('Title');
 
       return {
@@ -597,8 +647,10 @@ exports.handler = async (event) => {
           continue;
         }
 
-        // Extract values using mapped indices
-        const category = cell(values, categoryIndex);
+        // Extract values using mapped indices. A survey row with no Category is
+        // filed under `Survey`: the category mask still needs one, and a survey
+        // author is never shown the field to fill it in.
+        const category = cell(values, categoryIndex) || (isSurvey ? SURVEY_CATEGORY : '');
         const questionNumber = cell(values, questionNumberIndex);
         const title = cell(values, titleIndex);
         const questionDetail = cell(values, questionDetailIndex);
@@ -612,6 +664,25 @@ exports.handler = async (event) => {
         const sourceAttribution = cell(values, sourceAttributionIndex);
         const sourceSetIdCell = cell(values, sourceSetIdIndex);
         const sourceQuestionSkCell = cell(values, sourceQuestionSkIndex);
+
+        // A SURVEY ROW IS VALIDATED WHOLE, and a bad one is SKIPPED WITH ITS
+        // REASON while the rest import — the contract's rule, and the same
+        // sentences the browser's rowProblems and the CSV preflight say, so
+        // what the author was warned about is exactly what was skipped. Every
+        // problem on the row is named at once, joined with "; ", rather than
+        // one per upload. Nothing about the row is written until it passes.
+        let surveyAttributes = null;
+        if (isSurvey) {
+          const fields = surveyFieldsFromCells((column) => cell(values, surveyIndex[column]));
+          const problems = [...(title ? [] : ['needs a title']), ...validateSurvey(fields)];
+          if (problems.length > 0) {
+            skippedRows.push({ row: i + 1, reason: problems.join('; ') });
+            console.log(`⚠️ Row ${i + 1} skipped: ${problems.join('; ')}`);
+            continue;
+          }
+          // Only what this kind uses — see shared/survey-kinds.js itemFields.
+          surveyAttributes = itemFields(fields);
+        }
 
         // The per-question OVERRIDE. Empty means inherit the set's direction,
         // which is what every row of every existing set does. A non-empty cell
@@ -704,6 +775,8 @@ exports.handler = async (event) => {
             const optionsStr = cell(values, optionsIndex);
             baseQuestion.Options = optionsStr ? optionsStr.split('|').map(opt => opt.trim()) : [];
             baseQuestion.AllowMultiple = cell(values, allowMultipleIndex).toLowerCase() === 'true';
+          } else if (isSurvey) {
+            baseQuestion.SurveyAttributes = surveyAttributes;
           }
 
           // No `categories.add(category)` here any more: canonicalCategory()
@@ -1090,6 +1163,15 @@ exports.handler = async (event) => {
         // Store poll options
         questionItem.options = question.Options || [];
         questionItem.allowMultiple = question.AllowMultiple || false;
+      } else if (engagementType === 'survey') {
+        // `kind`, `required` and the fields this kind uses, under the
+        // contract's lower-case names — which are also the names the editor's
+        // rows use, so get-question-set-questions.js passes them straight
+        // through. Nothing irrelevant is stored: a field another kind would use
+        // reads back as its empty value instead. The prose among them
+        // (options, the labels, followUpPrompt, placeholder) is encrypted for
+        // an org set by the `encryptItem` call below, like Title and Detail.
+        Object.assign(questionItem, question.SurveyAttributes || {});
       }
 
       questionItems.push(questionItem);

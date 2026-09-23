@@ -129,7 +129,17 @@ check('question fields are exactly the agreed set', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.question].sort(), [
     'AnswerDetails', 'CustomInstructions', 'Detail', 'Title',
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF',
+    // The owner, 2026-09-23: question content is encrypted for org sets —
+    // options, labels, prompts and placeholder, surveys and polls alike.
+    // docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md, "Encryption".
+    'options', 'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder',
   ].sort()));
+check('the survey switches and vocabulary stay plaintext — flags, not prose', () => {
+  for (const f of ['kind', 'required', 'allowMultiple', 'maxPicks', 'allowOther', 'shuffle', 'scale',
+    'unsure', 'followUpWhen', 'rankTop', 'textLength', 'maxLength', 'themes']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.question.includes(f), `${f} is a switch or a count, not content`);
+  }
+});
 check('set fields are exactly the agreed set', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.set].sort(),
     ['aiContextInstruction', 'customInstruction', 'description', 'name',
@@ -324,7 +334,10 @@ check('every named field becomes an envelope and the row still finds itself', as
 // table in the clear and this goes red.
 const MUST_NOT_LEAK = {
   question: ['Title', 'Detail', 'optionA', 'optionB', 'optionC', 'optionD',
-    'optionE', 'optionF', 'AnswerDetails', 'CustomInstructions'],
+    'optionE', 'optionF', 'AnswerDetails', 'CustomInstructions',
+    // A poll's or a survey's answers, and the words a survey question wraps
+    // around them — the same prose a trivia option is.
+    'options', 'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder'],
   set: ['name', 'description', 'customInstruction', 'aiContextInstruction',
     'roundKindBrief'],
   // The session brief. Its Title/HostName are the same two strings as
@@ -382,6 +395,39 @@ check('an ARRAY field round-trips as an array', async () => {
   const item = { SK: 'QUESTION#001#AISummary', DiscussionQuestions: ['why?', 'what next?'] };
   const back = await C.decryptItem(org, 'aiSummary', await C.encryptItem(org, 'aiSummary', item));
   assert.deepStrictEqual(back.DiscussionQuestions, ['why?', 'what next?']);
+});
+check('a survey question\'s content round-trips — the options LIST as a list', async () => {
+  const org = 'org_nw';
+  const row = {
+    PK: 'ORG#org_nw#SET#pulse#v1', SK: 'QUESTION#c001#001', Title: 'Rank these', kind: 'rank',
+    options: ['Customer stories', 'Product roadmap', 'Team wins'], rankTop: 2,
+    lowLabel: 'Not useful', highLabel: 'Very useful', yesLabel: 'Keep it', noLabel: 'Cut it',
+    followUpPrompt: 'What would you cut?', placeholder: 'A sentence or two',
+  };
+  const enc = await C.encryptItem(org, 'question', row);
+  for (const f of ['options', 'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder']) {
+    assert.ok(C.isEnvelope(enc[f]), `${f} is not an envelope`);
+  }
+  assert.ok(!JSON.stringify(enc).includes('Product roadmap'), 'an option is readable at rest');
+  assert.strictEqual(enc.kind, 'rank', 'the kind is vocabulary and stays readable');
+  assert.strictEqual(enc.rankTop, 2, 'a count stays readable');
+  assert.deepStrictEqual(await C.decryptItem(org, 'question', enc), row);
+});
+check('a LEGACY plaintext poll `options` array passes through decrypt unchanged', async () => {
+  // Every poll row written before this change has plaintext options. There is
+  // no backfill: they read as themselves and encrypt on their next save.
+  const row = { PK: 'ORG#org_nw#SET#polls', SK: 'QUESTION#c001#001', Title: 'Which cadence?',
+    options: ['Weekly', 'Fortnightly', 'Monthly'], allowMultiple: false };
+  assert.deepStrictEqual(await C.decryptItem('org_nw', 'question', row), row);
+  // …and an org with no key at all can still read it, because nothing needed one.
+  assert.deepStrictEqual(await C.decryptItem('org_legacy', 'question', row), row);
+});
+check('an empty options list is encrypted like any other value (it is not a blank)', async () => {
+  // isSkippable is absent/null/'' only. [] is a value, and "this question has
+  // no options yet" is not worth a special case in the boundary.
+  const enc = await C.encryptItem('org_nw', 'question', { options: [] });
+  assert.ok(C.isEnvelope(enc.options));
+  assert.deepStrictEqual((await C.decryptItem('org_nw', 'question', enc)).options, []);
 });
 check('the caller\'s object is NOT mutated — handlers return the item they wrote', async () => {
   const row = { Title: SECRET };
