@@ -21,6 +21,10 @@ import AddQuestionsDialog from './AddQuestionsDialog';
 import TriviaAIBuilder from './TriviaAIBuilder';
 import PollAIBuilder from './PollAIBuilder';
 import AIScenarioBuilder from './AIScenarioBuilder';
+import SurveyQuestionFields, {
+  SurveyAddMenu, SurveyKindChip, SurveyPreviewLine, SurveyRequiredMark,
+} from './SurveyQuestionFields';
+import { SURVEY_CATEGORY } from '../config/surveyKinds';
 import {
   ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
 } from '../utils/addQuestions';
@@ -182,6 +186,11 @@ export default function QuestionsPanel({
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
   const engagementType = normalizeGameType(questionSet?.engagementType);
+  // A SURVEY SET is edited by KIND, not by category: its rows name a kind and
+  // preview their answer, Add question is a menu of the five kinds, and the
+  // form switches its fields by kind (components/SurveyQuestionFields.jsx,
+  // docs/design/survey-redesign/04–06). Every other path below is shared.
+  const isSurvey = engagementType === 'survey';
   // The server's answer to "may this caller write to this set", never ours.
   // Absent means an older payload: assume the historical behaviour (replace)
   // and let the handler refuse, which the 403 path below turns into a fork.
@@ -542,12 +551,20 @@ export default function QuestionsPanel({
   };
 
   const startAdd = () => {
+    // A survey question is a kind before it is anything else. Reached here
+    // only from Add questions → "write one", which names no kind, so it starts
+    // as the first kind on the menu; a default rating switches to any other
+    // kind without a question, because it has nothing to lose.
+    if (isSurvey) { startAddKind('rating'); return; }
     // The seed is unchanged: whatever the list is filtered to, else the
     // category of the last row, so adding a run of questions to one category
     // does not mean retyping its name every time.
     const seedCategory = activeCategory || rows[rows.length - 1]?.category || '';
     openForm(blankRow({ category: seedCategory }), 'add');
   };
+
+  /** The Add question menu's choice: a new survey question of that kind, filed under Survey. */
+  const startAddKind = (kind) => openForm(blankRow({ kind }), 'add');
 
   const startEdit = (row) => openForm({ ...row }, 'edit');
 
@@ -589,7 +606,13 @@ export default function QuestionsPanel({
       });
       return;
     }
-    const problemsNow = rowProblems(draft, engagementType);
+    // Surveys expose no category and the form shows none, so one it lacks —
+    // a question read from an older file — is filled here, where the person
+    // cannot be asked for it.
+    const committed = isSurvey && !String(draft.category || '').trim()
+      ? { ...draft, category: SURVEY_CATEGORY }
+      : draft;
+    const problemsNow = rowProblems(committed, engagementType);
     if (problemsNow.length) {
       // In the modal, not in the panel's status bar underneath it.
       setFormError(`That question ${problemsNow.join(', and ')}.`);
@@ -597,9 +620,9 @@ export default function QuestionsPanel({
     }
     setRows((current) => (draftKind === 'add'
       // An add only reaches the working copy here.
-      ? [...current, draft]
-      : current.map((r) => (r.uid === draft.uid
-        ? { ...draft, edited: r.origin === 'loaded' ? true : r.edited }
+      ? [...current, committed]
+      : current.map((r) => (r.uid === committed.uid
+        ? { ...committed, edited: r.origin === 'loaded' ? true : r.edited }
         : r))));
     closeForm();
     setStatus({ text: '', tone: '' });
@@ -1240,9 +1263,19 @@ export default function QuestionsPanel({
       )}
 
       <div className="qs-panel-actions">
-        <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready' || writesBlocked}>
-          <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
-        </button>
+        {isSurvey ? (
+          /* The kind first (mockup 04): the five kinds, then "From another
+             set", which stands in for the Pull button a survey does not show. */
+          <SurveyAddMenu
+            onAdd={startAddKind}
+            onPull={() => setShowPull(true)}
+            disabled={loadState !== 'ready' || writesBlocked}
+          />
+        ) : (
+          <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready' || writesBlocked}>
+            <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
+          </button>
+        )}
         {/* The New set routes — AI, CSV, by hand — pointed at THIS set. */}
         <button
           className="btn-secondary btn-small"
@@ -1253,13 +1286,15 @@ export default function QuestionsPanel({
         >
           <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" /> Add questions…
         </button>
-        <button
-          className="btn-secondary btn-small"
-          onClick={() => setShowPull(true)}
-          disabled={loadState !== 'ready' || writesBlocked}
-        >
-          <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
-        </button>
+        {!isSurvey && (
+          <button
+            className="btn-secondary btn-small"
+            onClick={() => setShowPull(true)}
+            disabled={loadState !== 'ready' || writesBlocked}
+          >
+            <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
+          </button>
+        )}
         {/* The selection is the table's checkboxes, and Preview does not show
             them: a "Save 2 selected" there acts on two questions nothing on
             screen names. Hidden, not cleared — it returns with the table. */}
@@ -1277,7 +1312,7 @@ export default function QuestionsPanel({
         )}
         {/* The table's own filter. Preview has chips of its own, and a select
             that filters a table nobody can see is a control that does nothing. */}
-        {categories.length > 1 && !previewing && (
+        {categories.length > 1 && !previewing && !isSurvey && (
           <label className="qs-filter">
             Filter by category:{' '}
             <select
@@ -1360,19 +1395,26 @@ export default function QuestionsPanel({
                       aria-label={`Select ${row.title || 'untitled question'}`}
                     />
                   )}
+                  {/* A survey row's Kind column (mockup 04). */}
+                  {isSurvey && <SurveyKindChip row={row} />}
                   <div className="qs-question-text">
                     <div className="qs-question-title">
                       <strong>{row.title || <em>Untitled question</em>}</strong>
                       {badge && <span className={`qs-change-badge ${badge.split(' ')[0].toLowerCase()}`}>{badge}</span>}
                     </div>
-                    <div className="qs-question-meta">
-                      <span>{row.category || 'no category'}</span>
-                      {showKind && row.roundKind && <span>{kindLabel(row.roundKind)}</span>}
-                      {row.sourceSetId && <span>from {row.sourceSetId}</span>}
-                      {engagementType === 'trivia' && row.correctAnswer && <span>answer: {row.correctAnswer}</span>}
-                      {row.detail && <span className="qs-question-detail">{row.detail.slice(0, 90)}{row.detail.length > 90 ? '…' : ''}</span>}
-                    </div>
+                    {/* A survey question previews its answer where another set
+                        prints its category: surveys expose no categories. */}
+                    {isSurvey ? <SurveyPreviewLine row={row} /> : (
+                      <div className="qs-question-meta">
+                        <span>{row.category || 'no category'}</span>
+                        {showKind && row.roundKind && <span>{kindLabel(row.roundKind)}</span>}
+                        {row.sourceSetId && <span>from {row.sourceSetId}</span>}
+                        {engagementType === 'trivia' && row.correctAnswer && <span>answer: {row.correctAnswer}</span>}
+                        {row.detail && <span className="qs-question-detail">{row.detail.slice(0, 90)}{row.detail.length > 90 ? '…' : ''}</span>}
+                      </div>
+                    )}
                   </div>
+                  {isSurvey && <SurveyRequiredMark required={row.required === true} />}
                   <div className="qs-question-actions">
                     {row.removed ? (
                       <button className="btn-secondary btn-small" onClick={() => restoreRow(row.uid)}>
@@ -1495,7 +1537,10 @@ export default function QuestionsPanel({
                toggle, the brief panel and the provenance line together. A
                disabled toggle would still advertise a route the caller cannot
                reach. */
-            ai={showAIAssist ? {
+            /* Not for a survey either: the one-question drafter
+               (ai-generate-questions) writes no kind, so its draft would be a
+               question of no kind at all. */
+            ai={showAIAssist && !isSurvey ? {
               open: aiOpen,
               brief: aiBrief,
               busy: aiBusy,
@@ -1760,9 +1805,39 @@ function QuestionForm({
   siblingCategory = '',
   setId = '',
   ai,
+  /**
+   * THE SLOT FOR A SURVEY QUESTION'S PHONE PREVIEW (mockup 05). The player's
+   * survey inputs are Phase 2, so nothing fills it yet and the panel passes
+   * nothing; when they exist, the preview goes here and SurveyQuestionFields
+   * makes room for it beside the fields.
+   */
+  surveyPhonePreview = null,
 }) {
   const set = (field) => (e) => onChange({ ...draft, [field]: e.target.value });
   const id = (field) => `q-${field}-${draft.uid}`;
+  const footer = (
+    <QuestionFormFooter
+      formError={formError}
+      confirmDrop={confirmDrop}
+      isAdding={isAdding}
+      onKeepEditing={onKeepEditing}
+      onDropDraft={onDropDraft}
+      onDone={onDone}
+      onCancel={onCancel}
+    />
+  );
+
+  // A survey question's fields are chosen by its KIND, not by the set's type,
+  // and a survey shows no category, siblings, picture or reveal (mockups 05
+  // and 06). What the form does not show still rides along on the row.
+  if (engagementType === 'survey') {
+    return (
+      <div className="qs-question-form">
+        <SurveyQuestionFields draft={draft} onChange={onChange} idOf={id} phonePreview={surveyPhonePreview} />
+        {footer}
+      </div>
+    );
+  }
 
   return (
     <div className="qs-question-form">
@@ -2023,6 +2098,20 @@ function QuestionForm({
         </div>
       </div>
 
+      {footer}
+    </div>
+  );
+}
+
+/**
+ * The form's foot, shared by every set type: the refusal Done met, then either
+ * the "throw it away?" strip or Done / Cancel.
+ */
+function QuestionFormFooter({
+  formError, confirmDrop, isAdding, onKeepEditing, onDropDraft, onDone, onCancel,
+}) {
+  return (
+    <>
       {formError && <StatusMessage message={formError} tone="error" />}
 
       {confirmDrop ? (
@@ -2051,6 +2140,6 @@ function QuestionForm({
           </span>
         </div>
       )}
-    </div>
+    </>
   );
 }
