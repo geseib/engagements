@@ -51,22 +51,17 @@ describe('tier one — the file the server would answer 400 for', () => {
     expect(report.importedCount).toBe(1);
   });
 
-  test('selecting Survey stops the import before anything is read', () => {
-    // upload-questions.js:150-161 rejects survey outright, and the gate is
-    // three-way. rejects: the shipped behaviour — the type was offered, the
-    // Upload button enabled, and the problem admitted only in a sentence beside
-    // the file picker. This is the "label it, not hide it" half of
-    // OPEN-QUESTIONS #3: Survey stays selectable and says what it costs.
-    const report = preflight(GOOD_CALL_AND_ANSWER, 'survey');
-    expect(report.ok).toBe(false);
-    expect(report.blocking.map((b) => b.code)).toContain('survey-unsupported');
-  });
-
-  test('JSON content is blocked whatever type is selected', () => {
+  test('JSON content is blocked for every type but survey', () => {
     // The same gate fires on a leading [ or { even for a .csv name and a
-    // call-and-answer type. rejects: gating only on the selected type.
+    // call-and-answer type. rejects: gating only on the selected type — and,
+    // since surveys phase 1, rejects opening the JSON door any wider than the
+    // one type whose builder used to export it (upload-questions.js converts
+    // survey JSON and still refuses it for everything else).
     const report = preflight('[{"title":"x"}]', 'call-and-answer');
     expect(report.blocking.map((b) => b.code)).toContain('json-content');
+    const trivia = preflight('{"questions":[]}', 'trivia', { fileName: 'quiz.json' });
+    expect(trivia.blocking.map((b) => b.code)).toContain('json-content');
+    expect(trivia.blocking[0].detail).toMatch(/only a survey/i);
   });
 
   test('a header row with no questions is named as that, not as an empty file', () => {
@@ -285,5 +280,166 @@ describe('the one-line summary', () => {
   test('it states rows, what would import, and categories', () => {
     const report = preflight(GOOD_CALL_AND_ANSWER, 'call-and-answer');
     expect(describePreflight(report)).toBe('2 rows · 2 would import · 1 category');
+  });
+});
+
+/**
+ * SURVEYS CAN BE IMPORTED NOW (surveys phases 0+1, C2).
+ *
+ * The survey-unsupported block is gone: upload-questions.js reads a survey CSV
+ * with a Kind column (Track A, A2) and converts the survey JSON the old
+ * builder exported. What the importer would SKIP is reported here in the
+ * contract's own words — docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md,
+ * "THE CONTRACT", Validation — so the preflight table and the importer's
+ * skippedRows say the same thing about the same row.
+ */
+const SURVEY_HEADER = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,'
+  + 'Options,AllowMultiple,MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,'
+  + 'Unsure,FollowUpWhen,FollowUpPrompt,RankTop,TextLength,MaxLength,Placeholder,Themes,Tags';
+const SURVEY_COLUMNS = SURVEY_HEADER.split(',');
+/** One survey row, every cell quoted as the contract writes them. */
+const surveyRow = (fields) => SURVEY_COLUMNS
+  .map((column) => `"${String(fields[column] ?? '').replace(/"/g, '""')}"`)
+  .join(',');
+const surveyCsv = (...rows) => [SURVEY_HEADER, ...rows.map(surveyRow)].join('\n');
+
+const EVERY_KIND = [
+  { Category: 'Survey', Title: 'How useful was it?', Kind: 'rating', Scale: '1-5', LowLabel: 'Not useful', HighLabel: 'Very useful' },
+  { Category: 'Survey', Title: 'Which part?', Kind: 'choice', Options: 'Demo|Stories|Roadmap', AllowMultiple: 'true', MaxPicks: '2' },
+  { Category: 'Survey', Title: 'Was the length right?', Kind: 'yesno', Unsure: 'true', FollowUpWhen: 'no', FollowUpPrompt: 'What would you cut?' },
+  { Category: 'Survey', Title: 'Rank the topics', Kind: 'rank', Options: 'A|B|C|D|E', RankTop: '3' },
+  { Category: 'Survey', Title: 'What was best?', Kind: 'text', TextLength: 'long', MaxLength: '500' },
+];
+
+describe('surveys — a file with a Kind column', () => {
+  test('one row of every kind preflights clean', () => {
+    // rejects: the old survey-unsupported block, and any rule stricter than
+    // the contract's.
+    const report = preflight(surveyCsv(...EVERY_KIND), 'survey');
+    expect(report.blocking).toEqual([]);
+    expect(report.skipped).toEqual([]);
+    expect(report.gaps).toEqual([]);
+    expect(report.importedCount).toBe(5);
+    expect(report.categories).toEqual(['Survey']);
+  });
+
+  test('no Kind column stops the import and says what a survey row needs', () => {
+    // Every row would be skipped as "needs a kind" and the importer would
+    // answer "No valid questions". rejects: reporting that as five skipped
+    // rows instead of the one missing column it is.
+    const report = preflight(csv('Category,Title', 'Survey,How was it?'), 'survey');
+    expect(report.ok).toBe(false);
+    expect(report.blocking.map((b) => b.code)).toContain('survey-no-kind');
+    expect(report.blocking.find((b) => b.code === 'survey-no-kind').title).toMatch(/no Kind column/i);
+  });
+
+  test.each([
+    ['no kind', { Kind: '' }, 'needs a kind'],
+    ['an unknown kind', { Kind: 'slider' }, "unknown kind 'slider'"],
+    ['a choice with one option', { Kind: 'choice', Options: 'Only' }, 'needs at least two options'],
+    ['a choice with nine options', { Kind: 'choice', Options: 'a|b|c|d|e|f|g|h|i' }, 'has more than eight options'],
+    ['more picks than options', { Kind: 'choice', Options: 'a|b|c', AllowMultiple: 'true', MaxPicks: '5' }, "can't allow 5 picks from 3 options"],
+    ['one pick of several', { Kind: 'choice', Options: 'a|b|c', AllowMultiple: 'true', MaxPicks: '1' }, "can't allow 1 picks from 3 options"],
+    ['a ranking of two', { Kind: 'rank', Options: 'a|b' }, 'needs at least three items'],
+    ['a ranking of eight', { Kind: 'rank', Options: 'a|b|c|d|e|f|g|h' }, 'has more than seven items'],
+    ['ranking the top of all', { Kind: 'rank', Options: 'a|b|c', RankTop: '3' }, "can't rank the top 3 of 3"],
+    ['an unknown scale', { Kind: 'rating', Scale: '1-7' }, "unknown scale '1-7'"],
+    ['an unknown follow-up', { Kind: 'yesno', FollowUpWhen: 'maybe' }, "unknown follow-up 'maybe'"],
+    ['a follow-up with no question', { Kind: 'yesno', FollowUpWhen: 'no', FollowUpPrompt: '' }, 'needs the follow-up question'],
+    ['an unknown length', { Kind: 'text', TextLength: 'medium' }, "unknown length 'medium'"],
+    ['an answer limit past 2000', { Kind: 'text', MaxLength: '5000' }, 'answer limit must be 20–2000 characters'],
+    ['an answer limit under 20', { Kind: 'text', MaxLength: '10' }, 'answer limit must be 20–2000 characters'],
+  ])('%s is skipped, in the importer’s words', (_label, fields, reason) => {
+    // rejects: preflight wording that differs from the contract's — the
+    // operator would read one reason here and another in the import report.
+    const report = preflight(surveyCsv(EVERY_KIND[0], { Category: 'Survey', Title: 'The bad one', ...fields }), 'survey');
+    expect(report.skipped).toEqual([
+      expect.objectContaining({ row: 3, problem: reason, result: 'Row skipped' }),
+    ]);
+    expect(report.importedCount).toBe(1);
+  });
+
+  test('two problems on one row are both named, joined as the importer joins them', () => {
+    const report = preflight(surveyCsv({ Category: 'Survey', Title: 'Too many', Kind: 'rank', Options: 'a|b|c|d|e|f|g|h', RankTop: '9' }, EVERY_KIND[4]), 'survey');
+    expect(report.skipped[0].problem).toBe("has more than seven items; can't rank the top 9 of 8");
+  });
+
+  test('a picks limit only counts when several may be picked', () => {
+    // MaxPicks is a field of "pick several" alone; with one pick it is not
+    // stored, so it cannot be a reason to skip the row.
+    const report = preflight(surveyCsv({ Category: 'Survey', Title: 'One pick', Kind: 'choice', Options: 'a|b', AllowMultiple: 'false', MaxPicks: '7' }), 'survey');
+    expect(report.skipped).toEqual([]);
+  });
+
+  test('the old spellings the builder exported are read, as the importer reads them', () => {
+    const report = preflight(surveyCsv(
+      { Category: 'Survey', Title: 'A', Kind: 'multiple_choice', Options: 'x|y' },
+      { Category: 'Survey', Title: 'B', Kind: 'text_entry' },
+      { Category: 'Survey', Title: 'C', Kind: 'yes_no' },
+      { Category: 'Survey', Title: 'D', Kind: 'ranking', Options: 'x|y|z' },
+      { Category: 'Survey', Title: 'E', Kind: 'nps', Scale: 'whatever — nps is 0-10' },
+      { Category: 'Survey', Title: 'F', Kind: 'Rating' },
+    ), 'survey');
+    expect(report.skipped).toEqual([]);
+    expect(report.importedCount).toBe(6);
+  });
+
+  test('a survey row with no Category still imports, filed under Survey', () => {
+    // The importer fills Survey in (A2): surveys expose no categories. rejects:
+    // reporting "Missing Category" for a row that will import.
+    const report = preflight(surveyCsv({ ...EVERY_KIND[0], Category: '' }), 'survey');
+    expect(report.skipped).toEqual([]);
+    expect(report.importedCount).toBe(1);
+    expect(report.categories).toEqual(['Survey']);
+  });
+
+  test('a row with no Title is still skipped, as every type’s is', () => {
+    const report = preflight(surveyCsv(EVERY_KIND[0], { ...EVERY_KIND[1], Title: '' }), 'survey');
+    expect(report.skipped).toEqual([expect.objectContaining({ row: 3, problem: 'Missing Title' })]);
+  });
+
+  test('a file whose every row would be skipped is blocked', () => {
+    const report = preflight(surveyCsv({ Category: 'Survey', Title: 'x', Kind: 'slider' }), 'survey');
+    expect(report.ok).toBe(false);
+    expect(report.blocking.map((b) => b.code)).toContain('no-usable-rows');
+  });
+
+  test('the survey-unsupported block is gone', () => {
+    const report = preflight(surveyCsv(...EVERY_KIND), 'survey');
+    expect(report.blocking.map((b) => b.code)).not.toContain('survey-unsupported');
+    expect(report.ok).toBe(true);
+  });
+});
+
+describe('surveys — the JSON the old builder exported', () => {
+  const EXPORT = JSON.stringify({
+    title: 'Q3 feedback',
+    questions: [
+      { question: 'How useful?', type: 'rating', scale: { type: '1-10' } },
+      { question: 'Anything else?', type: 'text_entry', textType: 'email' },
+    ],
+  });
+
+  test('is accepted for a survey, and counted', () => {
+    // rejects: the json-content block for survey. upload-questions.js converts
+    // this shape (legacySurveyJsonToCsv) before it reads a single row.
+    const report = preflight(EXPORT, 'survey', { fileName: 'survey-Q3.json' });
+    expect(report.blocking).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(report.dataRowCount).toBe(2);
+    expect(report.importedCount).toBe(2);
+    expect(describePreflight(report)).toBe('2 rows · 2 would import · 1 category');
+  });
+
+  test('a file that is not JSON at all says so', () => {
+    const report = preflight('{"title": "cut off', 'survey', { fileName: 'survey.json' });
+    expect(report.ok).toBe(false);
+    expect(report.blocking.map((b) => b.code)).toEqual(['survey-json-unreadable']);
+  });
+
+  test('JSON with no questions in it has nothing to import', () => {
+    const report = preflight('{"title":"Empty","questions":[]}', 'survey', { fileName: 'empty.json' });
+    expect(report.ok).toBe(false);
+    expect(report.blocking.map((b) => b.code)).toEqual(['survey-json-empty']);
   });
 });

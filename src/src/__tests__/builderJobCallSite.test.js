@@ -80,7 +80,11 @@ describe('the page does not create a set the worker already created', () => {
    */
   const source = read('AdminPage.jsx');
 
-  for (const handler of ['handleScenariosGenerated', 'handleTriviaGenerated', 'handlePollGenerated']) {
+  // handleSurveyGenerated joined the list in the Phase 0 fixes (Surveys
+  // phases 0+1, fix 2): it used to build a Blob and click an anchor — a JSON
+  // download, with no set anywhere — and the survey worker now creates a
+  // draft set like the other three.
+  for (const handler of ['handleScenariosGenerated', 'handleTriviaGenerated', 'handlePollGenerated', 'handleSurveyGenerated']) {
     test(`${handler} returns on createdSet without uploading`, () => {
       // rejects: leaving the old unconditional POST in place. The worker now
       // creates the set before the job goes terminal, so this path would send
@@ -100,44 +104,62 @@ describe('the page does not create a set the worker already created', () => {
   }
 });
 
-describe('only the whole-set builders promise a set gets made', () => {
-  test('scenarios, trivia and polls pass createsSet to the panel', () => {
+describe('every whole-set builder promises a set gets made — survey included now', () => {
+  test('all four builders pass createsSet to the panel', () => {
     // rejects: shipping server-side creation without the copy that tells
     // anyone. The report is that "Close — this keeps running" was believed and
-    // produced nothing; the panel has to say what actually happens now.
-    for (const file of ['AIScenarioBuilder.jsx', 'TriviaAIBuilder.jsx', 'PollAIBuilder.jsx']) {
+    // produced nothing; the panel has to say what actually happens now. The
+    // survey worker joined the other three (A5's setCreation), so its panel
+    // makes the same promise — withholding it would now be the untruth.
+    for (const file of ['AIScenarioBuilder.jsx', 'TriviaAIBuilder.jsx', 'PollAIBuilder.jsx', 'SurveyAIBuilder.jsx']) {
       expect(read('components', file)).toMatch(/<GenerationJobPanel[\s\S]{0,400}?createsSet/);
     }
   });
-
-  test('the survey builder does NOT', () => {
-    // rejects: passing it to all four. Survey is not a playable type and
-    // upload-questions.js refuses it outright, so its worker creates nothing —
-    // promising otherwise would be the same untruth in a new place.
-    expect(read('components', 'SurveyAIBuilder.jsx')).not.toMatch(/createsSet/);
-  });
 });
 
-describe('the survey builder does not claim to load anything', () => {
+describe('the survey builder is a draft-set builder, not an exporter', () => {
   const source = read('components', 'SurveyAIBuilder.jsx');
 
-  test('nothing in it says "Load into System"', () => {
-    // rejects: restoring the old label. O1, owner decision "label it".
-    // `onSurveyGenerated` is AdminPage.handleSurveyGenerated, which builds a
-    // Blob, clicks an anchor and reports "exported as JSON file". There is no
-    // survey write path at all — upload-questions.js rejects survey outright —
-    // so "Load into System" reported a success it never achieved.
-    expect(source).not.toMatch(/Load into System/i);
+  test('the three dead include* checkboxes are gone, and the kinds travel as `kinds`', () => {
+    // THE PHASE 0 FIX, pinned where it happened. rejects: the key template
+    // that built `includeMultiplechoice` against state named
+    // `includeMultipleChoice`, so two of three boxes did nothing.
+    expect(source).not.toMatch(/include\$\{/);
+    expect(source).not.toMatch(/includeMultipleChoice|includeTextEntry|includeRating/);
+    expect(source).toMatch(/\bkinds,/);
   });
 
-  test('its terminal action says Export JSON', () => {
-    expect(source).toMatch(/Export JSON and close/);
+  test('nothing in it exports JSON any more', () => {
+    // rejects: "Export JSON and close". The worker creates the draft set, and
+    // a survey JSON file was never something the library could read back
+    // until the importer learned to (Track A, A2).
+    expect(source).not.toMatch(/Export JSON/i);
+    expect(source).not.toMatch(/application\/json/);
   });
 
-  test('and it says on screen that a survey set cannot be uploaded', () => {
-    // rejects: silently renaming the button and leaving the operator to work
-    // out why nothing appears in the question-set list.
-    expect(source).toMatch(/cannot<\/b> be added to the/);
+  test('it opens the set the worker made, and hands over questions only when there is none', () => {
+    expect(source).toMatch(/onSurveyGenerated\(\{ createdSet: interpreted\.createdSet \}\)/);
+    expect(source).toMatch(/onSurveyGenerated\(\{ questions: keptItems, metadata:/);
+  });
+
+  test('the host dialog routes it through the same finishBuilder as the other three', () => {
+    // THE PHASE 0 FIX, host half. rejects: `onSurveyGenerated={() =>
+    // setBuilder(null)}`, which closed the builder and re-read nothing — the
+    // draft the worker had just made never opened.
+    const host = read('components', 'HostQuestionSetsDialog.jsx');
+    expect(host).toMatch(/<SurveyAIBuilder[\s\S]{0,120}?onSurveyGenerated=\{finishBuilder\}/);
+  });
+
+  test('the page makes the manual-path set from the survey CSV contract', () => {
+    // The fallback, when the worker could not create the set: the same
+    // upload the trivia and poll handlers make, typed as survey, with the CSV
+    // from rowsToCsv's survey branch (utils/surveyDraft.js) — not a Blob.
+    const page = read('AdminPage.jsx');
+    const body = page.split('const handleSurveyGenerated = async')[1].split('\n  };\n')[0];
+    expect(body).toMatch(/surveyItemsToCsv\(questions\)/);
+    expect(body).toMatch(/engagementType: 'survey'/);
+    expect(body).toMatch(/isAIGenerated: true/);
+    expect(body).not.toMatch(/new Blob/);
   });
 });
 

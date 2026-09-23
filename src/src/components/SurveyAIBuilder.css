@@ -1,0 +1,162 @@
+/* ============================================================================
+   GENERATE A SURVEY — components/SurveyAIBuilder.jsx
+
+   Derived from docs/design/survey-redesign/02-generate.html (the form) and
+   03-review.html (the mix line over the review table). Scoped under `.sab`
+   because the mockups' `.sv-opt`, `.field`, `.help` and `.inp` are the mockup
+   shell's names, not this app's.
+
+   ONE DELIBERATE DEPARTURE FROM THE MOCKUPS, the same one GenerationJobPanel.css
+   and GeneratedItemsTable.css already make: the mockups are drawn on the
+   console's dusk field, and this form does not live there. It lives in the
+   builder modal, `.survey-ai-builder-modal .modal-content { background: white }`
+   (BuilderPage.css). So the same design is re-derived on white and measured
+   against the surfaces it is really composited on
+   (__tests__/surveyAIBuilderPalette.test.js holds every number):
+
+     --sab-text       #2c3e50 on #ffffff  10.98:1   on #f8f9fa  10.42:1
+     --sab-muted      #5b6b7c on #ffffff   5.47:1   on #f8f9fa   5.19:1
+     --sab-on-accent  #1b2942 on --primary #F6A94C   7.43:1  (a pressed toggle)
+     --sab-chip-fg    #35506b on #eef2f7   7.44:1
+     --sab-edge       #7a8898 on #ffffff   3.62:1  (a control's boundary, 3:1)
+
+   Amber carries no text here: #F6A94C on white is 1.96:1. It FILLS a pressed
+   toggle, with dark words on it and a tick beside them — never the fill alone,
+   as the mockup's own note says.
+   ========================================================================== */
+
+.sab {
+  --sab-text: #2c3e50;
+  --sab-muted: #5b6b7c;
+  --sab-edge: #7a8898;
+  --sab-rule: #e3e8ee;
+  --sab-quiet: #f8f9fa;
+  --sab-field: #ffffff;
+  --sab-on-accent: #1b2942;
+  --sab-chip-bg: #eef2f7;
+  --sab-chip-fg: #35506b;
+
+  --sab-t-floor: 12px;
+  --sab-t-label: 13px;
+  --sab-t-body: 15px;
+  --sab-t-head: 19px;
+  --sab-row-h: 36px;
+
+  color: var(--sab-text);
+}
+
+/* The form is a one-column thing (mockup 02: 740px); the review is a table
+   and keeps the builder's full width (mockup 03: 1060px). */
+.sab.sab--form.modal-content { max-width: 760px; }
+
+.sab-headtext { flex: 1 1 auto; min-width: 0; }
+.sab-headtext h2 { margin: 0; }
+.sab-sub { margin: 4px 0 0; font-size: var(--sab-t-label); color: var(--sab-muted); }
+
+/* ------------------------------------------------------------------ form -- */
+
+.sab-form { display: flex; flex-direction: column; gap: 18px; }
+.sab-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sab-lab { font-size: var(--sab-t-label); font-weight: 700; color: var(--sab-text); }
+
+.sab-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--sab-edge);
+  border-radius: 6px;
+  background: var(--sab-field);
+  color: var(--sab-text);
+  font: inherit;
+  font-size: var(--sab-t-body);
+  line-height: 1.45;
+}
+
+/* The source well: a pasted outline is long. The one field on this screen
+   that is allowed to be tall (mockup 02's note). */
+.sab-source { min-height: 150px; resize: vertical; }
+
+.sab-help { margin: 0; font-size: var(--sab-t-label); color: var(--sab-muted); line-height: 1.45; }
+
+/* ------------------------------------------------------------- toggles -- */
+
+.sab-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sab-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--sab-row-h);
+  padding: 0 13px 0 10px;
+  border: 1px solid var(--sab-edge);
+  border-radius: 8px;
+  background: var(--sab-field);
+  color: var(--sab-text);
+  font: inherit;
+  font-size: var(--sab-t-body);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sab-opt:hover { background: var(--sab-quiet); }
+.sab-opt[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary-deep);
+  color: var(--sab-on-accent);
+}
+.sab-tick { display: none; font-weight: 800; }
+.sab-opt[aria-pressed="true"] .sab-tick { display: inline; }
+
+/* ------------------------------------------------------------- how many -- */
+
+/* The count itself is CountField's (CountField.css, measured in
+   countFieldPalette.test.js); this is only the line under it that says how
+   long the survey takes to answer. */
+.sab-per {
+  margin: 0;
+  font-size: var(--sab-t-label);
+  color: var(--sab-muted);
+}
+
+/* -------------------------------------------- anything else Workie obeys -- */
+
+.sab-more { border: 1px solid var(--sab-rule); border-radius: 8px; }
+.sab-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--sab-row-h);
+  padding: 0 12px;
+  font-size: var(--sab-t-label);
+  font-weight: 600;
+  color: var(--sab-muted);
+  list-style: none;
+  cursor: pointer;
+}
+.sab-more > summary::-webkit-details-marker { display: none; }
+.sab-more > summary:hover { background: var(--sab-quiet); }
+.sab-more[open] > summary svg { transform: rotate(180deg); }
+.sab-more > .sab-input { display: block; width: calc(100% - 24px); margin: 0 12px 12px; }
+
+/* ------------------------------------------------------ review: the mix -- */
+
+.sab-mix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; }
+.sab-dim { font-size: var(--sab-t-label); color: var(--sab-muted); }
+.sab-mix-end { margin-left: auto; }
+
+.sab-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: var(--sab-chip-bg);
+  color: var(--sab-chip-fg);
+  font-size: var(--sab-t-floor);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.sab :focus-visible { outline: 2px solid var(--sab-text); outline-offset: 2px; }

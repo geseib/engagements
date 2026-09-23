@@ -67,4 +67,28 @@ describe('NewSetDialog', () => {
     expect(onClose).toHaveBeenCalled();
     expect(onOpenBuilder).toHaveBeenCalledWith('trivia');
   });
+
+  /*
+    A SURVEY'S FOUR WAYS IN (docs/design/survey-redesign/01-new-survey.html)
+    are drawn inside this same dialog, under the same title and sub-line — the
+    mockup's own annotation: "This dialog is the shipped NewSetDialog".
+  */
+  describe('for a survey', () => {
+    it('offers the survey routes under the one title', () => {
+      draw({ engagementType: 'survey' });
+      expect(screen.getByRole('dialog', { name: 'New question set' })).toBeInTheDocument();
+      expect(screen.getByText('Your own material')).toBeInTheDocument();
+      expect(screen.getByText('A template')).toBeInTheDocument();
+      expect(screen.getByText('A file')).toBeInTheDocument();
+    });
+
+    it('Your own material hands over to the survey builder — never a modal from a modal', () => {
+      // rejects: opening the generator on top of this dialog. It closes first.
+      const { onClose, onOpenBuilder } = draw({ engagementType: 'survey' });
+      fireEvent.click(screen.getByRole('button', { name: /Write it from my material/i }));
+      expect(onClose).toHaveBeenCalled();
+      expect(onOpenBuilder).toHaveBeenCalledWith('survey');
+      expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onOpenBuilder.mock.invocationCallOrder[0]);
+    });
+  });
 });

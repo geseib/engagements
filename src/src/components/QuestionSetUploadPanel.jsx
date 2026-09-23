@@ -16,6 +16,29 @@ import { preflight, describePreflight } from '../utils/csvPreflight';
 import { authoringPrompt } from '../config/aiAuthoringPrompt';
 import './QuestionSetsPanel.css';
 
+/*
+  THE FIVE NAMED SURVEY TEMPLATES, as the server serves them
+  (admin/download-template?type=survey&template=<id>, Track A, A3). The
+  every-kind template — one row of each kind — is `type=survey` on its own, and
+  is offered with the file route, where mockup 01 puts it.
+*/
+const SURVEY_TEMPLATES = [
+  { id: 'presentation-feedback', label: 'Presentation feedback' },
+  { id: 'event-feedback', label: 'Event feedback' },
+  { id: 'workshop-retro', label: 'Workshop retro' },
+  { id: 'training-evaluation', label: 'Training evaluation' },
+  { id: 'team-pulse', label: 'Team pulse' },
+];
+
+/*
+  WHAT IS STILL TRUE ABOUT A SURVEY, said where the type is chosen.
+  `notPlayableReason()` (config/gameTypes.js, not this file's to change) still
+  says the importer rejects survey uploads, which stopped being true in
+  surveys phase 1; once it is reworded this can fall back to it.
+*/
+const SURVEY_NOT_PLAYABLE_YET =
+  'A survey can be made, imported, edited and downloaded here, but no session can run one yet.';
+
 /**
  * MAKING A NEW QUESTION SET — every path, and the engagement type asked ONCE.
  *
@@ -48,11 +71,15 @@ import './QuestionSetsPanel.css';
  * was `lines[0].split(',')` with `replace(/"/g, '')`, feeding an auto-filled
  * description box and nothing else. See utils/csvPreflight.js.
  *
- * SURVEY. Kept visible and marked Not playable (the owner's decision on
- * OPEN-QUESTIONS #3), rather than removed. The importer rejects every survey
- * upload, so the preflight blocks the Upload button and says so — instead of
- * the shipped behaviour, which offered the type, enabled the button, and
- * admitted the problem only in a sentence beside the file picker.
+ * SURVEY (docs/design/survey-redesign/01-new-survey.html). Surveys import now:
+ * the importer reads a CSV with a Kind column and the JSON the old survey
+ * builder exported, the builder leaves a draft set, and the server holds five
+ * named templates. So a survey gets its own ways in — Your own material, A
+ * template, A file — in place of the generic routes, and the preflight checks
+ * its rows in the contract's words. Mockup 01's fourth route, A blank survey,
+ * is not drawn: the importer makes no set with no questions in it, and there
+ * is no create-empty path to put behind the button. Still marked Not playable,
+ * and still said: no session can run a survey yet.
  *
  * SHARED WITH THE HOST, VIA PROPS RATHER THAN A FORK. Hosts create sets too
  * now, from the create-engagement flow (components/HostQuestionSetsDialog.jsx),
@@ -184,6 +211,7 @@ export default function QuestionSetUploadPanel({
   }, [scrollIntoViewOnMount]);
 
   const playable = isPlayableGameType(engagementType);
+  const isSurvey = engagementType === 'survey';
   const promptChoices = selectableSummaryPrompts(availablePrompts, engagementType);
   const hiddenPromptCount = availablePrompts.length - promptChoices.length;
 
@@ -224,10 +252,11 @@ export default function QuestionSetUploadPanel({
     reader.readAsText(chosen);
   };
 
-  const downloadTemplate = async (templateType) => {
+  const downloadTemplate = async (templateType, templateId = '') => {
     setStatus({ text: 'Downloading template…', tone: 'pending' });
     try {
-      const response = await authFetch(adminApiUrl(`admin/download-template?type=${templateType}`));
+      const query = `type=${templateType}${templateId ? `&template=${encodeURIComponent(templateId)}` : ''}`;
+      const response = await authFetch(adminApiUrl(`admin/download-template?${query}`));
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         setStatus({ text: `Failed to download template: ${result.error || response.status}`, tone: 'error' });
@@ -382,7 +411,9 @@ export default function QuestionSetUploadPanel({
             </option>
           ))}
         </select>
-        {!playable && <small>{notPlayableReason(engagementType)}</small>}
+        {!playable && (
+          <small>{isSurvey ? SURVEY_NOT_PLAYABLE_YET : notPlayableReason(engagementType)}</small>
+        )}
       </div>
 
       <div className="qsets-section">
@@ -407,7 +438,14 @@ export default function QuestionSetUploadPanel({
           These are not interchangeable. Each one says when it is the right one.
         </p>
         <div className="qsets-routes">
-          {showAIBuilder && (
+          {isSurvey && (
+            <SurveyRoutes
+              showAIBuilder={showAIBuilder}
+              onOpenBuilder={onOpenBuilder}
+              onDownloadTemplate={downloadTemplate}
+            />
+          )}
+          {!isSurvey && showAIBuilder && (
           <div className="qsets-route qsets-route--lead">
             <span className="qsets-route-nm">Generate with AI</span>
             <p className="qsets-route-when">
@@ -416,14 +454,12 @@ export default function QuestionSetUploadPanel({
             </p>
           <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onOpenBuilder && onOpenBuilder(engagementType)}>
             <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />
-            {/* The survey builder does not upload: handleSurveyGenerated builds a
-                Blob and clicks an anchor. Say so on the button rather than after
-                the fact (OPEN-QUESTIONS #3, option (c)'s copy). */}
-            AI {gameTypeLabel(engagementType)} builder{playable ? '' : ' (exports JSON)'}
+            AI {gameTypeLabel(engagementType)} builder
           </button>
           </div>
           )}
 
+          {!isSurvey && (
           <div className="qsets-route">
             <span className="qsets-route-nm">Start from a template</span>
             <p className="qsets-route-when">
@@ -435,6 +471,7 @@ export default function QuestionSetUploadPanel({
               Download {gameTypeLabel(engagementType)} template
             </button>
           </div>
+          )}
           {/* Beside the template it pairs with, and only for the types whose
               prompt exists — authoringPrompt() returns null for the rest, so
               adding a type later is a config entry, not panel surgery. */}
@@ -474,7 +511,8 @@ export default function QuestionSetUploadPanel({
               </button>
             </div>
           )}
-          {showManualBuilder && (
+          {/* Not for a survey: /builder has no survey form. */}
+          {showManualBuilder && !isSurvey && (
           <div className="qsets-route">
             <span className="qsets-route-nm">Manual builder</span>
             <p className="qsets-route-when">
@@ -498,7 +536,7 @@ export default function QuestionSetUploadPanel({
         <h4>…then upload it here</h4>
         <p className="qsets-route-when" style={{ margin: '-4px 0 10px' }}>
           Where every route above ends up, and the only one that loses nothing. Already have a
-          CSV? Start here.
+          CSV{isSurvey ? ', or the JSON a survey exports' : ''}? Start here.
         </p>
 
         <div className="qsets-file">
@@ -655,6 +693,68 @@ export default function QuestionSetUploadPanel({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A SURVEY'S WAYS IN — docs/design/survey-redesign/01-new-survey.html.
+ *
+ * Mockup 01's "Start from" list in the panel's own route idiom: each route
+ * says when it is the right one and carries its control. The five named
+ * templates sit under their route as a row of small buttons (a grid item of
+ * their own, spanning the row, so the route's button column is not asked to
+ * hold five). The every-kind template is offered with the file route, where
+ * the mockup's "Download the template" link is.
+ */
+function SurveyRoutes({ showAIBuilder, onOpenBuilder, onDownloadTemplate }) {
+  return (
+    <>
+      {showAIBuilder && (
+        <div className="qsets-route qsets-route--lead">
+          <span className="qsets-route-nm">Your own material</span>
+          <p className="qsets-route-when">
+            Best when you have the talk outline or the deck. Workie drafts the questions from it and
+            leaves a draft survey, switched off until you have read every one.
+          </p>
+          <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onOpenBuilder && onOpenBuilder('survey')}>
+            <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />
+            Write it from my material
+          </button>
+        </div>
+      )}
+
+      <div className="qsets-route">
+        <span className="qsets-route-nm">A template</span>
+        <p className="qsets-route-when">
+          A ready survey you edit. Download one, change what you like in a spreadsheet, and upload
+          it below — nothing is saved until you do.
+        </p>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+          {SURVEY_TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              className="qsets-btn qsets-btn--sm"
+              onClick={() => onDownloadTemplate('survey', template.id)}
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="qsets-route">
+        <span className="qsets-route-nm">A file</span>
+        <p className="qsets-route-when">
+          A CSV with a Kind column, or the JSON a survey exports. Upload it below; every row is
+          checked in your browser before anything is sent.
+        </p>
+        <button type="button" className="qsets-btn" onClick={() => onDownloadTemplate('survey')}>
+          <Icon name="FileText" weight="bold" size={14} color="currentColor" />
+          Download the template
+        </button>
+      </div>
+    </>
   );
 }
 

@@ -261,3 +261,40 @@
   font-size: 13px;
   color: var(--git-muted);
 }
+
+/* ------------------------------------------------------------------ kind -- */
+
+/* The survey Kind column (docs/design/survey-redesign/03-review.html): a chip,
+   icon and word, before the question. The same chip colours as .git-chip,
+   so the same measured 7.44:1. Where the kind can still be changed the chip
+   IS the select — one control saying the kind once — and the select renders
+   at body size, like every input. */
+.git-kindcol { width: 200px; }
+
+.git-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 11px;
+  background: var(--git-chip-bg);
+  color: var(--git-chip-fg);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.git-kind--edit { padding: 0 4px 0 9px; }
+
+.git-kindsel {
+  min-height: 28px;
+  padding: 2px 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -42,6 +42,18 @@ const NO_EXCLUSIONS = new Set();
  *   actions          node rendered in the header (Export / Create set / …)
  *   savedAs          { setId, setName } when the WORKER already wrote these
  *                    into a draft set, or null. See below.
+ *   kinds            survey only — { options: [{ id, label, icon }], of(item),
+ *                    label(item), onChange?(index, kindId) }. See below.
+ *
+ * THE KIND COLUMN (docs/design/survey-redesign/03-review.html). A survey's
+ * questions come in five kinds, so its table carries a Kind column BETWEEN the
+ * number and the question, as the mockup draws it: a chip, icon and word. With
+ * `onChange` the chip IS the select — one control stating the kind once, not a
+ * chip and a select saying the same thing twice — and a choice is reported
+ * with the item's real index. What switching costs (convertKind, and asking
+ * when something would be lost) is the caller's business; this component
+ * knows nothing about survey kinds beyond the options it is handed. Without
+ * `onChange` — rows already saved into a draft — it is a chip and nothing more.
  *
  * "NOTHING HAS BEEN SAVED YET" IS NOW A CONDITIONAL, not a fact. The whole-set
  * workers create an inactive draft set before their job goes terminal, so for
@@ -65,6 +77,7 @@ export default function GeneratedItemsTable({
   flag = () => null,
   columns = [],
   actions = null,
+  kinds = null,
 }) {
   const [query, setQuery] = useState('');
   const [facet, setFacet] = useState('');
@@ -226,6 +239,7 @@ export default function GeneratedItemsTable({
             <thead>
               <tr>
                 <th className="git-num" scope="col">#</th>
+                {kinds && <th scope="col" className="git-kindcol">Kind</th>}
                 <th scope="col">{capitalize(singular(noun))}</th>
                 {columns.map((column) => (
                   <th key={column.header} scope="col" style={column.width ? { width: column.width } : undefined}>
@@ -241,6 +255,11 @@ export default function GeneratedItemsTable({
                 return (
                   <tr key={row.index} className={isExcluded ? 'git-out' : undefined}>
                     <td className="git-num">{row.index + 1}</td>
+                    {kinds && (
+                      <td>
+                        <KindCell kinds={kinds} item={row.item} index={row.index} noun={noun} />
+                      </td>
+                    )}
                     <td>
                       <span className="git-nm">{row.primary || '(untitled)'}</span>
                       {row.flag
@@ -290,6 +309,45 @@ export default function GeneratedItemsTable({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * One row's kind: a chip, or — when the caller can still change it — a select
+ * dressed as the chip. The current kind's option reads as the chip would
+ * (`label(item)`: "Rating 0–10" for a recommend score), so the two never name
+ * one fact two ways.
+ */
+function KindCell({ kinds, item, index, noun }) {
+  const current = kinds.of(item);
+  const meta = kinds.options.find((option) => option.id === current) || null;
+  const label = kinds.label ? kinds.label(item) : (meta ? meta.label : String(current || ''));
+  const icon = meta ? meta.icon : 'Circle';
+
+  if (!kinds.onChange) {
+    return (
+      <span className="git-kind">
+        <Icon name={icon} weight="bold" size={13} color="currentColor" />
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="git-kind git-kind--edit">
+      <Icon name={icon} weight="bold" size={13} color="currentColor" />
+      <select
+        className="git-kindsel"
+        value={current || ''}
+        aria-label={`Kind of ${singular(noun)} ${index + 1}`}
+        onChange={(event) => kinds.onChange(index, event.target.value)}
+      >
+        {kinds.options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.id === current ? label : option.label}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }
 
