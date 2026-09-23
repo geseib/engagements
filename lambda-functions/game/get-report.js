@@ -1,9 +1,24 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { decryptItem } = require('./tenant-crypto');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/*
+  ONE ANSWER FOR EVERY REFUSAL. No identity, another team's host and a session
+  with no stored report all get this, word for word — a different reply for
+  "it exists but it is not yours" is an existence oracle over 9,000 codes.
+*/
+const NOT_FOUND = {
+  statusCode: 404,
+  body: JSON.stringify({
+    error: 'Report not found',
+    message: 'No report has been generated for this game yet. Use POST /games/{gameId}/report to create one.'
+  }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+};
 
 exports.handler = async (event) => {
   try {
@@ -21,42 +36,50 @@ exports.handler = async (event) => {
 
     console.log(`📋 Getting report for game ${gameId}, role: ${role || 'unspecified'}`);
 
-    // Get the report
-    const reportQuery = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { 
-        PK: `GAME#${gameId}`, 
-        SK: 'REPORT' 
-      }
-    }));
+    /*
+      WHOSE REPORT IS THIS? This route was PUBLIC, and `role=host` — a query
+      parameter anyone can type — returned the whole stored room, decrypted:
+      every name against every answer, the AI summaries, the comments. That is
+      what POST /report was closed to protect, and the stored row exists from
+      the first time a host opens the report. It carries the Cognito authorizer
+      now (template-clean.yaml, GetReportEvent; authorizer.js demands a host)
+      and asks what create-report.js asks. Closed 2026-09-23 on the owner's
+      "Yes"; nothing in the frontend called it.
 
-    if (!reportQuery.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ 
-          error: 'Report not found',
-          message: 'No report has been generated for this game yet. Use POST /games/{gameId}/report to create one.'
-        }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
-    }
+      NO IDENTITY IS REFUSED OUTRIGHT, as save-report.js and the comments
+      feature route do: callerMayDriveSession passes a caller with no groups,
+      so on its own it would hand an orgless session's report to anyone the
+      day this route lost its authorizer.
 
-    // ── THE ORG COMES OFF THE SESSION, NOT OFF THE CALLER ────────────────────
-    //
-    // `GET /games/{gameId}/report` is public and `role` is a query parameter —
-    // a claim anyone can make, not a fact this API established (see the same
-    // note in get-game.js). So there is no caller org to read, and a blank one
-    // throws rather than defaulting.
-    //
-    // The REPORT row does not carry `orgId` itself: create-report.js spreads
-    // `reportData` onto it and that object has no such field. Reading the
-    // session's METADATA row is therefore not laziness — it is the only place
-    // the answer lives, and the same place every participant path looks.
+      METADATA is read FIRST, before the report, so a refused caller costs no
+      read of the room. It is also the only place the owning org lives: the
+      REPORT row does not carry `orgId` (create-report.js spreads `reportData`,
+      which has none), and a blank org throws in tenant-crypto rather than
+      defaulting. A session whose METADATA has expired has no owner to check
+      against and answers not-found — the report is in Reports by then.
+    */
+    const authorizer = event?.requestContext?.authorizer;
+    const identity = authorizer?.jwt?.claims || authorizer?.lambda;
+    if (!identity) return NOT_FOUND;
+
     const metaRes = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
       ProjectionExpression: 'orgId'
     }));
+    if (!metaRes.Item || !callerMayDriveSession(event, metaRes.Item)) return NOT_FOUND;
+
+    // Get the report
+    const reportQuery = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: {
+        PK: `GAME#${gameId}`,
+        SK: 'REPORT'
+      }
+    }));
+
+    if (!reportQuery.Item) return NOT_FOUND;
+
     const reportOrgId = typeof metaRes.Item?.orgId === 'string' ? metaRes.Item.orgId.trim() : '';
     const report = reportOrgId
       ? await decryptItem(reportOrgId, 'report', reportQuery.Item)

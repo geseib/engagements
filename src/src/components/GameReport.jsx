@@ -250,11 +250,17 @@ function GameReport({
         <div className="expanded-qr-overlay" onClick={() => setShowSaveReportModal(false)}>
           <div className="expanded-qr-content save-report-modal" onClick={(e) => e.stopPropagation()}>
             <div className="confirmation-header">
-              <h2>Save Report Options</h2>
+              <h2>Save report</h2>
             </div>
+            {/* THE NUMBERS ARE THE BUCKET'S, NOT A GUESS. This said "Temporary
+                Save (24 hours) — deleted after 24 hours" while ReportsBucket's
+                lifecycle kept a standard report 90 days, and "Permanent" for a
+                report deleted at 365. template-clean.yaml DeleteOldReports is
+                the authority; __tests__/reportShare.test.jsx reads both
+                numbers from it and fails if this copy drifts again. */}
             <div className="save-report-content">
               <p className="save-description">
-                Choose how you'd like to save this report:
+                How long should it be kept?
               </p>
 
               <div className="save-option">
@@ -266,8 +272,8 @@ function GameReport({
                   onChange={() => setSaveAsPermanent(false)}
                 />
                 <label htmlFor="save-temporary">
-                  <strong>Temporary Save (24 hours)</strong>
-                  <span className="save-option-desc">Report will be automatically deleted after 24 hours</span>
+                  <strong>Keep for 90 days</strong>
+                  <span className="save-option-desc">Deleted automatically 90 days after you save it.</span>
                 </label>
               </div>
 
@@ -280,8 +286,8 @@ function GameReport({
                   onChange={() => setSaveAsPermanent(true)}
                 />
                 <label htmlFor="save-permanent">
-                  <strong>Permanent Save (1 year)</strong>
-                  <span className="save-option-desc">Report will be kept for 1 year for future reference</span>
+                  <strong>Keep for 1 year</strong>
+                  <span className="save-option-desc">Deleted automatically a year after you save it. For a report you will come back to.</span>
                 </label>
               </div>
             </div>
@@ -298,7 +304,7 @@ function GameReport({
                 onClick={() => saveReportToPDF(saveAsPermanent)}
                 disabled={isSaving}
               >
-                {isSaving ? 'Saving...' : 'Save Report'}
+                {isSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>

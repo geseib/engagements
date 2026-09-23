@@ -2581,10 +2581,10 @@ Resources:
             # rather than the three that moved, so a new caller cannot be added
             # on plain `fetch` without failing.
             #
-            # GET /games/{gameId}/report is a DIFFERENT route and STAYS PUBLIC.
-            # It reads the already-saved `SK: 'REPORT'` row and rebuilds
-            # nothing, so it cannot be walked for a session that never generated
-            # one — and closing it would be closing a participant route.
+            # GET /games/{gameId}/report was left PUBLIC here on the grounds
+            # that it rebuilds nothing. That was wrong: once a host has opened a
+            # report the stored row holds the whole room, and `?role=host` read
+            # it back to anyone. It is closed too (GetReportEvent, 2026-09-23).
             Auth:
               Authorizer: CognitoAuthorizer
       Policies:
@@ -2615,6 +2615,15 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/report
             Method: GET
+            # HOST/ADMIN ONLY since 2026-09-23. It was public, and `?role=host`
+            # returned the whole stored room decrypted — names against answers,
+            # AI summaries, comments — the very thing CreateReportEvent above
+            # was closed to protect. Nothing in the frontend called it.
+            # authorizer.js names it (the generic "GET + games is public" rule
+            # would let `pending` in) and get-report.js asks
+            # callerMayDriveSession. tests/get-report-authorization.js.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with

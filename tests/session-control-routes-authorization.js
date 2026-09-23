@@ -93,6 +93,9 @@ const MUST_BE_CLOSED = [
   // — but it drives the same room, so it holds the same line.
   ['PUT', '/games/{gameId}/prompt'],
   ['POST', '/games/{gameId}/report'],
+  // The stored report. It was on the list below as a participant read; it is
+  // not one — `?role=host` returned the whole room (tests/get-report-authorization.js).
+  ['GET', '/games/{gameId}/report'],
 ];
 
 // The participant journey. None of these carries a token, ever.
@@ -107,7 +110,6 @@ const MUST_STAY_OPEN = [
   ['GET', '/games/{gameId}/votes'],
   ['POST', '/games/{gameId}/votes'],
   ['POST', '/games/get-results'],
-  ['GET', '/games/{gameId}/report'],
   ['GET', '/games/{gameId}/ai-summary'],
   ['POST', '/games/{gameId}/players/{playerName}/handover-request'],
 ];

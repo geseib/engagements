@@ -109,6 +109,6 @@ export const REPORT_SHARING = [
   },
   {
     title: 'A saved link',
-    text: 'A link to the report, kept for a set time or kept permanently — you choose which when you save it.',
+    text: 'A saved copy, kept for 90 days or a year — you choose which when you save it — and a link with a passkey for someone who has no account.',
   },
 ];
