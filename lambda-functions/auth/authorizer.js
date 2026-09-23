@@ -480,6 +480,13 @@ function requiredGroupsForRoute(method, path) {
   if (PLATFORM_LEDGER_ROUTE.test(path)) {
     return ['admins'];
   }
+  // Observability: platform-wide usage numbers. Engage's, and the handler
+  // (orgs/platform-observability.js) re-asks isPlatformAdmin — same two halves
+  // as the rules above. Without this line it fell to the trailing default,
+  // which lets every host knock.
+  if (path === 'platform/observability') {
+    return ['admins'];
+  }
 
   // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
   //

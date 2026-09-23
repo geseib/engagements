@@ -1201,6 +1201,51 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # ── HOW ENGAGE IS USED, IN NUMBERS (the platform console's Observability) ─
+  # Engage staff only: the handler re-asks tenant.isPlatformAdmin and
+  # authorizer.js names the route ['admins']. It COUNTS tenant partitions
+  # (Select: COUNT) and reads the recorded PLATFORM#METRICS rows; it returns
+  # aggregates only. tests/platform-observability.js pins every line below.
+  PlatformObservabilityFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-platform-observability'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/platform-observability.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          USER_POOL_ID: !Ref UserPoolV2
+      Policies:
+        # READ ONLY, and NO decrypt grant. This function counts rows and reads
+        # counters across every organisation; it must be unable to change any
+        # of them and unable to unwrap any organisation's data key. The absence
+        # of both is part of the guarantee, not an oversight.
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        # One Cognito call: ListUsers, to count accounts. It asks for `sub`
+        # alone, so no address or name of anybody passes through it.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+              Resource: !GetAtt UserPoolV2.Arn
+      Events:
+        Observe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/observability
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   # ── COPY A SHARED SET INTO AN ORGANISATION ─────────────────────────────
   # The missing middle step: every org can READ the platform and public
   # libraries and may not CHANGE them, so without this the only answer to
