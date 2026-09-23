@@ -389,7 +389,11 @@ describe('the call sites — GameHostPage actually wires all of this', () => {
   });
 
   test('a new round clears the previous round\'s analysis', () => {
-    expect(host).toMatch(/setAnswers\(\[\]\);\s*setWavelengthAnalysis\(null\)/);
+    // The answers clear goes through showAnswersFor([], state) since
+    // 2026-09-23 — it also records WHICH round-phase the (empty) list belongs
+    // to (config/stageAnswers.js). The analysis must still clear beside it.
+    expect(host).toMatch(/showAnswersFor\(\[\], newState\);\s*setWavelengthAnalysis\(null\)/);
+    expect(host).toMatch(/showAnswersFor\(\[\], null\);\s*setWavelengthAnalysis\(null\)/);
   });
 });
 

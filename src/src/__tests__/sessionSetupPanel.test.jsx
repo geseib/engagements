@@ -646,6 +646,20 @@ describe('the Settings tab is where the names decisions are made', () => {
     expect(screen.getByLabelText(/show who wrote each response/i)).toBe(box);
   });
 
+  test('off is described as it behaves: hidden while voting, named when voting closes', () => {
+    // The owner, 2026-09-23: "keep anonymous until after people vote … they
+    // get points for upvoting." That is what off does — closing the vote
+    // reveals the round and results show each author with their points.
+    //
+    // rejects: "names nobody, all session", which the note said and the
+    // product never did, and which made the option confusing.
+    const { container } = openNames();
+    const notes = [...container.querySelectorAll('.setup-note')].map((n) => n.textContent).join(' ');
+    expect(notes).toMatch(/while the room answers and votes/);
+    expect(notes).toMatch(/When voting closes, each one shows who wrote it and the points it earned/);
+    expect(notes).not.toMatch(/all session/);
+  });
+
   test('ticking it emits the FLAG, not the checkbox — one flag, inverted once', () => {
     // THE TRAP THIS GUARDS. The stored per-game flag is `anonymousUntilReveal`
     // ("withhold the names"); the host-facing question is "show the names".
