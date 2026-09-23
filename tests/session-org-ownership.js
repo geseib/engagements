@@ -186,6 +186,13 @@ for (const rel of [
   // Not a control, a KEY: its ticket makes a WebSocket connection HOST, and a
   // HOST socket is sent the room's host-only frames. Born asking.
   'lambda-functions/game/mint-host-ticket.js',
+  // Three more that every sweep above missed, each Cognito-gated and none
+  // asking: what a live room is asked, who may take over a name (and so its
+  // answers and score), and who is counted. session-room-controls-org-scope.js
+  // proves the refusal writes nothing.
+  'lambda-functions/game/toggle-category.js',
+  'lambda-functions/game/grant-handover.js',
+  'lambda-functions/game/remove-player.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')

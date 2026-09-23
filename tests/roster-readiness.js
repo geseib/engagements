@@ -67,6 +67,10 @@ const PK = `GAME#${GAME}`;
 
 const roster = () => getPlayers.handler({ pathParameters: { gameId: GAME } });
 const state = () => getGameState.handler({ pathParameters: { gameId: GAME } });
+// remove-player carries the Cognito authorizer and refuses a caller with no
+// identity, so the host here is somebody the authorizer saw. The session is
+// orgless, which any host may drive.
+const HOST = { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } };
 const bodyOf = (res) => JSON.parse(res.body);
 const readinessOf = (list, name) => list.players.find((p) => p.playerName === name).readiness;
 
@@ -230,6 +234,7 @@ async function seed({ phase = 'ASK', round = 1, answered = [], voted = [] } = {}
     assert.strictEqual(bodyOf(await roster()).stats.readyPercentage, 50);
 
     await removePlayer.handler({
+      requestContext: HOST,
       pathParameters: { gameId: GAME, playerName: 'Dana' }, body: JSON.stringify({}),
     });
 
@@ -243,6 +248,7 @@ async function seed({ phase = 'ASK', round = 1, answered = [], voted = [] } = {}
   await check('§4 removing somebody does not fabricate readiness for them', async () => {
     await seed({ phase: 'ASK', answered: ['Ada'] });
     await removePlayer.handler({
+      requestContext: HOST,
       pathParameters: { gameId: GAME, playerName: 'Dana' }, body: JSON.stringify({}),
     });
     const list = bodyOf(await roster());

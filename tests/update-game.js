@@ -711,7 +711,9 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
 
   const toggleHandler = require(path.join(REPO, 'lambda-functions', 'game', 'toggle-category.js')).handler;
   const toggle = async (gameId, body) => {
-    const res = await toggleHandler({ pathParameters: { gameId }, body: JSON.stringify(body) });
+    // As the owning org, like every other call here: toggle-category asks
+    // whose room it is, and these sessions were created by ORG.
+    const res = await toggleHandler(asOrg({ pathParameters: { gameId }, body: JSON.stringify(body) }));
     return { status: res.statusCode, body: JSON.parse(res.body) };
   };
 
