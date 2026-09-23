@@ -615,7 +615,27 @@ const sessionsRun = (orgId) => [...store.values()]
   // ── 6. One place ──────────────────────────────────────────────────────────
   say('\n6. the meter is called from the answer path and nowhere else');
 
-  await check('only websocket/session-count.js calls recordBillableSession', () => {
+  // A SURVEY HAS NO ROUNDS AND NO SOCKET ANSWER PATH: its answers arrive by
+  // HTTP (PUT /games/{id}/survey/answers, game/survey-answers.js), a different
+  // bundle. So game/ carries the same counter, byte for byte, and bills a
+  // survey at its second distinct answered question exactly as message.js
+  // bills a round-based session. Two copies of ONE rule, not two rules.
+  // rejects: a survey-only billing rule drifting from the round one.
+  await check('game/session-count.js is byte-identical to websocket/session-count.js', () => {
+    const fs = require('fs');
+    const read = (rel) => fs.readFileSync(path.join(REPO, 'lambda-functions', rel), 'utf8');
+    assert.strictEqual(read('game/session-count.js'), read('websocket/session-count.js'));
+  });
+  // rejects: a survey answer path that never reaches the meter — survey
+  // sessions would run free (IMPLEMENTATION-phase-2.md §5.4).
+  await check('the survey answer path calls the game/ copy of countAnsweredQuestion', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(path.join(REPO, 'lambda-functions/game/survey-answers.js'), 'utf8');
+    assert.ok(/require\(['"]\.\/session-count['"]\)/.test(src), 'survey-answers.js does not require ./session-count');
+    assert.ok(/\bcountAnsweredQuestion\s*\(/.test(src), 'survey-answers.js never calls countAnsweredQuestion');
+  });
+
+  await check('only the two session-count.js copies call recordBillableSession', () => {
     const fs = require('fs');
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
     const callers = [];
@@ -630,7 +650,7 @@ const sessionsRun = (orgId) => [...store.values()]
     }
     // rejects: a second billable moment — join-game (4b39c871), start-game or
     // next-question — which would bill rehearsals the answer path forgives.
-    assert.deepStrictEqual(callers, ['websocket/session-count.js']);
+    assert.deepStrictEqual(callers.sort(), ['game/session-count.js', 'websocket/session-count.js']);
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
