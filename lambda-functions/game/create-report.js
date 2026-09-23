@@ -250,6 +250,10 @@ exports.handler = async (event) => {
         anchorLabel: row.AnchorLabel,
         anchorExcerpt: row.AnchorExcerpt,
         text: row.Text,
+        // The host put it on the wall (comments.js featureComment). The report
+        // marks it "Shown to the room" — the owner's "captured for the reports".
+        featured: row.Featured === true,
+        featuredAt: row.FeaturedAt || null,
         // OMITTED, never nulled, on a round whose authors are still hidden —
         // the rule this file already applies to answers, so `displayLabelFor`
         // reads a comment exactly the way it reads a response, with no new

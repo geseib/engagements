@@ -418,6 +418,19 @@ describe('comments in the session report', () => {
     expect(block.textContent).toContain('AI summary');
   });
 
+  test('one the host put on the wall says so', () => {
+    // The owner: "this feedback needs to be captured for the reports as well."
+    // A featured comment is the one the room discussed; the report marks it.
+    const data = JSON.parse(JSON.stringify(withComments));
+    const q = data.questions.find((x) => Array.isArray(x.comments) && x.comments.length);
+    q.comments[0].featured = true;
+    const { container } = render(<ReportDocument reportData={data} />);
+    const marks = [...container.querySelectorAll('.report-comment .comment-featured')];
+    expect(marks).toHaveLength(1);
+    expect(marks[0].textContent).toBe('Shown to the room');
+    expect(marks[0].closest('.report-comment').textContent).toContain(q.comments[0].text);
+  });
+
   test('each is attributed', () => {
     const { container } = render(<ReportDocument reportData={withComments} />);
     const authors = [...container.querySelectorAll('.comment-author')].map((n) => n.textContent);

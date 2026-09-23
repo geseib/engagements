@@ -11,7 +11,7 @@
  * players.
  *
  *   created, never started   →  created + 90 days
- *   started                  →  started + 7 days   (rewritten by start-game)
+ *   started                  →  started + 7 days   (game/session-start.js)
  *
  * The table's TTL attribute is `ttl`, epoch SECONDS (template-clean.yaml
  * TimeToLiveSpecification). DynamoDB deletes lazily — up to ~48h late — which

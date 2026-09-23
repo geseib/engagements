@@ -766,6 +766,23 @@ exports.handler = async (event) => {
       };
     }
 
+    // ── THE SESSION BRIEF, IN THE CLEAR FOR THE PROMPT ───────────────────────
+    //
+    // `Title`, `HostName`, `Details` and `AIContext` are ciphertext at rest on
+    // an org's session (ENCRYPTED_FIELDS.session), and this row feeds the
+    // prompt's title, the host's instructions and the event details. Read raw,
+    // each was a truthy envelope OBJECT: every `||` below picked it, every
+    // template literal turned it into "[object Object]", and personas.js's
+    // `gameAiContext.trim()` threw — so the host's brief was either replaced by
+    // that string or took the whole summary down with it. Decrypted into a new
+    // object (decryptItem never mutates), so nothing here can write plaintext
+    // back. The org is the SESSION's, off the row itself — this route is public
+    // (see sessionOrgId); an orgless session passes through unchanged.
+    const summaryOrgId = orgOf(gameMetadata.Item);
+    if (summaryOrgId) {
+      gameMetadata.Item = await decryptItem(summaryOrgId, 'session', gameMetadata.Item);
+    }
+
     // Extract scoring configuration and game type early since they're used in vote processing
     const gameType = gameMetadata.Item.GameType || 'call-and-answer';
     const scoringConfig = gameMetadata.Item.ScoringConfig || {
@@ -902,8 +919,8 @@ exports.handler = async (event) => {
     // Everything below feeds a Bedrock prompt built from the room's own words,
     // so an envelope here does not fail loudly — it produces a summary of
     // base64. The org is the SESSION's, read off the metadata row above (this
-    // route is public; see sessionOrgId).
-    const summaryOrgId = orgOf(gameMetadata.Item);
+    // route is public; see sessionOrgId) — `summaryOrgId`, resolved where the
+    // session brief was decrypted.
     const votes = summaryOrgId
       ? await decryptItems(summaryOrgId, 'vote', votesQuery.Items || [])
       : (votesQuery.Items || []);

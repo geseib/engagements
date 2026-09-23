@@ -320,6 +320,14 @@ const HOST_ADMIN_ROUTES = new Set([
   'GET admin/ai-draft-builder-form/{jobId}',
   'POST admin/ai-draft-set-metadata',
   'GET admin/ai-draft-set-metadata/{jobId}',
+  // Attaching a PDF or DOCX to a builder: FileUploadPrompt posts the bytes here
+  // and gets text back. Left behind when the builders opened, so a host's upload
+  // was refused with a body carrying no `error` and read "Processing failed:
+  // Unknown error". The handler is a pure function of the bytes — 5 MB cap, no
+  // caller identity, no table, no bucket, and its function has no policy that
+  // would reach one. `tests/parse-document-host-route.js` pins all of that; if
+  // the handler ever reads tenant data, this entry needs revisiting with it.
+  'POST admin/parse-document',
   // THIS WAS "READ ONLY" UNTIL NOW: an org may now CREATE its own prompt too.
   // The reason POST was excluded was that a prompt write "shapes what the AI
   // does for everybody" — true of the one partition that existed when that

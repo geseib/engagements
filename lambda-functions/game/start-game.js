@@ -1,8 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
-const { gamesIndexPk, callerMayDriveSession, GAMES_RESERVATION_PK } = require('./tenant');
-const { startedTtl } = require('./session-ttl');
+const { callerMayDriveSession } = require('./tenant');
+const { startSession } = require('./session-start');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -64,95 +64,19 @@ exports.handler = async (event) => {
       };
     }
 
-    // Update game state to STARTED
-    const now = new Date().toISOString();
-    // A started session expires 7 days on (session-ttl.js) — on every one of
-    // its rows, including the reservation, or the code stays taken forever.
-    const ttl = startedTtl(now);
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #state = :state, #started = :started, #updatedAt = :updatedAt, #startedAt = :startedAt, #ttl = :ttl',
-      ExpressionAttributeNames: {
-        '#state': 'State',
-        '#started': 'Started',
-        '#updatedAt': 'UpdatedAt',
-        '#startedAt': 'StartedAt',
-        '#ttl': 'ttl'
-      },
-      ExpressionAttributeValues: {
-        ':state': 'STARTED',
-        ':started': true,
-        ':updatedAt': now,
-        ':startedAt': now,
-        ':ttl': ttl
-      }
-    }));
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` },
-      UpdateExpression: 'SET #ttl = :ttl',
-      ExpressionAttributeNames: { '#ttl': 'ttl' },
-      ExpressionAttributeValues: { ':ttl': ttl }
-    }));
-
-    // Update METADATA with Started flag and LastPlayedAt
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt, #ttl = :ttl',
-      ExpressionAttributeNames: {
-        '#started': 'Started',
-        '#lastPlayedAt': 'LastPlayedAt',
-        '#ttl': 'ttl'
-      },
-      ExpressionAttributeValues: {
-        ':started': true,
-        ':lastPlayedAt': now,
-        ':ttl': ttl
-      }
-    }));
-
     /*
-      Update the SESSION BRIEF — which is the OWNING ORG's index row now, not
-      the global reservation.
+      STATE, the reservation, METADATA and the org's index row — the four rows
+      session-ttl.js names — in the one function next-question.js also calls
+      when it opens a round from CREATED. See session-start.js for what went
+      missing while these writes lived here alone.
 
-      The reservation row carries `{orgId, ttl}` and nothing a list ever reads,
-      so writing `Started` there would be writing to a row nobody looks at while
-      every host's list stayed stale. The owning org is read from METADATA
-      rather than from the caller: a session belongs to the org that created it,
-      not to whichever org the person pressing Start happens to be acting for.
-
-      A session created without an org has no index row, so there is nothing to
-      update and the round still starts — the state that matters is on STATE and
-      METADATA, both already written above.
+      The owning org comes from the METADATA read above, not from the caller: a
+      session belongs to the org that created it, not to whichever org the
+      person pressing Start happens to be acting for.
     */
-    const metadata = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'orgId'
-    }));
-    const orgId = (metadata.Item && metadata.Item.orgId) || '';
-
-    if (orgId) {
-      await db.send(new UpdateCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: gamesIndexPk(orgId), SK: `GAME#${gameId}` },
-        UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt, #ttl = :ttl',
-        ExpressionAttributeNames: {
-          '#started': 'Started',
-          '#lastPlayedAt': 'LastPlayedAt',
-        '#ttl': 'ttl'
-        },
-        ExpressionAttributeValues: {
-          ':started': true,
-          ':lastPlayedAt': now,
-        ':ttl': ttl
-        }
-      }));
-    } else {
-      console.warn(`⚠️ Game ${gameId} has no owning organisation — no session list row to update`);
-    }
+    const { startedAt: now } = await startSession(db, process.env.TABLE_NAME, gameId, {
+      orgId: (ownerRead.Item && ownerRead.Item.orgId) || ''
+    });
 
     console.log(`✅ Game ${gameId} started successfully`);
 

@@ -23,7 +23,9 @@
  * A host who creates a session and abandons it has used nothing, and charging
  * for it teaches them not to experiment. A session somebody actually joined ran
  * in front of a room. So the billable moment is the first successful player
- * join — see the call site note in usage-metering.js / the handoff.
+ * join. The call is in game/join-game.js, on the new-player branch. Until
+ * 2026-09-23 there was no call at all and nothing was ever billed;
+ * tests/billable-session-wiring.js drives the real join so that cannot recur.
  *
  * "First" is not something the caller has to work out. `recordBillableSession`
  * is a CONDITIONAL PUT on `LEDGER#<period>#SESSION#<gameId>` guarded by

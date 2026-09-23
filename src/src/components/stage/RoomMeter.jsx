@@ -174,10 +174,27 @@ const LIST_KIND = { LOBBY: 'joined' };
  */
 const NAMES_SHOWN = 8;
 
+/**
+ * ARRIVALS — refresh-2026-09-22 RATIONALE §6 step 5, applied to a FEEDBACK
+ * round's comments (the owner, 2026-09-22: "a way to get that info up on the
+ * screen … click on those would allow everyone to see them").
+ *
+ * The last three comments as they land, newest first and brightest, each
+ * saying WHAT it is about and never WHO wrote it — the mockup's "Response 31"
+ * is a position, not a person. Each is a button: the host presses one to put
+ * it up for the room (`onPick(commentId)`), and the one that is up is marked
+ * (`featuredId`). The waiting list and the arrivals never share a meter;
+ * arrivals win, because two lists in one column is the reflow the earlier
+ * "no text on the wall" ruling feared.
+ */
+const ARRIVALS_SHOWN = 3;
+const AGE_CLASS = ['', ' older', ' oldest'];
+
 export default function RoomMeter({
-  phase, heading, body, complete = false, waiting = null,
+  phase, heading, body, complete = false, waiting = null, arrivals = null,
 }) {
-  const names = (waiting && waiting.names) || [];
+  const arriving = (arrivals && Array.isArray(arrivals.items) ? arrivals.items : []).slice(-ARRIVALS_SHOWN).reverse();
+  const names = arriving.length ? [] : (waiting && waiting.names) || [];
   const interactive = Boolean(names.length && waiting && typeof waiting.onPreview === 'function');
   const onPin = waiting && waiting.onPin;
 
@@ -248,7 +265,7 @@ export default function RoomMeter({
     : {};
 
   return (
-    <aside className={`meter${complete ? ' is-complete' : ''}`} data-phase={phase}>
+    <aside className={`meter${complete ? ' is-complete' : ''}${arriving.length ? ' arrivals' : ''}`} data-phase={phase}>
       <h4>{heading}</h4>
       <div
         className={`count${complete ? ' done' : ''}${interactive ? ' revealable' : ''}`}
@@ -262,6 +279,31 @@ export default function RoomMeter({
           label tier does not fit that cap — the heading would clip its own
           completion cue on the profile that loses the most. */}
       {complete && <CompletionFlag />}
+      {arriving.length > 0 && (
+        <>
+          <h5>Arriving</h5>
+          <div className="arrivals-list">
+            {arriving.map((item, i) => {
+              const id = item.commentId;
+              const featured = Boolean(arrivals.featuredId) && arrivals.featuredId === id;
+              return (
+                <button
+                  key={id || i}
+                  type="button"
+                  className={`arr${AGE_CLASS[i] || ''}`}
+                  aria-pressed={featured}
+                  {...(featured ? { 'data-featured': '' } : {})}
+                  title={featured ? 'On the wall — press to take it down' : 'Put this on the wall'}
+                  onClick={() => arrivals.onPick?.(id)}
+                >
+                  <p className="ans">{item.text}</p>
+                  {item.anchorLabel && <span className="n">{`On ${item.anchorLabel}`}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
       {revealed && (
         <div className="waiting" data-waiting-list="" data-list-kind={listKind}>
           <h5>{label}</h5>

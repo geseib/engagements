@@ -4,6 +4,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
+const { startSession } = require('./session-start');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1048,6 +1049,25 @@ exports.handler = async (event) => {
     // the served and the ENDED response so a host whose running order was built
     // against a replaced set finds out, rather than watching it be ignored.
     const queueNotes = queueOutcome && queueOutcome.staleSet ? { staleSet: true } : {};
+
+    /*
+      OPENING FROM CREATED IS STARTING. The phone remote's "Start First Round"
+      is this route, and it never passes through start-game.js — so a room
+      played that way kept its 90-day expiry and, worse, METADATA.Started stayed
+      unset and session-gate.js told every phone "Game not started" while the
+      round was on the wall. The same writes, from the same function
+      (session-start.js), and only here: every refusal above has already
+      returned, and a session that is already started keeps its StartedAt and
+      its expiry through every later round.
+
+      Before the ENDED branch as well as the ASK one — either way the session
+      has left the lobby.
+    */
+    if (currentState === 'CREATED') {
+      await startSession(db, process.env.TABLE_NAME, gameId, {
+        orgId: (ownerRead.Item && ownerRead.Item.orgId) || ''
+      });
+    }
 
     if (!nextQuestion) {
       // Game is finished - update state to ENDED and broadcast

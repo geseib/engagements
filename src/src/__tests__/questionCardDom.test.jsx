@@ -100,6 +100,7 @@ const TRIVIA = {
   optionC: 'John Wayne Gacy',
   optionD: 'Richard Ramirez',
   correctAnswer: 'David Berkowitz',
+  answerDetails: 'Son of Sam was caught over a parking ticket.',
 };
 /* Filled slots A, C and D. The stage letters them A, B and C — by position
    among the filled slots, never by slot — and the room's phones answer in
@@ -200,14 +201,68 @@ describe('ASK — the card is the markup the stage rendered inline', () => {
 describe('REVEAL — the trivia RESULTS option treatment', () => {
   const answers = [{ answer: 'B' }, { answer: 'B' }, { answer: 'A' }, { answer: 'C' }];
 
+  /*
+   * THE FROZEN-ORACLE CASES FOR A TALLIED REVEAL ARE RETIRED, 2026-09-22.
+   * OracleTriviaResults is the inline markup as it stood at 29a055a7: four
+   * bars and nothing else. refresh-2026-09-22 RATIONALE §6 step 3 calls that a
+   * regression — a results screen with no question and no CORRECT word — and
+   * 03-stage-results.html draws the recap above, a Correct flag on the winning
+   * row and the explanation below. The oracle is kept, unedited, for the
+   * untallied (preview) cases, which draw exactly what they drew.
+   */
   test('with the room\'s answers, every option carries its bar and its share', () => {
-    expect(html(<QuestionCard phase="REVEAL" question={TRIVIA} gameType="trivia" answers={answers} />))
-      .toBe(html(<OracleTriviaResults currentQuestion={TRIVIA} answers={answers} />));
+    const { container } = render(<QuestionCard phase="REVEAL" question={TRIVIA} gameType="trivia" answers={answers} />);
+    expect([...container.querySelectorAll('.pct')].map((n) => n.textContent)).toEqual(['25%', '50%', '25%', '0%']);
+    expect([...container.querySelectorAll('.opt .fill')].map((n) => n.style.width)).toEqual(['25%', '50%', '25%', '0%']);
+    expect(container.querySelector('.opts').className).toBe('opts');
+  });
+
+  test('the recap restates the question above the options, as the full prompt', () => {
+    // rejects: four bars with nothing saying what was asked — the room saw a
+    // winning answer to a question it could no longer read.
+    const { container } = render(<QuestionCard phase="REVEAL" question={TRIVIA} gameType="trivia" answers={answers} />);
+    const recap = container.firstElementChild;
+    expect(recap.tagName).toBe('P');
+    expect(recap.className).toBe('recap');
+    expect(recap.textContent).toBe(TRIVIA.questionDetail);
+    expect(recap.nextElementSibling.className).toBe('opts');
+  });
+
+  test('a question with no detail recaps its title', () => {
+    const { container } = render(<QuestionCard phase="REVEAL" question={GAPPED} gameType="trivia" answers={[]} />);
+    expect(container.querySelector('.recap').textContent).toBe(GAPPED.title);
+  });
+
+  test('the correct row is the hero row and carries the word Correct, between its text and its share', () => {
+    // rejects: a green border as the only signal. At 25ft a 2px border-color
+    // change is not a word; "Correct" is.
+    const { container } = render(<QuestionCard phase="REVEAL" question={TRIVIA} gameType="trivia" answers={answers} />);
+    const rows = [...container.querySelectorAll('.opt')];
+    expect(rows.map((r) => r.className)).toEqual(['opt dim', 'opt correct hero-row', 'opt dim', 'opt dim']);
+    const winner = rows[1];
+    expect([...winner.children].map((c) => c.className)).toEqual(['fill', 'ltr', 'txt', 'flag', 'pct']);
+    expect(winner.querySelector('.flag').textContent).toBe('Correct');
+    expect(container.querySelectorAll('.flag')).toHaveLength(1);
+  });
+
+  test('the explanation follows the options, announced as content the fitter may drop', () => {
+    const { container } = render(<QuestionCard phase="REVEAL" question={TRIVIA} gameType="trivia" answers={answers} />);
+    const explain = container.lastElementChild;
+    expect(explain.className).toBe('qdetail explain');
+    expect(explain.textContent).toBe(TRIVIA.answerDetails);
+    // Content, so it announces its own loss (stageShell: chrome before content).
+    expect(explain.dataset.drop).toBe('3');
+    expect(explain.dataset.dropNote).toBe('Explanation');
+  });
+
+  test('a question with no explanation draws no explanation line', () => {
+    const { container } = render(<QuestionCard phase="REVEAL" question={GAPPED} gameType="trivia" answers={answers} />);
+    expect(container.querySelector('.explain')).toBeNull();
+    expect(container.lastElementChild.className).toBe('opts');
   });
 
   test('with an empty answer list, 0% is drawn — on the stage 0% is true', () => {
     const { container } = render(<QuestionCard phase="REVEAL" question={TRIVIA} gameType="trivia" answers={[]} />);
-    expect(container.innerHTML).toBe(html(<OracleTriviaResults currentQuestion={TRIVIA} answers={[]} />));
     expect([...container.querySelectorAll('.pct')].map((n) => n.textContent)).toEqual(['0%', '0%', '0%', '0%']);
   });
 
@@ -216,10 +271,9 @@ describe('REVEAL — the trivia RESULTS option treatment', () => {
     // the Seine, because the stage drew the Seine as B.
     const picks = [{ answer: 'B' }, { answer: 'B' }, { answer: 'C' }];
     const { container } = render(<QuestionCard phase="REVEAL" question={GAPPED} gameType="trivia" answers={picks} />);
-    expect(container.innerHTML).toBe(html(<OracleTriviaResults currentQuestion={GAPPED} answers={picks} />));
     expect([...container.querySelectorAll('.ltr')].map((n) => n.textContent)).toEqual(['A', 'B', 'C']);
     expect([...container.querySelectorAll('.pct')].map((n) => n.textContent)).toEqual(['0%', '67%', '33%']);
-    expect([...container.querySelectorAll('.opt')].map((n) => n.className)).toEqual(['opt dim', 'opt correct', 'opt dim']);
+    expect([...container.querySelectorAll('.opt')].map((n) => n.className)).toEqual(['opt dim', 'opt correct hero-row', 'opt dim']);
   });
 
   test('an answer recorded as a lowercase bare letter marks its option, and only it', () => {
@@ -239,7 +293,7 @@ describe('REVEAL — the trivia RESULTS option treatment', () => {
     expect(marked[0].querySelector('.ltr').textContent).toBe('C');
     expect(marked[0].querySelector('.txt').textContent).toBe(LOWERCASE_LETTER.optionC);
     expect([...container.querySelectorAll('.opt')].map((n) => n.className))
-      .toEqual(['opt dim', 'opt dim', 'opt correct']);
+      .toEqual(['opt dim', 'opt dim', 'opt correct hero-row']);
   });
 
   test('an answer recorded as a lowercase slot id marks its option, and only it', () => {
@@ -264,12 +318,13 @@ describe('REVEAL — the trivia RESULTS option treatment', () => {
     expect(marked[0].querySelector('.ltr').textContent).toBe('C');
     expect(marked[0].querySelector('.txt').textContent).toBe(LOWERCASE_SLOT_ID.optionC);
     expect([...container.querySelectorAll('.opt')].map((n) => n.className))
-      .toEqual(['opt dim', 'opt dim', 'opt correct']);
+      .toEqual(['opt dim', 'opt dim', 'opt correct hero-row']);
   });
 
-  test('with no question, the stage\'s empty options block — as the inline markup drew it', () => {
-    expect(html(<QuestionCard phase="REVEAL" question={null} gameType="trivia" answers={[]} />))
-      .toBe(html(<OracleTriviaResults currentQuestion={null} answers={[]} />));
+  test('with no question, an empty options block and nothing to recap or explain', () => {
+    const { container } = render(<QuestionCard phase="REVEAL" question={null} gameType="trivia" answers={[]} />);
+    expect([...container.children].map((n) => n.className)).toEqual(['opts']);
+    expect(container.querySelector('.opt')).toBeNull();
   });
 
   test('without answers, neither the bar nor the figure renders', () => {
@@ -393,6 +448,12 @@ describe('the stage really renders it', () => {
     // prompt. Every oracle above would stay green, because they render the card
     // without the prop; only the stage's own call sites can show it was passed.
     expect(source).not.toMatch(/withQuestion/);
+  });
+
+  test('RESULTS has no kicker: the recap is the room\'s orientation now', () => {
+    // rejects: "Round 3 · Results" above a card whose first line already
+    // restates the question (refresh-2026-09-22 03-stage-results.html has none).
+    expect(source).not.toMatch(/· Results`/);
   });
 
   test('none of the card\'s markup survives inline', () => {
