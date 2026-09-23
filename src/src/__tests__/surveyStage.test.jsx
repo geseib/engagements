@@ -357,6 +357,28 @@ describe('useSurveyProgress', () => {
     expect(result.current.progress.finished).toBe(30);
   });
 
+  /*
+    TWO COUNT READS THAT CROSS IN FLIGHT. On dev the wall stepped backwards 30
+    times in a 240-answer burst: a read that started first, saw fewer rows and
+    came back last used to carry the newest `at`. The server now stamps `at`
+    when the read STARTS (game/survey-rows.js progressFor), so the lower count
+    arriving second is the OLDER frame — and the one on screen stays.
+  */
+  test('a read that started earlier but lands later never lowers the wall', async () => {
+    const fetchFn = jest.fn(async () => okJson(PROGRESS));
+    const { result } = renderHook(() => useSurveyProgress({
+      gameId: '4821', active: true, names: 'anonymous', fetchFn, apiBase: API,
+    }));
+    await waitFor(() => expect(result.current.progress).not.toBeNull());
+    const later = { ...PROGRESS, started: 60, finished: 30, at: '2026-09-23T14:20:00.412Z' };
+    const earlier = { ...PROGRESS, started: 47, finished: 17, at: '2026-09-23T14:20:00.388Z' };
+    act(() => result.current.applyProgress(later));
+    act(() => result.current.applyProgress(earlier));
+    expect(result.current.progress).toMatchObject({ started: 60, finished: 30, at: later.at });
+    const counts = surveyRoomCounts({ progress: result.current.progress, joined: JOINED });
+    expect(counts.finished).toBe(30);
+  });
+
   test('Anonymous never asks for people', async () => {
     const fetchFn = jest.fn(async () => okJson(PROGRESS));
     const { result } = renderHook(() => useSurveyProgress({

@@ -421,6 +421,34 @@ function createTable() {
       };
     },
 
+    /**
+     * Run the next command matching `predicate` NOW, then hold its RESULT until
+     * `release()`. `hold` stops a command before it touches the table; this one
+     * lets it read the table as it is, and be slow to come back — how a read
+     * that STARTED first can FINISH last, carrying older news than a read that
+     * started after it.
+     * @returns {{ reached: Promise<void>, release: () => void }}
+     */
+    holdResult(predicate) {
+      const inner = table.doc.send;
+      let releaseFn;
+      let reached;
+      const reachedPromise = new Promise((resolve) => { reached = resolve; });
+      const held = new Promise((resolve) => { releaseFn = resolve; });
+      let armed = true;
+      const disarm = () => { armed = false; if (table.doc.send !== inner) table.doc.send = inner; };
+      table.doc.send = async (command) => {
+        const out = await inner(command);
+        if (armed && predicate(command)) {
+          disarm();
+          reached();
+          await held;
+        }
+        return out;
+      };
+      return { reached: reachedPromise, release: () => { disarm(); releaseFn(); } };
+    },
+
     doc: {
       async send(command) {
         const input = command.input || {};

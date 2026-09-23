@@ -207,7 +207,7 @@ Put landed records metrics and broadcasts; a racing one returns the stored count
 ### Broadcasts
 | type | to | payload |
 |---|---|---|
-| `surveyProgress` | host sockets only (`ConnectionType='HOST'`, all rows) | `{gameId,started,finished,perQuestion:[{qid,answered}],at}` — counts only |
+| `surveyProgress` | host sockets only (`ConnectionType='HOST'`, all rows) | `{gameId,started,finished,perQuestion:[{qid,answered}],at}` — counts only; `at` is when the (strongly consistent) count read STARTED, so the stage's newest-`at`-wins rule follows read order |
 | `surveyClosingSoon` | all | `{gameId,minutes:2,warnedAt}`; also STATE `WarnedAt` for reloads |
 | `surveyClosed` | all | `{gameId,newState:'SURVEY#CLOSED',n,finished,closedAt}` |
 | `gameEnded` | all | `{gameId,state:'ENDED'}` |

@@ -37,6 +37,7 @@
  *   §23 the player row is read strongly; a legacy row is accepted
  *   §24 two closes at once freeze and announce once
  *   §25 DynamoDB throttling is busy too: retried, then 503 BUSY — never a 500
+ *   §26 the live counts are stamped when they are read, so the wall never steps back
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -1800,6 +1801,51 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     const res = await host('progress', g);
     clearFaults();
     assert.strictEqual(res.statusCode, 503, res.body);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§26 the wall\'s counts follow the order they were READ');
+
+  // The host's stage keeps the frame with the newest `at` (useSurveyProgress).
+  // On dev the wall stepped backwards 30 times in a 240-answer burst, worst by
+  // 13: `at` was stamped AFTER the count query came back, so a query that
+  // started first, read fewer rows and finished last carried the newest stamp
+  // and won. The stamp is the moment the (strongly consistent) read STARTS.
+  const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+  const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+  // rejects: stamping `at` when the count query finishes.
+  await check('two count reads that cross: the one that started first carries the earlier `at`', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 3);
+    const held = table.holdResult(isRespQuery);
+    const slow = host('progress', g);
+    await held.reached;                    // it has read ONE row, and is slow to return
+    await sleep(5);
+    await answer(g, newRespondent(), '001', 4);
+    const fast = bodyOf(await host('progress', g));
+    await sleep(5);
+    held.release();
+    const late = bodyOf(await slow);
+    assert.strictEqual(late.started, 1, 'the slow read did not read before the second answer');
+    assert.strictEqual(fast.started, 2);
+    assert.ok(ISO.test(late.at) && ISO.test(fast.at), `not ISO: ${late.at} / ${fast.at}`);
+    assert.ok(late.at < fast.at, `the first-started read is stamped ${late.at}, after the later one's ${fast.at}`);
+  });
+  // rejects: a count query (and a frame) on every save — the cost that grows
+  // with the room. Only a change of WHO has answered WHAT may pay for one.
+  await check('an answer that changes no one\'s Answered or Complete runs no count query and sends nothing', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 3);
+    await answer(g, r, '007', 'fine');
+    await phone('submit', g, { respondentId: r });
+    table.log.length = 0;
+    frames.length = 0;
+    assert.strictEqual((await answer(g, r, '001', 5)).statusCode, 200);         // a new value, same question
+    assert.strictEqual((await answer(g, r, '001', 5)).statusCode, 200);         // the same value again
+    assert.strictEqual((await phone('submit', g, { respondentId: r })).statusCode, 200); // sent again
+    assert.strictEqual(table.log.filter(isRespQuery).length, 0, 'an unchanged save ran the count query');
+    assert.deepStrictEqual(hostFrames('surveyProgress'), []);
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);

@@ -71,8 +71,16 @@ async function queryAll(db, tableName, gameId, prefix, extra = {}) {
  * The `surveyProgress` payload: how many people have started (answered
  * something, or sent), how many have sent, and how many have answered each
  * question. Counts only — no respondent id, no name, no answer ever enters it.
+ *
+ * `at` IS WHEN THE READ STARTED, not when it finished. The host's stage keeps
+ * the frame with the newest `at` (src/src/hooks/useSurveyProgress.js), and
+ * reads are strongly consistent, so a read that starts later sees at least
+ * what an earlier one saw. Stamped on return, a read that started first but
+ * came back last — fewer rows, newest stamp — won, and the wall stepped
+ * backwards (dev: 30 times in a 240-answer burst, by up to 13).
  */
 async function progressFor(db, tableName, gameId, meta, questions) {
+  const at = new Date().toISOString();
   const session = sessionOf(meta);
   const rows = (await queryAll(db, tableName, gameId, RESP_PREFIX, {
     ProjectionExpression: '#answered, #complete, #session',
@@ -90,7 +98,7 @@ async function progressFor(db, tableName, gameId, meta, questions) {
     started: rows.filter((r) => hasAnswers(r) || r.Complete === true).length,
     finished: rows.filter((r) => r.Complete === true).length,
     perQuestion: questions.map((q) => ({ qid: q.qid, answered: answered.get(q.qid) })),
-    at: new Date().toISOString(),
+    at,
   };
 }
 
