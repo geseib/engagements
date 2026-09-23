@@ -32,6 +32,7 @@
  *   §18 Send: nothing answered is 422; a DONE that did not land is retryable
  *   §19 end freezes first when the close's freeze never landed
  *   §20 start-vote and get-results refuse a survey
+ *   §21 the Names lock is shut before STATE opens the room
  *   §22 people leaves out removed players
  *   §23 the player row is read strongly; a legacy row is accepted
  *   §24 two closes at once freeze and announce once
@@ -1484,6 +1485,26 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.deepStrictEqual(partition(g).filter((i) => /^ROUND#/.test(i.SK)), []);
     const pub = await getResults({ routeKey: 'POST /games/get-results', requestContext: { routeKey: 'POST /games/get-results' }, body: JSON.stringify({ gameId: g, questionNumber: 1 }) });
     assert.strictEqual(pub.statusCode, 409, pub.body);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§21 Names locks the instant opening begins');
+
+  // rejects: STATE flipped before METADATA.OpenedAt exists — an update-game
+  // that read CREATED in that gap changes Names on an open survey.
+  await check('a Names edit landing mid-open (after the start began, before STATE flips) is refused', async () => {
+    const g = await surveySession({ names: 'anonymous' });
+    const held = table.hold((c) => c.type === 'update' && c.input.Key.SK === 'STATE');
+    const starting = startGame(asHost(ACME, { pathParameters: { gameId: g } }));
+    await held.reached;
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, 'CREATED', 'the hold did not catch the flip');
+    const edit = await updateGame(asHost(ACME, { pathParameters: { gameId: g }, body: JSON.stringify({ names: 'named' }) }));
+    held.release();
+    const started = await starting;
+    assert.strictEqual(started.statusCode, 200, started.body);
+    assert.strictEqual(edit.statusCode, 400, edit.body);
+    assert.strictEqual(bodyOf(edit).code, 'NAMES_LOCKED');
+    assert.strictEqual(row(`GAME#${g}`, 'METADATA').Names, 'anonymous');
   });
 
   /* ----------------------------------------------------------------------- */
