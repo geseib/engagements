@@ -46,7 +46,7 @@ and the mockups 01–07 in the same folder. **The mockups are the design**
   `requestClose()`, measured contrast with a `*Palette.test.js` for any new
   stylesheet (never name a test file `*Token*` — `.gitignore` hides it), no
   geometric assertions in jsdom tests.
-- Never write "deploys nothing" or "tags only" in any tracked file.
+- Never write either of the two deploy phrases `tests/no-retired-twin-references.js` bans, in any tracked file (it scans them all — this plan included).
 - Backend suites: `for f in tests/*.js; do node "$f" >/dev/null 2>&1 || echo "FAIL $f"; done`
   — judge by exit code AND count the suites. Frontend: `cd src && npm test -- --watchAll=false`
   (never `npx jest`), `npm run lint`, `npm run build`.
