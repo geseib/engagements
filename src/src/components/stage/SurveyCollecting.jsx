@@ -21,21 +21,25 @@ import { surveyWallSubtitle } from '../../hooks/useSurveyProgress';
  *     "Collecting is not ASK").
  *   - no `.bar2` under anything — see RoomMeter.jsx.
  *
- * `title` defaults to s-01's own line. It is an invitation, not data: the rail
- * already carries the session's title, and repeating it 2 inches below would
- * be the same fact twice in one viewport.
+ * `title` IS THE SESSION'S OWN NAME, handed in by the page. It used to
+ * default to s-01's sample sentence, "Tell us how today went", and the page
+ * passed nothing — so every survey on every wall asked the room how today
+ * went, whatever it was about. With no name, a neutral instruction.
  */
+export const SURVEY_WALL_FALLBACK = 'Answer on your phone';
+
 export default function SurveyCollecting({
   questionCount = 0,
   names,
   playUrl,
   joinUrl,
   code,
-  title = 'Tell us how today went',
+  title = '',
 }) {
+  const headline = (typeof title === 'string' && title.trim()) || SURVEY_WALL_FALLBACK;
   return (
     <>
-      <p className="stitle">{title}</p>
+      <p className="stitle">{headline}</p>
       <p className="ssub">{surveyWallSubtitle({ questionCount, names })}</p>
       {code && (
         <div className="joinblock">

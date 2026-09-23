@@ -39,3 +39,13 @@ export function stateRank(s) {
 export function isSurveyState(s) {
   return s === SURVEY_OPEN || s === SURVEY_CLOSED;
 }
+
+/**
+ * The guard as a setter: `next`, unless it ranks below `current` — then
+ * `current`. For `setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED))`,
+ * so a `surveyClosed` frame (or the host's own close POST) resolving after
+ * the session ENDED cannot put the stage back on "closed".
+ */
+export function forwardOnly(current, next) {
+  return stateRank(next) < stateRank(current) ? current : next;
+}

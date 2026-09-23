@@ -65,6 +65,7 @@ import useSurveyProgress, {
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
 import { readStartRefusal } from './utils/startRefusal';
+import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
 import {
   anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
@@ -2131,7 +2132,9 @@ Focus on actionable business strategy insights.`;
       // A refusal said earlier (say, this device's close racing another's)
       // is about a survey that is now closed; it would only mislead.
       setSurveyActionError('');
-      setGameState('SURVEY#CLOSED');
+      // Forward only: a frame delivered after the session ENDED (on this
+      // device or another) must not put the stage back on "closed".
+      setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
     });
 
     // Connect as host - WebSocket is required
@@ -5326,8 +5329,14 @@ Focus on actionable business strategy insights.`;
       return;
     }
     setSurveyActionError('');
-    survey.markClosed({ n: result.n, finished: result.finished, perQuestion: result.perQuestion });
-    setGameState('SURVEY#CLOSED');
+    // closedAt orders what follows: a progress frame sent before the close
+    // and delivered after this POST cannot overwrite the frozen counts.
+    survey.markClosed({
+      n: result.n, finished: result.finished, perQuestion: result.perQuestion, closedAt: result.closedAt,
+    });
+    // Forward only — the session may have ENDED from another device while
+    // this POST was in flight.
+    setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
   };
 
   const warnSurveyNow = async () => {
@@ -5658,6 +5667,7 @@ Focus on actionable business strategy insights.`;
       people: survey.people,
       stillGoing: surveyCounts ? surveyCounts.joined - surveyCounts.finished : 0,
       loading: survey.peopleLoading,
+      error: survey.peopleError,
       mode: rosterReveal,
       ...surveyRosterHandlers,
     })
@@ -6135,6 +6145,7 @@ Focus on actionable business strategy insights.`;
                 handed to it at all. */}
             {hostPhase === 'COLLECTING' && (
               <SurveyCollecting
+                title={eventTitle}
                 questionCount={surveyQuestionCount}
                 names={surveyNames}
                 playUrl={playUrl}

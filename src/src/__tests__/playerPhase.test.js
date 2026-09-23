@@ -10,7 +10,9 @@
  * phone back on the lobby. IMPLEMENTATION-phase-2.md §2: OPEN 1, CLOSED 2,
  * ENDED max.
  */
-import { stateRank, SURVEY_OPEN, SURVEY_CLOSED, isSurveyState } from '../utils/playerPhase';
+import {
+  stateRank, SURVEY_OPEN, SURVEY_CLOSED, isSurveyState, forwardOnly,
+} from '../utils/playerPhase';
 
 /** The guard as PlayerPage applies it: accept `next` unless it ranks below what is held. */
 function guard(sequence) {
@@ -90,4 +92,35 @@ test('PlayerPage reads the rank from here rather than keeping its own copy', () 
   const page = fs.readFileSync(path.join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
   expect(page).toMatch(/from '\.\/utils\/playerPhase'/);
   expect(page).not.toMatch(/const stateRank = \(/);
+});
+
+/*
+  THE SAME ORDER, AS A SETTER. The host page took a late `surveyClosed` at its
+  word and set SURVEY#CLOSED over an ENDED session. `forwardOnly(current,
+  next)` is the phone's guard in the shape a React setter wants: `next` unless
+  it ranks below what is held.
+*/
+describe('forwardOnly — never move backwards', () => {
+  test('a late close cannot pull an ended session back', () => {
+    expect(forwardOnly('ENDED', SURVEY_CLOSED)).toBe('ENDED');
+    expect(forwardOnly('END', SURVEY_CLOSED)).toBe('END');
+  });
+
+  test('open moves on to closed, and closed to ended', () => {
+    expect(forwardOnly(SURVEY_OPEN, SURVEY_CLOSED)).toBe(SURVEY_CLOSED);
+    expect(forwardOnly(SURVEY_CLOSED, 'ENDED')).toBe('ENDED');
+  });
+
+  test('a close arriving before the open was seen still lands', () => {
+    expect(forwardOnly('CREATED', SURVEY_CLOSED)).toBe(SURVEY_CLOSED);
+    expect(forwardOnly(null, SURVEY_CLOSED)).toBe(SURVEY_CLOSED);
+  });
+
+  test('the same state again is the same state', () => {
+    expect(forwardOnly(SURVEY_CLOSED, SURVEY_CLOSED)).toBe(SURVEY_CLOSED);
+  });
+
+  test('a closed survey is not reopened by a stale open', () => {
+    expect(forwardOnly(SURVEY_CLOSED, SURVEY_OPEN)).toBe(SURVEY_CLOSED);
+  });
 });
