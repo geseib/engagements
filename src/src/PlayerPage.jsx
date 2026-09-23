@@ -10,13 +10,14 @@ import {
 } from './utils/playerParticipation';
 import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
-import HelpButton from './components/HelpButton';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import './components/PlayerSurface.css';
 
 import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
-import BrandMark from './components/BrandMark';
+import { PlayerShell } from './components/PlayerShell';
+import SurveyRunner from './components/survey/SurveyRunner';
+import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 
 const API_BASE = window.API_BASE;
 
@@ -52,85 +53,12 @@ const LookUpCue = ({ children }) => (
   </div>
 );
 
-/**
- * THE SHELL: bar, stage, dock. Three regions, and the dock is OUTSIDE the
- * scrolling region rather than pinned over it.
- *
- * That is what makes "scrolling to read is fine, scrolling to act is not"
- * (RATIONALE §5.2) structural rather than editorial: the primary action cannot
- * be pushed below the fold because it is not in the thing that scrolls. It is
- * also not `position: fixed`, which on iOS Safari interacts badly with the
- * collapsing URL bar and with the soft keyboard.
- *
- * `dock` IS OMITTED, NOT DISABLED, IN REST AND WATCH (§2.2). If there is
- * nothing to do there must be nothing that looks pressable, and a design that
- * renders a greyed bar has already lost that argument. Declared at module scope
- * so React keeps one element identity across renders — a component defined
- * inside PlayerPage would remount its whole subtree on every keystroke and take
- * the focused textarea with it.
- */
-export const PlayerShell = ({
-  phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, after = null, children,
-}) => (
-  <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume}>
-    {banner}
-    <header className="plr-bar">
-      <div className="plr-strip" />
-      <div className="plr-line">
-        {/* The mark, NOT a link: a tap here must never leave a live round. */}
-        <BrandMark size={18} />
-        <span className="plr-ctx">{ctx}</span>
-        {category && <span className="plr-cat">{category}</span>}
-        <span className="plr-spacer" />
-        {who && (
-          <span className="plr-who">
-            <span className={`plr-dot${online ? '' : ' plr-dot--off'}`} />
-            {who}
-          </span>
-        )}
-        {/*
-          THE PLAYER'S ONLY WAY INTO THE DOCUMENTATION WRITTEN FOR THEM.
-
-          `HelpButton` was mounted in exactly one file — `AdminPage.jsx` — while
-          the help system's contents advertised four player guides. The audience
-          with the least context and the smallest screen had a documentation set
-          and no door into it from anywhere in the product.
-
-          IN THE BAR, NOT THE DOCK. The dock is the primary action and is
-          omitted entirely when there is nothing to do (see the note on
-          `dock` above); help has to be reachable in precisely those states —
-          "that name is taken" is a dock-less screen, and it is the single most
-          likely moment for a player to want an explanation.
-
-          It renders inside `.plr` so the modal is in the dusk scope rather
-          than beside it, for the same reason `after` is: a dialog rendered as
-          a sibling of this shell resolves none of the --plr-* tokens.
-        */}
-        <HelpButton
-          section="player"
-          variant="inline"
-          size="small"
-          tooltip="Help"
-          className="plr-helpbtn"
-          reports={{ context: 'player' }}
-        />
-      </div>
-    </header>
-    <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>
-      {children}
-    </main>
-    {dock && <footer className="plr-dock">{dock}</footer>}
-    {/* OVERLAYS, INSIDE THE SCOPE RATHER THAN BESIDE IT.
-        A dialog rendered as a sibling of this shell is outside `.plr`, so it
-        inherits the data-theme="light" that public/index.html puts on <html>
-        and resolves none of the --plr-* tokens — which is how the spotlight
-        came to open a white card with 1.96:1 buttons over a dusk ballot. It is
-        NOT part of `children`: children land in `.plr-stage`, the scrolling
-        region, and a dialog does not belong inside the thing it covers. */}
-    {after}
-  </div>
-);
+/*
+  THE SHELL lives in components/PlayerShell.jsx, so SurveyRunner can draw in it
+  without importing this page (a circular import). Re-exported here because
+  tests and callers have always imported it from PlayerPage.
+*/
+export { PlayerShell };
 
 // Utility function to calculate proper rankings with tie handling
 const calculatePlayerRankings = (players) => {
@@ -368,23 +296,19 @@ function PlayerPage() {
   // already voted" check downstream had said anything at all.
   const voteRoundRef = useRef(null);
   const [results, setResults] = useState(null);
+  // The host's two-minute warning in a survey, `{minutes, warnedAt}`, from the
+  // `surveyClosingSoon` frame. A phone that loads after it was given reads it
+  // from GET /survey instead (SurveyRunner).
+  const [surveyWarning, setSurveyWarning] = useState(null);
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
 
   // A3: monotonic phase guard — prevents a slow GET /state from clobbering a
-  // newer phase delivered via WebSocket (or vice versa). Accepts both the WS
-  // message spellings (RESULT#/END) and the server state spellings (RESULTS#/ENDED).
+  // newer phase delivered via WebSocket (or vice versa). The order itself,
+  // survey states included, is utils/playerPhase.js.
   const lastRankRef = useRef(-1);
-  const stateRank = (s) => {
-    if (!s) return -1;
-    if (s === 'ENDED' || s === 'END') return Number.MAX_SAFE_INTEGER;
-    const m = s.match(/^(ASK|VOTE|RESULTS?)#(\d+)/);   // accepts RESULT# and RESULTS#
-    if (!m) return -1;                                  // CREATED/STARTED never overwrite a live phase
-    const phase = { ASK: 0, VOTE: 1, RESULT: 2, RESULTS: 2 }[m[1]];
-    return parseInt(m[2], 10) * 10 + phase;
-  };
   const applyGameState = (next) => {
     const r = stateRank(next);
     if (r < lastRankRef.current) {
@@ -823,6 +747,29 @@ function PlayerPage() {
       applyGameState('ENDED');
     });
 
+    /*
+      A SURVEY'S TWO FRAMES (IMPLEMENTATION-phase-2.md §2 "Broadcasts").
+
+      `surveyClosingSoon` is the host's two-minute warning: SurveyRunner shows
+      it as a `.plr-banner` over whatever the person is on. It is held here,
+      not in the runner, because this effect owns every handler on the socket
+      and `onMessage` keeps ONE handler per type — a second registration from
+      a child would silently replace this page's.
+
+      `surveyClosed` moves the phase on through the same monotonic guard as
+      every other frame, so a slow `/state` answering `SURVEY#OPEN` cannot
+      reopen it.
+    */
+    webSocketClient.onMessage('surveyClosingSoon', (data) => {
+      console.log('🔌 PLAYER: survey closing soon:', data);
+      setSurveyWarning({ minutes: data?.minutes, warnedAt: data?.warnedAt || null });
+    });
+
+    webSocketClient.onMessage('surveyClosed', (data) => {
+      console.log('🔌 PLAYER: survey closed:', data);
+      applyGameState(data?.newState || SURVEY_CLOSED);
+    });
+
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
@@ -854,6 +801,8 @@ function PlayerPage() {
       webSocketClient.offMessage('hostMessage');
       webSocketClient.offMessage('resultsReady');
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('surveyClosingSoon');
+      webSocketClient.offMessage('surveyClosed');
     };
   }, [gameId, playerName, joined, useWebSocket]);
 
@@ -2482,6 +2431,28 @@ function PlayerPage() {
       </div>
     </div>
   ) : null;
+
+  /* ---------------------------------------------------------------- SURVEY --
+     A survey has no rounds, so none of the branches below apply to it: no
+     ASK#/VOTE#/RESULTS#, no score, no lobby once it is open. The whole joined
+     surface is SurveyRunner (components/survey/), which loads the questions
+     itself and follows `gameState` for the host's close and end. It is here —
+     after every hook in this component and after the join screens — so the
+     hook order never depends on the game type, and BEFORE the ENDED branch,
+     because a survey's ended screen shows no score. */
+  if (gameType === 'survey') {
+    return (
+      <SurveyRunner
+        gameId={gameId}
+        playerName={playerName}
+        apiBase={API_BASE}
+        state={gameState}
+        warning={surveyWarning}
+        online={wsConnected}
+        banner={offlineBanner}
+      />
+    );
+  }
 
   let phase = 'quiet';
   let volume = 'rest';
