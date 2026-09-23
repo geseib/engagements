@@ -199,9 +199,12 @@ check('a prompt\'s defaultSettings (a map) and tags (an array) round-trip throug
 // SAME TWO STRINGS as Title/HostName on GAME#<id>/METADATA — so one sentence
 // would have been ciphertext in the report row and readable in the session row
 // of the same table.
+// Briefing (session-setup-redesign Phase 3): a host-checked summary of a
+// customer's document, and the file name rides inside it — "layoffs-v3.pdf"
+// can say more than the contents. Encrypted as ONE value (a map).
 check('session fields are exactly the agreed set', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.session].sort(),
-    ['AIContext', 'Details', 'HostName', 'Title'].sort()));
+    ['AIContext', 'Briefing', 'Details', 'HostName', 'Title'].sort()));
 check('the session row and the report row agree about the same two strings', () => {
   assert.ok(C.ENCRYPTED_FIELDS.session.includes('Title'));
   assert.ok(C.ENCRYPTED_FIELDS.report.includes('gameTitle'));
@@ -377,7 +380,7 @@ const MUST_NOT_LEAK = {
   // The session brief. Its Title/HostName are the same two strings as
   // report.gameTitle/hostName below — they must not be ciphertext in one row
   // and readable in the other.
-  session: ['Title', 'HostName', 'Details', 'AIContext'],
+  session: ['Title', 'HostName', 'Details', 'AIContext', 'Briefing'],
   answer: ['Answer', 'ProcessedWords'],
   // The derived tally quoted the answers back in the clear before this.
   results: ['Winners', 'answers', 'question', 'wordAnalysis'],

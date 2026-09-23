@@ -38,6 +38,17 @@ import { DEFAULT_SCOPE } from '../utils/setRef';
  */
 const neverShuffled = (gameType) => gameType === 'survey';
 
+/*
+ * 5. **The briefing is Call & Answer only** (session-setup-redesign Phase 3).
+ *    The server refuses it for any other format, so a body carrying one would
+ *    be a create that fails on a hidden, stale field. `null` or an empty text
+ *    means "no briefing": create sends no key, an edit sends null to clear.
+ */
+const briefingApplies = (gameType) => gameType === 'call-and-answer';
+const briefingValue = (briefing) => (
+  briefing && typeof briefing.text === 'string' && briefing.text.trim() ? briefing : null
+);
+
 /**
  * @param form  what `<GameSetupDialog>` raises through `onCreate`:
  *              { title, gameType, setId, setScope, categoryIds, eventDetails,
@@ -84,6 +95,7 @@ export function createGameBody(form = {}) {
     hostName: 'Host',
     ...createPayloadFor({ gameType, anonymousResponses }),
     ...namesPayloadFor({ gameType, names }),
+    ...(briefingApplies(gameType) && briefingValue(form.briefing) ? { briefing: briefingValue(form.briefing) } : {}),
   };
 }
 
@@ -147,5 +159,8 @@ export function updateGameBody(form = {}) {
     // that races the start fails rather than breaking a promise already on
     // the phones.
     ...namesPayloadFor({ gameType, names }),
+    // Only when the form says something about it — an absent key leaves the
+    // session's briefing alone; null clears it.
+    ...(briefingApplies(gameType) && 'briefing' in form ? { briefing: briefingValue(form.briefing) } : {}),
   };
 }

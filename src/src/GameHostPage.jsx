@@ -641,6 +641,9 @@ function GameHostPage() {
   const [gamePrompts, setGamePrompts] = useState([]);
   const [gamePromptId, setGamePromptId] = useState('');
   const [promptSwitchStatus, setPromptSwitchStatus] = useState('');
+  // Whether the live session carries a Call & Answer briefing. Shown as
+  // "Briefing on" beside the voice and the approach — never its text.
+  const [sessionBriefed, setSessionBriefed] = useState(false);
 
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -1099,6 +1102,7 @@ function GameHostPage() {
     personaSwitchStatus: setPersonaSwitchStatus,
     gamePromptId: setGamePromptId,
     promptSwitchStatus: setPromptSwitchStatus,
+    sessionBriefed: setSessionBriefed,
     aiSummaries: setAiSummaries,
     currentAIInsights: setCurrentAIInsights,
     loadingAIInsights: setLoadingAIInsights,
@@ -2359,6 +2363,7 @@ Focus on actionable business strategy insights.`;
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           // And the approach, for the same reason.
           setGamePromptId(gameStateData.gameMetadata.promptId || '');
+          setSessionBriefed(gameStateData.gameMetadata.briefed === true);
           /*
             A SURVEY'S NAMES AND ITS WARNING, so a reload comes back up on the
             promise the phones were given and still says the warning went out.
@@ -6687,6 +6692,16 @@ Focus on actionable business strategy insights.`;
                   </select>
                   {promptSwitchStatus && (
                     <span className="ai-persona-switch-status">{promptSwitchStatus}</span>
+                  )}
+                  {/* THAT Workie has the host's briefing — never the file
+                      name or the text (session-setup-redesign page 30). */}
+                  {sessionBriefed && (
+                    <span
+                      className="ai-persona-switch-status"
+                      title="Workie has the host's briefing for this session, and uses it where the answers touch it"
+                    >
+                      Briefing on
+                    </span>
                   )}
                 </div>
 

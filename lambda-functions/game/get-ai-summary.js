@@ -7,9 +7,10 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, resolveOutputSections, pickOpeningMove,
+  buildContextBlock, buildHostDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
+const { isCallAndAnswer } = require('./briefing');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 const { extractVariableTokens } = require('./template-variables');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
@@ -25,6 +26,10 @@ const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
 const { ORG, promptsMetadataPk } = require('./tenant');
 const { setMetadataKey } = require('./set-version');
 const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tenant-crypto');
+// Every log line below that is ABOUT the room's words — the answers, the
+// question, the prompt, Workie's reply — describes them with this and never
+// quotes them. tests/ai-summary-content-not-logged.js.
+const { shapeForLog } = require('./log-shape');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -79,12 +84,27 @@ const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.tri
  * every one of them — which is the bug wearing a different hat.
  */
 function sessionSetKey(metadata, setId) {
-  const scope = metadata && metadata.QuestionSetScope;
   return setMetadataKey({
-    scope,
-    orgId: scope === ORG ? ((metadata && metadata.orgId) || '') : '',
+    scope: metadata && metadata.QuestionSetScope,
+    orgId: sessionSetOrgId(metadata),
     setId,
   });
+}
+
+/**
+ * THE ORG THAT OWNS THIS SESSION'S SET — the key its METADATA row is sealed
+ * under, or '' for a platform or public set, which is never encrypted.
+ *
+ * upload-questions.js writes an org set's row through `encryptItem(orgId,
+ * 'set', …)`, so customInstruction and aiContextInstruction come back as
+ * {v,iv,tag,ct} envelopes. Read raw, the AI context reached personas.js's
+ * `.trim()` and threw (the room got aiSummaryError), and the custom
+ * instruction reached the prompt as "[object Object]". Same rule as
+ * get-question.js and create-report.js: the session's pinned scope, never the
+ * caller. tests/ai-summary-set-metadata-sealed.js.
+ */
+function sessionSetOrgId(metadata) {
+  return metadata && metadata.QuestionSetScope === ORG ? (metadata.orgId || '') : '';
 }
 
 async function sessionOrgId(gameId) {
@@ -179,8 +199,9 @@ const SECTION_SYNONYMS = {
 const parseAIResponse = (aiResponse, options = {}) => {
   const raw = String(aiResponse || '');
   const customShape = options.customShape === true;
-  console.log('🔍 PARSING: Full AI response length:', raw.length);
-  console.log('🔍 PARSING: First 300 chars:', raw.substring(0, 300));
+  // Its length, never its opening: the reply is written from the answers, and
+  // it is stored as ENCRYPTED_FIELDS.aiSummary.
+  console.log('🔍 PARSING: AI response, ' + raw.length + ' chars');
   if (customShape) console.log('🔍 PARSING: prompt declares its own output shape');
 
   const lines = raw.split('\n');
@@ -697,7 +718,11 @@ exports.handler = async (event) => {
         
         // Add debug information if debug mode is enabled
         if (debug === 'true' && existingSummary.Item.DebugInfo) {
-          responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt || 'Debug info not available';
+          // This route is public: the briefing is withheld from any prompt it
+          // returns (personas.js withholdBriefing).
+          responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt
+            ? withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt)
+            : 'Debug info not available';
           responseData.debugProvenance = existingSummary.Item.DebugInfo.promptProvenance || null;
         }
         
@@ -852,14 +877,11 @@ exports.handler = async (event) => {
     console.log(`📋 Question query result:`, question ? 'Found' : 'Not found');
     if (question) {
       console.log('🔍 RAW QUESTION DATA FIELDS:', Object.keys(question));
-      console.log('🔍 RAW QUESTION DATA SAMPLE:', {
-        correctAnswer: question.correctAnswer,
-        CorrectAnswer: question.CorrectAnswer,
-        optionA: question.optionA,
-        OptionA: question.OptionA,
-        answerDetails: question.answerDetails,
-        AnswerDetails: question.AnswerDetails
-      });
+      // Shapes, not values: on an org's set these fields were ciphertext a few
+      // lines up, and correctAnswer is often the right option's own text.
+      console.log(`🔍 RAW QUESTION DATA: correctAnswer ${shapeForLog(question.correctAnswer || question.CorrectAnswer)}, `
+        + `optionA ${shapeForLog(question.optionA || question.OptionA)}, `
+        + `answerDetails ${shapeForLog(question.answerDetails || question.AnswerDetails)}`);
     }
 
     // If question not found in set, create a fallback question object
@@ -898,10 +920,9 @@ exports.handler = async (event) => {
       question.optionF = question.optionF || question.OptionF;
       question.answerDetails = question.answerDetails || question.AnswerDetails;
       
-      console.log('🔧 AFTER NORMALIZATION:');
-      console.log('  question.correctAnswer:', question.correctAnswer);
-      console.log('  question.optionA:', question.optionA);
-      console.log('  question.optionB:', question.optionB);
+      console.log(`🔧 AFTER NORMALIZATION: title ${shapeForLog(question.title)}, `
+        + `correctAnswer ${shapeForLog(question.correctAnswer)}, optionA ${shapeForLog(question.optionA)}, `
+        + `optionB ${shapeForLog(question.optionB)}`);
     }
 
     // Use the sequential question number for answers lookup (already calculated above)
@@ -1133,11 +1154,20 @@ exports.handler = async (event) => {
           TableName: process.env.TABLE_NAME,
           Key: sessionSetKey(metadata, questionSetId),
         }));
-        
+        // Opened with the SET's org (see sessionSetOrgId) into a new object —
+        // decryptItem never mutates, so nothing here writes plaintext back.
+        const setOrgId = sessionSetOrgId(metadata);
+        if (setResult.Item && setOrgId) {
+          setResult.Item = await decryptItem(setOrgId, 'set', setResult.Item);
+        }
+
+        // The two instructions are the set author's own prose, sealed at rest
+        // on an org's set: the log says they were found and how long they are,
+        // never what they say. See shapeForLog.
         if (setResult.Item) {
           if (setResult.Item.customInstruction) {
             customInstruction = setResult.Item.customInstruction;
-            console.log('📋 Found custom instruction for AI prompt:', customInstruction);
+            console.log(`📋 Found the set's custom instruction for the AI prompt: ${shapeForLog(customInstruction)}`);
             promptProvenance.hierarchy.push({
               type: 'customInstruction',
               source: 'question_set',
@@ -1146,7 +1176,7 @@ exports.handler = async (event) => {
           }
           if (setResult.Item.aiContextInstruction) {
             questionSetAiContext = setResult.Item.aiContextInstruction;
-            console.log('🎯 Found question set AI context:', questionSetAiContext);
+            console.log(`🎯 Found the question set's AI context: ${shapeForLog(questionSetAiContext)}`);
             promptProvenance.hierarchy.push({
               type: 'aiContext',
               source: 'question_set',
@@ -1250,6 +1280,16 @@ exports.handler = async (event) => {
       */
       gameAiContext: metadata.AIContext || '',
       eventDetails: metadata.EngagementInfo || metadata.Details || '',
+      /*
+        THE BRIEFING (session-setup-redesign Phase 3): the host-checked summary
+        of a document, Call & Answer only. METADATA is decrypted above, so this
+        is the map, and only its TEXT goes on — never the file name. The server
+        refuses a briefing on any other format at create and PUT; the format
+        check here keeps a row written some other way from briefing one.
+      */
+      briefing: isCallAndAnswer(metadata.GameType) && metadata.Briefing && typeof metadata.Briefing.text === 'string'
+        ? metadata.Briefing.text
+        : '',
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
@@ -1329,6 +1369,9 @@ exports.handler = async (event) => {
       PersonaName: summaryData.personaName || null,
       PersonaId: summaryData.personaId || null,
       PersonaSource: summaryData.personaSource || null,
+      // Written with the briefing? Only the model path can say yes; the
+      // data-driven fallback never read it.
+      ...(summaryData.briefingUsed ? { BriefingUsed: true } : {}),
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
@@ -1379,7 +1422,7 @@ exports.handler = async (event) => {
     
     // Add debug information if debug mode is enabled
     if (debug === 'true' && summaryData.debugInfo) {
-      responseData.debugPrompt = summaryData.debugInfo.fullPrompt;
+      responseData.debugPrompt = withholdBriefing(summaryData.debugInfo.fullPrompt);
       responseData.debugProvenance = summaryData.debugInfo.promptProvenance;
     }
     
@@ -1486,7 +1529,10 @@ function tallyTriviaCorrectness(question, answers) {
     responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
 
     const isCorrect = isAnswerCorrect(question, playerAnswer);
-    console.log(`🔍 CORRECTNESS CHECK: Player "${playerName}" answered "${playerAnswer}" (slot ${slotForSubmitted(question, playerAnswer) || 'none'}), correct slot(s) ${correctSlots(question).join(',') || 'none'}, isCorrect=${isCorrect}`);
+    // Slots only, as websocket/message.js's TRIVIA CHECK: the pick is the
+    // player's answer (decrypted for this), so it is described, never quoted.
+    const placed = slotForSubmitted(question, playerAnswer) ? 'placed on a drawn option' : 'placed on no drawn option';
+    console.log(`🔍 CORRECTNESS CHECK: Player "${playerName}" answered ${shapeForLog(playerAnswer)}, ${placed}, correct slot(s) ${correctSlots(question).join(',') || 'none'}, isCorrect=${isCorrect}`);
 
     if (isCorrect) correctPlayers.push({ playerName, answer: playerAnswer });
   }
@@ -1589,7 +1635,7 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1738,16 +1784,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     contextSections.push(`PARTICIPANT INSTRUCTIONS: "${customInstruction}"`);
   }
 
-  // Create a more comprehensive answer list for the prompt
-  console.log('🔍 DEBUG: AI Summary - answers structure:', answers.length > 0 ? answers[0] : 'No answers');
-  console.log('🔍 DEBUG: AI Summary - voteTallies structure:', voteTallies);
-  
+  // Create a more comprehensive answer list for the prompt. The rows were
+  // decrypted for the prompt, not for the log: sizes and scores only (each
+  // tally carries `answerText`, so it is not dumped either).
+  console.log(`🔍 DEBUG: AI Summary - ${answers.length} answers, ${Object.keys(voteTallies).length} tallies`);
+
   const rankedAnswers = answers.map((answer, idx) => {
     const voteData = voteTallies[idx] || { totalScore: 0 };
     const playerName = answer.playerName || answer.PlayerName;
     const answerText = answer.answer || answer.Answer;
-    
-    console.log(`🔍 DEBUG: AI Summary - Answer ${idx}: player="${playerName}", answer="${answerText}", score=${voteData.totalScore}`);
+
+    console.log(`🔍 DEBUG: AI Summary - Answer ${idx}: player="${playerName}", answer ${shapeForLog(answerText)}, score=${voteData.totalScore}`);
     
     return {
       player: playerName,
@@ -1803,7 +1850,14 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
         // it most.
         Key: setKey,
       }));
-      
+      // Sealed under the set's org, like the handler's read of the same row
+      // (sessionSetOrgId): the session's pinned scope, and for an org set the
+      // session's org — the same pair the partition lookup below resolves.
+      const setOrgId = setScope === ORG ? orgId : '';
+      if (oldSetMetadata.Item && setOrgId) {
+        oldSetMetadata.Item = await decryptItem(setOrgId, 'set', oldSetMetadata.Item);
+      }
+
       if (oldSetMetadata.Item) {
         questionSetName = oldSetMetadata.Item.SetName || questionSetName;
         questionSetDescription = oldSetMetadata.Item.Description || '';
@@ -2102,13 +2156,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   console.log('  question exists:', !!question);
   if (question) {
     console.log('  🔍 ALL QUESTION FIELDS:', Object.keys(question));
-    console.log('  question.correctAnswer value:', JSON.stringify(question.correctAnswer));
-    console.log('  question.optionA value:', JSON.stringify(question.optionA));
-    console.log('  question.optionB value:', JSON.stringify(question.optionB));
-    console.log('  question.optionC value:', JSON.stringify(question.optionC));
-    console.log('  question.optionD value:', JSON.stringify(question.optionD));
-    console.log('  typeof correctAnswer:', typeof question.correctAnswer);
-    console.log('  typeof optionA:', typeof question.optionA);
+    // What each field IS — the type question these lines were written to
+    // answer — never what it says. See shapeForLog.
+    console.log('  question fields: ' + ['correctAnswer', 'optionA', 'optionB', 'optionC', 'optionD']
+      .map((field) => `${field} ${shapeForLog(question[field])}`).join(', '));
   }
   
   // Wavelength-specific variables (already initialized above)
@@ -2120,11 +2171,6 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   console.log('🎮 GAME TYPE CHECK: gameType=', gameType, 'question exists=', !!question);
   if (gameType === 'trivia' && question) {
     console.log('📋 ENTERING TRIVIA PROCESSING BLOCK');
-    console.log('🔍 QUESTION OBJECT IN TRIVIA BLOCK:');
-    console.log('  correctAnswer:', question.correctAnswer);
-    console.log('  optionA:', question.optionA);
-    console.log('  optionB:', question.optionB);
-    console.log('  All fields:', Object.keys(question));
     // Format trivia choices with better formatting
     const options = [];
     if (question.optionA) options.push(`A) ${question.optionA}`);
@@ -2134,14 +2180,14 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     if (question.optionE) options.push(`E) ${question.optionE}`);
     if (question.optionF) options.push(`F) ${question.optionF}`);
     triviaChoices = options.join(', ');
-    
-    console.log('🔍 TRIVIA CHOICES DEBUG:', triviaChoices);
-    
+
+    console.log(`🔍 TRIVIA CHOICES DEBUG: ${options.length} choices`);
+
     // The sentence the prompt is handed about the answer. Through the decoder
     // for the same reason the tally below is: the letter in it is read back to
     // the room, so it must be the letter the room SAW.
     correctAnswer = describeCorrectAnswer(question);
-    console.log(`🔍 CORRECT ANSWER DEBUG: "${correctAnswer}"`);
+    console.log(`🔍 CORRECT ANSWER DEBUG: ${correctSlots(question).length} correct slot(s) placed, sentence ${shapeForLog(correctAnswer)}`);
 
     // Calculate trivia response distribution and who got it right. This is a
     // SECOND correctness decision — it does not read the IsCorrect that
@@ -2163,20 +2209,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       triviaCorrectness = `${correctCount} of ${totalParticipants} players correct (${correctPercentage}%)`;
     }
     
-    console.log('🔍 TRIVIA PROCESSING COMPLETE:');
-    console.log('  gameType:', gameType);
-    console.log('  question exists:', !!question);
-    console.log('  question.correctAnswer:', question.correctAnswer);
-    console.log('  question.optionA:', question.optionA);
-    console.log('  question.optionB:', question.optionB);
-    console.log('  question.optionC:', question.optionC);
-    console.log('  question.optionD:', question.optionD);
-    console.log('  question.answerDetails:', question.answerDetails);
-    console.log('  triviaChoices:', triviaChoices);
-    console.log('  correctAnswer:', correctAnswer);
-    console.log('  correctCount:', correctCount);
-    console.log('  triviaResponses:', triviaResponses);
-    console.log('  triviaCorrectness:', triviaCorrectness);
+    // Counts: the distribution is keyed by what each player answered.
+    console.log(`🔍 TRIVIA PROCESSING COMPLETE: ${triviaCorrectness || `${correctCount} correct`}, `
+      + `${Object.keys(responseDistribution).length} distinct answers, answerDetails ${shapeForLog(question.answerDetails)}`);
   } else if ((gameType === 'polls' || gameType === 'poll') && question) {
     // The poll's options, from its (decrypted) `options` array — optionA..E
     // only for a row that has none. See pollOptionsLine.
@@ -2319,7 +2354,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       wordAnalysis = buildWavelengthProse(commonWords, wavelengthNearMiss, totalUniqueWords, wavelengthSubmitters);
 
       console.log('🌊 Fallback wavelength analysis complete:', {
-        topic: wavelengthTopic,
+        topic: shapeForLog(wavelengthTopic), // the question's title, sealed at rest on an org's set
         commonWordsCount: commonWords.length,
         totalUniqueWords: totalUniqueWords,
         submitterCount: wavelengthSubmitters
@@ -2603,47 +2638,29 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
 
   let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${hostLayer}`;
 
-  // Debug: Log key trivia variables
+  /*
+    WHICH VARIABLES ARE EMPTY, NOT WHAT THE FULL ONES SAY.
+
+    These lines used to print the template variables themselves — the room's
+    answers (`responsesText`, `playerResponses`, `triviaResponses`), its words
+    (`wavelengthWords`, `commonWords`), the question and its right answer. The
+    question they were written to answer was "why is {triviaChoices} blank in
+    the prompt?", and an empty-variable list answers that without quoting
+    anybody. The counts are numbers the room's scoreboard shows anyway.
+  */
+  const emptyVariables = Object.entries(templateVars)
+    .filter(([, value]) => value === '' || value === undefined || value === null)
+    .map(([name]) => name);
+  console.log(`🧩 TEMPLATE VARIABLES: ${Object.keys(templateVars).length - emptyVariables.length} filled, `
+    + `empty: ${emptyVariables.join(', ') || 'none'}`);
   if (gameType === 'trivia') {
-    console.log('🔍 TRIVIA DEBUG - Template variables:');
-    console.log('  question:', templateVars.question);
-    console.log('  questionTitle:', templateVars.questionTitle);
-    console.log('  questionDetail:', templateVars.questionDetail);
-    console.log('  correctAnswer:', templateVars.correctAnswer);
-    console.log('  correctCount:', templateVars.correctCount);
-    console.log('  totalPlayers:', templateVars.totalPlayers);
-    console.log('  triviaChoices:', templateVars.triviaChoices);
-    console.log('  triviaResponses:', templateVars.triviaResponses);
-    console.log('  triviaCorrectness:', templateVars.triviaCorrectness);
-    console.log('  playerResponses:', templateVars.playerResponses);
-    console.log('  scoreChanges:', templateVars.scoreChanges);
-    console.log('  cumulativeScores:', templateVars.cumulativeScores);
-    console.log('  responsesText:', templateVars.responsesText);
-    
-    console.log('🔍 TRIVIA DEBUG - Question object:');
-    console.log('  question.title:', question.title);
-    console.log('  question.correctAnswer:', question.correctAnswer);
-    console.log('  question.optionA:', question.optionA);
-    console.log('  question.optionB:', question.optionB);
-    console.log('  question.optionC:', question.optionC);
-    console.log('  question.optionD:', question.optionD);
-    
-    console.log('🔍 TRIVIA DEBUG - Raw values:');
-    console.log('  triviaChoices raw:', triviaChoices);
-    console.log('  correctAnswer raw:', correctAnswer);
-    console.log('  scoreChanges raw:', scoreChanges);
+    console.log(`🔍 TRIVIA DEBUG: ${templateVars.correctCount} of ${templateVars.totalPlayers} correct, `
+      + `choices ${shapeForLog(templateVars.triviaChoices)}, correctAnswer ${shapeForLog(templateVars.correctAnswer)}`);
   } else if (gameType === 'wavelength') {
-    console.log('🌊 WAVELENGTH DEBUG - Template variables:');
-    console.log('  wavelengthTopic:', templateVars.wavelengthTopic);
-    console.log('  wavelengthWords:', templateVars.wavelengthWords);
-    console.log('  commonWords:', templateVars.commonWords);
-    console.log('  commonWordsCount:', templateVars.commonWordsCount);
-    console.log('  totalUniqueWords:', templateVars.totalUniqueWords);
-    console.log('  connectionScore:', templateVars.connectionScore);
-    console.log('  wordAnalysis:', templateVars.wordAnalysis);
-    console.log('  teamScore:', templateVars.teamScore);
+    console.log(`🌊 WAVELENGTH DEBUG: ${templateVars.commonWordsCount} of ${templateVars.totalUniqueWords} words on every list, `
+      + `team score ${templateVars.teamScore}, connection ${templateVars.connectionScore}`);
   }
-  
+
   for (const [key, value] of Object.entries(templateVars)) {
     const regex = new RegExp(`\\{${key}\\}`, 'g');
     prompt = prompt.replace(regex, value);
@@ -2663,10 +2680,23 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       unresolvedVariables.map((n) => `{${n}}`).join(', '));
   }
 
-  console.log('🤖 FULL AI PROMPT CONSTRUCTED:');
-  console.log('=====================================');
-  console.log(prompt);
-  console.log('=====================================');
+  /*
+    THE BRIEFING LAYER, LAST — after the host's required additions, the
+    position games 1935 and 4567 showed the model obeys (personas.js
+    buildBriefingLayer carries the argument). Appended AFTER the template
+    variables are filled and checked, so a brace in a customer's document is
+    neither substituted nor reported as an unresolved variable: the brief goes
+    to the model exactly as the host signed it off.
+  */
+  const briefingLayer = buildBriefingLayer({ briefing });
+  if (briefingLayer) prompt += `\n\n${briefingLayer}`;
+
+  // THE PROMPT IS NEVER LOGGED. It embeds every answer verbatim, the question
+  // and the host's brief — all ciphertext at rest on an org's session. To see
+  // the prompt a round was given, generate its summary with ?debug=true: the
+  // prompt is then kept in the AISummary row's DebugInfo, sealed like the rest
+  // of the summary, and handed back on a ?debug=true read.
+  console.log(`🤖 AI PROMPT CONSTRUCTED: ${prompt.length} chars, ${unresolvedVariables.length} unresolved variable(s)`);
 
   // Prepare debug information
   const debugInfo = {
@@ -2741,8 +2771,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // projector) must see the whole document, heading included.
     const aiResponse = (prefill + responseBody.content[0].text).trim();
 
-    console.log('✅ CLAUDE SUCCESS: Real AI response received');
-    console.log('📝 AI Response preview:', aiResponse.substring(0, 200) + '...');
+    // Its size and how it ended, never a preview: the reply is written from the
+    // answers and stored sealed (ENCRYPTED_FIELDS.aiSummary). A stop_reason of
+    // max_tokens is the one thing here worth an alert.
+    console.log(`✅ CLAUDE SUCCESS: AI response received, ${aiResponse.length} chars, stop_reason ${responseBody.stop_reason || 'not given'}`);
 
     // Parse the structured response
     const parsed = parseAIResponse(aiResponse, { customShape });
@@ -2759,7 +2791,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // Whose voice this section is in. Persisted onto the AISummary item so a
       // report generated weeks later can attribute it — by then the game's
       // PersonaId may have been switched again, or the persona edited.
-      ...personaAttribution(persona)
+      ...personaAttribution(persona),
+      // Whether THIS summary was written with the briefing. A flag, never the
+      // text: the report says which rounds were briefed (RATIONALE §f Q1).
+      briefingUsed: Boolean(briefingLayer)
     };
 
     // Include debug information if in debug mode

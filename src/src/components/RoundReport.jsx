@@ -376,6 +376,11 @@ export default function RoundReport({
             {summary.personaName && (
               <p className="past-round__voice">{`In ${summary.personaName}'s voice`}</p>
             )}
+            {/* The fact, never the brief's text: the report outlives the
+                session, and the briefing lives exactly as long as the session. */}
+            {summary.briefingUsed && (
+              <p className="past-round__voice">Workie had the host&rsquo;s briefing for this round</p>
+            )}
           </>
         ) : (
           <p className="past-round__empty">No summary was generated for this round.</p>

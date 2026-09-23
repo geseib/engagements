@@ -74,6 +74,19 @@ function aRound(over = {}) {
   };
 }
 
+// The Call & Answer briefing: a round Workie wrote with the host's briefing
+// says so under the summary — the fact, never the brief's text.
+describe('a briefed round', () => {
+  test('says Workie was briefed', () => {
+    render(<RoundReport round={aRound({ aiSummary: { ...aRound().aiSummary, briefingUsed: true } })} />);
+    expect(screen.getByText(/Workie had the host.s briefing for this round/i)).toBeInTheDocument();
+  });
+  test('an unbriefed round says nothing about it', () => {
+    render(<RoundReport round={aRound()} />);
+    expect(screen.queryByText(/briefing/i)).toBeNull();
+  });
+});
+
 describe('the three sections', () => {
   test('renders the question, the responses and the AI summary', () => {
     render(<RoundReport round={aRound()} />);

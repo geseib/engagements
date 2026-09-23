@@ -349,6 +349,10 @@ exports.handler = async (event) => {
         // And its summary approach, for the same reason: the in-game picker
         // must open on what the session actually carries after a reload.
         promptId: gameMetadata.Item.PromptId || null,
+        // THAT the session carries a Call & Answer briefing, for the host
+        // stage's "Briefing on" — a boolean, never the text or the file name.
+        // (The briefing itself is ciphertext here; only its presence is read.)
+        briefed: Boolean(gameMetadata.Item.Briefing),
         createdAt: gameMetadata.Item.CreatedAt,
         // A survey's Names (null for every other type), when the room first
         // opened, and the two-minute warning — the three facts a survey page

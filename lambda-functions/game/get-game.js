@@ -145,6 +145,10 @@ exports.handler = async (event) => {
         // the edit's PUT sends promptId, '' REMOVEs it, so a prefill without
         // it erased the approach chosen at create on any edit at all.
         promptId: gameMetadata.Item.PromptId || '',
+        // The Call & Answer briefing, DECRYPTED, for the edit prefill — and on
+        // the host branch only. It is a summary of the host's own document;
+        // the public branch above, which every phone reads, never carries it.
+        briefing: sessionMeta.Briefing || null,
         // Same default-ON rule as anonymousUntilReveal above: only an explicit
         // false means "in written order" (schema-compliant-manager.js:106).
         randomizeQuestions: hostPreferences.randomizeQuestions !== false,

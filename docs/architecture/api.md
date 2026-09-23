@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-134 routes across 7 groups. 117 carry the Cognito authorizer; 17 are public.
+145 routes across 7 groups. 124 carry the Cognito authorizer; 21 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -34,6 +34,7 @@ on `requestContext.routeKey`.
 | GET | `/games/{gameId}/exclusions` | **Cognito** | `lambda-functions/game/question-exclusions.js` |
 | POST | `/games/{gameId}/exclusions` | **Cognito** | `lambda-functions/game/question-exclusions.js` |
 | GET | `/games/{gameId}/feedback-round` | public | `lambda-functions/game/comments.js` |
+| POST | `/games/{gameId}/host-ticket` | **Cognito** | `lambda-functions/game/mint-host-ticket.js` |
 | POST | `/games/{gameId}/next-question` | **Cognito** | `lambda-functions/game/next-question.js` |
 | PUT | `/games/{gameId}/persona` | **Cognito** | `lambda-functions/game/update-game-persona.js` |
 | GET | `/games/{gameId}/players` | public | `lambda-functions/game/get-players.js` |
@@ -52,12 +53,22 @@ on `requestContext.routeKey`.
 | POST | `/games/{gameId}/start-question` | **Cognito** | `lambda-functions/websocket/start-question.js` |
 | POST | `/games/{gameId}/start-vote` | **Cognito** | `lambda-functions/websocket/start-vote.js` |
 | GET | `/games/{gameId}/state` | public | `lambda-functions/game/get-game-state.js` |
+| GET | `/games/{gameId}/survey` | public | `lambda-functions/game/survey-answers.js` |
 | POST | `/games/{gameId}/toggle-category` | **Cognito** | `lambda-functions/game/toggle-category.js` |
 | GET | `/games/{gameId}/up-next` | **Cognito** | `lambda-functions/game/up-next.js` |
 | GET | `/games/{gameId}/votes` | public | `lambda-functions/game/get-votes.js` |
 | POST | `/games/{gameId}/votes` | public | `lambda-functions/game/submit-vote.js` |
+| POST | `/games/briefing/draft` | **Cognito** | `lambda-functions/game/draft-briefing.js` |
 | GET | `/games/{gameId}/report/download` | public | `lambda-functions/game/download-report.js` |
 | GET | `/games/{gameId}/state/{playerId}` | public | `lambda-functions/game/get-game-state.js` |
+| PUT | `/games/{gameId}/survey/answers` | public | `lambda-functions/game/survey-answers.js` |
+| POST | `/games/{gameId}/survey/close` | **Cognito** | `lambda-functions/game/survey-host.js` |
+| POST | `/games/{gameId}/survey/end` | **Cognito** | `lambda-functions/game/survey-host.js` |
+| POST | `/games/{gameId}/survey/mine` | public | `lambda-functions/game/survey-answers.js` |
+| GET | `/games/{gameId}/survey/people` | **Cognito** | `lambda-functions/game/survey-host.js` |
+| GET | `/games/{gameId}/survey/progress` | **Cognito** | `lambda-functions/game/survey-host.js` |
+| POST | `/games/{gameId}/survey/submit` | public | `lambda-functions/game/survey-answers.js` |
+| POST | `/games/{gameId}/survey/warning` | **Cognito** | `lambda-functions/game/survey-host.js` |
 | POST | `/games/{gameId}/comments/{commentId}/feature` | **Cognito** | `lambda-functions/game/comments.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover` | **Cognito** | `lambda-functions/game/grant-handover.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover-request` | public | `lambda-functions/game/request-handover.js` |

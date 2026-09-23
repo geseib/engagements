@@ -6,6 +6,7 @@ const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
+const { shapeForLog } = require('./log-shape');
 const { reconcileReport } = require('./report-merge');
 
 /**
@@ -504,8 +505,19 @@ exports.handler = async (event) => {
             console.log(`Could not fetch question details (old format) for ${sourceQuestionId}:`, error.message);
           }
         }
-        
-        console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${questionDetails?.Title || 'N/A'}`);
+
+        // DECRYPTED, with the SET's org from the pinned pair — both branches
+        // above read `resolvedSet.pk`, and on an org set ENCRYPTED_FIELDS.question
+        // seals Title, Detail, the options and AnswerDetails, which the report
+        // quotes below. Not the caller's org, and not the session's by
+        // assumption: the same rule get-question.js and get-results.js follow.
+        // Platform and public sets are never encrypted and pass through.
+        const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+        if (questionDetails && setOrgId) {
+          questionDetails = await decryptItem(setOrgId, 'question', questionDetails);
+        }
+
+        console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${shapeForLog(questionDetails?.Title)}`);
       }
 
       // Calculate vote tallies for ranking (same logic as get-ai-summary.js)
@@ -603,9 +615,11 @@ exports.handler = async (event) => {
         console.log(`  - questionDetails exists: ${!!questionDetails}`);
         console.log(`  - questionDetails keys: ${questionDetails ? Object.keys(questionDetails).join(', ') : 'N/A'}`);
         if (questionDetails) {
-          console.log(`  - optionA: ${questionDetails.optionA || questionDetails.OptionA || 'missing'}`);
-          console.log(`  - optionB: ${questionDetails.optionB || questionDetails.OptionB || 'missing'}`);
-          console.log(`  - correctAnswer: ${questionDetails.correctAnswer || questionDetails.CorrectAnswer || 'missing'}`);
+          // Shapes, never values — an org set's options are ciphertext at rest,
+          // and correctAnswer is often the right option's own text.
+          console.log(`  - optionA: ${shapeForLog(questionDetails.optionA || questionDetails.OptionA)}`);
+          console.log(`  - optionB: ${shapeForLog(questionDetails.optionB || questionDetails.OptionB)}`);
+          console.log(`  - correctAnswer: ${shapeForLog(questionDetails.correctAnswer || questionDetails.CorrectAnswer)}`);
         }
       }
 
@@ -672,6 +686,9 @@ exports.handler = async (event) => {
           // spelling, and must stay renderable.
           personaName: questionAISummary.PersonaName || questionAISummary.personaName || null,
           personaId: questionAISummary.PersonaId || questionAISummary.personaId || null,
+          // Written with the host's Call & Answer briefing? A flag the summary
+          // row froze — the report says WHICH rounds, never the brief's text.
+          briefingUsed: questionAISummary.BriefingUsed === true,
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,
         

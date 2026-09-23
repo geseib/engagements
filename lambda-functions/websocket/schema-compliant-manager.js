@@ -226,6 +226,11 @@ const createGame = async (gameId, gameData) => {
         // the set's own promptId; PUT /games/{id} switches it mid-game. Absent
         // means "what the set says, else the format standard".
         ...(gameData.promptId ? { PromptId: gameData.promptId } : {}),
+        // The Call & Answer briefing: the host-checked document summary Workie
+        // gets as the last layer of every round's prompt (personas.js
+        // buildBriefingLayer). Encrypted by encryptSession below. Absent means
+        // unbriefed; PUT /games/{id} sets or clears it until the session starts.
+        ...(gameData.briefing ? { Briefing: gameData.briefing } : {}),
         Details: gameData.details || '',
         // WHAT A SURVEY WRITES ABOUT PEOPLE (survey-names.js). Survey only;
         // editable through PUT /games/{id} until the survey opens, and never

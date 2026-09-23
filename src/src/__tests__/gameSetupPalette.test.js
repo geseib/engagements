@@ -146,6 +146,42 @@ describe('every pairing is measured, composited from the real paint stack', () =
     expect(ratio(text(), card())).toBeGreaterThanOrEqual(AA);
   });
 
+  /*
+    WORKIE'S BRIEFING (session-setup-redesign 01, 03, 04). Three tints over the
+    CARD: periwinkle while working and ready, amber for a fact about the file
+    (too large, slides, scanned, truncated), red only when something broke. The
+    copy on each is muted or text; the red state's title is --danger-text.
+  */
+  const rgbaOf = (selector, prop) => {
+    const rule = CSS.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`));
+    expect(rule).not.toBeNull();
+    const m = rule[1].match(new RegExp(`${prop}:\\s*rgba\\(\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*([0-9.]+)\\s*\\)`));
+    expect(m).not.toBeNull();
+    return { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], a: Number(m[4]) };
+  };
+  test.each([
+    ['.gsd .gsd-brief.is-ready'],
+    ['.gsd .gsd-brief.is-limit'],
+    ['.gsd .gsd-brief.is-failed'],
+  ])('the briefing %s tint keeps text and muted copy at AA', (selector) => {
+    const { rgb, a } = rgbaOf(selector, 'background');
+    const ground = alphaOver(rgb, card(), a);
+    expect(ratio(text(), ground)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(muted(), ground)).toBeGreaterThanOrEqual(AA);
+  });
+  test('a failed briefing names the fault in --danger-text, at AA on its tint', () => {
+    const { rgb, a } = rgbaOf('.gsd .gsd-brief.is-failed', 'background');
+    const deep = GLOBAL.match(/--danger-text:\s*(#[0-9A-Fa-f]{6})/);
+    expect(ratio(parseHex(deep[1]), alphaOver(rgb, card(), a))).toBeGreaterThanOrEqual(AA);
+    expect(CSS).toMatch(/\.gsd \.gsd-brief\.is-failed \.gsd-brief-t\s*\{[^}]*color:\s*var\(--danger-text\)/);
+  });
+  test('the hidden file input really is hidden, not just transparent', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-brief-file\s*\{[^}]*display:\s*none/);
+  });
+  test('the sweep stills under reduced motion', () => {
+    expect(CSS).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.gsd \.gsd-sweep i\s*\{[^}]*animation:\s*none/);
+  });
+
   test('the filled primary button carries DARK text, never white', () => {
     // #F6A94C under white is 1.9:1 in either theme. The dark navy clears 7:1.
     const m = CSS.match(/\.gsd \.btn-primary \{[^}]*color:\s*(#[0-9A-Fa-f]{6})/);

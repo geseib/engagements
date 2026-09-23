@@ -369,7 +369,7 @@ const seedAISummary = (n, extra = {}) =>
   seedVote('002', 'alice', { 0: 1 });
 
   // Round 1: stamped by the persona resolver.
-  seedAISummary('001', { PersonaName: 'The Sports Commentator', PersonaId: 'sports-commentator' });
+  seedAISummary('001', { PersonaName: 'The Sports Commentator', PersonaId: 'sports-commentator', BriefingUsed: true });
   // Round 2: written before the resolver stamped anything.
   seedAISummary('002');
 
@@ -382,6 +382,12 @@ const seedAISummary = (n, extra = {}) =>
     assert.strictEqual(questionOf(report, '002').aiSummary.personaName, null));
   check('...and its summary text is still intact', () =>
     assert.strictEqual(questionOf(report, '002').aiSummary.summaryText, 'Field notes for round 002'));
+  // The Call & Answer briefing: the report says WHICH rounds were briefed —
+  // a flag off the summary row — never the brief's text (RATIONALE §f Q1).
+  check('a briefed round says so', () =>
+    assert.strictEqual(questionOf(report, '001').aiSummary.briefingUsed, true));
+  check('an unbriefed round says false, not undefined', () =>
+    assert.strictEqual(questionOf(report, '002').aiSummary.briefingUsed, false));
 
   say('\n   lower-case spellings are accepted too');
   resetDb();

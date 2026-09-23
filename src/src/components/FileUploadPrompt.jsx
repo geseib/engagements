@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './FileUploadPrompt.css';
-import { authFetch } from '../auth/authFetch';
+import { readDocumentText, DocumentProblem } from '../utils/documentText';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 
@@ -15,8 +15,6 @@ function FileUploadPrompt({
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedContent, setExtractedContent] = useState('');
   const fileInputRef = useRef(null);
-
-  const API_BASE = window.API_BASE;
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
@@ -46,6 +44,12 @@ function FileUploadPrompt({
     setExtractedContent('');
   };
 
+  /*
+    ONE PIPELINE. The reading lives in utils/documentText.js, shared with the
+    create dialog's briefing: .txt/.md in the browser, PDF and Word through
+    POST /admin/parse-document. A DocumentProblem carries a sentence meant for
+    the host (too large, slides, password-protected, or the server's reason).
+  */
   const processFile = async () => {
     if (!selectedFile) return;
 
@@ -53,73 +57,20 @@ function FileUploadPrompt({
     setUploadStatus('Processing file...');
 
     try {
-      const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
-      
-      // For text and markdown files, read directly on client
-      if (fileExtension === 'txt' || fileExtension === 'md') {
-        const content = await readFileAsText(selectedFile);
-        setExtractedContent(content);
-        setUploadStatus('File processed successfully');
-        if (onContentExtracted) {
-          onContentExtracted(content);
-        }
-      } 
-      // For PDF and DOCX, send to backend for processing
-      else if (fileExtension === 'pdf' || fileExtension === 'docx') {
-        const base64Content = await readFileAsBase64(selectedFile);
-        
-        const response = await authFetch(`${API_BASE}admin/parse-document`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileContent: base64Content,
-            fileType: fileExtension,
-            fileName: selectedFile.name
-          })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-          setExtractedContent(result.text);
-          setUploadStatus('File processed successfully');
-          if (onContentExtracted) {
-            onContentExtracted(result.text);
-          }
-        } else {
-          setUploadStatus(`Processing failed: ${result.error || 'Unknown error'}`);
-        }
+      const { text } = await readDocumentText(selectedFile, { maxBytes: maxFileSize });
+      setExtractedContent(text);
+      setUploadStatus('File processed successfully');
+      if (onContentExtracted) {
+        onContentExtracted(text);
       }
     } catch (error) {
       console.error('File processing error:', error);
-      setUploadStatus(`Error: ${error.message}`);
+      setUploadStatus(error instanceof DocumentProblem
+        ? `Processing failed: ${error.message}`
+        : `Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const readFileAsText = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = reject;
-      reader.readAsText(file);
-    });
-  };
-
-  const readFileAsBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        // Remove the data:*/*;base64, prefix
-        const base64 = e.target.result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
   };
 
   const clearFile = () => {

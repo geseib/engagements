@@ -226,9 +226,11 @@ describe('the setup dialog / game session boundary', () => {
   // The mirror of the above: gameSession.js's header names the keys it excludes
   // on purpose, and it named five while omitting three.
   it('every key the dialog owns is named in gameSession.js\'s exclusion list', () => {
-    const header = fs.readFileSync(
-      path.join(__dirname, '..', 'config', 'gameSession.js'), 'utf8'
-    ).slice(0, 2000);
+    // The WHOLE header comment, not a fixed-length prefix: the list grew past
+    // a 2,000-character window once, and a key that fell off the end failed
+    // this test for a reason that had nothing to do with the dialog.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'config', 'gameSession.js'), 'utf8');
+    const header = src.slice(0, src.indexOf('*/'));
     for (const key of dialogOwnedKeys) {
       expect(header).toContain(key);
     }

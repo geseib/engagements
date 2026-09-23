@@ -259,3 +259,47 @@ describe('Names — a survey sends it, every other type does not', () => {
     expect(createGameBody(survey).anonymousUntilReveal).toBe(false);
   });
 });
+
+/*
+  THE BRIEFING (session-setup-redesign Phase 3) — Call & Answer only. The
+  server refuses it for any other format (create-game.js, update-game.js), so a
+  body that carried one would be a create that fails on a stale hidden field.
+*/
+describe('the briefing — Call & Answer only', () => {
+  const BRIEF = {
+    text: 'Q3 review.\n- Open issues up 15%.',
+    source: { name: 'q3.pdf', pages: 14, chars: 19400, truncated: false },
+    namesRemoved: 2,
+    draftedAt: '2026-09-23T10:00:00.000Z',
+    editedAt: null,
+  };
+  const base = { title: 'T', setId: 's', categoryIds: [] };
+
+  test('a Call & Answer create carries the whole map', () => {
+    expect(createGameBody({ ...base, gameType: 'call-and-answer', briefing: BRIEF }).briefing).toEqual(BRIEF);
+  });
+
+  test('no briefing, or an empty one, sends no key at all', () => {
+    expect('briefing' in createGameBody({ ...base, gameType: 'call-and-answer' })).toBe(false);
+    expect('briefing' in createGameBody({ ...base, gameType: 'call-and-answer', briefing: null })).toBe(false);
+    expect('briefing' in createGameBody({ ...base, gameType: 'call-and-answer', briefing: { text: '  ' } })).toBe(false);
+  });
+
+  test.each(['trivia', 'poll', 'wavelength', 'survey'])('a %s create never sends it, whatever the form held', (gameType) => {
+    expect('briefing' in createGameBody({ ...base, gameType, briefing: BRIEF })).toBe(false);
+  });
+
+  test('an edit of a Call & Answer session sends the map, or null to clear', () => {
+    expect(updateGameBody({ ...base, gameType: 'call-and-answer', briefing: BRIEF }).briefing).toEqual(BRIEF);
+    expect(updateGameBody({ ...base, gameType: 'call-and-answer', briefing: null }).briefing).toBeNull();
+    expect(updateGameBody({ ...base, gameType: 'call-and-answer', briefing: { text: '' } }).briefing).toBeNull();
+  });
+
+  test('an edit form that says nothing about it leaves it alone (no key)', () => {
+    expect('briefing' in updateGameBody({ ...base, gameType: 'call-and-answer' })).toBe(false);
+  });
+
+  test('an edit of any other format never sends it', () => {
+    expect('briefing' in updateGameBody({ ...base, gameType: 'trivia', briefing: BRIEF })).toBe(false);
+  });
+});
