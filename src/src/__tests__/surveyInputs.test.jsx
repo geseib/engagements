@@ -197,7 +197,8 @@ describe('ChoiceInput', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Something else/ }));
     // Ticked with nothing written is not yet an answer, so nothing new is sent.
     const box = screen.getByRole('textbox', { name: 'Something else — say what' });
-    expect(box).toBeInTheDocument();
+    // Ticking it is asking to type, so the box takes the focus.
+    expect(document.activeElement).toBe(box);
     fireEvent.change(box, { target: { value: 'A written summary' } });
     expect(onChange).toHaveBeenLastCalledWith([0, { other: 'A written summary' }], { typing: true });
     rerender(<ChoiceInput question={q} value={[0, { other: 'A written summary' }]} onChange={onChange} />);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { countWord, NOTE_LIMIT } from './surveyAnswers';
 
 const isOther = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v) && typeof v.other === 'string';
@@ -38,6 +38,15 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
   const otherOn = allowOther && (otherTicked || Boolean(otherEntry));
   const otherText = otherEntry ? otherEntry.other : draft;
 
+  /* Ticking "Something else" is asking to type, so the box takes the focus —
+     but only on a tick, never when a resumed answer draws it already open. */
+  const otherBox = useRef(null);
+  const focusOther = useRef(false);
+  useEffect(() => {
+    if (otherOn && focusOther.current && otherBox.current) otherBox.current.focus();
+    focusOther.current = false;
+  }, [otherOn]);
+
   const count = picked.length + (otherOn ? 1 : 0);
   const atLimit = multi && limit !== null && count >= limit;
 
@@ -67,6 +76,7 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
 
   const toggleOther = () => {
     if (!multi) {
+      if (!otherOn) focusOther.current = true;
       setOtherTicked(true);
       emit(build([], true, otherText));
       return;
@@ -75,6 +85,7 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
       setOtherTicked(false);
       emit(build(picked, false, ''));
     } else if (!atLimit) {
+      focusOther.current = true;
       setOtherTicked(true);
       emit(build(picked, true, otherText));
     }
@@ -139,6 +150,7 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
             </button>
             {otherOn && (
               <input
+                ref={otherBox}
                 type="text"
                 className="plr-inp plr-inp--other"
                 aria-label="Something else — say what"

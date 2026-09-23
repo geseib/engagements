@@ -34,7 +34,9 @@ describe('BrandMark', () => {
     ['components/RootPage.jsx'],
     ['auth/AuthChrome.jsx'],
     ['components/stage/SessionSetupPanel.jsx'],
-    ['PlayerPage.jsx'],
+    // The player bar. It moved out of PlayerPage.jsx with the survey, so the
+    // runner could draw in it without a circular import.
+    ['components/PlayerShell.jsx'],
   ])('%s draws it', (file) => {
     expect(read(...file.split('/'))).toMatch(/<BrandMark\b/);
   });
