@@ -107,6 +107,10 @@ From the session agent's live run. **#1 is fixed; 2-6 are not.**
 4. **Nothing is ever billed.** `recordBillableSession` is exported from four
    copies of `usage.js` and imported by none; zero `LEDGER#` rows exist. The
    free-plan cap therefore cannot fire either.
+   **Fixed 2026-09-23:** `game/join-game.js` calls it on every new-player join
+   (the conditional put makes the first one the charge). Driven end to end by
+   `tests/billable-session-wiring.js`. See the billing handoff's "Metering"
+   note for what the meters showed before.
 5. **No way to end a session.** `ENDED` is only written when the question pool
    runs dry (`next-question.js`), so a 6-round session on a 100-question set
    sits in `RESULTS#006` for ever and the report screen is unreachable.
