@@ -635,6 +635,33 @@ const sessionsRun = (orgId) => [...store.values()]
     assert.ok(/\bcountAnsweredQuestion\s*\(/.test(src), 'survey-answers.js never calls countAnsweredQuestion');
   });
 
+  // A SURVEY'S TWO QUESTIONS CAN RACE. Answers to different questions arrive
+  // at once, both try to claim FirstAnsweredRound, and the loser re-reads
+  // METADATA to find the winner's question. An eventually-consistent re-read
+  // can miss the write it just lost to — it comes back with no
+  // FirstAnsweredRound, the loser concludes "same question", and the session
+  // that has now answered two questions is not counted at that moment.
+  // rejects: the loser's re-read made without ConsistentRead, in either copy.
+  for (const copy of ['game', 'websocket']) {
+    await check(`${copy}/session-count.js: the loser of the FirstAnsweredRound claim re-reads strongly, and counts`, async () => {
+      const { countAnsweredQuestion } = require(path.join(REPO, 'lambda-functions', copy, 'session-count.js'));
+      const sentCommands = [];
+      const racingDb = {
+        send: async (cmd) => {
+          sentCommands.push(cmd);
+          if (cmd.type === 'update' && /FirstAnsweredRound/.test(cmd.input.UpdateExpression)) throw conditionFailed();
+          if (cmd.type === 'get') return { Item: cmd.input.ConsistentRead === true ? { FirstAnsweredRound: 'c001#001' } : {} };
+          return {};
+        },
+      };
+      const out = await countAnsweredQuestion(racingDb, 'test-table', '5555', 'c001#002', { orgId: '' });
+      const reads = sentCommands.filter((c) => c.type === 'get');
+      assert.strictEqual(reads.length, 1);
+      assert.strictEqual(reads[0].input.ConsistentRead, true, 'the re-read is eventually consistent');
+      assert.strictEqual(out.counted, true, `not counted: ${out.reason}`);
+    });
+  }
+
   await check('only the two session-count.js copies call recordBillableSession', () => {
     const fs = require('fs');
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');

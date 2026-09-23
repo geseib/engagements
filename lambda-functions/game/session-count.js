@@ -86,10 +86,15 @@ async function countAnsweredQuestion(db, tableName, gameId, round, meta = {}, op
         return { counted: false, reason: 'first-question' };
       } catch (error) {
         if (!error || error.name !== 'ConditionalCheckFailedException') throw error;
+        // STRONGLY: the write we just lost to may not be on an eventually-
+        // consistent replica yet, and a re-read that misses it finds no
+        // FirstAnsweredRound, takes this for the same question, and does not
+        // count a session that has now answered two.
         const again = await db.send(new GetCommand({
           TableName: tableName,
           Key: metadataKey(gameId),
           ProjectionExpression: 'FirstAnsweredRound, CountedAt',
+          ConsistentRead: true,
         }));
         if (again.Item && again.Item.CountedAt) return { counted: false, reason: 'already' };
         first = again.Item && again.Item.FirstAnsweredRound;
