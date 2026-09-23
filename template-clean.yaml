@@ -2553,6 +2553,19 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/save-report
             Method: POST
+            # HOST/ADMIN ONLY. This route was PUBLIC: a four-digit code put an
+            # object in ReportsBucket and a REPORT# row in the owning org's
+            # Reports list, Title encrypted under that org's key — a row the
+            # org's own hosts could not tell from one they saved. Same pair as
+            # CreateReportEvent above, for the same reason: the authorizer,
+            # and `callerMayDriveSession` in save-report.js, which refuses a
+            # caller with no identity outright. GameReport.jsx sends the token
+            # (authFetch); tests/save-report-authorization.js pins all three.
+            #
+            # GET /report and GET /report/download are separate routes and are
+            # not changed by this.
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with

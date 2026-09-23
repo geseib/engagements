@@ -23,6 +23,7 @@ import html2pdf from 'html2pdf.js';
 import Icon from './Icon';
 import RankIcon from './RankIcon';
 import MarkdownRenderer from './MarkdownRenderer';
+import { authFetch } from '../auth/authFetch';
 import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
 import { calculatePlayerRankings } from '../config/podium';
 import './GameReport.css';
@@ -137,8 +138,9 @@ function GameReport({
       // Extract base64 data
       const base64Data = pdfBlob.split(',')[1];
 
-      // Send to backend for S3 storage
-      const response = await fetch(`${API_BASE}games/${gameId}/save-report`, {
+      // Send to backend for S3 storage. authFetch, not fetch: the route carries
+      // the Cognito authorizer, so a bare fetch is a 401.
+      const response = await authFetch(`${API_BASE}games/${gameId}/save-report`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

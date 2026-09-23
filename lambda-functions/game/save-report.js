@@ -4,7 +4,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { encryptValue, encryptItem } = require('./tenant-crypto');
-const { reportsIndexPk } = require('./tenant');
+const { reportsIndexPk, callerMayDriveSession } = require('./tenant');
 
 const s3Client = new S3Client({});
 const dynamoClient = new DynamoDBClient({});
@@ -40,7 +40,26 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
     }));
 
-    if (!gameMetadata.Item) {
+    /*
+      WHOSE SESSION IS THIS? This route was PUBLIC: a four-digit code and no
+      identity put an object in the reports bucket and a REPORT# row in the
+      owning org's Reports list, its Title encrypted under that org's key. It
+      carries the Cognito authorizer now (template-clean.yaml, SaveReportEvent)
+      and this asks the same question create-report.js does, 404 rather than
+      403 for the reason tenant.callerMayDriveSession gives.
+
+      NO IDENTITY IS REFUSED HERE TOO, as comments.js's feature route does.
+      `callerMayDriveSession` passes a caller with no groups — the participant
+      journey is never gated — so on its own it would let anyone save against
+      an orgless session the day this route lost its authorizer. A saved report
+      is never a participant's act.
+
+      Everything below — the S3 put and the index row — sits after this, so a
+      refused caller writes nothing.
+    */
+    const authorizer = event?.requestContext?.authorizer;
+    const identity = authorizer?.jwt?.claims || authorizer?.lambda;
+    if (!gameMetadata.Item || !identity || !callerMayDriveSession(event, gameMetadata.Item)) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),

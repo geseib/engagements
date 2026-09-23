@@ -93,7 +93,10 @@ async function check(label, fn) {
   try { await fn(); pass += 1; console.log(`  PASS  ${label}`); }
   catch (e) { fail += 1; console.log(`  FAIL  ${label}\n        ${e.message}`); }
 }
+// A host of the owning org: the route carries the Cognito authorizer and the
+// handler refuses a caller with no identity (tests/save-report-authorization.js).
 const save = (gameId, body) => handler({
+  ...asMember('org_acme'),
   pathParameters: { gameId },
   body: JSON.stringify({ eventTitle: 'Q3 Offsite', pdfBlob: 'JVBERi0=', ...body }),
 });

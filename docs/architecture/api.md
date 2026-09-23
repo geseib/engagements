@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-108 routes across 6 groups. 89 carry the Cognito authorizer; 19 are public.
+132 routes across 7 groups. 114 carry the Cognito authorizer; 18 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -44,7 +44,7 @@ on `requestContext.routeKey`.
 | GET | `/games/{gameId}/report` | public | `lambda-functions/game/get-report.js` |
 | POST | `/games/{gameId}/report` | **Cognito** | `lambda-functions/game/create-report.js` |
 | POST | `/games/{gameId}/reveal-authors` | **Cognito** | `lambda-functions/game/reveal-authors.js` |
-| POST | `/games/{gameId}/save-report` | public | `lambda-functions/game/save-report.js` |
+| POST | `/games/{gameId}/save-report` | **Cognito** | `lambda-functions/game/save-report.js` |
 | POST | `/games/{gameId}/stage-beat` | **Cognito** | `lambda-functions/game/stage-beat.js` |
 | POST | `/games/{gameId}/stage-focus` | **Cognito** | `lambda-functions/game/stage-focus.js` |
 | POST | `/games/{gameId}/start` | **Cognito** | `lambda-functions/game/start-game.js` |
@@ -57,6 +57,7 @@ on `requestContext.routeKey`.
 | POST | `/games/{gameId}/votes` | public | `lambda-functions/game/submit-vote.js` |
 | GET | `/games/{gameId}/report/download` | public | `lambda-functions/game/download-report.js` |
 | GET | `/games/{gameId}/state/{playerId}` | public | `lambda-functions/game/get-game-state.js` |
+| POST | `/games/{gameId}/comments/{commentId}/feature` | **Cognito** | `lambda-functions/game/comments.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover` | **Cognito** | `lambda-functions/game/grant-handover.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover-request` | public | `lambda-functions/game/request-handover.js` |
 | POST | `/games/{gameId}/players/{playerName}/remove` | **Cognito** | `lambda-functions/game/remove-player.js` |
@@ -75,11 +76,17 @@ on `requestContext.routeKey`.
 | GET | `/orgs` | **Cognito** | `lambda-functions/admin/orgs/list-my-orgs.js` |
 | POST | `/orgs` | **Cognito** | `lambda-functions/admin/orgs/create-org.js` |
 | GET | `/orgs/{orgId}` | **Cognito** | `lambda-functions/admin/orgs/get-org.js` |
+| GET | `/orgs/{orgId}/adjustments` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
 | POST | `/orgs/{orgId}/invites` | **Cognito** | `lambda-functions/admin/orgs/invite-member.js` |
+| GET | `/orgs/{orgId}/invoices` | **Cognito** | `lambda-functions/admin/get-usage.js` |
 | GET | `/orgs/{orgId}/members` | **Cognito** | `lambda-functions/admin/orgs/list-members.js` |
+| GET | `/orgs/{orgId}/plan-requests` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
+| POST | `/orgs/{orgId}/plan-requests` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
 | GET | `/orgs/{orgId}/usage` | **Cognito** | `lambda-functions/admin/get-usage.js` |
 | DELETE | `/orgs/{orgId}/invites/{token}` | **Cognito** | `lambda-functions/admin/orgs/revoke-invite.js` |
+| GET | `/orgs/{orgId}/invoices/{period}` | **Cognito** | `lambda-functions/admin/get-usage.js` |
 | DELETE | `/orgs/{orgId}/members/{sub}` | **Cognito** | `lambda-functions/admin/orgs/remove-member.js` |
+| DELETE | `/orgs/{orgId}/plan-requests/{reqId}` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
 | PUT | `/orgs/{orgId}/members/{sub}/role` | **Cognito** | `lambda-functions/admin/orgs/change-member-role.js` |
 
 ## /question-sets
@@ -87,12 +94,21 @@ on `requestContext.routeKey`.
 | Method | Path | Auth | Handler |
 |---|---|---|---|
 | GET | `/question-sets` | **Cognito** | `lambda-functions/game/get-question-sets.js` |
+| POST | `/question-sets/{setId}/appeal` | **Cognito** | `lambda-functions/admin/appeal-question-set.js` |
 | GET | `/question-sets/{setId}/categories` | **Cognito** | `lambda-functions/game/get-categories.js` |
 | POST | `/question-sets/{setId}/check` | **Cognito** | `lambda-functions/admin/check-question-set.js` |
 | POST | `/question-sets/{setId}/copy` | **Cognito** | `lambda-functions/admin/copy-question-set.js` |
 | DELETE | `/question-sets/{setId}/publish` | **Cognito** | `lambda-functions/admin/publish-question-set.js` |
 | POST | `/question-sets/{setId}/publish` | **Cognito** | `lambda-functions/admin/publish-question-set.js` |
 | GET | `/question-sets/{setId}/questions` | **Cognito** | `lambda-functions/admin/get-question-set-questions.js` |
+| GET | `/question-sets/{setId}/check/{jobId}` | **Cognito** | `lambda-functions/admin/check-question-set.js` |
+
+## /reports
+
+| Method | Path | Auth | Handler |
+|---|---|---|---|
+| GET | `/reports` | **Cognito** | `lambda-functions/game/get-reports.js` |
+| GET | `/reports/download` | **Cognito** | `lambda-functions/game/download-saved-report.js` |
 
 ## /admin
 
@@ -114,6 +130,7 @@ on `requestContext.routeKey`.
 | GET | `/admin/download-template` | **Cognito** | `lambda-functions/admin/download-template.js` |
 | POST | `/admin/export-to-archive` | **Cognito** | `lambda-functions/admin/export-to-archive.js` |
 | POST | `/admin/import-from-archive` | **Cognito** | `lambda-functions/admin/import-from-archive.js` |
+| GET | `/admin/moderation` | **Cognito** | `lambda-functions/admin/moderation-list.js` |
 | POST | `/admin/parse-document` | **Cognito** | `lambda-functions/admin/parse-document.js` |
 | GET | `/admin/personas` | **Cognito** | `lambda-functions/admin/get-personas.js` |
 | POST | `/admin/populate-defaults` | **Cognito** | `lambda-functions/admin/populate-defaults.js` |
@@ -134,6 +151,10 @@ on `requestContext.routeKey`.
 | POST | `/admin/clear-game/{gameId}` | **Cognito** | `lambda-functions/admin/delete-game.js` |
 | GET | `/admin/download-question-set/{setId}` | **Cognito** | `lambda-functions/admin/download-question-set.js` |
 | PUT | `/admin/edit-question-set/{setId}` | **Cognito** | `lambda-functions/admin/edit-question-set.js` |
+| GET | `/admin/moderation/{sk}` | **Cognito** | `lambda-functions/admin/moderation-get.js` |
+| POST | `/admin/moderation/decide` | **Cognito** | `lambda-functions/admin/moderation-decide.js` |
+| DELETE | `/admin/public-library/{publicSetId}` | **Cognito** | `lambda-functions/admin/public-library-item.js` |
+| GET | `/admin/public-library/{publicSetId}` | **Cognito** | `lambda-functions/admin/public-library-item.js` |
 | DELETE | `/admin/question-sets/{setId}` | **Cognito** | `lambda-functions/admin/delete-question-set.js` |
 | POST | `/admin/toggle-question-set/{setId}` | **Cognito** | `lambda-functions/admin/toggle-question-set.js` |
 | POST | `/admin/toggle-quickstart/{setId}` | **Cognito** | `lambda-functions/admin/toggle-quickstart.js` |
@@ -152,5 +173,13 @@ on `requestContext.routeKey`.
 
 | Method | Path | Auth | Handler |
 |---|---|---|---|
+| GET | `/platform/codes` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
+| POST | `/platform/codes` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
 | GET | `/platform/orgs` | **Cognito** | `lambda-functions/admin/orgs/platform-orgs.js` |
+| GET | `/platform/plan-requests` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
+| POST | `/platform/codes/{code}/retire` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
+| GET | `/platform/orgs/{orgId}/adjustments` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
+| POST | `/platform/orgs/{orgId}/adjustments` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
 | POST | `/platform/orgs/{orgId}/status` | **Cognito** | `lambda-functions/admin/orgs/platform-orgs.js` |
+| POST | `/platform/plan-requests/{orgId}/{reqId}/decide` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
+| POST | `/platform/orgs/{orgId}/adjustments/{adjId}/revoke` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
