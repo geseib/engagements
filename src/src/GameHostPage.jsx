@@ -64,6 +64,7 @@ import useSurveyProgress, {
   surveyRoomCounts, surveyMeterRows, surveyWaiting, stillGoingNames,
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
+import { readStartRefusal } from './utils/startRefusal';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
 import {
   anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
@@ -474,6 +475,14 @@ function GameHostPage() {
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [gamesList, setGamesList] = useState([]);
   const [reportsModalMode, setReportsModalMode] = useState('reports'); // 'reports' or 'select'
+  // Why a start from the sessions list — or the create dialog's "Open the
+  // survey", which falls back to that list — was refused, in the server's
+  // words (utils/startRefusal.js). Shown on the list; cleared whenever the
+  // list goes away, by whichever route, so it never greets the next opening.
+  const [historyNotice, setHistoryNotice] = useState('');
+  useEffect(() => {
+    if (!showReportsModal) setHistoryNotice('');
+  }, [showReportsModal]);
   
   // `showFinalReport` used to live here. Nothing ever rendered it, and after
   // the end-of-game dialog was deleted nothing set it either, so it survived
@@ -4302,25 +4311,36 @@ Focus on actionable business strategy insights.`;
    * open (start-game.js writes STATE `SURVEY#OPEN`). One helper, so the three
    * routes cannot start a session three different ways.
    *
-   * Resolves true once the session is on stage, false if the start was
-   * refused — the caller decides what the host sees next.
+   * Resolves `{ok: true}` once the session is on stage, or `{ok: false,
+   * error}` if the start was refused — `error` is the SERVER's sentence
+   * (utils/startRefusal.js), e.g. start-game.js's "Nothing to ask yet: this
+   * survey's question set has no questions in it…". The caller decides where
+   * the host reads it; nothing here reaches for alert().
    */
   const startSession = async (selectedGameId, selectedEventTitle, overrides = {}) => {
+    let response;
     try {
       console.log(`🚀 HOST: Starting game ${selectedGameId}`);
-
-      const response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
+      response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
+    } catch (err) {
+      console.error('❌ Error starting game:', err);
+      return { ok: false, error: 'That did not reach the server. Check the connection and try again.' };
+    }
 
-      if (!response.ok) {
-        throw new Error(`Failed to start game: ${response.status} ${response.statusText}`);
-      }
+    if (!response.ok) {
+      const error = await readStartRefusal(response);
+      console.error(`❌ Start refused (${response.status}):`, error);
+      return { ok: false, error };
+    }
 
+    try {
       console.log(`✅ Game ${selectedGameId} started`);
 
       // Close modal and go to game screen
+      setHistoryNotice('');
       setShowReportsModal(false);
       switchToGame(selectedGameId, {
         eventTitle: selectedEventTitle || 'Engagement Session',
@@ -4332,16 +4352,18 @@ Focus on actionable business strategy insights.`;
       url.searchParams.set('gameId', selectedGameId);
       url.searchParams.set('eventTitle', encodeURIComponent(selectedEventTitle || ''));
       window.history.replaceState(null, '', url);
-      return true;
     } catch (err) {
-      console.error('❌ Error starting game:', err);
-      alert(`Failed to start game: ${err.message}`);
-      return false;
+      // The session DID start; only putting it on this screen failed. Saying
+      // it did not start would invite a second press of Start.
+      console.error('❌ Started, but could not load the stage:', err);
     }
+    return { ok: true };
   };
 
   const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
-    await startSession(selectedGameId, selectedEventTitle);
+    setHistoryNotice('');
+    const started = await startSession(selectedGameId, selectedEventTitle);
+    if (!started.ok) setHistoryNotice(`That session did not start: ${started.error}`);
   };
 
   /**
@@ -4353,14 +4375,15 @@ Focus on actionable business strategy insights.`;
    *
    * If the start is refused the survey still EXISTS, unopened — so the host is
    * shown it in history, where its Start button is, rather than left on a
-   * blank screen.
+   * blank screen, with the server's reason on the list (never an alert()).
    */
   const openNewSurvey = async (newGameId, form) => {
     const opened = await startSession(newGameId, form.title, {
       currentGameType: 'survey',
       selectedSetId: form.setId,
     });
-    if (opened) return;
+    if (opened.ok) return;
+    setHistoryNotice(`The survey was created but did not open: ${opened.error}`);
     await fetchGamesList();
     setReportsModalMode('select');
     setShowReportsModal(true);
@@ -5129,7 +5152,9 @@ Focus on actionable business strategy insights.`;
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
+            notice={historyNotice}
             onClose={() => {
+              setHistoryNotice('');
               setShowReportsModal(false);
               if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
                 setShowWelcomeScreen(true);
@@ -5394,8 +5419,11 @@ Focus on actionable business strategy insights.`;
         break;
       case HOST_INTENTS.OPEN_SURVEY:
         // A survey still in CREATED — its create-time open was refused, or it
-        // was continued from history. The same /start the create path uses.
-        startSession(gameId, eventTitle, { currentGameType: 'survey', selectedSetId });
+        // was continued from history. The same /start the create path uses; a
+        // refusal is said in the dock, in the server's words, where the other
+        // survey acts say theirs.
+        startSession(gameId, eventTitle, { currentGameType: 'survey', selectedSetId })
+          .then((opened) => setSurveyActionError(opened.ok ? '' : `The survey did not open: ${opened.error}`));
         break;
       case HOST_INTENTS.CLOSE_SURVEY:
         closeSurveyNow();

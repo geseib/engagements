@@ -298,6 +298,24 @@ describe('§5 two empty states, saying different things', () => {
   });
 });
 
+/*
+  A REFUSED START IS SAID ON THE LIST. The page falls back to this list when a
+  create-and-open is refused (the survey exists, unopened), and the list's own
+  Start can be refused — both used to say so in a browser alert(). The reason
+  is the server's sentence, handed in as `notice`.
+*/
+describe('§5a a notice from the page', () => {
+  test('is shown as an alert, in the server\'s words', () => {
+    render(<SessionHistoryPanel sessions={[fresh]} notice="Nothing to ask yet: this survey's question set has no questions in it." />);
+    expect(screen.getByRole('alert')).toHaveTextContent("Nothing to ask yet: this survey's question set has no questions in it.");
+  });
+
+  test('no notice, no alert', () => {
+    render(<SessionHistoryPanel sessions={[fresh]} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
 describe('§5b the two counts', () => {
   const cellUnder = (rowTitle, header) => {
     const i = screen.getAllByRole('columnheader').findIndex((th) => th.textContent === header);
