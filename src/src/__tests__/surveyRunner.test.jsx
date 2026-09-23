@@ -916,4 +916,63 @@ describe('in the player page', () => {
     const off = webSocketClient.offMessage.mock.calls.map(([t]) => t);
     expect(off).toEqual(expect.arrayContaining(['surveyClosingSoon', 'surveyClosed']));
   });
+
+  /*
+    NO TYPE IS CLAIMED BEFORE THE SERVER SAYS ONE. PlayerPage defaulted the
+    game type to 'call-and-answer', so a phone joining a survey that was already
+    open read "Waiting for the game to start. The host will begin the first
+    round." — for ~1.9 s on dev — until /state answered. While the type is
+    unknown the page now says only that it is loading.
+  */
+  describe('before /state has said what the session is', () => {
+    /** The page's fetch, with /state held until `answer(body)` is called. */
+    function heldState(server) {
+      let release;
+      const held = new Promise((resolve) => { release = resolve; });
+      const inner = pageFetch(server);
+      global.fetch = jest.fn((url, opts = {}) => (String(url) === `${API}games/${GAME}/state`
+        ? held.then(({ status, body }) => reply(status, body))
+        : inner(url, opts)));
+      return { answer: (body, status = 200) => act(async () => { release({ status, body }); }) };
+    }
+    async function join() {
+      render(<PlayerPage />);
+      fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+      fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
+      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      await screen.findByText(/Loading the session/i);
+    }
+
+    test('no lobby sentence while it is unknown; the survey once /state says survey', async () => {
+      const server = makeServer();
+      const state = heldState(server);
+      await join();
+      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+      expect(screen.queryByText(/first round/i)).toBeNull();
+      expect(screen.queryByText(/your score/i)).toBeNull();
+      await state.answer({ state: 'SURVEY#OPEN', gameType: 'survey' });
+      await heading(Q1);
+      expect(screen.queryByText(/Loading the session/i)).toBeNull();
+      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+    });
+
+    // rejects: reading a failed /state's empty body as "call-and-answer" — the
+    // same wrong lobby, reached by a flaky network instead of a slow one.
+    test('a /state that fails says nothing about the type: still loading, no lobby', async () => {
+      const state = heldState(makeServer());
+      await join();
+      await state.answer({ error: 'Internal Server Error' }, 500);
+      await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+      expect(screen.getByText(/Loading the session/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+    });
+
+    test('a trivia session gets its lobby exactly as before, once /state says trivia', async () => {
+      const state = heldState(makeServer());
+      await join();
+      await state.answer({ state: 'CREATED', gameType: 'trivia' });
+      expect(await screen.findByText('Waiting for the game to start. The host will begin the first round.')).toBeInTheDocument();
+      expect(screen.queryByText(/Loading the session/i)).toBeNull();
+    });
+  });
 });

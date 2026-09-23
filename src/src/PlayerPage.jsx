@@ -183,7 +183,16 @@ function PlayerPage() {
   const [mySubmittedAnswer, setMySubmittedAnswer] = useState('');
   const [hasAnswered, setHasAnswered] = useState(false);
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
-  const [gameType, setGameType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  /*
+    NULL UNTIL THE SERVER SAYS. This defaulted to 'call-and-answer', which is a
+    claim: a phone joining a survey that was already open showed the
+    call-and-answer lobby ("Waiting for the game to start. The host will begin
+    the first round.") for the ~2 s until /state answered. Unknown now renders
+    a neutral loading line (below, before the survey branch), and every branch
+    that reads the type runs only once there is one. /state's own fallback for
+    a session with no GameType is still 'call-and-answer' (checkGameState).
+  */
+  const [gameType, setGameType] = useState(null);
   const [selectedTriviaAnswer, setSelectedTriviaAnswer] = useState(null); // For trivia: stores selected option letter
   const [wavelengthWords, setWavelengthWords] = useState(Array(10).fill('')); // For wavelength: stores 10 words
   const [answers, setAnswers] = useState([]);
@@ -1125,12 +1134,15 @@ function PlayerPage() {
       const stateJson = await stateRes.json();
       console.log('🔍 PLAYER: Raw state API response:', stateJson);
       const serverGameState = stateJson.state || 'CREATED';
-      const serverGameType = stateJson.gameType || 'call-and-answer';
-      
-      // Update game type if changed
-      if (serverGameType !== gameType) {
-        setGameType(serverGameType);
-      }
+      // The type, when this response says one. get-game-state.js always names
+      // it (falling back to 'call-and-answer' itself), so an OK answer without
+      // one keeps that fallback; a FAILED read says nothing about the session
+      // and must not re-type it. (`gameType` here is often a closure captured
+      // at join, so this sets rather than compares — React ignores a same-value
+      // set.)
+      const serverGameType = (typeof stateJson.gameType === 'string' && stateJson.gameType)
+        || (stateRes.ok ? 'call-and-answer' : null);
+      if (serverGameType) setGameType(serverGameType);
       
       console.log(`🔄 PLAYER: Game state is ${serverGameState}`);
 
@@ -2431,6 +2443,27 @@ function PlayerPage() {
       </div>
     </div>
   ) : null;
+
+  /* --------------------------------------------------------- TYPE UNKNOWN --
+     Joined, but /state has not said what kind of session this is. Every screen
+     below is one type's; showing any of them now is a guess, and the old guess
+     (call-and-answer's lobby) was wrong for every survey that was already open.
+     Rest volume, no dock: there is nothing to do yet. */
+  if (!gameType) {
+    return (
+      <PlayerShell
+        phase="quiet"
+        volume="rest"
+        ctx="In the session"
+        who={playerName}
+        online={wsConnected}
+        banner={offlineBanner}
+        centre
+      >
+        <p className="plr-lede plr-muted">Loading the session…</p>
+      </PlayerShell>
+    );
+  }
 
   /* ---------------------------------------------------------------- SURVEY --
      A survey has no rounds, so none of the branches below apply to it: no
