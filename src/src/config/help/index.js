@@ -56,6 +56,7 @@ export const HELP_ALIASES = {
   'question-sets': 'admin-question-sets',
   'websocket-settings': 'admin-settings',
   'quick-start': 'host-quick-start',
+  billing: 'host-plan',
   players: 'host-player-management',
   troubleshooting: 'technical-troubleshooting',
 };

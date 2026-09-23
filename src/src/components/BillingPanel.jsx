@@ -221,6 +221,14 @@ export default function BillingPanel({
           <div className="bill-panel-body">
             <UsageMeter rows={meterRows} theme={theme} />
 
+            {/* WHAT "SESSIONS RUN" COUNTS — the owner's rule, 2026-09-23, stated
+                where the number is (websocket/session-count.js). */}
+            <p className="bill-note bill-note--after" data-testid="bill-session-rule">
+              A session counts once two of its questions have been answered. Creating,
+              starting, joining and a rehearsal are free.{' '}
+              <a href="/help/host-plan">How sessions are counted</a>
+            </p>
+
             {metered && state.sessionsUsed > state.sessionsIncluded ? (
               <p className="bill-notebox bill-notebox--warn bill-notebox--top">
                 <b>

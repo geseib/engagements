@@ -1,27 +1,25 @@
 /**
- * THE METER IS WIRED: A SESSION SOMEBODY JOINED IS COUNTED, ONCE.
+ * A SESSION COUNTS AT ITS SECOND ANSWERED QUESTION — driven through the real
+ * handlers, read off the rows they leave.
  *
- * From 6730ce9a (2026-08-23) until this file, `recordBillableSession` was
- * exported from three copies of usage.js and CALLED BY NOTHING. Its own tests
- * (tests/usage-metering.js) called it directly and passed, so the meter looked
- * finished — while every environment wrote zero `LEDGER#…#SESSION#` rows,
- * `sessionsRun` never left 0, the free plan's session gate in create-game.js
- * could not fire, and invoices counted no sessions. The multitenant handoff
- * recorded it the day it shipped ("Nothing is ever billed") and it stayed so.
+ * The owner, 2026-09-23: "the session only counts if at least 2 questions get
+ * answered by 1 or more people. otherwise we chalk it up to test, or something
+ * was not correct and they likely will restart" — and, asked again, "i want to
+ * keep it at two answered questions".
  *
- * So this file drives the REAL handlers — create-game, start-game, join-game —
- * and reads the rows they leave, instead of calling the meter by hand. A test
- * that calls `recordBillableSession` itself cannot tell whether anything else
- * does, which is exactly how the gap survived a month.
+ * THE MOMENT: the first answer to the second DIFFERENT question that gets any
+ * answer at all. Round numbers do not matter and neither do skips: questions
+ * 1-3 skipped, 4 answered, 5 skipped, 6 answered — the session counts on the
+ * first answer to 6 (§3 walks exactly that).
  *
- * WHERE THE CALL LIVES, AND WHY THERE. The billable moment is the FIRST
- * SUCCESSFUL PLAYER JOIN (usage.js header): a session somebody actually joined
- * ran in front of a room; a session created, or started for a rehearsal, and
- * abandoned used nothing. A join is only possible after /start
- * (session-gate.js refuses until METADATA.Started), so "joined" is strictly
- * "started AND somebody came" — and it covers every route a session can go
- * live by, with one call site. The meter never refuses the join
- * (RATIONALE.md §3, "Nothing is ever blocked").
+ * HISTORY. `recordBillableSession` was exported and called by nothing from
+ * 6730ce9a (2026-08-23); 4b39c871 wired it into join-game.js on the first join.
+ * The owner then moved the moment: a join happens in every rehearsal and QR
+ * test. The call now lives in websocket/session-count.js, behind the answer
+ * write in websocket/message.js, and join-game.js bills nothing (§3, §6).
+ *
+ * WHY THE REAL HANDLERS. A test that calls the meter by hand cannot tell
+ * whether anything else does, which is how the first gap survived a month.
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -93,6 +91,9 @@ function conditionHolds(expr, item) {
   if (src === 'attribute_not_exists(ClientId)') return !item || item.ClientId === undefined;
   if (src === 'attribute_exists(RemovedAt)') return !!item && item.RemovedAt !== undefined;
   if (src === 'attribute_exists(PK)') return !!item;
+  // session-count.js claims the first answered question on METADATA.
+  const absent = /^attribute_not_exists\(([A-Za-z]+)\)$/.exec(src);
+  if (absent) return !item || item[absent[1]] === undefined;
   throw new Error(`test stub: unevaluated ConditionExpression ${JSON.stringify(src)}`);
 }
 
@@ -225,6 +226,7 @@ const createGameHandler = require(path.join(REPO, 'lambda-functions/websocket/cr
 const startGame = require(path.join(REPO, 'lambda-functions/game/start-game.js')).handler;
 const joinGame = require(path.join(REPO, 'lambda-functions/game/join-game.js')).handler;
 const nextQuestion = require(path.join(REPO, 'lambda-functions/game/next-question.js')).handler;
+const wsMessage = require(path.join(REPO, 'lambda-functions/websocket/message.js')).handler;
 const usage = require(path.join(REPO, 'lambda-functions/admin/shared/usage.js'));
 
 const cryptos = ['websocket', 'game', 'admin/shared']
@@ -237,6 +239,7 @@ async function mintKey(orgId) {
 }
 
 if (!process.env.DEBUG) { console.log = () => {}; console.warn = () => {}; console.error = () => {}; }
+
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 
 let pass = 0, fail = 0;
@@ -284,37 +287,83 @@ const join = (gameId, playerName, clientId = `browser-${playerName}`) => joinGam
   body: JSON.stringify({ playerName, clientId }),
 });
 
-/** A created-and-started session, owned by `orgId`. */
-async function liveSession(orgId) {
-  const { res, gameId } = await create(orgId);
-  assert.strictEqual(res.statusCode, 201, `create failed: ${res.body}`);
-  const started = await start(orgId, gameId);
-  assert.strictEqual(started.statusCode, 200, `start failed: ${started.body}`);
-  return gameId;
-}
-
 /**
- * The phone remote's "Start First Round": POST next-question on a CREATED
- * session, which never passes through start-game.js (d3446e6b made it start
- * the session). Gives the session one category of a legacy platform set to
- * play — the rows tests/lobby-start-ttl.js lays down for the same door.
+ * One category of a legacy platform set with `n` questions to play — the rows
+ * tests/lobby-start-ttl.js lays down for the same handler.
  */
-async function startFromRemote(orgId, gameId) {
+function layDownSet(gameId, n = 8) {
   const PK = `GAME#${gameId}`;
   const SETPK = 'SET#set-alpha';
   Object.assign(store.get(key(PK, 'METADATA')), { QuestionSetId: 'set-alpha' });
   const put = (item) => store.set(key(item.PK, item.SK), item);
+  const ids = Array.from({ length: n }, (_, i) => String(i + 1).padStart(3, '0'));
   put({
     PK, SK: 'STATE#CATS',
     'AvailMask1-8': '10000000', 'AvailMask9-16': '00000000', 'AvailMask17-24': '00000000',
     'HostMask1-8': '10000000', 'HostMask9-16': '00000000', 'HostMask17-24': '00000000',
   });
-  put({ PK, SK: 'CATEGORY#c001#ACTIVE', ActiveIndex: 0, QuestionCount: 3 });
-  put({ PK, SK: 'CATEGORY#c001#ORDER', QuestionOrder: ['001', '002', '003'], IsRandomized: false });
-  put({ PK, SK: 'STATE#CATS#COUNTS', '1-8': [3], '9-16': [], '17-24': [], TotalEnabled: 3, TotalRemaining: 3, Version: 1 });
+  put({ PK, SK: 'CATEGORY#c001#ACTIVE', ActiveIndex: 0, QuestionCount: n });
+  put({ PK, SK: 'CATEGORY#c001#ORDER', QuestionOrder: ids, IsRandomized: false });
+  put({ PK, SK: 'STATE#CATS#COUNTS', '1-8': [n], '9-16': [], '17-24': [], TotalEnabled: n, TotalRemaining: n, Version: 1 });
   put({ PK: SETPK, SK: 'CATEGORY#c001', Name: 'Pricing' });
-  for (const n of ['001', '002', '003']) put({ PK: SETPK, SK: `QUESTION#${n}`, Category: 'Pricing', title: `Question ${n}` });
-  return nextQuestion(asHost(orgId, { pathParameters: { gameId }, body: JSON.stringify({}) }));
+  for (const id of ids) put({ PK: SETPK, SK: `QUESTION#${id}`, Category: 'Pricing', title: `Question ${id}` });
+}
+
+/** A created-and-started session, owned by `orgId`, with questions to ask. */
+async function liveSession(orgId) {
+  const { res, gameId } = await create(orgId);
+  assert.strictEqual(res.statusCode, 201, `create failed: ${res.body}`);
+  const started = await start(orgId, gameId);
+  assert.strictEqual(started.statusCode, 200, `start failed: ${started.body}`);
+  layDownSet(gameId);
+  return gameId;
+}
+
+const stateOf = (gameId) => store.get(key(`GAME#${gameId}`, 'STATE')).State;
+const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
+
+/**
+ * The host's next round: "Start First Round" from the lobby, else Skip — the
+ * one press that moves on whether or not anybody answered.
+ */
+async function serve(orgId, gameId) {
+  const inLobby = ['CREATED', 'STARTED'].includes(stateOf(gameId));
+  const res = await nextQuestion(asHost(orgId, {
+    pathParameters: { gameId },
+    body: JSON.stringify(inLobby ? {} : { action: 'skip' }),
+  }));
+  assert.strictEqual(res.statusCode, 200, `serve failed: ${res.body}`);
+  assert.match(stateOf(gameId), /^ASK#\d{3}$/);
+  return stateOf(gameId).slice(4);
+}
+
+/** A player's answer to the round on screen, over the real WebSocket route. */
+async function answer(gameId, playerName, text = 'an answer') {
+  const round = stateOf(gameId).slice(4);
+  const res = await wsMessage({
+    requestContext: { connectionId: `conn-${playerName}` },
+    body: JSON.stringify({ messageType: `ANSWER#${round}`, gameId, playerName, answer: text, answerType: 'text' }),
+  });
+  assert.strictEqual(res.statusCode, 200, `answer refused: ${res.body}`);
+  return round;
+}
+const answerRow = (gameId, round, playerName) =>
+  store.get(key(`GAME#${gameId}`, `QUESTION#${round}#ANSWER#${playerName}`));
+
+/** Serve a round and have each named player answer it. */
+async function answeredRound(orgId, gameId, players = ['Ada']) {
+  const round = await serve(orgId, gameId);
+  for (const p of players) await answer(gameId, p);
+  return round;
+}
+
+/** A session that COUNTS: started, joined, two questions answered. */
+async function countedSession(orgId) {
+  const gameId = await liveSession(orgId);
+  await join(gameId, 'Ada');
+  await answeredRound(orgId, gameId);
+  await answeredRound(orgId, gameId);
+  return gameId;
 }
 
 /** Every session ledger row, whatever the period — so a run that straddles
@@ -326,19 +375,22 @@ const sessionsRun = (orgId) => [...store.values()]
   .reduce((n, i) => n + (Number(i.sessionsRun) || 0), 0);
 
 (async () => {
-  say('\nbillable sessions: the meter is called by the join, once per session\n');
+  say('\nbillable sessions: a session counts at its second answered question\n');
 
-  // ── 1. One session, one row, one count ───────────────────────────────────
-  say('1. a session somebody joined is billed');
+  // ── 1. The moment ─────────────────────────────────────────────────────────
+  say('1. the second answered question counts the session');
 
-  await check('create, start, one join: one SESSION ledger row and sessionsRun 1', async () => {
+  await check('one answered question bills nothing; the second bills the session once', async () => {
     reset();
     await seedOrg(SOLO);
     const gameId = await liveSession(SOLO);
-    const joined = await join(gameId, 'Ada');
-    assert.strictEqual(joined.statusCode, 200, joined.body);
-    // rejects: recordBillableSession exported and called by nothing — the state
-    // of every environment from 6730ce9a until this change.
+    await join(gameId, 'Ada');
+    await answeredRound(SOLO, gameId);
+    // rejects: counting on the first answer — one question is a sound check.
+    assert.strictEqual(sessionRows(SOLO).length, 0, 'billed on the FIRST answered question');
+    assert.strictEqual(metadataOf(gameId).CountedAt, undefined);
+    await answeredRound(SOLO, gameId);
+    // rejects: the meter left uncalled on the answer path.
     const rows = sessionRows(SOLO);
     assert.strictEqual(rows.length, 1, `expected one SESSION ledger row, found ${rows.length}`);
     assert.strictEqual(rows[0].gameId, gameId);
@@ -347,37 +399,35 @@ const sessionsRun = (orgId) => [...store.values()]
     // rejects: stamping a ttl on a financial record (usage.js header).
     assert.strictEqual(rows[0].ttl, undefined, 'the ledger row carries a ttl');
     assert.strictEqual(sessionsRun(SOLO), 1);
+    assert.ok(metadataOf(gameId).CountedAt, 'METADATA.CountedAt was not stamped');
   });
 
   await check('the counter the gate reads agrees with the ledger — nothing for the reconciler to repair', async () => {
     reset();
     await seedOrg(SOLO);
-    const gameId = await liveSession(SOLO);
-    await join(gameId, 'Ada');
+    await countedSession(SOLO);
     const period = usage.periodOf(new Date());
     // rejects: raising the counter by a path that writes no ledger row. The
-    // reconciler rebuilds sessionsRun FROM the ledger, so a counter the ledger
-    // cannot account for is shouted about and never repaired.
+    // reconciler rebuilds sessionsRun FROM the ledger.
     assert.strictEqual(await usage.countBilledSessions(SOLO, period), 1);
     assert.strictEqual((await usage.readUsage(SOLO, period)).sessionsRun, 1);
     const allowance = await usage.readAllowance(SOLO);
     assert.strictEqual(allowance.sessionsUsed, 1, JSON.stringify(allowance));
   });
 
-  await check('a session started from the phone remote (next-question from CREATED) is billed on its join too', async () => {
+  await check('a session started from the phone remote (next-question from CREATED) counts the same way', async () => {
     reset();
     await seedOrg(SOLO);
     const { res, gameId } = await create(SOLO);
     assert.strictEqual(res.statusCode, 201, res.body);
-    const served = await startFromRemote(SOLO, gameId);
-    assert.strictEqual(served.statusCode, 200, served.body);
-    assert.strictEqual(sessionRows(SOLO).length, 0, 'billed before anybody joined');
+    layDownSet(gameId);
+    await serve(SOLO, gameId);                              // Start First Round, from CREATED
     const joined = await join(gameId, 'Ada');
     assert.strictEqual(joined.statusCode, 200, joined.body);
-    await join(gameId, 'Grace');
-    // rejects: metering in start-game.js. This door never calls it, so a
-    // session run from the remote would never be billed; the join is the one
-    // place every door leads through.
+    await answer(gameId, 'Ada');
+    assert.strictEqual(sessionRows(SOLO).length, 0, 'billed on the first answered question');
+    await answeredRound(SOLO, gameId);
+    // rejects: a meter reached by only one of the two doors that start play.
     assert.strictEqual(sessionRows(SOLO).length, 1);
     assert.strictEqual(sessionsRun(SOLO), 1);
   });
@@ -385,46 +435,26 @@ const sessionsRun = (orgId) => [...store.values()]
   // ── 2. Idempotent ─────────────────────────────────────────────────────────
   say('\n2. it is one charge however many times the room touches it');
 
-  await check('the whole room joining bills the session ONCE', async () => {
+  await check('a whole room answering five questions bills the session ONCE', async () => {
     reset();
     await seedOrg(SOLO);
     const gameId = await liveSession(SOLO);
-    for (let i = 0; i < 20; i++) {
-      const r = await join(gameId, `Player ${i}`);
-      assert.strictEqual(r.statusCode, 200, r.body);
-    }
-    // rejects: an unconditional ledger put or an ADD with no guard — twenty
-    // players would be twenty sessions on the invoice.
+    const room = Array.from({ length: 12 }, (_, i) => `Player ${i}`);
+    for (const p of room) await join(gameId, p);
+    for (let r = 0; r < 5; r++) await answeredRound(SOLO, gameId, room);
+    // rejects: an unconditional ledger put, or a meter that runs on every
+    // answer past the second question — sixty answers, sixty sessions.
     assert.strictEqual(sessionRows(SOLO).length, 1);
     assert.strictEqual(sessionsRun(SOLO), 1);
   });
 
-  await check('a reconnect, a refreshed phone and a lost name race do not bill again', async () => {
+  await check('a changed answer, a resent answer and a later round do not bill again', async () => {
     reset();
     await seedOrg(SOLO);
-    const gameId = await liveSession(SOLO);
-    await join(gameId, 'Ada', 'browser-1');
-    const again = await join(gameId, 'Ada', 'browser-1');        // same phone, back again
-    assert.strictEqual(again.statusCode, 200, again.body);
-    assert.strictEqual(parse(again).isReconnection, true);
-    const clash = await join(gameId, 'Ada', 'browser-2');        // someone else, same name
-    assert.strictEqual(clash.statusCode, 409, clash.body);
-    assert.strictEqual(sessionRows(SOLO).length, 1);
-    assert.strictEqual(sessionsRun(SOLO), 1);
-  });
-
-  await check('a re-start (the Start button pressed again, a retried request) does not bill twice', async () => {
-    reset();
-    await seedOrg(SOLO);
-    const gameId = await liveSession(SOLO);
-    await join(gameId, 'Ada');
-    // start-game only moves CREATED -> STARTED, so a second press is refused;
-    // the room carries on and another player arrives.
-    const second = await start(SOLO, gameId);
-    assert.strictEqual(second.statusCode, 400, second.body);
-    await join(gameId, 'Grace');
-    // rejects: metering on start AND join without one shared key, or keying the
-    // row on anything but the session (a clientId, a timestamp).
+    const gameId = await countedSession(SOLO);
+    await answer(gameId, 'Ada', 'changed my mind');          // same question, again
+    await answer(gameId, 'Ada', 'changed my mind');          // a redelivered frame
+    await answeredRound(SOLO, gameId);                        // a third question
     assert.strictEqual(sessionRows(SOLO).length, 1);
     assert.strictEqual(sessionsRun(SOLO), 1);
   });
@@ -433,30 +463,69 @@ const sessionsRun = (orgId) => [...store.values()]
     reset();
     await seedOrg(SOLO);
     await seedOrg(OTHER);
-    const a = await liveSession(SOLO);
-    const b = await liveSession(SOLO);
-    const c = await liveSession(OTHER);
-    for (const g of [a, b, c]) await join(g, 'Ada');
-    // rejects: billing to the caller's org rather than the SESSION's owning org
-    // (a join carries no org at all — it must come from METADATA).
+    await countedSession(SOLO);
+    await countedSession(SOLO);
+    const c = await countedSession(OTHER);
+    // rejects: billing to anything but the SESSION's owning org — a player's
+    // answer carries no org at all; it must come from METADATA.
     assert.strictEqual(sessionsRun(SOLO), 2);
     assert.strictEqual(sessionsRun(OTHER), 1);
     assert.strictEqual(sessionRows(OTHER)[0].gameId, c);
   });
 
-  // ── 3. What is NOT billed ─────────────────────────────────────────────────
-  say('\n3. nobody joined, or nobody to bill: nothing is written');
+  // ── 3. What does NOT count ────────────────────────────────────────────────
+  say('\n3. a rehearsal, a look around, or one question: nothing is written');
 
-  await check('creating and starting a session nobody joins bills nothing', async () => {
+  await check('creating, starting and joining a session bills nothing', async () => {
     reset();
     await seedOrg(SOLO);
-    await liveSession(SOLO);
-    await create(SOLO);                                          // never started
-    // rejects: moving the meter to create-game or start-game. A rehearsal, or a
-    // session set up and abandoned, ran in front of nobody (usage.js header:
-    // "charging for it teaches them not to experiment").
+    const gameId = await liveSession(SOLO);
+    for (let i = 0; i < 20; i++) await join(gameId, `Player ${i}`);
+    await create(SOLO);                                      // never started
+    // rejects: first-join billing (4b39c871), or a meter in create/start —
+    // everybody scanning the QR in a rehearsal is not a session.
     assert.strictEqual(sessionRows(SOLO).length, 0);
     assert.strictEqual(sessionsRun(SOLO), 0);
+  });
+
+  await check('questions served and skipped with no answers bill nothing', async () => {
+    reset();
+    await seedOrg(SOLO);
+    const gameId = await liveSession(SOLO);
+    await join(gameId, 'Ada');
+    for (let r = 0; r < 4; r++) await serve(SOLO, gameId);   // somebody just looking
+    // rejects: counting served rounds instead of answered ones.
+    assert.strictEqual(sessionRows(SOLO).length, 0);
+  });
+
+  await check('a whole room answering ONE question bills nothing', async () => {
+    reset();
+    await seedOrg(SOLO);
+    const gameId = await liveSession(SOLO);
+    const room = ['Ada', 'Grace', 'Alan', 'Edsger'];
+    for (const p of room) await join(gameId, p);
+    await answeredRound(SOLO, gameId, room);
+    await serve(SOLO, gameId);                               // skipped
+    // rejects: counting ANSWERS (four of them) rather than answered QUESTIONS.
+    assert.strictEqual(sessionRows(SOLO).length, 0);
+  });
+
+  await check('skip 1-3, answer 4, skip 5, answer 6: it counts on 6, not before', async () => {
+    reset();
+    await seedOrg(SOLO);
+    const gameId = await liveSession(SOLO);
+    await join(gameId, 'Ada');
+    for (let r = 0; r < 3; r++) await serve(SOLO, gameId);
+    const four = await answeredRound(SOLO, gameId);
+    assert.strictEqual(four, '004');
+    await serve(SOLO, gameId);
+    // rejects: "the second answer" read as "an answer on round 2", or as any
+    // answer once two rounds exist.
+    assert.strictEqual(sessionRows(SOLO).length, 0, 'counted before a second question was answered');
+    const six = await answeredRound(SOLO, gameId);
+    assert.strictEqual(six, '006');
+    assert.strictEqual(sessionRows(SOLO).length, 1);
+    assert.strictEqual(metadataOf(gameId).FirstAnsweredRound, '004');
   });
 
   await check('a session with no owning organisation records nothing', async () => {
@@ -465,9 +534,10 @@ const sessionsRun = (orgId) => [...store.values()]
     store.set(key('GAME#4321', 'METADATA'), {
       PK: 'GAME#4321', SK: 'METADATA', Title: 'Platform demo', Started: true, Visibility: 'public',
     });
-    store.set(key('GAME#4321', 'STATE'), { PK: 'GAME#4321', SK: 'STATE', State: 'STARTED' });
-    const joined = await join('4321', 'Ada');
-    assert.strictEqual(joined.statusCode, 200, joined.body);
+    store.set(key('GAME#4321', 'STATE'), { PK: 'GAME#4321', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
+    await answer('4321', 'Ada');
+    store.get(key('GAME#4321', 'STATE')).State = 'ASK#002';
+    await answer('4321', 'Ada');
     // rejects: inventing a partition (ORG#undefined, ORG#) for an unscoped
     // session, which would pool strangers' sessions into one bill.
     const metered = [...store.values()].filter((i) => /^(LEDGER|USAGE)#/.test(String(i.SK)));
@@ -476,54 +546,91 @@ const sessionsRun = (orgId) => [...store.values()]
   });
 
   // ── 4. It never blocks the room ───────────────────────────────────────────
-  say('\n4. a broken meter never refuses a join');
+  say('\n4. a broken meter never loses an answer, and tries again');
 
-  await check('the ledger write failing still lets the player in', async () => {
+  await check('the ledger write failing still stores the answer — and the next answer bills', async () => {
     reset();
     await seedOrg(SOLO);
     const gameId = await liveSession(SOLO);
+    await join(gameId, 'Ada');
+    await join(gameId, 'Grace');
+    await answeredRound(SOLO, gameId);
+    const second = await serve(SOLO, gameId);
     failWritesTo.add('LEDGER#');
     failWritesTo.add('USAGE#');
-    const joined = await join(gameId, 'Ada');
-    // rejects: awaiting the meter without its own catch, or a transaction that
-    // ties the player row to the ledger row — both turn a metering blip into
-    // "the room cannot get in" (RATIONALE.md §3).
-    assert.strictEqual(joined.statusCode, 200, joined.body);
-    assert.ok(store.has(key(`GAME#${gameId}`, 'PLAYER#Ada')), 'the player row was not written');
+    await answer(gameId, 'Ada');
+    // rejects: awaiting the meter without its own catch — a metering blip
+    // turned into a lost answer (RATIONALE.md §3).
+    assert.ok(answerRow(gameId, second, 'Ada'), 'the answer row was not written');
+    // rejects: stamping CountedAt before the charge landed — the session
+    // would never be billed and the reconciler has no row to rebuild from.
+    assert.strictEqual(metadataOf(gameId).CountedAt, undefined, 'marked counted without a charge');
+    failWritesTo.clear();
+    await answer(gameId, 'Grace');
+    assert.strictEqual(sessionRows(SOLO).length, 1, 'the retry on the next answer did not bill');
   });
 
-  // ── 5. The gate now has something to read ─────────────────────────────────
-  say('\n5. five joined sessions close a free plan\'s door; five unjoined ones do not');
+  // ── 5. The gate reads counted sessions ────────────────────────────────────
+  say('\n5. five counted sessions close a free plan\'s door; five rehearsals do not');
 
-  await check('after five real joined sessions the sixth CREATE is refused with 402', async () => {
+  await check('five rehearsals — joined, one question answered — leave the sixth CREATE open', async () => {
     reset();
     await seedOrg(SOLO);
     for (let i = 0; i < 5; i++) {
       const g = await liveSession(SOLO);
       await join(g, 'Ada');
+      await answeredRound(SOLO, g);
     }
     const sixth = await create(SOLO);
-    // rejects: the gate reading a counter nothing raises — before this change a
-    // free org could run sessions without end, because sessionsRun stayed 0.
+    // rejects: a rehearsal using up a free plan's allowance.
+    assert.strictEqual(sixth.res.statusCode, 201, sixth.res.body);
+  });
+
+  await check('after five counted sessions the sixth CREATE is refused with 402', async () => {
+    reset();
+    await seedOrg(SOLO);
+    for (let i = 0; i < 5; i++) await countedSession(SOLO);
+    const sixth = await create(SOLO);
     assert.strictEqual(sixth.res.statusCode, 402, sixth.res.body);
     assert.strictEqual(parse(sixth.res).limit.kind, 'sessions');
     assert.strictEqual(parse(sixth.res).limit.used, 5);
   });
 
-  await check('a session already running keeps admitting players past the allowance', async () => {
+  await check('a session already running keeps taking answers past the allowance', async () => {
     reset();
     await seedOrg(SOLO);
     const running = await liveSession(SOLO);
-    for (let i = 0; i < 5; i++) {
-      const g = await liveSession(SOLO);
-      await join(g, 'Ada');
-    }
-    // The org is now over its five; the room that was already open is not.
-    const late = await join(running, 'Grace');
-    // rejects: the meter (or anything beside it) consulting the allowance on
-    // join. It bills the sixth session; it never stops it.
-    assert.strictEqual(late.statusCode, 200, late.body);
+    await join(running, 'Grace');
+    await answeredRound(SOLO, running);
+    for (let i = 0; i < 5; i++) await countedSession(SOLO);
+    // The org is now at its five; the room that was already open is not stopped.
+    const round = await serve(SOLO, running);
+    await answer(running, 'Grace');
+    // rejects: the meter consulting the allowance on the answer path. It bills
+    // the sixth session; it never stops it.
+    assert.ok(answerRow(running, round, 'Grace'), 'the answer was refused');
     assert.strictEqual(sessionsRun(SOLO), 6);
+  });
+
+  // ── 6. One place ──────────────────────────────────────────────────────────
+  say('\n6. the meter is called from the answer path and nowhere else');
+
+  await check('only websocket/session-count.js calls recordBillableSession', () => {
+    const fs = require('fs');
+    const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const callers = [];
+    for (const dir of ['game', 'websocket', 'admin']) {
+      const abs = path.join(REPO, 'lambda-functions', dir);
+      for (const f of fs.readdirSync(abs)) {
+        if (!f.endsWith('.js') || f === 'usage.js') continue;
+        if (/\brecordBillableSession\s*\(/.test(strip(fs.readFileSync(path.join(abs, f), 'utf8')))) {
+          callers.push(`${dir}/${f}`);
+        }
+      }
+    }
+    // rejects: a second billable moment — join-game (4b39c871), start-game or
+    // next-question — which would bill rehearsals the answer path forgives.
+    assert.deepStrictEqual(callers, ['websocket/session-count.js']);
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);

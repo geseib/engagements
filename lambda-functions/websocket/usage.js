@@ -18,19 +18,25 @@
  * the rows that produced it. usage-reconcile.js does exactly that daily, which
  * is only possible because the ledger exists.
  *
- * ── WHY A SESSION IS BILLED ON THE FIRST JOIN, NOT ON CREATION ─────────────
+ * ── WHY A SESSION IS BILLED AT ITS SECOND ANSWERED QUESTION ────────────────
  *
- * A host who creates a session and abandons it has used nothing, and charging
- * for it teaches them not to experiment. A session somebody actually joined ran
- * in front of a room. So the billable moment is the first successful player
- * join. The call is in game/join-game.js, on the new-player branch. Until
- * 2026-09-23 there was no call at all and nothing was ever billed;
- * tests/billable-session-wiring.js drives the real join so that cannot recur.
+ * The owner, 2026-09-23: "the session only counts if at least 2 questions get
+ * answered by 1 or more people. otherwise we chalk it up to test, or something
+ * was not correct and they likely will restart." Creating, starting, joining
+ * and a room answering one question are all free — charging for a rehearsal
+ * teaches a host not to experiment. The billable moment is the first answer to
+ * the second DIFFERENT question to be answered, whenever that comes (skipped
+ * questions do not matter). websocket/session-count.js decides it, behind the
+ * answer write in websocket/message.js, and is the only caller of
+ * `recordBillableSession`; tests/billable-session-wiring.js holds that.
  *
- * "First" is not something the caller has to work out. `recordBillableSession`
+ * History: from 2026-08-23 nothing called the meter and nothing was billed;
+ * 4b39c871 then billed the first join, for one day, until the owner moved it.
+ *
+ * "Once" is not something the caller has to work out. `recordBillableSession`
  * is a CONDITIONAL PUT on `LEDGER#<period>#SESSION#<gameId>` guarded by
- * `attribute_not_exists(SK)`: the second, tenth and hundredth player to join
- * the same session all attempt the same write and all but one bounce off the
+ * `attribute_not_exists(SK)`: every later answer, and a retry after a failed
+ * write, attempts the same write and all but one bounce off the
  * condition. Idempotency is a property of the key, not of a check-then-write
  * the caller could race. Retries, WebSocket reconnects, Lambda's own at-least-
  * once redelivery and a player refreshing their phone are all the same case.
@@ -142,15 +148,16 @@ const ZERO = Object.freeze({ sessionsRun: 0, setsCurrent: 0, setsPeak: 0 });
 /**
  * Bill one session, once, ever.
  *
- * Call it on EVERY successful new-player join; the condition decides which one
- * was the first. Returns `{ billed }` — true only for the join that actually
- * created the ledger row.
+ * Called by websocket/session-count.js when a session reaches its second
+ * answered question; the condition makes any repeat a no-op. Returns
+ * `{ billed }` — true only for the call that actually created the ledger row.
  *
  * IT NEVER THROWS. The one product promise on 04-billing.html that has no
  * exceptions is "we do not block a session you are about to run in front of a
- * room", and a meter that can reject a join is a hard limit wearing a
- * disguise. A failure here is logged, left for the daily reconciler, and the
- * player joins. Losing a quarter is strictly better than losing the room.
+ * room", and a meter that can lose an answer is a hard limit wearing a
+ * disguise. A failure here is logged and reported as `reason: 'error'`, so the
+ * caller can try again on the next answer. Losing a quarter is strictly better
+ * than losing the room.
  */
 async function recordBillableSession(orgId, gameId, opts = {}) {
   const { db, tableName, now } = ctx(opts);
