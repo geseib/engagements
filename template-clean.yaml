@@ -460,6 +460,42 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # THE ONLY WAY A SOCKET BECOMES A HOST'S (game/mint-host-ticket.js). The
+  # WebSocket $connect route has no authorizer, and connect.js used to store
+  # ConnectionType HOST for any `?isHost=true` — so anyone with the four-digit
+  # code received the host-only frames (survey progress, names as they join,
+  # vote progress). The host page now fetches a single-use ticket here before
+  # every connect; connect.js spends it, and without one the socket is PLAYER.
+  HostTicketFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-host-ticket'
+      CodeUri: lambda-functions/game/
+      Handler: mint-host-ticket.handler
+      Events:
+        HostTicket:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/host-ticket
+            Method: post
+            # HOST ONLY, like /reveal-authors above, and the handler also asks
+            # callerMayDriveSession on the session's own org (404 otherwise).
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Exactly the two calls the handler makes: read METADATA's org, write
+        # the ticket row. It never deletes — connect.js spends tickets, and
+        # ConnectFunction already holds DynamoDBCrudPolicy on this table.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ dynamodb:GetItem, dynamodb:PutItem ]
+              Resource: !GetAtt GameTable.Arn
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   StageBeatFunction:
     Type: AWS::Serverless::Function
     Properties:

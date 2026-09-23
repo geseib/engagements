@@ -415,3 +415,11 @@ end.
     ~16 bytes a text. That bounds `SURVEY#RESULTS` at roughly 20,000 texts; Phase 3
     can derive those lists from the pages (every text on a page carries its id and
     `v`) if a survey ever gets near it.
+15. **Host sockets were self-declared — CLOSED 2026-09-23.** `$connect` has no
+    authorizer and `connect.js` stored `ConnectionType: 'HOST'` for any
+    `?isHost=true`, so anyone with the code received `surveyProgress` (and names as
+    they join, and vote progress) — the watching in item 12 needed no account at
+    all. A socket is now HOST only with a single-use ticket from
+    `POST /games/{gameId}/host-ticket` (authorizer + `callerMayDriveSession`),
+    which the host page fetches before every connect; anything else is stored
+    PLAYER. `tests/websocket-host-ticket.js`.

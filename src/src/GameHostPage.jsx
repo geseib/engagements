@@ -64,6 +64,7 @@ import useSurveyProgress, {
   surveyRoomCounts, surveyMeterRows, surveyWaiting, stillGoingNames,
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
+import { requestHostTicket } from './utils/hostTicketClient';
 import { readStartRefusal } from './utils/startRefusal';
 import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
@@ -2137,9 +2138,14 @@ Focus on actionable business strategy insights.`;
       setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
     });
 
-    // Connect as host - WebSocket is required
+    // Connect as host - WebSocket is required. `isHost` alone lands as PLAYER
+    // (websocket/connect.js); the host-only frames — names as they join, vote
+    // and survey progress — need a single-use ticket, fetched with this host's
+    // token before every open, reconnects included (utils/hostTicketClient.js).
     console.log('🔌 HOST: Connecting WebSocket for real-time updates');
-    webSocketClient.connect(gameId, null, true);
+    webSocketClient.connect(gameId, null, true, {
+      hostTicket: async (id) => (await requestHostTicket({ fetchFn: authFetch, apiBase: API_BASE, gameId: id })).ticket,
+    });
 
     return () => {
       console.log(`🔌 HOST: Disconnecting WebSocket for game ${gameId}`);

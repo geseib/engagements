@@ -67,9 +67,26 @@ const fakeDoc = {
       case 'put':
         store.set(key(inp.Item.PK, inp.Item.SK), inp.Item);
         return {};
-      case 'delete':
-        store.delete(key(inp.Key.PK, inp.Key.SK));
+      case 'delete': {
+        // connect.js spends a host ticket with ONE conditional Delete, and the
+        // host half of this file rests on that spend succeeding — so the
+        // condition is evaluated, not ignored (tests/websocket-host-ticket.js
+        // holds the refusals).
+        const k = key(inp.Key.PK, inp.Key.SK);
+        if (inp.ConditionExpression) {
+          if (inp.ConditionExpression !== 'attribute_exists(PK) AND ExpiresAt > :now') {
+            throw new Error(`fake delete: unsupported ConditionExpression ${inp.ConditionExpression}`);
+          }
+          const item = store.get(k);
+          if (!item || !(item.ExpiresAt > inp.ExpressionAttributeValues[':now'])) {
+            const e = new Error('The conditional request failed');
+            e.name = 'ConditionalCheckFailedException';
+            throw e;
+          }
+        }
+        store.delete(k);
         return {};
+      }
       case 'query': {
         const pk = inp.ExpressionAttributeValues[':pk'];
         const prefix = inp.ExpressionAttributeValues[':sk'] ?? '';
@@ -129,6 +146,22 @@ const connectEvent = (connectionId, query) => ({
 
 const put = (item) => store.set(key(item.PK, item.SK), item);
 
+/**
+ * The query string of a REAL host screen. `isHost=true` alone is only a
+ * request since the host-ticket change — without a live ticket connect.js
+ * stores PLAYER — so every host connect in this file presents one, minted the
+ * way POST /games/{gameId}/host-ticket stores it. Read at call time, so inside
+ * withFrozenClock the ticket's life is measured on the frozen clock too.
+ */
+let ticketSeq = 0;
+const asHost = () => {
+  ticketSeq += 1;
+  const hostTicket = ticketSeq.toString(16).padStart(64, '0');
+  const expiresAt = Math.floor(Date.now() / 1000) + 60;
+  put({ PK: `GAME#${GAME}`, SK: `HOSTTICKET#${hostTicket}`, GameId: GAME, ExpiresAt: expiresAt, ttl: expiresAt });
+  return { isHost: 'true', hostTicket };
+};
+
 /** Connection rows for the game, in insertion order. */
 const rows = () => [...store.values()].filter((i) => String(i.SK).startsWith('CONNECTION#'));
 const idsOf = () => rows().map((i) => i.ConnectionId).sort();
@@ -140,7 +173,7 @@ const idsOf = () => rows().map((i) => i.ConnectionId).sort();
 
   await check('a host connection is stored with its own row', async () => {
     store.clear();
-    await handler(connectEvent('host-1', { isHost: 'true' }));
+    await handler(connectEvent('host-1', asHost()));
     assert.deepStrictEqual(idsOf(), ['host-1']);
     assert.strictEqual(rows()[0].ConnectionType, 'HOST');
   });
@@ -152,7 +185,7 @@ const idsOf = () => rows().map((i) => i.ConnectionId).sort();
       ConnectionType: 'HOST', GameId: GAME, PlayerName: null,
       ConnectedAt: new Date(Date.now() - 60_000).toISOString(),
     });
-    await handler(connectEvent('host-2', { isHost: 'true' }));
+    await handler(connectEvent('host-2', asHost()));
     assert.deepStrictEqual(idsOf(), ['host-2']);
   });
 
@@ -219,10 +252,13 @@ const withFrozenClock = async (iso, fn) => {
       // connect.js stamps its own row from the same frozen clock, so the two are
       // genuinely equal — which is the case this check is named for and could
       // previously only reach by luck.
-      await handler(connectEvent('host-b', { isHost: 'true' }));
+      await handler(connectEvent('host-b', asHost()));
 
       const ids = idsOf();
       assert.ok(ids.includes('host-b'), 'the connecting socket lost its own row');
+      // Without this the check passes vacuously: a PLAYER row retires no HOST.
+      assert.strictEqual(rows().find((i) => i.ConnectionId === 'host-b').ConnectionType, 'HOST',
+        'the connecting host was stored as PLAYER — its ticket was not honoured');
       assert.ok(ids.includes('host-a'), 'a same-millisecond peer was evicted on a coin flip');
 
       // The premise itself, asserted rather than assumed. If a future change
@@ -241,7 +277,7 @@ const withFrozenClock = async (iso, fn) => {
       PK: `GAME#${GAME}`, SK: 'CONNECTION#host-legacy', ConnectionId: 'host-legacy',
       ConnectionType: 'HOST', GameId: GAME, PlayerName: null,
     });
-    await handler(connectEvent('host-2', { isHost: 'true' }));
+    await handler(connectEvent('host-2', asHost()));
     assert.deepStrictEqual(idsOf(), ['host-2']);
   });
 
@@ -256,7 +292,9 @@ const withFrozenClock = async (iso, fn) => {
       ConnectionType: 'HOST', GameId: GAME, PlayerName: null, ConnectedAt: future,
     });
 
-    await handler(connectEvent('host-old', { isHost: 'true' }));
+    await handler(connectEvent('host-old', asHost()));
+    assert.strictEqual(rows().find((i) => i.ConnectionId === 'host-old').ConnectionType, 'HOST',
+      'host-old was stored as PLAYER, so this would pass without testing the HOST dedup');
 
     assert.ok(
       idsOf().includes('host-new'),
@@ -281,14 +319,14 @@ const withFrozenClock = async (iso, fn) => {
 
   await check('a player connect never touches the host row', async () => {
     store.clear();
-    await handler(connectEvent('host-1', { isHost: 'true' }));
+    await handler(connectEvent('host-1', asHost()));
     await handler(connectEvent('ada-1', { playerName: 'Ada' }));
     assert.deepStrictEqual(idsOf(), ['ada-1', 'host-1']);
   });
 
   await check('every stored connection carries a ConnectedAt to order by', async () => {
     store.clear();
-    await handler(connectEvent('host-1', { isHost: 'true' }));
+    await handler(connectEvent('host-1', asHost()));
     assert.ok(rows()[0].ConnectedAt, 'ConnectedAt missing — dedup has nothing to compare');
   });
 

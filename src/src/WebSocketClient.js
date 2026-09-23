@@ -18,9 +18,24 @@ class WebSocketClient {
     this.intentionalClose = false;
     this.heartbeatMs = 25000;         // < API GW 10-min idle; catches dead sockets fast
     this.pongWaitMs = 10000;
+    this.hostTicketProvider = null;   // (gameId) => Promise<ticket|null>; see connect()
+    this.connectSeq = 0;              // bumped by every connect/discard/disconnect
+    this.awaitingTicket = false;      // a host ticket is being fetched for the current connect
+    this.reconnectTimer = null;
   }
 
-  connect(gameId, playerName = null, isHost = false) {
+  /**
+   * @param {object} [options]
+   * @param {(gameId: string) => Promise<string|null>} [options.hostTicket]
+   *   HOW A HOST SOCKET PROVES IT IS ONE. The server stores a connection as
+   *   HOST — and so sends it the host-only frames: names as they join, vote
+   *   and survey progress — only when the URL carries a live single-use ticket
+   *   from POST /games/{gameId}/host-ticket (lambda-functions/websocket/
+   *   connect.js). `isHost=true` on its own is only a request, and lands as
+   *   PLAYER. A ticket is spent by the handshake it rides in on, so this is
+   *   called before EVERY open, reconnects included, and it is kept for them.
+   */
+  connect(gameId, playerName = null, isHost = false, options = {}) {
     if (!window.WS_URL) {
       console.error('🔌 WebSocket URL not configured');
       return false;
@@ -29,6 +44,7 @@ class WebSocketClient {
     this.gameId = gameId;
     this.playerName = playerName;
     this.isHost = isHost;
+    this.hostTicketProvider = typeof options.hostTicket === 'function' ? options.hostTicket : null;
 
     // Retire whatever we were holding before opening its replacement.
     //
@@ -42,10 +58,50 @@ class WebSocketClient {
     // The handlers come off first: this close is ours, and `onclose` is what
     // runs the reconnect ladder.
     this._discardSocket();
+    this._cancelReconnect();
 
     const wsUrl = `${window.WS_URL}?gameId=${gameId}${playerName ? `&playerName=${encodeURIComponent(playerName)}` : ''}${isHost ? '&isHost=true' : ''}`;
-    
-    console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
+
+    if (isHost && this.hostTicketProvider) return this._openWithHostTicket(wsUrl);
+    return this._open(wsUrl);
+  }
+
+  /**
+   * Fetch a ticket, then open. While the fetch is in flight `isConnecting()` is
+   * true, so the four resume handlers cannot start a rival; a newer connect(),
+   * or a disconnect(), bumps `connectSeq` and this answer is dropped on arrival.
+   *
+   * NO TICKET, NO SOCKET. A socket opened without one would be stored PLAYER:
+   * open, badge green, and deaf to every host-only frame — the silent failure
+   * this client works hardest to avoid. So a failed fetch is a failed connect,
+   * and goes round the reconnect ladder like one.
+   */
+  _openWithHostTicket(wsUrl) {
+    const seq = this.connectSeq;
+    const provider = this.hostTicketProvider;
+    this.awaitingTicket = true;
+    (async () => {
+      let ticket = null;
+      try {
+        ticket = await provider(this.gameId);
+      } catch (_) {
+        ticket = null;
+      }
+      if (seq !== this.connectSeq) return;           // superseded while we waited
+      this.awaitingTicket = false;
+      if (!ticket) {
+        console.warn('🔌 No host ticket; will retry rather than connect deaf');
+        this._scheduleReconnect();
+        return;
+      }
+      this._open(`${wsUrl}&hostTicket=${encodeURIComponent(ticket)}`);
+    })();
+    return true;
+  }
+
+  _open(wsUrl) {
+    // The ticket is a credential until the handshake spends it: never logged.
+    console.log(`🔌 Connecting to WebSocket: ${wsUrl.replace(/([?&]hostTicket=)[^&]*/, '$1…')}`);
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -103,6 +159,8 @@ class WebSocketClient {
 
   /** Detach and close the current socket without triggering our own reconnect. */
   _discardSocket() {
+    this.connectSeq += 1;              // any ticket still in flight is for a socket we no longer want
+    this.awaitingTicket = false;
     const socket = this.ws;
     this.ws = null;
     if (!socket) return;
@@ -120,8 +178,22 @@ class WebSocketClient {
     }
     this.reconnectAttempts++;
     console.log(`🔌 Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay}ms`);
-    setTimeout(() => this.connect(this.gameId, this.playerName, this.isHost), this.reconnectDelay);
+    this._cancelReconnect();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this._reconnect();
+    }, this.reconnectDelay);
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+  }
+
+  _cancelReconnect() {
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+
+  /** Reopen as whoever we were — including the host-ticket provider. */
+  _reconnect() {
+    this.connect(this.gameId, this.playerName, this.isHost, { hostTicket: this.hostTicketProvider });
   }
 
   _startHeartbeat() {
@@ -158,13 +230,18 @@ class WebSocketClient {
     if (this.isConnected() || this.isConnecting()) return true;  // caller still runs checkGameState()
     this.reconnectAttempts = 0;                      // FIX: re-arm after permanent give-up
     this.reconnectDelay = this.baseReconnectDelay;
-    if (this.gameId) this.connect(this.gameId, this.playerName, this.isHost);
+    if (this.gameId) this._reconnect();
     return false;
   }
 
   onReconnected(cb) { this.onReconnect = cb; }
 
   disconnect() {
+    // A ticket still in flight, or a reconnect still waiting on its timer, would
+    // otherwise open a socket for a page that has already gone.
+    this.connectSeq += 1;
+    this.awaitingTicket = false;
+    this._cancelReconnect();
     if (this.ws) {
       console.log('🔌 Manually disconnecting WebSocket');
       this.intentionalClose = true;
@@ -180,6 +257,7 @@ class WebSocketClient {
 
   /** Handshake in flight. Not usable yet, but emphatically not absent. */
   isConnecting() {
+    if (this.awaitingTicket) return true;
     return !!this.ws && this.ws.readyState === WebSocket.CONNECTING;
   }
 
