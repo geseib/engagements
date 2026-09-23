@@ -75,6 +75,7 @@ const HOME = {
 const MARKERS = {
   'Question sets': '.qsets',
   Organisations: '.porgs',
+  Observability: '.pobs',
   Members: '.team',
   'Plan & usage': '.bill',
   'Data & privacy': '.privacy',
@@ -158,6 +159,29 @@ describe('platform mode', () => {
     await settle();
     await waitFor(() => expect(mounted()).toEqual(['Question sets']));
     expect(document.querySelector('h1')).toHaveTextContent('Shared library');
+  });
+
+  // rejects: Observability unreachable, headed with another section's
+  // sentence, or mounting beside Organisations (the landing section).
+  it('opens Observability on its own, headed with its own sentence', async () => {
+    mockActiveOrg = PLATFORM_MODE;
+    window.history.pushState({}, '', '/admin?section=observability');
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Observability']));
+    expect(document.querySelector('h1')).toHaveTextContent('Observability');
+    expect(document.querySelector('.adm-sub')).toHaveTextContent(/Totals only/);
+  });
+
+  // rejects: a platform-only screen reachable from inside an organisation by URL.
+  it('a URL naming Observability from inside an organisation does not open it', async () => {
+    mockActiveOrg = HOME.orgId;
+    window.history.pushState({}, '', '/admin?section=observability');
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
   });
 
   // rejects: the Public library section being unreachable, or mounting

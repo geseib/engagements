@@ -182,6 +182,7 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 | **Prompts — advisor** | `AIPromptManager.jsx:881-1086` | ok `.pmgr` | ok | ok | ok | ok (`Modal`) | ok | ok | ok `promptManagerDialogs` |
 | **Prompts — generation library** | `components/AIGenerationPromptEditor.jsx` | ok `.pgen` | ok | ok | ok | ok — a **place**, no longer an overlay | ok — `.padm-back` | ok | ok `aiGenerationPromptEditor` |
 | **Archive** | `components/ArchivePanel.{jsx,css}` | ok `.arch` | ok | ok `consoleSections.js` `contentTheme:'dark'` | ok | ok (table, fixed layout; three `Modal` confirms) | ok — one `arch-x` + footer exit, one `closeDialog` | ok — measured, tints composited | ok `archivePalette`, `archivePanel`, `scopedClassesDeclared` |
+| **Observability** (platform) | `components/ObservabilityPanel.{jsx,css}`; mockup `docs/design/observability/` | ok `.pobs` | ok — no hex literal at all | ok `consoleSections.js` `contentTheme:'dark'` + root `data-theme` | ok — 12/13/15/19 + one 30px numeral per tile | ok (tiles + two fixed-layout tables, no dialog) | — | ok — measured, tints composited | ok `observabilityPalette`, `observabilityPanel`, `adminOneSection` |
 | Settings | `AdminPage.jsx:1153+` + `styles.css:4760` | FAIL⁴ | FAIL⁴ | **FAIL¹³** | FAIL | — | — | FAIL | FAIL |
 
 ### Authoring and shared

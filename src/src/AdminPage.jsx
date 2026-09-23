@@ -11,6 +11,7 @@ import SessionsPanel from './components/SessionsPanel';
 import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
+import ObservabilityPanel from './components/ObservabilityPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
 import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
@@ -175,7 +176,7 @@ function urlNamesKnownSection() {
    a banner to the shape of the nav. Deliberately not counted in this sentence:
    it said "the four" while the array held five, which is the reliable fate of
    a number written beside a list that grows. */
-const PLATFORM_SECTION_IDS = ['orgs', 'publiclibrary', 'moderation', 'users', 'archive'];
+const PLATFORM_SECTION_IDS = ['orgs', 'observability', 'publiclibrary', 'moderation', 'users', 'archive'];
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -2070,6 +2071,7 @@ function AdminPage() {
           )}
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
+          {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
           {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 
