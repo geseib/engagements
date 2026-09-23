@@ -329,5 +329,23 @@ check('itemsToSurveyCsv folds a | inside an option too', () => {
   assert.ok(csv.includes('"A/B|C|D"'), csv);
 });
 
+console.log('\n9. the game/ copy the running survey reads');
+
+// rejects: editing the admin/shared/ copy and not the game/ one. A survey
+// session checks every answer against its question's kind, scale and options
+// (game/survey-answer.js via game/survey-questions.js), and a Lambda bundle is
+// its CodeUri, so game/ carries the same bytes rather than a second reading of
+// the contract. survey-kinds.js requires ./csv, which requires ./tags, so all
+// three travel together.
+{
+  const fs = require('fs');
+  for (const f of ['survey-kinds.js', 'csv.js', 'tags.js']) {
+    check(`lambda-functions/game/${f} is byte-identical to admin/shared/${f}`, () => {
+      const read = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8');
+      assert.strictEqual(read(`lambda-functions/game/${f}`), read(`lambda-functions/admin/shared/${f}`));
+    });
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

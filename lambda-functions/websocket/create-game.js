@@ -90,7 +90,10 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names } = JSON.parse(event.body || '{}');
+  // A survey is read in the order it was written: nothing shuffles it,
+  // whatever the payload says (IMPLEMENTATION-phase-2.md, METADATA).
+  const isSurvey = gameType === 'survey';
 
   /*
     THE OWNING ORGANISATION. Until this line a session had no owner attribute of
@@ -215,7 +218,7 @@ exports.handler = async (event) => {
       orgId,
       selectedCategories: selectedCategories || [],
       hostPreferences: {
-        randomizeQuestions: randomizeQuestions !== false, // Default to true if not specified
+        randomizeQuestions: isSurvey ? false : randomizeQuestions !== false, // Default to true if not specified
         // Default ON, per the owner: a host who never touches setup still gets
         // an anonymous round. Only an explicit false opts out.
         anonymousUntilReveal: anonymousUntilReveal !== false
@@ -227,6 +230,10 @@ exports.handler = async (event) => {
       // The host's summary-approach pick. Empty means "what the set says, else
       // the format's standard" — get-ai-summary.js:sessionPromptId.
       promptId: (promptId || '').trim(),
+      // WHAT A SURVEY WRITES ABOUT PEOPLE — anonymous / finished / named.
+      // Survey only; the manager falls back to the set's namesDefault, then
+      // to anonymous, and stores it on METADATA.Names (survey-names.js).
+      ...(isSurvey ? { names } : {}),
       details: engagementInfo || '',
       hostName: hostName || 'Host',
       visibility: visibility || 'public',

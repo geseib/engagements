@@ -757,7 +757,7 @@ exports.handler = async (event) => {
       db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-        ProjectionExpression: 'orgId'
+        ProjectionExpression: 'orgId, GameType'
       })),
     ]);
 
@@ -782,6 +782,23 @@ exports.handler = async (event) => {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /*
+      A SURVEY HAS NO ROUNDS, and this route must never serve one of its
+      questions as if it did. Refused HERE, before the state check below —
+      `action: 'skip'` and the specific-selection actions bypass that check, so
+      from CREATED they would serve ASK#001 of a survey set and start the
+      session through the wrong door (IMPLEMENTATION-phase-2.md §1). A survey is
+      opened by POST /start and closed by POST /survey/close (survey-host.js).
+    */
+    if (ownerRead.Item && ownerRead.Item.GameType === 'survey') {
+      const reason = 'A survey has no rounds to advance. Open it with Start, and close it when you are done.';
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: reason, message: reason, survey: true, gameId, state: gameState.Item.State }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }

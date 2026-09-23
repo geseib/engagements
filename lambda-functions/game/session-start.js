@@ -38,12 +38,20 @@ const { recordSessionStarted } = require('./platform-metrics');
 /**
  * Mark a session started on all four of its rows.
  *
- * Sets STATE to STARTED; a caller serving the first round in the same request
- * writes its ASK state over that immediately after.
+ * Sets STATE to `state` — STARTED unless the caller says otherwise; a caller
+ * serving the first round in the same request writes its ASK state over that
+ * immediately after. A SURVEY opens straight into SURVEY#OPEN (start-game.js):
+ * STARTED would hand it the lobby's behaviour — the host page's set
+ * auto-select, the remote's "Start First Round", next-question's advance.
+ *
+ * METADATA.OpenedAt is written here, `if_not_exists`, for every session type:
+ * the moment the room first opened, equal to StartedAt. It is what a survey's
+ * Names lock reads (update-game.js refuses a Names edit once it exists) and
+ * what a shared link's clock will count from.
  *
  * @returns {{ startedAt: string, ttl: number }}
  */
-async function startSession(db, tableName, gameId, { orgId = '', now = new Date().toISOString() } = {}) {
+async function startSession(db, tableName, gameId, { orgId = '', now = new Date().toISOString(), state = 'STARTED' } = {}) {
   // A started session expires 7 days on (session-ttl.js) — on every one of
   // its rows, including the reservation, or the code stays taken forever.
   const ttl = startedTtl(now);
@@ -60,7 +68,7 @@ async function startSession(db, tableName, gameId, { orgId = '', now = new Date(
       '#ttl': 'ttl'
     },
     ExpressionAttributeValues: {
-      ':state': 'STARTED',
+      ':state': state,
       ':started': true,
       ':updatedAt': now,
       ':startedAt': now,
@@ -75,20 +83,23 @@ async function startSession(db, tableName, gameId, { orgId = '', now = new Date(
     ExpressionAttributeValues: { ':ttl': ttl }
   }));
 
-  // METADATA carries the Started flag the join gate reads, and LastPlayedAt.
+  // METADATA carries the Started flag the join gate reads, LastPlayedAt, and
+  // OpenedAt — the first opening only, however many doors race.
   await db.send(new UpdateCommand({
     TableName: tableName,
     Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-    UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt, #ttl = :ttl',
+    UpdateExpression: 'SET #started = :started, #lastPlayedAt = :lastPlayedAt, #ttl = :ttl, #openedAt = if_not_exists(#openedAt, :openedAt)',
     ExpressionAttributeNames: {
       '#started': 'Started',
       '#lastPlayedAt': 'LastPlayedAt',
-      '#ttl': 'ttl'
+      '#ttl': 'ttl',
+      '#openedAt': 'OpenedAt'
     },
     ExpressionAttributeValues: {
       ':started': true,
       ':lastPlayedAt': now,
-      ':ttl': ttl
+      ':ttl': ttl,
+      ':openedAt': now
     }
   }));
 

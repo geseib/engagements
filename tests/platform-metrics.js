@@ -249,6 +249,58 @@ const brokenDb = (mode) => ({
   });
 
   /* ----------------------------------------------------------------------- */
+  say('\n§2b a survey: every question served at open, every answer counted at close');
+
+  // A survey has no rounds and never calls next-question, so without its own
+  // two recorders a survey session would read as "served nothing, answered
+  // nothing" on the console. docs/design/survey-redesign/IMPLEMENTATION-phase-2.md,
+  // Track A "Metrics".
+  reset();
+  session('4600');
+  await check('opening a survey serves all its questions at once, and is a session that served', async () => {
+    const r = await M.recordSurveyOpened({ gameId: '4600', questions: 8, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, opts());
+    assert.strictEqual(r.counted, true);
+    assert.strictEqual(month().roundsServed, 8);
+    assert.strictEqual(month().sessionsServed, 1);
+    assert.strictEqual(category('platform#leadership').rounds, 8);
+  });
+  // rejects: a double-pressed Open counting eight more questions.
+  await check('opening the same survey again counts nothing', async () => {
+    const r = await M.recordSurveyOpened({ gameId: '4600', questions: 8, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, opts());
+    assert.strictEqual(r.counted, false);
+    assert.strictEqual(month().roundsServed, 8);
+    assert.strictEqual(month().sessionsServed, 1);
+  });
+  await check('the bucket is kept on METADATA for the close, like a round\'s', () => {
+    assert.strictEqual(metadataOf('4600')[M.ROUNDS_MARKER], 8);
+    assert.strictEqual(metadataOf('4600')[M.BUCKET_ATTR].label, 'Leadership');
+  });
+  // rejects: counting a survey's answers as rows (people) rather than as
+  // answers (a person answering eight questions is eight).
+  await check('closing it counts the answers given — the sum over its questions — once', async () => {
+    const r = await M.recordSurveyClosed({ gameId: '4600', answers: 23, metadata: metadataOf('4600') }, opts());
+    assert.strictEqual(r.counted, true);
+    assert.strictEqual(month().answersStored, 23);
+    assert.strictEqual(category('platform#leadership').answers, 23);
+    const again = await M.recordSurveyClosed({ gameId: '4600', answers: 23, metadata: {} }, opts());
+    assert.strictEqual(again.counted, false);
+    assert.strictEqual(month().answersStored, 23);
+  });
+  await check('a team\'s survey is counted in the unnamed bucket, its questions never read', async () => {
+    session('4601');
+    await M.recordSurveyOpened({ gameId: '4601', questions: 3, set: ORG_SET, questionId: 'QUESTION#c001#001' }, opts());
+    await M.recordSurveyClosed({ gameId: '4601', answers: 4, metadata: metadataOf('4601') }, opts());
+    assert.strictEqual(category('org').rounds, 3);
+    assert.strictEqual(category('org').answers, 4);
+    assert.deepStrictEqual(readsOf(ORG_SET.pk), []);
+  });
+  await check('a survey with no METADATA row is not counted and not conjured', async () => {
+    assert.strictEqual((await M.recordSurveyOpened({ gameId: '4996', questions: 2, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, opts())).counted, false);
+    assert.strictEqual((await M.recordSurveyClosed({ gameId: '4996', answers: 2 }, opts())).counted, false);
+    assert.strictEqual(row('GAME#4996', 'METADATA'), undefined);
+  });
+
+  /* ----------------------------------------------------------------------- */
   say('\n§3 whose category is named');
 
   reset();
@@ -348,6 +400,8 @@ const brokenDb = (mode) => ({
         M.recordSessionStarted({ gameId: '1' }, bad),
         M.recordRoundServed({ gameId: '1', round: 1, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, bad),
         M.recordRoundClosed({ gameId: '1', round: 1 }, bad),
+        M.recordSurveyOpened({ gameId: '1', questions: 3, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, bad),
+        M.recordSurveyClosed({ gameId: '1', answers: 3 }, bad),
       ]);
       for (const r of results) assert.deepStrictEqual(r, { counted: false, reason: 'error' });
     });
@@ -358,6 +412,9 @@ const brokenDb = (mode) => ({
     assert.strictEqual((await M.recordRoundServed({ gameId: '1', round: 0 }, opts())).counted, false);
     assert.strictEqual((await M.recordRoundClosed({}, opts())).counted, false);
     assert.strictEqual((await M.recordRoundClosed({ gameId: '1', round: 0 }, opts())).counted, false);
+    assert.strictEqual((await M.recordSurveyOpened({ gameId: '1', questions: 0 }, opts())).counted, false);
+    assert.strictEqual((await M.recordSurveyOpened({}, opts())).counted, false);
+    assert.strictEqual((await M.recordSurveyClosed({}, opts())).counted, false);
   });
 
   /* ----------------------------------------------------------------------- */

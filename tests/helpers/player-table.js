@@ -30,6 +30,23 @@
  *   ReturnValues          ALL_OLD on a Put, UPDATED_OLD on an Update — the two
  *                         a recorder reads to tell a NEW row from an overwrite.
  *                         Any other value answers `{}` exactly as before.
+ *   TransactWrite         ConditionCheck · Put · Update · Delete, ALL-OR-NOTHING:
+ *                         every condition is evaluated against the table as it
+ *                         is before any write lands, and one failure cancels the
+ *                         lot with a `TransactionCanceledException` carrying
+ *                         `CancellationReasons` in item order, as DynamoDB does.
+ *                         The survey answer PUT rides on this (a ConditionCheck
+ *                         on STATE beside the row's Put), and a fake that applied
+ *                         the Put when the check failed would pass the very race
+ *                         the check exists for.
+ *   Query paging          `Limit` / `ExclusiveStartKey` / `LastEvaluatedKey`,
+ *                         and `table.pageSize` to force DynamoDB's 1 MB page
+ *                         boundary onto small fixtures. While paging is in play
+ *                         the rows come back in SK order, as DynamoDB returns
+ *                         them. A handler that reads one page and stops is only
+ *                         caught by a fake that ever returns more than one.
+ *                         (`ConsistentRead` is accepted and means nothing here:
+ *                         the fake has one copy of every row.)
  *
  * `serialise` is how a race is driven: it interleaves two in-flight sends at a
  * chosen point, so both handlers read the same item and then write one after
@@ -219,6 +236,14 @@ function conditionalFailure() {
   return error;
 }
 
+/** DynamoDB's shape for a cancelled transaction: one reason per item, in order. */
+function transactionCancelled(codes) {
+  const error = new Error(`Transaction cancelled, please refer cancellation reasons for specific reasons [${codes.join(', ')}]`);
+  error.name = 'TransactionCanceledException';
+  error.CancellationReasons = codes.map((Code) => (Code === 'None' ? { Code } : { Code, Message: 'The conditional request failed' }));
+  return error;
+}
+
 /* ---- the table ------------------------------------------------------------ */
 
 function createTable() {
@@ -238,6 +263,13 @@ function createTable() {
     store,
     log,
     keyOf,
+    /**
+     * Rows per Query page when the caller gives no `Limit`. null (the default)
+     * is one page holding everything, which is what every suite written before
+     * paging existed relies on. Set it to force a boundary a real 1 MB page
+     * would put somewhere in a big room; clear() leaves it alone.
+     */
+    pageSize: null,
 
     put: (item) => store.set(keyOf(item.PK, item.SK), item),
     get: (pk, sk) => store.get(keyOf(pk, sk)),
@@ -336,9 +368,63 @@ function createTable() {
             if (input.FilterExpression === 'ConnectionType = :type') {
               items = items.filter((i) => i.ConnectionType === input.ExpressionAttributeValues[':type']);
             }
+            // PAGING, only when something asks for it: a Limit, a start key,
+            // or a table-wide page size. Pages are cut in SK order, and the
+            // last key of a page that is not the end is handed back, exactly
+            // as a caller following LastEvaluatedKey has to see it.
+            const limit = Number(input.Limit) > 0 ? Number(input.Limit) : (Number(table.pageSize) > 0 ? Number(table.pageSize) : 0);
+            if (limit || input.ExclusiveStartKey) {
+              items = items.slice().sort((a, b) => (String(a.SK) < String(b.SK) ? -1 : String(a.SK) > String(b.SK) ? 1 : 0));
+              if (input.ExclusiveStartKey) {
+                const after = String(input.ExclusiveStartKey.SK);
+                items = items.filter((i) => String(i.SK) > after);
+              }
+              if (limit && items.length > limit) {
+                const page = items.slice(0, limit);
+                const last = page[page.length - 1];
+                const LastEvaluatedKey = { PK: last.PK, SK: last.SK };
+                if (input.Select === 'COUNT') return { Count: page.length, LastEvaluatedKey };
+                return { Items: page, LastEvaluatedKey };
+              }
+            }
             // Select COUNT returns the number and no rows, as DynamoDB does.
             if (input.Select === 'COUNT') return { Count: items.length };
             return { Items: items };
+          }
+
+          /*
+            ALL OR NOTHING. Every condition is judged against the table as it
+            stands BEFORE any of the transaction's writes, then either every
+            write lands or none does. A failure names each item's fate in
+            order — 'ConditionalCheckFailed' or 'None' — because a handler that
+            retries one kind of failure and refuses another reads exactly that.
+          */
+          case 'transactWrite': {
+            const entries = (input.TransactItems || []).map((entry) => {
+              const [kind, spec] = Object.entries(entry)[0] || [];
+              if (!['ConditionCheck', 'Put', 'Update', 'Delete'].includes(kind)) {
+                throw new Error(`fake: unsupported TransactItems entry ${JSON.stringify(entry)}`);
+              }
+              const k = kind === 'Put' ? keyOf(spec.Item.PK, spec.Item.SK) : keyOf(spec.Key.PK, spec.Key.SK);
+              return { kind, spec, k };
+            });
+            const codes = entries.map(({ kind, spec, k }) => {
+              if (kind === 'ConditionCheck' && !spec.ConditionExpression) {
+                throw new Error('fake: a ConditionCheck needs a ConditionExpression');
+              }
+              if (!spec.ConditionExpression) return 'None';
+              return evaluateCondition(
+                spec.ConditionExpression, store.get(k),
+                spec.ExpressionAttributeNames, spec.ExpressionAttributeValues
+              ) ? 'None' : 'ConditionalCheckFailed';
+            });
+            if (codes.some((c) => c !== 'None')) throw transactionCancelled(codes);
+            for (const { kind, spec, k } of entries) {
+              if (kind === 'Put') store.set(k, spec.Item);
+              else if (kind === 'Delete') store.delete(k);
+              else if (kind === 'Update') store.set(k, applyUpdate(store.get(k) || { ...spec.Key }, spec));
+            }
+            return {};
           }
 
           /*
@@ -377,6 +463,7 @@ class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 class BatchGetCommand { constructor(i) { this.input = i; this.type = 'batchGet'; } }
+class TransactWriteCommand { constructor(i) { this.input = i; this.type = 'transactWrite'; } }
 
 /**
  * Install the AWS stubs so every handler under `lambda-functions/game/` sees
@@ -427,7 +514,7 @@ function installStubs({ table, sent, frames = null, gone = null }) {
   stub('@aws-sdk/lib-dynamodb', {
     DynamoDBDocumentClient: { from: () => table.doc },
     GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-    BatchGetCommand,
+    BatchGetCommand, TransactWriteCommand,
   });
   stub('@aws-sdk/client-apigatewaymanagementapi', {
     ApiGatewayManagementApiClient: class {
@@ -456,6 +543,7 @@ module.exports = {
   applyUpdate,
   updatedAttributes,
   conditionalFailure,
+  transactionCancelled,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-  BatchGetCommand,
+  BatchGetCommand, TransactWriteCommand,
 };
