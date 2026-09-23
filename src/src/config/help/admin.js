@@ -91,7 +91,7 @@ const questionSets = {
           t: 'note',
           tone: 'info',
           title: 'Survey sets are marked "Not playable"',
-          text: 'The importer rejects survey uploads and no session runs a survey, so a survey set can be authored but never played. The console shows them rather than hiding them — hiding one would make it unreachable in the only place that can delete it.',
+          text: 'A survey set can be made, imported and edited, but no session can run one yet — that is the next step being built. The console shows survey sets rather than hiding them, and the create dialog leaves Survey out until a session can play one.',
         },
       ],
     },
