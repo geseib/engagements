@@ -105,45 +105,18 @@
   border-color: var(--primary-deep);
   color: var(--sab-on-accent);
 }
-.sab-opt--one { padding: 0 14px; }
-
 .sab-tick { display: none; font-weight: 800; }
 .sab-opt[aria-pressed="true"] .sab-tick { display: inline; }
 
 /* ------------------------------------------------------------- how many -- */
 
-.sab-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  margin: 4px 0 0;
-  font-size: var(--sab-t-body);
-}
-
-.sab-num {
-  box-sizing: border-box;
-  width: 64px;
-  min-height: 32px;
-  padding: 0 6px;
-  border: 1px solid var(--sab-edge);
-  border-radius: 6px;
-  background: var(--sab-field);
-  color: var(--sab-text);
-  font: inherit;
-  font-size: var(--sab-t-body);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
+/* The count itself is CountField's (CountField.css, measured in
+   countFieldPalette.test.js); this is only the line under it that says how
+   long the survey takes to answer. */
 .sab-per {
-  margin-left: 5px;
-  padding-left: 11px;
-  border-left: 1px solid var(--sab-rule);
+  margin: 0;
   font-size: var(--sab-t-label);
   color: var(--sab-muted);
-  white-space: nowrap;
 }
 
 /* -------------------------------------------- anything else Workie obeys -- */

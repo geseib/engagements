@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
+import CountField from './CountField';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
@@ -88,9 +89,8 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(EMPTY_FORM);
   const [kinds, setKinds] = useState(DEFAULT_SURVEY_KINDS);
-  // The number field's text. Kept as text so it can be empty while typed over;
-  // anything typed is clamped to 1..20 as it lands.
-  const [countText, setCountText] = useState(String(DEFAULT_SURVEY_COUNT));
+  // How many to ask for, 1..20. CountField hands back only clamped integers.
+  const [count, setCount] = useState(DEFAULT_SURVEY_COUNT);
 
   // The generated questions, as the operator has changed them (kinds switched).
   const [items, setItems] = useState([]);
@@ -112,7 +112,6 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   // empty, so the fallback save names the set from what was remembered.
   const setCopyRef = useRef(null);
 
-  const count = countText === '' ? 0 : clampQuestionCount(countText);
   const plannedTitle = draftSurveyTitle(form);
 
   const buildSetMetadata = () => {
@@ -225,7 +224,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   };
 
   const retryRemaining = (remaining) => {
-    setCountText(String(clampQuestionCount(remaining || count)));
+    setCount(clampQuestionCount(remaining || count));
     backToConfiguration();
   };
 
@@ -447,39 +446,25 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                 </p>
               </div>
 
+              {/*
+                HOW MANY, asked the way every builder asks it: the shared
+                CountField ("the builders all ask the same way",
+                countField.test.jsx). Mockup 02's Quick 5 / Standard 8 /
+                Thorough 12 are its three presets and their words are the hint;
+                the one fact the mockup adds — time to answer — sits under it.
+              */}
               <div className="sab-field">
-                <span className="sab-lab">How many</span>
-                <div className="sab-opts">
-                  {SURVEY_SIZES.map((size) => (
-                    <button
-                      key={size.id}
-                      type="button"
-                      className="sab-opt sab-opt--one"
-                      aria-pressed={count === size.count}
-                      onClick={() => setCountText(String(size.count))}
-                    >
-                      {size.label} {size.count}
-                    </button>
-                  ))}
-                </div>
-                <p className="sab-line">
-                  <span>About</span>
-                  <input
-                    type="number"
-                    className="sab-num"
-                    min="1"
-                    max={MAX_SURVEY_QUESTIONS}
-                    aria-label="Questions"
-                    value={countText}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      setCountText(raw === '' ? '' : String(clampQuestionCount(raw)));
-                    }}
-                  />
-                  <span>questions</span>
-                  <span className="sab-per">about {minutesWord(plannedTime)} to answer</span>
-                </p>
-                <p className="sab-help">Past twelve, people stop reading. The cap is {MAX_SURVEY_QUESTIONS}.</p>
+                <CountField
+                  label="How many questions"
+                  value={count}
+                  onChange={setCount}
+                  min={1}
+                  max={MAX_SURVEY_QUESTIONS}
+                  presets={SURVEY_SIZES.map((size) => size.count)}
+                  hint={`${SURVEY_SIZES.map((size, i) => `${i === 0 ? size.label : size.label.toLowerCase()}${i === 0 ? ' is' : ''} ${size.count}`).join(', ')}. `
+                    + `Past twelve, people stop reading; the cap is ${MAX_SURVEY_QUESTIONS}.`}
+                />
+                <p className="sab-per">about {minutesWord(plannedTime)} to answer</p>
               </div>
 
               <div className="sab-field">

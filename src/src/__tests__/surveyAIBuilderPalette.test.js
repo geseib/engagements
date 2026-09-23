@@ -178,9 +178,9 @@ describe('the ladder', () => {
     expect(kindPx.filter((n) => n < 12)).toEqual([]);
   });
 
-  test('every input renders at body size, the number and the kind select included', () => {
+  test('every input renders at body size, the kind select included', () => {
+    // The count is CountField's, measured in countFieldPalette.test.js.
     expect(block(SAB_CSS, '.sab-input')).toMatch(/font-size:\s*var\(--sab-t-body\)/);
-    expect(block(SAB_CSS, '.sab-num')).toMatch(/font-size:\s*var\(--sab-t-body\)/);
     expect(block(GIT_CSS, '.git-kindsel')).toMatch(/font-size:\s*15px/);
   });
 

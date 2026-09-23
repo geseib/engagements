@@ -95,7 +95,7 @@ const kindToggle = (name) => screen.getByRole('button', { name: new RegExp(`^${n
 const writeButton = () => screen.getByRole('button', { name: /Write the survey/i });
 const material = () => screen.getByLabelText(/What was the session\?/i);
 const goal = () => screen.getByLabelText(/What do you want to find out\?/i);
-const countField = () => screen.getByRole('spinbutton', { name: /questions/i });
+const countField = () => screen.getByRole('spinbutton', { name: /How many questions/i });
 
 /** Fill the form enough to start, press Write, and wait for the POST. */
 async function start(posted) {
@@ -168,14 +168,26 @@ describe('the form is mockup 02', () => {
     expect(kindToggle('Open answer')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('Standard 8 by default; Quick and Thorough set the number', async () => {
+  /*
+    HOW MANY is asked with the shared CountField — "the builders all ask the
+    same way" (countField.test.jsx): presets first, then one exact row. Mockup
+    02's Quick 5 / Standard 8 / Thorough 12 are its three presets, and the
+    words travel in the field's hint.
+  */
+  const preset = (n) => within(screen.getByRole('radiogroup', { name: /How many questions/i }))
+    .getByRole('radio', { name: String(n) });
+
+  test('8 by default; the presets are 5, 8 and 12 and set the number', async () => {
     const posted = mockApi();
     draw();
-    expect(screen.getByRole('button', { name: 'Standard 8' })).toHaveAttribute('aria-pressed', 'true');
+    const presets = within(screen.getByRole('radiogroup', { name: /How many questions/i })).getAllByRole('radio');
+    expect(presets.map((r) => r.textContent)).toEqual(['5', '8', '12']);
+    expect(preset(8)).toHaveAttribute('aria-checked', 'true');
     expect(countField()).toHaveValue(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Quick 5' }));
+    expect(screen.getByText(/Quick is 5, standard 8, thorough 12/)).toBeInTheDocument();
+    fireEvent.click(preset(5));
     expect(countField()).toHaveValue(5);
-    expect(screen.getByRole('button', { name: 'Quick 5' })).toHaveAttribute('aria-pressed', 'true');
+    expect(preset(5)).toHaveAttribute('aria-checked', 'true');
     const body = await start(posted);
     expect(body.questionCount).toBe(5);
   });
@@ -187,7 +199,7 @@ describe('the form is mockup 02', () => {
     draw();
     fireEvent.change(countField(), { target: { value: '35' } });
     expect(countField()).toHaveValue(20);
-    expect(screen.queryByRole('button', { name: /Quick|Standard|Thorough/, pressed: true })).toBeNull();
+    [5, 8, 12].forEach((n) => expect(preset(n)).toHaveAttribute('aria-checked', 'false'));
     const body = await start(posted);
     expect(body.questionCount).toBe(20);
   });
@@ -197,7 +209,7 @@ describe('the form is mockup 02', () => {
     mockApi();
     draw();
     expect(screen.getByText('about 4 minutes to answer')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Quick 5' }));
+    fireEvent.click(preset(5));
     ['Rating', 'Multiple choice', 'Yes / No'].forEach((k) => fireEvent.click(kindToggle(k)));
     // Five open answers: a minute each.
     expect(screen.getByText('about 5 minutes to answer')).toBeInTheDocument();
