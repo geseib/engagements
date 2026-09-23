@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { decryptItem } = require('./tenant-crypto');
+const { normalizeNames } = require('./survey-names');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -85,7 +86,15 @@ exports.handler = async (event) => {
       started: gameMetadata.Item.Started || false,
       state: gameState.Item?.State || 'CREATED',
       currentQuestionId: gameState.Item?.CurrentQuestionId || null,
-      lessonNumber: gameState.Item?.LessonNumber || 0
+      lessonNumber: gameState.Item?.LessonNumber || 0,
+      // THE SURVEY'S OWN FACTS, for a page that reloads mid-survey: what it
+      // writes about people (null on every other session type), when the room
+      // first opened (any session type — startSession stamps it), and the
+      // two-minute warning if the host gave one. Behaviour every participant
+      // is told about anyway; nothing here is a secret.
+      names: gameMetadata.Item.GameType === 'survey' ? normalizeNames(gameMetadata.Item.Names) : null,
+      openedAt: gameMetadata.Item.OpenedAt || null,
+      warnedAt: gameState.Item?.WarnedAt || null
     };
 
     // Role-specific information.

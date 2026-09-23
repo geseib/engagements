@@ -77,12 +77,11 @@ describe('the format picker', () => {
     expect(pill('Poll')).toBeInTheDocument();
   });
 
-  // rejects: building the mockup's five pills as drawn. Survey sets can be made
-  // since surveys phase 1, but no session plays one until phase 2, so the pill
-  // would open onto sets nothing can run.
-  test('does not offer Survey', () => {
+  // Surveys phase 2: a session plays a survey now, so the fifth pill the
+  // mockup drew is offered (its own dialog is surveySetupNames.test.jsx).
+  test('offers Survey', () => {
     setup();
-    expect(screen.queryByRole('button', { name: 'Survey' })).toBeNull();
+    expect(pill('Survey')).toBeInTheDocument();
   });
 
   test('offers every other type in the registry', () => {

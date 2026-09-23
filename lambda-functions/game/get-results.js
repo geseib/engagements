@@ -349,6 +349,24 @@ exports.handler = async (event) => {
       };
     }
 
+    /*
+      A SURVEY HAS NO ROUNDS. On the host route everything below writes
+      RESULTS#nnn over SURVEY#OPEN (and a ROUND# row), after which no answer
+      can be saved — the survey PUT's ConditionCheck needs SURVEY#OPEN — and
+      close refuses a survey that is not open. On the public route there is no
+      round to read. Refused on both, as next-question refuses it: 409, STATE
+      untouched (IMPLEMENTATION-phase-2.md §1). A survey's results are
+      SURVEY#RESULTS, written by POST /survey/close (survey-host.js).
+    */
+    if (gameMetadata.Item?.GameType === 'survey') {
+      const reason = 'A survey has no rounds to close. Close the survey itself when you are done.';
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: reason, message: reason, survey: true, gameId }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     const gameType = gameMetadata.Item?.GameType || 'call-and-answer';
     console.log(`🎮 Game type: ${gameType}`);
 

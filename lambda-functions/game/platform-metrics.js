@@ -18,7 +18,8 @@
  *   PK: PLATFORM#METRICS  SK: MONTH#<yyyy-mm>
  *       sessionsCreated   a host created a session
  *       sessionsStarted   a session left the lobby (either door, session-start.js)
- *       roundsServed      a question was put in front of the room (next-question.js)
+ *       roundsServed      a question was put in front of the room (next-question.js;
+ *                         a survey's every question when it opens, start-game.js)
  *       sessionsServed    sessions that served their FIRST question this month
  *       answersStored     answer rows a question had when the host moved on
  *                         from it — one per person per question
@@ -60,6 +61,10 @@
  *             for setsPeak. A retried or racing next-question for the same round
  *             carries the same number and bounces. The OLD value (UPDATED_OLD)
  *             says whether this was the session's first served round.
+ *   survey    a survey has no rounds: recordSurveyOpened counts every
+ *             question as served when it opens (the served marker, raised to
+ *             the question count), recordSurveyClosed counts the answers given
+ *             when it closes (the answers marker, once) — see below.
  *   answers   counted PER ROUND, not per answer, when the host moves on
  *             (next-question.js, before it serves the next round or ends the
  *             session): one COUNT query over the round's answer rows, then one
@@ -433,6 +438,121 @@ async function recordRoundClosed({ gameId, round, metadata } = {}, opts = {}) {
   }
 }
 
+// ── A survey: no rounds, so its own two moments ────────────────────────────
+//
+// A survey session never calls next-question — it opens (start-game.js) and
+// closes (survey-host.js), and every question is in front of the room from the
+// first moment to the last. Without these two it would read on the console as
+// a session that served nothing and was answered by nobody.
+// docs/design/survey-redesign/IMPLEMENTATION-phase-2.md, Track A "Metrics".
+
+/**
+ * start-game.js opened a survey: all of its questions are served at once.
+ *
+ * Once per session, on the SAME marker and condition as recordRoundServed —
+ * `MetricsRoundsServed` raised to the question count — so a double-pressed
+ * Open bounces, and the bucket is kept on METADATA for the close.
+ *
+ * @param {object} args
+ * @param {string} args.gameId
+ * @param {number} args.questions   how many questions the survey serves
+ * @param {object} args.set         the pinned set: { scope, pk }
+ * @param {string} args.questionId  one question's SK in that partition — the
+ *                                  category it names is the survey's bucket
+ */
+async function recordSurveyOpened({ gameId, questions, set, questionId } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    const n = Math.trunc(Number(questions));
+    if (!id || !Number.isFinite(n) || n < 1) return { counted: false, reason: 'no-questions' };
+
+    const bucket = await bucketForQuestion(c, {
+      scope: set && set.scope,
+      contentPk: set && set.pk,
+      questionId,
+    });
+
+    let firstForSession;
+    try {
+      const res = await c.db.send(new UpdateCommand({
+        TableName: c.tableName,
+        Key: { PK: `GAME#${id}`, SK: 'METADATA' },
+        UpdateExpression: 'SET #r = :n, #b = :bucket',
+        ConditionExpression: 'attribute_exists(PK) AND (attribute_not_exists(#r) OR #r < :n)',
+        ExpressionAttributeNames: { '#r': ROUNDS_MARKER, '#b': BUCKET_ATTR },
+        ExpressionAttributeValues: { ':n': n, ':bucket': bucket },
+        ReturnValues: 'UPDATED_OLD',
+      }));
+      const old = res && res.Attributes ? res.Attributes[ROUNDS_MARKER] : undefined;
+      firstForSession = old === undefined;
+    } catch (error) {
+      if (isConditionFailure(error)) return { counted: false, reason: 'already' };
+      throw error;
+    }
+
+    await Promise.all([
+      bumpMonth(c, { roundsServed: n, sessionsServed: firstForSession ? 1 : 0 }),
+      bumpCategory(c, bucket, 'rounds', n),
+    ]);
+    return { counted: true, firstForSession, library: bucket.library };
+  } catch (error) {
+    return swallow('survey opened', error);
+  }
+}
+
+/**
+ * survey-host.js closed a survey: count its answers, once.
+ *
+ * `answers` is the number of answers GIVEN — the sum over its questions of how
+ * many people answered each, which is what one ANSWER# row per person per
+ * question counts for a round. It comes from the frozen results, so nothing
+ * here reads an answer row. Once, by `MetricsAnswersCounted`, which a survey
+ * never otherwise writes.
+ *
+ * @param {object} args
+ * @param {string} args.gameId
+ * @param {number} args.answers    Σ per-question `n` from the aggregate
+ * @param {object} [args.metadata] the METADATA item the caller already read
+ */
+async function recordSurveyClosed({ gameId, answers, metadata } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    if (!id) return { counted: false, reason: 'no-session' };
+    const meta = metadata && typeof metadata === 'object' ? metadata : {};
+    if (meta[ANSWERS_MARKER] !== undefined) return { counted: false, reason: 'already' };
+    const total = Math.max(0, Math.trunc(Number(answers)) || 0);
+    const mark = Math.max(1, Math.trunc(Number(meta[ROUNDS_MARKER])) || 1);
+
+    try {
+      await c.db.send(new UpdateCommand({
+        TableName: c.tableName,
+        Key: { PK: `GAME#${id}`, SK: 'METADATA' },
+        UpdateExpression: 'SET #a = :n',
+        ConditionExpression: 'attribute_exists(PK) AND attribute_not_exists(#a)',
+        ExpressionAttributeNames: { '#a': ANSWERS_MARKER },
+        ExpressionAttributeValues: { ':n': mark },
+      }));
+    } catch (error) {
+      if (isConditionFailure(error)) return { counted: false, reason: 'already' };
+      throw error;
+    }
+    if (!total) return { counted: true, answers: 0 };
+
+    // The bucket the open kept; a survey has no REF rows to fall back to, so
+    // one opened before this existed is the unnamed bucket — know less.
+    const bucket = keptBucket(meta[BUCKET_ATTR]) || bucketFor('', '');
+    await Promise.all([
+      bumpMonth(c, { answersStored: total }),
+      bumpCategory(c, bucket, 'answers', total),
+    ]);
+    return { counted: true, answers: total, library: bucket.library };
+  } catch (error) {
+    return swallow('survey closed', error);
+  }
+}
+
 // ── Reading it back (admin/ only calls this) ───────────────────────────────
 
 const int = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.trunc(Number(v))) : 0);
@@ -520,6 +640,8 @@ module.exports = {
   recordSessionStarted,
   recordRoundServed,
   recordRoundClosed,
+  recordSurveyOpened,
+  recordSurveyClosed,
   readRecordedMetrics,
   averageRounds,
   bucketFor,

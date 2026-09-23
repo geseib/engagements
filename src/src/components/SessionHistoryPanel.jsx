@@ -110,6 +110,12 @@ export default function SessionHistoryPanel({
   onStart = () => {},
   onEdit = () => {},
   onClose = () => {},
+  /**
+   * A sentence from the page — why a Start (or the create dialog's "Open the
+   * survey", which lands the host here when it is refused) did not go through,
+   * in the server's own words. Shown as an alert under the header.
+   */
+  notice = '',
 }) {
   const [search, setSearch] = useState('');
   const { sorted, latestId } = useMemo(() => orderSessions(sessions), [sessions]);
@@ -151,6 +157,10 @@ export default function SessionHistoryPanel({
           ✕
         </button>
       </div>
+
+      {notice && (
+        <div className="shist__notice" role="alert">{notice}</div>
+      )}
 
       {/* The search is what makes the second empty state below meaningful. With
           no way to filter, "nothing matches" can never happen and the only

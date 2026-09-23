@@ -603,6 +603,24 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && path === 'games') {
     return ['hosts', 'admins'];
   }
+  // ── A SURVEY'S HOST READS ────────────────────────────────────────────────
+  //
+  // `GET /games/{gameId}/survey/progress` and `/survey/people` say who has and
+  // has not answered — by name, in Who finished and Named. They carry the
+  // Cognito authorizer, but the generic rule below ("GET + games is public")
+  // would then wave through ANY account in the pool, one still `pending`
+  // included: authentication doing the work of authorisation, the failure
+  // require-admin.js:19-24 records. So they are named here, template AND
+  // concrete path (the `rawPath` fallback carries a real id), and the handler
+  // (game/survey-host.js) additionally asks callerMayDriveSession.
+  //
+  // Only these two. The phone's own `GET /games/{gameId}/survey` stays public,
+  // and a prefix here would close it and 401 every participant.
+  // tests/session-control-routes-authorization.js holds both sides.
+  const SURVEY_HOST_READ = /^games\/[^/]+\/survey\/(progress|people)$/;
+  if (method === 'GET' && SURVEY_HOST_READ.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // THE STORED REPORT, `GET /games/{gameId}/report`. Closed 2026-09-23: it was
   // public, and `?role=host` handed anyone the whole decrypted room. Named here
   // for the same reason `GET games` is above — the generic "GET + games is

@@ -127,19 +127,22 @@ describe('the type filter is derived, and Survey is labelled rather than hidden'
     ]);
   });
 
-  test('the Survey option says it is not playable', () => {
-    // The owner's decision on OPEN-QUESTIONS #3 is (c) label it, not (b) hide
-    // it. rejects: an unannotated Survey option, which is the state that let
-    // someone author a set that can never be played and hear nothing about it.
+  /*
+    THE LABEL CAME OFF WHEN THE DEFECT DID. The owner's decision on
+    OPEN-QUESTIONS #3 was (c) label it, not (b) hide it, and through surveys
+    phase 1 the Survey option and every survey row said "Not playable" — true
+    then: no session could run one. Surveys phase 2 is that session, so the
+    label would now be the lie. The mechanism stays (UNPLAYABLE_GAME_TYPES, the
+    chip), empty, for the next type that is authorable before it is playable.
+  */
+  test('the Survey option no longer says it is not playable', () => {
     expect(
       within(typeFilter()).getByRole('option', { name: /survey/i }).textContent
-    ).toMatch(/not playable/i);
+    ).not.toMatch(/not playable/i);
   });
 
-  test('a survey row carries a Not playable chip', () => {
-    // Mockup 01 row 13 draws exactly this. rejects: a survey set reading as an
-    // ordinary row — "real defects, visible".
-    expect(within(rowFor('Engineering Values Check')).getByText('Not playable')).toBeInTheDocument();
+  test('a survey row carries no Not playable chip', () => {
+    expect(within(rowFor('Engineering Values Check')).queryByText('Not playable')).toBeNull();
     expect(within(rowFor('Nakamura Integration — Trivia')).queryByText('Not playable')).toBeNull();
   });
 

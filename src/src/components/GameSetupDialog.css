@@ -61,6 +61,10 @@
   --gsd-success: #4FB286;
   --gsd-success-text: #6FD0A4;   /* styles.css never declared one; every scope
                                     redeclares it locally (skill §6) */
+  /* The chosen Names option's wash (07-start-survey's --row-sel). It REPLACES
+     the option's card background, so it sits on the Names card's field:
+     muted on it measures 4.8:1, text 8.9:1 (gameSetupPalette.test.js). */
+  --gsd-row-sel: rgba(246, 169, 76, 0.10);
   --gsd-t-floor: 12px;
   --gsd-t-label: 13px;
   --gsd-t-body: 15px;
@@ -469,6 +473,126 @@
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* ------------------------------------------------------- a survey's Names
+   07-start-survey.html's `.sv-card2` / `.sv-three` / `.sv-pvs`, cut into this
+   scope: the option card above with its checkbox become a three-way choice.
+   The preview captions here sit AT the 12px floor — 07's own note raises the
+   shipped card's 10.5px/11px glance-only captions for this card, and the
+   older dispensation is not extended to new copy. */
+.gsd-names {
+  border: 1px solid var(--gsd-rule);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  background: var(--gsd-field);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.gsd-names-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.gsd-names-st {
+  margin-left: auto;
+  font-family: var(--font-display, inherit);
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+.gsd-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .gsd-three { grid-template-columns: 1fr; }
+}
+
+.gsd-three-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--gsd-rule-strong);
+  background: var(--gsd-card);
+  color: var(--gsd-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gsd-three-opt b {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+}
+
+/* The radio mark: a ring, filled with a dot when chosen — a shape as well as
+   a colour, so the choice never rests on hue alone. */
+.gsd-three-opt b i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--gsd-muted);
+}
+
+.gsd-three-opt span {
+  font-size: var(--gsd-t-label);
+  line-height: 1.4;
+  color: var(--gsd-muted);
+}
+
+.gsd-three-opt:hover { border-color: var(--gsd-primary); }
+
+.gsd-three-opt:focus-visible {
+  outline: 2px solid var(--gsd-primary);
+  outline-offset: 2px;
+}
+
+.gsd-three-opt[aria-checked="true"] {
+  border-color: var(--gsd-primary);
+  background: var(--gsd-row-sel);
+}
+
+.gsd-three-opt[aria-checked="true"] b i {
+  border-color: var(--gsd-primary);
+  background: radial-gradient(circle, var(--gsd-primary) 0 45%, transparent 50%);
+}
+
+.gsd-names .gsd-pv h6 { font-size: var(--gsd-t-floor); }
+
+.gsd-names .gsd-pv-ans b { color: var(--gsd-text); font-weight: 700; }
+
+.gsd-names .gsd-pv-who { font-size: var(--gsd-t-floor); }
+
+/* Named: the one mode where the host's own view carries a name. Text colour,
+   not amber — amber on the card is for the choice, not the person. */
+.gsd-names .gsd-pv-who.named { color: var(--gsd-text); }
+
+.gsd-names .gsd-pv-gap { margin-top: 10px; }
+
+.gsd-names-lock {
+  margin: 0 0 14px;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd-names-lock b { color: var(--gsd-text); font-weight: 700; }
 
 /* ------------------------------------------------------------------ footer */
 

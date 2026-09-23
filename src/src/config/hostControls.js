@@ -29,6 +29,12 @@
  * This module encodes what the host code ACTUALLY does. Reconciling the two is
  * a separate change (it touches gameTypes.js and the survey/wavelength backend
  * flows); until then `hostRunsVotePhase()` is the single honest answer.
+ *
+ * SURVEYS PHASE 2 settled the survey half of that. A survey is a session with
+ * no rounds (docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2): STATE
+ * goes CREATED → SURVEY#OPEN → SURVEY#CLOSED → ENDED and never touches ASK#,
+ * VOTE# or RESULTS#, so it joins the no-vote types and its host phases are
+ * COLLECTING and CLOSED. gameTypes.js says the same thing now.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import { normalizeGameType } from './gameTypes';
@@ -49,7 +55,16 @@ import { statusTone } from '../utils/statusTone';
  * array does not fail loudly; it silently renders the lobby, which is the same
  * class of bug as `isWaitingState('ENDED')` returning true.
  */
-export const HOST_PHASES = ['LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'FEEDBACK', 'ENDED'];
+export const HOST_PHASES = [
+  'LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'FEEDBACK',
+  // A SURVEY'S TWO PHASES. Not beats of a round and not a round of their own:
+  // a survey collects at the room's own pace (COLLECTING) and is then frozen
+  // (CLOSED). Listed here for the reason above — a phase missing from this
+  // array silently renders the lobby, which for a live survey would offer
+  // "Open the survey" to a room that is already answering.
+  'COLLECTING', 'CLOSED',
+  'ENDED',
+];
 
 /**
  * The three beats of RESULTS, spelled the way the server spells them, in the
@@ -134,19 +149,46 @@ export function stageBeatFromFrame(frame, gameState) {
  * Mirrors the `currentGameType === 'trivia' || currentGameType === 'wavelength'`
  * branch in handleFinishQuestion() / handleShowResults().
  */
-const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength']);
+/*
+ * `survey` joined in phase 2. It never reaches ASK at all, so "skips the vote"
+ * is the weaker half of the truth — but it is the half three other modules
+ * read: `anonymityApplies()` (the call-and-answer "Anonymous responses" card
+ * hides itself for a survey, whose own setting is Names), `podium.js`'s label,
+ * and hostRemote.js's mirror of this list.
+ */
+const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'survey']);
 
 /** Does the host code open a VOTE phase for this type? */
 export function hostRunsVotePhase(type) {
   return !TYPES_THAT_SKIP_VOTE.has(normalizeGameType(type));
 }
 
-/** The phases a round of this type actually passes through, in order. */
+/** Is this the one type that runs as a session with no rounds? */
+export function isSurveyType(type) {
+  return normalizeGameType(type) === 'survey';
+}
+
+/**
+ * The phases a session of this type actually passes through, in order —
+ * per ROUND for the round types, once for a survey.
+ */
 export function hostPhaseSequence(type) {
+  if (isSurveyType(type)) return ['LOBBY', 'COLLECTING', 'CLOSED'];
   return hostRunsVotePhase(type)
     ? ['LOBBY', 'ASK', 'VOTE', 'RESULTS']
     : ['LOBBY', 'ASK', 'RESULTS'];
 }
+
+/**
+ * The two survey states, spelled as the server writes them
+ * (lambda-functions/game/survey-names.js: SURVEY_OPEN / SURVEY_CLOSED). No
+ * digits after the `#`, so every round parser in the product reads them as
+ * inert rather than as round N.
+ */
+const SURVEY_STATE_PHASES = {
+  'SURVEY#OPEN': 'COLLECTING',
+  'SURVEY#CLOSED': 'CLOSED',
+};
 
 /**
  * Map a raw game state (`CREATED`, `STARTED`, `ASK#003`, `VOTE#003`,
@@ -158,6 +200,7 @@ export function hostPhaseSequence(type) {
  */
 export function phaseOfGameState(gameState) {
   const state = String(gameState ?? '');
+  if (SURVEY_STATE_PHASES[state]) return SURVEY_STATE_PHASES[state];
   if (state.startsWith('ASK#')) return 'ASK';
   if (state.startsWith('VOTE#')) return 'VOTE';
   if (state.startsWith('RESULTS#')) return 'RESULTS';
@@ -219,13 +262,63 @@ export const HOST_INTENTS = {
   PAGE: 'notes-page',  // turn to the next page of the read-back, not a new round
   REPORT: 'report',    // open the session report
   LEAVE: 'leave',      // leave this session and go back to the host menu
+  // A survey's four (surveyHostClient.js, and POST /start for the first):
+  OPEN_SURVEY: 'open-survey',   // CREATED → SURVEY#OPEN; phones may answer
+  CLOSE_SURVEY: 'close-survey', // SURVEY#OPEN → SURVEY#CLOSED; counts freeze
+  WARN_SURVEY: 'warn-survey',   // tell every phone it closes in two minutes
+  END_SURVEY: 'end-survey',     // SURVEY#CLOSED → ENDED
 };
 
+/**
+ * WHAT "CLOSE THE SURVEY" ASKS — the dock's confirm for the one control that
+ * carries one (IMPLEMENTATION-phase-2.md §5 risk 6). GameHostPage's
+ * runHostAction honours `confirm` on any control, before it dispatches; the
+ * copy lives here with every other word the dock says.
+ *
+ * It states the CONSEQUENCE and the counts before it asks (hard rules §12):
+ * every phone stops, the counts freeze, nothing reopens — and it names the
+ * reversible neighbour, the warning. `irreversible` makes the dialog refuse →
+ * as yes (ConfirmDialog `arrowConfirms`), since → is the key that pressed it.
+ *
+ * @param counts surveyRoomCounts() — {joined, finished, partway} — or null
+ *               before the first /progress read, when the counts are left out.
+ */
+export function surveyCloseConfirm(counts) {
+  const known = counts && Number.isFinite(counts.joined) && Number.isFinite(counts.finished)
+    && Number.isFinite(counts.partway);
+  const where = known
+    ? `${counts.finished} of ${counts.joined} have finished and ${counts.partway} ${counts.partway === 1 ? 'is' : 'are'} partway — what they have answered so far still counts. `
+    : '';
+  return {
+    title: 'Close the survey?',
+    message: `Every phone stops taking answers now and the counts are frozen. ${where}A closed survey cannot be reopened. Not yet? The two-minute warning tells every phone the close is coming.`,
+    confirmText: 'Close the survey',
+    irreversible: true,
+  };
+}
+
 function primaryFor(phase, {
-  runsVote, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages,
+  runsVote, isSurvey, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages, survey,
 }) {
   switch (phase) {
+    /*
+      A SURVEY OPENS WITH NOBODY IN THE ROOM, deliberately. The round types
+      wait for a first player because a round nobody hears is wasted; a survey
+      is answered at each person's own pace, and nobody CAN join until it opens
+      (session-gate.js refuses a join before `Started`). Requiring a player
+      here would be a button that can never light.
+    */
     case 'LOBBY': {
+      if (isSurvey) {
+        return {
+          id: 'open-survey',
+          label: 'Open the survey',
+          icon: 'PlayCircle',
+          intent: HOST_INTENTS.OPEN_SURVEY,
+          disabled: !hasQuestionSet,
+          hint: hasQuestionSet ? '' : 'Choose a question set in Game Info first',
+        };
+      }
       let hint = '';
       if (!hasQuestionSet) hint = 'Choose a question set in Game Info first';
       else if (playerCount === 0) hint = 'At least one player has to join first';
@@ -299,7 +392,51 @@ function primaryFor(phase, {
         disabled: false,
         hint: '',
       };
+    /*
+      CLOSING IS THE ONE PRIMARY THAT ASKS FIRST — `confirm` (surveyCloseConfirm
+      above), honoured by GameHostPage's runHostAction for whatever control
+      carries it. The dock binds SPACE and → to the primary (HostActionBar),
+      and a presenter's clicker sends exactly those; every other primary is
+      safe to fire by accident because the next beat can be stepped back from,
+      or discards nothing. This one stops every phone mid-answer and freezes
+      the counts, and there is no reopen.
+    */
+    case 'COLLECTING':
+      return {
+        id: 'close-survey',
+        label: 'Close the survey',
+        icon: 'Lock',
+        intent: HOST_INTENTS.CLOSE_SURVEY,
+        confirm: surveyCloseConfirm(survey),
+        disabled: false,
+        hint: '',
+      };
+    case 'CLOSED':
+      return {
+        id: 'end-survey',
+        label: 'End the session',
+        icon: 'FlagCheckered',
+        intent: HOST_INTENTS.END_SURVEY,
+        disabled: false,
+        hint: '',
+      };
     case 'ENDED':
+      /*
+        A survey has no session report to open — create-report.js reads
+        rounds, and a survey has none. Its results are phase 3's
+        (SURVEY#RESULTS), so the only honest act on the last screen is the way
+        out, which the round types carry as their secondary.
+      */
+      if (isSurvey) {
+        return {
+          id: 'leave',
+          label: 'Back to Menu',
+          icon: 'House',
+          intent: HOST_INTENTS.LEAVE,
+          disabled: false,
+          hint: '',
+        };
+      }
       return {
         id: 'report',
         label: 'Open Session Report',
@@ -355,12 +492,20 @@ function primaryFor(phase, {
   }
 }
 
+/** "21 finished · 15 partway · 6 not started" — the survey's whole room. */
+function surveyStatusLine(survey) {
+  if (!survey) return '';
+  const n = (v) => Math.max(0, Number(v) || 0);
+  return `${n(survey.finished)} finished · ${n(survey.partway)} partway · ${n(survey.notStarted)} not started`;
+}
+
 function statusTextFor(phase, {
-  playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+  isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
 }) {
   switch (phase) {
     case 'LOBBY':
       if (!hasQuestionSet) return 'Please select a question set to begin';
+      if (isSurvey) return 'People can join once the survey opens';
       if (playerCount === 0) return 'Waiting for players to join…';
       return `${playerCount} player${playerCount === 1 ? '' : 's'} ready`;
     case 'ASK':
@@ -382,8 +527,18 @@ function statusTextFor(phase, {
       return Number(notesPages) > 1
         ? `Reading page ${Number(notesPage) + 1} of ${notesPages}`
         : 'Discussion prompt on screen';
+    // `survey` is { finished, partway, notStarted } from the page's own
+    // /progress read (hooks/useSurveyProgress.js: surveyRoomCounts). Until the
+    // first read lands there is nothing to count, and the lobby's "Waiting for
+    // players to join…" would be a lie about a room that may be answering.
+    case 'COLLECTING':
+      return surveyStatusLine(survey) || 'Collecting answers…';
+    case 'CLOSED':
+      return survey
+        ? `Closed · ${surveyStatusLine(survey)}`
+        : 'The survey is closed';
     case 'ENDED':
-      return 'All rounds played';
+      return isSurvey ? 'The session is over' : 'All rounds played';
     case 'RESULTS':
     default:
       return 'Results are on screen';
@@ -413,13 +568,17 @@ export function hostControlsFor({
   // its Next Round primary unchanged.
   notesPage = 0,
   notesPages = 1,
+  // A collecting survey's room, { finished, partway, notStarted }, or null
+  // before the first /progress read. Only the survey phases read it.
+  survey = null,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const runsVote = hostRunsVotePhase(gameType);
+  const isSurvey = isSurveyType(gameType);
   const noun = String(roundNoun || 'Question').trim() || 'Question';
 
   const primary = primaryFor(resolvedPhase, {
-    runsVote, roundNoun: noun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages,
+    runsVote, isSurvey, roundNoun: noun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages, survey,
   });
 
   /*
@@ -441,7 +600,26 @@ export function hostControlsFor({
     menu."
   */
   let secondary = null;
-  if (resolvedPhase === 'ASK') {
+  if (resolvedPhase === 'COLLECTING') {
+    /*
+      THE TWO-MINUTE WARNING — s-01-collecting's second button. It moves
+      nothing: the survey stays open, no answer is touched, and every phone
+      gets a banner saying the close is coming. It is the secondary rather
+      than a panel control because it is the one thing a host does on this
+      screen besides closing it, and it is the kinder way to close it.
+    */
+    secondary = {
+      id: 'warn-survey',
+      label: 'Two-minute warning',
+      icon: 'Timer',
+      intent: HOST_INTENTS.WARN_SURVEY,
+      disabled: false,
+      hint: '',
+    };
+  } else if (resolvedPhase === 'CLOSED' || (isSurvey && resolvedPhase === 'ENDED')) {
+    // CLOSED's one act is ending it; a survey's ENDED primary IS the way out.
+    secondary = null;
+  } else if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
   } else if (resolvedPhase === 'FIELD_NOTES' && primary.intent === HOST_INTENTS.PAGE) {
     /*
@@ -521,7 +699,7 @@ export function hostControlsFor({
   }
 
   const text = statusTextFor(resolvedPhase, {
-    playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+    isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
   });
 
   return {

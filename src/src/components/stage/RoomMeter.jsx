@@ -150,6 +150,11 @@ const REVEAL_LABEL = {
   LOBBY: 'Already joined',
   ASK: 'Still to answer',
   VOTE: 'Still to vote',
+  // A collecting survey (s-07-whos-left): people partway through the form or
+  // not yet started — the waiting polarity, in the survey's own word. Offered
+  // only in the two Names values that record names; `surveyWaiting()` in
+  // hooks/useSurveyProgress.js hands this component null in Anonymous.
+  COLLECTING: 'Still going',
 };
 
 /**
@@ -190,12 +195,34 @@ const NAMES_SHOWN = 8;
 const ARRIVALS_SHOWN = 3;
 const AGE_CLASS = ['', ' older', ' oldest'];
 
+/*
+ * ROWS — a collecting survey's "Answered, by question" (s-01-collecting).
+ *
+ * NOT A SECOND STATEMENT OF THE FRACTION ABOVE, which is why it survives the
+ * rule that cut the mockup's `.bar2`. The fraction is how many have FINISHED
+ * the form; the rows are how far through the form the room is, one line per
+ * question, each printing its own count beside its bar so the bar is never the
+ * only statement of a number. They give way to the "Still going" list while it
+ * is up: two lists in one column is the reflow this meter refuses, and a name
+ * beside "Q3 · 34 / 42" would read as that person's answer.
+ *
+ * `rows`: [{ qid, label, answered, of, share (0-100), full }] —
+ * `surveyMeterRows()` in hooks/useSurveyProgress.js.
+ */
 export default function RoomMeter({
-  phase, heading, body, complete = false, waiting = null, arrivals = null,
+  phase, heading, body, complete = false, waiting = null, arrivals = null, rows = null,
 }) {
   const arriving = (arrivals && Array.isArray(arrivals.items) ? arrivals.items : []).slice(-ARRIVALS_SHOWN).reverse();
   const names = arriving.length ? [] : (waiting && waiting.names) || [];
-  const interactive = Boolean(names.length && waiting && typeof waiting.onPreview === 'function');
+  /*
+    A LIST MAY BE OFFERED BEFORE IT IS KNOWN. A collecting survey knows HOW
+    MANY are still going from its counts, but fetches WHO only when the host
+    asks (`/survey/people`, on reveal) — so `waiting.count` stands in for the
+    names until they land, and `waiting.loading` says so on the wall rather
+    than showing an empty list that reads as "nobody".
+  */
+  const offered = arriving.length ? 0 : (names.length || Number(waiting && waiting.count) || 0);
+  const interactive = Boolean(offered && waiting && typeof waiting.onPreview === 'function');
   const onPin = waiting && waiting.onPin;
 
   /*
@@ -237,13 +264,18 @@ export default function RoomMeter({
   const listKind = LIST_KIND[phaseKey] || 'waiting';
   const shown = names.slice(0, NAMES_SHOWN);
   const rest = names.length - shown.length;
+  const listCount = names.length || offered;
+  const loadingNames = interactive && !names.length && Boolean(waiting.loading);
+  // …and a list that could not be fetched says so, rather than loading forever.
+  const namesFailed = interactive && !names.length && !loadingNames && Boolean(waiting.error);
+  const progressRows = !revealed && Array.isArray(rows) ? rows : [];
 
   const countProps = interactive
     ? {
       tabIndex: 0,
       role: 'button',
       'aria-expanded': revealed,
-      'aria-label': `${label}: ${names.length}. Show the names. Press U.`,
+      'aria-label': `${label}: ${listCount}. Show the names. Press U.`,
       title: 'U shows or hides the names',
       onMouseEnter: waiting.onPreview,
       onMouseLeave: waiting.onPreviewEnd,
@@ -304,12 +336,28 @@ export default function RoomMeter({
           </div>
         </>
       )}
+      {progressRows.length > 0 && (
+        <div className="sprog" data-survey-progress="">
+          <h4>Answered, by question</h4>
+          {progressRows.map((row) => (
+            <div className="r" key={row.qid}>
+              <span>{row.label}</span>
+              <span className="t" aria-hidden="true">
+                <i className={row.full ? 'full' : undefined} style={{ width: `${row.share}%` }} />
+              </span>
+              <span className="v">{`${row.answered} / ${row.of}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {revealed && (
         <div className="waiting" data-waiting-list="" data-list-kind={listKind}>
           <h5>{label}</h5>
           <ul>
             {shown.map((name) => <li key={name}>{name}</li>)}
           </ul>
+          {loadingNames && <span className="more">Loading names…</span>}
+          {namesFailed && <span className="more">{waiting.error}</span>}
           {rest > 0 && <span className="more">{`+ ${rest} more`}</span>}
         </div>
       )}

@@ -12,6 +12,8 @@
  *   answers   game/next-question.js        a round's answer rows, counted once
  *                                          when the host moves on — nothing
  *                                          runs on the answer path itself
+ *   survey    game/start-game.js           every question served when it opens
+ *             game/survey-host.js          its answers counted when it closes
  *
  * A usage meter that was defined and never called is exactly what shipped once
  * already here: recordBillableSession had no call site for a month
@@ -226,6 +228,10 @@ const answer = (gameId, playerName, text, q = '001') => wsMessage({
     ['lambda-functions/game/session-start.js', 'recordSessionStarted'],
     ['lambda-functions/game/next-question.js', 'recordRoundServed'],
     ['lambda-functions/game/next-question.js', 'recordRoundClosed'],
+    // A survey has no rounds: it is served when it opens and counted when it
+    // closes. tests/survey-answers.js drives both through the real handlers.
+    ['lambda-functions/game/start-game.js', 'recordSurveyOpened'],
+    ['lambda-functions/game/survey-host.js', 'recordSurveyClosed'],
   ]) {
     await check(`${file} calls ${fn} exactly once`, () => assert.strictEqual(calls(file, fn), 1));
   }

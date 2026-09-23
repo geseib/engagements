@@ -30,12 +30,83 @@
  *   ReturnValues          ALL_OLD on a Put, UPDATED_OLD on an Update — the two
  *                         a recorder reads to tell a NEW row from an overwrite.
  *                         Any other value answers `{}` exactly as before.
+ *   TransactWrite         ConditionCheck · Put · Update · Delete, ALL-OR-NOTHING:
+ *                         every condition is evaluated against the table as it
+ *                         is before any write lands, and one failure cancels the
+ *                         lot with a `TransactionCanceledException` carrying
+ *                         `CancellationReasons` in item order, as DynamoDB does.
+ *                         The survey answer PUT rides on this (a ConditionCheck
+ *                         on STATE beside the row's Put), and a fake that applied
+ *                         the Put when the check failed would pass the very race
+ *                         the check exists for.
+ *   Query paging          `Limit` / `ExclusiveStartKey` / `LastEvaluatedKey`,
+ *                         and `table.pageSize` to force DynamoDB's 1 MB page
+ *                         boundary onto small fixtures. While paging is in play
+ *                         the rows come back in SK order, as DynamoDB returns
+ *                         them. A handler that reads one page and stops is only
+ *                         caught by a fake that ever returns more than one.
+ *                         (`ConsistentRead` is accepted and means nothing here:
+ *                         the fake has one copy of every row.)
  *
  * `serialise` is how a race is driven: it interleaves two in-flight sends at a
  * chosen point, so both handlers read the same item and then write one after
  * the other — which is precisely the interleaving that a read-then-write
  * implementation gets wrong and a conditional write survives.
+ *
+ * FAULTS DYNAMODB REALLY RAISES, ON DEMAND (`table.inject`). A single-copy
+ * fake never conflicts: two sends run one after the other, so a handler that
+ * treats DynamoDB's transaction conflicts as fatal passes every test here and
+ * 500s the first time a room answers together. `inject(predicate, makeError,
+ * times)` makes the next `times` matching sends throw instead of running, and
+ * two shapes are ready-made because they are the ones the survey routes meet:
+ *
+ *   conflictTransactions(n)  the next n TransactWrites cancel with reason
+ *                            `TransactionConflict` on their first item — the
+ *                            survey PUT's ConditionCheck on STATE, which every
+ *                            concurrent answer in the room also holds
+ *   conflictUpdates(n, pred) the next n UpdateItems (matching `pred`) throw
+ *                            `TransactionConflictException` — the host's close
+ *                            or warning landing on a STATE row a transaction
+ *                            is holding
+ *
+ * and the throttling a room meets once it outruns ONE PARTITION's write rate
+ * (every answer in a session writes `GAME#<id>`), seen on dev as
+ * `ThrottlingException … TableWriteKeyRangeThroughputExceeded` after the SDK's
+ * own three attempts:
+ *
+ *   throttle(n, pred, name)  the next n sends matching `pred` throw `name` —
+ *                            ThrottlingException (the default, with the
+ *                            `throttlingReasons` the dev log carried),
+ *                            ProvisionedThroughputExceededException or
+ *                            RequestLimitExceeded
+ *   throttleTransactions(n, code, at)
+ *                            the next n TransactWrites cancel with reason
+ *                            `code` (ThrottlingError, the default, or
+ *                            ProvisionedThroughputExceeded) on item `at`
+ *
+ * THE 400 KB ITEM LIMIT. DynamoDB refuses an item over 400 KB with a
+ * ValidationException; a fake that stores anything let SURVEY#RESULTS grow
+ * one encrypted blob per open answer, forever, and pass. Every Put, Update
+ * result and transactional Put is sized here (the JSON byte length of the
+ * item — a close, slightly generous stand-in for DynamoDB's own measure) and
+ * refused over ITEM_LIMIT_BYTES.
  */
+
+/** DynamoDB's item size limit. */
+const ITEM_LIMIT_BYTES = 400 * 1024;
+
+const itemBytes = (item) => Buffer.byteLength(JSON.stringify(item), 'utf8');
+
+function tooLarge(item) {
+  const error = new Error(`Item size has exceeded the maximum allowed size (${itemBytes(item)} bytes, ${item && item.PK}/${item && item.SK})`);
+  error.name = 'ValidationException';
+  return error;
+}
+
+/** Refuse, as DynamoDB does, an item over the limit. */
+function assertFits(item) {
+  if (itemBytes(item) > ITEM_LIMIT_BYTES) throw tooLarge(item);
+}
 
 /* ---- expression parsing --------------------------------------------------- */
 
@@ -219,6 +290,50 @@ function conditionalFailure() {
   return error;
 }
 
+const REASON_MESSAGES = {
+  ConditionalCheckFailed: 'The conditional request failed',
+  TransactionConflict: 'Transaction is ongoing for the item',
+  ThrottlingError: 'Throughput exceeds the current capacity of your table or index.',
+  ProvisionedThroughputExceeded: 'The level of configured provisioned throughput for the table was exceeded.',
+};
+
+const THROTTLE_MESSAGES = {
+  ThrottlingException: 'Throughput exceeds the current capacity of your table or index. DynamoDB is automatically scaling your table or index so please try again shortly.',
+  ProvisionedThroughputExceededException: 'The level of configured provisioned throughput for the table was exceeded. Consider increasing your provisioning level with the UpdateTable API.',
+  RequestLimitExceeded: 'Throughput exceeds the current throughput limit for your account.',
+};
+
+/**
+ * What DynamoDB throws when a partition (or the table, or the account) is out
+ * of throughput — after the SDK's own retries, as the dev log showed it:
+ * `$metadata.attempts: 3` and, for ThrottlingException, the reason.
+ */
+function throttled(name = 'ThrottlingException') {
+  if (!THROTTLE_MESSAGES[name]) throw new Error(`fake: ${name} is not a throttling error`);
+  const error = new Error(THROTTLE_MESSAGES[name]);
+  error.name = name;
+  error.$metadata = { httpStatusCode: 400, attempts: 3 };
+  if (name === 'ThrottlingException') {
+    error.throttlingReasons = [{ reason: 'TableWriteKeyRangeThroughputExceeded', resource: 'table/test-table' }];
+  }
+  return error;
+}
+
+/** DynamoDB's shape for a cancelled transaction: one reason per item, in order. */
+function transactionCancelled(codes) {
+  const error = new Error(`Transaction cancelled, please refer cancellation reasons for specific reasons [${codes.join(', ')}]`);
+  error.name = 'TransactionCanceledException';
+  error.CancellationReasons = codes.map((Code) => (Code === 'None' ? { Code } : { Code, Message: REASON_MESSAGES[Code] || Code }));
+  return error;
+}
+
+/** What a non-transactional write gets when a transaction holds its item. */
+function transactionConflict() {
+  const error = new Error('Transaction is ongoing for the item');
+  error.name = 'TransactionConflictException';
+  return error;
+}
+
 /* ---- the table ------------------------------------------------------------ */
 
 function createTable() {
@@ -234,14 +349,61 @@ function createTable() {
    */
   let gate = null;
 
+  /** Pending injected faults, in the order they were armed. */
+  const faults = [];
+
   const table = {
     store,
     log,
     keyOf,
+    faults,
+    /**
+     * Rows per Query page when the caller gives no `Limit`. null (the default)
+     * is one page holding everything, which is what every suite written before
+     * paging existed relies on. Set it to force a boundary a real 1 MB page
+     * would put somewhere in a big room; clear() leaves it alone.
+     */
+    pageSize: null,
 
     put: (item) => store.set(keyOf(item.PK, item.SK), item),
     get: (pk, sk) => store.get(keyOf(pk, sk)),
-    clear: () => { store.clear(); log.length = 0; gate = null; },
+    clear: () => { store.clear(); log.length = 0; gate = null; faults.length = 0; },
+
+    /**
+     * Make the next `times` sends for which `predicate(command)` is true throw
+     * `makeError(command)` instead of running — nothing is written. Returns a
+     * handle whose `thrown` counts how many actually fired.
+     */
+    inject(predicate, makeError, times = 1) {
+      const fault = { predicate, makeError, left: times, thrown: 0 };
+      faults.push(fault);
+      return fault;
+    },
+    /** The next `n` TransactWrites cancel with TransactionConflict on their first item. */
+    conflictTransactions(n = 1) {
+      return table.inject(
+        (c) => c.type === 'transactWrite',
+        (c) => transactionCancelled((c.input.TransactItems || []).map((_, i) => (i === 0 ? 'TransactionConflict' : 'None'))),
+        n
+      );
+    },
+    /** The next `n` UpdateItems matching `predicate` throw TransactionConflictException. */
+    conflictUpdates(n = 1, predicate = () => true) {
+      return table.inject((c) => c.type === 'update' && predicate(c), () => transactionConflict(), n);
+    },
+    /** The next `n` sends matching `predicate` throw the throttling error `name`. */
+    throttle(n = 1, predicate = () => true, name = 'ThrottlingException') {
+      throttled(name); // an unknown name fails here, not at the send
+      return table.inject(predicate, () => throttled(name), n);
+    },
+    /** The next `n` TransactWrites cancel with reason `code` on item `at` (the rest 'None'). */
+    throttleTransactions(n = 1, code = 'ThrottlingError', at = 0) {
+      return table.inject(
+        (c) => c.type === 'transactWrite',
+        (c) => transactionCancelled((c.input.TransactItems || []).map((_, i) => (i === at ? code : 'None'))),
+        n
+      );
+    },
 
     /**
      * Hold the next command for which `predicate(command)` is true.
@@ -259,6 +421,34 @@ function createTable() {
       };
     },
 
+    /**
+     * Run the next command matching `predicate` NOW, then hold its RESULT until
+     * `release()`. `hold` stops a command before it touches the table; this one
+     * lets it read the table as it is, and be slow to come back — how a read
+     * that STARTED first can FINISH last, carrying older news than a read that
+     * started after it.
+     * @returns {{ reached: Promise<void>, release: () => void }}
+     */
+    holdResult(predicate) {
+      const inner = table.doc.send;
+      let releaseFn;
+      let reached;
+      const reachedPromise = new Promise((resolve) => { reached = resolve; });
+      const held = new Promise((resolve) => { releaseFn = resolve; });
+      let armed = true;
+      const disarm = () => { armed = false; if (table.doc.send !== inner) table.doc.send = inner; };
+      table.doc.send = async (command) => {
+        const out = await inner(command);
+        if (armed && predicate(command)) {
+          disarm();
+          reached();
+          await held;
+        }
+        return out;
+      };
+      return { reached: reachedPromise, release: () => { disarm(); releaseFn(); } };
+    },
+
     doc: {
       async send(command) {
         const input = command.input || {};
@@ -274,6 +464,14 @@ function createTable() {
           await held;
         }
 
+        const fault = faults.find((f) => f.left > 0 && f.predicate(command));
+        if (fault) {
+          fault.left -= 1;
+          fault.thrown += 1;
+          if (fault.left === 0) faults.splice(faults.indexOf(fault), 1);
+          throw fault.makeError(command);
+        }
+
         switch (command.type) {
           case 'get':
             return { Item: store.get(keyOf(input.Key.PK, input.Key.SK)) };
@@ -287,6 +485,7 @@ function createTable() {
               )) {
               throw conditionalFailure();
             }
+            assertFits(input.Item);
             const previous = store.get(k);
             store.set(k, input.Item);
             // ALL_OLD is how a writer learns it OVERWROTE a row rather than
@@ -310,7 +509,9 @@ function createTable() {
             // forgets `attribute_exists(SK)` must be able to create the phantom
             // row here, or the test asserting it does not is asserting nothing.
             const base = current || { ...input.Key };
-            store.set(k, applyUpdate(base, input));
+            const updated = applyUpdate(base, input);
+            assertFits(updated);
+            store.set(k, updated);
             // UPDATED_OLD: the prior values of the attributes this update
             // named, and only those that existed — DynamoDB's own shape.
             if (input.ReturnValues === 'UPDATED_OLD') {
@@ -336,9 +537,70 @@ function createTable() {
             if (input.FilterExpression === 'ConnectionType = :type') {
               items = items.filter((i) => i.ConnectionType === input.ExpressionAttributeValues[':type']);
             }
+            // PAGING, only when something asks for it: a Limit, a start key,
+            // or a table-wide page size. Pages are cut in SK order, and the
+            // last key of a page that is not the end is handed back, exactly
+            // as a caller following LastEvaluatedKey has to see it.
+            const limit = Number(input.Limit) > 0 ? Number(input.Limit) : (Number(table.pageSize) > 0 ? Number(table.pageSize) : 0);
+            if (limit || input.ExclusiveStartKey) {
+              items = items.slice().sort((a, b) => (String(a.SK) < String(b.SK) ? -1 : String(a.SK) > String(b.SK) ? 1 : 0));
+              if (input.ExclusiveStartKey) {
+                const after = String(input.ExclusiveStartKey.SK);
+                items = items.filter((i) => String(i.SK) > after);
+              }
+              if (limit && items.length > limit) {
+                const page = items.slice(0, limit);
+                const last = page[page.length - 1];
+                const LastEvaluatedKey = { PK: last.PK, SK: last.SK };
+                if (input.Select === 'COUNT') return { Count: page.length, LastEvaluatedKey };
+                return { Items: page, LastEvaluatedKey };
+              }
+            }
             // Select COUNT returns the number and no rows, as DynamoDB does.
             if (input.Select === 'COUNT') return { Count: items.length };
             return { Items: items };
+          }
+
+          /*
+            ALL OR NOTHING. Every condition is judged against the table as it
+            stands BEFORE any of the transaction's writes, then either every
+            write lands or none does. A failure names each item's fate in
+            order — 'ConditionalCheckFailed' or 'None' — because a handler that
+            retries one kind of failure and refuses another reads exactly that.
+          */
+          case 'transactWrite': {
+            const entries = (input.TransactItems || []).map((entry) => {
+              const [kind, spec] = Object.entries(entry)[0] || [];
+              if (!['ConditionCheck', 'Put', 'Update', 'Delete'].includes(kind)) {
+                throw new Error(`fake: unsupported TransactItems entry ${JSON.stringify(entry)}`);
+              }
+              const k = kind === 'Put' ? keyOf(spec.Item.PK, spec.Item.SK) : keyOf(spec.Key.PK, spec.Key.SK);
+              return { kind, spec, k };
+            });
+            const codes = entries.map(({ kind, spec, k }) => {
+              if (kind === 'ConditionCheck' && !spec.ConditionExpression) {
+                throw new Error('fake: a ConditionCheck needs a ConditionExpression');
+              }
+              if (!spec.ConditionExpression) return 'None';
+              return evaluateCondition(
+                spec.ConditionExpression, store.get(k),
+                spec.ExpressionAttributeNames, spec.ExpressionAttributeValues
+              ) ? 'None' : 'ConditionalCheckFailed';
+            });
+            if (codes.some((c) => c !== 'None')) throw transactionCancelled(codes);
+            // Sized before anything lands: an oversized item fails the whole
+            // transaction (DynamoDB answers ValidationException, nothing written).
+            const next = entries.map(({ kind, spec, k }) => {
+              if (kind === 'Put') return spec.Item;
+              if (kind === 'Update') return applyUpdate(store.get(k) || { ...spec.Key }, spec);
+              return null;
+            });
+            next.forEach((item) => { if (item) assertFits(item); });
+            entries.forEach(({ kind, k }, i) => {
+              if (kind === 'Put' || kind === 'Update') store.set(k, next[i]);
+              else if (kind === 'Delete') store.delete(k);
+            });
+            return {};
           }
 
           /*
@@ -377,6 +639,7 @@ class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 class BatchGetCommand { constructor(i) { this.input = i; this.type = 'batchGet'; } }
+class TransactWriteCommand { constructor(i) { this.input = i; this.type = 'transactWrite'; } }
 
 /**
  * Install the AWS stubs so every handler under `lambda-functions/game/` sees
@@ -427,7 +690,7 @@ function installStubs({ table, sent, frames = null, gone = null }) {
   stub('@aws-sdk/lib-dynamodb', {
     DynamoDBDocumentClient: { from: () => table.doc },
     GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-    BatchGetCommand,
+    BatchGetCommand, TransactWriteCommand,
   });
   stub('@aws-sdk/client-apigatewaymanagementapi', {
     ApiGatewayManagementApiClient: class {
@@ -456,6 +719,11 @@ module.exports = {
   applyUpdate,
   updatedAttributes,
   conditionalFailure,
+  transactionCancelled,
+  transactionConflict,
+  throttled,
+  ITEM_LIMIT_BYTES,
+  itemBytes,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-  BatchGetCommand,
+  BatchGetCommand, TransactWriteCommand,
 };

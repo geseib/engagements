@@ -48,7 +48,7 @@ describe('the mark links home where that is safe', () => {
   test('and NOT on the player page or the stage', () => {
     // rejects: a tidy-minded "make every brand a link". A participant mid-round
     // and a projector mid-session must not be one tap from leaving.
-    for (const file of [['PlayerPage.jsx'], ['components', 'PlayerSurface.jsx'], ['components', 'stage', 'Stage.jsx'], ['HostRemote.jsx']]) {
+    for (const file of [['PlayerPage.jsx'], ['components', 'PlayerShell.jsx'], ['components', 'PlayerSurface.jsx'], ['components', 'stage', 'Stage.jsx'], ['HostRemote.jsx']]) {
       const full = path.join(__dirname, '..', ...file);
       if (!fs.existsSync(full)) continue;
       expect(fs.readFileSync(full, 'utf8')).not.toMatch(/href="\/home"/);

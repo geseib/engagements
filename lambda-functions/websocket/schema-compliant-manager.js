@@ -5,6 +5,20 @@ const { resolveSetPartition } = require('./set-version');
 const { GAMES_RESERVATION_PK, gamesIndexPk, PLATFORM } = require('./tenant');
 const { unstartedTtl } = require('./session-ttl');
 const { encryptItem } = require('./tenant-crypto');
+const { NAMES, NAMES_DEFAULT } = require('./survey-names');
+
+/**
+ * A survey's Names: what the host chose, else what the set says, else
+ * anonymous. An unknown value is passed over rather than folded to the
+ * default, so a typo in the payload still lands on the set's own choice.
+ */
+function surveyNamesFor(chosen, setMetadata) {
+  const known = (v) => {
+    const s = String(v == null ? '' : v).trim().toLowerCase();
+    return NAMES.includes(s) ? s : '';
+  };
+  return known(chosen) || known(setMetadata && setMetadata.namesDefault) || NAMES_DEFAULT;
+}
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -213,6 +227,12 @@ const createGame = async (gameId, gameData) => {
         // means "what the set says, else the format standard".
         ...(gameData.promptId ? { PromptId: gameData.promptId } : {}),
         Details: gameData.details || '',
+        // WHAT A SURVEY WRITES ABOUT PEOPLE (survey-names.js). Survey only;
+        // editable through PUT /games/{id} until the survey opens, and never
+        // after — update-game.js conditions the edit on no OpenedAt.
+        ...(gameData.engagementType === 'survey'
+          ? { Names: surveyNamesFor(gameData.names, resolvedSet.metadata) }
+          : {}),
         Visibility: gameData.visibility || 'public',
         AccessCode: gameData.accessCode || null,
         Started: false, // Game is created but not started

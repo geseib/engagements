@@ -27,9 +27,19 @@ import React, { useEffect } from 'react';
  * refuses it on the advance key: a held key must not confirm a question the
  * host has not finished reading. Escape cancels, as it does on every other
  * overlay. ArrowLeft may repeat harmlessly — cancelling twice is cancelling.
+ *
+ * `arrowConfirms={false}` IS FOR ACTS THAT CANNOT BE UNDONE. The argument
+ * above holds for an early advance, which the host can step back from. It
+ * inverts for "Close the survey": the dock binds → to that primary, and a
+ * clicker's → pressed twice — a double click, or pressing on because the wall
+ * did not seem to move — opened this dialog and then confirmed it, and a
+ * closed survey does not reopen. With the prop false, ← and Escape still
+ * cancel, → is swallowed (so it reaches neither this dialog's confirm nor the
+ * dock behind it), and the → hint comes off the button: the only yes is a
+ * deliberate press of the button itself — a click, or Enter / Space on it.
  */
 export default function ConfirmDialog({
-  title, message, confirmText = 'Proceed', onConfirm, onCancel,
+  title, message, confirmText = 'Proceed', onConfirm, onCancel, arrowConfirms = true,
 }) {
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -40,15 +50,15 @@ export default function ConfirmDialog({
         onCancel?.();
         return;
       }
-      if (event.key === 'ArrowRight' && !event.repeat) {
+      if (event.key === 'ArrowRight') {
         event.preventDefault();
         event.stopPropagation();
-        onConfirm?.();
+        if (arrowConfirms && !event.repeat) onConfirm?.();
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onConfirm, onCancel]);
+  }, [onConfirm, onCancel, arrowConfirms]);
 
   return (
     <div className="expanded-qr-overlay" onClick={onCancel}>
@@ -71,8 +81,8 @@ export default function ConfirmDialog({
             className="btn-primary"
             onClick={onConfirm}
           >
-            {`${confirmText} `}
-            <kbd aria-hidden="true">→</kbd>
+            {arrowConfirms ? `${confirmText} ` : confirmText}
+            {arrowConfirms && <kbd aria-hidden="true">→</kbd>}
           </button>
         </div>
       </div>

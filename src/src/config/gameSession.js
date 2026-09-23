@@ -29,7 +29,7 @@
  *     which unmounts when the dialog closes: engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
- *     editCategoryNames, knownPromptIds.
+ *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names).
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a
  *     session from history, not the one on stage, so it must not live in the
@@ -207,6 +207,14 @@ export function initialGameSession() {
     isRestoringState: false,
     manualStateChange: false,
     gameDebugMode: false,
+
+    // --- a survey (surveys phase 2) ---------------------------------------
+    // The session's Names value. Anonymous until the restore says otherwise:
+    // it is the value under which the wall offers no names at all, so the
+    // moment before the real one loads is the safe one.
+    surveyNames: 'anonymous',
+    // When the two-minute warning went out. A new session has not warned.
+    surveyWarnedAt: null,
   };
 }
 

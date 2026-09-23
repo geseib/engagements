@@ -57,8 +57,16 @@ import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
-  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat,
+  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType,
 } from './config/hostControls';
+import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
+import useSurveyProgress, {
+  surveyRoomCounts, surveyMeterRows, surveyWaiting, stillGoingNames,
+} from './hooks/useSurveyProgress';
+import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
+import { readStartRefusal } from './utils/startRefusal';
+import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
+import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
 import {
   anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
   stageLabelFor, standingsVisible, playerAnsweredActions, answeredNamesFrom,
@@ -74,7 +82,21 @@ const API_BASE = window.API_BASE;
  * `data-grow` attributes (01-lobby: 1.5, 02-ask: 1.35). Everything denser than
  * those runs at the ladder.
  */
-const STAGE_GROW = { LOBBY: '1.5', ASK: '1.35', ENDED: '1.5' };
+const STAGE_GROW = {
+  LOBBY: '1.5', ASK: '1.35', ENDED: '1.5',
+  // A survey. COLLECTING runs AT the ladder: s-01-collecting carries no
+  // data-grow, and rendered at 1920x1080 its title sits on one line beside a
+  // join block the height of the meter; at 1.5 the title wraps and the page
+  // stops looking like the mockup. CLOSED carries one short line, like ENDED.
+  COLLECTING: '1', CLOSED: '1.5',
+};
+
+/*
+ * The survey states in which the host reads /survey/progress: collecting, the
+ * frozen counts after the close, and the session's end (which still states
+ * how many answered). CREATED is not here — nothing has been answered yet.
+ */
+const SURVEY_READ_STATES = new Set(['SURVEY#OPEN', 'SURVEY#CLOSED', 'ENDED']);
 
 /* The trivia option slots and the correct-answer test that used to live here
    are in config/questionCard.js now, beside the card that reads them
@@ -413,6 +435,39 @@ function GameHostPage() {
   // hundreds of lines below the first early return, where no hook may live.
   const autoActRef = useRef(null);
 
+  /*
+    A SURVEY'S PER-GAME FACTS (surveys phase 2). `surveyNames` is the session's
+    Names value — Anonymous / Who finished / Named, fixed once the survey opened
+    — which decides whether the wall may ever offer a name. `surveyWarnedAt` is
+    when the two-minute warning went out, so the dock can say it did. Both are
+    on config/gameSession.js's list: the next session must not inherit either.
+    The Anonymous default is the safe one for the moment before a restore lands.
+  */
+  const [surveyNames, setSurveyNames] = useState(NAMES_DEFAULT);
+  const [surveyWarnedAt, setSurveyWarnedAt] = useState(null);
+  // A refused survey call (a 409 from a second device, a dropped network),
+  // said in the dock beside the button that was pressed — never alert().
+  const [surveyActionError, setSurveyActionError] = useState('');
+  /*
+    WHERE THE ROOM IS — hooks/useSurveyProgress.js: GET /survey/progress on
+    arrival, the `surveyProgress` frame after. Declared up here, above every
+    early return, because it is a hook; the socket handlers read it through
+    `surveyRef`, since they are registered once per game and would otherwise
+    call the hook's first render forever.
+  */
+  const survey = useSurveyProgress({
+    gameId,
+    active: isSurveyType(currentGameType) && SURVEY_READ_STATES.has(gameState),
+    names: surveyNames,
+    fetchFn: authFetch,
+    apiBase: API_BASE,
+  });
+  const surveyRef = useRef(survey);
+  surveyRef.current = survey;
+  // Whether the meter's "Still going" list is up, for the progress frame to
+  // refresh the names it is showing. Assigned at the bottom of the render.
+  const surveyRevealOpenRef = useRef(false);
+
   // Custom instruction state for question set instructions
   const [customInstruction, setCustomInstruction] = useState(null);
   const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
@@ -421,6 +476,14 @@ function GameHostPage() {
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [gamesList, setGamesList] = useState([]);
   const [reportsModalMode, setReportsModalMode] = useState('reports'); // 'reports' or 'select'
+  // Why a start from the sessions list — or the create dialog's "Open the
+  // survey", which falls back to that list — was refused, in the server's
+  // words (utils/startRefusal.js). Shown on the list; cleared whenever the
+  // list goes away, by whichever route, so it never greets the next opening.
+  const [historyNotice, setHistoryNotice] = useState('');
+  useEffect(() => {
+    if (!showReportsModal) setHistoryNotice('');
+  }, [showReportsModal]);
   
   // `showFinalReport` used to live here. Nothing ever rendered it, and after
   // the end-of-game dialog was deleted nothing set it either, so it survived
@@ -585,6 +648,7 @@ function GameHostPage() {
     title: '',
     message: '',
     confirmText: 'Proceed',
+    arrowConfirms: true,
     onConfirm: () => {},
     onCancel: () => {}
   });
@@ -1031,6 +1095,8 @@ function GameHostPage() {
     isRestoringState: setIsRestoringState,
     manualStateChange: setManualStateChange,
     gameDebugMode: setGameDebugMode,
+    surveyNames: setSurveyNames,
+    surveyWarnedAt: setSurveyWarnedAt,
   };
 
   // The game every in-flight async write is allowed to touch. Bumped
@@ -1052,6 +1118,8 @@ function GameHostPage() {
     // A failure banner carried into the next game would be a lie about it.
     setAiSummaryFailure(null);
     setAiRetrying(false);
+    // Same for a refused survey call: it was about the session being left.
+    setSurveyActionError('');
     aiQuestionRef.current = null;
     resetGameSession(gameSessionSetters, overrides);
   };
@@ -2033,6 +2101,42 @@ Focus on actionable business strategy insights.`;
       closeAllSidePanels();
     });
 
+    /*
+      A COLLECTING SURVEY'S THREE FRAMES (IMPLEMENTATION-phase-2.md §2
+      "Broadcasts"). `surveyProgress` goes to host sockets only and carries
+      counts only — the same payload as GET /survey/progress, so it is handed
+      straight to the hook, which ignores a frame older than what is on screen.
+      Every read goes through `surveyRef`: this effect registers once per game,
+      and the hook's callbacks as of that first render would be the wrong ones
+      to trust with a later session's state.
+    */
+    webSocketClient.onMessage('surveyProgress', (data) => {
+      surveyRef.current.applyProgress(data);
+      // The "Still going" list is up: re-read who, so a person who just
+      // finished leaves the wall while the host is looking at it.
+      if (surveyRevealOpenRef.current) surveyRef.current.loadPeople();
+    });
+
+    // Another of the host's devices sent the warning (or this one, echoed).
+    webSocketClient.onMessage('surveyClosingSoon', (data) => {
+      setSurveyWarnedAt((data && data.warnedAt) || new Date().toISOString());
+    });
+
+    // Closed — by this page's own POST, or by another device. The counts
+    // freeze on the wall either way; the frame carries n and finished only,
+    // so the per-question rows keep the last numbers they had.
+    webSocketClient.onMessage('surveyClosed', (data) => {
+      surveyRef.current.markClosed({
+        n: data && data.n, finished: data && data.finished, closedAt: data && data.closedAt,
+      });
+      // A refusal said earlier (say, this device's close racing another's)
+      // is about a survey that is now closed; it would only mislead.
+      setSurveyActionError('');
+      // Forward only: a frame delivered after the session ENDED (on this
+      // device or another) must not put the stage back on "closed".
+      setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
+    });
+
     // Connect as host - WebSocket is required
     console.log('🔌 HOST: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, null, true);
@@ -2066,6 +2170,9 @@ Focus on actionable business strategy insights.`;
       // that outlived its session and fired with a stale closure. Found by the
       // registered/removed symmetry test in __tests__/hostControls.test.js.
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('surveyProgress');
+      webSocketClient.offMessage('surveyClosingSoon');
+      webSocketClient.offMessage('surveyClosed');
     };
   }, [gameId, useWebSocket]);
 
@@ -2227,6 +2334,16 @@ Focus on actionable business strategy insights.`;
           setGamePersonaId(gameStateData.gameMetadata.personaId || '');
           // And the approach, for the same reason.
           setGamePromptId(gameStateData.gameMetadata.promptId || '');
+          /*
+            A SURVEY'S NAMES AND ITS WARNING, so a reload comes back up on the
+            promise the phones were given and still says the warning went out.
+            Read from the top level first and the metadata second: the contract
+            says get-game-state "carries names, openedAt, warnedAt" without
+            fixing which object they sit in. An unknown or absent value reads as
+            Anonymous — the value under which the wall offers no names at all.
+          */
+          setSurveyNames(namesMode(gameStateData.names ?? gameStateData.gameMetadata.names).id);
+          setSurveyWarnedAt(gameStateData.warnedAt ?? gameStateData.gameMetadata.warnedAt ?? null);
           const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           // The scope the SESSION pinned, not a fresh search. A session plays
           // one partition for its whole life; reloading the host screen must
@@ -4188,36 +4305,91 @@ Focus on actionable business strategy insights.`;
     console.log(`🔗 HOST: Continuing game ${selectedGameId} from history`);
   };
   
-  const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
+  /**
+   * START A SESSION AND PUT IT ON STAGE — the one caller of `POST /start`.
+   *
+   * It was `startGameFromHistory`'s body. Surveys phase 2 needed the same
+   * call from two more places — the create dialog's "Open the survey" and a
+   * survey lobby's own "Open the survey" — and for a survey `/start` IS the
+   * open (start-game.js writes STATE `SURVEY#OPEN`). One helper, so the three
+   * routes cannot start a session three different ways.
+   *
+   * Resolves `{ok: true}` once the session is on stage, or `{ok: false,
+   * error}` if the start was refused — `error` is the SERVER's sentence
+   * (utils/startRefusal.js), e.g. start-game.js's "Nothing to ask yet: this
+   * survey's question set has no questions in it…". The caller decides where
+   * the host reads it; nothing here reaches for alert().
+   */
+  const startSession = async (selectedGameId, selectedEventTitle, overrides = {}) => {
+    let response;
     try {
-      console.log(`🚀 HOST: Starting game ${selectedGameId} from history`);
-      
-      // Call start-game API
-      const response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
+      console.log(`🚀 HOST: Starting game ${selectedGameId}`);
+      response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
+    } catch (err) {
+      console.error('❌ Error starting game:', err);
+      return { ok: false, error: 'That did not reach the server. Check the connection and try again.' };
+    }
 
-      if (!response.ok) {
-        throw new Error(`Failed to start game: ${response.status} ${response.statusText}`);
-      }
+    if (!response.ok) {
+      const error = await readStartRefusal(response);
+      console.error(`❌ Start refused (${response.status}):`, error);
+      return { ok: false, error };
+    }
 
-      console.log(`✅ Game ${selectedGameId} started successfully from history`);
-      
+    try {
+      console.log(`✅ Game ${selectedGameId} started`);
+
       // Close modal and go to game screen
+      setHistoryNotice('');
       setShowReportsModal(false);
-      switchToGame(selectedGameId, { eventTitle: selectedEventTitle || 'Engagement Session' });
+      switchToGame(selectedGameId, {
+        eventTitle: selectedEventTitle || 'Engagement Session',
+        ...overrides,
+      });
 
       // Update URL to reflect the selected game
       const url = new URL(window.location);
       url.searchParams.set('gameId', selectedGameId);
-      url.searchParams.set('eventTitle', encodeURIComponent(selectedEventTitle));
+      url.searchParams.set('eventTitle', encodeURIComponent(selectedEventTitle || ''));
       window.history.replaceState(null, '', url);
-      
     } catch (err) {
-      console.error('❌ Error starting game from history:', err);
-      alert(`Failed to start game: ${err.message}`);
+      // The session DID start; only putting it on this screen failed. Saying
+      // it did not start would invite a second press of Start.
+      console.error('❌ Started, but could not load the stage:', err);
     }
+    return { ok: true };
+  };
+
+  const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
+    setHistoryNotice('');
+    const started = await startSession(selectedGameId, selectedEventTitle);
+    if (!started.ok) setHistoryNotice(`That session did not start: ${started.error}`);
+  };
+
+  /**
+   * CREATE → OPEN → THE COLLECTING STAGE, for a survey (IMPLEMENTATION-phase-2.md
+   * §5 risk 5). The dialog's button said "Open the survey", so the create is
+   * followed straight by the start, the way QuickstartMenu creates-and-starts;
+   * there is no history modal and no lobby to fill first, matching
+   * s-01-collecting, which draws none.
+   *
+   * If the start is refused the survey still EXISTS, unopened — so the host is
+   * shown it in history, where its Start button is, rather than left on a
+   * blank screen, with the server's reason on the list (never an alert()).
+   */
+  const openNewSurvey = async (newGameId, form) => {
+    const opened = await startSession(newGameId, form.title, {
+      currentGameType: 'survey',
+      selectedSetId: form.setId,
+    });
+    if (opened.ok) return;
+    setHistoryNotice(`The survey was created but did not open: ${opened.error}`);
+    await fetchGamesList();
+    setReportsModalMode('select');
+    setShowReportsModal(true);
   };
   
   /*
@@ -4405,10 +4577,14 @@ Focus on actionable business strategy insights.`;
         // Close new game dialog
         setShowNewGameDialog(false);
 
-        // Show game history with the new game highlighted
-        await fetchGamesList();
-        setReportsModalMode('select');
-        setShowReportsModal(true);
+        if (isSurveyType(form.gameType)) {
+          await openNewSurvey(newGameId, form);
+        } else {
+          // Show game history with the new game highlighted
+          await fetchGamesList();
+          setReportsModalMode('select');
+          setShowReportsModal(true);
+        }
 
         console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${form.setId}", title "${form.title}" - showing in history`);
       } else {
@@ -4670,13 +4846,16 @@ Focus on actionable business strategy insights.`;
     closeQuestionBrowser();
   };
 
-  // Function to show custom confirmation modal
-  const showConfirmation = (title, message, confirmText = 'Proceed') => {
+  // Function to show custom confirmation modal. `arrowConfirms: false` for an
+  // act that cannot be undone — → then cancels nothing and confirms nothing
+  // (components/ConfirmDialog.jsx).
+  const showConfirmation = (title, message, confirmText = 'Proceed', { arrowConfirms = true } = {}) => {
     return new Promise((resolve) => {
       setConfirmModalProps({
         title,
         message,
         confirmText,
+        arrowConfirms,
         onConfirm: () => {
           setShowConfirmModal(false);
           resolve(true);
@@ -4976,7 +5155,9 @@ Focus on actionable business strategy insights.`;
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
+            notice={historyNotice}
             onClose={() => {
+              setHistoryNotice('');
               setShowReportsModal(false);
               if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
                 setShowWelcomeScreen(true);
@@ -5073,6 +5254,16 @@ Focus on actionable business strategy insights.`;
   }
   const notesPage = clampPage(notesIndexRaw, notesPages);
 
+  /*
+    A SURVEY'S ROOM, in the three numbers the dock prints and the one the
+    meter does: finished · partway · not started, of everyone who joined.
+    null until the first /survey/progress read lands (hooks/useSurveyProgress.js).
+  */
+  const isSurvey = isSurveyType(currentGameType);
+  const surveyCounts = isSurvey
+    ? surveyRoomCounts({ progress: survey.progress, joined: players.length })
+    : null;
+
   const hostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
@@ -5082,6 +5273,7 @@ Focus on actionable business strategy insights.`;
     votedCount: playersWhoVoted.length,
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
+    survey: surveyCounts,
     notesPage,
     notesPages,
   });
@@ -5118,8 +5310,73 @@ Focus on actionable business strategy insights.`;
     pastRoundOpen: pastRoundIndex !== null,
   });
 
-  const runHostAction = (action) => {
+  /*
+    A SURVEY'S THREE HOST ACTS after the open — utils/surveyHostClient.js, each
+    through `authFetch` (every survey host route carries the Cognito
+    authorizer). A refusal is said in the dock, beside the button, and the
+    stage stays where the server says it is.
+  */
+
+  /**
+   * CLOSE — once the host has said yes. The ask is not here: it is the
+   * control's `confirm` (config/hostControls.js surveyCloseConfirm), which
+   * runHostAction honours before it dispatches, on every route to the control.
+   */
+  const closeSurveyNow = async () => {
+    const result = await closeSurvey({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (!result.ok) {
+      setSurveyActionError(`The survey did not close: ${result.error}`);
+      return;
+    }
+    setSurveyActionError('');
+    // closedAt orders what follows: a progress frame sent before the close
+    // and delivered after this POST cannot overwrite the frozen counts.
+    survey.markClosed({
+      n: result.n, finished: result.finished, perQuestion: result.perQuestion, closedAt: result.closedAt,
+    });
+    // Forward only — the session may have ENDED from another device while
+    // this POST was in flight.
+    setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
+  };
+
+  const warnSurveyNow = async () => {
+    const result = await warnSurvey({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (!result.ok) {
+      setSurveyActionError(`The warning did not go out: ${result.error}`);
+      return;
+    }
+    setSurveyActionError('');
+    setSurveyWarnedAt(result.warnedAt || new Date().toISOString());
+  };
+
+  const endSurveyNow = async () => {
+    const result = await endSurvey({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (!result.ok) {
+      setSurveyActionError(`The session did not end: ${result.error}`);
+      return;
+    }
+    setSurveyActionError('');
+    setGameState('ENDED');
+  };
+
+  const runHostAction = async (action) => {
     if (!action) return;
+    /*
+      A CONTROL THAT ASKS FIRST. config/hostControls.js marks an act that
+      cannot be undone with `confirm` — {title, message, confirmText,
+      irreversible} — and every route to a control comes through here: the
+      dock's button, SPACE and → (HostActionBar), auto-mode's timer. So asking
+      here is asking on every route, and no handler has to remember to. An
+      irreversible ask does not take → as yes: → is the key that pressed the
+      control, and a clicker sends it twice.
+    */
+    if (action.confirm) {
+      const ask = action.confirm;
+      const ok = await showConfirmation(ask.title, ask.message, ask.confirmText, {
+        arrowConfirms: !ask.irreversible,
+      });
+      if (!ok) return;
+    }
     // A page turn is a content move, not a round advance — it must not close
     // the panel the host is reading beside, nor unpin anything.
     if (action.intent !== HOST_INTENTS.PAGE) {
@@ -5169,6 +5426,23 @@ Focus on actionable business strategy insights.`;
         // the last screen of the session do nothing at all.
         generateReportForGame(gameId, eventTitle);
         break;
+      case HOST_INTENTS.OPEN_SURVEY:
+        // A survey still in CREATED — its create-time open was refused, or it
+        // was continued from history. The same /start the create path uses; a
+        // refusal is said in the dock, in the server's words, where the other
+        // survey acts say theirs.
+        startSession(gameId, eventTitle, { currentGameType: 'survey', selectedSetId })
+          .then((opened) => setSurveyActionError(opened.ok ? '' : `The survey did not open: ${opened.error}`));
+        break;
+      case HOST_INTENTS.CLOSE_SURVEY:
+        closeSurveyNow();
+        break;
+      case HOST_INTENTS.WARN_SURVEY:
+        warnSurveyNow();
+        break;
+      case HOST_INTENTS.END_SURVEY:
+        endSurveyNow();
+        break;
       case HOST_INTENTS.LEAVE:
         /*
           The same handler the settings panel's own control uses, deliberately.
@@ -5213,6 +5487,10 @@ Focus on actionable business strategy insights.`;
     // beats of one phase, and repainting the bar mid-round would say the round
     // had moved when it has not.
     RESULTS: 'results', FIELD_NOTES: 'results', FEEDBACK: 'results', ENDED: 'done',
+    // A survey: the room is answering (s-01 draws the ask band), then it is
+    // over. CLOSED takes the done band rather than results' green because
+    // phase 2 draws no results — the walk-through that will is phase 3's.
+    COLLECTING: 'ask', CLOSED: 'done',
   };
 
   /**
@@ -5245,6 +5523,21 @@ Focus on actionable business strategy insights.`;
       // The comments so far — the same count the stage prints — with the
       // arrivals beneath it (meterArrivals, below).
       return { heading: 'Comments', body: String(roundComments.length) };
+    }
+    /*
+      A SURVEY (s-01-collecting): FINISHED of joined — the one fraction — and
+      beneath it how far through the form the room is, a row per question.
+      The rows are a different fact from the fraction, which is why they
+      survive the rule that cut the mockup's `.bar2` (RoomMeter.jsx). After the
+      close the same numbers stay up, frozen. Before the first read lands the
+      numerator is a dash, not a zero nobody counted.
+    */
+    if (hostPhase === 'COLLECTING' || hostPhase === 'CLOSED') {
+      return {
+        heading: 'Finished',
+        body: <>{surveyCounts ? surveyCounts.finished : '–'}<small>{` / ${players.length}`}</small></>,
+        rows: surveyMeterRows({ progress: survey.progress, joined: players.length }),
+      };
     }
     // RESULTS, FIELD_NOTES and ENDED run solo. The mockup's standings column
     // is a list of names WITH A SCORE BESIDE EACH, which is the half of the
@@ -5315,6 +5608,18 @@ Focus on actionable business strategy insights.`;
         nameWaitingWhenAnonymous,
       });
     }
+    /*
+      A COLLECTING SURVEY: who is STILL GOING — partway or not started, never
+      the finished — fetched from /survey/people only when the host reveals
+      (surveyRosterHandlers below). In ANONYMOUS there are none, ever: the
+      server records no names, and surveyWaiting() hands the meter null so no
+      reveal is offered at all (RATIONALE.md §3, "Names stop at the console").
+      A separate gate from ASK/VOTE's on purpose: whether a survey may name
+      anyone is its Names value, fixed at open, not the round-anonymity rule.
+    */
+    if (hostPhase === 'COLLECTING') {
+      return namesMode(surveyNames).id === 'anonymous' ? null : stillGoingNames(survey.people);
+    }
     return null;
   })();
 
@@ -5344,9 +5649,31 @@ Focus on actionable business strategy insights.`;
      count unless it is handed both names and handlers, so a gated round — or
      a round everybody is already in — offers no affordance at all rather than
      a control that opens an empty list. */
-  const meterWaiting = revealNames && revealNames.length
-    ? { names: revealNames, mode: rosterReveal, ...rosterHandlers }
-    : null;
+  /*
+    A SURVEY'S REVEAL FETCHES AS IT OPENS. The meter knows how many are still
+    going from the counts, but not WHO until the host asks — so a preview or a
+    pin loads /survey/people (never in Anonymous; the hook refuses), and a
+    progress frame re-reads it while the list is up.
+  */
+  const surveyRosterHandlers = {
+    onPreview: () => { rosterHandlers.onPreview(); survey.loadPeople(); },
+    onPreviewEnd: rosterHandlers.onPreviewEnd,
+    onPin: () => { if (!rosterReveal) survey.loadPeople(); rosterHandlers.onPin(); },
+  };
+  surveyRevealOpenRef.current = hostPhase === 'COLLECTING' && Boolean(rosterReveal);
+  const meterWaiting = hostPhase === 'COLLECTING'
+    ? surveyWaiting({
+      names: surveyNames,
+      people: survey.people,
+      stillGoing: surveyCounts ? surveyCounts.joined - surveyCounts.finished : 0,
+      loading: survey.peopleLoading,
+      error: survey.peopleError,
+      mode: rosterReveal,
+      ...surveyRosterHandlers,
+    })
+    : (revealNames && revealNames.length
+      ? { names: revealNames, mode: rosterReveal, ...rosterHandlers }
+      : null);
 
   /**
    * THE ANSWER LIST, CUT INTO PAGES THE STAGE CAN ACTUALLY HOLD.
@@ -5501,9 +5828,12 @@ Focus on actionable business strategy insights.`;
   // has JOINED. Dropping the hint here lets dockStatus below fall through to
   // statusTextFor's "Waiting for players to join…", which is already keyed
   // off playerCount === 0 for this exact case.
-  const dockHint = hostControls.primary.disabled && hostPhase !== 'LOBBY' && players.length > 0
-    ? hostControls.primary.hint
-    : '';
+  // A refused survey call outranks the disabled-primary hint: it is about the
+  // button the host just pressed, and it is the only place it is said.
+  const dockHint = surveyActionError
+    || (hostControls.primary.disabled && hostPhase !== 'LOBBY' && players.length > 0
+      ? hostControls.primary.hint
+      : '');
   const dockKbd = !hostControls.primary.disabled && !anyOverlayOpen ? 'SPACE' : '';
 
   /**
@@ -5515,11 +5845,17 @@ Focus on actionable business strategy insights.`;
    * beside "Nobody has answered yet" — and of the pair the hint is the one
    * that also explains the greyed-out button.
    */
+  /* A collecting survey is "all in" when everyone in the room has FINISHED the
+     form — the meter's own fraction, flagged the way ASK's is (CompletionFlag).
+     roomIsComplete() answers false for every phase but ASK and VOTE, so the
+     two never both apply. */
+  const surveyAllIn = hostPhase === 'COLLECTING'
+    && Boolean(surveyCounts && surveyCounts.joined > 0 && surveyCounts.finished >= surveyCounts.joined);
   const everybodyIn = roomIsComplete({
     phase: hostPhase,
     responded: hostPhase === 'VOTE' ? playersWhoVoted.length : answeredCount,
     playerCount: players.length,
-  });
+  }) || surveyAllIn;
   const dockStatus = dockHint
     ? ''
     : (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
@@ -5531,7 +5867,13 @@ Focus on actionable business strategy insights.`;
       // primary is disabled the config's copy IS the explanation, so it stands.
       : (hostPhase === 'LOBBY' && !hostControls.primary.disabled)
         ? 'Ready when you are'
-        : hostControls.status.text;
+        /* A collecting survey's dock is s-01's "21 finished · 15 partway ·
+           6 not started" (hostControls' status), and says once the warning
+           has gone out — the button does not change, so this is where the
+           host sees that it worked. */
+        : (hostPhase === 'COLLECTING' && surveyWarnedAt
+          ? `${hostControls.status.text} · warning sent`
+          : hostControls.status.text);
 
   // Wavelength's two-beat reveal: beat one is a sentence, beat two a terms
   // flow of a different height, and the clustered upgrade can change the flow
@@ -5540,6 +5882,34 @@ Focus on actionable business strategy insights.`;
   // fit stageShell.test.jsx's composition window).
   const wavelengthFitKey = wavelengthAnalysis
     ? `${wavelengthAnalysis.matching}:${wavelengthAnalysis.clustering}:${wavelengthAnalysis.totalUniqueWords}`
+    : '';
+
+  /*
+    A SURVEY ON STAGE. The rail's context line cannot count rounds — a survey
+    has none, and `lessonNumber` is 0, which would print "Question 0" — so it
+    says what it is and how long: "Survey / 8 questions" (s-01). The count is
+    the progress payload's own question list once it lands, else the set's.
+    Its fit key: rows arriving, counts moving and names landing all change the
+    meter's height, which the fitter measures.
+  */
+  const surveyStage = hostPhase === 'COLLECTING' || hostPhase === 'CLOSED';
+  const surveyQuestionCount = (survey.progress && Array.isArray(survey.progress.perQuestion)
+    && survey.progress.perQuestion.length) || roundOf || 0;
+  const railContext = surveyStage
+    ? {
+      category: 'Survey',
+      detail: surveyQuestionCount
+        ? `${surveyQuestionCount} question${surveyQuestionCount === 1 ? '' : 's'}`
+        : undefined,
+    }
+    : {
+      category: currentQuestion?.field || currentQuestion?.category || undefined,
+      noun: getHostRoundNoun(),
+      round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
+      of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
+    };
+  const surveyFitKey = isSurvey && survey.progress
+    ? `${surveyQuestionCount}:${survey.progress.finished}:${survey.people ? survey.people.length : -1}`
     : '';
 
   return (
@@ -5588,20 +5958,15 @@ Focus on actionable business strategy insights.`;
           // FIELD_NOTES' own page: answerPage.page clamps to 0 there.
           stagePageIndex,
           loadingAIInsights, currentAIInsights ? 1 : 0,
-          wavelengthFitKey,
+          wavelengthFitKey, surveyFitKey,
         ].join('|')}
         rail={(
           <Rail
             phase={hostPhase}
             title={eventTitle || 'Engagements'}
-            context={{
-              category: currentQuestion?.field || currentQuestion?.category || undefined,
-              noun: getHostRoundNoun(),
-              round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
-              of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
-            }}
+            context={railContext}
             join={gameId
-              ? (hostPhase === 'ENDED'
+              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED'
                 ? { code: gameId, closed: true }
                 : {
                     url: joinDisplayUrl,
@@ -5618,6 +5983,7 @@ Focus on actionable business strategy insights.`;
             <RoomMeter
               phase={hostPhase} heading={meter.heading} body={meter.body}
               complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
+              rows={meter.rows}
             />
           )
           : null}
@@ -5770,6 +6136,32 @@ Focus on actionable business strategy insights.`;
                   </p>
                 )}
               </>
+            )}
+
+            {/* A SURVEY, COLLECTING — components/stage/SurveyCollecting.jsx
+                (s-01-collecting): the invitation, the Names promise, and the
+                lobby's own join block and QR, which stay up the whole time —
+                nobody is looking up, so the wall is the way in. No names are
+                handed to it at all. */}
+            {hostPhase === 'COLLECTING' && (
+              <SurveyCollecting
+                title={eventTitle}
+                questionCount={surveyQuestionCount}
+                names={surveyNames}
+                playUrl={playUrl}
+                joinUrl={joinDisplayUrl}
+                code={gameId}
+              />
+            )}
+            {/* …then CLOSED, and a survey's ENDED: counts only (phase 3 draws
+                the results). ENDED's own branch below is for the round types —
+                its podium ranks people, which a survey must never do. */}
+            {(hostPhase === 'CLOSED' || (hostPhase === 'ENDED' && isSurvey)) && (
+              <SurveyClosed
+                n={surveyCounts ? surveyCounts.started : null}
+                finished={surveyCounts ? surveyCounts.finished : null}
+                ended={hostPhase === 'ENDED'}
+              />
             )}
 
             {/* THE QUESTION — components/QuestionCard.jsx, the one card the
@@ -6302,7 +6694,7 @@ Focus on actionable business strategy insights.`;
                 conclusion, which nothing in the game state can supply yet
                 (that is plan 4/5's, with Field Notes) — so the hero is the
                 honest one we do have, and the roll-up sits beneath it. */}
-            {hostPhase === 'ENDED' && (
+            {hostPhase === 'ENDED' && !isSurvey && (
               <>
                 <div className="kicker">Session complete</div>
                 <h1 className="hero">
@@ -6621,6 +7013,7 @@ Focus on actionable business strategy insights.`;
           title={confirmModalProps.title}
           message={confirmModalProps.message}
           confirmText={confirmModalProps.confirmText}
+          arrowConfirms={confirmModalProps.arrowConfirms !== false}
           onConfirm={confirmModalProps.onConfirm}
           onCancel={confirmModalProps.onCancel}
         />

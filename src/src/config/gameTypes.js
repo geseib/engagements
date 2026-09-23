@@ -68,12 +68,13 @@ export const GAME_TYPES = {
     short: 'Survey',
     icon: 'ListChecks',
     accent: 'var(--secondary)',
-    // Records what the code DOES, which may not be what was intended: only
-    // trivia and wavelength skip voting, so a survey falls through and runs a
-    // vote phase. Arguably a survey should not — but changing that changes the
-    // game, so this table is corrected to reality and the question is flagged
-    // rather than silently answered here.
-    phases: ['ASK', 'VOTE', 'RESULTS'],
+    // A SESSION WITH NO ROUNDS (surveys phase 2). This used to read
+    // ASK → VOTE → RESULTS, recording what the code did to a survey by
+    // accident — it fell through handleFinishQuestion() into start-vote. A
+    // survey now collects at each person's own pace and is then closed:
+    // STATE SURVEY#OPEN → SURVEY#CLOSED, host phases COLLECTING → CLOSED
+    // (config/hostControls.js), and no vote, so hasVotePhase() is false.
+    phases: ['COLLECTING', 'CLOSED'],
     blurb: 'Structured multi-question feedback, reported in aggregate.',
     answerType: 'text',
     roundNoun: 'Question',
@@ -146,17 +147,14 @@ export const GAME_TYPE_LIST = Object.values(GAME_TYPES);
  * Types a host may NOT create, and why. One id per reason, so the fix is a
  * deletion rather than an edit.
  *
- * `survey` — since surveys phase 1 (docs/design/survey-redesign/) a survey set
- * CAN exist: the importer accepts the survey CSV and the old survey JSON, the
- * AI builder writes a draft survey set, and the editor edits one. What does not
- * exist yet is a session that PLAYS one — that is phase 2 (the player's five
- * question inputs, answer rows, the collecting stage). Until then the create
- * dialog must not offer Survey: its set dropdown would list survey sets that
- * open onto a session nothing can run. When phase 2 ships, delete the id from
- * this array and the option appears; the picker renders from GAME_TYPE_LIST,
- * so nothing else changes.
+ * EMPTY SINCE SURVEYS PHASE 2. `survey` sat here through phase 1, when a survey
+ * set could be made and edited but no session could play one; phase 2 is the
+ * session (the collecting stage, the phone's five inputs, the answer rows), so
+ * the id was deleted and the create dialog's pill appeared, exactly as this
+ * comment promised. The array, NOT_PLAYABLE_LABEL and notPlayableReason() stay
+ * for the next type that is authorable before it is playable.
  */
-export const UNPLAYABLE_GAME_TYPES = ['survey'];
+export const UNPLAYABLE_GAME_TYPES = [];
 
 /**
  * The types the create dialog offers today.
@@ -196,6 +194,5 @@ export const NOT_PLAYABLE_LABEL = 'Not playable';
  */
 export function notPlayableReason(type) {
   if (isPlayableGameType(type)) return '';
-  return 'A survey set can be made and edited here, but no session can run one yet — '
-    + 'running a survey in a live session is the next step being built.';
+  return `A ${gameTypeLabel(type)} set can be made and edited here, but no session can run one yet.`;
 }

@@ -186,8 +186,18 @@ describe('§7 derived blocks render from the real tables', () => {
     const text = document.body.textContent;
     expect(text).toContain('Call & Answer');
     expect(text).toContain('Wavelength');
-    // Survey is not playable, so it must not be offered as an option.
-    expect(text).not.toContain('Survey');
+    // Surveys phase 2: a session plays a survey now, so the guide lists it —
+    // with its real phases, which are not a round's.
+    expect(text).toContain('Survey');
+    expect(text).toContain('COLLECTING → CLOSED');
+  });
+
+  test('the question-sets guide no longer says a survey cannot be run', () => {
+    render(<HelpSystem section="admin-question-sets" onClose={() => {}} />);
+    const text = document.body.textContent;
+    expect(text).not.toMatch(/no session can run one yet/i);
+    expect(text).not.toMatch(/marked "Not playable"/i);
+    expect(text).toMatch(/Names/);
   });
 
   /*

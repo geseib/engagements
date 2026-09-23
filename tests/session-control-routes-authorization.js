@@ -93,6 +93,16 @@ const MUST_BE_CLOSED = [
   // — but it drives the same room, so it holds the same line.
   ['PUT', '/games/{gameId}/prompt'],
   ['POST', '/games/{gameId}/report'],
+  // A SURVEY'S HOST ROUTES (game/survey-host.js). Close and end move the room;
+  // the warning speaks to every phone; progress and people read who has and
+  // has not answered. The two GETs are the ones the generic "GET + games is
+  // public" rule would hand to any account in the pool — so authorizer.js
+  // names them explicitly, and §3 below holds that it does.
+  ['POST', '/games/{gameId}/survey/close'],
+  ['POST', '/games/{gameId}/survey/warning'],
+  ['POST', '/games/{gameId}/survey/end'],
+  ['GET', '/games/{gameId}/survey/progress'],
+  ['GET', '/games/{gameId}/survey/people'],
   // The stored report. It was on the list below as a participant read; it is
   // not one — `?role=host` returned the whole room (tests/get-report-authorization.js).
   ['GET', '/games/{gameId}/report'],
@@ -112,6 +122,11 @@ const MUST_STAY_OPEN = [
   ['POST', '/games/get-results'],
   ['GET', '/games/{gameId}/ai-summary'],
   ['POST', '/games/{gameId}/players/{playerName}/handover-request'],
+  // A phone answering a survey (game/survey-answers.js). No token, ever.
+  ['GET', '/games/{gameId}/survey'],
+  ['PUT', '/games/{gameId}/survey/answers'],
+  ['POST', '/games/{gameId}/survey/submit'],
+  ['POST', '/games/{gameId}/survey/mine'],
 ];
 
 const routes = routesFromTemplate();
@@ -161,6 +176,20 @@ for (const bare of [
   check(`POST ${bare} is not public`, () =>
     assert.notDeepStrictEqual(requiredGroupsForRoute('POST', bare), [],
       'the concrete path fell through to the public rule'));
+}
+
+// The survey host GETs, by concrete path — the `rawPath` fallback — where the
+// generic rule would read `GET` + `games` and return PUBLIC.
+console.log('\n   and the survey host reads are not public by their concrete path');
+for (const bare of ['games/1234/survey/people', 'games/1234/survey/progress']) {
+  check(`GET ${bare} requires hosts or admins`, () =>
+    assert.deepStrictEqual(requiredGroupsForRoute('GET', bare), ['hosts', 'admins'],
+      `got ${JSON.stringify(requiredGroupsForRoute('GET', bare))} — any signed-in account could list who finished`));
+}
+// ...and the phone's own survey read stays public, template and concrete alike.
+for (const p of ['games/{gameId}/survey', 'games/1234/survey']) {
+  check(`GET ${p} stays public`, () =>
+    assert.deepStrictEqual(requiredGroupsForRoute('GET', p), []));
 }
 
 // ---------- 4. The client half ----------

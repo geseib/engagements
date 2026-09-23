@@ -1,0 +1,621 @@
+/**
+ * A PHONE ANSWERING A SURVEY.
+ *
+ *     GET  /games/{gameId}/survey          the questions, and where the survey is
+ *     PUT  /games/{gameId}/survey/answers  one answer: {qid, value}, autosaved
+ *     POST /games/{gameId}/survey/submit   Send — marks this person's row complete
+ *     POST /games/{gameId}/survey/mine     this person's own answers back (resume,
+ *                                          while the survey is open)
+ *
+ * docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2 is the contract.
+ *
+ * ── PUBLIC, LIKE THE VOTE AND THE COMMENT ──────────────────────────────────
+ *
+ * Participants hold no Cognito identity, so these routes carry no authorizer
+ * (comments.js's header argues it at length). The gate is not "who are you"
+ * but "is this room collecting right now": STATE must be SURVEY#OPEN, and the
+ * write itself re-checks that in the same transaction (see the PUT below). The
+ * organisation comes off METADATA, never off the caller.
+ *
+ * `mine` IS A POST, not a GET: it carries a respondent id or a clientId, and
+ * both are CAPABILITIES — what proves a row is yours — that must stay out of
+ * URLs and access logs (the precedent is POST /games/get-results).
+ *
+ * ── WHOSE ROW: NAMES DECIDES, THE SERVER DERIVES ───────────────────────────
+ *
+ * The key is worked out here from METADATA.Names and never taken from the body:
+ *
+ *   anonymous  SURVEY#RESP#<respondentId> — `r_` + 22 base64url the PHONE made
+ *              (128 bits) and keeps; never derived from the clientId, never a
+ *              name. Nothing on the row says who it is.
+ *   finished   the same row, plus SURVEY#DONE#<player> — a name and
+ *              started/finished, with no respondent id — so writes also bring
+ *              the player, checked against their own browser.
+ *   named      SURVEY#RESP#<player name>, checked by the player's clientId:
+ *              PLAYER#<name>.ClientId must be the caller's (a legacy row with no
+ *              ClientId is accepted, as join-game.js accepts it). After a host
+ *              handover the new browser's clientId is the one on the player row,
+ *              so it reaches the same answers and the old browser does not.
+ *
+ * ── NO TIMESTAMPS WHERE A NAME IS NOT WRITTEN ─────────────────────────────
+ *
+ * In Anonymous and Who finished the answer row carries no UpdatedAt, no
+ * StartedAt — a time on it would line up with DONE.FinishedAt and put a name
+ * back on the answers (§5.2). Only Named, which writes the name anyway, keeps
+ * StartedAt and CompletedAt. And nothing here logs a respondent id beside a
+ * player name.
+ *
+ * ── THE PUT ───────────────────────────────────────────────────────────────
+ *
+ * Read METADATA+STATE → check the value against its question → read the row
+ * strongly, open it, set one key, seal it → ONE TransactWriteItems: a
+ * ConditionCheck that STATE is still SURVEY#OPEN, beside the Put conditioned on
+ * the row's Rev (optimistic lock). The ConditionCheck is what makes close
+ * final: an answer that read "open" and lands after the close fails whole,
+ * rather than sitting in the row after the results were frozen without it.
+ * Then: DONE "started" for a first answer in Who finished; the billing counter
+ * (a survey bills at its second distinct answered question — session-count.js,
+ * the game/ copy); and, only when WHO has answered WHAT changed, the counts to
+ * the host's screens.
+ *
+ * ── WHAT A FAILED WRITE MEANS, AND WHAT THE PHONE IS TOLD ──────────────────
+ *
+ * The transaction can be refused three ways, and only one is about the survey:
+ *
+ *   STATE's check failed       the survey closed      409 SURVEY_CLOSED / NOT_OPEN
+ *   the Rev check failed       this person's row moved under us (another tab,
+ *                              a retried save): re-read and go again, three
+ *                              times, then 503 {code:'CONFLICT'}
+ *   TransactionConflict        another answer's transaction held STATE — a
+ *                              room answering together. DynamoDB locks every
+ *                              item in a transaction, the ConditionCheck's
+ *                              included, so this is ordinary, not an error:
+ *                              jittered backoff for the survey-retry.js budget
+ *                              (eight tries, eight seconds), then 503
+ *                              {code:'BUSY'}
+ *   throttled                  the partition's write rate is spent — every
+ *                              answer in the session writes GAME#<id>, so a
+ *                              big room reaches it (ThrottlingException, or a
+ *                              cancellation reason ThrottlingError). Busy, the
+ *                              same budget, the same 503.
+ *
+ * 409 is kept for the first: a phone reads 409 as a fact about the survey
+ * ("closed", "not open yet") and stops. Everything retryable is a 503, which
+ * the phone retries — a throttled READ included, which the handler's catch
+ * answers BUSY rather than 500.
+ */
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const {
+  DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand,
+} = require('@aws-sdk/lib-dynamodb');
+
+const { normalizeNames, SURVEY_OPEN, SURVEY_CLOSED } = require('./survey-names');
+const { loadSurveyQuestions, toWire } = require('./survey-questions');
+const { checkAnswer } = require('./survey-answer');
+const { toHosts } = require('./survey-broadcast');
+const {
+  RESP_PREFIX, DONE_PREFIX, RESPONDENT_ID,
+  isSurvey, sessionOf, orgOf, readSession, progressFor, respond,
+} = require('./survey-rows');
+const { encryptItem, decryptItem, decryptValue } = require('./tenant-crypto');
+const { countAnsweredQuestion } = require('./session-count');
+const retry = require('./survey-retry');
+
+const client = new DynamoDBClient({});
+const db = DynamoDBDocumentClient.from(client, { marshallOptions: { removeUndefinedValues: true } });
+const TABLE = () => process.env.TABLE_NAME;
+
+/** Rev lost this many times in a row → 503 CONFLICT. (Busy has its own, larger budget.) */
+const MAX_TRIES = 3;
+
+/** A refusal the phone can act on: `code` is for the client, `error` for a person. */
+const refuse = (statusCode, code, error, extra = {}) => respond(statusCode, { error, code, ...extra });
+
+const notFound = () => respond(404, { error: 'Survey not found' });
+
+/** Retryable, and said so: the phone tries again on a 503 by itself. */
+const busy = () => refuse(503, 'BUSY', 'Lots of answers are arriving at once. Trying again.');
+const conflict = () => refuse(503, 'CONFLICT', 'Another save for this person landed at the same moment. Trying again.');
+
+/**
+ * Is the room collecting? `null` when it is; otherwise the response.
+ * CREATED is "not open yet", CLOSED/ENDED "closed" — two sentences a phone
+ * shows differently.
+ */
+function collectingOr(state) {
+  const s = state && state.State;
+  if (s === SURVEY_OPEN) return null;
+  if (s === SURVEY_CLOSED || s === 'ENDED') {
+    return refuse(409, 'SURVEY_CLOSED', 'This survey has closed.', { state: s });
+  }
+  return refuse(409, 'NOT_OPEN', 'This survey is not open yet.', { state: s || null });
+}
+
+/** Has the survey been opened at all (anything after CREATED)? */
+const opened = (state) => Boolean(state && state.State && state.State !== 'CREATED');
+
+/** `{name, clientId}` off the body, or nulls. The name is used exactly as joined. */
+function playerOf(body) {
+  const p = body && body.player && typeof body.player === 'object' ? body.player : {};
+  const name = typeof p.name === 'string' && p.name.trim() ? p.name : null;
+  const clientId = typeof p.clientId === 'string' && p.clientId.trim() ? p.clientId.trim() : null;
+  return { name, clientId };
+}
+
+/**
+ * Is this browser the player it says it is? The PLAYER row's ClientId is the
+ * proof (join-game.js stamps it; a handover moves it). A legacy row with no
+ * ClientId is accepted, as join accepts it.
+ *
+ * STRONGLY read: a handover rewrites ClientId, and the new browser's first
+ * save follows within the second. An eventually-consistent read can still
+ * see the old ClientId then — refusing the person who now holds the name and
+ * accepting the browser they just left.
+ */
+async function isThatPlayer(gameId, { name, clientId }) {
+  if (!name) return false;
+  const res = await db.send(new GetCommand({
+    TableName: TABLE(),
+    Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${name}` },
+    ConsistentRead: true,
+    ProjectionExpression: '#cid',
+    ExpressionAttributeNames: { '#cid': 'ClientId' },
+  }));
+  const item = res && res.Item;
+  if (!item) return false;
+  if (!item.ClientId) return true;
+  return Boolean(clientId) && item.ClientId === clientId;
+}
+
+/**
+ * Whose row this request is about — `{ key, name?, doneName? }` — or a
+ * response. `forWrite` asks for the player in Who finished (the DONE list is
+ * written); reading your own row back needs only the respondent id.
+ */
+async function respondentFor(gameId, names, body, { forWrite }) {
+  const player = playerOf(body);
+  if (names === 'named') {
+    if (!player.name) return { response: refuse(400, 'BAD_PLAYER', 'This survey keeps names: send player {name, clientId}.') };
+    if (!(await isThatPlayer(gameId, player))) {
+      return { response: refuse(403, 'NOT_YOU', 'These answers belong to someone else in this session.') };
+    }
+    return { key: player.name, name: player.name };
+  }
+  const rid = body && body.respondentId;
+  if (typeof rid !== 'string' || !RESPONDENT_ID.test(rid)) {
+    return { response: refuse(400, 'BAD_RESPONDENT', 'respondentId must be r_ followed by 22 letters, digits, - or _.') };
+  }
+  if (names === 'finished' && forWrite) {
+    if (!player.name) return { response: refuse(400, 'BAD_PLAYER', 'This survey lists who finished: send player {name, clientId}.') };
+    if (!(await isThatPlayer(gameId, player))) {
+      return { response: refuse(403, 'NOT_YOU', 'That name belongs to someone else in this session.') };
+    }
+    return { key: rid, doneName: player.name };
+  }
+  return { key: rid };
+}
+
+const respKey = (gameId, key) => ({ PK: `GAME#${gameId}`, SK: `${RESP_PREFIX}${key}` });
+
+/** The stored row for this person in THIS session, opened; null when there is none. */
+async function readOwnRow(gameId, key, meta) {
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: respKey(gameId, key), ConsistentRead: true }));
+  const raw = res && res.Item;
+  if (!raw) return { raw: null, current: null };
+  // A row from a previous session on this code is not this person's: it is
+  // overwritten, never read back or added to.
+  if (raw.Session !== sessionOf(meta)) return { raw, current: null };
+  const orgId = orgOf(meta);
+  const current = orgId ? await decryptItem(orgId, 'surveyResponse', raw) : raw;
+  return { raw, current };
+}
+
+/** The qids answered, in the survey's own order. */
+const answeredIn = (questions, answers) => questions.filter((q) => answers[q.qid] !== undefined).map((q) => q.qid);
+
+/** The session's started ttl, as startSession wrote it — the only writer of one. */
+const rowTtl = (meta, state) => (state && state.ttl) || (meta && meta.ttl) || undefined;
+
+/**
+ * Write one version of a person's row, but only while the survey is open and
+ * only over the version that was read. Returns 'ok' | 'closed' | 'stale' |
+ * 'busy' (see "What a failed write means" in the header).
+ */
+async function writeRow(gameId, meta, raw, item) {
+  const orgId = orgOf(meta);
+  const sealed = orgId ? await encryptItem(orgId, 'surveyResponse', item) : item;
+  try {
+    await db.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: TABLE(),
+            Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+            ConditionExpression: '#state = :open',
+            ExpressionAttributeNames: { '#state': 'State' },
+            ExpressionAttributeValues: { ':open': SURVEY_OPEN },
+          },
+        },
+        {
+          Put: {
+            TableName: TABLE(),
+            Item: sealed,
+            ConditionExpression: 'attribute_not_exists(PK) OR #rev = :rev',
+            ExpressionAttributeNames: { '#rev': 'Rev' },
+            ExpressionAttributeValues: { ':rev': raw ? raw.Rev : 0 },
+          },
+        },
+      ],
+    }));
+    return 'ok';
+  } catch (err) {
+    if (err && err.name === 'TransactionCanceledException') {
+      const codes = (err.CancellationReasons || []).map((r) => r && r.Code);
+      if (codes[0] === 'ConditionalCheckFailed') return 'closed';
+      if (codes[1] === 'ConditionalCheckFailed') return 'stale';
+    }
+    // A conflict on STATE, or the partition's throughput spent: again, later.
+    if (retry.isBusyError(err)) return 'busy';
+    throw err;
+  }
+}
+
+/**
+ * Read this person's row, let `build` decide the next version, write it —
+ * again, as often as the budgets allow, while the write is refused for a
+ * reason that goes away (a stale Rev, a busy STATE).
+ *
+ * `build(raw, current, now)` returns `{ item }` to write, `{ response }` to
+ * answer without writing, or `{}` when there is nothing to write. The result
+ * is what `build` last returned, or `{ response }` when the write could not
+ * be made.
+ */
+async function saveOwnRow(gameId, meta, key, build) {
+  let stale = 0;
+  let busyTries = 0;
+  const startedAt = Date.now();
+  for (;;) {
+    const { raw, current } = await readOwnRow(gameId, key, meta);
+    const plan = build(raw, current, new Date().toISOString());
+    if (plan.response || !plan.item) return plan;
+    const outcome = await writeRow(gameId, meta, raw, plan.item);
+    if (outcome === 'ok') return plan;
+    if (outcome === 'closed') return { response: collectingOr({ State: SURVEY_CLOSED }) };
+    if (outcome === 'stale') {
+      stale += 1;
+      if (stale >= MAX_TRIES) return { response: conflict() };
+      continue;
+    }
+    busyTries += 1;
+    if (!retry.mayRetry(busyTries, startedAt)) {
+      console.warn(`⚠️ SURVEY: an answer write stayed busy for ${busyTries} tries — answering 503 BUSY`);
+      return { response: busy() };
+    }
+    await retry.pause(busyTries);
+  }
+}
+
+/** The fields every version of a person's row carries, whatever else changes. */
+function baseRow(gameId, who, meta, state, raw, current, now) {
+  const item = {
+    ...respKey(gameId, who.key),
+    Rev: (raw && Number(raw.Rev)) ? Number(raw.Rev) + 1 : 1,
+    Session: sessionOf(meta),
+    ttl: rowTtl(meta, state),
+  };
+  // NAMED ONLY: the name, and when they started and sent. In the other two
+  // modes a time on this row would re-link it to a name (see the header).
+  if (who.name) {
+    item.Name = who.name;
+    item.StartedAt = (current && current.StartedAt) || now;
+    if (current && current.CompletedAt) item.CompletedAt = current.CompletedAt;
+  }
+  return item;
+}
+
+/**
+ * The counts to the host's screens. NEVER THROWS, like the broadcast itself
+ * (survey-broadcast.js): by now the answer is written, and a count read that
+ * was throttled must not tell the phone its answer was lost. The wall catches
+ * up on the next answer that moves it.
+ */
+async function announceProgress(gameId, meta, questions) {
+  try {
+    const payload = await progressFor(db, TABLE(), gameId, meta, questions);
+    await toHosts(db, TABLE(), gameId, { type: 'surveyProgress', ...payload });
+  } catch (err) {
+    console.error('⚠️ SURVEY: the host was not sent the new counts (the answer is saved):', err && err.name);
+  }
+}
+
+/** Who finished: the first answer puts the name on the list as "started". */
+async function markStarted(gameId, meta, state, name) {
+  try {
+    await db.send(new PutCommand({
+      TableName: TABLE(),
+      Item: {
+        PK: `GAME#${gameId}`, SK: `${DONE_PREFIX}${name}`,
+        Name: name, Status: 'started', Session: sessionOf(meta), ttl: rowTtl(meta, state),
+      },
+      // Never over "finished", and never over this session's own row — but a
+      // previous session's row on the same code is fair to replace.
+      ConditionExpression: 'attribute_not_exists(PK) OR #session <> :session',
+      ExpressionAttributeNames: { '#session': 'Session' },
+      ExpressionAttributeValues: { ':session': sessionOf(meta) },
+    }));
+  } catch (err) {
+    if (!err || err.name !== 'ConditionalCheckFailedException') {
+      console.error('⚠️ SURVEY: could not mark a respondent started (continuing):', err && err.message);
+    }
+  }
+}
+
+/**
+ * Who finished: Send puts the name on the list as "finished". An idempotent
+ * upsert — over nothing, over "started", over a previous session's row on the
+ * same code — that leaves this session's "finished" (and its FinishedAt)
+ * alone. Returns whether it changed anything; THROWS on any other failure,
+ * because the caller must not report a Send whose name did not move.
+ */
+async function markFinished(gameId, meta, state, name) {
+  try {
+    await db.send(new PutCommand({
+      TableName: TABLE(),
+      Item: {
+        PK: `GAME#${gameId}`, SK: `${DONE_PREFIX}${name}`,
+        Name: name, Status: 'finished', FinishedAt: new Date().toISOString(),
+        Session: sessionOf(meta), ttl: rowTtl(meta, state),
+      },
+      ConditionExpression: 'attribute_not_exists(PK) OR #session <> :session OR #status <> :finished',
+      ExpressionAttributeNames: { '#session': 'Session', '#status': 'Status' },
+      ExpressionAttributeValues: { ':session': sessionOf(meta), ':finished': 'finished' },
+    }));
+    return true;
+  } catch (err) {
+    if (err && err.name === 'ConditionalCheckFailedException') return false;
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────── GET ───────────
+
+/**
+ * The session's name as the host sees it, for the phone's bar. `Title` is
+ * ciphertext at rest on an org's session (ENCRYPTED_FIELDS.session) and is
+ * opened with the SESSION's org, off METADATA, as get-game.js does on this same
+ * unauthenticated path. '' when there is none — and when it cannot be opened:
+ * it names the bar, and a survey that will not load over its title is worse
+ * than a bar with no name.
+ */
+async function sessionTitle(meta) {
+  const orgId = orgOf(meta);
+  try {
+    const title = orgId ? await decryptValue(orgId, meta.Title) : meta.Title;
+    return typeof title === 'string' ? title : '';
+  } catch (err) {
+    console.error('⚠️ SURVEY: could not open the session title (sending none):', err && err.message);
+    return '';
+  }
+}
+
+async function getSurvey(gameId) {
+  const { meta, state } = await readSession(db, TABLE(), gameId);
+  if (!isSurvey(meta)) return notFound();
+  if (!opened(state)) return refuse(409, 'NOT_OPEN', 'This survey is not open yet.', { state: (state && state.State) || null });
+  const { questions } = await loadSurveyQuestions(db, TABLE(), meta);
+  return respond(200, {
+    gameId,
+    title: await sessionTitle(meta),
+    state: state.State,
+    names: normalizeNames(meta.Names),
+    openedAt: meta.OpenedAt || null,
+    warnedAt: state.WarnedAt || null,
+    questions: questions.map(toWire),
+  });
+}
+
+// ─────────────────────────────────────────────────────────── PUT ───────────
+
+async function putAnswer(gameId, body) {
+  const { meta, state } = await readSession(db, TABLE(), gameId);
+  if (!isSurvey(meta)) return notFound();
+  const gate = collectingOr(state);
+  if (gate) return gate;
+
+  const names = normalizeNames(meta.Names);
+  const who = await respondentFor(gameId, names, body, { forWrite: true });
+  if (who.response) return who.response;
+
+  const { questions } = await loadSurveyQuestions(db, TABLE(), meta);
+  const qid = typeof body.qid === 'string' ? body.qid : '';
+  const question = questions.find((q) => q.qid === qid);
+  if (!question) return refuse(400, 'BAD_QID', 'That question is not in this survey.');
+  if (!Object.prototype.hasOwnProperty.call(body, 'value')) {
+    return refuse(400, 'BAD_VALUE', 'value is required — send null to clear an answer.');
+  }
+  const checked = checkAnswer(question, body.value);
+  if (!checked.ok) return refuse(400, 'BAD_VALUE', checked.error);
+
+  const saved = await saveOwnRow(gameId, meta, who.key, (raw, current, now) => {
+    // Clearing an answer nobody has given is nothing to write: no empty row,
+    // no "started" on the wall, no DONE entry for a person who answered nothing.
+    if (checked.value === null && !current) {
+      return { response: respond(200, { qid, saved: true, rev: 0, answered: 0, complete: false }) };
+    }
+    const answers = { ...((current && current.Answers) || {}) };
+    if (checked.value === null) delete answers[qid];
+    else answers[qid] = checked.value;
+    const before = {
+      answered: (current && Array.isArray(current.Answered)) ? current.Answered : [],
+      complete: Boolean(current && current.Complete === true),
+      isNew: !current,
+    };
+    return {
+      before,
+      item: {
+        ...baseRow(gameId, who, meta, state, raw, current, now),
+        Answers: answers,
+        Answered: answeredIn(questions, answers),
+        // ONCE SENT, FINISHED. A person who pressed Send has finished even if
+        // they later clear an answer — a required one included; `Complete`
+        // is only ever set here from what the row already says. (Clearing
+        // EVERY answer after Send leaves a row that counts in Finished and
+        // not in N; that is the person's own doing, and accepted.)
+        Complete: before.complete,
+      },
+    };
+  });
+  if (saved.response) return saved.response;
+  const { before, item } = saved;
+
+  if (who.doneName && before.isNew) await markStarted(gameId, meta, state, who.doneName);
+  if (checked.value !== null) await countAnsweredQuestion(db, TABLE(), gameId, qid, meta);
+  const changed = before.isNew
+    || before.complete !== item.Complete
+    || before.answered.join('|') !== item.Answered.join('|');
+  if (changed) await announceProgress(gameId, meta, questions);
+
+  return respond(200, { qid, saved: true, rev: item.Rev, answered: item.Answered.length, complete: item.Complete });
+}
+
+// ───────────────────────────────────────────────────────── submit ──────────
+
+/**
+ * Send. Marks this person's row complete, and in Who finished moves their name
+ * to "finished".
+ *
+ *   - Nothing answered at all: 422 {code:'NOTHING_ANSWERED', missing: every
+ *     required qid}. A Send with no answers would count in Finished and not in
+ *     N — a finished person who said nothing.
+ *   - A required question unanswered: 422 {code:'MISSING', missing}.
+ *   - ALREADY SENT: nothing to write on the row, and a 200 — a person who sent
+ *     has finished (the PUT never takes `Complete` back). But the DONE write
+ *     below still runs: sending again is exactly how a phone retries a Send
+ *     whose DONE write failed, and skipping it there is what used to leave a
+ *     name "partway" for good.
+ *
+ * The DONE write is an idempotent upsert that reports whether it changed
+ * anything; if it FAILS the answer is 503 BUSY, never a quiet 200, so the phone
+ * sends again. The host hears about it whenever either write changed something.
+ */
+async function submit(gameId, body) {
+  const { meta, state } = await readSession(db, TABLE(), gameId);
+  if (!isSurvey(meta)) return notFound();
+  const gate = collectingOr(state);
+  if (gate) return gate;
+
+  const names = normalizeNames(meta.Names);
+  const who = await respondentFor(gameId, names, body, { forWrite: true });
+  if (who.response) return who.response;
+  const { questions } = await loadSurveyQuestions(db, TABLE(), meta);
+
+  const saved = await saveOwnRow(gameId, meta, who.key, (raw, current, now) => {
+    if (current && current.Complete === true) return { wasComplete: true, row: current };
+    const answers = (current && current.Answers) || {};
+    const answered = answeredIn(questions, answers);
+    if (!answered.length) {
+      const required = questions.filter((q) => q.required).map((q) => q.qid);
+      return { response: respond(422, { error: 'Nothing has been answered yet.', code: 'NOTHING_ANSWERED', missing: required }) };
+    }
+    const missing = questions.filter((q) => q.required && answers[q.qid] === undefined).map((q) => q.qid);
+    if (missing.length) {
+      return { response: respond(422, { error: 'Some required questions have no answer yet.', code: 'MISSING', missing }) };
+    }
+    return {
+      wasComplete: false,
+      item: {
+        ...baseRow(gameId, who, meta, state, raw, current, now),
+        Answers: answers,
+        Answered: answered,
+        Complete: true,
+        ...(who.name ? { CompletedAt: now } : {}),
+      },
+    };
+  });
+  if (saved.response) return saved.response;
+  const sentRow = saved.item || saved.row;
+
+  let doneChanged = false;
+  if (who.doneName) {
+    try {
+      doneChanged = await markFinished(gameId, meta, state, who.doneName);
+    } catch (err) {
+      // The row IS complete; only the name list lags. Say so as a retryable
+      // failure — the phone's next Send lands here again and finishes it.
+      console.error('⚠️ SURVEY: Send saved the answers but not the finished list:', err && err.message);
+      return refuse(503, 'BUSY', 'Your answers are sent, but the list of who finished did not update. Trying again.');
+    }
+  }
+  if (!saved.wasComplete || doneChanged) await announceProgress(gameId, meta, questions);
+  return respond(200, { complete: true, answered: (sentRow.Answered || []).length });
+}
+
+// ──────────────────────────────────────────────────────────── mine ──────────
+
+async function mine(gameId, body) {
+  const { meta, state } = await readSession(db, TABLE(), gameId);
+  if (!isSurvey(meta)) return notFound();
+  // Resume is for a survey still collecting: once it has closed a phone is
+  // told so (409, as the PUT and Send are), not handed answers to edit.
+  const gate = collectingOr(state);
+  if (gate) return gate;
+  const names = normalizeNames(meta.Names);
+  const who = await respondentFor(gameId, names, body, { forWrite: false });
+  if (who.response) return who.response;
+  const { current } = await readOwnRow(gameId, who.key, meta);
+  if (!current) return respond(404, { error: 'No answers yet.', code: 'NO_ROW' });
+  return respond(200, {
+    answers: current.Answers || {},
+    answered: Array.isArray(current.Answered) ? current.Answered : [],
+    complete: current.Complete === true,
+    rev: Number(current.Rev) || 0,
+  });
+}
+
+// ───────────────────────────────────────────────────────── handler ─────────
+
+/** 'get' | 'answers' | 'submit' | 'mine' | null, from the route template (or the path). */
+function routeOf(event) {
+  const method = event.requestContext?.http?.method || event.httpMethod || '';
+  const key = event.requestContext?.routeKey || event.routeKey || '';
+  const p = key ? key.split(' ')[1] || '' : (event.rawPath || event.path || '');
+  if (method === 'GET' && /\/survey$/.test(p)) return 'get';
+  if (method === 'PUT' && /\/survey\/answers$/.test(p)) return 'answers';
+  if (method === 'POST' && /\/survey\/submit$/.test(p)) return 'submit';
+  if (method === 'POST' && /\/survey\/mine$/.test(p)) return 'mine';
+  return null;
+}
+
+exports.handler = async (event) => {
+  const method = event.requestContext?.http?.method || event.httpMethod;
+  if (method === 'OPTIONS') return respond(200, {});
+
+  const { gameId } = event.pathParameters || {};
+  if (!gameId) return respond(400, { error: 'gameId is required' });
+
+  const route = routeOf(event);
+  if (!route) return respond(404, { error: 'Not found' });
+
+  try {
+    if (route === 'get') return await getSurvey(gameId);
+    let body = {};
+    try {
+      body = JSON.parse(event.body || '{}') || {};
+    } catch {
+      return respond(400, { error: 'Body must be JSON' });
+    }
+    if (typeof body !== 'object' || Array.isArray(body)) return respond(400, { error: 'Body must be a JSON object' });
+    if (route === 'answers') return await putAnswer(gameId, body);
+    if (route === 'submit') return await submit(gameId, body);
+    return await mine(gameId, body);
+  } catch (error) {
+    // Refused because a transaction held the item, or throttled — a read
+    // included: busy, not broken. The phone tries again on a 503.
+    if (retry.isBusyError(error)) {
+      console.warn('⚠️ SURVEY: busy past the retry budget — answering 503 BUSY:', error.name);
+      return busy();
+    }
+    console.error('❌ SURVEY: error:', error);
+    return respond(500, { error: 'Failed to handle the survey request' });
+  }
+};

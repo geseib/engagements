@@ -153,3 +153,52 @@ describe('the host page carries the set\'s scope, not just its id', () => {
     expect(host).toMatch(/fetchQuestionSetInstruction\(form\.setId, form\.setScope\)/);
   });
 });
+
+/**
+ * A SURVEY IS CREATED AND OPENED IN ONE PRESS (IMPLEMENTATION-phase-2.md §5
+ * risk 5). The dialog's button says "Open the survey", so the create call is
+ * followed by POST /start and the host lands on the collecting stage — the
+ * QuickstartMenu precedent. Every other type still goes create → history →
+ * Start, because a lobby that fills before the first round is their design;
+ * a survey has no lobby worth waiting in (s-01-collecting draws none).
+ */
+describe('a survey create opens the survey, with no history modal in between', () => {
+  const bodyOf = (name) => {
+    const start = host.indexOf(`const ${name} = async`);
+    expect(start).toBeGreaterThan(-1);
+    return host.slice(start, host.indexOf('\n  };', start));
+  };
+
+  test('handleStartNewGame sends a survey down its own path', () => {
+    const body = bodyOf('handleStartNewGame');
+    const branch = body.match(/if \(isSurveyType\(form\.gameType\)\) \{([\s\S]*?)\} else \{([\s\S]*?)\n {8}\}/);
+    expect(branch).not.toBeNull();
+    const [, surveyPath, otherPath] = branch;
+    expect(surveyPath).toMatch(/openNewSurvey\(newGameId, form\)/);
+    // rejects: the survey path falling through to the history modal.
+    expect(surveyPath).not.toMatch(/setShowReportsModal\(true\)/);
+    expect(otherPath).toMatch(/setShowReportsModal\(true\)/);
+  });
+
+  test('opening posts /start through the one start helper, then goes to the stage', () => {
+    const open = bodyOf('openNewSurvey');
+    const starts = open.indexOf('startSession(');
+    expect(starts).toBeGreaterThan(-1);
+    // The history modal is only the fallback for a start that failed.
+    const fallback = open.indexOf('setShowReportsModal(true)');
+    expect(fallback === -1 || fallback > starts).toBe(true);
+    // startSession resolves {ok, error} (the refusal in the server's words,
+    // utils/startRefusal.js), so success is `opened.ok`, not a bare boolean.
+    expect(open).toMatch(/if \(opened\.ok\) return;/);
+
+    const start = bodyOf('startSession');
+    expect(start).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{\w+\}\/start`/);
+    expect(start).toMatch(/method: 'POST'/);
+    expect(start).toMatch(/switchToGame\(/);
+  });
+
+  test('history\'s own Start still uses the same helper — one caller of /start', () => {
+    expect(bodyOf('startGameFromHistory')).toMatch(/startSession\(/);
+    expect((host.match(/\/start`/g) || []).length).toBe(1);
+  });
+});

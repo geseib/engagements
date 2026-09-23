@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/l
 const { resolveSetPartition } = require('./set-version');
 const { ORG } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
+const { normalizeNames } = require('./survey-names');
 
 const { isPresent } = require('./player-presence');
 const { BEATS } = require('./stage-beats');
@@ -308,9 +309,18 @@ exports.handler = async (event) => {
       }
     }
 
+    // The survey's own facts, at the top level (where the host page reads them
+    // first) and again in gameMetadata below.
+    const surveyFacts = {
+      names: gameMetadata.Item.GameType === 'survey' ? normalizeNames(gameMetadata.Item.Names) : null,
+      openedAt: gameMetadata.Item.OpenedAt || null,
+      warnedAt: (stateItem && stateItem.WarnedAt) || null
+    };
+
     const response = {
       gameId: gameId,
       state: frontendState,
+      ...surveyFacts,
       currentQuestion: lessonNumber, // Return numeric lesson number for frontend
       currentQuestionData: currentQuestionData,
       authorsRevealed: authorsRevealed,
@@ -339,7 +349,11 @@ exports.handler = async (event) => {
         // And its summary approach, for the same reason: the in-game picker
         // must open on what the session actually carries after a reload.
         promptId: gameMetadata.Item.PromptId || null,
-        createdAt: gameMetadata.Item.CreatedAt
+        createdAt: gameMetadata.Item.CreatedAt,
+        // A survey's Names (null for every other type), when the room first
+        // opened, and the two-minute warning — the three facts a survey page
+        // needs back after a reload. Same projection as get-game.js.
+        ...surveyFacts
       }
     };
 

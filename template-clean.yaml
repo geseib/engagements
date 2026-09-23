@@ -2112,6 +2112,14 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Opening a SURVEY tells every screen (`gameStateChanged`), so a phone
+        # that loaded it before it opened reloads into it. Without this the
+        # post is a silent AccessDenied and that phone waits forever.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
         StartGameEvent:
           Type: HttpApi
@@ -3239,6 +3247,151 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/feedback-round
             Method: GET
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # A PHONE ANSWERING A SURVEY (game/survey-answers.js). Public, like
+  # /comments and /votes: participants hold no token. The gate is the room's
+  # state (SURVEY#OPEN), re-checked inside every answer's own write.
+  # docs/design/survey-redesign/IMPLEMENTATION-phase-2.md.
+  SurveyAnswersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-survey-answers'
+      CodeUri: lambda-functions/game/
+      Handler: survey-answers.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Policies:
+        # A person's answers are ciphertext at rest (ENCRYPTED_FIELDS.surveyResponse),
+        # and an org set's questions are too, so this function unwraps the org's
+        # data key — ONLY with an orgId encryption context.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # Every answer that changes who has answered what sends `surveyProgress`
+        # to the host's screens. Without this it is a silent AccessDenied and
+        # the wall's counts never move.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        GetSurveyEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey
+            Method: GET
+        PutSurveyAnswerEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/answers
+            Method: PUT
+        SubmitSurveyEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/submit
+            Method: POST
+        # POST, not GET: it carries a respondent id or a clientId — capabilities
+        # that must stay out of URLs and access logs.
+        MySurveyAnswersEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/mine
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # THE HOST DRIVING A SURVEY (game/survey-host.js). Every route carries the
+  # authorizer AND the handler asks callerMayDriveSession on the session's own
+  # org — 404 to anyone else. The two GETs are also named in authorizer.js,
+  # where the generic "GET + games" rule would otherwise let any signed-in
+  # account read who has finished.
+  SurveyHostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-survey-host'
+      CodeUri: lambda-functions/game/
+      Handler: survey-host.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Policies:
+        # Close opens every answer row and seals the frozen results' Texts under
+        # the org's key (ENCRYPTED_FIELDS.surveyResults) — ONLY with an orgId
+        # encryption context.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # surveyClosed, surveyClosingSoon and gameEnded go to every screen.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        CloseSurveyEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/close
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        WarnSurveyEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/warning
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        EndSurveyEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/end
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        SurveyProgressEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/progress
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        SurveyPeopleEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey/people
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

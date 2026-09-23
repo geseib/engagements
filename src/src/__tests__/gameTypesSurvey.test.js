@@ -1,26 +1,33 @@
-import { isPlayableGameType, notPlayableReason, UNPLAYABLE_GAME_TYPES, NOT_PLAYABLE_LABEL } from '../config/gameTypes';
+import {
+  isPlayableGameType, notPlayableReason, UNPLAYABLE_GAME_TYPES, NOT_PLAYABLE_LABEL,
+  PICKER_GAME_TYPES, GAME_TYPES, hasVotePhase,
+} from '../config/gameTypes';
 
 /*
- * Surveys phase 1: a survey set can be made, imported, generated and edited,
- * but no session plays one until phase 2. The "Not playable" chip stays — and
- * its reason must stop saying the importer refuses surveys, because it no
- * longer does. docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md.
+ * Surveys phase 2: a session can PLAY a survey now — the host opens it, phones
+ * answer at their own pace, the host closes it. So the one id that sat in
+ * UNPLAYABLE_GAME_TYPES comes out, the create dialog's pill appears, and the
+ * console's "Not playable" chip stops being drawn on survey sets.
+ * docs/design/survey-redesign/IMPLEMENTATION-phase-2.md, Track D.
  */
-describe('survey is authorable but not yet playable', () => {
-  test('survey is still the one unplayable type', () => {
-    expect(UNPLAYABLE_GAME_TYPES).toEqual(['survey']);
-    expect(isPlayableGameType('survey')).toBe(false);
+describe('survey is playable', () => {
+  test('no type is held back from the create dialog any more', () => {
+    expect(UNPLAYABLE_GAME_TYPES).toEqual([]);
+    expect(isPlayableGameType('survey')).toBe(true);
+    expect(PICKER_GAME_TYPES.map((t) => t.id)).toContain('survey');
+  });
+
+  test('a playable type has no reason to print, survey included', () => {
+    expect(notPlayableReason('survey')).toBe('');
+    expect(notPlayableReason('trivia')).toBe('');
+    // The chip's words survive for the day another type needs them.
     expect(NOT_PLAYABLE_LABEL).toBe('Not playable');
   });
 
-  test('the reason says what is true now: it can be built, not yet run', () => {
-    const reason = notPlayableReason('survey');
-    expect(reason).toMatch(/can be (made|built|authored)/i);
-    expect(reason).toMatch(/no session (can )?(run|play)s? (one|it|a survey) yet/i);
-    expect(reason).not.toMatch(/importer rejects/i);
-  });
-
-  test('playable types have no reason', () => {
-    expect(notPlayableReason('trivia')).toBe('');
+  test('a survey runs COLLECTING then CLOSED — no rounds, no vote', () => {
+    // rejects: the phase-1 table's ASK → VOTE → RESULTS, which described what
+    // the code did to a survey by accident (it fell through to start-vote).
+    expect(GAME_TYPES.survey.phases).toEqual(['COLLECTING', 'CLOSED']);
+    expect(hasVotePhase('survey')).toBe(false);
   });
 });

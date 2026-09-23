@@ -10,15 +10,28 @@ import {
 } from './utils/playerParticipation';
 import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
-import HelpButton from './components/HelpButton';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import './components/PlayerSurface.css';
 
 import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
-import BrandMark from './components/BrandMark';
+import { PlayerShell } from './components/PlayerShell';
+import SurveyRunner from './components/survey/SurveyRunner';
+import { namesMode } from './config/surveyNames';
+import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 
 const API_BASE = window.API_BASE;
+
+/**
+ * What a survey's join screen adds about the name: the Names value's own phone
+ * promise, lead and line (config/surveyNames.js — the one place those
+ * sentences live), or nothing when the brief carried no value to speak for.
+ */
+function surveyNamePromise(names) {
+  if (!names) return null;
+  const mode = namesMode(names);
+  return <>{' '}{mode.phoneLead && <><b>{mode.phoneLead}</b>{' '}</>}{mode.phoneLine}</>;
+}
 
 /**
  * THE LOOK-UP CUE — the same sentence shape, in the same position, in every
@@ -52,85 +65,12 @@ const LookUpCue = ({ children }) => (
   </div>
 );
 
-/**
- * THE SHELL: bar, stage, dock. Three regions, and the dock is OUTSIDE the
- * scrolling region rather than pinned over it.
- *
- * That is what makes "scrolling to read is fine, scrolling to act is not"
- * (RATIONALE §5.2) structural rather than editorial: the primary action cannot
- * be pushed below the fold because it is not in the thing that scrolls. It is
- * also not `position: fixed`, which on iOS Safari interacts badly with the
- * collapsing URL bar and with the soft keyboard.
- *
- * `dock` IS OMITTED, NOT DISABLED, IN REST AND WATCH (§2.2). If there is
- * nothing to do there must be nothing that looks pressable, and a design that
- * renders a greyed bar has already lost that argument. Declared at module scope
- * so React keeps one element identity across renders — a component defined
- * inside PlayerPage would remount its whole subtree on every keystroke and take
- * the focused textarea with it.
- */
-export const PlayerShell = ({
-  phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, after = null, children,
-}) => (
-  <div className="plr" data-theme="dark" data-phase={phase} data-volume={volume}>
-    {banner}
-    <header className="plr-bar">
-      <div className="plr-strip" />
-      <div className="plr-line">
-        {/* The mark, NOT a link: a tap here must never leave a live round. */}
-        <BrandMark size={18} />
-        <span className="plr-ctx">{ctx}</span>
-        {category && <span className="plr-cat">{category}</span>}
-        <span className="plr-spacer" />
-        {who && (
-          <span className="plr-who">
-            <span className={`plr-dot${online ? '' : ' plr-dot--off'}`} />
-            {who}
-          </span>
-        )}
-        {/*
-          THE PLAYER'S ONLY WAY INTO THE DOCUMENTATION WRITTEN FOR THEM.
-
-          `HelpButton` was mounted in exactly one file — `AdminPage.jsx` — while
-          the help system's contents advertised four player guides. The audience
-          with the least context and the smallest screen had a documentation set
-          and no door into it from anywhere in the product.
-
-          IN THE BAR, NOT THE DOCK. The dock is the primary action and is
-          omitted entirely when there is nothing to do (see the note on
-          `dock` above); help has to be reachable in precisely those states —
-          "that name is taken" is a dock-less screen, and it is the single most
-          likely moment for a player to want an explanation.
-
-          It renders inside `.plr` so the modal is in the dusk scope rather
-          than beside it, for the same reason `after` is: a dialog rendered as
-          a sibling of this shell resolves none of the --plr-* tokens.
-        */}
-        <HelpButton
-          section="player"
-          variant="inline"
-          size="small"
-          tooltip="Help"
-          className="plr-helpbtn"
-          reports={{ context: 'player' }}
-        />
-      </div>
-    </header>
-    <main className={`plr-stage${centre ? ' plr-stage--centre' : ''}`}>
-      {children}
-    </main>
-    {dock && <footer className="plr-dock">{dock}</footer>}
-    {/* OVERLAYS, INSIDE THE SCOPE RATHER THAN BESIDE IT.
-        A dialog rendered as a sibling of this shell is outside `.plr`, so it
-        inherits the data-theme="light" that public/index.html puts on <html>
-        and resolves none of the --plr-* tokens — which is how the spotlight
-        came to open a white card with 1.96:1 buttons over a dusk ballot. It is
-        NOT part of `children`: children land in `.plr-stage`, the scrolling
-        region, and a dialog does not belong inside the thing it covers. */}
-    {after}
-  </div>
-);
+/*
+  THE SHELL lives in components/PlayerShell.jsx, so SurveyRunner can draw in it
+  without importing this page (a circular import). Re-exported here because
+  tests and callers have always imported it from PlayerPage.
+*/
+export { PlayerShell };
 
 // Utility function to calculate proper rankings with tie handling
 const calculatePlayerRankings = (players) => {
@@ -255,7 +195,16 @@ function PlayerPage() {
   const [mySubmittedAnswer, setMySubmittedAnswer] = useState('');
   const [hasAnswered, setHasAnswered] = useState(false);
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
-  const [gameType, setGameType] = useState('call-and-answer'); // 'call-and-answer' or 'trivia'
+  /*
+    NULL UNTIL THE SERVER SAYS. This defaulted to 'call-and-answer', which is a
+    claim: a phone joining a survey that was already open showed the
+    call-and-answer lobby ("Waiting for the game to start. The host will begin
+    the first round.") for the ~2 s until /state answered. Unknown now renders
+    a neutral loading line (below, before the survey branch), and every branch
+    that reads the type runs only once there is one. /state's own fallback for
+    a session with no GameType is still 'call-and-answer' (checkGameState).
+  */
+  const [gameType, setGameType] = useState(null);
   const [selectedTriviaAnswer, setSelectedTriviaAnswer] = useState(null); // For trivia: stores selected option letter
   const [wavelengthWords, setWavelengthWords] = useState(Array(10).fill('')); // For wavelength: stores 10 words
   const [answers, setAnswers] = useState([]);
@@ -347,12 +296,11 @@ function PlayerPage() {
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
   const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
-  // What the host typed into Event Details at setup. Stored by create-game.js
-  // as `Details` and returned to participants by get-game.js as
-  // `engagementInfo` — and until this existed, read by nothing at all, which
-  // made the setup field's own help text ("shown to participants when they
-  // join") false for the whole life of the field.
-  const [engagementInfo, setEngagementInfo] = useState('');
+  // The session brief — GET /games/{id}?role=player — for ONE code:
+  // `{ code, gameType, names, engagementInfo }`, or null. Read as soon as a
+  // code is known, before joining as well as after (the effect below says
+  // when), because the join screens speak the session's own terms.
+  const [brief, setBrief] = useState(null);
   // Which question the on-screen draft belongs to. A ref, not state: it is
   // read and claimed inside async fetches that would otherwise close over a
   // stale value, and changing it must never itself cause a render.
@@ -368,23 +316,19 @@ function PlayerPage() {
   // already voted" check downstream had said anything at all.
   const voteRoundRef = useRef(null);
   const [results, setResults] = useState(null);
+  // The host's two-minute warning in a survey, `{minutes, warnedAt}`, from the
+  // `surveyClosingSoon` frame. A phone that loads after it was given reads it
+  // from GET /survey instead (SurveyRunner).
+  const [surveyWarning, setSurveyWarning] = useState(null);
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
 
   // A3: monotonic phase guard — prevents a slow GET /state from clobbering a
-  // newer phase delivered via WebSocket (or vice versa). Accepts both the WS
-  // message spellings (RESULT#/END) and the server state spellings (RESULTS#/ENDED).
+  // newer phase delivered via WebSocket (or vice versa). The order itself,
+  // survey states included, is utils/playerPhase.js.
   const lastRankRef = useRef(-1);
-  const stateRank = (s) => {
-    if (!s) return -1;
-    if (s === 'ENDED' || s === 'END') return Number.MAX_SAFE_INTEGER;
-    const m = s.match(/^(ASK|VOTE|RESULTS?)#(\d+)/);   // accepts RESULT# and RESULTS#
-    if (!m) return -1;                                  // CREATED/STARTED never overwrite a live phase
-    const phase = { ASK: 0, VOTE: 1, RESULT: 2, RESULTS: 2 }[m[1]];
-    return parseInt(m[2], 10) * 10 + phase;
-  };
   const applyGameState = (next) => {
     const r = stateRank(next);
     if (r < lastRankRef.current) {
@@ -513,6 +457,10 @@ function PlayerPage() {
 
   /** Everything that must be true once the server has actually let us in. */
   const enterSession = (gid, name, data) => {
+    // The brief the join screen read for THIS code already named the session's
+    // type (GameType never changes), so the joined surface need not wait on
+    // /state to know it. Anything else waits: see `gameType`.
+    if (brief && brief.code === String(gid || '').trim() && brief.gameType) setGameType(brief.gameType);
     setPlayerName(name);
     setJoined(true);
     setJoinCollision(null);
@@ -615,7 +563,20 @@ function PlayerPage() {
   }, [useWebSocket]);
 
   /**
-   * The host's session brief, fetched once the participant is in.
+   * The host's session brief, as soon as there is a code to ask about.
+   *
+   * WHEN. Once the participant is in, always. Before that, when the code is
+   * one the page did not have to guess at: it came in the link (the QR code's
+   * route), the rejoin prompt is up for it, or four digits have been typed —
+   * never on every keystroke. The join screens need it: a survey's name field
+   * and rejoin prompt used to promise a scoreboard, voting rounds and "your
+   * score", none of which a survey has.
+   *
+   * WHAT. `engagementInfo` — what the host typed into Event Details at setup,
+   * stored by create-game.js as `Details` and until this existed read by
+   * nothing at all, which made the setup field's own help text ("shown to
+   * participants when they join") false for the whole life of the field —
+   * plus `gameType` and, for a survey, `names`.
    *
    * `role=player` explicitly, though it no longer buys secrecy: the host view
    * of this endpoint DID return the private-game access code, and no longer
@@ -625,27 +586,41 @@ function PlayerPage() {
    * the host branch carries setup fields a participant has no use for.
    *
    * Every failure is swallowed. The brief is a nicety; being in the room is
-   * not, and a 404 or a flaky network must never take the lobby down with it.
+   * not, and a 404 or a flaky network must never take the lobby down with it
+   * — nor change a word of the join screen, which then reads as it always did.
    */
+  const typedCode = String(gameId || '').trim();
+  const briefCode = typedCode && (joined || rejoinPrompt || (gameIdFromUrl && !codeUnlocked) || /^\d{4}$/.test(typedCode))
+    ? typedCode
+    : '';
   useEffect(() => {
-    if (!joined || !gameId) return undefined;
+    if (!briefCode) return undefined;
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}games/${gameId}?role=player`);
+        const res = await fetch(`${API_BASE}games/${briefCode}?role=player`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && typeof data.engagementInfo === 'string') {
-          setEngagementInfo(data.engagementInfo);
-        }
+        if (cancelled || !data || typeof data !== 'object') return;
+        setBrief({
+          code: briefCode,
+          gameType: typeof data.gameType === 'string' && data.gameType ? data.gameType : null,
+          names: typeof data.names === 'string' && data.names ? data.names : null,
+          engagementInfo: typeof data.engagementInfo === 'string' ? data.engagementInfo : '',
+        });
       } catch (error) {
         console.warn('PLAYER: session details unavailable:', error.message);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [joined, gameId]);
+  }, [briefCode]);
+
+  /** The brief, if it is for the code on this page; null otherwise. */
+  const briefHere = brief && brief.code === typedCode ? brief : null;
+  const engagementInfo = (briefHere && briefHere.engagementInfo) || '';
+  const briefSaysSurvey = Boolean(briefHere && briefHere.gameType === 'survey');
 
   // WebSocket connection effect - only runs when WebSocket is enabled and player has joined
   useEffect(() => {
@@ -823,6 +798,29 @@ function PlayerPage() {
       applyGameState('ENDED');
     });
 
+    /*
+      A SURVEY'S TWO FRAMES (IMPLEMENTATION-phase-2.md §2 "Broadcasts").
+
+      `surveyClosingSoon` is the host's two-minute warning: SurveyRunner shows
+      it as a `.plr-banner` over whatever the person is on. It is held here,
+      not in the runner, because this effect owns every handler on the socket
+      and `onMessage` keeps ONE handler per type — a second registration from
+      a child would silently replace this page's.
+
+      `surveyClosed` moves the phase on through the same monotonic guard as
+      every other frame, so a slow `/state` answering `SURVEY#OPEN` cannot
+      reopen it.
+    */
+    webSocketClient.onMessage('surveyClosingSoon', (data) => {
+      console.log('🔌 PLAYER: survey closing soon:', data);
+      setSurveyWarning({ minutes: data?.minutes, warnedAt: data?.warnedAt || null });
+    });
+
+    webSocketClient.onMessage('surveyClosed', (data) => {
+      console.log('🔌 PLAYER: survey closed:', data);
+      applyGameState(data?.newState || SURVEY_CLOSED);
+    });
+
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
@@ -854,6 +852,8 @@ function PlayerPage() {
       webSocketClient.offMessage('hostMessage');
       webSocketClient.offMessage('resultsReady');
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('surveyClosingSoon');
+      webSocketClient.offMessage('surveyClosed');
     };
   }, [gameId, playerName, joined, useWebSocket]);
 
@@ -1176,12 +1176,15 @@ function PlayerPage() {
       const stateJson = await stateRes.json();
       console.log('🔍 PLAYER: Raw state API response:', stateJson);
       const serverGameState = stateJson.state || 'CREATED';
-      const serverGameType = stateJson.gameType || 'call-and-answer';
-      
-      // Update game type if changed
-      if (serverGameType !== gameType) {
-        setGameType(serverGameType);
-      }
+      // The type, when this response says one. get-game-state.js always names
+      // it (falling back to 'call-and-answer' itself), so an OK answer without
+      // one keeps that fallback; a FAILED read says nothing about the session
+      // and must not re-type it. (`gameType` here is often a closure captured
+      // at join, so this sets rather than compares — React ignores a same-value
+      // set.)
+      const serverGameType = (typeof stateJson.gameType === 'string' && stateJson.gameType)
+        || (stateRes.ok ? 'call-and-answer' : null);
+      if (serverGameType) setGameType(serverGameType);
       
       console.log(`🔄 PLAYER: Game state is ${serverGameState}`);
 
@@ -2237,8 +2240,11 @@ function PlayerPage() {
         <h1 className="plr-h1">Welcome back.</h1>
         <p className="plr-lede plr-muted">
           This phone joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
-          <strong>{rejoinPrompt.name}</strong>. Rejoining brings your answers and your score
-          back with you.
+          <strong>{rejoinPrompt.name}</strong>.{' '}
+          {/* A survey has answers and no score (the brief says which this is). */}
+          {briefSaysSurvey
+            ? 'Rejoining brings your answers back with you.'
+            : 'Rejoining brings your answers and your score back with you.'}
         </p>
       </PlayerShell>
     );
@@ -2408,9 +2414,22 @@ function PlayerPage() {
                 (RATIONALE §6.3). Telling somebody at the ballot that their
                 answer was unattributed is telling them after they wrote it. */}
             <p className="plr-help" id="plr-name-help">
-              Used for the scoreboard and to get you back in if you lose this page. On rounds
-              where the room votes, your name is <b>not</b> shown next to your answer until
-              voting closes.
+              {briefSaysSurvey ? (
+                /* A SURVEY HAS NO SCOREBOARD AND NO VOTING ROUNDS. What the name
+                   is for there is the Names value's own promise, in its own
+                   words (config/surveyNames.js — never retyped); with no value
+                   in the brief, only what is true of every survey. */
+                <>
+                  Used to get you back in if you lose this page.
+                  {surveyNamePromise(briefHere.names)}
+                </>
+              ) : (
+                <>
+                  Used for the scoreboard and to get you back in if you lose this page. On rounds
+                  where the room votes, your name is <b>not</b> shown next to your answer until
+                  voting closes.
+                </>
+              )}
             </p>
           </div>
 
@@ -2482,6 +2501,49 @@ function PlayerPage() {
       </div>
     </div>
   ) : null;
+
+  /* --------------------------------------------------------- TYPE UNKNOWN --
+     Joined, but /state has not said what kind of session this is. Every screen
+     below is one type's; showing any of them now is a guess, and the old guess
+     (call-and-answer's lobby) was wrong for every survey that was already open.
+     Rest volume, no dock: there is nothing to do yet. */
+  if (!gameType) {
+    return (
+      <PlayerShell
+        phase="quiet"
+        volume="rest"
+        ctx="In the session"
+        who={playerName}
+        online={wsConnected}
+        banner={offlineBanner}
+        centre
+      >
+        <p className="plr-lede plr-muted">Loading the session…</p>
+      </PlayerShell>
+    );
+  }
+
+  /* ---------------------------------------------------------------- SURVEY --
+     A survey has no rounds, so none of the branches below apply to it: no
+     ASK#/VOTE#/RESULTS#, no score, no lobby once it is open. The whole joined
+     surface is SurveyRunner (components/survey/), which loads the questions
+     itself and follows `gameState` for the host's close and end. It is here —
+     after every hook in this component and after the join screens — so the
+     hook order never depends on the game type, and BEFORE the ENDED branch,
+     because a survey's ended screen shows no score. */
+  if (gameType === 'survey') {
+    return (
+      <SurveyRunner
+        gameId={gameId}
+        playerName={playerName}
+        apiBase={API_BASE}
+        state={gameState}
+        warning={surveyWarning}
+        online={wsConnected}
+        banner={offlineBanner}
+      />
+    );
+  }
 
   let phase = 'quiet';
   let volume = 'rest';

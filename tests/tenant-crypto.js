@@ -261,6 +261,39 @@ check('comment encrypts the prose, the excerpt and the label', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.comment].sort(),
     ['AnchorExcerpt', 'AnchorLabel', 'Text']));
 
+// A SURVEY RESPONSE — one row per person, SK=SURVEY#RESP#<respondent>. `Answers`
+// is every answer that person gave, as ONE map (encryptValue serialises it),
+// the same class of content as `answer`. `Answered` (the qids) and `Complete`
+// stay plaintext: they are what the host's live counts read without asking KMS
+// anything — counts, not content. docs/design/survey-redesign/IMPLEMENTATION-phase-2.md.
+check('surveyResponse encrypts the Answers map and nothing the live counts read', () => {
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.surveyResponse], ['Answers']);
+  for (const f of ['Answered', 'Complete', 'Rev', 'Session']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.surveyResponse.includes(f), `${f} is a count or a coordinate`);
+  }
+});
+// SURVEY#RESULTS, frozen at close, and its text pages
+// (SURVEY#RESULTS#TEXT#<qid>#<page>). `Texts` — on the pages — holds the open
+// answers, write-ins and whys, the words people wrote, kept past their 7-day
+// rows so results can be read for 30 days. The counts on the main item, and
+// the page counts naming the pages, are conceded visible, as
+// `results.VoteTallies` is.
+check('surveyResults encrypts the frozen Texts, not the counts', () => {
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.surveyResults], ['Texts']);
+  for (const f of ['N', 'Finished', 'PerQuestion', 'Order', 'TextPages']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.surveyResults.includes(f), `${f} is a count`);
+  }
+});
+check('a survey response\'s Answers map round-trips as the map', async () => {
+  const org = await newOrg('org_survey_fields');
+  const row = { PK: 'GAME#1234', SK: 'SURVEY#RESP#r_x', Answers: { 'c001#001': 4, 'c001#007': 'Shorter talks' }, Answered: ['c001#001', 'c001#007'] };
+  const enc = await C.encryptItem(org, 'surveyResponse', row);
+  assert.ok(C.isEnvelope(enc.Answers));
+  assert.deepStrictEqual(enc.Answered, row.Answered);
+  assert.ok(!JSON.stringify(enc).includes('Shorter talks'));
+  assert.deepStrictEqual((await C.decryptItem(org, 'surveyResponse', enc)).Answers, row.Answers);
+});
+
 // The author is conceded visible exactly as it is on `answer`: PlayerName is
 // part of the sort key on an answer row and cannot be hidden there, so
 // encrypting it on a comment would buy nothing and break the join.

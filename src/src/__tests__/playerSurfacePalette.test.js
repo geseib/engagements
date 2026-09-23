@@ -34,6 +34,9 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
 const GLOBAL_CSS = read('styles.css');
 const PLR_CSS = read('components', 'PlayerSurface.css');
 const PLR_JSX = read('PlayerPage.jsx');
+/* The shell — bar, stage, dock and the scope root — moved to its own file with
+   the survey (SurveyRunner draws in it, and PlayerPage renders SurveyRunner). */
+const SHELL_JSX = read('components', 'PlayerShell.jsx');
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
@@ -212,7 +215,9 @@ describe('the tinted composites', () => {
 
 describe('the surface declares its own theme', () => {
   test('the scope root carries data-theme="dark"', () => {
-    expect(PLR_JSX).toMatch(/className="plr"[^>]*data-theme="dark"/);
+    expect(SHELL_JSX).toMatch(/className="plr"[^>]*data-theme="dark"/);
+    // …and the page draws every joined and unjoined screen in that shell.
+    expect(PLR_JSX).toMatch(/import \{ PlayerShell \} from '\.\/components\/PlayerShell'/);
   });
 
   test('PlayerPage imports the stylesheet that theme is useless without', () => {
