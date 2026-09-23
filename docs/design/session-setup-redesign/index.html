@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Session setup — mockups</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#9BA8BE}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage,.frame.laptop{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#9BA8BE;margin:4px 0 14px}
+.bd .step{font:800 12px/1 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#F6A94C;margin:0 0 8px}
+
+.bd{max-width:1180px}
+.grp{margin:0 0 26px}
+.grp h2{margin:0 0 10px}
+.lst{list-style:none;margin:0;padding:0;border-top:1px solid rgba(244,237,228,.12)}
+.lst li{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;padding:10px 0;border-bottom:1px solid rgba(244,237,228,.12)}
+.lst a{color:#F4EDE4;font-weight:700;text-decoration:none}
+.lst a:hover{color:#F6A94C}
+.lst span{color:#B6C2D4}
+.st{width:100%;border-collapse:collapse;margin:0 0 28px;font-size:14px;table-layout:fixed}
+.st th,.st td{text-align:left;padding:9px 10px;border-bottom:1px solid rgba(244,237,228,.12);vertical-align:top}
+.st th{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#9BA8BE}
+.st td:first-child{font-weight:700}
+.st code{color:#F6A94C;font:12.5px ui-monospace,Menlo,monospace}
+.no{color:#EF8C86;font-weight:700}.pt{color:#F6A94C;font-weight:700}.ok{color:#6FD0A4;font-weight:700}
+.bd p.lede code{color:#F6A94C;font:13px ui-monospace,Menlo,monospace}
+</style></head>
+<body><main class="bd">
+<h1>Create an engagement, and preview it</h1>
+<p class="lede">Three pieces from one brief (owner, 23 Sep). A <b>simpler create dialog</b>: the few things a host must decide up front, everything with a safe default under one <b>Advanced</b> disclosure whose summary line names the defaults. A <b>briefing from a document</b> for Call &amp; Answer: a PDF summarised into a short, editable brief that Workie uses when it reflects the room&rsquo;s answers. A <b>preview</b>: after creating and before opening, the host looks at the stage, steps through, and edits &mdash; with the doors closed. The dialog pages are drawn by the shipped <code>GameSetupDialog.css</code>; the stage, phone and console by their approved mockup sheets. Press N on any page to hide the design notes. See <code>RATIONALE.md</code> and <code>PLAN.md</code> beside this file.</p>
+<h2>Where it stands today (23 Sep 2026)</h2>
+<table class="st"><colgroup><col style="width:190px"><col style="width:84px"><col></colgroup><thead><tr><th>Piece</th><th>State</th><th>Evidence</th></tr></thead><tbody><tr><td>Create dialog</td><td class="pt">Partial</td><td>Eleven controls in one scroll (<code>GameSetupDialog.jsx:380-750</code>): title, format, set, categories, anonymity, shuffle, event details, AI context, voice, approach, plan line. All but three have a default. Head and foot scroll away.</td></tr><tr><td>A document for Workie</td><td class="no">Missing</td><td>No session-level document. <code>FileUploadPrompt</code> + <code>admin/parse-document.js</code> exist, but only the set builders use them, appending raw text to a generation prompt (<code>SurveyAIBuilder.jsx:612-620</code>). parse-document is admins-only in the authorizer (<code>authorizer.js:400</code>).</td></tr><tr><td>Joining before start</td><td class="ok">Works</td><td>Refused: <code>session-gate.js:57-70</code> answers 403 ‘Game not started’. The phone shows the server&rsquo;s sentence on the join form, or nothing on an auto-join (<code>PlayerPage.jsx:540-565</code>).</td></tr><tr><td>Looking before opening</td><td class="no">Missing</td><td>Create lands on the history list (<code>GameHostPage.jsx:4404-4410</code>). The row offers Edit and Start; ‘Open’ was removed (<code>SessionHistoryPanel.jsx:50-79</code>). Start is the only way onto the stage, and it lets people in.</td></tr><tr><td>Editing before start</td><td class="pt">Partial</td><td><code>PUT /games/{id}</code> while CREATED: title, details, AI context, voice, approach, anonymity, categories (<code>update-game.js:69-72</code>). The dialog&rsquo;s note still says categories are fixed (<code>GameSetupDialog.jsx:424-425</code>).</td></tr><tr><td>Workie&rsquo;s context</td><td class="pt">Partial</td><td>Details and AI context reach the prompt twice (context block, host directive). But <code>get-ai-summary.js</code> never decrypts METADATA (<code>:756-759</code>), so on an org session they arrive as envelope objects.</td></tr></tbody></table>
+<section class="grp"><h2>Create an engagement</h2><ul class="lst"><li><a href="01-create.html">The create dialog, Advanced closed</a><span>Title, format, set and categories up front; the briefing row; one Advanced line that names every default in force.</span></li><li><a href="02-create-advanced.html">The same, Advanced open</a><span>Responses, question order, Workie&rsquo;s voice and approach, instructions, event details &mdash; a changed value named in amber in the summary.</span></li><li><a href="03-briefing-ready.html">The briefing, ready to check</a><span>The summary Workie will get, editable in full, with where it came from and how many names were left out.</span></li><li><a href="04-briefing-states.html">The briefing, every state</a><span>Choose &rarr; read &rarr; write &rarr; check; scanned, too large, too long, locked, slides, failed; the Advanced line per format; the close confirm.</span></li></ul></section><section class="grp"><h2>Preview before opening</h2><ul class="lst"><li><a href="10-preview-lobby.html">The stage in preview</a><span>The lobby as the room will see it, a dashed Preview chip and band, the meter says Closed, the primary opens the doors.</span></li><li><a href="11-preview-round.html">Stepping through round 1</a><span>The plan&rsquo;s first question, read-only, from the same planner the live round uses.</span></li><li><a href="12-preview-edit.html">Editing from the preview</a><span>The shipped edit dialog over the stage: name, categories, Workie info including the briefing; what is fixed, and why.</span></li><li><a href="20-phone-not-open.html">A phone that arrives early</a><span>‘Not open yet’ &mdash; keeps the name, checks by itself, lets itself in when the doors open.</span></li><li><a href="22-preview-board.html">Both sides of the door (board)</a><span>Stage, phone, edit dialog and step-through together, with the state model.</span></li></ul></section><section class="grp"><h2>Workie, briefed</h2><ul class="lst"><li><a href="30-workie-briefed.html">Workie&rsquo;s comment on the wall</a><span>The MTTR example: its own knowledge (the quick-win play) tied to the brief (‘an MTTR the brief puts at three weeks’).</span></li><li><a href="31-mttr-end-to-end.html">The example, end to end (board)</a><span>Document &rarr; briefing &rarr; a participant&rsquo;s answer &rarr; the wall.</span></li><li><a href="21-phone-answer.html">The participant&rsquo;s answer</a><span>Round 1 on the phone, as shipped (player-redesign 07).</span></li></ul></section><section class="grp"><h2>Underneath</h2><ul class="lst"><li><a href="40-data-and-prompt.html">Data, prompt and states</a><span>Where the briefing lives and for how long, the prompt layer word for word, guardrails, states, routes.</span></li></ul></section>
+</main></body></html>

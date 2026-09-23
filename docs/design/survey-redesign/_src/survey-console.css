@@ -1,0 +1,355 @@
+/* ===========================================================================
+   survey-console.css — the survey's console screens, as a DIFF against
+   admin-redesign/_src/shell.css (inlined above, verbatim). Every class is
+   prefixed sv- so it cannot collide with the shell's .chip / .seg / .field.
+
+   The create-set modal's one-of-N control (.cs-opt, create-set-redesign/
+   02-ai-describe.html) is re-declared here under sv- rather than copied in
+   whole: that page is a proposal, and this set must not depend on it.
+
+   MEASURED against the shell's real stack (dusk; the editor's card/panel/row
+   alternation is QuestionSetEditor.css's — card --surface, panel --bg,
+   row --surface):
+     --text on --surface 12.53 / --bg 14.97       question text, values
+     --muted on --surface 8.08 / --bg 9.65        labels, n, previews
+     --sv-on-accent #1B2942 on --primary 7.42     a selected kind toggle
+     --secondary #7CA7E6 on --surface 6.10        Workie's label (AA)
+     --primary on --surface 7.64                  "Most picked", mean marker
+   Bar FILLS are non-text and only need 3:1 against their track (1.4.11);
+   every fill below is paired with a printed number, never colour alone.
+   ======================================================================== */
+
+:root{--sv-on-accent:#1B2942;--sv-track:rgba(182,194,212,.12)}
+
+/* --------------------------------------------------------- the kind chip */
+/* The five kinds carry an icon AND a word, everywhere. One neutral chip:
+   the kinds are not ranked, so none of them gets a colour. */
+.sv-kind{display:inline-flex;align-items:center;gap:5px;font-size:var(--t-floor);font-weight:600;
+  padding:2px 8px 2px 6px;border-radius:999px;border:1px solid var(--rule-strong);color:var(--text);
+  white-space:nowrap;line-height:1.5}
+.sv-kind .ico{width:13px;height:13px;vertical-align:0;opacity:.85}
+
+/* --------------------------------------------------------- kind toggles */
+/* Pick-several, so each is a pressed button that says so with a tick as well
+   as the fill (never the fill alone: on paper the amber is 1.96:1). */
+.sv-opts{display:flex;flex-wrap:wrap;gap:6px}
+.sv-opt{height:36px;padding:0 13px 0 10px;border-radius:8px;display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--rule-strong);background:transparent;color:var(--text);
+  font:600 var(--t-body)/1 var(--font-ui);cursor:pointer;white-space:nowrap}
+.sv-opt .ico{width:15px;height:15px}
+.sv-opt:hover{background:var(--row-hover);border-color:var(--muted)}
+.sv-opt[aria-pressed="true"]{background:var(--primary);border-color:var(--primary-deep);color:var(--sv-on-accent)}
+.sv-opt .tick{display:none;font-weight:800}
+.sv-opt[aria-pressed="true"] .tick{display:inline}
+.sv-opt.one{padding:0 14px}
+.sv-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-body);color:var(--text)}
+.sv-num{width:58px;height:32px;padding:0 6px;text-align:center;border-radius:6px;
+  border:1px solid var(--rule-strong);background:var(--bg);color:var(--text);
+  font:600 var(--t-body)/1 var(--font-ui);font-variant-numeric:tabular-nums}
+.sv-per{font-size:var(--t-label);color:var(--muted);white-space:nowrap;margin-left:5px;padding-left:11px;
+  border-left:1px solid var(--rule-strong)}
+.sv-step + .sv-step{margin-top:16px}
+.modal.sv-modal{width:min(740px,100%)}
+.modal.sv-modal .body{padding-bottom:6px}
+
+/* The source well: a pasted talk outline is long. It is the one field on the
+   screen that is allowed to be tall, and it says how much it holds. */
+.sv-src{position:relative}
+.sv-src textarea.inp{min-height:150px;font-size:var(--t-body)}
+.sv-src .meta{display:flex;gap:10px;align-items:center;margin-top:6px;font-size:var(--t-label);color:var(--muted)}
+.sv-src .meta .grow{flex:1}
+.sv-file{display:inline-flex;align-items:center;gap:7px;padding:4px 9px 4px 7px;border-radius:6px;
+  border:1px solid var(--rule-strong);font-size:var(--t-label);color:var(--text);background:var(--surface-2)}
+.sv-file .x{color:var(--muted);cursor:pointer}
+
+/* ---------------------------------------------------------- start cards */
+/* Three ways into a survey. Not a five-card chooser: three rows of one
+   sentence each, the whole row the target. */
+.sv-starts{display:flex;flex-direction:column;gap:8px}
+.sv-start{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:9px;
+  border:1px solid var(--rule-strong);background:var(--bg);cursor:pointer;text-align:left;color:var(--text);
+  font:inherit;width:100%}
+.sv-start:hover{border-color:var(--muted);background:var(--row-hover)}
+.sv-start[aria-pressed="true"]{border-color:var(--primary);background:var(--row-sel)}
+.sv-start .ico{width:20px;height:20px;color:var(--primary);margin-top:1px}
+.sv-start b{display:block;font-size:var(--t-body);font-weight:700}
+.sv-start span{display:block;font-size:var(--t-label);color:var(--muted);margin-top:2px;line-height:1.45}
+.sv-tpls{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.sv-tpl{font-size:var(--t-label);font-weight:600;padding:5px 10px;border-radius:999px;
+  border:1px solid var(--rule-strong);color:var(--text);background:var(--surface)}
+.sv-tpl[aria-pressed="true"]{border-color:var(--primary);color:var(--primary)}
+.sv-type{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+
+/* --------------------------------------------------------- the editor */
+/* Card / panel / row, as QuestionSetEditor.css ships it. */
+.sv-card{background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);padding:0 0 4px}
+.sv-card > header{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.sv-card > header h2{margin:0;font:700 var(--t-head)/1.2 var(--font-display)}
+.sv-card > header .grow{flex:1}
+.sv-well{background:var(--bg);margin:12px 14px;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.sv-well .tbl th{background:var(--bg)}
+.sv-well .tbl td{background:var(--surface)}
+.sv-well .tbl tbody tr:hover td{background:#22324F}
+.sv-well .tbl tbody tr[aria-selected=true] td{background:#2A344A}
+.tbl td.grip{color:var(--muted);text-align:center;padding:0;cursor:grab}
+.tbl td.grip .ico{width:14px;height:14px;opacity:.6}
+.sv-prev{display:block;font-size:var(--t-label);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-prev b{color:var(--text);font-weight:600}
+.sv-req{font-size:var(--t-floor);color:var(--muted)}
+.sv-req.on{color:var(--text);font-weight:700}
+.tbl .rowact.show{opacity:1}
+.tbl .rowact .btn:first-child{margin-left:auto}
+.sv-mix{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sv-mix .sv-kind .n{color:var(--muted);font-weight:700}
+
+/* The add menu: a popover under its button, five kinds, each a sentence. */
+.sv-menu{position:absolute;z-index:40;width:360px;background:var(--surface);border:1px solid var(--rule-strong);
+  border-radius:10px;box-shadow:0 20px 48px rgba(0,0,0,.5);padding:6px}
+.sv-menu button{display:flex;gap:11px;align-items:flex-start;width:100%;text-align:left;padding:9px 10px;
+  border:0;border-radius:7px;background:none;color:var(--text);font:inherit;cursor:pointer}
+.sv-menu button:hover,.sv-menu button.hi{background:var(--row-hover)}
+.sv-menu .ico{width:17px;height:17px;color:var(--primary);margin-top:1px}
+.sv-menu b{display:block;font-size:var(--t-body)}
+.sv-menu span{display:block;font-size:var(--t-label);color:var(--muted);line-height:1.4}
+.sv-menu hr{border:0;border-top:1px solid var(--rule);margin:5px 4px}
+.sv-menu kbd{margin-left:auto;align-self:center}
+
+/* ---------------------------------------------------- the question form */
+.sv-edit{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0}
+.sv-edit .form{padding:14px 18px 6px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.sv-edit .side{border-left:1px solid var(--rule);background:var(--bg);padding:14px 16px 16px;
+  display:flex;flex-direction:column;gap:9px;align-items:center}
+.sv-edit .side .lab{align-self:flex-start}
+.sv-phone{width:260px;height:520px;border-radius:26px;border:1px solid var(--rule-strong);overflow:hidden;
+  position:relative;background:#0F1A2E;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+.sv-phone iframe{position:absolute;left:0;top:0;border:0;width:390px;height:780px;transform:scale(.6667);transform-origin:0 0}
+.modal.sv-qmodal{width:min(980px,100%)}
+.sv-kindbar{display:flex;gap:6px;flex-wrap:wrap}
+.sv-kindbar .sv-opt{height:32px;font-size:var(--t-label)}
+.sv-kindbar .sv-opt[aria-pressed="true"] .tick{display:none}
+.sv-kindbar .sv-opt[disabled]{opacity:.42;cursor:not-allowed}
+.sv-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.sv-row .field{flex:1 1 140px}
+.sv-row .field.sm{flex:0 0 118px}
+.sv-steps{display:flex;gap:4px;align-items:center}
+.sv-steps span{flex:1;height:30px;border:1px solid var(--rule-strong);border-radius:6px;display:grid;place-items:center;
+  font:700 var(--t-label)/1 var(--font-ui);color:var(--muted);background:var(--bg)}
+.sv-optlist{display:flex;flex-direction:column;gap:6px}
+.sv-optlist .o{display:flex;gap:7px;align-items:center}
+.sv-optlist .o .k{flex:none;width:22px;text-align:center;font:700 var(--t-label)/1 var(--font-ui);color:var(--muted)}
+.sv-optlist .o .inp{flex:1}
+.sv-optlist .o .btn{flex:none}
+.sv-switch{display:flex;align-items:center;gap:9px;font-size:var(--t-body);color:var(--text);cursor:pointer}
+.sv-switch input{margin:0}
+.sv-switch small{display:block;font-size:var(--t-label);color:var(--muted)}
+.sv-sub{border-left:2px solid var(--rule-strong);padding:2px 0 2px 12px;display:flex;flex-direction:column;gap:9px}
+.sv-kinds4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.sv-kinds4 .panel{margin:0}
+.sv-kinds4 .panel .body{display:flex;flex-direction:column;gap:12px}
+.sv-kinds4 .panel > header h2{display:flex;align-items:center;gap:8px;font-size:var(--t-head)}
+.sv-kinds4 .panel > header h2 .ico{width:17px;height:17px;color:var(--primary)}
+
+/* --------------------------------------------------------- the results */
+.sv-head-kpis{display:flex;gap:26px;margin-top:8px;flex-wrap:wrap}
+.sv-kpi b{display:block;font:800 var(--t-numeral)/1 var(--font-display);font-variant-numeric:tabular-nums}
+.sv-kpi span{font-size:var(--t-label);color:var(--muted)}
+.sv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+@media (max-width:1180px){.sv-grid{grid-template-columns:1fr}}
+.sv-res{background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden}
+.sv-res.wide{grid-column:1 / -1}
+.sv-res > header{padding:11px 14px 9px;border-bottom:1px solid var(--rule)}
+.sv-res > header .hd{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.sv-res > header .hd .n{font-size:var(--t-floor);font-weight:800;letter-spacing:.1em;color:var(--muted)}
+.sv-res > header .hd .grow{flex:1}
+.sv-res > header .hd .cnt{font-size:var(--t-label);color:var(--muted);white-space:nowrap}
+.sv-res > header h3{margin:0;font-size:var(--t-body);font-weight:700;line-height:1.35}
+.sv-res .body{padding:12px 14px 14px}
+.sv-res .note{margin:12px 0 0;padding:8px 11px;border-left:2px solid var(--secondary);background:rgba(124,167,230,.07);
+  font-size:var(--t-label);line-height:1.5;color:var(--text);border-radius:0 6px 6px 0}
+.sv-res .note b{color:var(--secondary);font-weight:700}
+.sv-res .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+
+/* horizontal bars: choice, rank shares, themes */
+.sv-bars{display:flex;flex-direction:column;gap:6px}
+.sv-bar{display:grid;grid-template-columns:minmax(0,1fr) 150px 52px;gap:10px;align-items:center;font-size:var(--t-body)}
+.sv-bar .l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-bar .t{height:12px;border-radius:99px;background:var(--sv-track);overflow:hidden}
+.sv-bar .t i{display:block;height:100%;border-radius:99px;background:var(--muted);opacity:.75}
+.sv-bar.is-top .t i{background:var(--primary);opacity:1}
+.sv-bar .v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.sv-bar .v small{display:block;font-size:var(--t-floor);color:var(--muted);font-weight:600}
+.sv-bar.is-top .l{font-weight:700}
+.sv-tag{font-size:var(--t-floor);font-weight:700;color:var(--primary);margin-left:6px;letter-spacing:.04em}
+.sv-foot{margin-top:9px;font-size:var(--t-label);color:var(--muted)}
+
+/* rating: a histogram, because a scale is ordered and the shape is the story */
+.sv-rate{display:grid;grid-template-columns:118px minmax(0,1fr);gap:16px;align-items:end}
+.sv-mean b{display:block;font:800 var(--t-numeral)/1 var(--font-display);font-variant-numeric:tabular-nums}
+.sv-mean span{font-size:var(--t-label);color:var(--muted);display:block;margin-top:3px}
+.sv-mean em{font-style:normal;display:block;font-size:var(--t-label);color:var(--text);margin-top:8px}
+.sv-hist{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:6px;align-items:end;height:112px;
+  border-bottom:1px solid var(--rule-strong);position:relative}
+.sv-hist .c{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px}
+.sv-hist .c i{display:block;width:100%;border-radius:4px 4px 0 0;background:var(--muted);opacity:.7}
+.sv-hist .c.is-top i{background:var(--primary);opacity:1}
+.sv-hist .c em{font-style:normal;font-size:var(--t-floor);color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.sv-histx{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:6px;margin-top:5px;
+  font-size:var(--t-label);font-weight:700;text-align:center;color:var(--text)}
+.sv-ends{display:flex;justify-content:space-between;font-size:var(--t-floor);color:var(--muted);margin-top:3px}
+
+/* split: yes / no, NPS. One bar, every segment labelled in words + number. */
+.sv-split{display:flex;height:34px;border-radius:7px;overflow:hidden;gap:2px}
+.sv-split i{display:flex;align-items:center;padding:0 10px;font-style:normal;font-weight:800;font-size:var(--t-label);
+  color:var(--sv-on-accent);white-space:nowrap;min-width:0;overflow:hidden}
+.sv-split .yes{background:var(--primary)}
+.sv-split .no{background:var(--secondary)}
+.sv-split .ns{background:#8A96AB}
+.sv-split .det{background:var(--danger)}
+.sv-split .pas{background:#8A96AB}
+.sv-split .pro{background:var(--success)}
+.sv-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:var(--t-label);color:var(--muted)}
+.sv-legend b{color:var(--text)}
+.sv-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:0}
+.sv-quotes{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.sv-quotes li{font-size:var(--t-body);line-height:1.45;padding-left:11px;border-left:2px solid var(--rule-strong)}
+.sv-quotes li small{display:block;font-size:var(--t-floor);color:var(--muted);margin-top:1px}
+
+/* rank: ordered rows, with where each item landed shown as a strip */
+.sv-rank{display:flex;flex-direction:column}
+.sv-rank .r{display:grid;grid-template-columns:30px minmax(0,1fr) 120px 62px;gap:10px;align-items:center;
+  min-height:36px;border-bottom:1px solid var(--rule);font-size:var(--t-body)}
+.sv-rank .r:last-child{border-bottom:0}
+.sv-rank .p{font:800 var(--t-body)/1 var(--font-display);color:var(--muted)}
+.sv-rank .r:first-child .p{color:var(--primary)}
+.sv-rank .l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-rank .strip{display:flex;height:10px;border-radius:3px;overflow:hidden;gap:1px}
+.sv-rank .strip i{display:block;background:var(--muted)}
+.sv-rank .strip i.p1{background:var(--primary)}
+.sv-rank .strip i.p2{background:rgba(246,169,76,.55)}
+.sv-rank .strip i.p3{background:rgba(182,194,212,.55)}
+.sv-rank .strip i.p4{background:rgba(182,194,212,.30)}
+.sv-rank .strip i.p5{background:rgba(182,194,212,.16)}
+.sv-rank .v{text-align:right;font-size:var(--t-label);color:var(--muted);font-variant-numeric:tabular-nums}
+.sv-rank .v b{color:var(--text);font-size:var(--t-body)}
+
+/* open text: themes Workie found, each with its count and one quote */
+.sv-themes{display:flex;flex-direction:column;gap:8px}
+.sv-theme{border:1px solid var(--rule);border-radius:8px;padding:9px 12px;background:var(--bg)}
+.sv-theme .h{display:flex;align-items:baseline;gap:10px}
+.sv-theme .h b{font-size:var(--t-body)}
+.sv-theme .h .c{margin-left:auto;font-size:var(--t-label);color:var(--muted);white-space:nowrap}
+.sv-theme .h .t{flex:0 0 110px;height:8px;border-radius:99px;background:var(--sv-track);overflow:hidden;align-self:center}
+.sv-theme .h .t i{display:block;height:100%;background:var(--muted);opacity:.75}
+.sv-theme q{display:block;margin-top:4px;font-size:var(--t-label);color:var(--muted);line-height:1.45;quotes:"\201C" "\201D"}
+
+/* Workie's read — the one secondary-blue block on the page. Blue is Workie's
+   colour on the stage too (AISummaryStatus); a reader learns it once. */
+.sv-workie{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--secondary);
+  border-radius:var(--radius);margin:0 0 14px;overflow:hidden}
+.sv-workie > header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.sv-workie > header h2{margin:0;font:700 var(--t-head)/1.2 var(--font-display);display:flex;align-items:center;gap:8px}
+.sv-workie > header h2 .ico{width:18px;height:18px;color:var(--secondary)}
+.sv-workie > header .grow{flex:1}
+.sv-workie > header select.inp{width:auto;min-height:28px;height:28px;padding:0 8px;font-size:var(--t-label)}
+.sv-workie .body{padding:14px 16px 12px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px}
+.sv-workie .lead{font:700 var(--t-head)/1.35 var(--font-ui);margin:0 0 10px;max-width:60ch}
+.sv-workie p{margin:0 0 9px;line-height:1.55;max-width:70ch}
+.sv-workie h4{margin:0 0 7px;font-size:var(--t-floor);font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sv-workie ol,.sv-workie ul{margin:0 0 12px;padding-left:18px;line-height:1.5}
+.sv-workie li{margin:0 0 5px}
+.sv-workie .caveat{font-size:var(--t-label);color:var(--muted);border-top:1px solid var(--rule);padding-top:9px;margin-top:4px}
+.sv-workie footer{display:flex;gap:8px;align-items:center;padding:9px 14px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.sv-workie footer .grow{flex:1}
+.sv-workie footer .dim{font-size:var(--t-label)}
+.sv-steer{display:flex;gap:8px;align-items:center;flex:1 1 320px}
+.sv-steer .inp{height:28px;min-height:28px;font-size:var(--t-label)}
+
+/* open-text response list */
+.sv-resp{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--rule)}
+.sv-resp:last-child{border-bottom:0}
+.sv-resp p{margin:0;font-size:var(--t-body);line-height:1.5}
+.sv-resp small{display:block;margin-top:3px;font-size:var(--t-floor);color:var(--muted)}
+.sv-resp .acts{display:flex;gap:5px}
+.sv-resp.on p{color:var(--text)}
+.sv-onwall{font-size:var(--t-floor);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--primary)}
+
+/* ------------------------------------------------------------- sharing */
+.sv-link{display:flex;gap:8px;align-items:center}
+.sv-link .inp{font-family:var(--font-mono);font-size:14px}
+.sv-share{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:18px;align-items:start}
+.sv-qrbox{background:#fff;border-radius:10px;padding:10px;width:170px;height:170px}
+.sv-qrbox svg{width:100%;height:100%;display:block}
+.sv-inc{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.sv-inc .i{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 11px;
+  border-bottom:1px solid var(--rule);background:var(--bg);font-size:var(--t-body)}
+.sv-inc .i:last-child{border-bottom:0}
+.sv-inc .i .l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-inc .i select.inp{width:auto;min-height:28px;height:28px;padding:0 6px;font-size:var(--t-label)}
+.sv-inc .i .why{font-size:var(--t-label);color:var(--primary);white-space:nowrap}
+
+/* ---------------------------------------------------------- data model */
+.sv-dm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.sv-dm .panel{margin:0}
+.sv-key{font-family:var(--font-mono);font-size:13px;color:var(--primary);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-pre{margin:0;font:12px/1.55 var(--font-mono);color:var(--text);background:var(--bg);border:1px solid var(--rule);
+  border-radius:7px;padding:10px 12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.sv-pre .c{color:var(--muted)}
+.sv-pre .k{color:var(--secondary)}
+.sv-pre .s{color:#E6D8C6}
+.sv-flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:0 0 14px}
+.sv-flow .s{flex:1 1 150px;border:1px solid var(--rule);background:var(--surface);padding:10px 12px;
+  border-radius:8px;position:relative;margin-right:22px}
+.sv-flow .s:last-child{margin-right:0}
+.sv-flow .s:not(:last-child)::after{content:"\2192";position:absolute;right:-18px;top:50%;transform:translateY(-50%);
+  color:var(--muted);font-weight:800}
+.sv-flow .s b{display:block;font-size:var(--t-body)}
+.sv-flow .s span{display:block;font-size:var(--t-label);color:var(--muted);margin-top:3px;line-height:1.45}
+.sv-flow .s code{font-family:var(--font-mono);font-size:12px;color:var(--primary)}
+.sv-life td.bar{padding:0 10px}
+.sv-life .lb{height:10px;border-radius:99px;background:var(--sv-track);position:relative}
+.sv-life .lb i{position:absolute;top:0;bottom:0;left:0;border-radius:99px;background:var(--muted)}
+.sv-life .lb i.keep{background:var(--primary)}
+.tbl td.wrap{line-height:1.45;padding-top:7px;padding-bottom:7px;height:auto}
+
+/* ------------------------------------------------ starting a survey -----
+   The shipped setup dialog's option card (GameSetupDialog.css .gsd-opt /
+   .gsd-preview / .gsd-opt-limit), re-cut under sv- at the console ladder:
+   the shipped card's 10.5px and 11px captions are raised to the 12px floor. */
+.sv-sect{margin:18px 0 8px;font:800 var(--t-floor)/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.sv-sect:first-child{margin-top:4px}
+.modal .body .sv-sect{margin:22px 0 9px}
+.modal .body .sv-sect:first-child{margin-top:2px}
+.sv-card2{border:1px solid var(--rule);border-radius:12px;padding:14px 16px;background:var(--surface-2);
+  display:flex;flex-direction:column;gap:11px;margin:0 0 12px}
+.sv-card2 .hd{display:flex;align-items:baseline;gap:10px}
+.sv-card2 .hd b{font-size:16px;font-weight:700}
+.sv-card2 .hd .st{margin-left:auto;font:800 var(--t-floor)/1 var(--font-display);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.sv-card2 .does{margin:0;font-size:14px;line-height:1.5}
+.sv-card2 .limit{margin:0;font-size:var(--t-floor);line-height:1.5;color:var(--muted);border-left:3px solid var(--secondary);padding-left:11px}
+.sv-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sv-three button{display:flex;flex-direction:column;gap:4px;text-align:left;padding:10px 12px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--rule-strong);background:var(--surface);color:var(--text);font:inherit;min-width:0}
+.sv-three button b{font-size:var(--t-body);display:flex;align-items:center;gap:7px}
+.sv-three button b i{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--muted)}
+.sv-three button span{font-size:var(--t-label);color:var(--muted);line-height:1.4}
+.sv-three button[aria-checked="true"]{border-color:var(--primary);background:var(--row-sel)}
+.sv-three button[aria-checked="true"] b i{border-color:var(--primary);background:radial-gradient(circle,var(--primary) 0 45%,transparent 50%)}
+.sv-pvs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sv-pv{border:1px solid var(--rule);border-radius:10px;padding:11px 12px;background:var(--surface)}
+.sv-pv h6{margin:0 0 7px;font:800 var(--t-floor)/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.sv-pv p{margin:0;font-size:var(--t-label);line-height:1.45}
+.sv-pv .who{margin-top:6px;font-size:var(--t-floor);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.sv-pv .who.named{color:var(--primary)}
+.sv-kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 14px;align-items:baseline;font-size:var(--t-body)}
+.sv-kv dt{font-size:var(--t-label);color:var(--muted);font-weight:600}
+.sv-kv dd{margin:0}
+.sv-kv dd small{display:block;font-size:var(--t-label);color:var(--muted);margin-top:2px}
+.sv-lock{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-label);color:var(--muted)}
+.sv-lock .ico{width:13px;height:13px}
+
+/* people: status is a word AND a mark, never colour alone */
+.sv-status{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-label);font-weight:600}
+.sv-status i{width:8px;height:8px;border-radius:50%;flex:none}
+.sv-status.done{color:var(--success-text)}.sv-status.done i{background:var(--success)}
+.sv-status.part{color:var(--primary)}.sv-status.part i{background:transparent;border:2px solid var(--primary)}
+.sv-status.none{color:var(--muted)}.sv-status.none i{background:transparent;border:2px dashed var(--muted)}

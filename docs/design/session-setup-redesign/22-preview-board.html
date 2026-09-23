@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preview — both sides of the door</title>
+<style>
+
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#9BA8BE}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage,.frame.laptop{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#9BA8BE;margin:4px 0 14px}
+.bd .step{font:800 12px/1 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#F6A94C;margin:0 0 8px}
+
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<main class="bd">
+
+<h1>Preview: both sides of the door</h1>
+<p class="lede">The host looks, edits and steps through with the doors closed; a phone that scans the code meanwhile is told it is not open yet and waits with its name typed; the host presses <b>Open the doors</b> and every waiting phone lets itself in. Open any frame on its own to see it full size.</p>
+<div class="row">
+<figure style="--w:768px"><div class="frame stage" style="width:768px;height:432px"><iframe src="10-preview-lobby.html#bare" width="1920" height="1080" style="transform:scale(0.4)" loading="lazy" title="The stage, in previewDashed chip and band; the meter says Closed; the primary opens the doors"></iframe></div><figcaption><b>The stage, in preview</b><span>Dashed chip and band; the meter says Closed; the primary opens the doors</span></figcaption></figure>
+<figure style="--w:242px"><div class="frame phone" style="width:242px;height:523px"><iframe src="20-phone-not-open.html#bare" width="390" height="844" style="transform:scale(0.62)" loading="lazy" title="A phone that scans nowKeeps the name; checks by itself"></iframe></div><figcaption><b>A phone that scans now</b><span>Keeps the name; checks by itself</span></figcaption></figure>
+</div>
+<div class="row">
+<figure style="--w:608px"><div class="frame laptop" style="width:608px;height:380px"><iframe src="12-preview-edit.html#bare" width="1600" height="1000" style="transform:scale(0.38)" loading="lazy" title="Edit, from the previewThe shipped edit dialog, over the stage, with the briefing"></iframe></div><figcaption><b>Edit, from the preview</b><span>The shipped edit dialog, over the stage, with the briefing</span></figcaption></figure>
+<figure style="--w:576px"><div class="frame stage" style="width:576px;height:324px"><iframe src="11-preview-round.html#bare" width="1920" height="1080" style="transform:scale(0.3)" loading="lazy" title="Stepping throughThe plan&rsquo;s round 1, read-only"></iframe></div><figcaption><b>Stepping through</b><span>The plan&rsquo;s round 1, read-only</span></figcaption></figure>
+</div>
+<div class="row">
+<figure style="--w:242px"><div class="frame phone" style="width:242px;height:523px"><iframe src="../player-redesign/05-lobby.html#bare" width="390" height="844" style="transform:scale(0.62)" loading="lazy" title="After Open the doorsThe waiting phone joins itself and lands here (player-redesign 05)"></iframe></div><figcaption><b>After Open the doors</b><span>The waiting phone joins itself and lands here (player-redesign 05)</span></figcaption></figure>
+<figure style="--w:242px"><div class="frame phone" style="width:242px;height:523px"><iframe src="../player-redesign/03-join-ended.html#bare" width="390" height="844" style="transform:scale(0.62)" loading="lazy" title="The family it belongs toplayer-redesign 03: say what happened, offer only what can succeed"></iframe></div><figcaption><b>The family it belongs to</b><span>player-redesign 03: say what happened, offer only what can succeed</span></figcaption></figure>
+</div>
+</main>
+<aside class="mk-anno-rail" aria-label="Design notes"><h6>Design notes</h6><div class="mk-anno"><b>The state model</b><b>Created</b> (closed, not on any stage) &rarr; <b>Preview</b> (closed, on the stage: a view, not a stored state) &rarr; <b>Open</b> (<code>Started: true</code>, joins accepted, lobby) &rarr; <b>Started</b> (round 1 asked) &rarr; <b>Ended</b>. The server already stores the first boundary; only the host page learns to show it.</div><div class="mk-anno"><b>Today the phone just says no</b>A refused join sets an inline error on the join form with the server&rsquo;s sentence (<code>PlayerPage.jsx:565</code>); the shared-link auto-join swallows it entirely (<code>quiet</code>, <code>:540</code>). <code>joinResult.js</code> already classifies the case as <code>not-started</code> (<code>:89-91</code>); nothing renders it.</div><div class="mk-anno"><b>Waiting without joining</b>The phone polls the public <code>GET /games/{id}</code>, which already returns <code>started</code> (<code>get-game.js:85</code>), every 5 seconds while the page is visible, and joins with the typed name the moment it flips. No join is attempted early, so no player row, no billable session, no roster entry.</div><div class="mk-anno"><b>The name stays where the rules put it</b>The name gate sits behind the session gate (<code>session-gate.js:14-21</code>): an unstarted session refuses before it looks at names. Waiting keeps that order &mdash; the name is only sent when the doors are open.</div><div class="mk-anno"><b>Opening is the 7-day clock</b>Open the doors is <code>start-game.js</code>, which rewrites every row&rsquo;s TTL to opened + 7 days (<code>:69-97</code>). Preview never touches it, so a session previewed for a week is still on its 90-day unstarted clock (<code>session-ttl.js:13-14</code>).</div></aside><button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button><script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>

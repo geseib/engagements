@@ -1,0 +1,915 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>New engagement — the briefing, ready to check</title>
+<style>
+/* ---- src/src/styles.css, the rules the dialog inherits (extracted) ---- */
+:root {
+  /* ---- DUSK STAGE (big-screen / projector states) ---- */
+  --bg:            #0F1A2E;  /* deepest dusk slate, full-viewport field */
+  --surface:       #1B2942;  /* option cards, panels, AI panel */
+  --surface-2:     #25375A;  /* nested/hover, ridge mid-tone */
+  --text:          #F4EDE4;  /* warm paper-white, never pure #FFF (13.2:1) */
+  --muted:         #9BA8BE;  /* metadata, counters, secondary (6.1:1) */
+
+  --primary:       #F6A94C;  /* AMBER summit-glow — the one hero accent (8.4:1) */
+  --primary-deep:  #C77B4A;  /* amber pressed / horizon gradient stop (4.9:1) */
+  --secondary:     #7CA7E6;  /* dusk periwinkle — links, WS-connected, non-reward (6.8:1) */
+
+  --success:       #4FB286;  /* correct answer, positive delta (5.6:1) */
+  --danger:        #E5645E;  /* errors, destructive only. Borders, rules, bar fills. */
+  /* TWO TEXT-ONLY DANGER TINTS, by the same argument that produced --muted's
+     lift. Measured against the DUSK set, unlifted (no projector here — the
+     admin console is one person at 24in), --danger is UNDER the 4.5:1 AA bar
+     for normal text: 4.38:1 on --surface and 3.56:1 on --surface-2. Destructive
+     copy is precisely the text a person must read carefully, and it lives in
+     modals, which sit on --surface. Found by the admin redesign's audit A4;
+     see docs/design/admin-redesign/RATIONALE.md §5.
+       --danger-text  7.26 / 6.08 / 4.94  on --bg / --surface / --surface-2
+       --danger-deep  carries --text at 5.16:1 (a filled #E5645E button carries
+                      white at only 3.32:1, which is why it cannot be --danger)
+     --danger itself is unchanged and keeps every non-text job. */
+  --danger-text:   #EF8C86;  /* destructive COPY on a dusk surface */
+  --danger-deep:   #B03A34;  /* filled destructive button */
+  --gold:          #F6A94C;  /* rank #1 == --primary; silver #C0C6D0, bronze #B4794A */
+  --silver:        #C0C6D0;
+  --bronze:        #B4794A;
+
+  /* signature sky — ONLY behind the mountain, never on buttons */
+  --summit-sky: linear-gradient(180deg, #16233B 0%, #2A3A57 52%, #C77B4A 100%);
+  --ridge-front: #16233B;
+  --ridge-mid:   #22344F;
+  --ridge-back:  #2E4262;
+
+  /* geometry */
+  --radius: 16px;
+  --radius-sm: 8px;
+  --hairline: 1px solid rgba(155,168,190,.18);
+  --space: 8px; /* 8px base grid */
+
+  /* typography */
+  --font-display: "Archivo Expanded", system-ui, sans-serif; /* wide+heavy, recreates PP Neue Corp Wide */
+  --font-ui:      "Inter", system-ui, sans-serif;
+}
+[data-theme="light"] {
+  --bg:        #FBF7F1;   /* warm paper, kills projector-room glare */
+  --surface:   #FFFFFF;
+  --surface-2: #F1EDE4;
+  --text:      #1B2942;
+  --muted:     #5E6167;
+  /* --primary / --secondary / --success / --danger unchanged across themes */
+}
+[data-theme="dark"] {
+  --bg:        #0F1A2E;
+  --surface:   #1B2942;
+  --surface-2: #25375A;
+  --text:      #F4EDE4;
+  --muted:     #9BA8BE;
+}
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-secondary {
+  background: white;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.new-game-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.new-game-dialog {
+  background: white;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.new-game-dialog h2 {
+  margin: 0;
+  padding: 24px 24px 0;
+  font-size: 24px;
+  color: #333;
+}
+.dialog-content {
+  padding: 20px 24px;
+}
+.form-group {
+  margin-bottom: 20px;
+}
+.dialog-actions {
+  padding: 0 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.dialog-actions .btn-primary,
+.dialog-actions .btn-secondary {
+  min-width: 120px;
+}
+body{margin:0;font-family:var(--font-ui);line-height:1.6;color:var(--text);background:var(--bg)}
+*,*::before,*::after{box-sizing:border-box}
+/* ---- src/src/components/GameSetupDialog.css, verbatim ---- */
+/* ============================================================================
+   THE CREATE / EDIT ENGAGEMENT DIALOG — dusk, at last.
+
+   Reported: "i dont think that the create engagement modal is quite up to the
+   design of the rest of the site, its a bit dated." Correct, and the history
+   explains the mismatch: half of this dialog (the format pills, the option
+   cards, the anonymity preview) was redesigned against the host mockups and
+   carried its own commentary — but it was retinted onto the ORIGINAL dialog
+   shell, a 500px white card with 2-solid-#e1e1e1 inputs from the first weeks
+   of the project. The room around the new furniture was never rebuilt, and a
+   white card floating over the dusk stage is exactly what "dated" looks like.
+
+   This sheet converts the WHOLE dialog to dusk — the same conversion the
+   prompt admin got — and owns every rule the dialog uses. The paper-era .gsd
+   block that lived in styles.css moves here, retinted; nothing .gsd remains
+   there. The base .new-game-dialog card in styles.css is untouched (the
+   reports modal still wears it); `.gsd.new-game-dialog` overrides within this
+   scope only.
+
+   SCOPED TOKENS, NOT [data-theme]. The Modal primitive owns the content
+   element, so there is no root of ours to stamp a theme attribute on without
+   widening Modal's API. Every colour below is a --gsd-* local declared on the
+   scope itself (skill §0.5) — an undefined custom property invalidates the
+   whole declaration, so nothing here reaches for a token another stylesheet
+   happens to put in the bundle.
+
+   MEASURED CONTRAST (gameSetupPalette.test.js composites the real stacks):
+     text    #F4EDE4 on card #1B2942            12.5:1
+     muted   #A9B5C9 on card #1B2942             7.0:1  (see the token note for
+                                                  why not the site's #9BA8BE)
+     muted   on the is-on green tint              4.9:1  (the pairing that
+                                                  forced the lighter muted)
+     text    on input field #25375A               9.9:1
+     primary #F6A94C on card                      7.4:1  (chip text, ok on dusk;
+                                                  the paper block needed
+                                                  --primary-deep — dusk does not)
+     success-text #6FD0A4 on the is-on tint       5.4:1
+
+   Ladder: the laptop ladder (12/13/15/19/24) — this is a one-person surface at
+   arm's length, not a stage. Inputs render at body (15px), never label.
+   ========================================================================== */
+
+.gsd {
+  --gsd-card: #1B2942;
+  --gsd-field: #25375A;
+  --gsd-text: #F4EDE4;
+  /*
+    #A9B5C9, one step lighter than the site's #9BA8BE, and the palette test is
+    why: this scope puts muted copy on a GREEN-TINTED field (the option cards
+    default ON), and #9BA8BE measures 4.23:1 there — under AA on the shipping
+    state of that text. The site value survives on plain --surface grounds;
+    this scope's extra tint layer is what it does not survive. 4.90 on the
+    tint, 5.7 on the field, 7.0 on the card. Measured, not eyeballed — the
+    first draft of this file eyeballed it and the test caught it.
+  */
+  --gsd-muted: #A9B5C9;
+  --gsd-rule: rgba(155, 168, 190, 0.24);
+  --gsd-rule-strong: rgba(155, 168, 190, 0.38);
+  --gsd-primary: #F6A94C;
+  --gsd-secondary: #7CA7E6;
+  --gsd-success: #4FB286;
+  --gsd-success-text: #6FD0A4;   /* styles.css never declared one; every scope
+                                    redeclares it locally (skill §6) */
+  --gsd-t-floor: 12px;
+  --gsd-t-label: 13px;
+  --gsd-t-body: 15px;
+  --gsd-t-head: 19px;
+  --gsd-t-title: 24px;
+}
+
+/* The card. Wider than the old 500px — the format pills, the two-column rows
+   and the category grid were designed for room the original card never gave
+   them, which is why everything in it felt crowded. */
+.gsd.new-game-dialog {
+  position: relative;
+  background: var(--gsd-card);
+  color: var(--gsd-text);
+  border: 1px solid var(--gsd-rule);
+  border-radius: 14px;
+  max-width: 680px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.gsd h2 {
+  margin: 0 0 4px;
+  padding: 22px 26px 0;
+  font-family: var(--font-display, inherit);
+  font-size: var(--gsd-t-title);
+  font-weight: 800;
+  color: var(--gsd-text);
+}
+
+.gsd .dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 26px 22px;
+}
+
+/* ------------------------------------------------------------------- the X */
+
+.gsd-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--gsd-muted);
+  cursor: pointer;
+}
+
+.gsd-close:hover { background: rgba(155, 168, 190, 0.14); color: var(--gsd-text); }
+
+.gsd-close:focus-visible {
+  outline: 2px solid var(--gsd-primary);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ labels + rows */
+
+.gsd .form-group { margin-bottom: 14px; }
+
+.gsd .form-group > label,
+.gsd .gsd-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+/* Question set and categories share a row on a wide dialog and stack on a
+   narrow one — flex-basis, not a media query, because the dialog's own width
+   is what matters and it is not the viewport's. */
+.gsd .gsd-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gsd .gsd-row > .form-group {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- the fields
+   One rule for all three controls: the old sheet styled the textarea in the
+   new idiom and left input and select on 2px #e1e1e1 — two generations of
+   field on one form is most of what read as dated. Inputs are body-size by
+   ladder rule: a 13px input producing 15px table text is the RATIONALE §3.2
+   failure. */
+.gsd .dialog-input,
+.gsd .dialog-select,
+.gsd .dialog-textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 8px;
+  background: var(--gsd-field);
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-body);
+}
+
+.gsd .dialog-textarea { resize: vertical; }
+
+.gsd .dialog-input:focus,
+.gsd .dialog-select:focus,
+.gsd .dialog-textarea:focus {
+  outline: none;
+  border-color: var(--gsd-primary);
+}
+
+.gsd .dialog-input:disabled,
+.gsd .dialog-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gsd .dialog-select option { background: var(--gsd-field); color: var(--gsd-text); }
+
+.gsd .dialog-help-text {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.45;
+  color: var(--gsd-muted);
+}
+
+/* ------------------------------------------------------------- format pills */
+
+.gsd-types {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gsd-pill {
+  font: inherit;
+  font-weight: 700;
+  font-size: var(--gsd-t-label);
+  padding: 9px 14px;
+  border-radius: 99px;
+  background: transparent;
+  border: 1px solid var(--gsd-rule-strong);
+  color: var(--gsd-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.gsd-pill:hover:not(:disabled) {
+  border-color: var(--gsd-primary);
+  color: var(--gsd-text);
+}
+
+/* On dusk, --primary carries text at 7.4:1 — the paper block's detour through
+   --primary-deep existed because #F6A94C is 1.9:1 on white, and it is exactly
+   the kind of compensation that stops being needed when the surface converts. */
+.gsd-pill.on {
+  border-color: var(--gsd-primary);
+  color: var(--gsd-primary);
+  background: rgba(246, 169, 76, 0.12);
+}
+
+.gsd-pill:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* THE WAY IN TO A HOST'S OWN QUESTION SETS, beside the picker that needs one.
+   A link rather than a button: it opens a side task, and a second filled
+   button next to "Create engagement" would compete with the one action this
+   screen exists for. */
+.gsd-setlink {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 600;
+  color: var(--gsd-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.gsd-setlink:hover { color: var(--gsd-text); }
+
+/* `blurb` from config/gameTypes.js — one line that answers "what is
+   Wavelength?". */
+.gsd-blurb {
+  margin: 8px 0 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd-section {
+  margin: 18px 0 10px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+  border-top: 1px solid var(--gsd-rule);
+  padding-top: 16px;
+}
+
+/* ---------------------------------------------------------- category grid
+   The grid is LIVE in both modes now (the edit lock was reported and lifted),
+   so the selected state has to read as a control, not a chip: border AND tint,
+   never colour alone. */
+.gsd .category-selection { margin-top: 2px; }
+
+.gsd .category-button-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gsd .category-button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--gsd-rule-strong);
+  background: transparent;
+  color: var(--gsd-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gsd .category-button:hover { border-color: var(--gsd-primary); }
+
+.gsd .category-button.selected {
+  border-color: var(--gsd-primary);
+  background: rgba(246, 169, 76, 0.12);
+}
+
+.gsd .category-button .category-count {
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  color: var(--gsd-muted);
+}
+
+/* ------------------------------------------------------------- option cards */
+
+.gsd-opt {
+  border: 1px solid var(--gsd-rule);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--gsd-field);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gsd-opt.is-on {
+  border-color: var(--gsd-success);
+  background: rgba(79, 178, 134, 0.10);
+}
+
+.gsd-opt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  margin: 0;
+}
+
+.gsd-opt-head input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: none;
+  cursor: pointer;
+  accent-color: var(--gsd-success);
+}
+
+.gsd-opt-head input[type="checkbox"]:disabled { cursor: not-allowed; }
+
+.gsd-opt-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gsd-text);
+}
+
+.gsd-opt-state {
+  flex: none;
+  font-family: var(--font-display, inherit);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+/* 11px is under the 12px floor and stays DELIBERATELY: the ON/OFF word is a
+   state echo beside an 18px checkbox that already carries the fact — the same
+   glance-only dispensation the old sheet gave it. The floor protects things
+   read in runs; this is read never and glanced twice. */
+.gsd-opt.is-on .gsd-opt-state { color: var(--gsd-success-text); }
+
+.gsd-opt-does {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gsd-text);
+}
+
+.gsd-opt-else {
+  margin: 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd-opt-else b { color: var(--gsd-text); font-weight: 700; }
+
+/* THE ZERO-SETUP LINE. One sentence naming what Workie will do with nothing
+   configured, so the optional fields above read as options rather than
+   homework. Same set-apart treatment as .gsd-opt-limit — it is the other
+   sentence that qualifies the section — keyed green because it is a promise
+   that things already work, not a caveat. --gsd-success-text #6FD0A4 on the
+   dialog's #1B2942 surface is 7.6:1. */
+.gsd-workie-plan {
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.5;
+  color: var(--gsd-success-text);
+  border-left: 3px solid var(--gsd-success);
+  padding-left: 11px;
+}
+
+/* NEVER OVERCLAIM. The limits sentence is set apart rather than tucked into
+   the paragraph above, because it is the one line that qualifies the promise. */
+.gsd-opt-limit {
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+  border-left: 3px solid var(--gsd-secondary);
+  padding-left: 11px;
+}
+
+/* --------------------------------------------------- before/after preview */
+
+.gsd-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .gsd-preview { grid-template-columns: 1fr; }
+}
+
+.gsd-pv {
+  border: 1px solid var(--gsd-rule);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: var(--gsd-card);
+}
+
+.gsd-pv h6 {
+  margin: 0 0 7px;
+  font-size: 10.5px;   /* glance-only card caption; same dispensation as
+                          .gsd-opt-state, inherited from the old sheet */
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+.gsd-pv-ans {
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  line-height: 1.4;
+  color: var(--gsd-text);
+}
+
+.gsd-pv-who {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+
+.gsd-pv-who.named {
+  color: var(--gsd-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.gsd .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gsd-rule);
+}
+
+.gsd .btn-primary,
+.gsd .btn-secondary {
+  font: inherit;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Filled amber carries DARK text: white on #F6A94C is 1.9:1 in either theme. */
+.gsd .btn-primary {
+  border: 1px solid var(--gsd-primary);
+  background: var(--gsd-primary);
+  color: #1B2942;
+}
+
+.gsd .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+.gsd .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.gsd .btn-secondary {
+  border: 1px solid var(--gsd-rule-strong);
+  background: transparent;
+  color: var(--gsd-text);
+}
+
+.gsd .btn-secondary:hover { border-color: var(--gsd-muted); }
+
+/* THE REFUSAL, in the dialog instead of a browser alert. A limit is the
+   amber rule (it is a plan fact, not a fault); any other failure is the
+   danger rule. Copy inherits --gsd-text; the link is the one accent. */
+.gsd .gsd-refusal {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger-text);
+  border-radius: 6px;
+  background: rgba(229, 100, 94, .10);
+  color: var(--gsd-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.gsd .gsd-refusal--limit { border-left-color: var(--primary); background: rgba(246, 169, 76, .10); }
+.gsd .gsd-refusal a { color: var(--primary); font-weight: 700; }
+
+/* ---- ss-dialog.css: what this design adds ---- */
+/* ===========================================================================
+   ss-dialog.css — the create / edit dialog, as a DIFF against the shipped
+   GameSetupDialog.css (inlined above this block, verbatim, together with the
+   styles.css rules it inherits).
+
+   In the product every rule here moves INTO GameSetupDialog.css, rooted at
+   .gsd, as gsd-* — the dialog owns its one sheet. The ss- prefix exists only
+   so the mockup's diff is legible and cannot collide with anything shipped.
+   Colour is the dialog's own --gsd-* locals (GameSetupDialog.css:43-69); the
+   two tokens it borrows from :root (--danger-text, --danger-deep) are the ones
+   the shipped refusal already borrows (:516-527).
+
+   MEASURED (composited up the real stack: tint over card #1B2942):
+     --gsd-text  #F4EDE4 on card 12.53 · on field #25375A 10.20
+     --gsd-muted #A9B5C9 on card  7.03 · on field  5.72
+                 on the briefing's periwinkle tint (6% over card)    6.30
+                 on the amber limit tint (10% over card)             5.83
+                 on the danger tint (10% over card)                  6.28
+     --gsd-secondary #7CA7E6 on card 5.91 · on the periwinkle tint 5.30
+     --gsd-primary   #F6A94C on card 7.42 (the "changed" words in the
+                     Advanced summary)
+     --danger-text   #EF8C86 on the danger tint 5.43
+     --danger-deep   #B03A34 carrying --gsd-text 5.16 (styles.css:31-33)
+     --gsd-text on the confirm foot #2A2E42 11.53
+   Ladder: the laptop ladder, 12/13/15/19/24. Nothing new below 12px.
+   ======================================================================== */
+
+.gsd svg.ico{width:16px;height:16px;flex:none;vertical-align:-3px}
+
+/* ---------------------------------------------- the head and foot STICK
+   The shipped card scrolls as one piece (styles.css .new-game-dialog:
+   max-height 90vh, overflow-y auto), so the absolute X scrolls away with the
+   title and Cancel sits below the last field. Both exits stay on screen now,
+   whatever is open — hard rule 2 is about exits you can SEE. */
+.gsd .ss-head{position:sticky;top:0;z-index:3;background:var(--gsd-card);
+  border-bottom:1px solid var(--gsd-rule);padding-bottom:12px}
+.gsd .ss-head h2{margin:0;padding:22px 64px 0 26px}
+.gsd .ss-head .ss-sub{margin:3px 0 0;padding:0 64px 0 26px;font-size:var(--gsd-t-label);
+  color:var(--gsd-muted);line-height:1.45}
+.gsd .ss-head .gsd-close{top:14px}
+.gsd .dialog-actions.ss-foot{position:sticky;bottom:0;z-index:3;background:var(--gsd-card);
+  align-items:center;margin-top:0;padding:14px 26px 18px;flex-wrap:wrap}
+.gsd .ss-foot-note{margin:0 auto 0 0;display:flex;gap:7px;align-items:center;
+  font-size:var(--gsd-t-label);color:var(--gsd-muted);line-height:1.4;min-width:0}
+.gsd .ss-foot-note svg.ico{color:var(--gsd-secondary)}
+
+/* The dirty-close confirm, INLINE in the foot — never a modal from a modal.
+   Both exits (X and Cancel) route through one requestClose(); with nothing
+   typed it just closes, with a briefing or an edit in hand it turns the foot
+   into this. Escape answers the same way. */
+.gsd .dialog-actions.ss-foot.is-confirm{background:#2A2E42;border-top-color:rgba(229,100,94,.55)}
+.gsd .ss-confirm-t{margin:0 auto 0 0;font-size:14px;line-height:1.45;color:var(--gsd-text);min-width:0;flex:1 1 260px}
+.gsd .ss-confirm-t b{font-weight:700}
+.gsd .btn-danger-deep{font:inherit;font-size:var(--gsd-t-body);font-weight:700;padding:10px 18px;border-radius:8px;
+  border:1px solid var(--danger-deep);background:var(--danger-deep);color:var(--gsd-text);cursor:pointer;min-width:120px}
+
+/* ------------------------------------------------------- small pieces */
+.gsd .ss-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:99px;
+  border:1px solid var(--gsd-rule-strong);font-size:var(--gsd-t-floor);font-weight:700;letter-spacing:.04em;
+  text-transform:none;color:var(--gsd-muted);vertical-align:1px}
+.gsd .ss-btn{font:inherit;font-size:var(--gsd-t-label);font-weight:700;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--gsd-rule-strong);background:transparent;color:var(--gsd-text);cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.gsd .ss-btn:hover{border-color:var(--gsd-primary)}
+.gsd .ss-btn--link{border:0;padding:0;color:var(--gsd-secondary);text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.gsd .ss-fine{font-size:var(--gsd-t-floor);color:var(--gsd-muted);line-height:1.45}
+.gsd .ss-locked{display:flex;gap:7px;align-items:center;margin-top:6px;font-size:var(--gsd-t-floor);color:var(--gsd-muted)}
+
+/* FIX, found by rendering the two shipped sheets together: an UNSELECTED
+   category name computes #333 on the card — 1.15:1 — because styles.css:4858
+   styles .category-name directly and beats the colour .gsd .category-button
+   hands down (GameSetupDialog.css:289-316 re-colours only .category-count).
+   Selected names are white by styles.css:7432, which is why a test of the
+   selected chip passes. */
+.gsd .category-button .category-name{color:inherit}
+
+/* The shipped captions at 10.5 / 11px, raised to the 12px floor as the survey
+   start dialog (survey-redesign 07) already did — one dialog family, one floor. */
+.gsd .gsd-pv h6,.gsd .gsd-pv-who,.gsd .gsd-opt-state{font-size:var(--gsd-t-floor)}
+
+/* ---------------------------------------------------------- THE BRIEFING
+   One block, five states: empty (an invitation), working (read, then write),
+   ready (the editable summary), limit (amber: a fact about the file, not a
+   fault) and failed (danger rule: something broke). Call & Answer only. */
+.gsd .ss-brief{border:1px dashed var(--gsd-rule-strong);border-radius:12px;padding:14px 16px;
+  display:flex;gap:14px;align-items:flex-start;margin-bottom:6px}
+.gsd .ss-brief-ico{width:34px;height:34px;border-radius:9px;background:rgba(124,167,230,.12);
+  color:var(--gsd-secondary);display:grid;place-items:center;flex:none}
+.gsd .ss-brief-ico svg.ico{width:18px;height:18px}
+.gsd .ss-brief-main{min-width:0;flex:1;display:flex;flex-direction:column;gap:8px}
+.gsd .ss-brief-t{margin:0;font-size:var(--gsd-t-body);font-weight:700;color:var(--gsd-text);line-height:1.35}
+.gsd .ss-brief-d{margin:0;font-size:var(--gsd-t-label);color:var(--gsd-muted);line-height:1.5}
+.gsd .ss-brief-d b{color:var(--gsd-text);font-weight:700}
+.gsd .ss-brief-acts{display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+
+.gsd .ss-brief.is-ready,.gsd .ss-brief.is-working{border-style:solid;border-color:rgba(124,167,230,.42);
+  background:rgba(124,167,230,.06)}
+.gsd .ss-brief.is-limit{border-style:solid;border-color:rgba(246,169,76,.55);background:rgba(246,169,76,.10)}
+.gsd .ss-brief.is-limit .ss-brief-ico{background:rgba(246,169,76,.16);color:var(--gsd-primary)}
+.gsd .ss-brief.is-failed{border-style:solid;border-color:rgba(229,100,94,.55);background:rgba(229,100,94,.10)}
+.gsd .ss-brief.is-failed .ss-brief-ico{background:rgba(229,100,94,.16);color:var(--danger-text)}
+
+.gsd .ss-src{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:var(--gsd-t-label);color:var(--gsd-muted)}
+.gsd .ss-src b{color:var(--gsd-text);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:30ch}
+.gsd .ss-src .sep{opacity:.5}
+.gsd textarea.dialog-textarea.ss-brief-text{min-height:200px;line-height:1.5;font-size:14px}
+.gsd .ss-row{display:flex;gap:12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+.gsd .ss-kept{margin:0;font-size:var(--gsd-t-floor);line-height:1.5;color:var(--gsd-muted);
+  border-left:3px solid var(--gsd-secondary);padding-left:11px}
+.gsd .ss-kept b{color:var(--gsd-text);font-weight:700}
+
+/* The two-step progress: a real step that finishes, then an honest sweep —
+   the summarising call returns once, so there is no fraction to show. */
+.gsd .ss-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.gsd .ss-steps li{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--gsd-text);line-height:1.35}
+.gsd .ss-steps li span{min-width:0}
+.gsd .ss-steps li small{color:var(--gsd-muted);font-size:var(--gsd-t-floor);margin-left:4px}
+.gsd .ss-dot{width:18px;height:18px;border-radius:50%;flex:none;border:2px solid var(--gsd-rule-strong);
+  display:grid;place-items:center;font-size:11px;font-weight:800;line-height:1;color:#1B2942}
+.gsd .ss-steps li.done .ss-dot{background:var(--gsd-success);border-color:var(--gsd-success)}
+.gsd .ss-steps li.now .ss-dot{border-color:var(--gsd-primary)}
+.gsd .ss-steps li.todo{color:var(--gsd-muted)}
+.gsd .ss-sweep{height:4px;border-radius:99px;background:rgba(155,168,190,.18);overflow:hidden;position:relative}
+.gsd .ss-sweep i{position:absolute;top:0;bottom:0;left:-30%;width:30%;border-radius:99px;background:var(--gsd-primary);
+  animation:ss-sweep 1.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes ss-sweep{to{left:100%}}
+@media (prefers-reduced-motion:reduce){.gsd .ss-sweep i{animation:none;left:0;width:100%;opacity:.45}}
+
+/* ------------------------------------------------ THE ADVANCED DISCLOSURE
+   A native <details>, closed by default. The summary line IS the promise:
+   it names every default in force, and a changed value is named in amber in
+   the same sentence, so closing the section never hides a decision. */
+.gsd .ss-adv{margin:14px 0 2px;border-top:1px solid var(--gsd-rule)}
+.gsd .ss-adv > summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr);
+  gap:2px 14px;align-items:baseline;padding:14px 0 6px;border-radius:6px}
+.gsd .ss-adv > summary::-webkit-details-marker{display:none}
+.gsd .ss-adv > summary:focus-visible{outline:2px solid var(--gsd-primary);outline-offset:3px}
+.gsd .ss-adv-k{display:inline-flex;align-items:center;gap:7px;font-size:var(--gsd-t-floor);font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--gsd-text);white-space:nowrap}
+.gsd .ss-chev{display:inline-block;width:8px;height:8px;border-right:2px solid var(--gsd-muted);
+  border-bottom:2px solid var(--gsd-muted);transform:rotate(-45deg);transition:transform .15s ease;margin-right:2px}
+.gsd .ss-adv[open] .ss-chev{transform:rotate(45deg)}
+.gsd .ss-adv-s{margin:0;font-size:var(--gsd-t-label);color:var(--gsd-muted);line-height:1.5}
+.gsd .ss-adv-s b{color:var(--gsd-primary);font-weight:700}
+.gsd .ss-adv-s .ss-open-only{display:none}
+.gsd .ss-adv[open] .ss-adv-s .ss-open-only{display:inline}
+.gsd .ss-adv-body{padding:6px 0 2px;display:flex;flex-direction:column;gap:2px}
+.gsd .ss-adv-body .gsd-section{margin-top:12px}
+.gsd .ss-adv-body .gsd-section:first-child{margin-top:4px;border-top:0;padding-top:4px}
+.gsd .ss-two{display:flex;gap:16px;flex-wrap:wrap}
+.gsd .ss-two > .form-group{flex:1 1 240px;min-width:0}
+.gsd .ss-changed{color:var(--gsd-primary);font-weight:700}
+
+/* ------------------------------------------------ mockup tooling only
+   The rail reserves 320px on the right; the shipped overlay is 100vw. */
+body.mk-anno-on .new-game-overlay{width:auto;right:320px}
+@media (max-width:1440px){body.mk-anno-on .new-game-overlay{right:0}}
+.ss-behind{position:fixed;left:0;top:0;border:0;width:100%;height:100%}
+body.mk-anno-on .ss-behind{width:calc(100% - 320px)}
+@media (max-width:1440px){body.mk-anno-on .ss-behind{width:100%}}
+.new-game-overlay.ss-lighter{background:rgba(6,10,18,.62)}
+
+/* ---- mockup tooling: the design-notes rail (mk.css), not product CSS ---- */
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="i-books" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h4v16H3zM9 4h4v16H9z"/><path d="m15.4 5.3 3.5 15.2 2-.5L17.4 4.8z"/></g><g id="i-play" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M10.4 9.2 15 12l-4.6 2.8z"/></g><g id="i-sparkle" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.7 9l5.8 1.7-5.8 1.7L12 18l-1.7-5.6L4.5 10.7 10.3 9z"/></g><g id="i-package" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20 8v8l-8 4.4L4 16V8z"/><path d="M4 8l8 4.3L20 8M12 12.3V20"/></g><g id="i-users" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.5" cy="8.5" r="3.2"/><path d="M3.6 19.4a6 6 0 0 1 11.8 0"/><path d="M16.4 6.2a3 3 0 0 1 0 5.9M17.6 14.4a5.6 5.6 0 0 1 3 4.6"/></g><g id="i-gear" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8"/></g><g id="i-search" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.2"/><path d="m15.4 15.4 4.1 4.1"/></g><g id="i-plus" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g><g id="i-trash" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 6.6h14.8M9.4 6.6V4.4h5.2v2.2M6.6 6.6l1 13h8.8l1-13"/></g><g id="i-warn" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.2 21 19.6H3z"/><path d="M12 10v4.2M12 16.8v.1"/></g><g id="i-check" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.6 4.6 4.6L19 7.4"/></g><g id="i-x" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g><g id="i-down" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9.5 6 6 6-6"/></g><g id="i-up" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14.5 6-6 6 6"/></g><g id="i-left" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></g><g id="i-image" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5.2" width="16.8" height="13.6" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.4 17.2 4.8-4.4 4 3.4 2.8-2.4 3.6 3.2"/></g><g id="i-upload" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16.4V4.6M7.6 9 12 4.6 16.4 9M4.4 19.4h15.2"/></g><g id="i-download" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.6v11.8M7.6 12l4.4 4.4L16.4 12M4.4 19.4h15.2"/></g><g id="i-pencil" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 19.4h3.2L19 8.2a2.3 2.3 0 0 0-3.2-3.2L4.6 16.2z"/></g><g id="i-clock" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.2V12l3.2 2"/></g><g id="i-revert" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 10.4h5V5.4"/><path d="M4.9 10a8 8 0 1 1-.5 4.4"/></g><g id="i-link" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 13.8a3.6 3.6 0 0 0 5.2 0l2.6-2.6a3.7 3.7 0 0 0-5.2-5.2l-1.1 1.1"/><path d="M13.8 10.2a3.6 3.6 0 0 0-5.2 0L6 12.8a3.7 3.7 0 0 0 5.2 5.2l1.1-1.1"/></g><g id="i-file" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.6H7.4a1.8 1.8 0 0 0-1.8 1.8v13.2a1.8 1.8 0 0 0 1.8 1.8h9.2a1.8 1.8 0 0 0 1.8-1.8V8z"/><path d="M14 3.6V8h4.4"/></g><g id="i-pin" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.8h6l-.8 5.4 3 3.4H6.8l3-3.4z"/><path d="M12 12.6V20"/></g><g id="i-lock" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5.2" y="10.6" width="13.6" height="9.4" rx="1.8"/><path d="M8.4 10.6V8a3.6 3.6 0 0 1 7.2 0v2.6"/></g><g id="i-eye" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 12s3.4-6.2 9.2-6.2 9.2 6.2 9.2 6.2-3.4 6.2-9.2 6.2S2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.6"/></g><g id="i-door" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20.4h14"/><path d="M7 20.4V4.6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.8"/><circle cx="14" cy="12.4" r=".9"/></g><g id="i-database" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7.4" ry="2.6"/><path d="M4.6 6v12c0 1.4 3.3 2.6 7.4 2.6s7.4-1.2 7.4-2.6V6M4.6 12c0 1.4 3.3 2.6 7.4 2.6s7.4-1.2 7.4-2.6"/></g><g id="i-arrow" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12h14.6M13.4 6.2 19.2 12l-5.8 5.8"/></g></defs></svg>
+
+<div class="new-game-overlay">
+<div class="new-game-dialog gsd ss-dlg " role="dialog" aria-modal="true" aria-labelledby="gsd-heading"><div class="ss-head"><h2 id="gsd-heading">New engagement</h2><button type="button" class="gsd-close" aria-label="Close without creating" title="Close without creating">&times;</button></div><div class="dialog-content"><div class="form-group"><label for="gsd-title">Event title</label><input id="gsd-title" type="text" class="dialog-input" value="Support Ops Review — Q3"></div><div class="form-group"><span class="gsd-label" id="gsd-format-label">Format</span><div class="gsd-types" role="group" aria-labelledby="gsd-format-label"><button type="button" class="gsd-pill on" aria-pressed="true">Call &amp; Answer</button><button type="button" class="gsd-pill" aria-pressed="false">Trivia</button><button type="button" class="gsd-pill" aria-pressed="false">Poll</button><button type="button" class="gsd-pill" aria-pressed="false">Wavelength</button></div><p class="gsd-blurb">Open responses, then the room votes on the best ones.</p></div><div class="gsd-row"><div class="form-group"><label for="gsd-set">Question set</label><select id="gsd-set" class="dialog-select"><option>Faster fixes (12 questions)</option></select><button type="button" class="gsd-setlink">Your question sets</button></div><div class="form-group"><span class="gsd-label" id="gsd-cat-label">Categories</span><div class="category-selection"><div class="category-button-grid" role="group" aria-labelledby="gsd-cat-label"><button type="button" class="category-button selected" aria-pressed="true"><span class="category-name">Backlog</span><span class="category-count">(4)</span></button><button type="button" class="category-button selected" aria-pressed="true"><span class="category-name">Handoffs</span><span class="category-count">(3)</span></button><button type="button" class="category-button selected" aria-pressed="true"><span class="category-name">Tooling</span><span class="category-count">(3)</span></button><button type="button" class="category-button" aria-pressed="false"><span class="category-name">Customer updates</span><span class="category-count">(2)</span></button></div><small class="dialog-help-text">3 of 4 categories &middot; 10 questions</small></div></div></div><h3 class="gsd-section">Workie&rsquo;s briefing<span class="ss-tag">Call &amp; Answer only</span></h3><div class="ss-brief is-ready"><span class="ss-brief-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-file"/></svg></span><div class="ss-brief-main"><div class="ss-row"><div class="ss-src">From <b title="q3-support-ops-review.pdf">q3-support-ops-review.pdf</b><span class="sep">&middot;</span>14 pages</div><div class="ss-brief-acts"><button type="button" class="ss-btn"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-upload"/></svg>Replace</button><button type="button" class="ss-btn"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trash"/></svg>Remove</button></div></div><label class="gsd-label" for="ss-brief-text" style="margin:2px 0 0">What Workie will know</label><textarea id="ss-brief-text" class="dialog-textarea ss-brief-text" maxlength="1500">Q3 review of the support team, ahead of Q4 planning.
+- Open issues are up 15% on Q2 (1,840 to 2,116).
+- Mean time to resolve (MTTR) has stretched to 3 weeks. The Q4 target is 10 days.
+- About a third of the open backlog is tagged “quick fix” (under a day of work); many have waited more than a month.
+- Most escalations start with a ticket reopened after a first fix.
+- Two tier-2 roles were unfilled for most of the quarter.
+- Goal: MTTR under 10 days without adding headcount.</textarea><div class="ss-row"><p class="ss-kept"><b>2 names left out.</b> The summary keeps roles, not people &mdash; nothing here is ever shown to the room.</p><small class="dialog-help-text" style="margin:0">478/1,500 characters</small></div></div></div><details class="ss-adv"><summary><span class="ss-adv-k"><i class="ss-chev" aria-hidden="true"></i>Advanced</span><span class="ss-adv-s">Using the defaults &mdash; answers anonymous until voting closes, questions shuffled; Workie adapts its voice and gives the standard Call &amp; Answer summary. <span class="ss-open-only">Change any of them here.</span></span></summary></details></div><div class="dialog-actions ss-foot"><p class="ss-foot-note"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-door"/></svg>Nobody can join until you open the doors.</p><button type="button" class="btn-secondary">Cancel</button><button type="button" class="btn-primary">Create engagement</button></div></div>
+</div>
+<aside class="mk-anno-rail" aria-label="Design notes"><h6>Design notes</h6><div class="mk-anno"><b>Read it before the room does</b>The owner: the doc &lsquo;would be summerized to inform the workie&rsquo;. The summary is the thing the host signs off, so it is on screen in full, in an ordinary textarea, editable to the last character. 1,500 characters at most &mdash; about eight facts.</div><div class="mk-anno"><b>Facts, not the file</b>Only this text is kept. The PDF goes to <code>admin/parse-document.js</code>, which returns text and stores nothing (<code>:68-80</code>); the text goes to a new stateless summariser; the file and the full text are dropped in the browser. See 40 for why.</div><div class="mk-anno"><b>Names left out, and said so</b>The summariser swaps people for roles. The count is shown because a silent removal is a reduction with no recovery &mdash; the host can add a name back by typing it, knowing Workie may then say it on the wall.</div><div class="mk-anno"><b>Replace and Remove</b>Replace runs the same two steps again; Remove clears the briefing (the session then carries none). Both are plain buttons inside the block &mdash; no second dialog.</div><div class="mk-anno"><b>Workie still has a default</b>The Advanced summary lists what the briefing does not change. A briefing is additive: the voice, the approach and the format contract are exactly what they were (40).</div></aside><button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button><script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+<script>if(location.hash==='#bare'){document.body.classList.remove('mk-anno-on');document.body.classList.add('mk-anno-off','ss-bare');var t=document.getElementById('mkAnno');if(t)t.style.display='none';}</script>
+
+</body>
+</html>

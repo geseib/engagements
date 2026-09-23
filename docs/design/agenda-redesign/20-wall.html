@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>On the wall — an event</title>
+<style>
+
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#B6C2D4}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#B6C2D4;margin:4px 0 14px}
+.bd .arrow{align-self:center;font:800 24px/1 "Inter",system-ui,sans-serif;color:#F6A94C;padding:0 2px}
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<main class="bd">
+
+<h1>On the wall</h1>
+<p class="lede">Doors open with the day&rsquo;s agenda and the one code. During a talk the presenter&rsquo;s own screen does the work; if the projector stays on Engage it holds on &ldquo;Now presenting&rdquo;. Between items the next one is the headline and the rest of the day waits at the side. Starting an engagement plays the phase wipe once, over that item&rsquo;s own lobby, while the phones arrive by themselves. Room profile, 1920&times;1080.</p>
+<div class="row">
+<figure style="--w:739px"><div class="frame stage" style="width:739px;height:416px"><iframe src="s-01-doors.html" width="1920" height="1080" style="transform:scale(0.385)" loading="lazy" title="Doors openThe agenda and the way in; the code once"></iframe></div><figcaption><b>Doors open</b><span>The agenda and the way in; the code once</span></figcaption></figure>
+<figure style="--w:739px"><div class="frame stage" style="width:739px;height:416px"><iframe src="s-02-presenting.html" width="1920" height="1080" style="transform:scale(0.385)" loading="lazy" title="Now presentingA holding screen: the talk, the presenter, the way in, what&rsquo;s next"></iframe></div><figcaption><b>Now presenting</b><span>A holding screen: the talk, the presenter, the way in, what&rsquo;s next</span></figcaption></figure>
+</div><div class="row">
+<figure style="--w:739px"><div class="frame stage" style="width:739px;height:416px"><iframe src="s-03-between.html" width="1920" height="1080" style="transform:scale(0.385)" loading="lazy" title="Between itemsThe next item is the headline; later items at the side"></iframe></div><figcaption><b>Between items</b><span>The next item is the headline; later items at the side</span></figcaption></figure>
+<figure style="--w:739px"><div class="frame stage" style="width:739px;height:416px"><iframe src="s-04-trigger.html" width="1920" height="1080" style="transform:scale(0.385)" loading="lazy" title="Start triviaThe wipe, once; phones counting in; the item&rsquo;s own lobby"></iframe></div><figcaption><b>Start trivia</b><span>The wipe, once; phones counting in; the item&rsquo;s own lobby</span></figcaption></figure>
+</div><div class="row">
+<figure style="--w:739px"><div class="frame stage" style="width:739px;height:416px"><iframe src="s-05-break.html" width="1920" height="1080" style="transform:scale(0.385)" loading="lazy" title="A breakA countdown to the planned return; the day&rsquo;s standings"></iframe></div><figcaption><b>A break</b><span>A countdown to the planned return; the day&rsquo;s standings</span></figcaption></figure>
+<figure style="--w:739px"><div class="frame stage" style="width:739px;height:416px"><iframe src="s-06-rehearsal.html" width="1920" height="1080" style="transform:scale(0.385)" loading="lazy" title="RehearsalDoors closed; the dashed mark; step through the items"></iframe></div><figcaption><b>Rehearsal</b><span>Doors closed; the dashed mark; step through the items</span></figcaption></figure>
+</div>
+</main>
+<aside class="mk-anno-rail" aria-label="Design notes">
+<h6>Design notes</h6>
+<div class="mk-anno"><b>The audited stage, unchanged</b>Rail, phase band, fitter, dock, the four literal ladders and every floor are <code>stage-base.css</code> + the 22 Sep refresh, inlined verbatim. The event adds two shapes (the wall agenda, the presenter line) and reuses the rest.</div><div class="mk-anno"><b>A presentation wears the lobby band</b>The band means &lsquo;nobody needs a phone&rsquo;, which is true of a lobby and of a talk. No fifth phase colour.</div><div class="mk-anno"><b>The code, once per screen</b>Where the join block is up, the rail drops its JOIN code; in the item lobby the rail keeps it, because a latecomer has no other way in. The code is the <b>event's</b> 5307 throughout &mdash; the item's own session code is never shown.</div><div class="mk-anno"><b>Lateness is not room-facing</b>The dock is on the projected image, so drift from the plan (&lsquo;13 min over&rsquo;) lives only in the Setup drawer and on the host remote.</div><div class="mk-anno"><b>Engage never shows the slides</b>Owner, 23 Sep (decision 8): the presenter presents from their own presentation mode. So there is no slide viewer, no page rendering and no next-slide control here or on the remote &mdash; and no question of an outside presenter driving Engage. The PDF is only a copy for attendees.</div><div class="mk-anno"><b>Now presenting holds the room</b>For rooms where the projector stays on Engage (a second screen, or the host switches inputs): the talk, the presenter, the one code for latecomers, and what comes next. It is the between-items shape, so nothing new is learned.</div><div class="mk-anno"><b>Start trivia is the next press</b>The dock's primary is always the next item, so the host can end a talk early or on time with the same key.</div><div class="mk-anno"><b>A break counts down, then stops</b>Decision 7: the hero numeral counts to the planned return and stops at 0:00 (&lsquo;Starting now&rsquo;); it never runs negative on the wall. +5 min moves the return time for everyone. The right column is the day's standings (decision 6) &mdash; names because this event's reports are Full.</div><div class="mk-anno"><b>Rehearsal is Preview for a whole event</b>Decision 9, simple: the session-setup design's Preview model &mdash; a view, not a state; joins refused, a phone that scans waits (session-setup 20). The dashed chip and dashed band are its marks. Stepping through shows each item's screen and an engagement's questions read-only from its pinned set; no session is created, nothing is billed, no report is saved.</div><div class="mk-anno"><b>The wipe means &lsquo;look at your phone now&rsquo;</b>That is its job in the refresh (<code>refresh-stage.css</code> &sect;1), so it is spent here exactly once per engagement, with the one extra fact the room needs: no code to type.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>

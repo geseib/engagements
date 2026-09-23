@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Finishing and shared results — survey</title>
+<style>
+
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#9BA8BE}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#9BA8BE;margin:4px 0 14px}
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<main class="bd">
+
+<h1>Finishing, and the results coming back</h1>
+<p class="lede">Check and send; the thank-you at rest volume; the phone when the host shares results; and the shared page itself, on a phone and on a laptop.</p>
+<div class="row">
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-07-review.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Check your answersSkipped optionals shown, each one tap away"></iframe></div><figcaption><b>Check your answers</b><span>Skipped optionals shown, each one tap away</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-08-done.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="SentRest volume: no dock, no amber"></iframe></div><figcaption><b>Sent</b><span>Rest volume: no dock, no amber</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-09-ended.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Results sharedThe ENDED screen gains one button"></iframe></div><figcaption><b>Results shared</b><span>The ENDED screen gains one button</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-10-shared.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="The shared pageRead-only; ‘You’ marked from this phone only"></iframe></div><figcaption><b>The shared page</b><span>Read-only; ‘You’ marked from this phone only</span></figcaption></figure>
+</div>
+<h2>The same shared page on a laptop</h2>
+<div class="row"><figure style="--w:640px"><div class="frame stage" style="width:640px;height:410px"><iframe src="p-10-shared.html" width="1280" height="820" style="transform:scale(0.5)" loading="lazy" title="engage.seibtribe.us/r/7fK2-mQ9xThe player's laptop ladder; the gutter absorbs the width"></iframe></div><figcaption><b>engage.seibtribe.us/r/7fK2-mQ9x</b><span>The player's laptop ladder; the gutter absorbs the width</span></figcaption></figure></div>
+</main>
+<aside class="mk-anno-rail" aria-label="Design notes">
+<h6>Design notes</h6>
+<div class="mk-anno"><b>Editable until close</b>Answers are saved as given and stay editable until the host closes the survey. Send only marks the row complete, which is what the wall's &lsquo;finished&rsquo; count reads.</div><div class="mk-anno"><b>Rest volume</b>The player's own rule: when the task is done there is no dock and no amber. The one link left is the only thing that can still be done.</div><div class="mk-anno"><b>Results come back to the phone</b>Today the ENDED screen promises a link the host may share and nothing can publish one. A host's Share (32) pushes to phones still connected; the button opens the frozen page.</div><div class="mk-anno"><b>‘You’ is local</b>The shared page is public and knows nobody. The phone that answered remembers its own answers in local storage and marks them; the link opened anywhere else shows no marks.</div><div class="mk-anno"><b>One page, both sizes</b>The shared page is the player shell with the player's three literal ladders, so it reads at 14in and at 24in without a second design.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+/* ===========================================================================
+   agenda-phone.css — the participant's event screens, as a DIFF against the
+   shipped player (player-redesign/build.py CSS, inlined above; PlayerSurface.css
+   is its re-cut under .plr). Every rule reads the phone ladder (--L-*), the
+   44px tap floor (--tap) and the Warm Summit tokens already declared there.
+   Every class that is new is prefixed ag-. No colour is new.
+
+   MEASURED against the player's real stack (--bg #0F1A2E, --surface #182640):
+     --text  on --surface        13.01:1  agenda titles, the code field
+     --muted on --surface         8.39:1  times, type lines, end labels
+     --primary #F6A94C on --bg    8.86:1  the error line (amber, not red: the
+                                          player's rule — red means destructive)
+     --success-text on --surface  8.08:1  a done item's word
+     #0F1A2E on --primary         8.86:1  the NOW badge
+     --text / --muted on the now row (#F6A94C @8% over --bg = #212530)
+                                  13.18 / 8.50
+   ======================================================================== */
+
+/* ---------------------------------------- the font shorthand, as shipped --
+   The player mockup's CSS writes `font:800 … inherit`, which is INVALID (a
+   family of `inherit` cannot sit in the shorthand), so every button fell back
+   to the UA's 400 weight. PlayerSurface.css ships `font-family:inherit` with
+   the weight declared on its own (:487-505); restated here so the mockups
+   render what ships (found by survey-redesign, same fix). */
+.btn,.opt,.inp,.more,.rk{font-family:inherit}
+.btn{font-weight:800;font-size:var(--L-secondary);line-height:1.2}
+.btn.ghost,.btn[disabled]{font-weight:700}
+.opt{font-weight:400;font-size:var(--L-secondary);line-height:1.35}
+.opt .k,.row .k{font-family:inherit;font-weight:800;font-size:var(--L-meta)}
+.inp{font-weight:400;font-size:var(--L-secondary);line-height:1.35}
+
+/* ------------------------------------------------ the event, on one line --
+   The bar's context reads "Q4 Kickoff · 3 of 8". The 4px strip is the
+   player's own phase strip, unchanged: it says what the phone is doing now. */
+.ag-when{font-size:var(--L-meta);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 8px}
+
+/* ------------------------------------------------ the personal code ------
+   Six characters from an alphabet with no look-alikes (no 0/O, 1/I/L, 8/B —
+   the player redesign's own finding about codes read off a projector). One
+   field, not six boxes: paste works, autofill works, and a screen reader
+   reads one input. The spacing is letter-spacing on the field itself. */
+.inp.ag-code6{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;
+  font-size:var(--L-primary);letter-spacing:.34em;text-indent:.34em;text-align:center;
+  text-transform:uppercase}
+.inp.ag-email{font-size:var(--L-body)}
+.ag-where{display:flex;gap:10px;align-items:center;padding:12px 14px;border:1px solid var(--rule);
+  border-radius:13px;background:var(--surface);margin:0 0 20px}
+.ag-where .n{font:800 var(--L-primary)/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;
+  color:var(--primary)}
+.ag-where .t{min-width:0;flex:1 1 auto}
+.ag-where .t b{display:block;font-size:var(--L-body);line-height:1.3}
+.ag-where .t span{display:block;font-size:var(--L-meta);color:var(--muted);line-height:1.35}
+.ag-where button{flex:none;background:none;border:0;color:var(--muted);text-decoration:underline;
+  text-underline-offset:4px;font-family:inherit;font-weight:700;font-size:var(--L-meta);line-height:1;
+  min-height:var(--tap);cursor:pointer;padding:0 2px}
+.ag-tries{font-size:var(--L-meta);color:var(--muted);margin:8px 0 0}
+
+/* ----------------------------------------------------------- the agenda --
+   The participant's agenda: every item in order, each with its state said in
+   a WORD (Done / Now / Next / Later), never by tint alone, and a link only
+   where the host released something. Rows are the player's .row shape. */
+.ag-list{list-style:none;margin:0 0 6px;padding:0}
+.ag-it{display:grid;grid-template-columns:52px minmax(0,1fr);gap:4px 12px;padding:12px 0;
+  border-bottom:1px solid var(--rule)}
+.ag-it:last-child{border-bottom:0}
+.ag-it .at{font-size:var(--L-meta);font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;
+  padding-top:3px;line-height:1.3}
+.ag-it .tt{font-size:var(--L-body);font-weight:700;line-height:1.3;min-width:0}
+.ag-it .ty{display:flex;align-items:flex-start;gap:8px;font-size:var(--L-meta);color:var(--muted);
+  margin-top:3px;line-height:1.35}
+.ag-it .ty svg{flex:none;margin-top:1px}
+.ag-it .ty > span:not(.ag-st){flex:1 1 auto;min-width:0}
+.ag-it .ty .ag-st{flex:none}
+.ag-st{font-size:var(--L-meta);font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  border:1px solid var(--rule);border-radius:6px;padding:2px 7px;color:var(--muted);white-space:nowrap}
+.ag-st.done{color:var(--success-text);border-color:rgba(111,208,164,.45)}
+.ag-st.now{color:#0F1A2E;background:var(--primary);border-color:var(--primary)}
+.ag-it.is-done .tt{color:var(--muted);font-weight:600}
+.ag-it.is-now{background:rgba(246,169,76,.08);margin:0 calc(var(--gut) * -1);padding-left:calc(var(--gut) - 3px);
+  padding-right:var(--gut);border-left:3px solid var(--primary);border-bottom-color:transparent}
+.ag-it .ds{margin:6px 0 0;font-size:var(--L-meta);line-height:1.45;color:var(--text);opacity:.86;max-width:var(--measure)}
+.ag-it.is-brk .tt{font-weight:600;color:var(--muted)}
+.card.ag-day{padding:4px 15px;margin:0 0 6px}
+.ag-it .go{grid-column:2;display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ag-a{display:inline-flex;align-items:center;gap:7px;min-height:var(--tap);padding:0 13px;border-radius:11px;
+  border:1px solid var(--rule);background:var(--surface);color:var(--text);text-decoration:none;
+  font-size:var(--L-meta);font-weight:700;letter-spacing:.02em}
+.ag-a svg{flex:none;color:var(--muted)}
+
+/* ---------------------------------------------------- the switch moment --
+   When the host starts an engagement, the phone does not wait for a tap: the
+   player's own lobby for that item arrives with one beat that names it. The
+   beat is the stage wipe's phone twin — a still screen, 1.2s, then the item. */
+.ag-beat{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px var(--gut);gap:10px}
+.ag-beat .ty{display:flex;align-items:center;gap:10px;font-size:var(--L-meta);font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--primary)}
+.ag-beat h1{margin:0}
+.ag-beat .lede{margin:0}
+.ag-beat .ag-join{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:var(--L-body);color:var(--muted)}
+.ag-beat .ag-join i{width:10px;height:10px;border-radius:50%;background:var(--success);flex:none}
+@keyframes agrise{from{opacity:0;transform:translateY(.6em)}to{opacity:1;transform:none}}
+.ag-beat > *{animation:agrise .32s cubic-bezier(.16,1,.3,1) both}
+.ag-beat > *:nth-child(2){animation-delay:.06s}
+.ag-beat > *:nth-child(3){animation-delay:.12s}
+@media (prefers-reduced-motion:reduce){.ag-beat > *{animation:none}}
+
+/* ---------------------------------------------------- watching a talk ---- */
+/* The reference copy: one full-width row, the player's surface card, the
+   only thing on a WATCH screen that can be pressed (it is personal: a copy
+   to keep). Two lines, both inside the 44px target. */
+.ag-a.ag-copy{display:flex;width:100%;min-height:60px;padding:10px 14px;gap:12px;margin:4px 0 0;max-width:var(--measure)}
+.ag-a.ag-copy span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ag-a.ag-copy b{font-size:var(--L-body);font-weight:700;letter-spacing:0}
+.ag-a.ag-copy small{font-size:var(--L-meta);font-weight:400;color:var(--muted);letter-spacing:0}
+.ag-next{display:flex;gap:12px;align-items:baseline;padding:14px 0 0;margin-top:14px;border-top:1px solid var(--rule);
+  font-size:var(--L-body);color:var(--muted);max-width:var(--measure)}
+.ag-next b{color:var(--text)}
