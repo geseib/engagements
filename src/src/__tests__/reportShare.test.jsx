@@ -150,7 +150,9 @@ describe('the host\'s "Report saved" dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Report saved' })).toBeInTheDocument();
     expect(screen.getByLabelText('Link')).toHaveValue(`https://engage.test/shared-report?game=4821&key=${encodeURIComponent(KEY)}`);
     expect(screen.getByLabelText('Passkey')).toHaveValue('K7QM3-XPD9Z');
-    expect(screen.getByText(/only time the passkey is shown/)).toBeInTheDocument();
+    // rejects: "the only time the passkey is shown" — it is kept, in Reports.
+    expect(screen.getByText(/find both again under Reports/)).toBeInTheDocument();
+    expect(screen.getByText(/as long as the report is kept/)).toBeInTheDocument();
   });
 
   test('copy puts each item on the clipboard separately', async () => {
@@ -228,5 +230,59 @@ describe('the save options say what the bucket actually does', () => {
     expect(permanentDays).toBe(365);
     const dialog = document.querySelector('.save-report-modal');
     expect(dialog.textContent).not.toMatch(/24 hours|temporary|permanent/i);
+  });
+});
+
+describe('copying, when the browser will not', () => {
+  /*
+    The owner, 2026-09-23: "the copy buttons don't seem to work (tested on
+    iPhone) but manually copying worked." utils/copyText.js copies
+    synchronously first (a selection and execCommand, which iOS Safari
+    honours inside the tap), then tries the async API, and says when both
+    refuse. jsdom implements neither path, so each is stubbed per test.
+  */
+  const { copyText } = require('../utils/copyText');
+  const CopyField = require('../components/CopyField').default;
+
+  afterEach(() => { delete document.execCommand; });
+
+  test('the synchronous copy goes first, and when it works the async API is never asked', async () => {
+    document.execCommand = jest.fn(() => true);
+    const writeText = jest.fn(async () => {});
+    expect(await copyText('K7QM3-XPD9Z', { nav: { clipboard: { writeText } } })).toBe(true);
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+    expect(writeText).not.toHaveBeenCalled();
+    // and the throwaway textarea is gone again
+    expect(document.querySelector('textarea')).toBeNull();
+  });
+
+  test('when the synchronous copy is refused, the async API is the second try', async () => {
+    document.execCommand = jest.fn(() => false);
+    const writeText = jest.fn(async () => {});
+    expect(await copyText('K7QM3-XPD9Z', { nav: { clipboard: { writeText } } })).toBe(true);
+    expect(writeText).toHaveBeenCalledWith('K7QM3-XPD9Z');
+  });
+
+  test('both refused: false, never a throw', async () => {
+    document.execCommand = jest.fn(() => { throw new Error('nope'); });
+    const writeText = jest.fn(async () => { throw new Error('NotAllowedError'); });
+    expect(await copyText('x', { nav: { clipboard: { writeText } } })).toBe(false);
+  });
+
+  // rejects: a refusal that looks like a dead button.
+  test('a refused copy says what to do instead, and selects the text', async () => {
+    const classes = { field: 'f', label: 'l', row: 'r', input: 'i', button: 'b', note: 'n' };
+    render(<CopyField id="k" label="Passkey" value="K7QM3-XPD9Z" copyLabel="Copy the passkey" classes={classes} copy={async () => false} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy the passkey' })); });
+    expect(screen.getByText(/Press and hold the text above to copy it/)).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByLabelText('Passkey'));
+  });
+
+  test('a copy that worked says Copied', async () => {
+    const classes = { field: 'f', label: 'l', row: 'r', input: 'i', button: 'b', note: 'n' };
+    render(<CopyField id="k" label="Passkey" value="K7QM3-XPD9Z" copyLabel="Copy the passkey" classes={classes} copy={async () => true} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy the passkey' })); });
+    expect(screen.getByRole('button', { name: 'Copy the passkey' })).toHaveTextContent('Copied');
+    expect(screen.queryByText(/Press and hold/)).toBeNull();
   });
 });

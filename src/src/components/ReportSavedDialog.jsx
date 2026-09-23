@@ -5,9 +5,9 @@
  * where the link alone opened the report for anybody who could guess it — and
  * anybody in the room could (config/reportShare.js). Now a shared report is two
  * items, and this dialog hands the host both: the link to /shared-report, and
- * the passkey save-report.js minted. The passkey is shown here and never again;
- * only its hash is kept, so there is nothing to look it up from later. Saving
- * again mints a new one, and the team can always open the report from Reports.
+ * the passkey save-report.js minted. Both can be found again in Reports (the
+ * owner: "no way to get the link and passkey back"), and saving the session
+ * again keeps the same passkey.
  *
  * The X, the backdrop, Escape and "Done" all close it. Nothing here is unsaved
  * work — the report is already stored — so none of them is gated.
@@ -15,44 +15,21 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import CopyField from './CopyField';
 import {
   fetchSharedReport, formatShareUntil, reportFilename, saveBlob, shareLinkFor,
 } from '../config/reportShare';
 import './ReportShare.css';
 
-function CopyField({ id, label, value, className = '', copyLabel }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard refused (permissions, an insecure origin): select the text so
-      // the host can copy it by hand rather than being told nothing.
-      const el = document.getElementById(id);
-      if (el) { el.focus(); el.select(); }
-    }
-  };
-  return (
-    <div className="rshare-field">
-      <label className="rshare-label" htmlFor={id}>{label}</label>
-      <div className="rshare-copyrow">
-        <input
-          id={id}
-          className={`rshare-input ${className}`}
-          value={value}
-          readOnly
-          onFocus={(e) => e.target.select()}
-        />
-        <button type="button" className="rshare-btn" onClick={copy} aria-label={copyLabel}>
-          <Icon name={copied ? 'Check' : 'ClipboardText'} weight="bold" size={18} />
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-    </div>
-  );
-}
+/** The dialog's look for the shared CopyField (ReportShare.css). */
+const FIELD = {
+  field: 'rshare-field',
+  label: 'rshare-label',
+  row: 'rshare-copyrow',
+  input: 'rshare-input',
+  button: 'rshare-btn',
+  note: 'rshare-copynote',
+};
 
 export default function ReportSavedDialog({
   saved,
@@ -97,19 +74,20 @@ export default function ReportSavedDialog({
         a forwarded link from opening it.
       </p>
 
-      <CopyField id="rshare-link" label="Link" value={link} copyLabel="Copy the link" />
+      <CopyField id="rshare-link" label="Link" value={link} copyLabel="Copy the link" classes={FIELD} />
       <CopyField
         id="rshare-key"
         label="Passkey"
         value={saved.passkey}
-        className="rshare-input--key"
+        inputClassName="rshare-input--key"
         copyLabel="Copy the passkey"
+        classes={FIELD}
       />
 
       <ul className="rshare-facts">
-        <li>This is the only time the passkey is shown. If it is lost, save the report again for a new one.</li>
-        {until && <li>The link and passkey work until {until}, while the session&apos;s record is kept.</li>}
-        <li>Anyone on your team can open it any time from Reports, without a passkey.</li>
+        {until && <li>The link and passkey work until {until}, as long as the report is kept.</li>}
+        <li>You can find both again under Reports. Saving this session again keeps the same passkey.</li>
+        <li>Anyone on your team can open it from Reports without a passkey.</li>
       </ul>
 
       {download === 'failed' && (

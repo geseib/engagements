@@ -248,9 +248,59 @@
 .rp-mono { font-family: var(--rp-font-mono); font-size: 14px; }
 .rp-danger-text { color: var(--danger-text); }
 
-.rp-rowact { display: flex; gap: 5px; justify-content: flex-end; opacity: 0; }
+/* Two things differ from SessionsPanel's rule, on purpose.
+   margin-left: auto on the first action and a wrap, NOT justify-content:
+   flex-end — with Share beside PDF the group can outgrow its cell, and a
+   flex-end group overflows toward its start, where overflow: hidden makes it
+   unreachable. And the actions are visible without hover on a touch screen:
+   a phone has no hover, so opacity 0 left two invisible buttons in every row
+   of the host's Reports dialog. */
+.rp-rowact { display: flex; flex-wrap: wrap; gap: 5px; opacity: 0; }
+.rp-rowact > :first-child { margin-left: auto; }
 .rp-tbl tr:hover .rp-rowact,
-.rp-tbl tr:focus-within .rp-rowact { opacity: 1; }
+.rp-tbl tr:focus-within .rp-rowact,
+.rp-tbl tr.rp-open .rp-rowact { opacity: 1; }
+@media (hover: none) {
+  .rp-rowact { opacity: 1; }
+}
+
+/* ------------------------------------------------------------ share row -- */
+/* The link and passkey, inline under the report's row (ReportsPanel.jsx says
+   why not a dialog). A table cell here is one nowrap line; this one is not. */
+.rp-tbl .rp-sharerow td {
+  height: auto;
+  padding: 12px 10px 16px;
+  white-space: normal;
+  overflow: visible;
+  background: var(--rp-row-hover);
+}
+.rp-share { display: grid; gap: 10px; max-width: 42rem; }
+.rp-share-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: var(--rp-t-label);
+  font-weight: 600;
+  color: var(--muted);
+}
+.rp-share-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 16px, one above this screen's body size: the host dialog is opened on
+   phones, and iOS zooms the whole page on focusing an input under 16px. */
+.rp-share-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  font: 400 16px/1 var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rp-rule-strong);
+  border-radius: 6px;
+}
+.rp-share-input--key { font-family: var(--rp-font-mono); letter-spacing: .1em; }
+.rp-share-row .rp-btn { height: 34px; }
+.rp-share-copynote { margin: 4px 0 0; font-size: var(--rp-t-label); color: var(--muted); }
+.rp-share-copynote:empty { display: none; }
+.rp-share-note { margin: 0; font-size: var(--rp-t-label); color: var(--muted); }
 
 .rp-chip {
   display: inline-flex;
@@ -330,11 +380,25 @@
 .rp-envwarn b { color: var(--primary); }
 
 /* ---------------------------------------------------------- reports only -- */
-.rp-col-name  { width: 40%; }
+.rp-col-name  { width: 36%; }
 .rp-col-when  { width: 14%; }
 .rp-col-until { width: 16%; }
 .rp-col-sess  { width: 16%; }
-.rp-col-acts  { width: 14%; }
+.rp-col-acts  { width: 18%; }   /* Share and PDF */
+/* A PHONE. Five columns do not fit 375px: Share and PDF were cut off at the
+   cell's edge and every date truncated — and the host opens this list from a
+   phone. Saved and Session give way; the report, how long it is kept and what
+   can be done with it stay. The share row is one cell and is untouched. */
+@media (max-width: 560px) {
+  .rp-tbl th:nth-child(2), .rp-tbl td:nth-child(2),
+  .rp-tbl th:nth-child(4), .rp-tbl td:nth-child(4) { display: none; }
+  .rp-col-name  { width: 44%; }
+  .rp-col-until { width: 24%; }
+  .rp-col-acts  { width: 32%; }
+  /* The kept-until date wraps rather than truncating: it is the one date
+     this list exists to show. */
+  .rp-tbl td:nth-child(3) { white-space: normal; }
+}
 /* KEPT UNTIL is a DATE, never a countdown ("3 days left" is a different number
    tomorrow and lies on a printed page). Red only inside seven days; the pin
    marks the year-long keep, so the fact never rests on colour alone. */

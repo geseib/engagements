@@ -1,10 +1,9 @@
-const crypto = require('crypto');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
-const { encryptValue, encryptItem } = require('./tenant-crypto');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { encryptValue, encryptItem, decryptItems } = require('./tenant-crypto');
 const { reportsIndexPk, callerMayDriveSession } = require('./tenant');
-const { generatePasskey, hashPasskey } = require('./report-passkey');
+const { generatePasskey, hashPasskey, normalizePasskey } = require('./report-passkey');
 
 const s3Client = new S3Client({});
 const dynamoClient = new DynamoDBClient({});
@@ -97,13 +96,58 @@ exports.handler = async (event) => {
     // no data key and keeps writing a real PDF, exactly as it did yesterday.
     const orgId = typeof gameMetadata.Item.orgId === 'string' ? gameMetadata.Item.orgId.trim() : '';
 
-    // Generate filename
+    const indexPk = reportsIndexPk(orgId);
+    const retentionDays = permanent ? 365 : 90;
+    const extension = `.pdf${orgId ? '.enc' : ''}`;
+
+    /*
+      ONE REPORT PER SESSION. The owner, 2026-09-23: "creating the report again
+      doesn't overwrite it for the same session it creates a new line item.
+      Probably wasteful." It did: every save wrote a new REPORT#<game>#<when>
+      row and, on another day or the other retention, a new object — and the
+      Reports list kept every one. The list's own mockup had taken "a second
+      save of one session is a second row" as a decision; the owner reversed it.
+
+      So a save REPLACES what the session already has, and it does so without
+      breaking anything the host may already have shared:
+        - the PASSKEY is kept. It was given out with the link, and a new one
+          would silently lock out everybody who has it.
+        - the OBJECT is overwritten in place when the retention is the same, so
+          the link stays the same too. Switching between 90 days and a year
+          needs the other key (the lifecycle rules are a tag and a prefix), so
+          that save moves it and the old link stops; the dialog shows the new.
+      The previous rows — this format's one, and any number of the old
+      timestamped ones — are removed after the new row is written, with any
+      object the new one did not overwrite. A failure there costs a leftover
+      row, never the report that was just saved.
+
+      `begins_with('REPORT#<game>')` also matches a longer game id with the
+      same prefix, hence the exact gameId filter.
+    */
+    const previousRes = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': indexPk, ':sk': `REPORT#${gameId}` },
+    }));
+    const previousRows = (previousRes.Items || []).filter((r) => String(r.gameId) === String(gameId));
+    const previous = (orgId ? await decryptItems(orgId, 'reportIndex', previousRows) : previousRows)
+      .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+
+    const keptPasskey = previous.map((r) => r.passkey).find((k) => normalizePasskey(k));
+    const passkey = keptPasskey || generatePasskey();
+
+    const sameRetention = previous.find((r) => r.s3Key
+      && !!r.permanent === !!permanent
+      && String(r.s3Key).endsWith(extension)
+      && String(r.s3Key).startsWith('permanent/') === !!permanent);
+
+    // Generate filename — or keep the one this session already has.
     const timestamp = new Date().toISOString().split('T')[0];
     const sanitizedTitle = eventTitle.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-');
-    const baseFileName = `${sanitizedTitle}-${timestamp}-${gameId}.pdf${orgId ? '.enc' : ''}`;
-
-    // Add prefix for permanent files
-    const fileName = permanent ? `permanent/${baseFileName}` : baseFileName;
+    const fileName = sameRetention
+      ? sameRetention.s3Key
+      : `${permanent ? 'permanent/' : ''}${sanitizedTitle}-${timestamp}-${gameId}${extension}`;
+    const baseFileName = fileName.replace(/^permanent\//, '');
 
     // The base64 string is what gets encrypted, not the decoded bytes:
     // `encryptValue` JSON-serialises its input, and a Buffer does not survive
@@ -112,10 +156,10 @@ exports.handler = async (event) => {
       ? Buffer.from(JSON.stringify(await encryptValue(orgId, pdfBlob)), 'utf8')
       : Buffer.from(pdfBlob, 'base64');
 
-    // The second item a shared link needs (report-passkey.js). Only its salted
-    // hash is stored, on the object it opens; the passkey itself goes back to
-    // the host in this response and is never written or logged anywhere.
-    const passkey = generatePasskey();
+    // The second item a shared link needs (report-passkey.js). The object
+    // carries only a salted hash of it — S3 metadata is readable by anyone who
+    // can list the bucket. The passkey itself is kept on the index row below,
+    // encrypted under the org's key, so the team can find it again in Reports.
     const passkeyHash = await hashPasskey(passkey);
 
     // Upload to S3
@@ -167,14 +211,6 @@ exports.handler = async (event) => {
     // at the retired eng.dev twin for months.
     const downloadUrl = `games/${gameId}/report/download?key=${encodeURIComponent(fileName)}`;
 
-    // How long the link and passkey work. download-report.js reads the org off
-    // the session's METADATA row, so the public route opens a report exactly as
-    // long as that row lives — its `ttl` (session-ttl.js), not the object's 90
-    // or 365 days. After that the team opens it from Reports instead.
-    const sessionTtl = Number(gameMetadata.Item.ttl);
-    const shareUntil = Number.isFinite(sessionTtl) && sessionTtl > 0
-      ? new Date(sessionTtl * 1000).toISOString()
-      : null;
 
     /*
       THE ROW THAT OUTLIVES THE SESSION. The session's rows expire (7 days
@@ -184,30 +220,57 @@ exports.handler = async (event) => {
 
       Its own `ttl` matches the bucket rule for its prefix (template
       ReportsBucket: 90 days, `permanent/` 365), so the row never lists a
-      report the bucket has already deleted, give or take DynamoDB's lag.
+      report the bucket has already deleted, give or take DynamoDB's lag. An
+      overwrite restarts the object's clock, and this row's with it.
+
+      ONE ROW PER SESSION: the sort key is the session, nothing else, so a
+      second save is a PUT over the first.
+
+      `passkey` is on the row so the team can find the link and passkey again
+      (the owner: "no way to get the link and passkey back"). Under an org it
+      is encrypted with the org's key (tenant-crypto `reportIndex`) — the same
+      key that encrypts the report itself, so reading it opens nothing that
+      decrypting the report would not. An orgless session's report is a plain
+      PDF in the bucket and its row is plaintext; the passkey is too.
     */
     const savedAt = new Date().toISOString();
-    const retentionDays = permanent ? 365 : 90;
+    const expiresAt = new Date(Date.parse(savedAt) + retentionDays * 86400000).toISOString();
+    const reportSk = `REPORT#${gameId}`;
     const reportRow = {
-      PK: reportsIndexPk(orgId),
-      // A short random tail after the timestamp: two saves of one session in
-      // the same millisecond would otherwise be one row, and the second would
-      // silently overwrite the first (seen in tests/report-index-row.js).
-      SK: `REPORT#${gameId}#${savedAt}#${crypto.randomBytes(3).toString('hex')}`,
+      PK: indexPk,
+      SK: reportSk,
       gameId,
       Title: eventTitle,
       ...(orgId ? { orgId } : {}),
       s3Key: fileName,
       encrypted: !!orgId,
       permanent: !!permanent,
+      passkey,
       savedAt,
-      expiresAt: new Date(Date.parse(savedAt) + retentionDays * 86400000).toISOString(),
+      expiresAt,
       ttl: Math.floor(Date.parse(savedAt) / 1000) + retentionDays * 86400,
     };
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
       Item: orgId ? await encryptItem(orgId, 'reportIndex', reportRow) : reportRow,
     }));
+
+    // Now the session's earlier saves: every other row, and every object the
+    // new one did not overwrite. After the new row, never before it.
+    let replaced = 0;
+    for (const old of previous) {
+      try {
+        if (old.SK !== reportSk) {
+          await db.send(new DeleteCommand({ TableName: process.env.TABLE_NAME, Key: { PK: indexPk, SK: old.SK } }));
+          replaced += 1;
+        }
+        if (old.s3Key && old.s3Key !== fileName) {
+          await s3Client.send(new DeleteObjectCommand({ Bucket: process.env.REPORTS_BUCKET_NAME, Key: old.s3Key }));
+        }
+      } catch (err) {
+        console.error(`Save report: could not remove an earlier save (${old.SK}):`, err.message);
+      }
+    }
 
     console.log(`✅ PDF report saved: ${fileName}`);
     
@@ -226,10 +289,15 @@ exports.handler = async (event) => {
         // `downloadUrl` is always RELATIVE now (it points at this API). Kept
         // so a console that still branches on it resolves it correctly.
         downloadUrlIsRelative: true,
-        // Shown to the host once, here, and nowhere else. Lose it and the
-        // report is saved again for a new one; the team still has Reports.
+        // The second item the link needs. The same one as the session's
+        // earlier save, if it had one; the team finds it again in Reports.
         passkey,
-        shareUntil
+        // How long the link and passkey work: as long as the report is kept.
+        // download-report.js reads the org off the object, not the session, so
+        // this is the object's 90 or 365 days, not the session's record.
+        shareUntil: expiresAt,
+        // How many earlier saves of this session this one replaced.
+        replaced
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

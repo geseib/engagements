@@ -48,6 +48,7 @@ const ddbPuts = [];
 class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
 class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class QueryCommand { constructor(input) { this.kind = 'query'; this.input = input; } }
+class DeleteCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 class UpdateCommand { constructor(input) { this.kind = 'update'; this.input = input; } }
 class BatchGetCommand { constructor(input) { this.kind = 'batchGet'; this.input = input; } }
 const doc = {
@@ -61,14 +62,15 @@ const doc = {
 };
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
-  DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, UpdateCommand, BatchGetCommand,
+  DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, UpdateCommand, BatchGetCommand, DeleteCommand,
 });
 const s3Puts = [];
 class PutObjectCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class GetObjectCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
+class DeleteObjectCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 stub('@aws-sdk/client-s3', {
   S3Client: class { async send(cmd) { if (cmd.kind === 'put') s3Puts.push(cmd.input); return {}; } },
-  PutObjectCommand, GetObjectCommand,
+  PutObjectCommand, GetObjectCommand, DeleteObjectCommand,
 });
 stub('@aws-sdk/s3-request-presigner', { getSignedUrl: async () => 'https://signed.example/x' });
 
