@@ -335,27 +335,25 @@ console.log('\n7. playerVoted is NOT anonymised');
 
 seedAnonymousRound('3007');
 put({ PK: 'GAME#3007', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+put({ PK: 'GAME#3007', SK: 'CONNECTION#player-1', ConnectionId: 'player-1', ConnectionType: 'PLAYER' });
 sent = [];
 await wsMessage({
-  requestContext: { connectionId: 'player-conn-2', domainName: 'ws.test.invalid', stage: 'dev' },
+  requestContext: { connectionId: 'host-1', domainName: 'ws.test.invalid', stage: 'dev' },
   body: JSON.stringify({
     action: 'message', gameId: '3007', playerName: 'Ada',
     messageType: 'VOTE#001', votedFor: 'Grace'
   })
 });
-// NOTE ON EVENT SHAPE: message.js's isHostMessage() matches ANY
-// 'VOTE#'-prefixed messageType, and the top-level handler checks
-// isHostMessage() before isPlayerMessage() — so a player-originated
-// VOTE#001 message is always routed through handleHostMessage, never through
-// handlePlayerMessage's own VOTE# branch (the one that assigns
-// notificationType = 'playerVoted', and the one this task's binding
-// constraints forbid touching). That branch is unreachable through the real
-// exported handler for any messageType value; it's a pre-existing routing
-// property, not something this task's redaction change affects. §5.6.6: this
-// feature is about who WROTE an answer, not who voted for it — the invariant
-// this test can honestly check against the real handler is that whatever
-// frame VOTE#001 does produce keeps the player's name.
-const voted = sent.map(s => s.message).find(m => m.messageType === 'VOTE#001');
+// NOTE ON EVENT SHAPE: `VOTE#…` is a HOST frame in message.js (the host
+// sends its new state verbatim), and host frames are obeyed only from the
+// room's own HOST socket (tests/websocket-host-message-gate.js) — so it is
+// sent here from host-1. The real `playerVoted` frame comes from
+// submit-vote.js on the HTTP path. §5.6.6: this feature is about who WROTE
+// an answer, not who voted for it — the invariant this test can honestly
+// check against the real handler is that the frame VOTE#001 produces is not
+// run through the answer redaction, and keeps the name it carried.
+const voted = sent.filter(s => s.connectionId === 'player-1')
+  .map(s => s.message).find(m => m.messageType === 'VOTE#001');
 await check('playerVoted keeps its playerName', () =>
   assert.strictEqual(voted?.playerName, 'Ada'));
 

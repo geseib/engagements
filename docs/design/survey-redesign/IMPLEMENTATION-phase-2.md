@@ -423,3 +423,12 @@ end.
     `POST /games/{gameId}/host-ticket` (authorizer + `callerMayDriveSession`),
     which the host page fetches before every connect; anything else is stored
     PLAYER. `tests/websocket-host-ticket.js`.
+16. **Host frames were obeyed from any socket — CLOSED 2026-09-23.** Item 15 made
+    the connection row honest, but `websocket/message.js` still acted on
+    `ASK#`/`VOTE#`/`RESULT#`/`END`/`REQUEST_VOTE`/`CREATE_RESULTS` from whoever sent
+    them, for whatever `gameId` the frame named: a phone, a socket that joined no
+    game, or another room's host could move a room ASK→VOTE→RESULTS or fan a forged
+    `hostMessage` to every phone. It now reads the sender's own row
+    (`GAME#<gameId>` / `CONNECTION#<connectionId>`, strongly consistent) and refuses
+    anything but HOST with 403, logging no body. Player frames are unchanged.
+    `tests/websocket-host-message-gate.js`.

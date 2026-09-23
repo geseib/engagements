@@ -36,7 +36,6 @@ exports.handler = async (event) => {
   
   try {
     const body = JSON.parse(event.body || '{}');
-    console.log(`📨 WebSocket Message from ${connectionId}:`, body);
 
     // Heartbeat keepalive from the client (WebSocketClient._startHeartbeat sends
     // { action: 'ping' }). Reply with a pong. The pong message carries no gameId,
@@ -47,14 +46,31 @@ exports.handler = async (event) => {
     }
 
     const { messageType, gameId, playerName } = body;
-    
+
     if (!messageType || !gameId) {
       console.log('❌ Missing required fields: messageType, gameId');
       return { statusCode: 400, body: 'Missing required fields' };
     }
-    
+
+    // A HOST FRAME IS OBEYED ONLY FROM THAT ROOM'S OWN HOST SOCKET. Both the
+    // messageType and the gameId are whatever the frame says, and $connect has
+    // no authorizer, so without this any socket — one joined to no game, or to
+    // another game — could open a vote, close it, or fan a forged hostMessage
+    // out to every phone in the room (tests/websocket-host-message-gate.js).
+    //
+    // Refused BEFORE the body is logged: a refused frame is untrusted input, and
+    // its body never reaches the logs. Only the clipped type and game id do.
+    const hostFrame = isHostMessage(messageType);
+    if (hostFrame && !(await senderIsHostOf(gameId, connectionId))) {
+      console.warn(`🚫 Host message ${clipForLog(messageType)} for game ${clipForLog(gameId)} refused: `
+        + `connection ${connectionId} is not that game's host`);
+      return { statusCode: 403, body: 'Not this game\'s host' };
+    }
+
+    console.log(`📨 WebSocket Message from ${connectionId}:`, body);
+
     // Route message based on type
-    if (isHostMessage(messageType)) {
+    if (hostFrame) {
       await handleHostMessage(gameId, messageType, body);
     } else if (isPlayerMessage(messageType)) {
       await handlePlayerMessage(gameId, playerName, messageType, body);
@@ -81,6 +97,34 @@ function isHostMessage(messageType) {
          messageType === 'END' ||
          messageType === 'REQUEST_VOTE' ||
          messageType === 'CREATE_RESULTS';
+}
+
+/**
+ * Is this connection the host screen of this game?
+ *
+ * The SENDER's own row, under the game the FRAME names. connect.js stores
+ * `ConnectionType: 'HOST'` only for a handshake that spent a ticket minted for
+ * that game (host-tickets.js), so the row is the server's one fact about who
+ * drives the room — nothing in the frame is. A host socket for another room has
+ * no row under this game, and a socket that joined no game has its row under
+ * GAME#LOBBY, stored PLAYER.
+ *
+ * Strongly consistent: a host that has just reconnected sends its next frame
+ * moments after connect.js wrote the row, and a stale read would refuse it. A
+ * table error throws to the handler's catch — a 500, never an obeyed frame.
+ */
+async function senderIsHostOf(gameId, connectionId) {
+  const row = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `CONNECTION#${connectionId}` },
+    ConsistentRead: true
+  }));
+  return row.Item?.ConnectionType === 'HOST';
+}
+
+/** A frame field fit for a log line: quoted, and short whatever was sent. */
+function clipForLog(value) {
+  return JSON.stringify(String(value).slice(0, 64));
 }
 
 /**
