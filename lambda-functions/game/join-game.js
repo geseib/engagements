@@ -411,52 +411,25 @@ exports.handler = async (event) => {
  * Notify host via WebSocket when a player joins or reconnects
  */
 async function notifyHostOfPlayerJoin(gameId, playerData) {
+  // Quiet by design. This used to log the whole API Gateway client config and a
+  // dozen WEBSOCKET DEBUG lines on every join, and — with no host connected —
+  // run a second Query over every connection row just to print it. What an
+  // operator needs is below: that nobody was told, or why a send failed.
   try {
-    console.log(`🔔 WEBSOCKET DEBUG: Notifying host of player join: ${playerData.playerName} in game ${gameId}`);
-    console.log(`🔔 WEBSOCKET DEBUG: Environment WEBSOCKET_API_ENDPOINT: ${process.env.WEBSOCKET_API_ENDPOINT}`);
-    console.log(`🔔 WEBSOCKET DEBUG: ApiGateway client configured:`, apigateway.config);
-    
-    // Get host connection for this game
     const hostConnection = await getHostConnection(gameId);
-    console.log(`🔔 WEBSOCKET DEBUG: Host connection result:`, hostConnection);
-    
-    if (hostConnection) {
-      const message = {
-        type: 'playerJoined',
-        gameId: gameId,
-        player: playerData,
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log(`🔔 WEBSOCKET DEBUG: Sending message to ${hostConnection.ConnectionId}:`, message);
-      
-      await sendToConnection(hostConnection.ConnectionId, message);
-      
-      console.log(`✅ WEBSOCKET DEBUG: Host notified successfully of player join: ${playerData.playerName}`);
-    } else {
-      console.log(`⚠️ WEBSOCKET DEBUG: No host connection found for game ${gameId}`);
-      
-      // Additional debugging - check what connections exist
-      const allConnections = await db.send(new QueryCommand({
-        TableName: process.env.TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        ExpressionAttributeValues: {
-          ':pk': `GAME#${gameId}`,
-          ':sk': 'CONNECTION#'
-        }
-      }));
-      
-      console.log(`🔔 WEBSOCKET DEBUG: All connections for game ${gameId}:`, allConnections.Items);
+    if (!hostConnection) {
+      console.log(`⚠️ No host connection for game ${gameId}; playerJoined not delivered`);
+      return;
     }
-    
-  } catch (error) {
-    console.error(`❌ WEBSOCKET DEBUG: Error notifying host of player join:`, error);
-    console.error(`❌ WEBSOCKET DEBUG: Error details:`, {
-      message: error.message,
-      statusCode: error.$response?.statusCode,
-      stack: error.stack
+    await sendToConnection(hostConnection.ConnectionId, {
+      type: 'playerJoined',
+      gameId: gameId,
+      player: playerData,
+      timestamp: new Date().toISOString()
     });
-    // Don't throw error - this shouldn't block player joining
+  } catch (error) {
+    // Don't throw - this shouldn't block player joining
+    console.error(`❌ Error notifying host of player join in game ${gameId}:`, error.message);
   }
 }
 
@@ -488,24 +461,17 @@ async function getHostConnection(gameId) {
  */
 async function sendToConnection(connectionId, message) {
   try {
-    console.log(`🔔 WEBSOCKET DEBUG: sendToConnection called with connectionId: ${connectionId}`);
-    console.log(`🔔 WEBSOCKET DEBUG: Message to send:`, JSON.stringify(message, null, 2));
-    
-    const command = new PostToConnectionCommand({
+    await apigateway.send(new PostToConnectionCommand({
       ConnectionId: connectionId,
       Data: JSON.stringify(message)
-    });
-    
-    console.log(`🔔 WEBSOCKET DEBUG: Executing PostToConnectionCommand`);
-    const result = await apigateway.send(command);
-    console.log(`🔔 WEBSOCKET DEBUG: PostToConnectionCommand result:`, result);
+    }));
     return { ok: true };
 
   } catch (error) {
     // 410 Gone == dead connection. Delete the stale row inline (message carries
     // gameId so the PK is known) and never re-throw.
     if (error.statusCode === 410 || error.name === 'GoneException' || error.$response?.statusCode === 410) {
-      console.log(`🧹 WEBSOCKET DEBUG: Removing stale connection ${connectionId} (410 Gone)`);
+      console.log(`🧹 Removing stale connection ${connectionId} (410 Gone)`);
       if (message.gameId) {
         await db.send(new DeleteCommand({
           TableName: process.env.TABLE_NAME,
@@ -514,7 +480,7 @@ async function sendToConnection(connectionId, message) {
       }
       return { ok: false, stale: true };
     }
-    console.error(`❌ WEBSOCKET DEBUG: Failed to send to connection ${connectionId}:`, error);
+    console.error(`❌ Failed to send to connection ${connectionId}:`, error.message);
     return { ok: false, error };
   }
 }

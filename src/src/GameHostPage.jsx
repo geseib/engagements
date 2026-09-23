@@ -59,11 +59,13 @@ import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType,
 } from './config/hostControls';
+import { stageAnswersKey, stageAnswersReady, askFetchStillCurrent } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
 import useSurveyProgress, {
   surveyRoomCounts, surveyMeterRows, surveyWaiting, stillGoingNames,
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
+import { requestHostTicket } from './utils/hostTicketClient';
 import { readStartRefusal } from './utils/startRefusal';
 import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
@@ -137,6 +139,21 @@ function GameHostPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [currentQuestionId, setCurrentQuestionId] = useState('');
   const [answers, setAnswers] = useState([]);
+  /*
+    WHICH ROUND-PHASE `answers` BELONGS TO (config/stageAnswers.js). The VOTE
+    and RESULTS stages draw responses only when this matches the state on
+    screen, so the space stays blank until that phase's rows have loaded
+    instead of flashing ASK's leftovers. `answersFetchSeqRef` makes the latest
+    ASK refetch win: they fire once per arriving answer and can land out of
+    order, which is how the list could briefly hold one row.
+  */
+  const [answersFor, setAnswersFor] = useState(null);
+  const answersFetchSeqRef = useRef(0);
+  const showAnswersFor = (rows, forState) => {
+    answersFetchSeqRef.current += 1;       // any ASK refetch still in flight is now stale
+    setAnswers(rows);
+    setAnswersFor(stageAnswersKey(forState));
+  };
   /* Wavelength RESULTS payload (wordAnalysis): landed words, near-miss tier,
      denominator, matching mode. Set from the close-round/get-results response,
      upgraded in place by the `wavelengthAnalysisReady` frame when the
@@ -563,6 +580,9 @@ function GameHostPage() {
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
+  // A create in flight — the ref guards re-entry, the state shows it on the button.
+  const creatingSessionRef = useRef(false);
+  const [creatingSession, setCreatingSession] = useState(false);
   /*
     THE SESSION BEING EDITED from history — `{ gameId, values }` or null, where
     `values` is what GET /games/{id}?role=host returned (the prefill).
@@ -2137,9 +2157,14 @@ Focus on actionable business strategy insights.`;
       setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
     });
 
-    // Connect as host - WebSocket is required
+    // Connect as host - WebSocket is required. `isHost` alone lands as PLAYER
+    // (websocket/connect.js); the host-only frames — names as they join, vote
+    // and survey progress — need a single-use ticket, fetched with this host's
+    // token before every open, reconnects included (utils/hostTicketClient.js).
     console.log('🔌 HOST: Connecting WebSocket for real-time updates');
-    webSocketClient.connect(gameId, null, true);
+    webSocketClient.connect(gameId, null, true, {
+      hostTicket: async (id) => (await requestHostTicket({ fetchFn: authFetch, apiBase: API_BASE, gameId: id })).ticket,
+    });
 
     return () => {
       console.log(`🔌 HOST: Disconnecting WebSocket for game ${gameId}`);
@@ -2448,7 +2473,7 @@ Focus on actionable business strategy insights.`;
               // "Start Voting" on a round nobody had answered, because
               // hostControls enables it from `answers.length`.
               console.log('🧹 HOST: no answers in for this round yet — clearing the previous round\'s');
-              setAnswers([]);
+              showAnswersFor([], currentState);
             }
           }
           
@@ -2460,7 +2485,11 @@ Focus on actionable business strategy insights.`;
               
               if (answersRes.ok) {
                 const answersData = await answersRes.json();
-                setAnswers(answersData.answers || []);
+                // Only if the stage is still on this vote — a later phase may
+                // already have put its own rows up while this was in flight.
+                if (stageAnswersKey(gameStateRef.current) === stageAnswersKey(currentState)) {
+                  showAnswersFor(answersData.answers || [], currentState);
+                }
                 console.log(`🗳️ HOST: Loaded ${answersData.answers.length} answers for voting`);
               }
             } catch (error) {
@@ -2560,7 +2589,9 @@ Focus on actionable business strategy insights.`;
                 }
                 
                 console.log(`🎯 HOST: Final formatted answers:`, formattedAnswers);
-                setAnswers(formattedAnswers);
+                if (stageAnswersKey(gameStateRef.current) === stageAnswersKey(currentState)) {
+                  showAnswersFor(formattedAnswers, currentState);
+                }
                 console.log(`🏆 HOST: Loaded ${formattedAnswers.length} formatted results for question ${questionNumber}`);
               }
             } catch (error) {
@@ -2581,7 +2612,7 @@ Focus on actionable business strategy insights.`;
           setCurrentQuestionId('');
           setCurrentQuestionIndex(-1);
           setLessonNumber(0);
-          setAnswers([]);
+          showAnswersFor([], null);
           setWavelengthAnalysis(null);
           setPlayersWhoAnswered([]);
           setVotes([]);
@@ -2613,6 +2644,9 @@ Focus on actionable business strategy insights.`;
   };
 
   const fetchAnswersForQuestion = async (questionNumber) => {
+    // Numbered at the moment it is ISSUED, so the latest refetch wins however
+    // the responses come back (config/stageAnswers.js).
+    const seq = ++answersFetchSeqRef.current;
     try {
       console.log(`📡 HOST: Fetching answers for question ${questionNumber}`);
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
@@ -2625,8 +2659,14 @@ Focus on actionable business strategy insights.`;
       
       const questionAnswers = json.answers || [];
       console.log(`🔍 HOST: Answers for question ${questionNumber}:`, questionAnswers);
-      
+
+      // A later refetch was issued, or the room has left this round's ASK:
+      // these rows are not the stage's any more.
+      if (seq !== answersFetchSeqRef.current) return;
+      if (!askFetchStillCurrent(gameStateRef.current, questionNumber)) return;
+
       setAnswers(questionAnswers);
+      setAnswersFor(stageAnswersKey(`ASK#${paddedQuestionNumber}`));
 
       // Participation is derived from these rows ONLY when they carry names.
       // On a hidden round every row is redacted, so this used to write
@@ -3713,7 +3753,7 @@ Focus on actionable business strategy insights.`;
       
       // Clear all answer/voting state for new question
       console.log(`🧹 HOST: Clearing state for new question - resetting answers and players`);
-      setAnswers([]);
+      showAnswersFor([], newState);
       setWavelengthAnalysis(null);
       setPlayersWhoAnswered([]);
       setVotes([]);
@@ -3859,6 +3899,7 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  const openingVoteRef = useRef(false);
   const handleFinishQuestion = async () => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia' || currentGameType === 'wavelength') {
@@ -3889,8 +3930,17 @@ Focus on actionable business strategy insights.`;
       if (!proceed) return;
     }
 
+    /*
+      NO PLACEHOLDER STATE. This set `gameState` to 'voting' while start-vote
+      was in flight. 'voting' is no round-phase, so the stage fell back to the
+      LOBBY — QR, join code and all — for the length of the call, and stayed
+      there if the call failed. The room stays on ASK until the server says
+      VOTE (its own response below, or the `votingStarted` frame, whichever
+      lands first); the VOTE stage then waits for its rows (stageAnswers.js).
+    */
+    if (openingVoteRef.current) return;
+    openingVoteRef.current = true;
     setManualStateChange(true);
-    setGameState('voting');
 
     // Get answers and update state to voting using new API
     try {
@@ -3910,12 +3960,13 @@ Focus on actionable business strategy insights.`;
         console.log(`🗳️ HOST: Vote started successfully:`, voteData);
         
         // The start-vote endpoint should return the answers
+        const voteState = `VOTE#${questionNumber.toString().padStart(3, '0')}`;
         if (voteData.answers) {
-          setAnswers(voteData.answers);
+          showAnswersFor(voteData.answers, voteState);
           console.log(`🗳️ HOST: Loaded ${voteData.answers.length} answers for voting`);
         }
         // Update the local state to reflect the voting state
-        setGameState(`VOTE#${questionNumber.toString().padStart(3, '0')}`);
+        setGameState(voteState);
       } else {
         console.error(`❌ HOST: Failed to start vote:`, startVoteRes.status);
         const errorData = await startVoteRes.json();
@@ -3923,6 +3974,8 @@ Focus on actionable business strategy insights.`;
       }
     } catch (e) {
       console.error('Failed to start vote', e);
+    } finally {
+      openingVoteRef.current = false;
     }
   };
 
@@ -4026,8 +4079,10 @@ Focus on actionable business strategy insights.`;
           : []; // Empty array if no votes
       }
       
-      setAnswers(formattedAnswers);
-      console.log(`📊 HOST: Updated answers with ${formattedAnswers.length} results`);
+      // Put on the stage WITH the RESULTS state below, not here: two awaits
+      // sit between here and there, and the VOTE stage would have drawn
+      // these tally rows in the meantime.
+      console.log(`📊 HOST: Formatted ${formattedAnswers.length} results`);
       
       // Extract player score updates from results (already calculated by get-results API)
       const playerScoreUpdates = {};
@@ -4091,6 +4146,7 @@ Focus on actionable business strategy insights.`;
       const resultsState = `RESULTS#${paddedQuestionNumber}`;
       
       setManualStateChange(true);
+      showAnswersFor(formattedAnswers, resultsState);
       setGameState(resultsState);
       // get-results.js's enterResultsState already set AuthorsRevealed
       // unconditionally as part of this same request (Task 8) — mirror that
@@ -4162,7 +4218,7 @@ Focus on actionable business strategy insights.`;
         return;
       }
       const data = await res.json();
-      setAnswers(data.answers || []);
+      showAnswersFor(data.answers || [], gameStateRef.current);
       setAuthorsRevealed(true);
     } catch (e) {
       console.error('❌ HOST: reveal error', e);
@@ -4263,10 +4319,15 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleWelcomeNewGame = async () => {
-    setShowWelcomeScreen(false);
-    // Fetch question sets before showing the dialog
+    // FETCH FIRST, THEN SWAP. Hiding the welcome screen before this await left
+    // nothing to draw but the empty host stage for the length of the fetch —
+    // the flash the owner reported ("a screen flash to the main host screen
+    // ... it doesn't have any session info yet"). Showing the dialog first is
+    // the order that is safe even unbatched: the welcome branch returns ahead
+    // of the dialog's, so the welcome screen stays up until both are set.
     await fetchQuestionSets();
     setShowNewGameDialog(true);
+    setShowWelcomeScreen(false);
   };
 
   const handleContinueGame = () => {
@@ -4499,11 +4560,16 @@ Focus on actionable business strategy insights.`;
    * the create call used to read them back out of the pre-reset closure.
    */
   const handleStartNewGame = async (form) => {
+    // ONE PRESS, ONE SESSION. The dialog now stays up until the next screen is
+    // ready, and it never had a guard: a second press was a second session.
+    if (creatingSessionRef.current) return;
     setCreateRefusal(null);
     if (!form?.setId || !form.title?.trim()) {
       setCreateRefusal({ message: 'pick a question set and enter an event title' });
       return;
     }
+    creatingSessionRef.current = true;
+    setCreatingSession(true);
     /*
       THE DESTRUCTIVE CLEAR THAT USED TO SIT HERE DELETED "80s 2" (issue #26).
 
@@ -4574,9 +4640,14 @@ Focus on actionable business strategy insights.`;
         // Store event title in localStorage as backup
         localStorage.setItem(`game_${newGameId}_title`, form.title);
 
-        // Close new game dialog
-        setShowNewGameDialog(false);
-
+        /*
+          THE DIALOG CLOSES LAST. It used to close here, before the awaits
+          below, and the empty host stage showed until the session list (or
+          the survey) was ready — the owner's second flash, "after you have
+          created it and before it brings up the list of sessions". The list's
+          branch returns ahead of the dialog's, so opening it first and closing
+          the dialog after is safe in either order React commits them.
+        */
         if (isSurveyType(form.gameType)) {
           await openNewSurvey(newGameId, form);
         } else {
@@ -4585,6 +4656,7 @@ Focus on actionable business strategy insights.`;
           setReportsModalMode('select');
           setShowReportsModal(true);
         }
+        setShowNewGameDialog(false);
 
         console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${form.setId}", title "${form.title}" - showing in history`);
       } else {
@@ -4600,6 +4672,9 @@ Focus on actionable business strategy insights.`;
       console.error('Failed to create game:', error);
       setCreateRefusal({ message: `${error.message}. Please try again.` });
       return;
+    } finally {
+      creatingSessionRef.current = false;
+      setCreatingSession(false);
     }
     
     console.log(`🎯 HOST: New game started with set "${form.setId}", title "${form.title}", and AI context: ${form.aiContext ? 'provided' : 'none'}`);
@@ -5201,6 +5276,7 @@ Focus on actionable business strategy insights.`;
         }}
         onCreate={handleStartNewGame}
         refusal={createRefusal}
+        busy={creatingSession}
       />
     );
   }
@@ -5231,6 +5307,11 @@ Focus on actionable business strategy insights.`;
   const hostPhase = gameState === 'ENDED'
     ? 'ENDED'
     : hostPhaseForBeat(roundPhase, resultsBeat);
+
+  // Are `answers` THIS round-phase's? VOTE and RESULTS leave their responses'
+  // space blank until they are (config/stageAnswers.js) — the owner: "it
+  // would be better to leave that space blank until the data has loaded."
+  const stageResponsesReady = stageAnswersReady(gameState, answersFor);
 
   /*
     WHERE THE READ-BACK IS, for the dock. On FIELD_NOTES the primary is a page
@@ -6115,26 +6196,24 @@ Focus on actionable business strategy insights.`;
                     <div className="qr">
                       <QRCodeSVG value={playUrl} size={512} level="M" includeMargin={false} />
                     </div>
+                    {/* No "Open on your phone" label over the address — the
+                        owner took it off, 2026-09-23. The kicker above already
+                        says how to join. */}
                     <div className="joininfo">
-                      <div className="lbl">Open on your phone</div>
                       <div className="url">{joinDisplayUrl}</div>
                       <div className="lbl">Session code</div>
                       <div className="code">{gameId}</div>
                     </div>
                   </div>
                 )}
-                {/* "until voting closes" USED TO END THIS SENTENCE and it is
-                    now a lie: entering RESULTS reveals the round on the server,
-                    but the stage attributes nobody unless the host's session
-                    setting says to. So the room is told the fact that is
-                    actually true — nobody is named — and told who can change
-                    it. */}
-                {anonymityApplies(currentGameType) && anonymousUntilReveal && (
-                  <p className="anon-line" data-drop="3" data-drop-note="Anonymity note">
-                    <b>Answers are anonymous.</b> Nobody sees who wrote what — the
-                    host included — unless the host turns names on.
-                  </p>
-                )}
+                {/* NO ANONYMITY LINE IN THE LOBBY. The owner, 2026-09-23: "leave
+                    the comment 'Answers are anonymous. Nobody sees who wrote
+                    what — the host included — unless the host turns names on.'
+                    off the main intro page." It was also wrong: by default names
+                    are hidden only until voting closes, when each response is
+                    shown with its author and the points it earned (anonymity.js
+                    authorsHiddenNow). The phone says that where it matters —
+                    above the ballot (PlayerPage, plr-anon). */}
               </>
             )}
 
@@ -6209,7 +6288,7 @@ Focus on actionable business strategy insights.`;
                     printed position, and two keys the room can read off the
                     line itself. */}
                 <div className="cards">
-                  {answerPage.items.map((answer, i) => {
+                  {stageResponsesReady && answerPage.items.map((answer, i) => {
                     const idx = answerPage.offset + i;
                     return (
                       <div key={idx} className="card">
@@ -6223,13 +6302,15 @@ Focus on actionable business strategy insights.`;
                     );
                   })}
                 </div>
-                <Pager
-                  total={answers.length}
-                  page={answerPage.page}
-                  pageSize={stagePageSize}
-                  onPage={setStagePageIndex}
-                  enabled={!anyOverlayOpen}
-                />
+                {stageResponsesReady && (
+                  <Pager
+                    total={answers.length}
+                    page={answerPage.page}
+                    pageSize={stagePageSize}
+                    onPage={setStagePageIndex}
+                    enabled={!anyOverlayOpen}
+                  />
+                )}
               </>
             )}
 
@@ -6301,7 +6382,9 @@ Focus on actionable business strategy insights.`;
                     payoff is the correct row and its share of the vote below.
                     The old empty-state is not restored either: it printed
                     JSON.stringify(answers) at a room. */}
-                {currentGameType !== 'trivia' && answers.length === 0 ? (
+                {/* Blank until this round's results are the ones in hand, so
+                    "No responses came in" is never said while they load. */}
+                {!stageResponsesReady ? null : currentGameType !== 'trivia' && answers.length === 0 ? (
                   <p className="qdetail">No responses came in for this one.</p>
                 ) : currentGameType === 'trivia' ? (
                   /* The same card as ASK, in its RESULTS treatment: the correct

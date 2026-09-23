@@ -11,6 +11,7 @@
  * says "hidden" in one directory and "visible" in the other is a leak that no
  * single-file test can see.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -266,6 +267,7 @@ await check('the inlined skip-set agrees with game-types.js for every spelling',
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
+suiteFinished();
 process.exit(fail === 0 ? 0 : 1);
 
 })();

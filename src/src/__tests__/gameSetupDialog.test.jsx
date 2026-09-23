@@ -262,6 +262,17 @@ describe('creating', () => {
     expect(screen.getByRole('button', { name: /create engagement/i })).toBeEnabled();
   });
 
+  // The page keeps the dialog up until the next screen is ready, so a press in
+  // flight must look taken and must not be pressable again — a second press
+  // was a second session. rejects: a live Create while `busy`.
+  test('while the page is creating, the button says so and cannot be pressed again', () => {
+    const { props } = ready({ busy: true });
+    const button = screen.getByRole('button', { name: /creating…/i });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
   // THE reason for the extraction. handleStartNewGame calls leaveCurrentGame(),
   // which clears activeCategoryIds, and then reads it from the pre-reset
   // closure. Putting the ids in the payload removes that dependency entirely.

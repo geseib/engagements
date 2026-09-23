@@ -40,6 +40,7 @@
  * to delete the guard), and no host inherits content they did not create
  * (section 3.3). Change that decision and both go red.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -1137,5 +1138,6 @@ function reset() { store.clear(); log.length = 0; }
     assert.ok(inactiveHost.legacy, 'a legacy row with no active attribute was treated as inactive'));
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

@@ -5,6 +5,7 @@
  * free month left as a gap instead of a $0.00 row; an invoice that recomputes
  * from the ledger instead of reading its snapshot; a non-member reading one.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -379,5 +380,6 @@ const ORG_B = 'org_2222222222222222222222';
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

@@ -21,6 +21,7 @@
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -306,5 +307,6 @@ function seedPlatformSet(setId = 'teamretro') {
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { say(`crashed: ${e.stack}`); process.exit(1); });

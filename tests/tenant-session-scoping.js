@@ -35,6 +35,7 @@
  * and every one of them was watched failing against a deliberately broken
  * implementation before being kept.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -644,5 +645,6 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

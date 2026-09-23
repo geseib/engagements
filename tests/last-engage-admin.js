@@ -28,6 +28,7 @@
  * // rejects: any change that would leave the pool with zero Engage admins, and
  * //          any caller destroying their own account.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const Module = require('module');
@@ -274,5 +275,6 @@ const bodyOf = (res) => JSON.parse(res.body || '{}');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

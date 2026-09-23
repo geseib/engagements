@@ -16,6 +16,7 @@
  * §4 covers the part that is easy to get wrong in the other direction: one bad
  * session must not take the list down with it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -330,5 +331,6 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
   });
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

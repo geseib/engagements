@@ -33,6 +33,7 @@
  *   - the refusal is not a roster probe: a private session still demands the
  *     access code before it will say anything about a name.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -309,5 +310,6 @@ const playerRow = (name) => store.get(key(`GAME#${GAME}`, `PLAYER#${name}`));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

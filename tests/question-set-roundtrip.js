@@ -60,6 +60,7 @@
  * Category/School/Tags/AnswerDetails/Image; wavelength rows carry no
  * type-specific attribute at all and so ride the call-and-answer branch.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -1131,5 +1132,6 @@ const WAVELENGTH_CSV = [
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

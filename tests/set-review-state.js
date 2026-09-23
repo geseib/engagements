@@ -25,6 +25,7 @@
  * state exists to prevent, reintroduced by the storage shape chosen to prevent
  * it. A row keyed by the version NUMBER cannot shift and has one writer.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const Module = require('module');
@@ -237,5 +238,6 @@ const PLAT_REF = { scope: 'platform', setId: '80strivia' };
 
   say(`\n${pass} passed, ${fail} failed`);
   Module._load = realLoad;
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

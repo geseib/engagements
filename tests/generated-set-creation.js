@@ -25,6 +25,7 @@
  * idempotency guard, and a stub that ignored conditions would let a broken
  * guard pass.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -864,5 +865,6 @@ const scenarioBody = (overrides = {}) => ({
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);
+  suiteFinished();
   if (failed > 0) process.exit(1);
 })();

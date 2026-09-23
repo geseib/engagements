@@ -18,6 +18,7 @@
  *   §4  THE REPORT DOES NOT DROP THEM. Neither does the score record, nor a
  *       single answer or vote.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -55,7 +56,13 @@ const PK = `GAME#${GAME}`;
 const join = (body) => joinGame.handler({
   pathParameters: { gameId: GAME }, body: JSON.stringify(body),
 });
+// Both host routes carry the Cognito authorizer and refuse a caller with no
+// identity, so the host here is somebody the authorizer saw. The session is
+// orgless, which any host may drive — session-room-controls-org-scope.js is
+// where the cross-org refusal is proven.
+const HOST = { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } };
 const remove = (playerName, body) => removePlayer.handler({
+  requestContext: HOST,
   pathParameters: { gameId: GAME, playerName }, body: JSON.stringify(body || {}),
 });
 const roster = () => getPlayers.handler({ pathParameters: { gameId: GAME } });
@@ -320,6 +327,7 @@ async function seedSession({ phase = 'ASK' } = {}) {
     await seedSession();
     await remove('Tomás');
     await grantHandover.handler({
+      requestContext: HOST,
       pathParameters: { gameId: GAME, playerName: 'Tomás' }, body: JSON.stringify({}),
     });
 
@@ -372,5 +380,6 @@ async function seedSession({ phase = 'ASK' } = {}) {
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

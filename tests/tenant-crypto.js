@@ -21,6 +21,7 @@
  * The cipher is REAL — node:crypto, real round trips. Only KMS is stubbed,
  * because the point of a data key is that nothing on the hot path talks to it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -679,5 +680,6 @@ console.log('\n8. the three bundle copies have not drifted');
 
 run().then(() => {
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 });

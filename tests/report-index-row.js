@@ -12,6 +12,7 @@
  * rejects: no row; a plaintext Title under an org; a 1-year report expiring
  * at 90 days; a standard upload without the tag the bucket rule filters on.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -202,5 +203,6 @@ const rowsIn = (pk) => [...ddb.values()].filter((r) => r.PK === pk);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

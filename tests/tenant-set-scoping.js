@@ -37,6 +37,7 @@
  * admin bundle imports (s3-request-presigner) cannot be resolved from the repo
  * root at all.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -881,5 +882,6 @@ function seedPlatformSet() {
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

@@ -24,6 +24,7 @@
  * own row would keep passing after the writers changed key or field names,
  * which is precisely the failure it is supposed to catch.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -419,5 +420,6 @@ const askForMyAnswer = (gameId, query) =>
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

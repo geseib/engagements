@@ -16,6 +16,7 @@
  */
 const path = require('path');
 const Module = require('module');
+const suiteFinished = require('./finish-guard');
 
 const TABLE = 'engage-archive-suite';
 Object.assign(process.env, {
@@ -400,6 +401,7 @@ function checker() {
       }
     },
     finish() {
+      suiteFinished();
       console.log(`\n${pass} passed, ${fail} failed`);
       process.exit(fail ? 1 : 0);
     },

@@ -29,6 +29,7 @@
  *   §7  the capability is not published. `HandoverRequestedBy` is a clientId,
  *       and a clientId is what get-answers.js accepts as proof of identity.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const fs = require('fs');
@@ -83,7 +84,13 @@ const join = (body) => joinGame.handler({
 const ask = (playerName, body) => requestHandover.handler({
   pathParameters: { gameId: GAME, playerName }, body: JSON.stringify(body || {}),
 });
+// The grant route carries the Cognito authorizer and the handler refuses a
+// caller with no identity, so the host here is somebody the authorizer saw.
+// The session is orgless (reset() writes no orgId), which any host may drive —
+// session-room-controls-org-scope.js is where the cross-org refusal is proven.
+const HOST = { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } };
 const grant = (playerName, body) => grantHandover.handler({
+  requestContext: HOST,
   pathParameters: { gameId: GAME, playerName }, body: JSON.stringify(body || {}),
 });
 const roster = () => getPlayers.handler({ pathParameters: { gameId: GAME } });
@@ -577,5 +584,6 @@ const playerRow = (name) => store.get(key(PK, `PLAYER#${name}`));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

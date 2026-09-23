@@ -24,6 +24,7 @@
  * Stubbing note: intercept Module._load by request name — client-s3 exists only
  * in the deployed bundle, so require.cache poisoning by path silently misses.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const Module = require('module');
@@ -224,5 +225,6 @@ const bodyOf = (put) => JSON.parse(put.Body);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { loud(); console.error('harness error:', e); process.exit(2); });

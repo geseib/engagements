@@ -7,8 +7,9 @@
  * The property is one hop of a payload, which reading the file can establish.
  *
  * WHAT IT PROTECTS. The builder steers the generator with a direction and then
- * hands the finished scenarios to `handleScenariosGenerated`, which POSTs them
- * to /admin/upload-questions. If the direction does not make that hop it steers
+ * hands the finished scenarios to `handleScenariosGenerated`, which passes them
+ * to utils/generatedSetUpload.js, which POSTs them to /admin/upload-questions
+ * (the host shelf shares that path). If the direction does not make that hop it steers
  * exactly one generation and is then lost: the SETS row reads as Produce for a
  * set generated as Apply, and the editor, the library and every regeneration
  * afterwards believe it. That failure is silent — the questions are right and
@@ -34,23 +35,22 @@ function stripComments(text) {
 
 const read = (...p) => stripComments(fs.readFileSync(src(...p), 'utf8'));
 
+/*
+  WHERE THE HOP IS NOW. The upload moved out of AdminPage into
+  utils/generatedSetUpload.js so the host shelf could share it, and the body it
+  builds is pure — so the forwarding, the poll hop and the omission of an unset
+  direction are asserted BEHAVIOURALLY in generatedSetUpload.test.js ("the body
+  each kind sends"), not read from source here. What stays here is the one hop
+  that is still page wiring: the handler has to hand over the WHOLE payload.
+*/
 describe('the direction survives the hop from the builder to the set', () => {
-  test('AdminPage reads roundKind off the builder payload', () => {
-    // rejects: destructuring only `{ scenarios, metadata }`, which is what the
-    // handler did before this slice — the direction would arrive on the object
-    // and be dropped on the floor one line later.
+  test('AdminPage hands the scenario payload over whole', () => {
+    // rejects: destructuring `{ scenarios, metadata }` and passing only those,
+    // which is what the handler did before the round-direction slice — the
+    // direction would arrive on the object and be dropped one line later.
     const source = read('AdminPage.jsx');
-    expect(source).toMatch(/const\s*\{[^}]*roundKind[^}]*\}\s*=\s*scenarioData/);
-  });
-
-  test('and sends it to /admin/upload-questions', () => {
-    // rejects: reading it and not forwarding it. upload-questions.js is the
-    // only writer of the SETS row on the create path, so a direction that does
-    // not reach this body is a direction the set never had.
-    const source = read('AdminPage.jsx');
-    const body = source.slice(source.indexOf('admin/upload-questions'));
-    expect(body).toMatch(/roundKind\b/);
-    expect(body).toMatch(/roundKindBrief\b/);
+    const handler = source.slice(source.indexOf('const handleScenariosGenerated'));
+    expect(handler).toMatch(/uploadBuilderResult\('scenario', scenarioData, \{ engagementType \}\)/);
   });
 
   test('the poll handler does the same hop', () => {
@@ -60,19 +60,13 @@ describe('the direction survives the hop from the builder to the set', () => {
     // record what it was steered with just as a scenario set does.
     const source = read('AdminPage.jsx');
     const handler = source.slice(source.indexOf('const handlePollGenerated'));
-    expect(handler).toMatch(/const\s*\{[^}]*roundKind[^}]*\}\s*=\s*pollData/);
-    const body = handler.slice(handler.indexOf('admin/upload-questions'));
-    expect(body).toMatch(/\.\.\.\(roundKind \? \{ roundKind \} : \{\}\)/);
+    expect(handler).toMatch(/uploadBuilderResult\('poll', pollData\)/);
   });
 
-  test('an unset direction is OMITTED from the payload, not sent as empty', () => {
-    // rejects: `roundKind: roundKind || ''`. upload-questions.js writes the
-    // attribute only when it is non-empty precisely so a set that was never
-    // asked keeps no stored value — that distinction is what makes D1's
-    // "no migration" free, and a always-present key destroys it at the source.
-    const source = read('AdminPage.jsx');
-    expect(source).toMatch(/\.\.\.\(roundKind \? \{ roundKind \} : \{\}\)/);
-    expect(source).toMatch(/\.\.\.\(roundKindBrief \? \{ roundKindBrief \} : \{\}\)/);
+  test('the shared path reads the direction off the payload it is given', () => {
+    // rejects: the helper building its body from `{ metadata }` alone.
+    const helper = read('utils', 'generatedSetUpload.js');
+    expect(helper).toMatch(/const\s*\{[^}]*roundKind[^}]*\}\s*=\s*data/);
   });
 });
 

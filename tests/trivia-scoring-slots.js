@@ -41,6 +41,7 @@
  * keep passing after the writer changed, which is the failure it exists to
  * catch.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const fs = require('fs');
@@ -469,6 +470,7 @@ await check('websocket/trivia-answer.js and game/trivia-answer.js are byte-ident
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
+suiteFinished();
 process.exit(fail === 0 ? 0 : 1);
 
 })();

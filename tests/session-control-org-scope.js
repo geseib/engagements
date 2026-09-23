@@ -47,6 +47,7 @@
  * //          driving a room, or being handed a roster — and any of these
  * //          handlers calling the guard and then acting anyway.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -639,5 +640,6 @@ const closeRound = (event) => getResults({
       `got ${orphanVote.statusCode}: ${orphanVote.body}`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

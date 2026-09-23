@@ -40,6 +40,7 @@
  * Drives the REAL handlers with Bedrock and DynamoDB stubbed, following
  * tests/scenario-generation-job.js.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const fs = require('fs');
@@ -596,5 +597,6 @@ async function promptFor(payload) {
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);
+  suiteFinished();
   if (failed > 0) process.exit(1);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

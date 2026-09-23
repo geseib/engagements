@@ -46,6 +46,7 @@
  * snapshot is an envelope and merging it means decrypting it first — is
  * exercised rather than assumed.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -420,5 +421,6 @@ function seedFinishedSession({ gameId = GAME, orgId = null } = {}) {
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

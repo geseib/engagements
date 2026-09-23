@@ -11,6 +11,7 @@
  *   - a model failure that leaves the stage waiting on beat one forever
  *   - the return of connectionScore or per-player wavelength scoring
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -727,5 +728,6 @@ const runWorker = (gameId) => handler({
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

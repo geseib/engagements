@@ -26,6 +26,7 @@
  *   - engagementType is editable and validated
  *   - upload no longer stamps 'lessons-learned' on every set regardless of type
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -500,5 +501,6 @@ function seedSet(overrides = {}) {
       'the omit-untouched / send-empty-when-cleared contract is gone'));
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

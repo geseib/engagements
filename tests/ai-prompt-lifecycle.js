@@ -21,6 +21,7 @@
  * these handlers import exist only in the deployed bundle and cannot be
  * resolved locally at all. Intercept Module._load by request name instead.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -413,5 +414,6 @@ const list = (qs) => getPrompts.handler({ queryStringParameters: qs || {} })
     assert.strictEqual(orphan.malformed, true));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

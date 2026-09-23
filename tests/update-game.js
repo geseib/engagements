@@ -30,6 +30,7 @@
  * Stubbing note (same as tests/persona-controls.js): intercept Module._load by
  * request name — poisoning require.cache by resolved path silently misses.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -711,7 +712,9 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
 
   const toggleHandler = require(path.join(REPO, 'lambda-functions', 'game', 'toggle-category.js')).handler;
   const toggle = async (gameId, body) => {
-    const res = await toggleHandler({ pathParameters: { gameId }, body: JSON.stringify(body) });
+    // As the owning org, like every other call here: toggle-category asks
+    // whose room it is, and these sessions were created by ORG.
+    const res = await toggleHandler(asOrg({ pathParameters: { gameId }, body: JSON.stringify(body) }));
     return { status: res.statusCode, body: JSON.parse(res.body) };
   };
 
@@ -902,5 +905,6 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

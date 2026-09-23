@@ -8,7 +8,8 @@
  *
  * ── THERE IS NO DELETE IN THIS FILE, AND THERE MUST NOT BE ─────────────────
  *
- * The handler issues exactly one `GetCommand` and one `UpdateCommand`. It does
+ * The handler issues two `GetCommand`s (METADATA for the owner, then the
+ * player row) and exactly one `UpdateCommand`. It does
  * not touch `PLAYER#{name}#SCORE`, and it does not touch a single
  * `QUESTION#nnn#ANSWER#{name}` or `#VOTE#{name}`. Removal is the presence of a
  * `RemovedAt` timestamp on the player row and nothing else — see
@@ -39,6 +40,11 @@
  * for their reason: every participant knows the four-digit game id, so on a
  * public route this would be a button any phone in the room could press to take
  * somebody else out of the round.
+ *
+ * AND THIS SESSION'S HOST. The authorizer only proves the caller is *a* host;
+ * until `callerMayDriveSession` was asked here, any `hosts` account holding one
+ * of 9,000 four-digit codes could empty a rival's live counts — or undo their
+ * host's removals. tests/session-room-controls-org-scope.js.
  */
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -46,6 +52,7 @@ const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/
 const { ApiGatewayManagementApiClient } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const { notifyHost } = require('./host-notify');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -68,6 +75,26 @@ exports.handler = async (event) => {
       return {
         statusCode: 400,
         body: JSON.stringify({ error: 'Game ID and player name are required' }),
+        headers: cors
+      };
+    }
+
+    // WHOSE ROOM IS THIS? Asked before the player read and before anything is
+    // written or pushed, so a refusal changes nothing, tells the host's other
+    // device nothing, and is one answer whether or not the name is in the room.
+    // No identity is refused outright — removal is never a participant's act.
+    // 404 rather than 403: see tenant.callerMayDriveSession.
+    const meta = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'PK, orgId, OrgId'
+    }));
+    const authorizer = event?.requestContext?.authorizer;
+    const identity = authorizer?.jwt?.claims || authorizer?.lambda;
+    if (!meta.Item || !identity || !callerMayDriveSession(event, meta.Item)) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
         headers: cors
       };
     }

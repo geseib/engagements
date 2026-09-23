@@ -22,6 +22,7 @@
  * operations that must be ordered so a partial failure never leaves a
  * browsable set pointing at missing questions.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -458,5 +459,6 @@ function check(label, fn) {
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

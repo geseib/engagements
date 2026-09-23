@@ -10,6 +10,7 @@
  * decision winning; staff routes open to anyone signed in; a bare partition
  * literal anywhere in the handler.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -453,5 +454,6 @@ const ORG_B = 'org_2222222222222222222222';
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

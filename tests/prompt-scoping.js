@@ -12,6 +12,7 @@
  *     platform-only ON PURPOSE;
  *   - the prompt's TEXT is in S3, and the partition does not reach it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -245,5 +246,6 @@ const internal = () => ({ requestContext: { authorizer: { lambda: {} } } });
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

@@ -793,9 +793,10 @@ async function handleTriviaResults(event, gameId, questionId) {
   console.log(`🎯 Found ${answers.length} trivia answers for question ${paddedQuestionId}`);
   
   if (answers.length > 0) {
+    // Never `Answer`: it was decrypted a few lines up, and printing it here
+    // would undo that for anyone who can read the log group.
     console.log(`📋 TRIVIA ANSWERS FOUND:`, answers.map(a => ({
       playerName: a.PlayerName,
-      answer: a.Answer,
       isCorrect: a.IsCorrect,
       pointsEarned: a.PointsEarned
     })));

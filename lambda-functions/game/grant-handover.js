@@ -14,6 +14,13 @@
  * authorizer, and that asymmetry is the design — asking is something a person
  * locked out of the session must be able to do, granting is not.
  *
+ * AND THIS SESSION'S HOST. The authorizer only proves the caller is *a* host,
+ * which moved that button out of the room and left it in every other
+ * organisation: a `hosts` account holding one of 9,000 four-digit codes could
+ * unlock a rival's name and claim it with a plain join. The handler now asks
+ * `callerMayDriveSession` before it reads the player row —
+ * tests/session-room-controls-org-scope.js.
+ *
  * ── WHY THE HOST NEVER HANDLES A CLIENT ID ─────────────────────────────────
  *
  * `bindToRequester: true` rather than `forClientId: "<id>"`. The host's console
@@ -51,6 +58,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 
 const { handoverExpiryFrom, HANDOVER_WINDOW_SECONDS, publicHandoverState } = require('./handover');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -68,6 +76,25 @@ exports.handler = async (event) => {
       return {
         statusCode: 400,
         body: JSON.stringify({ error: 'Game ID and player name are required' }),
+        headers: cors
+      };
+    }
+
+    // WHOSE ROOM IS THIS? Asked before the player read, so a refusal is one
+    // answer whether or not the name is in the room, and no identity is
+    // refused outright — granting is never a participant's act. 404 rather
+    // than 403: see tenant.callerMayDriveSession.
+    const meta = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'PK, orgId, OrgId'
+    }));
+    const authorizer = event?.requestContext?.authorizer;
+    const identity = authorizer?.jwt?.claims || authorizer?.lambda;
+    if (!meta.Item || !identity || !callerMayDriveSession(event, meta.Item)) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
         headers: cors
       };
     }

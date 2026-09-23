@@ -28,6 +28,7 @@
  *   - replace preserves promptId, personaId, instructions and roundNoun
  *   - CSV image filenames become set-scoped media keys, per-SET not per-version
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -1116,5 +1117,6 @@ function decorate(setId, fields) {
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

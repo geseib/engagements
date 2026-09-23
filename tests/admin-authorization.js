@@ -24,6 +24,7 @@
  *
  * These run the REAL handler against a stubbed Cognito client.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -290,5 +291,6 @@ const jwtEventAs = (groups, { method = 'POST', path: p = '/admin/users/list' } =
   poolUsers = [];
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

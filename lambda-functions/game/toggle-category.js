@@ -1,6 +1,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 
+const { callerMayDriveSession } = require('./tenant');
+
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
@@ -30,6 +32,33 @@ exports.handler = async (event) => {
         body: JSON.stringify({ 
           error: 'Missing required fields: gameId, categoryId, enabled' 
         }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /*
+      WHOSE ROOM IS THIS? The Cognito authorizer says the caller is *a* host;
+      nothing here said they were THIS session's host, so any `hosts` account
+      holding one of 9,000 four-digit codes could change which categories a
+      rival's live room is asked. Same guard and same 404 as
+      mint-host-ticket.js — see tenant.callerMayDriveSession for why not 403.
+
+      It sits BEFORE the STATE read on purpose: the state check below answers
+      400 for an ENDED room, which would tell a rival what they were refused
+      from. And no identity is refused outright, because callerMayDriveSession
+      passes a caller with no groups and a toggle is never a participant's act.
+    */
+    const meta = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'PK, orgId, OrgId'
+    }));
+    const authorizer = event?.requestContext?.authorizer;
+    const identity = authorizer?.jwt?.claims || authorizer?.lambda;
+    if (!meta.Item || !identity || !callerMayDriveSession(event, meta.Item)) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Game not found' }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }

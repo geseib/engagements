@@ -23,6 +23,7 @@
  * becomes the third one, and this file proves the extension did not break the
  * two that were there.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -317,5 +318,6 @@ function seedGame(gameId, lessonNumber = 3) {
       `an unknown beat travelled to the client as '${unknownBeat.stageBeat}'`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

@@ -20,6 +20,7 @@
  * asserts against the prompt that would actually be sent and the job record
  * that would actually be written.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -689,5 +690,6 @@ async function runJob(body, workerCtx = ctx()) {
   });
 
   console.log(`\n${passed} passed, ${failed} failed\n`);
+  suiteFinished();
   if (failed > 0) process.exit(1);
 })();

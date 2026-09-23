@@ -23,6 +23,7 @@
  * import exist only in the deployed bundle. Intercept Module._load by request
  * name instead.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -828,5 +829,6 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

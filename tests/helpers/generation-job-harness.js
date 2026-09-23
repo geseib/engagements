@@ -15,6 +15,7 @@
  * is already deployed.
  */
 const Module = require('module');
+const suiteFinished = require('./finish-guard');
 
 const state = {
   ddb: new Map(),
@@ -125,6 +126,7 @@ async function test(name, fn) {
 
 /** Print the tally in the format the repo's aggregate command greps for. */
 function summary() {
+  suiteFinished();
   console.log(`\n${state.passed} passed, ${state.failed} failed\n`);
   if (state.failed > 0) process.exit(1);
 }

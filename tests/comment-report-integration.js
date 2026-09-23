@@ -17,6 +17,7 @@
  * the wrong round would pass any assertion that only counted the total, and
  * would pass a symmetric fixture too.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -269,5 +270,6 @@ const build = () => handler({
     assert.strictEqual(bare.gameStats.totalComments, 0));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

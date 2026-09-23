@@ -31,6 +31,7 @@
  * (§1-§3) while still not being CLOBBERED by the specific pick that asked it
  * (§4). Fixing either one alone re-breaks the other.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -266,5 +267,6 @@ const servedNow = () => {
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

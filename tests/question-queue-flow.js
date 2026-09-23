@@ -26,6 +26,7 @@
  *      every duplicate tap, which invalidates every other surface's
  *      expectedVersion for no reason at all.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -366,5 +367,6 @@ const bodyOf = (res) => JSON.parse(res.body);
     assert.strictEqual(noQueueYet.questionQueue.version, 0));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

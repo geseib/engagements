@@ -33,6 +33,7 @@
  * every one of them was watched failing against a deliberately broken
  * implementation before being kept.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -815,5 +816,6 @@ const TEAM_ORG = 'org_2222222222222222222222';
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

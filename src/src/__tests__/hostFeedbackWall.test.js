@@ -65,4 +65,37 @@ describe('the wall styles', () => {
     expect(CSS).toMatch(/\.featured\{/);
     expect(CSS).toMatch(/\.featured \.who\{/);
   });
+
+  /*
+    THE FEATURED QUOTE MUST BE READABLE. The owner, 2026-09-23, with a
+    screenshot of "I / thin / k I": "if host clicks on the comment from the
+    list, it is not readable." `--measure` is in `ch`, which resolves in the
+    font of the element that uses it — the box's small body font, not the
+    quote's primary-tier one. Measured in a browser at 1000-1920 wide before
+    and after (stage.css carries the account).
+  */
+  const block = (sel) => {
+    const at = CSS.indexOf(`${sel}{`);
+    expect(at).toBeGreaterThan(-1);
+    return CSS.slice(at, CSS.indexOf('}', at));
+  };
+  // rejects: the measure on the box, where 26ch is a strip of body characters.
+  test('the measure sits on the quote, not on the box around it', () => {
+    expect(block('.featured')).not.toMatch(/max-width:var\(--measure\)/);
+    expect(block('.featured .say')).toMatch(/max-width:var\(--measure\)/);
+  });
+  // rejects: `anywhere`, which breaks words between any two letters and
+  // shrinks the box's min-content to a single letter.
+  test('the quote never breaks a word that fits on a line', () => {
+    expect(block('.featured .say')).not.toMatch(/overflow-wrap:anywhere/);
+    expect(block('.featured .say')).toMatch(/overflow-wrap:break-word/);
+  });
+  // rejects: min-width:0 on the dock's room-facing status — the one thing
+  // that gave in a crowded dock, down to a word a line ("Results / are / on").
+  test('the dock status keeps a floor, and the key hints give way first', () => {
+    expect(block('.dock .status')).not.toMatch(/min-width:0/);
+    expect(block('.dock .status')).toMatch(/min-width:min\(/);
+    expect(CSS).toMatch(/@media \(max-width:1200px\)\{\.dock \.host-action-bar__keyhint\{display:none\}\}/);
+    expect(CSS).toMatch(/@media \(max-width:1100px\)\{\.dock \.kbd\{display:none\}\}/);
+  });
 });

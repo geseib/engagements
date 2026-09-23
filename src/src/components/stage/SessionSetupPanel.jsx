@@ -904,11 +904,20 @@ export default function SessionSetupPanel({
                       checked={anonymousUntilReveal === false}
                       onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
                     />
-                    <span>Show who wrote each response</span>
+                    <span>Show who wrote each response from the start</span>
                   </label>
+                  {/* WHAT OFF ACTUALLY DOES. This said "names nobody, all
+                      session", which was never true: closing the vote reveals
+                      the round (get-results.js enterResultsState) and the
+                      results show each author with the points they earned
+                      (anonymity.js authorsHiddenNow). The owner, 2026-09-23:
+                      "keep anonymous until after people vote … they get points
+                      for upvoting." */}
                   <p className="setup-note">
-                    Off, the stage labels responses “Response 1”, “Response 2” and names
-                    nobody, all session. On, every response carries its author.
+                    Off (the default), responses are labelled “Response 1”, “Response 2”
+                    while the room answers and votes. When voting closes, each one shows
+                    who wrote it and the points it earned. On, every response carries its
+                    author from the start.
                   </p>
                   {/* THE TRADE-OFF, STATED, NOT ENFORCED. The two directions are
                       genuinely not symmetric — one crosses the wire and one does

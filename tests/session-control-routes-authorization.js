@@ -115,6 +115,10 @@ const MUST_BE_CLOSED = [
   ['GET', '/games/{gameId}/up-next'],
   ['GET', '/games/{gameId}/queue'],
   ['GET', '/games/{gameId}/exclusions'],
+  // The host's WebSocket ticket (game/mint-host-ticket.js). It is what makes a
+  // socket HOST, and a HOST socket receives the host-only frames — names as
+  // they join, vote and survey progress (tests/websocket-host-ticket.js).
+  ['POST', '/games/{gameId}/host-ticket'],
 ];
 
 // The participant journey. None of these carries a token, ever.

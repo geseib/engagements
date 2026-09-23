@@ -12,6 +12,7 @@
  * including a wrong one, and four such assertions shipped green in this repo
  * before being caught.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -469,5 +470,6 @@ const aComment = (over = {}) => ({
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

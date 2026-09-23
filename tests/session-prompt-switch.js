@@ -30,6 +30,7 @@
  * rejects: a mid-session control wired to a pre-start-only route; a second
  *          writer of a session attribute that skips the guard the first applies.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -358,5 +359,6 @@ const quietly = async (fn) => {
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

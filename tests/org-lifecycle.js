@@ -30,6 +30,7 @@
  * deriving an orgId from the organisation's name; a plain SET on defaultOrgId
  * instead of if_not_exists; guarding before the OPTIONS preflight.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -802,5 +803,6 @@ const ORG_B = 'org_2222222222222222222222';
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

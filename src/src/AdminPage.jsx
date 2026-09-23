@@ -48,9 +48,7 @@ import { describeEnvironment } from './utils/adminEnvironment';
 import {
   SECTION_PARAM, sectionFromSearch, searchForSection, searchMatchesSection,
 } from './config/adminSection';
-import { tagsToCsvCell } from './utils/tags';
-import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
-import { surveyItemsToCsv } from './utils/surveyDraft';
+import { uploadGeneratedSet, generatedSetPendingNotice } from './utils/generatedSetUpload';
 
 const API_BASE = window.API_BASE;
 
@@ -1100,16 +1098,29 @@ function AdminPage() {
     already used, and reports what will happen BEFORE anything is sent.
   */
 
+  /*
+    THE FALLBACK, WHEN THE WORKER COULD NOT MAKE THE SET: upload what the
+    builder handed over. The CSV, the body and the notice each answer becomes
+    live in utils/generatedSetUpload.js, which the host shelf
+    (HostQuestionSetsDialog) calls too. They used to be written out here four
+    times, where the shelf could not reach them, so on this path the shelf
+    saved nothing.
+  */
+  const uploadBuilderResult = async (kind, data, options) => {
+    setNotice(generatedSetPendingNotice(kind));
+    const outcome = await uploadGeneratedSet(kind, data, options);
+    // A 402 is a plan fact, not an upload fault: kept for the Billing section,
+    // and said here as the plan-limit notice the shared path built.
+    if (outcome.limit) setUploadRefusal(outcome.limit);
+    setNotice(outcome.notice);
+    if (outcome.ok) await fetchQuestionSets(); // Refresh the list
+  };
+
   // Handle AI-generated scenarios
   const handleScenariosGenerated = async (scenarioData) => {
     setShowAIScenarioBuilder(false);
 
-    // scenarioData carries the scenarios, the set-level metadata, and the round
-    // DIRECTION the builder was steered with. The direction has to reach the
-    // SETS row or it steers one generation and is then forgotten — a set that
-    // was generated as Apply would read back as Produce for the editor, the
-    // library and every later regeneration.
-    const { scenarios, metadata, roundKind, roundKindBrief, createdSet } = scenarioData;
+    const { createdSet } = scenarioData;
 
     // THE WORKER ALREADY MADE IT. Uploading again would be refused — the
     // importer will not write over a set that exists — and would report that
@@ -1126,96 +1137,19 @@ function AdminPage() {
       return;
     }
 
-    // Convert scenarios to CSV format and upload
-    const csvContent = generateScenariosCSV(scenarios);
-    const timestamp = Date.now();
-
-    try {
-      setNotice({ text: 'Processing AI-generated scenarios…', tone: 'pending' });
-
-      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
-          fileContent: csvContent,
-          customTitle: metadata.title,
-          customDescription: metadata.description,
-          customInstructions: metadata.customInstructions,
-          aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: engagementType,
-          ...(roundKind ? { roundKind } : {}),
-          ...(roundKindBrief ? { roundKindBrief } : {}),
-          isAIGenerated: true
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setNotice({ text: `${result.message} — question set created. Open it from the list to review it.`, tone: 'success' });
-        await fetchQuestionSets(); // Refresh the list
-      } else {
-        // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section, and say it HERE as the plan-limit notice — what ran out and
-        // what this reader can do about it (22-plan-limit-notice.html). It
-        // used to be text ending "Open Plan & usage to request the Team plan"
-        // with no link, said to people who may not request.
-        const limit = parseUpgradeRequired(response, result);
-        if (limit) {
-          setUploadRefusal(limit);
-          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
-        } else {
-          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
-        }
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
-    }
-  };
-
-  const generateScenariosCSV = (scenarios) => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
-
-    // First, group scenarios by category
-    const scenariosByCategory = {};
-    scenarios.forEach(scenario => {
-      const category = scenario.category || 'AI Generated';
-      if (!scenariosByCategory[category]) {
-        scenariosByCategory[category] = [];
-      }
-      scenariosByCategory[category].push(scenario);
-    });
-
-    // Generate CSV rows with proper category-relative numbering
-    const rows = [];
-    Object.keys(scenariosByCategory).forEach(category => {
-      scenariosByCategory[category].forEach((scenario, index) => {
-        const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
-        rows.push(csvRow([
-          category,
-          questionNumber,
-          scenario.title,
-          scenario.detail,
-          scenario.school || 'Professional Development',
-          scenario.customInstructions || '',
-          tagsToCsvCell(scenario.tags)
-        ]));
-      });
-    });
-
-    return buildCsv(headers, rows);
+    // scenarioData carries the scenarios, the set-level metadata, and the round
+    // DIRECTION the builder was steered with. It goes over WHOLE: the direction
+    // has to reach the SETS row or it steers one generation and is then
+    // forgotten — a set that was generated as Apply would read back as Produce
+    // for the editor, the library and every later regeneration.
+    await uploadBuilderResult('scenario', scenarioData, { engagementType });
   };
 
   // Handle AI-generated trivia
   const handleTriviaGenerated = async (triviaData) => {
     setShowTriviaAIBuilder(false);
 
-    // triviaData includes both questions and metadata
-    const { questions, metadata, createdSet } = triviaData;
+    const { createdSet } = triviaData;
 
     // THE WORKER ALREADY MADE IT — same rule as handleScenariosGenerated.
     // Uploading again would be refused and the refusal would be reported as a
@@ -1231,111 +1165,14 @@ function AdminPage() {
       return;
     }
 
-    // Convert trivia to CSV format and upload
-    const csvContent = generateTriviaCSV(questions);
-    const timestamp = Date.now();
-
-    try {
-      setNotice({ text: 'Processing AI-generated trivia questions…', tone: 'pending' });
-
-      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
-          fileContent: csvContent,
-          customTitle: metadata.title,
-          customDescription: metadata.description,
-          customInstructions: metadata.customInstructions,
-          aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'trivia',
-          isAIGenerated: true
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setNotice({ text: `${result.message} — trivia set created. Open it from the list to review it.`, tone: 'success' });
-        await fetchQuestionSets(); // Refresh the list
-      } else {
-        // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section, and say it HERE as the plan-limit notice — what ran out and
-        // what this reader can do about it (22-plan-limit-notice.html). It
-        // used to be text ending "Open Plan & usage to request the Team plan"
-        // with no link, said to people who may not request.
-        const limit = parseUpgradeRequired(response, result);
-        if (limit) {
-          setUploadRefusal(limit);
-          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
-        } else {
-          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
-        }
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
-    }
-  };
-
-  const generateTriviaCSV = (questions) => {
-    // Use the new CSV format that matches upload-questions.js expectations
-    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
-    
-    // First, group questions by category
-    const questionsByCategory = {};
-    questions.forEach(trivia => {
-      const category = trivia.category || 'General';
-      if (!questionsByCategory[category]) {
-        questionsByCategory[category] = [];
-      }
-      questionsByCategory[category].push(trivia);
-    });
-    
-    // Generate CSV rows with proper category-relative numbering
-    const rows = [];
-    Object.keys(questionsByCategory).forEach(category => {
-      questionsByCategory[category].forEach((trivia, index) => {
-        const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
-        
-        // Get the correct answer - keep as OptionA format for backend processing
-        const correctAnswer = Array.isArray(trivia.correctAnswer) ? trivia.correctAnswer.join(',') : trivia.correctAnswer;
-        
-        // Build the row with new format that matches what upload-questions.js expects
-        rows.push(csvRow([
-          category,
-          questionNumber,
-          trivia.title,
-          trivia.questionDetail || trivia.detail || '',
-          trivia.answerDetails || '',
-          trivia.school || 'General',
-          trivia.optionA || '',
-          trivia.optionB || '',
-          trivia.optionC || '',
-          trivia.optionD || '',
-          trivia.optionE || '',
-          trivia.optionF || '',
-          correctAnswer,
-          trivia.difficulty,
-          tagsToCsvCell(trivia.tags)
-        ]));
-      });
-    });
-
-    return buildCsv(headers, rows);
+    await uploadBuilderResult('trivia', triviaData);
   };
 
   // Handle AI-generated polls
   const handlePollGenerated = async (pollData) => {
     setShowPollAIBuilder(false);
 
-    // pollData carries the questions, the set-level metadata, and the round
-    // DIRECTION the builder was steered with. Same reasoning as
-    // handleScenariosGenerated: a direction that does not reach the SETS row
-    // steers one generation and is then forgotten.
-    const { questions, metadata, roundKind, roundKindBrief, createdSet } = pollData;
+    const { createdSet } = pollData;
 
     // THE WORKER ALREADY MADE IT — same rule as handleScenariosGenerated.
     if (createdSet?.setId) {
@@ -1349,95 +1186,9 @@ function AdminPage() {
       return;
     }
 
-    // Convert polls to CSV format and upload
-    const csvContent = generatePollCSV(questions);
-    const timestamp = Date.now();
-
-    try {
-      setNotice({ text: 'Processing AI-generated poll questions…', tone: 'pending' });
-
-      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
-          fileContent: csvContent,
-          customTitle: metadata.title,
-          customDescription: metadata.description,
-          customInstructions: metadata.customInstructions,
-          aiContextInstructions: metadata.aiContextInstructions,
-          engagementType: 'poll',
-          ...(roundKind ? { roundKind } : {}),
-          ...(roundKindBrief ? { roundKindBrief } : {}),
-          isAIGenerated: true
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setNotice({ text: `${result.message} — poll set created. Open it from the list to review it.`, tone: 'success' });
-        await fetchQuestionSets(); // Refresh the list
-      } else {
-        // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section, and say it HERE as the plan-limit notice — what ran out and
-        // what this reader can do about it (22-plan-limit-notice.html). It
-        // used to be text ending "Open Plan & usage to request the Team plan"
-        // with no link, said to people who may not request.
-        const limit = parseUpgradeRequired(response, result);
-        if (limit) {
-          setUploadRefusal(limit);
-          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
-        } else {
-          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
-        }
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
-    }
-  };
-
-  const generatePollCSV = (questions) => {
-    // ONE `Options` column, pipe-separated — see optionsToCsvCell(). This used
-    // to emit Option1..Option5, which upload-questions.js does not read and has
-    // no fallback for, so every AI-generated poll set imported with zero
-    // options. Do not "restore" the numbered columns.
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
-
-    // First, group questions by category
-    const questionsByCategory = {};
-    questions.forEach(poll => {
-      const category = poll.category || 'General';
-      if (!questionsByCategory[category]) {
-        questionsByCategory[category] = [];
-      }
-      questionsByCategory[category].push(poll);
-    });
-    
-    // Generate CSV rows with proper category-relative numbering
-    const rows = [];
-    Object.keys(questionsByCategory).forEach(category => {
-      questionsByCategory[category].forEach((poll, index) => {
-        const questionNumber = index + 1; // Category-relative numbering (1, 2, 3 for each category)
-
-        rows.push(csvRow([
-          category,
-          questionNumber,
-          poll.title,
-          poll.detail || '',
-          poll.school || 'General',
-          poll.customInstructions || '',
-          optionsToCsvCell(poll.options),
-          allowMultipleToCsvCell(poll.allowMultiple),
-          tagsToCsvCell(poll.tags)
-        ]));
-      });
-    });
-
-    return buildCsv(headers, rows);
+    // Whole, for the reason handleScenariosGenerated gives: the poll builder
+    // hands over a round direction too.
+    await uploadBuilderResult('poll', pollData);
   };
 
   // Handle AI-generated surveys.
@@ -1451,7 +1202,7 @@ function AdminPage() {
   const handleSurveyGenerated = async (surveyData) => {
     setShowSurveyAIBuilder(false);
 
-    const { questions, metadata, createdSet } = surveyData;
+    const { createdSet } = surveyData;
 
     // THE WORKER ALREADY MADE IT — same rule as handleScenariosGenerated.
     // Uploading again would be refused and the refusal would be reported as a
@@ -1467,49 +1218,9 @@ function AdminPage() {
       return;
     }
 
-    // The survey branch of the one CSV contract (utils/surveyDraft.js →
-    // questionRows.rowsToCsv), not a survey writer of this page's own.
-    const csvContent = surveyItemsToCsv(questions);
-    const timestamp = Date.now();
-
-    try {
-      setNotice({ text: 'Processing AI-generated survey questions…', tone: 'pending' });
-
-      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
-          fileContent: csvContent,
-          customTitle: metadata.title,
-          customDescription: metadata.description,
-          engagementType: 'survey',
-          isAIGenerated: true
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setNotice({ text: `${result.message} — draft survey created. Open it from the list to review it.`, tone: 'success' });
-        await fetchQuestionSets(); // Refresh the list
-      } else {
-        // A 402 is a plan fact, not an upload fault — the plan-limit notice,
-        // as handlePollGenerated says it (22-plan-limit-notice.html).
-        const limit = parseUpgradeRequired(response, result);
-        if (limit) {
-          setUploadRefusal(limit);
-          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
-        } else {
-          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
-        }
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
-    }
+    // The survey kind writes the survey branch of the one CSV contract
+    // (utils/surveyDraft.js → questionRows.rowsToCsv), not a CSV of its own.
+    await uploadBuilderResult('survey', surveyData);
   };
 
 

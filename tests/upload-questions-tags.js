@@ -12,6 +12,7 @@
  * be resolved from the repo root), and stub only the commands upload-questions.js
  * actually issues: GetCommand, BatchWriteCommand, UpdateCommand.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -189,5 +190,6 @@ const upload = (fileContent, title) => handler({
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);
+  suiteFinished();
   if (failed > 0) process.exit(1);
 })();

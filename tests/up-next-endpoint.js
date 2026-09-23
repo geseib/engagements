@@ -11,6 +11,7 @@
  * The property under all of them: THE PREVIEW MUST MATCH THE SERVE. §4 pins it
  * directly by running both against one fixture.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -410,5 +411,6 @@ const ids = (body) => body.upNext.map((u) => u.questionId);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

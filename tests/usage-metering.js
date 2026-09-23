@@ -19,6 +19,7 @@
  * a closed period's peak with today's set count; get-usage serving one org's
  * numbers to another; the two copies of usage.js drifting apart.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -631,5 +632,6 @@ check('admin/shared/usage.js matches game/usage.js', () => {
 
 run().then(() => {
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 });

@@ -20,6 +20,7 @@
  * powers still CANNOT do, because a staff console is exactly where the
  * isolation guarantee would be quietly given away.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -711,5 +712,6 @@ const say = (s) => console.log(s);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exitCode = fail ? 1 : 0;
 })();

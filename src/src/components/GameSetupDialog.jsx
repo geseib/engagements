@@ -140,6 +140,11 @@ export default function GameSetupDialog({
   onQuestionSetChange,
   onCancel,
   onCreate,
+  /* THE PAGE IS STILL WORKING ON THIS PRESS. The dialog now stays up until
+     the page has the next screen ready (GameHostPage handleStartNewGame), so
+     the press has to look taken and cannot be pressed twice — a second press
+     was a second session. */
+  busy = false,
 }) {
   const isEdit = mode === 'edit';
   const seed = initialValues || {};
@@ -379,7 +384,7 @@ export default function GameSetupDialog({
   };
 
   const submit = () => {
-    if (!canCreate) return;
+    if (!canCreate || busy) return;
     // An edit that deselected every category is refused HERE, not sent and
     // bounced: the backend would 400 it, but the host is mid-form and the
     // helper line under the grid already says why.
@@ -1054,8 +1059,10 @@ export default function GameSetupDialog({
           {/* A survey is created AND opened by this press (the page posts
               /start straight after the create), so the button says what it
               does: phones can answer the moment it lands. */}
-          <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate}>
-            {isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement')}
+          <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate || busy}>
+            {busy
+              ? (isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…'))
+              : (isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement'))}
           </button>
         </div>
       )}

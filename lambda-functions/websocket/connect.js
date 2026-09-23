@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { spendHostTicket } = require('./host-tickets');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -8,11 +9,27 @@ exports.handler = async (event) => {
   const connectionId = event.requestContext.connectionId;
   const gameId = event.queryStringParameters?.gameId;
   const playerName = event.queryStringParameters?.playerName;
-  const isHost = event.queryStringParameters?.isHost === 'true';
-  
-  console.log(`🔌 WebSocket Connect: ${connectionId}, Game: ${gameId}, Player: ${playerName}, Host: ${isHost}`);
-  
+  const askedForHost = event.queryStringParameters?.isHost === 'true';
+
   try {
+    // `isHost=true` is a REQUEST, never a fact. This route has no authorizer,
+    // and every host-only frame — survey progress, names as they join, vote
+    // progress — goes to the rows stored HOST, so the query string alone used
+    // to hand anyone with the four-digit code the host's private feed. HOST now
+    // takes a single-use ticket from POST /games/{gameId}/host-ticket, which
+    // only someone allowed to drive this room can mint (host-tickets.js).
+    //
+    // Anything short of a live ticket for THIS game stores PLAYER: the socket
+    // still connects and still gets what the room gets. A table error while
+    // spending throws to the catch below and refuses the handshake — the host
+    // page reconnects with a fresh ticket, where a silent PLAYER row would have
+    // left it deaf. The ticket is never logged.
+    const isHost = askedForHost
+      && await spendHostTicket(db, process.env.TABLE_NAME, gameId, event.queryStringParameters?.hostTicket);
+
+    console.log(`🔌 WebSocket Connect: ${connectionId}, Game: ${gameId}, Player: ${playerName}, Host: ${isHost}`
+      + (askedForHost && !isHost ? ' (asked for host without a live ticket; stored as PLAYER)' : ''));
+
     // Claim the row FIRST, then retire the older ones.
     //
     // Ordering is the whole point. This used to delete every existing row for

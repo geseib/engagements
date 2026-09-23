@@ -41,6 +41,7 @@
  * // rejects: a cross-org caller opening a feedback round, revealing a rival's
  * //          authors, or either handler calling the guard and ignoring it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -327,5 +328,6 @@ const COMMENT = {
     assert.strictEqual(orphanReveal.statusCode, 200, `got ${orphanReveal.statusCode}: ${orphanReveal.body}`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

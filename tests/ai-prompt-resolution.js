@@ -59,6 +59,7 @@
  * library is genuinely wanted, the editor's copy has to change in the same
  * commit. That is the whole purpose of failing here.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -345,5 +346,6 @@ function check(label, fn) {
     assert.strictEqual(mod.sessionPromptId({ PromptId: 'game-pick' }, null), 'game-pick'));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

@@ -27,6 +27,7 @@
  * Everything below drives the REAL handlers with the AWS SDK stubbed. Bedrock
  * records the prompt it is handed, because the prompt is the artefact.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -631,5 +632,6 @@ const putUpdate = async (promptId, body) => {
   }
 
   realLog(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { loud(); console.error('harness error:', e); process.exit(1); });

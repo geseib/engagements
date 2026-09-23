@@ -22,6 +22,7 @@
  * the table; a refusal distinguishable from "no such game"; the host's own
  * save refused; the report screen posting with a bare `fetch`.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -198,5 +199,6 @@ const nothingWritten = () => {
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

@@ -16,6 +16,7 @@
  * these handlers import exist only in the deployed bundle. Intercept
  * Module._load by request NAME instead, before any handler loads.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -893,5 +894,6 @@ const parse = (res) => { try { return JSON.parse(res.body); } catch { return {};
       `nothing diagnosable was logged: ${JSON.stringify(warned)}`));
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();
