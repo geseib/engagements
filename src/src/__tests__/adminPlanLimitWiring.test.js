@@ -12,12 +12,14 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'AdminPage.jsx'), 'utf8');
 const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-test('all three upload paths hand a 402 to the notice as a limit, not as text', () => {
+// Four since surveys phase 1: scenarios, trivia, poll and survey each upload
+// what their builder made when the worker did not make the set itself.
+test('all four upload paths hand a 402 to the notice as a limit, not as text', () => {
   // rejects: the old "… Open Plan & usage to request the Team plan." string —
   // no link, and said to people who may not request.
   expect(code).not.toMatch(/Open Plan & usage to request the Team plan/);
   const limitNotices = code.match(/setNotice\(\{ limit, outcome: 'Nothing was saved\.', tone: 'error' \}\)/g) || [];
-  expect(limitNotices).toHaveLength(3);
+  expect(limitNotices).toHaveLength(4);
 });
 
 test('a refused copy is the notice too, and it says nothing was copied', () => {

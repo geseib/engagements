@@ -1496,15 +1496,15 @@ function AdminPage() {
         setNotice({ text: `${result.message} — draft survey created. Open it from the list to review it.`, tone: 'success' });
         await fetchQuestionSets(); // Refresh the list
       } else {
-        // A 402 is a plan fact, not an upload fault — see handleTriviaGenerated.
+        // A 402 is a plan fact, not an upload fault — the plan-limit notice,
+        // as handlePollGenerated says it (22-plan-limit-notice.html).
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
