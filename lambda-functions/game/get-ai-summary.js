@@ -1503,6 +1503,50 @@ function describeCorrectAnswer(question) {
 }
 exports.describeCorrectAnswer = describeCorrectAnswer;
 
+/**
+ * A POLL'S OPTIONS, as the prompt reads them: "Option 1: …, Option 2: …".
+ *
+ * From the question's `options` ARRAY, which is the only attribute
+ * upload-questions.js has ever written for a poll's answers (lower-case, the
+ * same attribute download-question-set.js exports). The poll branch used to
+ * read optionA..optionE — written only for TRIVIA — so `{pollOptions}` came out
+ * empty on every poll in the product and the model summarised a vote without
+ * knowing what anybody voted between. optionA..E are still read, numbered by
+ * their slot as before, but only when there is no `options` attribute at all
+ * (a hand-made row); an empty list means the poll has no options.
+ *
+ * DECRYPTED HERE, because the question row reaching generateAISummary is not
+ * decrypted upstream, and since 2026-09-23 `options` is in
+ * ENCRYPTED_FIELDS.question — an envelope on an org set. decryptValue passes a
+ * legacy plaintext array through untouched (no key needed), and is a no-op if
+ * the row is ever decrypted before it gets here. A decrypt that fails is
+ * logged and reads as no options rather than taking the summary down.
+ */
+async function pollOptionsLine(question, orgId) {
+  const q = question || {};
+  const stored = q.options !== undefined && q.options !== null ? q.options : q.Options;
+  if (stored !== undefined && stored !== null) {
+    let opened;
+    try {
+      opened = await decryptValue(orgId, stored);
+    } catch (error) {
+      console.warn('⚠️ Poll options could not be decrypted for the summary: ' + error.message);
+      return '';
+    }
+    const list = Array.isArray(opened) ? opened : String(opened).split('|');
+    return list
+      .map((option) => String(option ?? '').trim())
+      .filter(Boolean)
+      .map((option, i) => 'Option ' + (i + 1) + ': ' + option)
+      .join(', ');
+  }
+  return ['optionA', 'optionB', 'optionC', 'optionD', 'optionE']
+    .map((slot, i) => (q[slot] ? 'Option ' + (i + 1) + ': ' + q[slot] : ''))
+    .filter(Boolean)
+    .join(', ');
+}
+exports.pollOptionsLine = pollOptionsLine;
+
 // Exported for the same reason as buildFallbackSummary: it lets the anonymity
 // redaction inside this function (below) be exercised directly, without a full
 // exports.handler round trip.
@@ -2105,15 +2149,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     console.log('  triviaResponses:', triviaResponses);
     console.log('  triviaCorrectness:', triviaCorrectness);
   } else if ((gameType === 'polls' || gameType === 'poll') && question) {
-    // Format poll options
-    const options = [];
-    if (question.optionA) options.push(`Option 1: ${question.optionA}`);
-    if (question.optionB) options.push(`Option 2: ${question.optionB}`);
-    if (question.optionC) options.push(`Option 3: ${question.optionC}`);
-    if (question.optionD) options.push(`Option 4: ${question.optionD}`);
-    if (question.optionE) options.push(`Option 5: ${question.optionE}`);
-    pollOptions = options.join(', ');
-    
+    // The poll's options, from its (decrypted) `options` array — optionA..E
+    // only for a row that has none. See pollOptionsLine.
+    pollOptions = await pollOptionsLine(question, orgId);
+
     // For polls, there's no correct answer, just distribution
     const responseDistribution = {};
     answers.forEach(answer => {
