@@ -67,7 +67,12 @@ exports.handler = async (event) => {
       return { statusCode: 403, body: 'Not this game\'s host' };
     }
 
-    console.log(`📨 WebSocket Message from ${connectionId}:`, body);
+    // What arrived, never what it said: an ANSWER# body is the player's answer
+    // (encrypted at rest — see handlePlayerAnswer) and an ASK# body carries the
+    // question. Field NAMES are enough to see a frame's shape.
+    console.log(`📨 WebSocket message ${clipForLog(messageType)} for game ${clipForLog(gameId)} `
+      + `from ${connectionId}${playerName ? ` (player ${clipForLog(playerName)})` : ''}, `
+      + `fields ${clipForLog(Object.keys(body).join(','))}`);
 
     // Route message based on type
     if (hostFrame) {
@@ -125,6 +130,19 @@ async function senderIsHostOf(gameId, connectionId) {
 /** A frame field fit for a log line: quoted, and short whatever was sent. */
 function clipForLog(value) {
   return JSON.stringify(String(value).slice(0, 64));
+}
+
+/**
+ * An answer as a log line may carry it: its size, never its words.
+ *
+ * The ANSWER row encrypts `Answer` at rest (handlePlayerAnswer), and a log line
+ * that quoted it would hand the same words to anyone who can read the log group
+ * — no key, no audit trail. tests/answer-content-not-logged.js.
+ */
+function describeAnswer(answer) {
+  if (typeof answer === 'string') return `${answer.length} chars`;
+  if (answer === undefined || answer === null) return 'no answer';
+  return `a ${typeof answer}, not a string`;
 }
 
 /**
@@ -375,7 +393,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     const { answer, answerType = 'text' } = messageData;
     
     console.log(`🎯 Processing answer: messageType=${messageType}, rawQuestionNumber=${rawQuestionNumber}, paddedQuestionNumber=${questionNumber}`);
-    console.log(`🎯 DEBUG TRIVIA ANSWER: playerName=${playerName}, answer=${answer}, answerType=${answerType}, gameId=${gameId}`);
+    console.log(`🎯 Answer from ${playerName} in game ${gameId}: ${answerType}, ${describeAnswer(answer)}`);
     
     if (!answer) {
       console.log(`⚠️ No answer provided in message data`);
@@ -477,7 +495,6 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
           };
 
           if (question.Item) {
-            const correctAnswer = question.Item.correctAnswer;
             const points = question.Item.points || 10;
             
             // Check if player's answer is correct.
@@ -495,7 +512,11 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
             const drawn = drawnOptions(question.Item);
             const picked = slotForSubmitted(question.Item, answer);
 
-            console.log(`🔍 TRIVIA CHECK: Player answered "${answer}" -> slot ${picked || 'none'} (drawn: ${drawn.map((o) => `${o.letter}=${o.slot}`).join(' ')}), correct answer(s): ${JSON.stringify(correctAnswer)} -> slot(s) ${correctSlots(question.Item).join(',') || 'none'}, isCorrect: ${isCorrect}`);
+            // Slots and letters only. Neither the pick nor the set's own
+            // spelling of the answer is quoted: the pick is the player's answer,
+            // and `correctAnswer` is often the option's TEXT, which an org's set
+            // holds as ciphertext in optionA..F.
+            console.log(`🔍 TRIVIA CHECK: answer ${picked ? 'placed on a drawn option' : 'placed on no drawn option'} (drawn: ${drawn.map((o) => `${o.letter}=${o.slot}`).join(' ')}), correct slot(s) ${correctSlots(question.Item).join(',') || 'none'}, isCorrect: ${isCorrect}`);
             
             // Calculate response time and speed bonus
             let responseTimeMs = 0;
@@ -520,7 +541,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
             answerRecord.PointsEarned = totalPoints;
             answerRecord.BasePoints = points;
             
-            console.log(`🎯 TRIVIA SCORING: ${playerName} answered ${answer} (correct: ${correctAnswer}), isCorrect: ${isCorrect}, time: ${responseTimeMs}ms, points: ${totalPoints}`);
+            console.log(`🎯 TRIVIA SCORING: ${playerName} on question ${questionNumber}, isCorrect: ${isCorrect}, time: ${responseTimeMs}ms, points: ${totalPoints}`);
           }
         }
       } catch (triviaError) {
@@ -530,7 +551,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     } else if (answerType === 'wavelength') {
       // For wavelength questions, process and normalize the word list
       try {
-        console.log(`🌊 Processing wavelength answer from ${playerName}: ${answer}`);
+        console.log(`🌊 Processing wavelength answer from ${playerName} (${describeAnswer(answer)})`);
         
         // Parse the comma-separated words and normalize them
         const words = answer.split(',')
@@ -543,7 +564,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
         answerRecord.WordCount = words.length;
         answerRecord.ProcessedWords = words; // Store as array for easier processing
         
-        console.log(`🌊 Processed ${words.length} words for ${playerName}: [${words.join(', ')}]`);
+        console.log(`🌊 Processed ${words.length} words for ${playerName}`);
         
       } catch (wavelengthError) {
         console.error('Error processing wavelength answer:', wavelengthError);
@@ -551,8 +572,11 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
       }
     }
     
-    console.log(`📝 STORING ANSWER RECORD:`, JSON.stringify(answerRecord, null, 2));
-    console.log(`🔥 WEBSOCKET DEBUG: About to store answer record with PK: ${answerRecord.PK}, SK: ${answerRecord.SK}`);
+    // The row's keys and scoring, never the row: `Answer` is what is about to be
+    // encrypted, and this line runs BEFORE that happens.
+    console.log(`📝 Storing answer row PK: ${answerRecord.PK}, SK: ${answerRecord.SK} — ${answerType}, `
+      + `${describeAnswer(answerRecord.Answer)}`
+      + ('IsCorrect' in answerRecord ? `, isCorrect: ${answerRecord.IsCorrect}, points: ${answerRecord.PointsEarned}` : ''));
 
     // ── THE MOST SENSITIVE ROW IN THE TABLE ──────────────────────────────────
     //
@@ -701,7 +725,10 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData)
         ...notificationData
       };
       
-      console.log(`📤 Sending notification to ${hostConnections.length} host connection(s):`, notificationMessage);
+      // Field names, not the frame: when the round is not anonymous it carries
+      // the answer itself. The names still show whether the author was withheld.
+      console.log(`📤 Sending ${notificationType} ${messageType} to ${hostConnections.length} host connection(s), `
+        + `fields ${clipForLog(Object.keys(notificationMessage).join(','))}`);
 
       await Promise.all(hostConnections.map(
         (connection) => sendToConnection(connection.ConnectionId, notificationMessage)
