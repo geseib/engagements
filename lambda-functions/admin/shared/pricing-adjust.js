@@ -29,9 +29,12 @@
  *   validFrom / validTo: period ids 'yyyy-mm', inclusive; validTo absent = open
  *   revokedAt: set = ignored from then on (the row stays for history)
  *
- * Copied byte-for-byte into lambda-functions/game/pricing-adjust.js and the
- * frontend imports the game copy, exactly as pricing.js is handled;
- * tests/pricing-adjust.js holds the copies identical.
+ * Copied byte-for-byte into lambda-functions/game/pricing-adjust.js and
+ * lambda-functions/websocket/pricing-adjust.js, exactly as pricing.js is
+ * handled: the frontend imports the game copy, and usage.js — itself in all
+ * three bundles — gates on `effectivePlan`, so the allowance the refusal
+ * counts is the allowance the bill prints. tests/pricing-adjust.js holds the
+ * three copies identical.
  */
 const pricing = require('./pricing');
 

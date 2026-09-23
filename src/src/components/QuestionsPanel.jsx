@@ -3,6 +3,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
+import PlanLimitNotice from './PlanLimitNotice';
+import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import QuestionPullDialog from './QuestionPullDialog';
 import CategoryPicker from './CategoryPicker';
 import QuestionImageField from './QuestionImageField';
@@ -257,6 +259,9 @@ export default function QuestionsPanel({
      locked. A refusal written there while this dialog is open is one nobody
      can see, so Create reads as a dead button. This is the dialog's own line. */
   const [newSetError, setNewSetError] = useState('');
+  // A create refused at the stored-set allowance (402), said on the card as the
+  // plan-limit notice rather than as "Could not create …".
+  const [newSetLimit, setNewSetLimit] = useState(null);
 
   /*
     A FORK AND A SUBSET ARE CREATES, so the importer requires a shelf for both —
@@ -269,6 +274,7 @@ export default function QuestionsPanel({
     // Every open goes through here, so this is the one place a refusal from a
     // previous attempt has to be dropped.
     setNewSetError('');
+    setNewSetLimit(null);
     setNewSetDialog({
       topic: resolveSetTopic(questionSet?.topic),
       tags: normalizeSetTags(questionSet?.tags),
@@ -1036,6 +1042,7 @@ export default function QuestionsPanel({
     }));
 
     setSaving(true);
+    setNewSetLimit(null);
     setStatus({ text: `Creating "${title}"...`, tone: 'pending' });
     try {
       const { response, result } = await saveRows(
@@ -1062,6 +1069,10 @@ export default function QuestionsPanel({
           tone: 'success'
         });
         if (onChanged) onChanged();
+      } else if (parseUpgradeRequired(response, result)) {
+        setStatus({ text: '', tone: '' });
+        setNewSetError('');
+        setNewSetLimit(parseUpgradeRequired(response, result));
       } else {
         // The dialog is still open, so this belongs on it: the importer refuses
         // a create for reasons beyond the shelf, and those must not be the one
@@ -1769,6 +1780,7 @@ export default function QuestionsPanel({
             {/* Beside the button that was pressed, INSIDE the card. The panel's
                 status line is behind this dialog's own scrim. */}
             {newSetError && <StatusMessage message={newSetError} tone="error" />}
+            <PlanLimitNotice refusal={newSetLimit} outcome="Nothing was created." surface="dusk" />
 
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setNewSetDialog(null)} disabled={saving}>

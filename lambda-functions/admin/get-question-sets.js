@@ -7,6 +7,7 @@ const {
 const { isAdminCaller } = require('./shared/require-admin');
 const { ORG, PLATFORM, canManageScope, callerOrgId } = require('./shared/tenant');
 const { readAllowance } = require('./shared/usage');
+const { planLimitResolve } = require('./shared/plan-limit');
 const { decryptItem, isEnvelope } = require('./shared/tenant-crypto');
 
 const client = new DynamoDBClient({});
@@ -281,6 +282,9 @@ exports.handler = async (event) => {
         mustUpgradeForSet: a.mustUpgradeForSet === true,
         planId: a.planId || null,
       };
+      // Who can make room, for the editor's on-arrival warning — only when a
+      // copy WOULD be refused, so a list with room pays nothing for it.
+      if (setAllowance.mustUpgradeForSet) setAllowance.resolve = await planLimitResolve(event, a);
     } catch (e) {
       console.warn('⚠️ could not read the set allowance; the list is served without it:', e.message);
     }

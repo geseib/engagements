@@ -222,3 +222,23 @@ test('an unrecognised plan is treated as personal, exactly as planFor says', () 
   expect(container.firstChild).toHaveAttribute('data-plan', PERSONAL_PLAN.id);
   expect(container.querySelector('.bill-calc')).toBeNull();
 });
+
+/*
+  WHAT "SESSIONS RUN" COUNTS, said where the number is. The owner, 2026-09-23:
+  a session counts only once two of its questions have been answered; a
+  rehearsal is free. The meter is websocket/session-count.js.
+*/
+describe('the session rule is stated beside the meter, on both plans', () => {
+  // rejects: the rule living only in help, where nobody reading the meter looks.
+  test.each([['team', team], ['personal', personal]])('%s: states the rule and links to the guide', (_, mount) => {
+    mount();
+    const rule = screen.getByTestId('bill-session-rule');
+    expect(rule).toHaveTextContent(/two of its questions have been answered/);
+    expect(rule).toHaveTextContent(/rehearsal are free/);
+    // rejects: a link to a guide id the help corpus does not have.
+    const link = within(rule).getByRole('link', { name: 'How sessions are counted' });
+    expect(link).toHaveAttribute('href', '/help/host-plan');
+    const { GUIDE_BY_ID } = require('../config/help');
+    expect(GUIDE_BY_ID['host-plan']).toBeDefined();
+  });
+});

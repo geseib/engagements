@@ -21,6 +21,7 @@ const {
 } = require('./shared/question-set-access');
 const { readAllowance } = require('./shared/usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./shared/pricing');
+const { planLimitResolve } = require('./shared/plan-limit');
 const {
   ROUND_KIND_IDS, MAX_ROUND_KIND_BRIEF, normalizeRoundKind,
 } = require('./shared/round-kinds');
@@ -898,7 +899,10 @@ exports.handler = async (event) => {
         console.log(`🚧 ${targetRef.orgId} is at its stored-set allowance (${allowance.setsUsed}/${allowance.setsIncluded}) — refusing a NEW set`);
         return {
           statusCode: UPGRADE_REQUIRED_STATUS,
-          body: JSON.stringify(upgradeRequired('sets', allowance)),
+          body: JSON.stringify({
+            ...upgradeRequired('sets', allowance),
+            resolve: await planLimitResolve(event, allowance),
+          }),
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
       }

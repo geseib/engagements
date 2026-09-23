@@ -27,6 +27,8 @@ import {
   latestTopicSuggestion
 } from '../utils/questionSetEditing';
 import { setTopicRefusal } from '../config/setTopics';
+import PlanLimitNotice from './PlanLimitNotice';
+import { refusalFromAllowance } from '../utils/upgradeRequired';
 import { roundKindApplies, roundKindGaps } from '../config/roundKinds';
 import { editableRows } from '../utils/questionRows';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
@@ -1318,17 +1320,20 @@ export default function QuestionSetEditor({
         {/* SAID ON ARRIVAL, not only on the button. The complaint was that it
             was "not obvious" — a label you read at the moment of pressing is
             already too late if you have spent two minutes editing. */}
+        {/* The shared plan-limit notice, said ON ARRIVAL: saving or adding to a
+            set that is not yours makes a copy, and a copy is refused at the
+            stored-set allowance. The way out is the reader's own — the list
+            carries `setAllowance.resolve` (get-question-sets.js) — instead of
+            "or upgrade your plan" to people who cannot. Dusk pinned: this
+            editor can open inside the host shelf's white card. */}
         {noRoomForCopy && (
-          <p className="qs-ai-provenance qs-ai-provenance--stop" role="alert" data-testid="no-room-notice">
-            <Icon name="Warning" weight="fill" size={14} color="var(--danger-text)" />{' '}
-            <strong>
-              You have no room for a copy of this set
-              {setAllowance.setsIncluded != null ? ` — ${setAllowance.setsUsed} of ${setAllowance.setsIncluded} sets used` : ''}.
-            </strong>{' '}
-            Saving or adding to a set that is not yours makes your own copy, and there is nowhere to
-            put one. Delete one of your own sets to make room, or upgrade your plan. Reading is not
-            affected.
-          </p>
+          <div data-testid="no-room-notice">
+            <PlanLimitNotice
+              refusal={refusalFromAllowance(setAllowance)}
+              outcome="A copy of this set cannot be saved. Reading is not affected."
+              surface="dusk"
+            />
+          </div>
         )}
         {isSomebodyElses && !noRoomForCopy && (
           <p className="qs-ai-provenance" data-testid="not-yours-notice">

@@ -110,11 +110,19 @@ console.log('\n4. the effective plan: a special rate and extra allowance change 
   });
 }
 
-console.log('\n5. the two copies have not drifted');
+console.log('\n5. the three copies have not drifted');
 {
   const a = fs.readFileSync(path.join(REPO, 'lambda-functions/admin/shared/pricing-adjust.js'), 'utf8');
   const b = fs.readFileSync(path.join(REPO, 'lambda-functions/game/pricing-adjust.js'), 'utf8');
   check('game/pricing-adjust.js matches admin/shared/', () => assert.strictEqual(a, b));
+  // rejects: the session gate (websocket/create-game.js → websocket/usage.js)
+  // folding grants in with a different effectivePlan than the bill does.
+  // usage.js requires './pricing-adjust' from every bundle it is copied to.
+  check('websocket/pricing-adjust.js matches admin/shared/', () => {
+    const w = path.join(REPO, 'lambda-functions/websocket/pricing-adjust.js');
+    assert.ok(fs.existsSync(w), 'websocket/ has no pricing-adjust.js, and websocket/usage.js needs one');
+    assert.strictEqual(fs.readFileSync(w, 'utf8'), a);
+  });
   check('it is pure: requires only pricing', () => assert.deepStrictEqual([...a.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]), ['./pricing']));
 }
 

@@ -12,6 +12,7 @@ import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
+import SharedReportPage from './components/SharedReportPage';
 
 // Marketing is lazy so that a player on /play and a host on the stage never
 // download a brochure. One chunk per page; AuthLoading is the fallback.
@@ -314,6 +315,14 @@ function AppRouter() {
 
   if (path === '/join') {
     return <RootPage />;
+  }
+
+  // A SHARED REPORT. Public on purpose: the person opening it has no account.
+  // The link names the report and the passkey the host gave them opens it
+  // (config/reportShare.js). Exact match, like /join — never behind
+  // ProtectedRoute, which would bounce the recipient to a sign-in they cannot do.
+  if (path === '/shared-report') {
+    return <SharedReportPage />;
   }
 
   // The six-step tour and the four facilitator use cases. Exact match, like

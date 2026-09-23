@@ -220,3 +220,33 @@ describe('§6 the features that shipped today are documented', () => {
     expect(corpus()).toMatch(pattern);
   });
 });
+
+/*
+  THE BILLING RULE, IN THE GUIDE PLAN & USAGE LINKS TO. The owner, 2026-09-23:
+  "the session only counts if at least 2 questions get answered by 1 or more
+  people." The server side is websocket/session-count.js.
+*/
+describe('§7 what counts toward a plan', () => {
+  test('/help/billing and /help/host-plan both reach the guide', () => {
+    // rejects: the alias pointing at a guide id that does not exist.
+    expect(resolveHelpTarget('billing')).toEqual(resolveHelpTarget('host-plan'));
+    expect(GUIDE_BY_ID['host-plan']).toBeDefined();
+    expect(ROLE_ID_BY_GUIDE_ID['host-plan']).toBe('host');
+  });
+
+  test('the guide states the rule the meter enforces', () => {
+    const text = guideText(GUIDE_BY_ID['host-plan']);
+    // rejects: the guide drifting back to "a session counts when someone joins".
+    expect(text).toMatch(/two of its questions have each been answered/);
+    expect(text).toMatch(/skip 1 to 3, answer 4, skip 5, answer 6/);
+    expect(text).toMatch(/joining it/);
+    expect(text).not.toMatch(/counts (when|once) (somebody|someone|a player) joins/i);
+  });
+
+  test('no guide still says a session is kept 7 days after it was last played', () => {
+    // rejects: the expiry the TTL never implemented — it is started + 7 days.
+    allGuides().forEach((guide) => {
+      expect(guideText(guide)).not.toMatch(/after it was last played|after last play/);
+    });
+  });
+});

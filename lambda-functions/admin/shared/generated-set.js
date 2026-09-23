@@ -159,13 +159,24 @@ async function recordCreatedSet(dynamodb, tableName, jobId, { setId, setName }) 
   }));
 }
 
-/** Record why there is no set, so the client can offer the manual path honestly. */
-async function recordSetCreationError(dynamodb, tableName, jobId, message) {
+/**
+ * Record why there is no set, so the client can offer the manual path honestly.
+ *
+ * `limit` is the importer's whole 402 body when the refusal was the stored-set
+ * ALLOWANCE — `limit`, `upgrade` and the `resolve` block saying who can fix it
+ * (plan-limit.js). Kept whole so the builder can show the plan-limit notice
+ * (22-plan-limit-notice.html) instead of a fault's sentence; the sentence stays
+ * in `setCreationError` for a client that predates it.
+ */
+async function recordSetCreationError(dynamodb, tableName, jobId, message, limit = null) {
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
     Key: jobKey(jobId),
-    UpdateExpression: 'SET setCreationError = :error',
-    ExpressionAttributeValues: { ':error': String(message || 'The set could not be created.') },
+    UpdateExpression: limit ? 'SET setCreationError = :error, setCreationLimit = :limit' : 'SET setCreationError = :error',
+    ExpressionAttributeValues: {
+      ':error': String(message || 'The set could not be created.'),
+      ...(limit ? { ':limit': limit } : {}),
+    },
   }));
 }
 
@@ -312,7 +323,8 @@ async function createSetForJob({
     if (response?.statusCode !== 200) {
       const why = parsed.error || `The importer returned ${response?.statusCode}.`;
       console.error(`❌ Job ${jobId} could not create its set: ${why}`);
-      await recordSetCreationError(dynamodb, tableName, jobId, why);
+      const limit = response?.statusCode === 402 && parsed.code === 'upgrade_required' ? parsed : null;
+      await recordSetCreationError(dynamodb, tableName, jobId, why, limit);
       return null;
     }
 

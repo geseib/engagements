@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
+import PlanLimitNotice from './PlanLimitNotice';
+import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
 import {
   isUnreadableSet, unreadableSetName, UNREADABLE_REASON, UNREADABLE_SUB,
@@ -18,6 +20,9 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
   });
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  // A plan-limit refusal from the last press, shown in the sheet — it used to
+  // be a browser alert() with the server's sentence and nothing to click.
+  const [limit, setLimit] = useState(null);
   const [currentPage, setCurrentPage] = useState({
     'call-and-answer': 0,
     'trivia': 0,
@@ -67,6 +72,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
     if (creating) return;
     
     setCreating(true);
+    setLimit(null);
     try {
       console.log(`🚀 Creating quickstart game with set: ${questionSet.name}`);
       
@@ -148,7 +154,14 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
           throw new Error('Failed to start game');
         }
       } else {
-        const errorData = await createResponse.json();
+        const errorData = await createResponse.json().catch(() => ({}));
+        // A plan limit is not a fault: say it in the sheet, with the way out
+        // (PlanLimitNotice, compact — this sheet is narrow).
+        const refusal = parseUpgradeRequired(createResponse, errorData);
+        if (refusal) {
+          setLimit(refusal);
+          return;
+        }
         throw new Error(errorData.error || 'Failed to create game');
       }
     } catch (error) {
@@ -239,6 +252,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
         </div>
 
         <div className="quickstart-content">
+          <PlanLimitNotice refusal={limit} outcome="Nothing was created." surface="dusk" compact onDismiss={() => setLimit(null)} />
           {totalQuickstartSets === 0 ? (
             <div className="no-quickstart-sets">
               <h3>No Quickstart Sets Available</h3>

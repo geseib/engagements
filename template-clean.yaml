@@ -700,7 +700,13 @@ Resources:
         #
         # tests/cors-allows-sent-headers.js reads this list and the headers
         # authFetch actually sends, and fails if they drift apart.
-        AllowHeaders: ["Content-Type", "Authorization", "X-Engage-Org"]
+        #
+        # X-Report-Passkey is the second item a shared report link needs
+        # (game/report-passkey.js): a recipient with no account presents it to
+        # GET /games/{gameId}/report/download. Same failure without it — a
+        # silent network error on the one screen that sends it.
+        # tests/report-download-passkey.js pins it here.
+        AllowHeaders: ["Content-Type", "Authorization", "X-Engage-Org", "X-Report-Passkey"]
         ExposeHeaders: ["Content-Length", "X-Request-Id"]
       # Lambda authorizer (UserPoolV2 JWTs). No DefaultAuthorizer on purpose:
       # player and host game routes stay public; admin routes opt in per-event
@@ -1189,6 +1195,51 @@ Resources:
             ApiId: !Ref RestApi
             Path: /platform/orgs/{orgId}/status
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # ── HOW ENGAGE IS USED, IN NUMBERS (the platform console's Observability) ─
+  # Engage staff only: the handler re-asks tenant.isPlatformAdmin and
+  # authorizer.js names the route ['admins']. It COUNTS tenant partitions
+  # (Select: COUNT) and reads the recorded PLATFORM#METRICS rows; it returns
+  # aggregates only. tests/platform-observability.js pins every line below.
+  PlatformObservabilityFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-platform-observability'
+      CodeUri: lambda-functions/admin/
+      Runtime: nodejs22.x
+      Timeout: 30
+      Handler: orgs/platform-observability.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          USER_POOL_ID: !Ref UserPoolV2
+      Policies:
+        # READ ONLY, and NO decrypt grant. This function counts rows and reads
+        # counters across every organisation; it must be unable to change any
+        # of them and unable to unwrap any organisation's data key. The absence
+        # of both is part of the guarantee, not an oversight.
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+        # One Cognito call: ListUsers, to count accounts. It asks for `sub`
+        # alone, so no address or name of anybody passes through it.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+              Resource: !GetAtt UserPoolV2.Arn
+      Events:
+        Observe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/observability
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -1873,6 +1924,11 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/report/download
             Method: GET
+            # PUBLIC, BUT THE LINK ALONE OPENS NOTHING. The handler requires the
+            # report's passkey in X-Report-Passkey (minted by save-report.js,
+            # given out by the host), because the key in this link is a title,
+            # a date and the join code — all known to the room. A recipient
+            # with no account types it on /shared-report.
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -2273,6 +2329,41 @@ Resources:
             # ABOVE the generic public rule — so start-vote is not handed to
             # path.includes('vote'). tests/session-control-routes-authorization.js
             # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # Mid-session summary-approach switch: the persona function's twin, for the
+  # "Approach (next round)" select beside the voice one on the results stage.
+  # It was first wired to PUT /games/{gameId} (update-game.js), which refuses
+  # every session not in CREATED, so it failed on every stage it rendered on.
+  # One attribute (PromptId), next-round semantics, '' clears — see the header
+  # of update-game-prompt.js.
+  UpdateGamePromptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-update-game-prompt'
+      CodeUri: lambda-functions/game/
+      Handler: update-game-prompt.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        UpdateGamePromptEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/prompt
+            Method: PUT
+            # HOST/ADMIN ONLY, like /persona above and for its reasons: a join
+            # code is not a secret. requiredGroupsForRoute answers
+            # ['hosts','admins'] through its POST/PUT/DELETE + games rule; the
+            # handler asks callerMayDriveSession for WHICH room.
+            # tests/session-prompt-switch.js pins both halves.
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

@@ -24,6 +24,7 @@ import Icon from './Icon';
 import RankIcon from './RankIcon';
 import MarkdownRenderer from './MarkdownRenderer';
 import { authFetch } from '../auth/authFetch';
+import ReportSavedDialog from './ReportSavedDialog';
 import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
 import { calculatePlayerRankings } from '../config/podium';
 import './GameReport.css';
@@ -55,14 +56,9 @@ function GameReport({
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveReportModal, setShowSaveReportModal] = useState(false);
   const [saveAsPermanent, setSaveAsPermanent] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmModalProps, setConfirmModalProps] = useState({
-    title: '',
-    message: '',
-    confirmText: 'Proceed',
-    onConfirm: () => {},
-    onCancel: () => {}
-  });
+  // The save response: the key, the passkey and how long they work. Shown in
+  // ReportSavedDialog once, because the passkey is never retrievable again.
+  const [savedReport, setSavedReport] = useState(null);
 
   const ready = status === 'ready' && Boolean(reportData);
   const gameId = reportData?.gameId;
@@ -159,48 +155,10 @@ function GameReport({
 
       const result = await response.json();
 
-      // Show appropriate notification based on save type
-      const message = permanent
-        ? 'Report saved permanently! Your report will be kept for 1 year.'
-        : 'Report saved! Download link expires in 24 hours.';
-
-      // An encrypted report's link points at THIS API, not at S3, because the
-      // stored object is an envelope and a presigned S3 link would hand a
-      // browser ciphertext. Resolve it against the configured API base — the
-      // handler cannot know that from inside Lambda, and hardcoding a host is
-      // how every join link came to point at the retired eng.dev twin.
-      const downloadHref = result.downloadUrlIsRelative
-        ? `${API_BASE}${result.downloadUrl}`
-        : result.downloadUrl;
-
-      setConfirmModalProps({
-        title: 'Report Saved Successfully',
-        message: `${message}\n\nWould you like to download the report now?`,
-        confirmText: 'Download Now',
-        cancelText: 'Copy Link',
-        onConfirm: () => {
-          window.open(downloadHref, '_blank');
-          setShowConfirmModal(false);
-        },
-        onCancel: () => {
-          navigator.clipboard.writeText(downloadHref).then(() => {
-            // Show brief success message
-            const successDiv = document.createElement('div');
-            successDiv.className = 'clipboard-success';
-            successDiv.textContent = 'Download link copied to clipboard!';
-            document.body.appendChild(successDiv);
-            setTimeout(() => successDiv.remove(), 3000);
-          }).catch(() => {
-            // Fallback: show the URL in an input for manual copying
-            const input = document.createElement('input');
-            input.value = downloadHref;
-            input.select();
-            document.execCommand('copy');
-          });
-          setShowConfirmModal(false);
-        }
-      });
-      setShowConfirmModal(true);
+      // Two items, not a link: whoever opens the link also needs the passkey
+      // (lambda-functions/game/report-passkey.js). The dialog hands the host
+      // both, and it is the only place the passkey is ever shown.
+      setSavedReport(result);
 
     } catch (err) {
       console.error('Error saving report:', err);
@@ -347,32 +305,12 @@ function GameReport({
         </div>
       )}
 
-      {/* Success Confirmation Modal */}
-      {showConfirmModal && (
-        <div className="expanded-qr-overlay" onClick={confirmModalProps.onCancel}>
-          <div className="expanded-qr-content confirmation-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirmation-header">
-              <h2>{confirmModalProps.title}</h2>
-            </div>
-            <div className="confirmation-message">
-              {confirmModalProps.message}
-            </div>
-            <div className="dialog-actions">
-              <button
-                className="btn-secondary"
-                onClick={confirmModalProps.onCancel}
-              >
-                {confirmModalProps.cancelText || 'Cancel'}
-              </button>
-              <button
-                className="btn-primary"
-                onClick={confirmModalProps.onConfirm}
-              >
-                {confirmModalProps.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
+      {savedReport && (
+        <ReportSavedDialog
+          saved={savedReport}
+          gameId={gameId}
+          onClose={() => setSavedReport(null)}
+        />
       )}
     </>
   );

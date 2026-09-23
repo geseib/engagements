@@ -98,7 +98,52 @@ export function parseUpgradeRequired(response, body) {
     message: String(payload.message || ''),
     limit,
     upgrade,
+    /* WHO CAN FIX IT — worked out on the server from the caller's role
+       (lambda-functions/admin/shared/plan-limit.js). Null from a server that predates it;
+       PlanLimitNotice then falls back to pointing at Plan & usage. */
+    resolve: normaliseResolve(payload.resolve),
   };
+}
+
+/** The server's `resolve` block, with every field present and typed. */
+function normaliseResolve(raw) {
+  if (!isObject(raw)) return null;
+  const org = isObject(raw.org) ? raw.org : {};
+  const role = ['owner', 'admin', 'member'].includes(raw.role) ? raw.role : 'member';
+  const contacts = Array.isArray(raw.contacts)
+    ? raw.contacts
+      .filter(isObject)
+      .map((c) => ({ name: String(c.name || c.email || ''), email: String(c.email || ''), role: String(c.role || '') }))
+      .filter((c) => c.name)
+    : [];
+  const request = isObject(raw.request) && raw.request.requestedAt
+    ? { requestedAt: String(raw.request.requestedAt), requestedBy: String(raw.request.requestedBy || '') }
+    : null;
+  return {
+    role,
+    canRequest: raw.canRequest === true,
+    canViewBilling: raw.canViewBilling === true,
+    orgName: String(org.name || ''),
+    orgType: org.type === 'personal' ? 'personal' : 'team',
+    contacts,
+    request,
+    resetsOn: String(raw.resetsOn || ''),
+  };
+}
+
+/**
+ * The set list's `setAllowance` (get-question-sets.js), read as the refusal a
+ * copy WOULD get — so the editor can say it on arrival with the same notice
+ * the refusal itself uses. Null when there is room.
+ */
+export function refusalFromAllowance(setAllowance) {
+  if (!isObject(setAllowance) || setAllowance.mustUpgradeForSet !== true) return null;
+  return parseUpgradeRequired(UPGRADE_REQUIRED_STATUS, {
+    code: UPGRADE_REQUIRED_CODE,
+    upgradeRequired: true,
+    limit: { kind: 'sets', used: setAllowance.setsUsed, included: setAllowance.setsIncluded },
+    resolve: setAllowance.resolve,
+  });
 }
 
 /**

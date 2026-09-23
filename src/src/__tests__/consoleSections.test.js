@@ -40,7 +40,9 @@ describe('platform staff (mockups 10 and 11)', () => {
     // content is not, and there is no link that could reach one. See
     // consoleModes.test.js for why "no content at all" stopped being the rule.
     // 'planrequests' joined 2026-09-22 (billing step 2): the one thing staff DO for a customer.
-    expect(ids(PLATFORM)).toEqual(['orgs', 'planrequests', 'discountcodes', 'questionsets', 'publiclibrary', 'moderation', 'users', 'archive']);
+    // 'observability' joined 2026-09-23: platform-wide TOTALS, and no customer content — see
+    // observabilityPanel.test.jsx and tests/platform-observability.js.
+    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'publiclibrary', 'moderation', 'users', 'archive']);
     expect(ids(PLATFORM)).not.toContain('games');
     expect(ids(PLATFORM)).not.toContain('prompts');
     expect(ids(PLATFORM)).not.toContain('library');

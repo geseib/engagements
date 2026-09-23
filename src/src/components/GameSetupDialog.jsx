@@ -68,6 +68,7 @@ import {
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import Modal from './Modal';
+import PlanLimitNotice from './PlanLimitNotice';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import './GameSetupDialog.css';
@@ -749,22 +750,17 @@ export default function GameSetupDialog({
         )}
       </div>
 
-      {refusal && (
-        <div className={`gsd-refusal${refusal.blocked ? ' gsd-refusal--limit' : ''}`} role="alert" data-testid="gsd-refusal">
-          {refusal.blocked ? (
-            <>
-              <strong>
-                Your plan's {refusal.kind === 'sets' ? 'stored sets' : 'sessions'} for this period are used up
-                {refusal.used != null && refusal.included != null ? ` — ${refusal.used} of ${refusal.included}` : ''}.
-              </strong>{' '}
-              {refusal.message || 'Nothing was created.'}{' '}
-              <a href={billingHref}>Open Plan &amp; usage</a> to request the Team plan, or wait for the period to reset.
-            </>
-          ) : (
-            <>Could not create the session: {refusal.message || 'unknown error'}.</>
-          )}
+      {/* A PLAN LIMIT is the shared notice (22-plan-limit-notice.html): what
+          ran out, and what THIS person can do about it — the owner gets the
+          request, anyone else is told whom to ask. Anything else is a fault,
+          said plainly. */}
+      {refusal && refusal.blocked ? (
+        <PlanLimitNotice refusal={refusal} outcome="Nothing was created." surface="dusk" billingHref={billingHref} />
+      ) : refusal ? (
+        <div className="gsd-refusal" role="alert" data-testid="gsd-refusal">
+          Could not create the session: {refusal.message || 'unknown error'}.
         </div>
-      )}
+      ) : null}
 
       <div className="dialog-actions">
         <button type="button" className="btn-secondary" onClick={() => onCancel?.()}>

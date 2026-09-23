@@ -9,8 +9,12 @@
  * stacking and palette contracts are. Three things must hold together:
  *
  *   1. a second select beside the voice one, labelled for the next round;
- *   2. its handler writes `promptId` through PUT /games/{gameId} — the route
- *      update-game.js already validates ownership on, not a new one;
+ *   2. its handler writes `promptId` through PUT /games/{gameId}/prompt, the
+ *      approach's own route, exactly as the voice uses /persona. It was first
+ *      wired to PUT /games/{gameId} — update-game.js, which refuses any session
+ *      whose state is not CREATED — so on the results stage, the only place the
+ *      select renders, every switch came back "Game cannot be edited". The old
+ *      form of this test pinned that route and passed the whole time;
  *   3. a resumed session restores the pick from `gameMetadata.promptId`,
  *      or the picker misreports its own state after every reload (the
  *      persona picker's own history, get-game-state.js:333).
@@ -26,15 +30,31 @@ test('the results stage carries an approach select beside the voice one', () => 
   expect(src).toMatch(/id="game-persona"/);
 });
 
-test('switching it writes promptId through PUT /games/{gameId}', () => {
-  const at = src.indexOf('const handleChangeGamePrompt');
+/** The handler's own body, cut at the next handler so nothing beside it counts. */
+const handlerBody = (name) => {
+  const at = src.indexOf(`const ${name}`);
   expect(at).toBeGreaterThan(-1);
-  const body = src.slice(at, at + 1600);
+  const end = src.indexOf('\n  const handle', at + 1);
+  return src.slice(at, end > at ? end : at + 2000);
+};
+
+test('switching it writes promptId through PUT /games/{gameId}/prompt', () => {
+  const body = handlerBody('handleChangeGamePrompt');
+  expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/prompt`/);
   expect(body).toMatch(/method: 'PUT'/);
-  expect(body).toMatch(/`\$\{API_BASE\}games\/\$\{gameId\}`/);
   expect(body).toMatch(/promptId: promptId \|\| ''/);
   // Says what the voice switch says: next round, not this one.
   expect(body).toMatch(/next/i);
+});
+
+test('it never goes through the pre-start edit route, which refuses a started session', () => {
+  const body = handlerBody('handleChangeGamePrompt');
+  expect(body).not.toMatch(/`\$\{API_BASE\}games\/\$\{gameId\}`/);
+});
+
+test('it has the same shape as the voice switch beside it', () => {
+  const voice = handlerBody('handleChangeGamePersona');
+  expect(voice).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/persona`/);
 });
 
 test('a resumed session restores the pick from the game record', () => {

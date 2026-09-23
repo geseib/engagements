@@ -15,7 +15,7 @@
  * never gated. A "tidy-up" that moves this check into join-game.js or
  * start-game.js stops a room mid-round, and §3 below is what catches it.
  *
- * The other four things it pins:
+ * The other five things it pins:
  *
  *   - the arithmetic. `allowanceState` decides who is refused, so its boundary
  *     (the FIFTH session is fine, the sixth is not) is asserted directly.
@@ -23,6 +23,10 @@
  *     the console has to be able to draw an upgrade button without string-
  *     matching prose that a copy edit will change.
  *   - a team is NEVER gated, at any usage.
+ *   - the gate counts EXTRA ALLOWANCE staff granted (a CREDIT_UNITS row) exactly
+ *     as the bill does — active grants only, sessions and sets apart, failing
+ *     open when the ledger cannot be read. Grants go through the real staff
+ *     route, so the row the gate reads is the row orgs/adjustments.js writes.
  *   - the three bundle copies of pricing.js and usage.js not drifting, because
  *     three Lambdas now decide the same question in three directories.
  *
@@ -92,6 +96,7 @@ class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 class ScanCommand { constructor(i) { this.input = i; this.type = 'scan'; } }
 class BatchWriteCommand { constructor(i) { this.input = i; this.type = 'batchWrite'; } }
 class BatchGetCommand { constructor(i) { this.input = i; this.type = 'batchGet'; } }
+class TransactWriteCommand { constructor(i) { this.input = i; this.type = 'transactWrite'; } }
 
 function conditionFailed(message) {
   const err = new Error(message);
@@ -189,6 +194,19 @@ const fakeDoc = {
         }
         return { Responses: out };
       }
+      case 'transactWrite': {
+        // Puts only — the one form a staff grant (orgs/adjustments.js) uses.
+        // Anything else throws rather than being quietly skipped.
+        for (const t of inp.TransactItems || []) {
+          if (!t.Put) throw new Error(`fake transactWrite: unsupported item ${JSON.stringify(Object.keys(t))}`);
+          const k = key(t.Put.Item.PK, t.Put.Item.SK);
+          if (/attribute_not_exists\(PK\)/.test(t.Put.ConditionExpression || '') && store.has(k)) {
+            throw conditionFailed(`row ${k} already exists`);
+          }
+          store.set(k, t.Put.Item);
+        }
+        return {};
+      }
       case 'scan':
         return { Items: [...store.values()].map((i) => ({ ...i })) };
       case 'query': {
@@ -233,7 +251,7 @@ stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
   PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand,
-  ScanCommand, BatchWriteCommand, BatchGetCommand,
+  ScanCommand, BatchWriteCommand, BatchGetCommand, TransactWriteCommand,
 });
 stub('@aws-sdk/client-apigatewaymanagementapi', {
   ApiGatewayManagementApiClient: class { async send() { return {}; } },
@@ -253,6 +271,8 @@ const getAnswers = require(path.join(REPO, 'lambda-functions/game/get-answers.js
 const submitVote = require(path.join(REPO, 'lambda-functions/game/submit-vote.js')).handler;
 const getResults = require(path.join(REPO, 'lambda-functions/game/get-results.js')).handler;
 const upload = require(path.join(REPO, 'lambda-functions/admin/upload-questions.js')).handler;
+const adjustments = require(path.join(REPO, 'lambda-functions/admin/orgs/adjustments.js')).handler;
+const getUsage = require(path.join(REPO, 'lambda-functions/admin/get-usage.js')).handler;
 
 const pricing = require(path.join(REPO, 'lambda-functions/game/pricing.js'));
 const { PERSONAL_PLAN, TEAM_PLAN, allowanceState, upgradeRequired, planFor } = pricing;
@@ -277,11 +297,18 @@ const say = (...a) => process.stdout.write(a.join(' ') + '\n');
  *  provoked rather than argued about. Wrapped around the harness's own send so
  *  the fake table stays the shared one every module already holds. */
 const failGetOn = new Set();
+/** "PK|prefix" pairs whose Query should blow up — the adjustments ledger. */
+const failQueryOn = new Set();
 const passThrough = fakeDoc.send;
 fakeDoc.send = async (cmd) => {
   if (cmd.type === 'get') {
     const k = key(cmd.input.Key.PK, cmd.input.Key.SK);
     if (failGetOn.has(k)) throw new Error(`injected read failure on ${k}`);
+  }
+  if (cmd.type === 'query') {
+    const v = cmd.input.ExpressionAttributeValues || {};
+    const k = key(v[':pk'], v[':sk']);
+    if (failQueryOn.has(k)) throw new Error(`injected query failure on ${k}`);
   }
   return passThrough(cmd);
 };
@@ -355,6 +382,35 @@ const uploadAs = (orgId, body) => upload({
   // one helper still serves both and the 402 under test is still what answers.
   body: JSON.stringify({ fileName: 'x.csv', fileContent: CSV, topic: 'business-work', ...body }),
 });
+
+/** Engage staff, standing in no organisation — who may grant an allowance. */
+const asStaff = (extra = {}) => ({
+  requestContext: {
+    authorizer: { lambda: { userId: 'u_staff', email: 'staff@engage.example', groups: 'admins' } },
+    http: { method: 'POST' },
+  },
+  ...extra,
+});
+
+/** Extra allowance, granted through the REAL staff route, so the row the gate
+ *  reads is the row orgs/adjustments.js writes — not a fixture shaped like it. */
+const grantUnits = (orgId, body) => adjustments(asStaff({
+  pathParameters: { orgId },
+  rawPath: `/platform/orgs/${orgId}/adjustments`,
+  body: JSON.stringify({ kind: 'CREDIT_UNITS', note: 'Pilot: five more on us', ...body }),
+}));
+const revokeGrant = (orgId, adjId) => adjustments(asStaff({
+  pathParameters: { orgId, adjId },
+  rawPath: `/platform/orgs/${orgId}/adjustments/${adjId}/revoke`,
+  body: JSON.stringify({ note: 'Granted to the wrong team' }),
+}));
+
+/** A billing period `n` months from `period` (negative for earlier). */
+function shiftPeriod(period, n) {
+  const [y, m] = period.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
 
 (async () => {
   say('\nplan gating: a personal org is capped, a team is metered, a running room is neither\n');
@@ -613,8 +669,121 @@ const uploadAs = (orgId, body) => upload({
     assert.strictEqual(res.statusCode, 200, res.body);
   });
 
-  // ── 5. Three bundles, one answer ─────────────────────────────────────────
-  say('\n5. three copies, byte for byte');
+  // ── 5. Extra allowance ───────────────────────────────────────────────────
+  say('\n5. extra allowance from Engage lifts the gate by exactly what the bill shows');
+
+  await check('a free org granted five more sessions starts its sixth, and its tenth', async () => {
+    reset();
+    await seedOrg(SOLO);
+    const granted = await grantUnits(SOLO, { units: { sessions: 5 } });
+    assert.strictEqual(granted.statusCode, 201, granted.body);
+    // rejects: gating on planFor(orgRow) alone. The bill folds the grant in
+    // (get-usage.js → adjusted.plan) and says ten are included; a gate reading
+    // the bare plan refuses the sixth anyway — the bug this section is for.
+    seedUsage(SOLO, { sessionsRun: 5 });
+    const sixth = await createFor(SOLO);
+    assert.strictEqual(sixth.statusCode, 201, `the sixth was refused: ${sixth.body}`);
+    seedUsage(SOLO, { sessionsRun: 9 });
+    const tenth = await createFor(SOLO);
+    assert.strictEqual(tenth.statusCode, 201, `the tenth was refused: ${tenth.body}`);
+  });
+
+  await check('and is refused at ten, naming ten — the number its bill prints', async () => {
+    reset();
+    await seedOrg(SOLO);
+    await grantUnits(SOLO, { units: { sessions: 5 } });
+    seedUsage(SOLO, { sessionsRun: 10 });
+    const res = await createFor(SOLO);
+    // rejects: a grant that lifts the cap altogether, or one added twice.
+    assert.strictEqual(res.statusCode, 402, res.body);
+    assert.deepStrictEqual(parse(res).limit, { kind: 'sessions', planId: 'personal', used: 10, included: 10 });
+    // rejects: the gate and the bill computing "included" two ways. The billing
+    // screen's number, from the real handler, is the refusal's number.
+    const bill = parse(await getUsage(asHost(SOLO, {
+      pathParameters: { orgId: SOLO }, rawPath: `/orgs/${SOLO}/usage`,
+    })));
+    assert.strictEqual(bill.adjusted.plan.includedSessions, parse(res).limit.included, JSON.stringify(bill.adjusted.plan));
+  });
+
+  await check('a REVOKED grant does not count', async () => {
+    reset();
+    await seedOrg(SOLO);
+    const adjId = parse(await grantUnits(SOLO, { units: { sessions: 5 } })).adjustment.adjId;
+    const revoked = await revokeGrant(SOLO, adjId);
+    assert.strictEqual(revoked.statusCode, 200, revoked.body);
+    seedUsage(SOLO, { sessionsRun: 5 });
+    const res = await createFor(SOLO);
+    // rejects: summing every CREDIT_UNITS row instead of asking pricing-adjust's
+    // isActive. A revoked row stays in the ledger for history; it must not
+    // stay in the allowance.
+    assert.strictEqual(res.statusCode, 402, res.body);
+    assert.strictEqual(parse(res).limit.included, 5);
+  });
+
+  await check('an EXPIRED grant does not count, and nor does one not yet started', async () => {
+    reset();
+    await seedOrg(SOLO);
+    const ended = await grantUnits(SOLO, {
+      units: { sessions: 5 }, validFrom: shiftPeriod(PERIOD, -2), validTo: shiftPeriod(PERIOD, -1),
+    });
+    assert.strictEqual(ended.statusCode, 201, ended.body);
+    const upcoming = await grantUnits(SOLO, { units: { sessions: 5 }, validFrom: shiftPeriod(PERIOD, 1) });
+    assert.strictEqual(upcoming.statusCode, 201, upcoming.body);
+    seedUsage(SOLO, { sessionsRun: 5 });
+    const res = await createFor(SOLO);
+    // rejects: ignoring validFrom/validTo — last quarter's pilot allowance
+    // carried forward for ever, or next month's spent early.
+    assert.strictEqual(res.statusCode, 402, res.body);
+    assert.strictEqual(parse(res).limit.included, 5);
+  });
+
+  await check('a grant of SETS lifts the set gate, and only the set gate', async () => {
+    reset();
+    await seedOrg(SOLO);
+    await grantUnits(SOLO, { units: { sets: 3 } });
+    seedUsage(SOLO, { sessionsRun: 5, setsCurrent: 5 });
+    const res = await uploadAs(SOLO, { customTitle: 'Retro Six' });
+    // rejects: folding in `units.sessions` and forgetting `units.sets` —
+    // upload-questions.js gates on the same readAllowance.
+    assert.strictEqual(res.statusCode, 200, `the sixth set was refused: ${res.body}`);
+    // rejects: a sets grant spilling into the session allowance.
+    const session = await createFor(SOLO);
+    assert.strictEqual(session.statusCode, 402, session.body);
+  });
+
+  await check('…up to exactly the number granted', async () => {
+    reset();
+    await seedOrg(SOLO);
+    await grantUnits(SOLO, { units: { sets: 3 } });
+    seedUsage(SOLO, { setsCurrent: 8 });
+    const res = await uploadAs(SOLO, { customTitle: 'Retro Nine' });
+    assert.strictEqual(res.statusCode, 402, res.body);
+    assert.strictEqual(parse(res).limit.included, 8);
+  });
+
+  await check('an unreadable adjustments ledger still fails OPEN', async () => {
+    reset();
+    await seedOrg(SOLO);
+    seedUsage(SOLO, { sessionsRun: 5, setsCurrent: 5 });
+    failQueryOn.add(key(`ORG#${SOLO}`, 'ADJ#'));
+    try {
+      const a = await gameUsage.readAllowance(SOLO);
+      // rejects: falling back to the bare plan when the grants cannot be read.
+      // That refuses exactly the customer Engage just gave more to, on a
+      // DynamoDB blip — failing closed, which readAllowance never does.
+      assert.strictEqual(a.mustUpgrade, false, JSON.stringify(a));
+      assert.strictEqual(a.reason, 'adjustments-unreadable');
+      const session = await createFor(SOLO);
+      assert.strictEqual(session.statusCode, 201, session.body);
+      const set = await uploadAs(SOLO, { customTitle: 'Retro Six' });
+      assert.strictEqual(set.statusCode, 200, set.body);
+    } finally {
+      failQueryOn.clear();
+    }
+  });
+
+  // ── 6. Three bundles, one answer ─────────────────────────────────────────
+  say('\n6. three copies, byte for byte');
 
   await check('pricing.js is identical in game/, admin/shared/ and websocket/', () => {
     const fs = require('fs');

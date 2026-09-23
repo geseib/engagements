@@ -5,6 +5,8 @@ const { refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
 const { encryptItem, decryptItem } = require('./tenant-crypto');
 const { ORG } = require('./tenant');
+const { countAnsweredQuestion, COUNT_PROJECTION } = require('./session-count');
+const { recordAnswerStored } = require('./platform-metrics');
 const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
@@ -525,21 +527,30 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     //
     // A session with no org (created before tenancy) writes plaintext, exactly
     // as it did yesterday; there is no key to write it under.
+    // The same read carries what session-count.js needs, so a session that has
+    // already counted costs no extra call per answer.
     const sessionMeta = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'orgId'
+      ProjectionExpression: COUNT_PROJECTION
     }));
     const answerOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
     const itemToStore = answerOrgId
       ? await encryptItem(answerOrgId, 'answer', answerRecord)
       : answerRecord;
 
-    await db.send(new PutCommand({
+    const stored = await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
-      Item: itemToStore
+      Item: itemToStore,
+      ReturnValues: 'ALL_OLD' // an overwrite is a changed answer, not a new one
     }));
-    
+    await recordAnswerStored({ gameId, questionNumber, previous: stored && stored.Attributes }, { db }); // never throws
+
+    // A SESSION COUNTS toward its organisation's plan at the first answer to
+    // its second answered question (session-count.js). After the answer is
+    // stored, and it never throws — metering can never lose an answer.
+    await countAnsweredQuestion(db, process.env.TABLE_NAME, gameId, questionNumber, sessionMeta.Item || {});
+
     console.log(`✅ Answer stored for ${playerName} on question ${questionNumber}`);
     console.log(`🔥 WEBSOCKET DEBUG: Successfully stored answer record in DynamoDB`);
     

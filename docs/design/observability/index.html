@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Observability, Engage staff — Engage2 platform console</title>
+<style>
+/* ===========================================================================
+   OBSERVABILITY — the platform console's usage page. Mockup, self-contained
+   by the docs/design rule (no build step, no CDN, no external asset).
+
+   The shell below is the platform console's, trimmed from
+   docs/design/tenancy-redesign/10-platform-orgs.html. The page itself — every
+   `.pobs` rule — is what ships as src/src/components/ObservabilityPanel.css.
+
+   Tokens are the SHIPPED dusk values from src/src/styles.css, including
+   --muted #9BA8BE (the tenancy mockups still carry the older #B6C2D4; the CSS
+   is what runs — engage-design §6).
+
+   WHY TABLES AND NOT A CHART, YET. The recorded counters start at deploy, so
+   on the day this ships the per-month data is ONE month. A one-bar bar chart
+   is a stat tile wearing a costume (dataviz: choosing-a-form). The month table
+   is the form until there are enough months for a trend to exist; a chart can
+   sit above it then, and the table stays as its table view.
+   =========================================================================== */
+
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#9BA8BE;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --danger:#E5645E; --danger-text:#EF8C86; --danger-deep:#B03A34;
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Archivo Expanded","Archivo",system-ui,-apple-system,sans-serif;
+
+  --rule:rgba(155,168,190,.20);
+  --rule-strong:rgba(155,168,190,.34);
+  --row-hover:rgba(155,168,190,.055);
+  --row-sel:rgba(246,169,76,.10);
+  --t-floor:12px; --t-label:13px; --t-body:15px; --t-head:19px; --t-title:24px;
+  --nav-w:212px; --top-h:48px;
+}
+
+body{
+  background:var(--bg); color:var(--text);
+  font:400 var(--t-body)/1.45 var(--font-ui); font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;
+  height:100vh; overflow:hidden;
+  display:grid;
+  grid-template-columns:var(--nav-w) minmax(0,1fr);
+  grid-template-rows:var(--top-h) 1fr;
+  grid-template-areas:"brand top" "nav work";
+}
+@media (max-width:1180px){ :root{--nav-w:60px} .nav-label,.nav-sec{display:none} .nav-item{justify-content:center} }
+
+.ico{width:16px;height:16px;flex:none;display:inline-block;vertical-align:-3px}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:3px}
+
+.brand{grid-area:brand;display:flex;align-items:center;gap:9px;padding:0 14px;
+  border-bottom:1px solid var(--rule);border-right:1px solid var(--rule);background:var(--surface)}
+.brand .mark{width:22px;height:22px;border-radius:6px;flex:none;background:linear-gradient(145deg,var(--primary),var(--primary-deep))}
+.brand .word{font-family:var(--font-display);font-weight:800;font-size:var(--t-label);letter-spacing:.10em;text-transform:uppercase}
+.top{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--rule);background:var(--surface)}
+.top .spacer{flex:1 1 auto}
+.orgchip{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:999px;
+  border:1px solid var(--rule-strong);font:600 var(--t-label)/1 var(--font-ui);color:var(--text)}
+.orgchip .ico{color:var(--secondary)}
+.envchip{font-size:var(--t-floor);font-weight:700;letter-spacing:.10em;text-transform:uppercase;padding:3px 8px;
+  border-radius:999px;border:1px solid rgba(124,167,230,.5);color:var(--secondary)}
+.who{display:flex;align-items:center;gap:8px;font-size:var(--t-label);color:var(--muted)}
+.who .avatar{width:24px;height:24px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;
+  font-size:var(--t-floor);font-weight:700;color:var(--text)}
+
+.nav{grid-area:nav;background:var(--surface);border-right:1px solid var(--rule);padding:10px 8px;
+  display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.nav-sec{font-size:var(--t-floor);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);opacity:.72;
+  padding:14px 8px 5px;font-weight:700}
+.nav-item{display:flex;align-items:center;gap:9px;padding:0 9px;height:32px;border-radius:6px;color:var(--muted);
+  font-size:var(--t-body);border:1px solid transparent;cursor:pointer;background:none;width:100%;text-align:left;font-family:inherit}
+.nav-item:hover{background:var(--row-hover);color:var(--text)}
+.nav-item[aria-current]{background:var(--row-sel);color:var(--text);border-color:rgba(246,169,76,.34);font-weight:600}
+.nav-label{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-foot{margin-top:auto;border-top:1px solid var(--rule);padding-top:8px}
+
+.work{grid-area:work;min-width:0;min-height:0;display:flex;flex-direction:column}
+.work-head{flex:none;padding:14px 20px 10px;border-bottom:1px solid var(--rule)}
+.work-head h1{font-family:var(--font-display);font-weight:800;font-size:var(--t-title);line-height:1.15;margin:0}
+.work-head .sub{margin:4px 0 0;color:var(--muted);font-size:var(--t-label);max-width:92ch}
+.work-body{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 20px 40px}
+
+/* ===========================================================================
+   THE PAGE — ships as components/ObservabilityPanel.css, scoped under .pobs
+   =========================================================================== */
+.pobs{
+  --pobs-t-floor:12px; --pobs-t-label:13px; --pobs-t-body:15px; --pobs-t-head:19px; --pobs-t-numeral:30px;
+  --pobs-row-h:36px;
+  --pobs-rule:rgba(155,168,190,.20);
+  --pobs-rule-strong:rgba(155,168,190,.34);
+  --pobs-row-hover:rgba(155,168,190,.055);
+  --pobs-tint-danger:rgba(229,100,94,.09);
+  color:var(--text); font:400 var(--pobs-t-body)/1.45 var(--font-ui); font-variant-numeric:tabular-nums;
+  max-width:1120px;
+}
+.pobs-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px}
+.pobs-asof{color:var(--muted);font-size:var(--pobs-t-label)}
+.pobs-btn{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 9px;border-radius:6px;
+  border:1px solid var(--pobs-rule-strong);background:transparent;color:var(--text);
+  font:600 var(--pobs-t-floor)/1 var(--font-ui);cursor:pointer;margin-left:auto}
+.pobs-btn:hover{background:var(--pobs-row-hover);border-color:var(--muted)}
+
+.pobs-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 26px}
+@media (max-width:1180px){.pobs-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pobs-tile{background:var(--surface);border:1px solid var(--pobs-rule);border-radius:8px;padding:12px 14px 13px;min-width:0}
+.pobs-tile-label{display:block;color:var(--muted);font-size:var(--pobs-t-label);font-weight:600}
+.pobs-tile-value{display:block;font:800 var(--pobs-t-numeral)/1.15 var(--font-display);color:var(--text);
+  margin:6px 0 4px;letter-spacing:-.01em}
+.pobs-tile-sub{display:block;color:var(--muted);font-size:var(--pobs-t-label);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+.pobs-section{margin:0 0 26px}
+.pobs-h2{margin:0;font:700 var(--pobs-t-head)/1.2 var(--font-display)}
+.pobs-cap{margin:4px 0 10px;color:var(--muted);font-size:var(--pobs-t-label);max-width:96ch}
+.pobs-cap strong{color:var(--text);font-weight:600}
+
+.pobs-tablewrap{overflow-x:auto}
+.pobs-tbl{width:100%;min-width:640px;border-collapse:collapse;table-layout:fixed}
+.pobs-tbl th{text-align:left;font:600 var(--pobs-t-label)/1.2 var(--font-ui);color:var(--muted);
+  padding:0 10px 8px;border-bottom:1px solid var(--pobs-rule-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pobs-tbl td{height:var(--pobs-row-h);padding:0 10px;border-bottom:1px solid var(--pobs-rule);vertical-align:middle;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pobs-tbl tbody tr:hover{background:var(--pobs-row-hover)}
+.pobs-tbl .pobs-num{text-align:right}
+.pobs-col-num{width:112px}
+.pobs-col-lib{width:150px}
+.pobs-name{font-weight:600}
+.pobs-none{color:var(--muted)}
+.pobs-row--teams td{color:var(--muted)}
+.pobs-row--teams .pobs-name{font-weight:600;color:var(--muted)}
+
+.pobs-note{margin:0;padding:12px 14px;border:1px solid var(--pobs-rule);border-left:3px solid var(--primary);
+  border-radius:6px;background:var(--surface);color:var(--muted);font-size:var(--pobs-t-label);line-height:1.55}
+.pobs-h3{margin:0;font:700 var(--pobs-t-body)/1.3 var(--font-ui);color:var(--text)}
+.pobs-defs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 28px;margin:8px 0 0}
+@media (max-width:1180px){.pobs-defs{grid-template-columns:1fr}}
+.pobs-defs div{min-width:0}
+.pobs-defs dt{color:var(--text);font-weight:600}
+.pobs-defs dd{margin:1px 0 0}
+
+/* mockup-only frame label */
+.frame-label{font-size:var(--t-floor);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);opacity:.72;
+  font-weight:700;margin:0 0 10px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<g id="i-building" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 20.4V5.2h9.2v15.2M13.8 10.2h5.6v10.2"/><path d="M7.4 8.6h3.6M7.4 12.2h3.6M7.4 15.8h3.6"/></g>
+<g id="i-chart" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5h16"/><path d="m5 15 4.5-4.5 3.5 3 6-6.5"/><path d="M15.5 7H19v3.5"/></g>
+<g id="i-card" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="5.6" width="18.4" height="12.8" rx="2.2"/><path d="M2.8 10h18.4"/></g>
+<g id="i-flag" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20.4V4.2h10.6l-1.7 3.6 1.7 3.6H6"/></g>
+<g id="i-books" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h4v16H3zM9 4h4v16H9z"/><path d="m15.4 5.3 3.5 15.2 2-.5L17.4 4.8z"/></g>
+<g id="i-globe" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.6 12h16.8"/><path d="M12 3.5c2.4 2.6 3.6 5.6 3.6 8.5s-1.2 5.9-3.6 8.5c-2.4-2.6-3.6-5.6-3.6-8.5S9.6 6.1 12 3.5Z"/></g>
+<g id="i-users" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.5" cy="8.5" r="3.2"/><path d="M3.6 19.4a6 6 0 0 1 11.8 0"/><path d="M16.4 6.2a3 3 0 0 1 0 5.9M17.6 14.4a5.6 5.6 0 0 1 3 4.6"/></g>
+<g id="i-package" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20 8v8l-8 4.4L4 16V8z"/><path d="M4 8l8 4.3L20 8M12 12.3V20"/></g>
+<g id="i-gear" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8"/></g>
+<g id="i-shield" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 19.4 6v6.2c0 4-3.1 7-7.4 8.4-4.3-1.4-7.4-4.4-7.4-8.4V6z"/><path d="m8.9 12 2.2 2.2 4-4.2"/></g>
+<g id="i-refresh" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></g>
+</defs></svg>
+
+<header class="brand"><span class="mark" aria-hidden="true"></span><span class="word">Engage</span></header>
+<div class="top">
+  <span class="spacer"></span>
+  <span class="orgchip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>Engage</span>
+  <span class="envchip">dev</span>
+  <div class="who"><span class="avatar" aria-hidden="true">GS</span><span>george@seibtribe.com</span></div>
+</div>
+
+<nav class="nav" aria-label="Sections">
+  <div class="nav-sec">Engage</div>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-building"/></svg><span class="nav-label">Organisations</span></button>
+  <button class="nav-item" aria-current="page"><svg class="ico" viewBox="0 0 24 24"><use href="#i-chart"/></svg><span class="nav-label">Observability</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-card"/></svg><span class="nav-label">Plan requests</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-flag"/></svg><span class="nav-label">Discount codes</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-books"/></svg><span class="nav-label">Shared library</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-globe"/></svg><span class="nav-label">Public library</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-flag"/></svg><span class="nav-label">Moderation</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-users"/></svg><span class="nav-label">Accounts</span></button>
+  <button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-package"/></svg><span class="nav-label">Archive</span></button>
+  <div class="nav-foot"><button class="nav-item"><svg class="ico" viewBox="0 0 24 24"><use href="#i-gear"/></svg><span class="nav-label">Settings</span></button></div>
+</nav>
+
+<main class="work">
+  <div class="work-head">
+    <h1>Observability</h1>
+    <p class="sub">How Engage is being used, in numbers. Totals only — nothing a team wrote is read to make them.</p>
+  </div>
+
+  <div class="work-body">
+    <div class="pobs" data-theme="dark">
+
+      <div class="pobs-bar">
+        <span class="pobs-asof">As of 14 Nov 2026, 10:42 UTC</span>
+        <button class="pobs-btn" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh</button>
+      </div>
+
+      <section class="pobs-tiles" aria-label="Right now">
+        <div class="pobs-tile">
+          <span class="pobs-tile-label">Accounts</span>
+          <span class="pobs-tile-value">312</span>
+          <span class="pobs-tile-sub">Every sign-in account, any status</span>
+        </div>
+        <div class="pobs-tile">
+          <span class="pobs-tile-label">Organisations</span>
+          <span class="pobs-tile-value">297</span>
+          <span class="pobs-tile-sub">14 teams · 283 personal spaces</span>
+        </div>
+        <div class="pobs-tile">
+          <span class="pobs-tile-label">Question sets</span>
+          <span class="pobs-tile-value">188</span>
+          <span class="pobs-tile-sub">41 Engage · 6 public · 141 teams’ own</span>
+        </div>
+        <div class="pobs-tile">
+          <span class="pobs-tile-label">Stored reports</span>
+          <span class="pobs-tile-value">23</span>
+          <span class="pobs-tile-sub">Saved PDFs still kept</span>
+        </div>
+      </section>
+
+      <section class="pobs-section" aria-labelledby="pobs-months">
+        <h2 class="pobs-h2" id="pobs-months">By month</h2>
+        <p class="pobs-cap">Counted since <strong>23 September 2026</strong>. “Counted” is sessions that counted toward a team’s plan, summed across organisations.</p>
+        <div class="pobs-tablewrap">
+          <table class="pobs-tbl" aria-labelledby="pobs-months">
+            <thead><tr>
+              <th scope="col">Month</th>
+              <th scope="col" class="pobs-col-num pobs-num">Created</th>
+              <th scope="col" class="pobs-col-num pobs-num">Started</th>
+              <th scope="col" class="pobs-col-num pobs-num" title="Counted toward a plan: two questions answered">Counted</th>
+              <th scope="col" class="pobs-col-num pobs-num">Questions</th>
+              <th scope="col" class="pobs-col-num pobs-num">Per session</th>
+              <th scope="col" class="pobs-col-num pobs-num">Answers</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="pobs-name">November 2026</td><td class="pobs-num">31</td><td class="pobs-num">24</td><td class="pobs-num">19</td><td class="pobs-num">203</td><td class="pobs-num">9.2</td><td class="pobs-num">2,871</td></tr>
+              <tr><td class="pobs-name">October 2026</td><td class="pobs-num">58</td><td class="pobs-num">47</td><td class="pobs-num">41</td><td class="pobs-num">412</td><td class="pobs-num">9.4</td><td class="pobs-num">6,090</td></tr>
+              <tr><td class="pobs-name">September 2026</td><td class="pobs-num">9</td><td class="pobs-num">6</td><td class="pobs-num">5</td><td class="pobs-num">30</td><td class="pobs-num">6.0</td><td class="pobs-num">140</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="pobs-section" aria-labelledby="pobs-cats">
+        <h2 class="pobs-h2" id="pobs-cats">By category</h2>
+        <p class="pobs-cap">Counted since <strong>23 September 2026</strong>. Engage’s and the public library’s categories are named. A team’s own categories are theirs, so they are counted together and never named.</p>
+        <div class="pobs-tablewrap">
+          <table class="pobs-tbl" aria-labelledby="pobs-cats">
+            <thead><tr>
+              <th scope="col">Category</th>
+              <th scope="col" class="pobs-col-lib">Library</th>
+              <th scope="col" class="pobs-col-num pobs-num">Questions</th>
+              <th scope="col" class="pobs-col-num pobs-num">Answers</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="pobs-name">Leadership</td><td>Engage</td><td class="pobs-num">118</td><td class="pobs-num">1,902</td></tr>
+              <tr><td class="pobs-name">Team health</td><td>Engage</td><td class="pobs-num">96</td><td class="pobs-num">1,455</td></tr>
+              <tr><td class="pobs-name">Icebreakers</td><td>Engage</td><td class="pobs-num">71</td><td class="pobs-num">1,160</td></tr>
+              <tr><td class="pobs-name">Party games</td><td>Public</td><td class="pobs-num">22</td><td class="pobs-num">318</td></tr>
+              <tr class="pobs-row--teams"><td class="pobs-name">Teams’ own sets</td><td>Teams</td><td class="pobs-num">338</td><td class="pobs-num">4,076</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="pobs-note" aria-labelledby="pobs-defs">
+        <h2 class="pobs-h3" id="pobs-defs">What each number means</h2>
+        <dl class="pobs-defs">
+          <div><dt>Created</dt><dd>A host made a session, whether or not it was ever played.</dd></div>
+          <div><dt>Started</dt><dd>A session left the lobby — Start, or its first question from the remote. Once per session.</dd></div>
+          <div><dt>Counted</dt><dd>Sessions that counted toward a team’s plan that month: two of their questions were answered. Rehearsals and false starts are not here. Summed across every organisation.</dd></div>
+          <div><dt>Questions</dt><dd>A question counts when it is put on screen, once per session. Questions a set holds but nobody reached are not counted.</dd></div>
+          <div><dt>Per session</dt><dd>Questions ÷ sessions that put at least one question on screen, that month.</dd></div>
+          <div><dt>Answers</dt><dd>One per person per question. Changing an answer does not count again.</dd></div>
+        </dl>
+      </section>
+
+    </div>
+  </div>
+</main>
+</body>
+</html>

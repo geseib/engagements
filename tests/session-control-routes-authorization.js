@@ -89,6 +89,9 @@ const MUST_BE_CLOSED = [
   ['POST', '/games/{gameId}/next-question'],
   ['POST', '/games/{gameId}/toggle-category'],
   ['PUT', '/games/{gameId}/persona'],
+  // Never public — born closed as /persona's twin (tests/session-prompt-switch.js)
+  // — but it drives the same room, so it holds the same line.
+  ['PUT', '/games/{gameId}/prompt'],
   ['POST', '/games/{gameId}/report'],
 ];
 
@@ -165,7 +168,7 @@ const CALLERS = [
   'src/src/HostRemote.jsx',
   'src/src/components/QuickstartMenu.jsx',
 ];
-const ROUTE_WORDS = ['start-vote', 'next-question', 'toggle-category', '/persona', '/start`'];
+const ROUTE_WORDS = ['start-vote', 'next-question', 'toggle-category', '/persona', '/prompt`', '/start`'];
 
 for (const rel of CALLERS) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')

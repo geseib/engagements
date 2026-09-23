@@ -16,6 +16,7 @@ jest.mock('../HostRemote', () => () => <div data-testid="host-remote" />);
 jest.mock('../WordCloudTest', () => () => <div data-testid="wordcloud" />);
 jest.mock('../auth/AuthPage', () => () => <div data-testid="auth-page" />);
 jest.mock('../components/RootPage', () => () => <div data-testid="root-page" />);
+jest.mock('../components/SharedReportPage', () => () => <div data-testid="shared-report-page" />);
 jest.mock('../marketing/HomePage', () => () => <div data-testid="home-page" />);
 jest.mock('../marketing/HowItWorksPage', () => () => <div data-testid="how-page" />);
 jest.mock('../marketing/UseCasesPage', () => () => <div data-testid="cases-page" />);
@@ -37,6 +38,8 @@ const PUBLIC = [
   ['/reports', 'reports-page'],
   ['/help', 'help-page'],
   ['/help/host/host-quick-start', 'help-page'],
+  // A shared report's recipient has no account: link + passkey, never a sign-in.
+  ['/shared-report', 'shared-report-page'],
 ];
 
 test.each(PUBLIC)('%s is public: a signed-out visitor gets the page, not the sign-in form', async (path, testId) => {

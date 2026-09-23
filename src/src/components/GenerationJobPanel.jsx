@@ -1,6 +1,8 @@
 import React from 'react';
 import Icon from './Icon';
 import { warningsMayBeIncomplete } from '../utils/generationJob';
+import PlanLimitNotice from './PlanLimitNotice';
+import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import './GenerationJobPanel.css';
 
 /**
@@ -101,7 +103,7 @@ export default function GenerationJobPanel({
 
   const {
     outcome, phase, items, completed, requested, warnings, error, shortfall, promptSource,
-    createdSet, setCreationError,
+    createdSet, setCreationError, setCreationLimit,
   } = job;
 
   if (outcome === 'running') {
@@ -260,11 +262,20 @@ export default function GenerationJobPanel({
       {/* The worker tried to make the set and could not. Said plainly, because
           the manual path below is the only way out of it and the operator has
           to know why they are being asked to take it. */}
-      {setCreationError && !createdSet && (
+      {/* A refusal at the stored-set ALLOWANCE is a plan fact with a way out,
+          not a fault: the plan-limit notice, in the reader's voice
+          (22-plan-limit-notice.html). The items are still here to keep. */}
+      {setCreationLimit && !createdSet ? (
+        <PlanLimitNotice
+          refusal={parseUpgradeRequired(402, setCreationLimit)}
+          outcome="The questions were generated, but no set was saved."
+          surface="paper"
+        />
+      ) : setCreationError && !createdSet ? (
         <p className="gjp-errmsg">
           The set could not be created for you: {setCreationError}
         </p>
-      )}
+      ) : null}
 
       {error && (
         <>

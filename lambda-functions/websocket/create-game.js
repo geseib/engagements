@@ -8,6 +8,8 @@ const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const { readAllowance } = require('./usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
+const { recordSessionCreated } = require('./platform-metrics');
+const { planLimitResolve } = require('./plan-limit');
 
 /**
  * WHERE THE PLAYER LINK POINTS, and why it was pointing at a dead host.
@@ -165,7 +167,12 @@ exports.handler = async (event) => {
       console.log(`🚧 ${orgId} is at its session allowance (${allowance.sessionsUsed}/${allowance.sessionsIncluded}) — refusing a NEW session`);
       return {
         statusCode: UPGRADE_REQUIRED_STATUS,
-        body: JSON.stringify(upgradeRequired('sessions', allowance)),
+        // `resolve` says what THIS caller can do about it (plan-limit.js):
+        // the owner may request the Team plan, anyone else is told whom to ask.
+        body: JSON.stringify({
+          ...upgradeRequired('sessions', allowance),
+          resolve: await planLimitResolve(event, allowance),
+        }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
@@ -255,6 +262,7 @@ exports.handler = async (event) => {
   }
 
   console.log(`✅ Game ${gameId} created successfully`);
+  await recordSessionCreated({ gameId }); // platform-metrics.js: never throws
   return {
     statusCode: 201,
     body: JSON.stringify({

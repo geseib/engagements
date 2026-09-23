@@ -33,6 +33,7 @@ const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 
 const { gamesIndexPk, GAMES_RESERVATION_PK } = require('./tenant');
 const { startedTtl } = require('./session-ttl');
+const { recordSessionStarted } = require('./platform-metrics');
 
 /**
  * Mark a session started on all four of its rows.
@@ -117,6 +118,7 @@ async function startSession(db, tableName, gameId, { orgId = '', now = new Date(
     console.warn(`⚠️ Game ${gameId} has no owning organisation — no session list row to update`);
   }
 
+  await recordSessionStarted({ gameId }, { db, tableName }); // once per session; never throws
   return { startedAt: now, ttl };
 }
 

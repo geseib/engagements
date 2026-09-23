@@ -60,7 +60,7 @@ function mockApi({ uploadFails = null } = {}) {
     if (method === 'GET' && url.includes('/versions')) return jsonResponse(200, []);
     if (method === 'POST' && url.includes('upload-questions')) {
       posts.push(JSON.parse(options.body));
-      if (uploadFails) return jsonResponse(uploadFails.status, { error: uploadFails.error });
+      if (uploadFails) return jsonResponse(uploadFails.status, uploadFails.body || { error: uploadFails.error });
       return jsonResponse(200, { setId: 'new-set', setName: 'Openers', questionCount: 1 });
     }
     throw new Error(`Unhandled request: ${method} ${url}`);
@@ -256,5 +256,29 @@ describe('the replace path is untouched', () => {
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].replaceSetId).toBe('lessons-learned');
     expect('topic' in posts[0]).toBe(false);
+  });
+});
+
+describe('a new set refused at the stored-set allowance', () => {
+  // 22-plan-limit-notice.html: this said "Could not create "Openers": This
+  // organisation cannot store another question set yet…" — the plan limit in
+  // a fault's voice, with the way out left unsaid.
+  it('says it on the card as the plan-limit notice, and keeps the dialog and the name', async () => {
+    mockApi({ uploadFails: { status: 402, body: {
+      code: 'upgrade_required',
+      error: 'This organisation cannot store another question set yet.',
+      limit: { kind: 'sets', used: 5, included: 5 },
+      resolve: { role: 'admin', canViewBilling: true, org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
+    } } });
+    renderPanel();
+    fireEvent.change(await openDialog(), { target: { value: 'Openers' } });
+    create();
+
+    const box = await within(dialog()).findByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Northwind holds 5 of the 5 question sets it includes. Nothing was created.');
+    expect(box).toHaveTextContent('Only the owner can move Northwind to the Team plan.');
+    // rejects: the plan fact reported as "Could not create …"
+    expect(within(dialog()).queryByText(/Could not create/)).toBeNull();
+    expect(screen.getByLabelText(/Name the new set/i)).toHaveValue('Openers');
   });
 });

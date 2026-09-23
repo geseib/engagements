@@ -5,6 +5,8 @@ import PollBuilder from './components/PollBuilder';
 import WavelengthBuilder from './components/WavelengthBuilder';
 import AIAssistant from './components/AIAssistant';
 import './BuilderPage.css';
+import PlanLimitNotice from './components/PlanLimitNotice';
+import { parseUpgradeRequired } from './utils/upgradeRequired';
 import { authFetch } from './auth/authFetch';
 import Icon from './components/Icon';
 import SetTopicField from './components/SetTopicField';
@@ -44,6 +46,9 @@ function BuilderPage() {
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
   const [saveStatus, setSaveStatus] = useState('');
+  // A save refused at the stored-set allowance (402): a plan fact with a way
+  // out, shown as the plan-limit notice rather than "Save failed: …".
+  const [limit, setLimit] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [availablePrompts, setAvailablePrompts] = useState([]);
 
@@ -192,6 +197,7 @@ function BuilderPage() {
     }
 
     setIsSaving(true);
+    setLimit(null);
     setSaveStatus('Saving question set...');
 
     try {
@@ -234,7 +240,13 @@ function BuilderPage() {
           questions: []
         });
       } else {
-        setSaveStatus(`Save failed: ${result.error || 'Unknown error'}`);
+        const refusal = parseUpgradeRequired(response, result);
+        if (refusal) {
+          setSaveStatus('');
+          setLimit(refusal);
+        } else {
+          setSaveStatus(`Save failed: ${result.error || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error('Save error:', error);
@@ -493,6 +505,7 @@ function BuilderPage() {
                 {saveStatus}
               </div>
             )}
+            <PlanLimitNotice refusal={limit} outcome="Nothing was saved." surface="paper" onDismiss={() => setLimit(null)} />
           </div>
         </div>
       </div>

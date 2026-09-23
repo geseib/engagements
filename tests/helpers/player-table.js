@@ -23,8 +23,13 @@
  *
  *   ConditionExpression   attribute_exists(A) · attribute_not_exists(A)
  *                         A = :v · A > :v · AND · OR · parentheses
- *   UpdateExpression      SET a = :x, b = :y   REMOVE c, d
- *                         (either clause may be absent; `#name` aliases work)
+ *   UpdateExpression      SET a = :x, b = if_not_exists(b, :y)   REMOVE c, d
+ *                         ADD n :one  (a number; the counters the platform
+ *                         metrics keep — platform-metrics.js)
+ *                         (any clause may be absent; `#name` aliases work)
+ *   ReturnValues          ALL_OLD on a Put, UPDATED_OLD on an Update — the two
+ *                         a recorder reads to tell a NEW row from an overwrite.
+ *                         Any other value answers `{}` exactly as before.
  *
  * `serialise` is how a race is driven: it interleaves two in-flight sends at a
  * chosen point, so both handlers read the same item and then write one after
@@ -106,38 +111,102 @@ function evaluateCondition(expression, item, names = {}, values = {}) {
   return result;
 }
 
-/** `SET a = :x, b = :y REMOVE c, d` applied to a copy of the item. */
+/** Split on TOP-LEVEL commas only — `if_not_exists(a, :b)` must stay whole. */
+function splitTop(body) {
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of String(body)) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * The sections of an UpdateExpression, in order: [['SET', body], ['ADD', body]].
+ * Keywords are matched UPPER-CASE and whole-word, which is how every handler
+ * here writes them — so a `#setId` alias is never mistaken for a clause.
+ */
+function sectionsOf(expression) {
+  const parts = String(expression || '').trim().split(/\b(SET|REMOVE|ADD)\b/);
+  if (parts.length < 3 || parts[0].trim() !== '') {
+    throw new Error(`fake: unsupported UpdateExpression: ${expression}`);
+  }
+  const out = [];
+  for (let i = 1; i < parts.length; i += 2) {
+    const body = String(parts[i + 1] || '').trim();
+    if (!body) throw new Error(`fake: empty ${parts[i]} clause in: ${expression}`);
+    out.push([parts[i], body]);
+  }
+  return out;
+}
+
+const nameOf = (token, names) => {
+  const attribute = token.startsWith('#') ? names[token] : token;
+  if (!attribute) throw new Error(`fake: unmapped attribute name ${token}`);
+  return attribute;
+};
+
+/** Every attribute an UpdateExpression names on its left-hand sides. */
+function updatedAttributes(input) {
+  const names = input.ExpressionAttributeNames || {};
+  const out = [];
+  for (const [kind, body] of sectionsOf(input.UpdateExpression)) {
+    for (const clause of splitTop(body)) {
+      const lhs = kind === 'SET' ? clause.slice(0, clause.indexOf('='))
+        : kind === 'ADD' ? clause.split(/\s+/)[0] : clause;
+      out.push(nameOf(lhs.trim(), names));
+    }
+  }
+  return out;
+}
+
+/** `SET a = :x, b = if_not_exists(b, :y) REMOVE c ADD n :one` applied to a copy. */
 function applyUpdate(item, input) {
   const names = input.ExpressionAttributeNames || {};
   const values = input.ExpressionAttributeValues || {};
-  const expression = String(input.UpdateExpression || '').trim();
-
-  const match = /^(?:SET\s+([\s\S]*?))?\s*(?:REMOVE\s+([\s\S]*))?$/i.exec(expression);
-  if (!match || (!match[1] && !match[2])) {
-    throw new Error(`fake: unsupported UpdateExpression: ${expression}`);
-  }
+  const valueOf = (token) => {
+    if (!(token in values)) throw new Error(`fake: unmapped attribute value ${token}`);
+    return values[token];
+  };
 
   const next = { ...item };
 
-  if (match[1]) {
-    for (const clause of match[1].split(',')) {
-      const parts = clause.split('=');
-      if (parts.length !== 2) throw new Error(`fake: unsupported SET clause: ${clause}`);
-      const lhs = parts[0].trim();
-      const rhs = parts[1].trim();
-      const attribute = lhs.startsWith('#') ? names[lhs] : lhs;
-      if (!attribute) throw new Error(`fake: unmapped attribute name ${lhs}`);
-      if (!(rhs in values)) throw new Error(`fake: unmapped attribute value ${rhs}`);
-      next[attribute] = values[rhs];
-    }
-  }
-
-  if (match[2]) {
-    for (const raw of match[2].split(',')) {
-      const token = raw.trim();
-      const attribute = token.startsWith('#') ? names[token] : token;
-      if (!attribute) throw new Error(`fake: unmapped attribute name ${token}`);
-      delete next[attribute];
+  for (const [kind, body] of sectionsOf(input.UpdateExpression)) {
+    for (const clause of splitTop(body)) {
+      if (kind === 'SET') {
+        const eq = clause.indexOf('=');
+        if (eq === -1) throw new Error(`fake: unsupported SET clause: ${clause}`);
+        const attribute = nameOf(clause.slice(0, eq).trim(), names);
+        const rhs = clause.slice(eq + 1).trim();
+        const ifNot = /^if_not_exists\(\s*([#\w]+)\s*,\s*(:\w+)\s*\)$/.exec(rhs);
+        if (ifNot) {
+          const current = next[nameOf(ifNot[1], names)];
+          next[attribute] = current !== undefined ? current : valueOf(ifNot[2]);
+        } else if (/^:\w+$/.test(rhs)) {
+          next[attribute] = valueOf(rhs);
+        } else {
+          throw new Error(`fake: unsupported SET clause: ${clause}`);
+        }
+      } else if (kind === 'REMOVE') {
+        delete next[nameOf(clause, names)];
+      } else {
+        // ADD: numbers only. DynamoDB also adds to sets; nothing here does.
+        const m = /^([#\w]+)\s+(:\w+)$/.exec(clause);
+        if (!m) throw new Error(`fake: unsupported ADD clause: ${clause}`);
+        const attribute = nameOf(m[1], names);
+        const delta = valueOf(m[2]);
+        if (typeof delta !== 'number') throw new Error(`fake: ADD of a non-number to ${attribute}`);
+        const current = next[attribute];
+        if (current !== undefined && typeof current !== 'number') {
+          throw new Error(`fake: ADD to non-number ${attribute}`);
+        }
+        next[attribute] = (current || 0) + delta;
+      }
     }
   }
 
@@ -218,7 +287,11 @@ function createTable() {
               )) {
               throw conditionalFailure();
             }
+            const previous = store.get(k);
             store.set(k, input.Item);
+            // ALL_OLD is how a writer learns it OVERWROTE a row rather than
+            // created one — an answer resubmitted by the same player.
+            if (input.ReturnValues === 'ALL_OLD' && previous) return { Attributes: { ...previous } };
             return {};
           }
 
@@ -238,6 +311,15 @@ function createTable() {
             // row here, or the test asserting it does not is asserting nothing.
             const base = current || { ...input.Key };
             store.set(k, applyUpdate(base, input));
+            // UPDATED_OLD: the prior values of the attributes this update
+            // named, and only those that existed — DynamoDB's own shape.
+            if (input.ReturnValues === 'UPDATED_OLD') {
+              const old = {};
+              for (const name of updatedAttributes(input)) {
+                if (current && current[name] !== undefined) old[name] = current[name];
+              }
+              return Object.keys(old).length ? { Attributes: old } : {};
+            }
             return {};
           }
 
@@ -370,6 +452,7 @@ module.exports = {
   installStubs,
   evaluateCondition,
   applyUpdate,
+  updatedAttributes,
   conditionalFailure,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
   BatchGetCommand,

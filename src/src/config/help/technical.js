@@ -93,7 +93,7 @@ const troubleshooting = {
           t: 'note',
           tone: 'warn',
           title: 'Sessions expire on a timer',
-          text: '90 days from creation, or 7 days after last play — whichever comes first. A session that has gone is gone. Generate the report while the session still exists.',
+          text: '90 days from creation, or 7 days once it has started — whichever comes first. A session that has gone is gone. Generate the report while the session still exists.',
         },
       ],
     },

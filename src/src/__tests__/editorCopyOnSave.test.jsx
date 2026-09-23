@@ -17,7 +17,7 @@
  * copies, and the screen says so BEFORE the press rather than after.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
@@ -190,14 +190,27 @@ describe('a set that is not yours, when there is no room for the copy', () => {
     serve();
     draw(ENGAGE_SET, { setAllowance: FULL });
     const notice = screen.getByTestId('no-room-notice');
-    expect(notice).toHaveTextContent('5 of 5 sets used');
-    expect(notice).toHaveTextContent(/delete one of your own sets/i);
-    expect(notice).toHaveTextContent(/upgrade/i);
+    // The shared plan-limit notice (22-plan-limit-notice.html), said on arrival.
+    expect(notice).toHaveTextContent('Your space holds 5 of the 5 question sets it includes.');
+    expect(notice).toHaveTextContent('A copy of this set cannot be saved. Reading is not affected.');
+    expect(notice).toHaveTextContent(/delete a set/i);
+    // No `resolve` on this list response: the way out is Plan & usage.
+    expect(within(notice).getByRole('link', { name: 'Open Plan & usage' })).toHaveAttribute('href', '/admin?section=billing');
     // The friendlier "you can change anything here" notice would now be a lie.
     expect(screen.queryByTestId('not-yours-notice')).toBeNull();
     expect(saveButton()).toBeDisabled();
     await waitFor(() => expect(screen.getByRole('button', { name: /add a question/i })).toBeDisabled());
     expect(screen.getByTestId('add-questions')).toBeDisabled();
+  });
+
+  it('tells a member whom to ask, by name, when the list says who can fix it', async () => {
+    // rejects: "or upgrade your plan" said to somebody who cannot
+    serve();
+    draw(ENGAGE_SET, { setAllowance: { ...FULL, resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' } } });
+    const notice = screen.getByTestId('no-room-notice');
+    expect(notice).toHaveTextContent('Ask an owner or admin to move Northwind to the Team plan.');
+    expect(within(notice).getByRole('link', { name: /Dana Whitfield/ })).toHaveAttribute('href', 'mailto:dana@x.example');
+    expect(within(notice).queryByRole('link', { name: /Request/ })).toBeNull();
   });
 
   it('says nothing, and blocks nothing, on your OWN set or when there is room', async () => {
