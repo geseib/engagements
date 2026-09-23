@@ -27,6 +27,7 @@
  * `11-moderation.html` is a queue of sets "waiting for a person", not a
  * notification.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const Module = require('module');
@@ -575,5 +576,6 @@ function snapshotOf({ version = 2, contentHash } = {}) {
 
   say(`\n${pass} passed, ${fail} failed`);
   Module._load = realLoad;
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

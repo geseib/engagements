@@ -28,6 +28,7 @@
  * get-results.js already emits `newState` on its `gameStateChanged` frame — the
  * convention existed, start-vote just didn't follow it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -284,5 +285,6 @@ const invoke = (gameId, questionNumber = 1) =>
     assert.strictEqual(sent.length, 0));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

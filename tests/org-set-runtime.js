@@ -12,6 +12,7 @@
  *
  * rejects: any runtime reader that hands resolveSetPartition a bare id.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const REPO = path.join(__dirname, '..');
@@ -124,5 +125,6 @@ const CASES = [
   });
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

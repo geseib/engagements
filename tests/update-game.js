@@ -30,6 +30,7 @@
  * Stubbing note (same as tests/persona-controls.js): intercept Module._load by
  * request name — poisoning require.cache by resolved path silently misses.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -904,5 +905,6 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

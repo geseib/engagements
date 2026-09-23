@@ -1,4 +1,5 @@
 // tests/publishable-text.js
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const REPO = path.join(__dirname, '..');
@@ -81,5 +82,6 @@ const categories = [{ PK: 'ORG#org_x#SET#s#v2', SK: 'CATEGORY#c001', Name: 'Inju
     assert.notStrictEqual(a, b);
   });
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

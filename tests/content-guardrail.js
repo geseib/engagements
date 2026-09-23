@@ -21,6 +21,7 @@
  * and the fan-out, which is where a mistake becomes either a public library
  * full of material nobody vetted or a refusal nobody can act on.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const Module = require('module');
@@ -250,5 +251,6 @@ const QUESTIONS = [
   });
   say(`\n${pass} passed, ${fail} failed`);
   Module._load = realLoad;
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

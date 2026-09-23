@@ -35,6 +35,7 @@
  * pick, so it must not write ActiveIndex or zero an AvailMask bit; doing so
  * once per queued question is the same damage that commit removed, at speed.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -485,5 +486,6 @@ const bodyOf = (res) => JSON.parse(res.body);
     assert.match(get('STATE').State, /^ASK#/, 'the contention stopped the session advancing'));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

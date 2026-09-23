@@ -41,6 +41,7 @@
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const crypto = require('crypto');
 const assert = require('assert');
@@ -1868,5 +1869,6 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { say(`crashed: ${e.stack}`); process.exit(1); });

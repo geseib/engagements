@@ -50,6 +50,7 @@
  * //          set tags leaking onto question rows; the two copies of the shelf
  * //          drifting apart.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -555,5 +556,6 @@ const save = (setId, patch) => editSet({
     assert.ok(front.includes(`UNFILED_LABEL = '${T.UNFILED_LABEL}'`), 'the two copies disagree about what unfiled is called');
   });
 
+  suiteFinished();
   finish();
 })();

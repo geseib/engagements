@@ -54,6 +54,7 @@
  * their codes, PlayerPage needs the flag to show the access-code form, and it
  * is its own decision — noted so the next reader knows it was seen, not missed.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -405,5 +406,6 @@ const ACCESS_CODE_KEY = /access[\s_-]*code/i;
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { loud(); console.error('harness error:', e); process.exit(2); });

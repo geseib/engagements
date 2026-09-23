@@ -6,6 +6,7 @@
  * a member reading the ledger; revoke deleting the row; a code name reused
  * while live; a code retired twice; a bare partition literal.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -391,5 +392,6 @@ const ORG_B = 'org_2222222222222222222222';
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

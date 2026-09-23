@@ -20,6 +20,7 @@
  * which is also why it was added to lambda-functions/admin/package.json rather
  * than being assumed present in the Lambda runtime.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -672,5 +673,6 @@ async function test(name, fn) {
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);
+  suiteFinished();
   if (failed > 0) process.exit(1);
 })();

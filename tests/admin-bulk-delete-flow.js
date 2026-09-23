@@ -11,6 +11,7 @@
  * Stubbing follows tests/ai-prompt-resolution.js: hook Module._load BY MODULE
  * NAME, never require.cache by resolved path.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -227,5 +228,6 @@ function check(label, fn) {
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

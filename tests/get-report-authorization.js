@@ -21,6 +21,7 @@
  * rule; the new rule swallowing a participant GET or /report/download; a
  * refusal that differs from "not found"; the host's own read refused.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const REPO = path.join(__dirname, '..');
@@ -138,5 +139,6 @@ const REPORT = {
   await check('a signed-in host on an orgless session: 200', () => assert.strictEqual(orgless.statusCode, 200, orgless.body));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

@@ -25,6 +25,7 @@
  * EXECUTES — a ReferenceError does not exist until the line runs — so it is
  * driven through exports.handler in worker mode rather than around it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -693,6 +694,7 @@ say('\n7. an organisation\'s own Workie is used, not silently replaced');
 }
 
 say(`\n${pass} passed, ${fail} failed`);
+suiteFinished();
 process.exit(fail ? 1 : 0);
 
 })().catch((e) => {

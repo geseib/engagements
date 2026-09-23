@@ -29,6 +29,7 @@
  * stubbed, and the KMS stub behaves the way the key policy will: a Decrypt that
  * does not name the right org in its encryption context is refused.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const nodeCrypto = require('crypto');
@@ -677,5 +678,6 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { say('harness error: ' + (e && e.stack || e)); process.exit(2); });

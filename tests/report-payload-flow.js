@@ -23,6 +23,7 @@
  *     and is absent-safe on summaries written before the resolver stamped it
  *   - a normal voted round is byte-for-byte unchanged: ranks, tallies, winners
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -471,5 +472,6 @@ const seedAISummary = (n, extra = {}) =>
     ));
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

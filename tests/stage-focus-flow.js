@@ -43,6 +43,7 @@
  * The assertions are deliberately about the PERSISTED record and the WIRE, not
  * the response body — the response body is the one thing a host never sees.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -422,5 +423,6 @@ const readState = async (gameId) => JSON.parse(
   check('OPTIONS is answered', () => assert.strictEqual(preflight.statusCode, 200));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

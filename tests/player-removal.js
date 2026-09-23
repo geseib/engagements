@@ -18,6 +18,7 @@
  *   §4  THE REPORT DOES NOT DROP THEM. Neither does the score record, nor a
  *       single answer or vote.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -379,5 +380,6 @@ async function seedSession({ phase = 'ASK' } = {}) {
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

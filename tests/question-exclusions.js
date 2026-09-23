@@ -9,6 +9,7 @@
  * tests/up-next-endpoint.js, where the serve and the preview can be run
  * against one fixture.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -128,5 +129,6 @@ const row = () => store.get(table.keyOf(PK, 'EXCLUDED'));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

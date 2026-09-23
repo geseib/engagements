@@ -30,6 +30,7 @@
  * not in the other two bundles — the same constraint that already forces three
  * copies of game-types.js. Copies are fine; SILENT copies are not.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -734,4 +735,5 @@ check('{reveal} is empty rather than prose when the author left it blank', () =>
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
+suiteFinished();
 process.exit(fail ? 1 : 0);

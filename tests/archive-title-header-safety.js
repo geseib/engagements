@@ -29,6 +29,7 @@
  * boundary character by character, so the oracle the later stubbed tests use is
  * itself verified against the shipped SDK rather than asserted from memory.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const http = require('http');
 const path = require('path');
@@ -506,5 +507,6 @@ async function phase3Export() {
   await phase2Upload();
   await phase3Export();
   console.log(`\n${passed} passed, ${failed} failed`);
+  suiteFinished();
   process.exit(failed ? 1 : 0);
 })();

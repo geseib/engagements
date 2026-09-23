@@ -27,6 +27,7 @@
  * membership; accepting without writing the USER reverse row; revoking another
  * organisation's invitation; a non-admin inviting or revoking.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -629,5 +630,6 @@ const admin = (orgId) => ({ sub: 'u_amara', email: 'amara@northwind.example', or
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

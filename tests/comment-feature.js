@@ -14,6 +14,7 @@
  *
  * Every expectation is constructed by hand.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -205,5 +206,6 @@ function seed(gameId, { orgId = 'acme' } = {}) {
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

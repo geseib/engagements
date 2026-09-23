@@ -44,6 +44,7 @@
  * //          for takeover, or taking somebody out of the counts — and any of
  * //          these handlers calling the guard and acting anyway.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -391,5 +392,6 @@ const saysItExists = (res) =>
       `got ${orphanRemove.statusCode}: ${orphanRemove.body}`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

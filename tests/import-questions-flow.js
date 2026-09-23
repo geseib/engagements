@@ -17,6 +17,7 @@
  *   - a 160-question set is written in batches, not one request per question
  *   - UnprocessedItems are retried rather than dropped
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -501,5 +502,6 @@ const TRIVIA_CSV = [
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

@@ -7,6 +7,7 @@
  * meaningful business analysis". Precedence is the fix, and it is what these
  * tests pin down.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -457,5 +458,6 @@ const loadPersona = async (id) => STORE[id] || null;
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

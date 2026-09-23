@@ -41,6 +41,7 @@
  * KMS. Without it "the create succeeded" and "the create failed for an
  * unrelated reason" would look the same from here.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -811,5 +812,6 @@ function shiftPeriod(period, n) {
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

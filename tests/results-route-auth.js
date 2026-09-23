@@ -28,6 +28,7 @@
  * caller that cannot prove it came through the authenticated route does not
  * get the transition.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -440,5 +441,6 @@ const withoutTimestamps = (body) => {
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

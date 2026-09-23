@@ -32,6 +32,7 @@
  * `.jwt.claims` shape this API has never produced. Everything below drives the
  * REAL exported handler.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -363,5 +364,6 @@ const NW = { PK: `USER#${SUB}`, SK: 'ORG#org_northwind', orgId: 'org_northwind',
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

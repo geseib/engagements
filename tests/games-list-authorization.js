@@ -46,6 +46,7 @@
  * literal `'games'` is checked against the path the handler really derives,
  * not against one this file made up.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -328,5 +329,6 @@ const PARTICIPANT_GETS = [
       'the admin Sessions tab stopped sending a token'));
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

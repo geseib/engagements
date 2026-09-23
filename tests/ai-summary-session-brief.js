@@ -35,6 +35,7 @@
  * reason tests/org-authored-prompts.js gives: @aws-sdk/client-kms exists only
  * in the deployed bundle.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -365,5 +366,6 @@ async function runWorker(gameId) {
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { say(`CRASH ${e.stack}`); process.exit(1); });

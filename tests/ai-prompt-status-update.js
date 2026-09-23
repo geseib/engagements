@@ -33,6 +33,7 @@
  * import exist only in the deployed bundle and cannot be resolved locally at
  * all, so poisoning require.cache by resolved path silently misses.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -505,5 +506,6 @@ async function seed(overrides = {}) {
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(1); });

@@ -32,6 +32,7 @@
  *            get-game-state's `answererIds` via `waitingRoster`, which read the
  *            correct source all along. §3 pins both at once.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -259,5 +260,6 @@ async function seed({ phase = 'ASK', round = 1, answered = [], voted = [] } = {}
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

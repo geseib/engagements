@@ -22,6 +22,7 @@
  * saw the round stuck. So the assertions here are deliberately about the
  * PERSISTED state and the WIRE, not about the response body.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -336,5 +337,6 @@ async function run(gameId) {
     assert.strictEqual(sent.length, 0));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

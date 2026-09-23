@@ -10,6 +10,7 @@
  * //          AccessDenied as a "missing" image; overwriting an image that already exists on
  * //          the tier; writing anywhere but one set's folder.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const path = require('path');
 const Module = require('module');
@@ -181,5 +182,6 @@ const ROWS = [
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

@@ -17,6 +17,7 @@
  * worker mode with Bedrock stubbed, so it asserts against the prompt that
  * would actually be sent and the fields that would actually be stored.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -435,5 +436,6 @@ const TRIAD = ['## Summary', '## Discussion Questions', '## Next Steps'];
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

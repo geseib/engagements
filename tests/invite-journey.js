@@ -49,6 +49,7 @@
  * membership; accepting without writing the USER reverse row; revoking another
  * organisation's invitation; a non-admin inviting or revoking.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -571,5 +572,6 @@ const pointersFor = (email) => [...store.keys()]
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

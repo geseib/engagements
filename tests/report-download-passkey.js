@@ -17,6 +17,7 @@
  * passkey stored anywhere in plaintext; an orgless PDF corrupted on the way
  * out; the header missing from CORS; the route acquiring an authorizer.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -307,5 +308,6 @@ const fetchReport = (gameId, s3Key, passkey) => download({
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

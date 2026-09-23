@@ -27,6 +27,7 @@
  * handlers import exist only in the deployed bundle. Intercept Module._load
  * by request NAME instead, before any handler loads.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -747,5 +748,6 @@ const rowAt = (pk, sk) => store.get(key(pk, sk));
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

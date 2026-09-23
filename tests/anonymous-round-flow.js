@@ -11,6 +11,7 @@
  * and tests/vote-state-broadcast.js (which this file's stub preamble is
  * copied from).
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -934,6 +935,7 @@ await check('a game with anonymity switched off is attributed even mid-vote', ()
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
+suiteFinished();
 process.exit(fail === 0 ? 0 : 1);
 
 })();

@@ -18,6 +18,7 @@
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -353,5 +354,6 @@ const tenantReads = () => table.log.filter((e) => e.type === 'query' && /^ORG#/.
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })().catch((e) => { say(e.stack); process.exit(1); });

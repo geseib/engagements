@@ -11,6 +11,7 @@
  */
 const Module = require('module');
 const path = require('path');
+const suiteFinished = require('./finish-guard');
 const REPO = path.join(__dirname, '..', '..');
 const cryptoStub = require('./tenant-crypto-stub');
 
@@ -315,6 +316,7 @@ async function test(name, fn) {
   catch (error) { state.failed += 1; console.log(`  FAIL  ${name}\n        ${error.message}`); }
 }
 function summary() {
+  suiteFinished();
   console.log(`\n${state.passed} passed, ${state.failed} failed\n`);
   if (state.failed > 0) process.exit(1);
 }

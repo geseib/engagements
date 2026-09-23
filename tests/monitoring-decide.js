@@ -13,6 +13,7 @@
  * reason: the require.cache-by-resolved-path trick cannot resolve a package
  * that is not on disk.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -386,5 +387,6 @@ const alertOnly = { id: 'games', title: 'Games', threshold: 100, comparison: '>'
   }
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { process.stdout.write(`harness error: ${e && e.stack}\n`); process.exit(1); });

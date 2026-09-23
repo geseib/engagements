@@ -15,6 +15,7 @@
  * Runs the REAL get-question and get-game-state handlers against a stubbed
  * DynamoDB, in the style of tests/art-title-flow.js.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -484,5 +485,6 @@ function seed(state) {
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

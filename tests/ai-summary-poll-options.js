@@ -18,6 +18,7 @@
  * to read; a failed decrypt taking the whole summary down; losing the old
  * optionA..E rows that have no `options` at all.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -166,5 +167,6 @@ const ORG = 'org_acme';
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { say('harness error: ' + (e && e.stack || e)); process.exit(2); });

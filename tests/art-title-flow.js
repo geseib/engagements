@@ -7,6 +7,7 @@
  *
  *   CSV -> upload-questions -> SET#/QUESTION# item -> get-game-state -> player payload
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -280,5 +281,6 @@ function check(label, fn) {
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

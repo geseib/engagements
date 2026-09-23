@@ -17,6 +17,7 @@
  *          diagnostic connection scan coming back; the host no longer being
  *          told at all.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -103,5 +104,6 @@ async function joinCapturing(name) {
   });
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

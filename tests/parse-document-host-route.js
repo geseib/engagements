@@ -22,6 +22,7 @@
  * anyone rather than to hosts; a pending account passing; the handler reaching
  * for anything but its two parsers.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -325,5 +326,6 @@ const parse = (body, requestContext) => parseDocument.handler({
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

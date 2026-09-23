@@ -30,6 +30,7 @@
  * the real handler stores, and the encrypted question row is whatever the real
  * encryptItem makes of it.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -161,5 +162,6 @@ const CASES = [
   await check('the legacy REF row scores as it always has', () => assert.strictEqual(legacy.IsCorrect, true, `IsCorrect was ${legacy.IsCorrect}`));
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

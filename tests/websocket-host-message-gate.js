@@ -33,6 +33,7 @@
  *          error on the lookup falling through to the broadcast; a refused
  *          frame's body reaching the logs.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -460,5 +461,6 @@ const BROADCASTS = ['ASK#002', 'VOTE#001', 'RESULT#001', 'END'];
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();

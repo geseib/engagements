@@ -42,6 +42,7 @@
  *          a cross-org host minting a ticket; the ticket reaching the logs; the
  *          host page connecting without asking for one.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -449,5 +450,6 @@ async function captureLogs(fn) {
   });
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

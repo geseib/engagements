@@ -29,6 +29,7 @@
  *   §7  the capability is not published. `HandoverRequestedBy` is a clientId,
  *       and a clientId is what get-answers.js accepts as proof of identity.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const fs = require('fs');
@@ -583,5 +584,6 @@ const playerRow = (name) => store.get(key(PK, `PLAYER#${name}`));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

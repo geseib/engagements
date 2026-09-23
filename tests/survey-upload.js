@@ -24,6 +24,7 @@
  * question sitting in the clear at rest; an org POLL's options doing the same;
  * the editor or the download being handed an envelope instead of the words.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -593,5 +594,6 @@ const questionRows = (pk) => rowsIn(pk)
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);
+  suiteFinished();
   process.exit(failed ? 1 : 0);
 })().catch((e) => { say('harness error: ' + (e && e.stack || e)); process.exit(2); });

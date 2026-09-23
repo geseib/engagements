@@ -9,6 +9,7 @@
  * the caller just wrote to, so it is read with ConsistentRead; the platform and
  * public libraries are nobody's fresh write and stay eventually consistent.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const REPO = path.join(__dirname, '..');
@@ -54,5 +55,6 @@ const check = (label, fn) => { try { fn(); console.log(`  PASS  ${label}`); pass
     assert.ok(!byPk.get('PUBLIC#SETS').ConsistentRead, 'public read should not be consistent');
   });
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

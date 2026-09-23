@@ -13,6 +13,7 @@
  * //          the one sent; signing for archive.seibtribe.us; a presigned download sent with
  * //          a second Authorization header.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const crypto = require('crypto');
 const path = require('path');
@@ -176,5 +177,6 @@ const SECRET = process.env.AWS_SECRET_ACCESS_KEY;
 
   global.fetch = realFetch;
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e); process.exit(2); });

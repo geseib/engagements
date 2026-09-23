@@ -24,6 +24,7 @@
  * its row. A late-landing older `$connect` may retire itself, never its
  * successor.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -331,5 +332,6 @@ const withFrozenClock = async (iso, fn) => {
   });
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   if (fail) process.exit(1);
 })();

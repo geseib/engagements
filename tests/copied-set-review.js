@@ -21,6 +21,7 @@
  * `shared/archive-snapshot.js` already leaves both rows out of a backup, for the
  * same reason: a verdict about a version in another library is not content.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 const Module = require('module');
@@ -259,5 +260,6 @@ async function copyAPassedPublicSet() {
 
   say(`\n${pass} passed, ${fail} failed`);
   Module._load = realLoad;
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

@@ -32,6 +32,7 @@
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -356,5 +357,6 @@ function assertStartedRows(gameId) {
   });
 
   say(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail ? 1 : 0);
 })();

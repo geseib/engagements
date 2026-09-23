@@ -29,6 +29,7 @@
  *
  * §4 pins the bookkeeping that SHOULD still happen, for the same reason.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -213,5 +214,6 @@ const ask = (body) => nextQuestion.handler({
 
   /* ---- summary ----------------------------------------------------------- */
   console.log(`\n${pass} passed, ${fail} failed\n`);
+  suiteFinished();
   process.exit(fail === 0 ? 1 && 0 : 1);
 })();

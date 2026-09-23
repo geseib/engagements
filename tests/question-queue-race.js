@@ -33,6 +33,7 @@
  * Lambda that burns its 30s timeout on a hot key, and a loop that retries the
  * WRITE without re-reading is implementation 2 wearing a hat.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -274,5 +275,6 @@ const isQueueWrite = (command) =>
     assert.strictEqual(sent.length, 0, `${sent.length} frame(s) went out`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
 })();
