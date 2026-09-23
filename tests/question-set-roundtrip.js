@@ -326,6 +326,25 @@ const POLL_CSV = [
     + '"Pick one.","Speed|Quality|Novelty","false","culture"',
 ].join('\n');
 
+// Every survey kind and the settings that change its row (surveys phase 1,
+// docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md "THE CONTRACT").
+// Row 3 carries an option with a comma in it on purpose: the file separates
+// options with a pipe, and a comma is part of an option's words.
+const SURVEY_HEADER = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,'
+  + 'AllowMultiple,MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,'
+  + 'FollowUpWhen,FollowUpPrompt,RankTop,TextLength,MaxLength,Placeholder,Themes,Tags';
+const SURVEY_CSV = [
+  SURVEY_HEADER,
+  '"Survey",1,"HOW USEFUL WAS IT","For your work next week.","","","rating","true","","false","","false","false","1-10","Not useful","Very useful","","","false","","","","","","","false","feedback"',
+  '"Survey",2,"WOULD YOU RECOMMEND IT","","","","rating","false","","false","","false","false","0-10","","","","","false","","","","","","","false",""',
+  '"Survey",3,"MOST VALUABLE PART","","","","choice","true","The live demo|The case studies, with their renewal numbers|The Q&A","false","","false","false","","","","","","false","","","","","","","false",""',
+  '"Survey",4,"MORE OF NEXT TIME","","","","choice","false","More questions|A breakout|Slides ahead|A recording","true","2","true","true","","","","","","false","","","","","","","false",""',
+  '"Survey",5,"LENGTH RIGHT","","","","yesno","true","","false","","false","false","","","","Keep it","Change it","true","no","What would you cut or add?","","","","","false",""',
+  '"Survey",6,"RANK THE TOPICS","","","","rank","false","Customer stories|Product roadmap|Team wins|Culture|Financials","false","","false","false","","","","","","false","","","3","","","","false",""',
+  '"Survey",7,"BEST PART","","","","text","false","","false","","false","false","","","","","","false","","","","long","500","What would you tell a colleague?","true",""',
+  '"Survey",8,"WHAT TO ADD","","","","text","false","","false","","false","false","","","","","","false","","","","short","280","","false",""',
+].join('\n');
+
 const ART_CSV = [
   'Category,Question#,Title,Detail_lesson,School,CustomInstruction,AnswerDetails,Image,Tags',
   '"Renaissance",1,"THE ENIGMATIC SMILE","","Leonardo da Vinci","Invent a title.",'
@@ -776,6 +795,96 @@ const WAVELENGTH_CSV = [
   // The owner's idea: the add-question button offers to pull from another set.
   // A pulled question is a COPY (decision 2) — new keys, no link, no
   // propagation — carrying provenance that is read by nothing.
+  // ==== survey (surveys phase 1) ===========================================
+  say('\n  -- survey: every kind, the console editor, encryption at rest --');
+  resetDb();
+  {
+    const t = await roundTrip('Roundtrip Survey', 'survey', SURVEY_CSV);
+
+    // rejects: a vacuous fixture, or an importer that stopped reading Kind.
+    check('the seeded survey carries every kind, in order', () =>
+      assert.deepStrictEqual(t.before.map((r) => r.kind),
+        ['rating', 'rating', 'choice', 'choice', 'yesno', 'rank', 'text', 'text']));
+
+    // rejects: the exporter emitting its own column names or order. The
+    // importer matches headers EXACTLY; a renamed survey column is a setting
+    // silently lost on the next replace.
+    check('the exported header is the survey contract', () =>
+      assert.strictEqual(t.header, SURVEY_HEADER));
+
+    check('every survey question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+
+    // rejects: an options cell split on commas.
+    check('an option with a comma in it comes back whole', () =>
+      assert.deepStrictEqual(t.after[2].options,
+        ['The live demo', 'The case studies, with their renewal numbers', 'The Q&A']));
+
+    check('each kind keeps its own settings', () => {
+      assert.deepStrictEqual(
+        { scale: t.after[0].scale, lowLabel: t.after[0].lowLabel, highLabel: t.after[0].highLabel, required: t.after[0].required },
+        { scale: '1-10', lowLabel: 'Not useful', highLabel: 'Very useful', required: true });
+      assert.strictEqual(t.after[1].scale, '0-10');
+      assert.deepStrictEqual(
+        { allowMultiple: t.after[3].allowMultiple, maxPicks: t.after[3].maxPicks, allowOther: t.after[3].allowOther, shuffle: t.after[3].shuffle },
+        { allowMultiple: true, maxPicks: 2, allowOther: true, shuffle: true });
+      assert.deepStrictEqual(
+        { yesLabel: t.after[4].yesLabel, noLabel: t.after[4].noLabel, unsure: t.after[4].unsure,
+          followUpWhen: t.after[4].followUpWhen, followUpPrompt: t.after[4].followUpPrompt },
+        { yesLabel: 'Keep it', noLabel: 'Change it', unsure: true, followUpWhen: 'no', followUpPrompt: 'What would you cut or add?' });
+      assert.strictEqual(t.after[5].rankTop, 3);
+      assert.deepStrictEqual(
+        { textLength: t.after[6].textLength, maxLength: t.after[6].maxLength, placeholder: t.after[6].placeholder, themes: t.after[6].themes },
+        { textLength: 'long', maxLength: 500, placeholder: 'What would you tell a colleague?', themes: true });
+      assert.deepStrictEqual(
+        { textLength: t.after[7].textLength, maxLength: t.after[7].maxLength, themes: t.after[7].themes },
+        { textLength: 'short', maxLength: 280, themes: false });
+    });
+
+    // rejects: a row carrying another kind's settings — "a field not relevant
+    // to the row's kind is not stored".
+    check('a question stores only its own kind\'s settings', () => {
+      assert.ok(!('options' in t.after[0]), 'a rating row stored options');
+      assert.ok(!('scale' in t.after[6]), 'an open-answer row stored a scale');
+      assert.ok(!('rankTop' in t.after[2]), 'a choice row stored rankTop');
+    });
+
+    // rejects: question content written in the clear for an org set (owner,
+    // 2026-09-23: options, labels, prompts and placeholders are encrypted).
+    check('an org survey\'s options, labels and prompts are envelopes at rest', () => {
+      const raw = [...store.values()].filter((i) => i.PK === `ORG#org_nw#SET#${t.setId}#v1`
+        && String(i.SK).startsWith('QUESTION#')).sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+      const isEnvelope = (v) => v && typeof v === 'object' && !Array.isArray(v) && 'ct' in v;
+      assert.ok(isEnvelope(raw[2].options), 'choice options stored in the clear');
+      assert.ok(isEnvelope(raw[0].lowLabel), 'a rating label stored in the clear');
+      assert.ok(isEnvelope(raw[4].followUpPrompt), 'a follow-up prompt stored in the clear');
+      assert.ok(isEnvelope(raw[6].placeholder), 'a placeholder stored in the clear');
+      assert.ok(!JSON.stringify(raw).includes('renewal numbers'), 'an option\'s words are readable at rest');
+    });
+
+    // The console editor: its serialiser must equal the exporter byte for byte.
+    const rows = await workingCopy(t.setId);
+    check('the console serialises a survey byte-identically to download-question-set.js', () =>
+      assert.strictEqual(rowsToCsv(rows, 'survey'), t.csv));
+
+    const untouched = await saveWorkingCopy(t.setId, rows, 'survey', rows.map((r) => r.uid));
+    check('saving an untouched survey working copy changes no question at all', () =>
+      assertSameQuestions(t.after, untouched.rows));
+  }
+
+  // Poll options joined the encrypted fields at the same time (the owner's
+  // ruling covers polls too), and a poll still round-trips.
+  resetDb();
+  {
+    const t = await roundTrip('Encrypted Poll', 'poll', POLL_CSV);
+    check('an org poll\'s options are envelopes at rest and plaintext on the way out', () => {
+      const raw = [...store.values()].find((i) => i.PK === `ORG#org_nw#SET#${t.setId}#v1`
+        && String(i.SK).startsWith('QUESTION#'));
+      assert.ok(raw.options && typeof raw.options === 'object' && 'ct' in raw.options, 'poll options stored in the clear');
+      assert.deepStrictEqual(t.after[0].options, ['Office', 'Remote', 'Hybrid', 'Co-working']);
+    });
+  }
+
   say('\n  -- pulling a question from another set --');
   resetDb();
   {
