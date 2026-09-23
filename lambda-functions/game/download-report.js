@@ -19,23 +19,32 @@
  * a reader that link hands over an unreadable blob, which is a broken button
  * dressed as a security improvement.
  *
- * ── WHY THIS ROUTE IS PUBLIC ───────────────────────────────────────────────
+ * ── WHY THIS ROUTE IS PUBLIC, AND WHY THE LINK IS NOT ENOUGH ──────────────
  *
- * It is a bearer URL, exactly as the presigned S3 link it replaces was: holding
- * it is the authorisation. That is a deliberate continuation of how sharing a
- * report already worked, not a new hole — the key names a sanitised title, a
- * date and the four-digit game id, and it is handed out only to whoever pressed
- * Save. Making it authenticated would break sharing the report with the room,
- * which is the feature.
+ * It stays public because sharing a report with somebody who has no account is
+ * the feature. It was a bearer URL — holding the link was the authorisation —
+ * and that was a hole, not a continuation of the presigned link it replaced: a
+ * presigned URL carries a signature nobody can guess, and this key is
+ * `<sanitised title>-<date>-<gameId>.pdf.enc`, which everyone in the room knows
+ * all of. Anyone there could build the link and read the whole session.
  *
- * What it must NOT do is become an oracle. An object that is not there and an
- * object belonging to a session that no longer exists answer the same 404, and
- * the key is never echoed back in an error.
+ * So the link is now one of TWO items. The other is the passkey save-report.js
+ * minted for this report and gave the host (report-passkey.js), presented in
+ * the `X-Report-Passkey` header — a header, not the query string, so it is not
+ * in a link somebody forwards, in browser history, or in an access log. It is
+ * checked against the salted hash on the object BEFORE the body is read. A
+ * report saved before passkeys existed has no hash and opens for nobody here;
+ * its team still opens it from Reports (download-saved-report.js).
+ *
+ * What it must NOT do is become an oracle. No passkey, a wrong passkey, an
+ * object that is not there and an object belonging to a session that no longer
+ * exists all answer the same 404, and the key is never echoed back in an error.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { decryptValue, isEnvelope } = require('./tenant-crypto');
+const { verifyPasskey } = require('./report-passkey');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
@@ -43,21 +52,44 @@ const s3 = new S3Client({});
 const NOT_FOUND = {
   statusCode: 404,
   headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: 'That report is not available.' }),
+  // One sentence for every refusal, so a mistyped passkey and a report that
+  // does not exist cannot be told apart — and the recipient still learns what
+  // to check.
+  body: JSON.stringify({ error: 'No report matches that link and passkey.' }),
 };
 
-async function bodyOf(stream) {
-  if (typeof stream.transformToString === 'function') return stream.transformToString();
+/*
+  BYTES, NOT TEXT. This used `transformToString()`, which decodes as UTF-8: fine
+  for an envelope (JSON), but a plain PDF is binary and invalid sequences were
+  replaced on the way through, so an orgless report arrived corrupt. Every
+  share link comes through here now, orgless ones included.
+*/
+async function bytesOf(stream) {
+  if (typeof stream.transformToByteArray === 'function') return Buffer.from(await stream.transformToByteArray());
   const chunks = [];
   for await (const c of stream) chunks.push(Buffer.from(c));
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
+}
+
+/** HTTP API lowercases header names; a test or another integration may not. */
+function headerOf(event, name) {
+  const headers = event.headers || {};
+  const want = name.toLowerCase();
+  const hit = Object.keys(headers).find((k) => k.toLowerCase() === want);
+  return hit ? headers[hit] : '';
+}
+
+/** Let go of a body we have decided not to read, so the socket is released. */
+function discard(stream) {
+  try { if (stream && typeof stream.destroy === 'function') stream.destroy(); } catch { /* nothing to free */ }
 }
 
 exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const key = (event.queryStringParameters || {}).key;
-    if (!gameId || !key) return NOT_FOUND;
+    const passkey = headerOf(event, 'x-report-passkey');
+    if (!gameId || !key || !passkey) return NOT_FOUND;
 
     // THE KEY MUST BELONG TO THIS GAME. `key` is a query parameter, so without
     // this a caller could name any object in the bucket — including another
@@ -82,20 +114,30 @@ exports.handler = async (event) => {
       Bucket: process.env.REPORTS_BUCKET_NAME,
       Key: key,
     }));
-    const raw = await bodyOf(obj.Body);
+    // The passkey before a single byte of the body. S3 hands user metadata
+    // back lower-cased and without the x-amz-meta- prefix.
+    const stored = obj.Metadata || {};
+    if (!(await verifyPasskey(passkey, stored['passkey-salt'], stored['passkey-hash']))) {
+      discard(obj.Body);
+      return NOT_FOUND;
+    }
+    const bytes = await bytesOf(obj.Body);
 
     // A report saved before tenancy, or by an orgless session, is a real PDF
     // already — `isEnvelope` tells them apart exactly rather than by guessing
     // from the extension, which a caller controls.
     let pdfBase64;
     let parsed = null;
-    try { parsed = JSON.parse(raw); } catch { /* a plain PDF, not JSON */ }
+    // A PDF begins `%PDF-`; only something that could be JSON is parsed.
+    if (bytes[0] === 0x7b) {
+      try { parsed = JSON.parse(bytes.toString('utf8')); } catch { /* not JSON after all */ }
+    }
 
     if (parsed && isEnvelope(parsed)) {
       if (!orgId) return NOT_FOUND;   // ciphertext with no key: unreadable, say so as absence
       pdfBase64 = await decryptValue(orgId, parsed);
     } else {
-      pdfBase64 = Buffer.from(raw, 'utf8').toString('base64');
+      pdfBase64 = bytes.toString('base64');
     }
 
     const filename = key.replace(/^permanent\//, '').replace(/\.enc$/, '');
