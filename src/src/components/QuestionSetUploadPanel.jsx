@@ -33,10 +33,10 @@ const SURVEY_TEMPLATES = [
 ];
 
 /*
-  WHAT IS STILL TRUE ABOUT A SURVEY, said where the type is chosen.
-  `notPlayableReason()` (config/gameTypes.js, not this file's to change) still
-  says the importer rejects survey uploads, which stopped being true in
-  surveys phase 1; once it is reworded this can fall back to it.
+  WHAT IS STILL TRUE ABOUT A SURVEY, said where the type is chosen: it can be
+  made, imported, edited and downloaded, but not yet run (phase 2). This
+  panel's own sentence names all four ways in, which notPlayableReason() in
+  config/gameTypes.js does not.
 */
 const SURVEY_NOT_PLAYABLE_YET =
   'A survey can be made, imported, edited and downloaded here, but no session can run one yet.';
@@ -548,7 +548,7 @@ export default function QuestionSetUploadPanel({
         <h4>…then upload it here</h4>
         <p className="qsets-route-when" style={{ margin: '-4px 0 10px' }}>
           Where every route above ends up, and the only one that loses nothing. Already have a
-          CSV{isSurvey ? ', or the JSON a survey exports' : ''}? Start here.
+          CSV{isSurvey ? ', or the JSON the old survey builder exported' : ''}? Start here.
         </p>
 
         <div className="qsets-file">
@@ -763,7 +763,7 @@ function SurveyRoutes({ showAIBuilder, onOpenBuilder, onDownloadTemplate }) {
       <div className="qsets-route">
         <span className="qsets-route-nm">A file</span>
         <p className="qsets-route-when">
-          A CSV with a Kind column, or the JSON a survey exports. Upload it below; every row is
+          A CSV with a Kind column, or the JSON the old survey builder exported. Upload it below; every row is
           checked in your browser before anything is sent.
         </p>
         <button type="button" className="qsets-btn" onClick={() => onDownloadTemplate('survey')}>

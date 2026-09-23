@@ -180,6 +180,21 @@ describe('Add question is a menu of the five kinds', () => {
     expect(items.map((i) => i.querySelector('b').textContent))
       .toEqual(['Rating', 'Multiple choice', 'Yes / No', 'Ranking', 'Open answer', 'From another set']);
     expect(items[0].textContent).toContain('A scale: 1–5, 1–10, 0–10 (a recommend score) or stars.');
+    // rejects: promising polls the pull dialog never lists — it lists sets of
+    // this set's own type (review finding, 2026-09-23).
+    expect(items[5].textContent).toContain('Copy questions from another survey you already have.');
+    expect(items[5].textContent).not.toMatch(/poll/i);
+  });
+
+  // rejects: a Preview that draws a survey question as a title-only card under
+  // a "Survey" heading — the player's survey inputs are phase 2.
+  test('Preview waits for phase 2 on a survey set, and says so', async () => {
+    mockApi();
+    renderPanel();
+    await ready();
+    const preview = screen.getByRole('button', { name: /Preview/ });
+    expect(preview).toBeDisabled();
+    expect(preview).toHaveAttribute('title', expect.stringMatching(/survey/i));
   });
 
   test('the keyboard drives it: focus lands on the first kind, ↓ ↑ move, Enter picks', async () => {
@@ -429,6 +444,22 @@ describe('switching a question\'s kind', () => {
     // Title and Needs-an-answer ride along.
     expect(screen.getByLabelText('Question')).toHaveValue('How useful was the session?');
     expect(screen.getByRole('checkbox', { name: /Needs an answer/ })).toBeChecked();
+  });
+
+  // rejects: confirming with the row captured when the kind was CLICKED — the
+  // form stays editable while the confirm strip is up, and a title typed in
+  // between was reverted by the switch (review finding, 2026-09-23).
+  test('an edit made while the confirm strip is up survives the switch', async () => {
+    mockApi();
+    renderPanel();
+    await ready();
+    await editQuestion('How useful was the session?');
+
+    fireEvent.click(kindButton('Open answer'));
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'What was most useful?' } });
+    fireEvent.click(within(within(dialog()).getByRole('alert')).getByRole('button', { name: /Switch/ }));
+    expect(pressedKind()).toEqual(['Open answer']);
+    expect(screen.getByLabelText('Question')).toHaveValue('What was most useful?');
   });
 
   test('a default rating with nothing filled switches without asking', async () => {

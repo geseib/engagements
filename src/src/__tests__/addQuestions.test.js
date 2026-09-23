@@ -106,3 +106,14 @@ describe('adding questions from a survey CSV (surveys phase 1)', () => {
     expect(rowsFromCsv(csv).rows[0].detail).toBe('Think about next week');
   });
 });
+
+describe('Add questions reads a hand-made survey file the way the importer does (review finding)', () => {
+  test('yes / 1 read as true, and a capitalised or legacy kind is understood', () => {
+    const csv = 'Category,Title,Kind,Required,Options,AllowMultiple\n'
+      + '"Survey","Pick","multiple_choice","yes","a|b|c","1"\n'
+      + '"Survey","Rate","Rating","Y","",""\n';
+    const { rows } = rowsFromCsv(csv);
+    expect(rows[0]).toMatchObject({ kind: 'choice', required: true, allowMultiple: true });
+    expect(rows[1]).toMatchObject({ kind: 'rating', required: true });
+  });
+});

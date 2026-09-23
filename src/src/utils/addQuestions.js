@@ -117,6 +117,28 @@ const HEADER_TO_FIELD = {
   themes: 'Themes',
 };
 
+/*
+  A hand-made survey file, read as upload-questions.js reads it
+  (admin/shared/survey-kinds.js): yes / y / 1 are true, and a capitalised or
+  legacy kind (Rating, multiple_choice, text_entry, yes_no, ranking, nps) is
+  understood — toRow alone takes only the contract's own spellings.
+*/
+const SURVEY_BOOLEANS = ['Required', 'allowMultiple', 'AllowMultiple', 'AllowOther', 'Shuffle', 'Unsure', 'Themes'];
+const LEGACY_KIND = {
+  multiple_choice: 'choice', 'multiple-choice': 'choice', text_entry: 'text', 'text-entry': 'text',
+  yes_no: 'yesno', 'yes-no': 'yesno', ranking: 'rank',
+};
+function readSurveyCellsAsTheImporterDoes(source) {
+  SURVEY_BOOLEANS.forEach((field) => {
+    if (typeof source[field] !== 'string' || source[field].trim() === '') return;
+    source[field] = /^(true|yes|y|1)$/i.test(source[field].trim()) ? 'true' : 'false';
+  });
+  if (typeof source.Kind === 'string' && source.Kind.trim()) {
+    const kind = source.Kind.trim().toLowerCase();
+    if (kind === 'nps') { source.Kind = 'rating'; source.Scale = '0-10'; } else source.Kind = LEGACY_KIND[kind] || kind;
+  }
+}
+
 /** A CSV in the template's own columns → rows. `{ rows, error }`. */
 export function rowsFromCsv(text) {
   const table = parseCsv(text);
@@ -136,6 +158,7 @@ export function rowsFromCsv(text) {
       if (typeof source.options === 'string') {
         source.options = source.options.split('|').map((o) => o.trim()).filter(Boolean);
       }
+      readSurveyCellsAsTheImporterDoes(source);
       return asNewRow(source);
     })
     .filter((row) => row.title);

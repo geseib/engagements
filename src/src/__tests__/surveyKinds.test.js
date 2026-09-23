@@ -162,3 +162,14 @@ describe('estimateMinutes', () => {
     expect(estimateMinutes(new Array(8).fill({ kind: 'rating' }))).toBe(3);
   });
 });
+
+describe('convertKind names an open answer\'s settings when it drops them (review finding)', () => {
+  test('a short answer, a custom limit and themes off are named', () => {
+    const { loses } = convertKind({ kind: 'text', textLength: 'short', maxLength: 140, placeholder: '', themes: false }, 'rating');
+    expect(loses).toEqual(['a short answer', 'the 140-character limit', 'leaving it out of Workie’s themes']);
+  });
+  test('a default open answer still switches without asking', () => {
+    expect(convertKind({ kind: 'text', textLength: 'long', maxLength: 500, placeholder: '', themes: true }, 'yesno').loses).toEqual([]);
+    expect(convertKind({ kind: 'text', textLength: 'short', maxLength: 280, themes: true }, 'yesno').loses).toEqual(['a short answer']);
+  });
+});

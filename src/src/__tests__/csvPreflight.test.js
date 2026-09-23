@@ -468,3 +468,12 @@ describe('survey preflight agrees with the importer (integration of surveys phas
     expect(report.skipped.map((s) => s.problem).join(' ')).toMatch(/can't allow 9 picks from 3 options/);
   });
 });
+
+describe('survey scale spellings the importer accepts (review finding)', () => {
+  // The importer's foldScale reads "1–5" (the en dash the product prints) and
+  // "1 - 5"; a preflight that only lower-cases warned about rows that import.
+  test.each(['1–5', '1 - 5', '0–10', 'Stars'])('scale %s is not flagged', (scale) => {
+    const csv = `Category,Title,Kind,Scale\n"Survey","Q","rating","${scale}"\n`;
+    expect(preflight(csv, 'survey').skipped).toEqual([]);
+  });
+});

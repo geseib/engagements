@@ -158,7 +158,10 @@ function surveyRowProblems(row, columns) {
   } else if (kind === 'rating') {
     // A legacy `nps` row IS a 0–10 rating; its Scale cell is not read.
     const scale = get('Scale');
-    if (folded !== 'nps' && scale && !SCALES.includes(scale.toLowerCase())) {
+    // Folded as the importer's foldScale does: case, spaces, and the en dash
+    // the product prints ("1–5").
+    const scaleKey = scale.toLowerCase().replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, '');
+    if (folded !== 'nps' && scale && !SCALES.includes(scaleKey)) {
       problems.push(`unknown scale '${scale}'`);
     }
   } else if (kind === 'yesno') {

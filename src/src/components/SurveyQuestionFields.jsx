@@ -80,7 +80,7 @@ export function SurveyAddMenu({ onAdd, onPull, disabled = false, title }) {
     ...SURVEY_KINDS.map((k) => ({ key: k.id, icon: k.icon, label: k.label, blurb: k.blurb, pick: () => onAdd(k.id) })),
     ...(onPull ? [{
       key: 'pull', icon: 'Books', label: 'From another set',
-      blurb: 'Copy questions from a survey or poll you already have.', pick: onPull, rule: true,
+      blurb: 'Copy questions from another survey you already have.', pick: onPull, rule: true,
     }] : []),
   ];
 
@@ -524,7 +524,10 @@ export default function SurveyQuestionFields({ draft, onChange, idOf, phonePrevi
               <button
                 type="button"
                 className="btn-danger btn-small"
-                onClick={() => { onChange(pendingSwitch.row); setPendingSwitch(null); }}
+                // Converted from the draft AS IT IS NOW, not as it was when the
+                // kind was clicked: the form stays editable while this strip is
+                // up, and a title typed in between must survive the switch.
+                onClick={() => { onChange(convertKind(draft, pendingSwitch.kind).row); setPendingSwitch(null); }}
               >
                 Switch and lose {pendingSwitch.loses.length === 1 ? 'it' : 'them'}
               </button>

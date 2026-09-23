@@ -382,6 +382,22 @@ describe('when there is no set yet (an older job, or a creation that failed)', (
     expect(screen.getByText(/2 kept · about 1 minute\b/)).toBeInTheDocument();
   });
 
+  // rejects: saving a kept row the review cannot fill in — a rating switched
+  // to multiple choice has blank options the table cannot edit, and the
+  // importer would skip it (review finding, 2026-09-23).
+  test('Save waits while a kept question could not be imported, and says why', async () => {
+    await review(jobPayload());
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind of question 1' }), { target: { value: 'choice' } });
+    const save = screen.getByRole('button', { name: /as a draft survey/ });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute('title', expect.stringMatching(/leave it out|leave them out/i));
+
+    const first = within(screen.getByRole('table')).getAllByRole('row')[1];
+    fireEvent.click(within(first).getByRole('button', { name: /Leave out/ }));
+    expect(screen.getByRole('button', { name: /as a draft survey/ })).toBeEnabled();
+  });
+
   test('saving hands over the kept questions, converted, with the set copy', async () => {
     // rejects: `{ survey, metadata }` for a Blob download. The page now makes
     // a draft set from `{ questions, metadata }`, as it does for trivia.

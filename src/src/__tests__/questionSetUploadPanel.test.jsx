@@ -493,6 +493,10 @@ describe('a survey has four ways in (mockup 01)', () => {
       .find((r) => r.querySelector('.qsets-route-nm').textContent === 'A file');
     expect(fileRoute.textContent).toMatch(/Kind column/);
     expect(fileRoute.textContent).toMatch(/JSON/);
+    // rejects: "the JSON a survey exports" — surveys download as CSV now; the
+    // JSON accepted is what the OLD builder exported (review finding).
+    expect(fileRoute.textContent).toMatch(/JSON the old survey builder exported/);
+    expect(fileRoute.textContent).not.toMatch(/JSON a survey exports/);
     fireEvent.click(within(fileRoute).getByRole('button', { name: /Download the template/i }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('survey-template.csv downloaded.'));
     const [url] = authFetch.mock.calls.find(([u]) => u.includes('download-template'));

@@ -280,6 +280,10 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   };
 
   const keptItems = items.filter((_, index) => !excluded.has(index));
+  // A kept question the importer would skip — a kind switched here to one
+  // whose list this table cannot fill — must not reach Save: the set would be
+  // made without it and only a skipped-row count would say so.
+  const keptFlagged = keptItems.filter((item) => surveyItemProblem(item)).length;
 
   /** The kept questions as the contract CSV — rowsToCsv's survey branch. */
   const handleDownloadCsv = () => {
@@ -573,7 +577,10 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                             type="button"
                             className="btn-primary"
                             onClick={handleSaveDraft}
-                            disabled={keptItems.length === 0}
+                            disabled={keptItems.length === 0 || keptFlagged > 0}
+                            title={keptFlagged > 0
+                              ? `${keptFlagged === 1 ? 'One question' : `${keptFlagged} questions`} could not be imported as ${keptFlagged === 1 ? 'it stands' : 'they stand'} — switch ${keptFlagged === 1 ? 'it' : 'them'} back, or leave ${keptFlagged === 1 ? 'it' : 'them'} out.`
+                              : undefined}
                           >
                             Save {keptItems.length} as a draft survey
                           </button>

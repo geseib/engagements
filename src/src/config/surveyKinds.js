@@ -143,9 +143,17 @@ function whatIsLost(row, toKind) {
       if (!keepsList && filledOptions(row).length) lost.push(`${filledOptions(row).length} items`);
       if (row.rankTop) lost.push(`ranking the top ${row.rankTop}`);
       break;
-    case 'text':
+    case 'text': {
+      // Only what differs from the defaults is named: a default open answer
+      // (long, 500, themes on, no placeholder) switches without asking.
+      const length = row.textLength || 'long';
+      if (length === 'short') lost.push('a short answer');
+      const defaultLimit = length === 'short' ? 280 : 500;
+      if (row.maxLength && Number(row.maxLength) !== defaultLimit) lost.push(`the ${row.maxLength}-character limit`);
+      if (row.themes === false) lost.push('leaving it out of Workie’s themes');
       if (text(row.placeholder)) lost.push(`the placeholder “${text(row.placeholder)}”`);
       break;
+    }
     default:
       break;
   }

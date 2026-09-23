@@ -316,7 +316,10 @@ export default function QuestionsPanel({
   // With nothing to show, the reason is the preview's own empty line: a set
   // with no questions and a set whose every question is marked for removal are
   // different situations with different ways back (config/questionPreview.js).
-  const previewBlocked = loadState === 'loading' && rows.length === 0 ? 'The questions are still loading.'
+  // A survey's preview is the player's survey inputs, which arrive with
+  // running surveys (phase 2); a title-only card would misrepresent every kind.
+  const previewBlocked = isSurvey ? 'A survey preview arrives with running surveys — the phone’s answer screens are the next step.'
+    : loadState === 'loading' && rows.length === 0 ? 'The questions are still loading.'
     : loadState === 'error' ? 'The questions could not be loaded, so there is nothing to preview.'
       : nothingToPreview(rows);
   const previewing = viewMode === 'preview' && !previewBlocked;
