@@ -76,6 +76,93 @@ let uidCounter = 0;
 /** Stable local key for React. Never written anywhere and never sent. */
 const nextUid = () => `row-${(uidCounter += 1)}`;
 
+/* ------------------------------------------------------------- surveys --- */
+/*
+ * THE SURVEY BRANCH OF THE CONTRACT — docs/design/survey-redesign/
+ * IMPLEMENTATION-phase-0-1.md, "THE CONTRACT". The server's half is
+ * lambda-functions/admin/shared/survey-kinds.js and download-question-set.js;
+ * the words a person reads about a kind live in config/surveyKinds.js.
+ *
+ * THE DEFAULTS ARE WRITTEN DOWN TWICE. config/surveyKinds.js is ESM and this
+ * file is CommonJS (see the header), so `defaultsFor` cannot be imported here.
+ * __tests__/questionRowsSurvey.test.js holds `blankRow({ kind })` equal to
+ * `defaultsFor(kind)` field by field, so the two copies cannot drift apart.
+ */
+const SURVEY_KIND_IDS = ['rating', 'choice', 'yesno', 'rank', 'text'];
+const SURVEY_CATEGORY = 'Survey';
+const SURVEY_SCALES = ['1-5', '1-10', '0-10', 'stars'];
+const SURVEY_FOLLOW_UPS = ['', 'yes', 'no', 'any'];
+const SURVEY_LENGTHS = ['short', 'long'];
+
+/** A new question's fields, per kind. The editor's list rows start with blank
+ *  slots to type into; blank slots are never written (`filledOptions`). */
+const SURVEY_DEFAULTS = {
+  rating: { kind: 'rating', required: false, scale: '1-5', lowLabel: '', highLabel: '' },
+  choice: {
+    kind: 'choice', required: false, options: ['', ''], allowMultiple: false, maxPicks: null, allowOther: false, shuffle: false,
+  },
+  yesno: {
+    kind: 'yesno', required: false, yesLabel: '', noLabel: '', unsure: false, followUpWhen: '', followUpPrompt: '',
+  },
+  rank: { kind: 'rank', required: false, options: ['', '', ''], rankTop: null },
+  text: { kind: 'text', required: false, textLength: 'long', maxLength: 500, placeholder: '', themes: true },
+};
+
+/** A fresh copy of a kind's defaults — never the shared table's own arrays. */
+const surveyDefaults = (kind) => {
+  const defaults = SURVEY_DEFAULTS[kind];
+  if (!defaults) return { kind };
+  return defaults.options ? { ...defaults, options: [...defaults.options] } : { ...defaults };
+};
+
+/** A DynamoDB boolean, or the "true" a CSV cell carries. */
+const toBool = (value) => value === true || text(value).toLowerCase() === 'true';
+
+/** An integer or null. '' and absent are null — "not set", which is not zero. */
+const toIntOrNull = (value) => {
+  if (value === undefined || value === null || text(value) === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** The options a person actually filled in — the list rows' blank slots are not options. */
+const filledOptions = (row) => (Array.isArray(row.options) ? row.options.map(text).filter(Boolean) : []);
+
+/** An open answer's limit when none is set: the contract's 500 long, 280 short. */
+const defaultMaxLength = (textLength) => (textLength === 'short' ? 280 : 500);
+
+/**
+ * Every survey field, read off a stored question. A field relevant to the
+ * row's kind and left empty reads as the contract's default; a field the kind
+ * does not use is not stored and reads back as its empty value.
+ */
+function surveyFields(q) {
+  const kind = text(pick(q, 'kind', 'Kind'));
+  const textLength = text(pick(q, 'textLength', 'TextLength')) || (kind === 'text' ? 'long' : '');
+  const maxLength = toIntOrNull(pick(q, 'maxLength', 'MaxLength'));
+  const themes = pick(q, 'themes', 'Themes');
+  return {
+    kind,
+    required: toBool(pick(q, 'required', 'Required')),
+    maxPicks: toIntOrNull(pick(q, 'maxPicks', 'MaxPicks')),
+    allowOther: toBool(pick(q, 'allowOther', 'AllowOther')),
+    shuffle: toBool(pick(q, 'shuffle', 'Shuffle')),
+    scale: text(pick(q, 'scale', 'Scale')) || (kind === 'rating' ? '1-5' : ''),
+    lowLabel: text(pick(q, 'lowLabel', 'LowLabel')),
+    highLabel: text(pick(q, 'highLabel', 'HighLabel')),
+    yesLabel: text(pick(q, 'yesLabel', 'YesLabel')),
+    noLabel: text(pick(q, 'noLabel', 'NoLabel')),
+    unsure: toBool(pick(q, 'unsure', 'Unsure')),
+    followUpWhen: text(pick(q, 'followUpWhen', 'FollowUpWhen')),
+    followUpPrompt: text(pick(q, 'followUpPrompt', 'FollowUpPrompt')),
+    rankTop: toIntOrNull(pick(q, 'rankTop', 'RankTop')),
+    textLength,
+    maxLength: maxLength === null && kind === 'text' ? defaultMaxLength(textLength) : maxLength,
+    placeholder: text(pick(q, 'placeholder', 'Placeholder')),
+    themes: kind === 'text' ? (themes === undefined ? true : toBool(themes)) : false,
+  };
+}
+
 /**
  * One question from `GET /question-sets/{setId}/questions` as an editable row.
  *
@@ -120,9 +207,14 @@ function toRow(question, extra = {}) {
     optionF: text(pick(q, 'optionF', 'OptionF')),
     correctAnswer: text(pick(q, 'correctAnswer', 'CorrectAnswer')),
     difficulty: text(pick(q, 'difficulty', 'Difficulty')),
+    // Poll and survey (choice, rank) both keep their list here.
     options: toTagList(pick(q, 'options', 'Options')),
     allowMultiple: pick(q, 'allowMultiple', 'AllowMultiple') === true
       || text(pick(q, 'allowMultiple', 'AllowMultiple')).toLowerCase() === 'true',
+    // A survey question's kind and the kind's settings. On every row, so a row
+    // has one shape whatever set it is in; a trivia or poll row reads them all
+    // as empty and no serialiser but the survey branch writes any of them.
+    ...surveyFields(q),
     ...extra,
   };
 }
@@ -146,9 +238,17 @@ function editableRows(payload) {
     .sort((a, b) => a.sk.localeCompare(b.sk));
 }
 
-/** A brand-new, empty question. Category and Title are what make it importable. */
+/**
+ * A brand-new, empty question. Category and Title are what make it importable.
+ *
+ * Given a `kind`, it is a SURVEY question: filed under `Survey` (surveys expose
+ * no categories, and the importer's category bitmask needs one) and carrying
+ * that kind's defaults.
+ */
 function blankRow(overrides = {}) {
-  return toRow({}, { origin: 'new', ...overrides });
+  const kind = overrides.kind;
+  const survey = kind ? { category: SURVEY_CATEGORY, ...surveyDefaults(kind) } : {};
+  return toRow({}, { origin: 'new', ...survey, ...overrides });
 }
 
 /**
@@ -203,6 +303,58 @@ function rowProblems(row, engagementType) {
   }
   if (engagementType === 'poll' && (row.options || []).length < 2) {
     problems.push('needs at least two options');
+  }
+  if (engagementType === 'survey') problems.push(...surveyProblems(row));
+  return problems;
+}
+
+/**
+ * What would make the importer skip a survey row, IN THE IMPORTER'S WORDS —
+ * the contract's skip reasons, so what the editor refuses and what an upload
+ * would report are one sentence, not two.
+ *
+ * A relevant field left empty is its default (a blank scale is 1–5), and blank
+ * list slots are not options: the form starts a list with slots to type into.
+ */
+function surveyProblems(row) {
+  const kind = text(row.kind);
+  if (!kind) return ['needs a kind'];
+  if (!SURVEY_KIND_IDS.includes(kind)) return [`unknown kind '${kind}'`];
+  const problems = [];
+  const count = filledOptions(row).length;
+  const isInt = (n) => Number.isInteger(Number(n));
+  if (kind === 'choice') {
+    if (count < 2) problems.push('needs at least two options');
+    if (count > 8) problems.push('has more than eight options');
+    // A pick limit only means anything once several picks are allowed.
+    const picks = row.allowMultiple === true ? toIntOrNull(row.maxPicks) : null;
+    if (picks !== null && (!isInt(picks) || picks < 2 || picks > count)) {
+      problems.push(`can't allow ${picks} picks from ${count} options`);
+    }
+  }
+  if (kind === 'rank') {
+    if (count < 3) problems.push('needs at least three items');
+    if (count > 7) problems.push('has more than seven items');
+    const top = toIntOrNull(row.rankTop);
+    if (top !== null && (!isInt(top) || top < 1 || top > count - 1)) {
+      problems.push(`can't rank the top ${top} of ${count}`);
+    }
+  }
+  if (kind === 'rating') {
+    const scale = text(row.scale) || '1-5';
+    if (!SURVEY_SCALES.includes(scale)) problems.push(`unknown scale '${scale}'`);
+  }
+  if (kind === 'yesno') {
+    const when = text(row.followUpWhen);
+    if (!SURVEY_FOLLOW_UPS.includes(when)) problems.push(`unknown follow-up '${when}'`);
+    else if (when && !text(row.followUpPrompt)) problems.push('needs the follow-up question');
+  }
+  if (kind === 'text') {
+    const length = text(row.textLength) || 'long';
+    if (!SURVEY_LENGTHS.includes(length)) problems.push(`unknown length '${length}'`);
+    const limit = toIntOrNull(row.maxLength);
+    const max = limit === null ? defaultMaxLength(length) : limit;
+    if (!isInt(max) || max < 20 || max > 2000) problems.push('answer limit must be 20–2000 characters');
   }
   return problems;
 }
@@ -276,6 +428,60 @@ function moveRow(rows, uid, delta) {
 
 const esc = (v) => String(v ?? '').replace(/"/g, '""');
 const quoted = (v) => `"${esc(v)}"`;
+
+/** The survey branch's twenty columns, Kind to Themes, in the contract's order. */
+const SURVEY_CSV_COLUMNS = [
+  'Kind', 'Required', 'Options', 'AllowMultiple', 'MaxPicks', 'AllowOther', 'Shuffle',
+  'Scale', 'LowLabel', 'HighLabel', 'YesLabel', 'NoLabel', 'Unsure', 'FollowUpWhen',
+  'FollowUpPrompt', 'RankTop', 'TextLength', 'MaxLength', 'Placeholder', 'Themes',
+];
+
+/**
+ * One survey row's twenty cells, every one quoted as the poll branch quotes.
+ *
+ * WRITTEN BY RELEVANCE, NOT BY WHAT THE ROW HAPPENS TO CARRY. The server stores
+ * only the fields relevant to a row's kind and writes the rest as empty — ''
+ * for a string, "false" for a boolean, "" for an integer — so this does too,
+ * whatever a working-copy row has left over from a kind it used to be. Two
+ * fields are relevant only conditionally, exactly as the contract's field
+ * table says: MaxPicks only once several picks are allowed, FollowUpPrompt only
+ * once there is a follow-up. A relevant field left empty is written as its
+ * default (a 1–5 scale, a long answer of up to 500).
+ */
+function surveyCsvCells(r) {
+  const kind = text(r.kind);
+  const is = (...kinds) => kinds.includes(kind);
+  const str = (relevant, value) => quoted(relevant ? value : '');
+  const bool = (relevant, value) => `"${relevant && value === true}"`;
+  const int = (relevant, value) => {
+    const n = relevant ? toIntOrNull(value) : null;
+    return `"${n === null ? '' : n}"`;
+  };
+  const length = text(r.textLength) || 'long';
+  const limit = toIntOrNull(r.maxLength);
+  return [
+    quoted(kind),
+    bool(true, r.required),
+    str(is('choice', 'rank'), filledOptions(r).join('|')),
+    bool(is('choice'), r.allowMultiple),
+    int(is('choice') && r.allowMultiple === true, r.maxPicks),
+    bool(is('choice'), r.allowOther),
+    bool(is('choice'), r.shuffle),
+    str(is('rating'), text(r.scale) || '1-5'),
+    str(is('rating'), r.lowLabel),
+    str(is('rating'), r.highLabel),
+    str(is('yesno'), r.yesLabel),
+    str(is('yesno'), r.noLabel),
+    bool(is('yesno'), r.unsure),
+    str(is('yesno'), r.followUpWhen),
+    str(is('yesno') && text(r.followUpWhen) !== '', r.followUpPrompt),
+    int(is('rank'), r.rankTop),
+    str(is('text'), length),
+    int(is('text'), limit === null ? defaultMaxLength(length) : limit),
+    str(is('text'), r.placeholder),
+    `"${is('text') && r.themes !== false}"`,
+  ];
+}
 
 /**
  * Serialise the working copy as the CSV `upload-questions.js` reads.
@@ -353,6 +559,14 @@ function rowsToCsv(rows, engagementType, options = {}) {
       + optionalHeader + ',Tags';
     body = live.map((r) => common(r)
       + `,${quoted((r.options || []).join('|'))},"${r.allowMultiple === true}"`
+      + optionalCells(r)
+      + `,"${tagsOf(r)}"`);
+  } else if (engagementType === 'survey') {
+    header = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,'
+      + SURVEY_CSV_COLUMNS.join(',')
+      + optionalHeader + ',Tags';
+    body = live.map((r) => common(r)
+      + surveyCsvCells(r).map((cell) => `,${cell}`).join('')
       + optionalCells(r)
       + `,"${tagsOf(r)}"`);
   } else {
