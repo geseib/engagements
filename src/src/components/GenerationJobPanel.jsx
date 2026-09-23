@@ -48,11 +48,10 @@ export default function GenerationJobPanel({
    * Does THIS builder's worker create the question set itself?
    *
    * Default false, and the default is the honest one. The whole-set generators
-   * (scenarios, trivia, polls) create an inactive draft set before the job goes
-   * terminal, so "Close — this keeps running" now produces something to come
-   * back to. The survey builder's worker creates nothing — survey is not a
-   * playable type and upload-questions.js refuses it — so it must not be handed
-   * this promise. A panel that says "and it makes the set for you" over a
+   * (scenarios, trivia, polls, and since surveys phase 1 surveys) create an
+   * inactive draft set before the job goes terminal, so "Close — this keeps
+   * running" produces something to come back to. A builder whose worker does
+   * NOT create a set must not be handed this promise. A panel that says "and it makes the set for you" over a
    * builder that does not is the exact defect this whole change repairs, in a
    * new coat.
    */

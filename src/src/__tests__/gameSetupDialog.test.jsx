@@ -76,9 +76,9 @@ describe('the format picker', () => {
     expect(pill('Poll')).toBeInTheDocument();
   });
 
-  // rejects: building the mockup's five pills as drawn. upload-questions.js:146-157
-  // rejects survey uploads outright, so no survey set can exist, so the pill
-  // would open onto an empty list with Create permanently disabled.
+  // rejects: building the mockup's five pills as drawn. Survey sets can be made
+  // since surveys phase 1, but no session plays one until phase 2, so the pill
+  // would open onto sets nothing can run.
   test('does not offer Survey', () => {
     setup();
     expect(screen.queryByRole('button', { name: 'Survey' })).toBeNull();
