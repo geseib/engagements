@@ -52,7 +52,7 @@ import {
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
-import { fetchComments } from './utils/commentsClient';
+import { fetchComments, featureComment } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
@@ -397,6 +397,9 @@ function GameHostPage() {
   // below five responses with no override — dead for a whole session in a room
   // of four, which is the room the owner runs.
   const [nameWaitingWhenAnonymous, setNameWaitingWhenAnonymous] = useState(true);
+  // Whether a FEEDBACK round's comments arrive on the wall (RoomMeter's
+  // arrivals) or only their count does. Per-game like the setting above it.
+  const [wallComments, setWallComments] = useState(true);
 
   // AUTO-MODE — the session advances itself when everyone has responded,
   // dwelling on each page of responses and Workie prose first. The decisions
@@ -775,6 +778,28 @@ function GameHostPage() {
   loadRoundCommentsRef.current = loadRoundComments;
 
   /*
+    THE HOST PUTS ONE COMMENT ON THE WALL — a press on an arrival in the meter.
+    Pressing the one already up takes it down. Optimistic: the meter and the
+    stage move at once and the socket's `commentFeatured` refetch confirms;
+    on failure the rows are re-read rather than guessed at.
+  */
+  const handleFeatureComment = async (commentId) => {
+    const target = roundComments.find((c) => c.commentId === commentId);
+    if (!target || !gameId) return;
+    const round = String(target.questionNumber || parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0');
+    const next = !target.featured;
+    setRoundComments((list) => list.map((c) => (
+      c.commentId === commentId
+        ? { ...c, featured: next, featuredAt: new Date().toISOString() }
+        : (next ? { ...c, featured: false } : c)
+    )));
+    const result = await featureComment({
+      fetchFn: authFetch, apiBase: API_BASE, gameId, commentId, questionNumber: round, featured: next,
+    });
+    if (!result.ok) loadRoundCommentsRef.current();
+  };
+
+  /*
     A RELOAD RECOVERS THE COUNT, NOT JUST THE STAGE.
 
     `resultsBeat` restoring to 'feedback' on reload (`serverStageBeatRef`,
@@ -969,6 +994,7 @@ function GameHostPage() {
     lessonNumber: setLessonNumber,
     authorsRevealed: setAuthorsRevealed,
     nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
+    wallComments: setWallComments,
     autoMode: setAutoMode,
     players: setPlayers,
     removedPlayers: setRemovedPlayers,
@@ -1923,6 +1949,10 @@ Focus on actionable business strategy insights.`;
     webSocketClient.onMessage('commentPosted', () => {
       loadRoundCommentsRef.current();
     });
+    // The host featured or un-featured one; every screen re-reads the rows.
+    webSocketClient.onMessage('commentFeatured', () => {
+      loadRoundCommentsRef.current();
+    });
 
     webSocketClient.onMessage('aiSummaryReady', (data) => {
       console.log('🔌 AI Summary ready notification:', data);
@@ -2028,6 +2058,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
+      webSocketClient.offMessage('commentFeatured');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
@@ -5209,12 +5240,30 @@ Focus on actionable business strategy insights.`;
         body: <>{playersWhoVoted.length}<small>{` / ${players.length}`}</small></>,
       };
     }
+    if (hostPhase === 'FEEDBACK') {
+      // The comments so far — the same count the stage prints — with the
+      // arrivals beneath it (meterArrivals, below).
+      return { heading: 'Comments', body: String(roundComments.length) };
+    }
     // RESULTS, FIELD_NOTES and ENDED run solo. The mockup's standings column
     // is a list of names WITH A SCORE BESIDE EACH, which is the half of the
     // old rule that did not get retired — see RoomMeter.jsx's doc-block and
     // standingsVisible().
     return null;
   })();
+
+  /*
+    WHAT ARRIVES ON THE WALL in a FEEDBACK round — the round's comments, text
+    and anchor only, never the author (RoomMeter.jsx). Gated on the session
+    setting so a host who wants the old count-only wall keeps it. The
+    featured one is whichever the host pressed last.
+  */
+  const featuredComment = hostPhase === 'FEEDBACK'
+    ? roundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
+    : null;
+  const meterArrivals = hostPhase === 'FEEDBACK' && wallComments !== false
+    ? { items: roundComments, onPick: handleFeatureComment, featuredId: featuredComment ? featuredComment.commentId : null }
+    : null;
 
   /**
    * WHO THE METER MAY NAME — and it is a DIFFERENT SET IN THE LOBBY.
@@ -5567,7 +5616,7 @@ Focus on actionable business strategy insights.`;
           ? (
             <RoomMeter
               phase={hostPhase} heading={meter.heading} body={meter.body}
-              complete={everybodyIn} waiting={meterWaiting}
+              complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
             />
           )
           : null}
@@ -6224,6 +6273,21 @@ Focus on actionable business strategy insights.`;
                       : `${roundComments.length} comments so far.`}
                   </p>
                 )}
+
+                {/* THE ONE THE HOST PUT UP. The ruling above is reversed by
+                    the owner on 2026-09-22 for the text the host CHOOSES: the
+                    arrivals in the meter are unattributed; this one carries
+                    its author, who was told on their phone that their name
+                    would be shown with the comment. */}
+                {featuredComment && (
+                  <blockquote className="featured" data-drop="4" data-drop-note="The featured comment">
+                    <p className="say">{featuredComment.text}</p>
+                    <footer>
+                      {featuredComment.playerName && <span className="who">{featuredComment.playerName}</span>}
+                      {featuredComment.anchorLabel && <span className="on">{`on ${featuredComment.anchorLabel}`}</span>}
+                    </footer>
+                  </blockquote>
+                )}
               </>
             )}
 
@@ -6381,6 +6445,8 @@ Focus on actionable business strategy insights.`;
           onAnonymousUntilRevealChange={setAnonymousUntilReveal}
           nameWaitingWhenAnonymous={nameWaitingWhenAnonymous}
           onNameWaitingChange={setNameWaitingWhenAnonymous}
+          wallComments={wallComments}
+          onWallCommentsChange={setWallComments}
           autoMode={autoMode}
           onAutoModeChange={setAutoMode}
           answerCount={answers.length}

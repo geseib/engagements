@@ -3092,6 +3092,17 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/comments
             Method: GET
+        # The host puts one comment on the wall. The one route on this
+        # function that is NOT public: Cognito here, and callerMayDriveSession
+        # on the session's own org inside the handler (comments.js).
+        FeatureCommentEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/comments/{commentId}/feature
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
         # The one round a participant is being asked to comment on: the round
         # actually on the `feedback` beat, its report slice and its comments,
         # and nothing else. Public, and deliberately NOT `GET /report?role=host`

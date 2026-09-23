@@ -291,3 +291,14 @@ describe('showing the comments', () => {
     expect(container.querySelector('.rr-c__excerpt')).toBeNull();
   });
 });
+
+describe('a comment the host put on the wall', () => {
+  test('is marked "Shown to the room" in the round report too', () => {
+    const comments = [{ ...COMMENTS[1], featured: true }, COMMENTS[2]];
+    const { container } = render(<RoundReport round={aRound()} comments={comments} />);
+    const marks = [...container.querySelectorAll('.rr-c__item .rr-c__featured')];
+    expect(marks).toHaveLength(1);
+    expect(marks[0].textContent).toBe('Shown to the room');
+    expect(marks[0].closest('.rr-c__item').textContent).toContain(COMMENTS[1].text);
+  });
+});

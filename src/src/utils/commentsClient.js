@@ -148,3 +148,36 @@ export async function fetchComments({ fetchFn = fetch, apiBase, gameId, question
     return { ok: false, comments: [], error: 'The comments could not be read.' };
   }
 }
+
+/**
+ * THE HOST PUTS ONE COMMENT ON THE WALL — or takes it down.
+ *
+ * The fourth call, and the one that is NOT public: `POST …/comments/{id}/feature`
+ * sits behind the Cognito authorizer, so the host page hands in `authFetch` as
+ * `fetchFn`. This helper does not reach for it itself, for the same reason the
+ * three calls above never do — the file must stay importable by the phone.
+ */
+export async function featureComment({
+  fetchFn = fetch, apiBase, gameId, commentId, questionNumber, featured,
+}) {
+  let response;
+  try {
+    response = await fetchFn(
+      `${apiBase}games/${encodeURIComponent(gameId)}/comments/${encodeURIComponent(commentId)}/feature`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionNumber, featured }),
+      },
+    );
+  } catch (e) {
+    return { ok: false, comment: null, error: e?.message || 'That did not reach the server.' };
+  }
+  if (!response.ok) return { ok: false, comment: null, error: await describeFailure(response) };
+  try {
+    const body = await response.json();
+    return { ok: true, comment: body.comment || null, error: null };
+  } catch {
+    return { ok: true, comment: null, error: null };
+  }
+}

@@ -7,7 +7,7 @@
  * words and show the reason, which it cannot do from inside a catch it did not
  * write.
  */
-import { postComment, fetchFeedbackRound, fetchComments } from '../utils/commentsClient';
+import { postComment, fetchFeedbackRound, fetchComments, featureComment } from '../utils/commentsClient';
 
 const API = 'https://api.test/dev/';
 
@@ -151,5 +151,27 @@ describe('fetchComments', () => {
     const res = await fetchComments({ fetchFn, apiBase: API, gameId: '4821' });
     expect(res.ok).toBe(false);
     expect(res.comments).toEqual([]);
+  });
+});
+
+describe('featureComment', () => {
+  test('posts the host\'s decision to the comment\'s own route, through the fetch it is given', async () => {
+    // The route is the host's (Cognito), so the caller hands in authFetch —
+    // this helper never reaches for it itself, for the same reason the three
+    // public calls never do.
+    const fetchFn = jest.fn().mockResolvedValue(ok({ comment: { commentId: 'c2', featured: true } }));
+    const result = await featureComment({ fetchFn, apiBase: API, gameId: '4821', commentId: 'c2', questionNumber: '003', featured: true });
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('https://api.test/dev/games/4821/comments/c2/feature');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ questionNumber: '003', featured: true });
+    expect(result).toEqual({ ok: true, comment: { commentId: 'c2', featured: true }, error: null });
+  });
+
+  test('a failure resolves with the server\'s reason', async () => {
+    const fetchFn = jest.fn().mockResolvedValue(ok({ error: 'Game not found' }, 404));
+    const result = await featureComment({ fetchFn, apiBase: API, gameId: '4821', commentId: 'c2', questionNumber: '003', featured: true });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Game not found');
   });
 });

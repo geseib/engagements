@@ -115,6 +115,7 @@ function CommentList({ comments, showAnchor = false }) {
               a position, exactly as `displayLabelFor` does for responses.
             */}
             <span className="rr-c__who">{comment.playerName || comment.name || `Comment ${i + 1}`}</span>
+            {comment.featured === true && <span className="rr-c__featured">Shown to the room</span>}
           </li>
         ))}
       </ol>

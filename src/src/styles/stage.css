@@ -652,6 +652,37 @@ body, .stage-ladder-table{
 .qdetail.explain{animation:arrive .4s cubic-bezier(.16,1,.3,1) calc(var(--rv) + .9s) both}
 @keyframes arrive{from{opacity:0;transform:translateY(.5em)}to{opacity:1;transform:none}}
 
+/* ARRIVALS IN THE METER — refresh-2026-09-22 _src/refresh-stage.css :45-59.
+   A feedback round's comments as they land: the newest at full strength, the
+   two before it dimmer. Text and what it is about; never the author. Each is
+   a button the host presses to put it on the wall. */
+.meter.arrivals{max-width:clamp(300px, 31vw, 640px);gap:calc(1.1vh + 4px)}
+.meter.arrivals h5{margin:calc(.8vh + 4px) 0 0;font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase}
+.arrivals-list{display:flex;flex-direction:column;min-width:0}
+.arr{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  background:rgba(27,41,66,.74);border:var(--hair) solid var(--rule);border-radius:var(--radius);
+  padding:calc(.8vh + 5px) calc(.8vw + 9px);min-width:0;
+  animation:arrive .24s cubic-bezier(.16,1,.3,1) both}
+.arr + .arr{margin-top:calc(.6vh + 3px)}
+.arr .ans{font-size:var(--t-body);font-weight:600;line-height:1.22;color:var(--text);margin:0;
+  overflow-wrap:anywhere}
+.arr .n{display:block;margin-top:.25em;font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.arr.older{opacity:.7}
+.arr.oldest{opacity:.45}
+.arr[data-featured]{border-color:var(--primary);border-width:2px;opacity:1}
+
+/* THE FEATURED COMMENT on the wall: the quote at the primary tier, its author
+   and what it was about beneath. */
+.featured{margin:calc(1.5vh + 6px) 0 0;padding:calc(1.2vh + 6px) calc(1.4vw + 12px);
+  border-left:4px solid var(--primary);background:rgba(27,41,66,.55);border-radius:var(--radius);
+  max-width:var(--measure);animation:arrive .4s cubic-bezier(.16,1,.3,1) both}
+.featured .say{margin:0;font-family:var(--font-display);font-weight:800;line-height:1.08;
+  font-size:max(var(--floor),calc(var(--t-primary) * .9));color:var(--text);overflow-wrap:anywhere}
+.featured footer{display:flex;flex-wrap:wrap;gap:.3em .9em;margin-top:.5em;font-size:var(--t-meta);font-weight:700}
+.featured .who{color:var(--primary);letter-spacing:.06em;text-transform:uppercase}
+.featured .on{color:var(--muted)}
+
 @media (prefers-reduced-motion:reduce){
   .wipe{animation:none;display:none}
   .bar{transition:none}
@@ -659,6 +690,8 @@ body, .stage-ladder-table{
   .opt.correct{animation:none}
   .opt .flag{animation:none}
   .qdetail.explain{animation:none}
+  .arr{animation:none}
+  .featured{animation:none}
 }
 
 /* answer cards — three per page, full width, four readable lines each */

@@ -653,6 +653,10 @@ function ReportDocument({ reportData }) {
                         <span className="comment-author">
                           {comment.playerName || `Comment ${cIdx + 1}`}
                         </span>
+                        {/* The host put it on the wall during the round. */}
+                        {comment.featured === true && (
+                          <span className="comment-featured">Shown to the room</span>
+                        )}
                       </div>
                     </div>
                   ))}

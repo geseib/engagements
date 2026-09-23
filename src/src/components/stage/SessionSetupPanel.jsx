@@ -170,6 +170,10 @@ export default function SessionSetupPanel({
   onAnonymousUntilRevealChange = () => {},
   nameWaitingWhenAnonymous = true,
   onNameWaitingChange = () => {},
+  // Whether a feedback round's comments arrive on the wall (text and what
+  // they are about, never the author) or only their count does.
+  wallComments = true,
+  onWallCommentsChange = () => {},
   /* AUTO-MODE — the session advances itself when everyone has responded,
      paging through responses and Workie prose at reading pace first. The
      decisions live in config/autoMode.js and the timer in GameHostPage; this
@@ -952,6 +956,22 @@ export default function SessionSetupPanel({
                   )}
                 </>
               )}
+
+              <h3 className="setup-h">Feedback</h3>
+              <label className="setup-toggle">
+                <input
+                  type="checkbox"
+                  data-testid="wall-comments"
+                  checked={wallComments !== false}
+                  onChange={(e) => onWallCommentsChange(e.target.checked)}
+                />
+                <span>Show comments on the wall as they arrive</span>
+              </label>
+              <p className="setup-note">
+                In a feedback round the room meter shows the latest comments — what
+                they say and what they are about, never who wrote them. Press one to
+                put it up for everyone with its author. Off, the wall shows only the count.
+              </p>
 
               {/* PACE, between Names and Display: it changes what the room
                   experiences, not what a colleague can be identified by, so it

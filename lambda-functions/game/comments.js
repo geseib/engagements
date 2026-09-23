@@ -96,7 +96,7 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
-  DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand,
+  DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const crypto = require('crypto');
@@ -107,6 +107,7 @@ const {
 } = require('./comment-keys');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { isHidden, redactAnswers } = require('./anonymity');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -201,6 +202,11 @@ function toWire(row) {
     playerName: row.playerName,
     name: row.name,
     submittedAt: row.SubmittedAt,
+    // The host put it on the wall (featureComment below). A boolean on the
+    // wire even when the row has none, so a reader never has to tell "not
+    // featured" from "written before featuring existed".
+    featured: row.Featured === true,
+    featuredAt: row.FeaturedAt || null,
   };
 }
 
@@ -522,6 +528,84 @@ async function readFeedbackRound(gameId) {
   });
 }
 
+// ─────────────────────────────────── POST /comments/{commentId}/feature ────
+
+/**
+ * THE HOST PUTS ONE COMMENT ON THE WALL.
+ *
+ * The owner (2026-09-22): after results, "there needs to be a way to get that
+ * info up on the screen … click on those would allow everyone to see them.
+ * this feedback needs to be captured for the reports as well." The stage's
+ * earlier ruling — no text on the wall — is reversed for the text the host
+ * CHOOSES; the arrivals list on the stage stays unattributed and only the
+ * featured one carries its author, who was told on their phone that their
+ * name would be shown with the comment.
+ *
+ * THIS ROUTE IS NOT PUBLIC — the one route in this file that is not. Cognito
+ * in front (template-clean.yaml) and `callerMayDriveSession` on the session's
+ * own org behind it, the same pair stage-beat.js pays and for the same reason:
+ * the id space is 9,000 four-digit codes, and "feature" is a write against
+ * somebody's room. 404, not 403, on a caller who is not this session's host —
+ * the same shape as the beat, so an outsider learns nothing from the status.
+ *
+ * UPDATE, never PUT: the prose stays exactly as it was written and encrypted;
+ * only `Featured`/`FeaturedAt` change. The row is found by its round prefix
+ * and the id at the end of its key, because the anchor segments between the
+ * two are not in the request and must not be trusted from it.
+ */
+async function featureComment(event, gameId, commentId, body) {
+  const questionNumber = body && body.questionNumber;
+  if (questionNumber === undefined || questionNumber === null || questionNumber === '') {
+    return respond(400, { error: 'questionNumber is required' });
+  }
+  if (!/^\d+$/.test(String(questionNumber).trim())) {
+    return respond(400, { error: 'questionNumber must be numeric' });
+  }
+  if (typeof body.featured !== 'boolean') {
+    return respond(400, { error: 'featured must be a boolean' });
+  }
+  const padded = String(questionNumber).trim().padStart(3, '0');
+
+  const { meta } = await readSession(gameId);
+  if (!meta) return respond(404, { error: 'Game not found' });
+  // No identity at all is a phone. A phone cannot feature.
+  const claims = event?.requestContext?.authorizer?.jwt?.claims || event?.requestContext?.authorizer?.lambda;
+  if (!claims || !callerMayDriveSession(event, meta)) {
+    return respond(404, { error: 'Game not found' });
+  }
+
+  const res = await db.send(new QueryCommand({
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': commentPrefix({ questionNumber: padded }) },
+  }));
+  const row = (res.Items || []).find((item) => (parseCommentSk(item.SK) || {}).commentId === String(commentId));
+  if (!row) return respond(404, { error: 'Comment not found' });
+
+  const now = new Date().toISOString();
+  const updated = await db.send(new UpdateCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: row.PK, SK: row.SK },
+    UpdateExpression: 'SET #featured = :featured, #featuredAt = :at',
+    ExpressionAttributeNames: { '#featured': 'Featured', '#featuredAt': 'FeaturedAt' },
+    ExpressionAttributeValues: { ':featured': body.featured, ':at': now },
+    ReturnValues: 'ALL_NEW',
+  }));
+
+  await broadcastToGame(gameId, {
+    type: 'commentFeatured',
+    gameId,
+    questionNumber: padded,
+    commentId: String(commentId),
+    featured: body.featured,
+    timestamp: now,
+  });
+
+  const orgId = orgOf(meta);
+  const plain = orgId ? await decryptItem(orgId, 'comment', updated.Attributes || row) : (updated.Attributes || row);
+  return respond(200, { status: 'OK', gameId, questionNumber: padded, comment: toWire(plain) });
+}
+
 // ───────────────────────────────────────────────────────── handler ─────────
 
 exports.handler = async (event) => {
@@ -545,6 +629,10 @@ exports.handler = async (event) => {
       body = JSON.parse(event.body || '{}') || {};
     } catch {
       return respond(400, { error: 'Body must be JSON' });
+    }
+    const route = event.requestContext?.routeKey || event.routeKey || '';
+    if (route.includes('/feature')) {
+      return await featureComment(event, gameId, event.pathParameters?.commentId, body);
     }
     return await writeComment(gameId, body);
   } catch (error) {
