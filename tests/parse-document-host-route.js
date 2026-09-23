@@ -65,10 +65,37 @@ stubs.set('@aws-sdk/lib-dynamodb', {
 
 // The two parsers. What they are handed is recorded, which is how section 4
 // proves an oversized upload is refused BEFORE any parsing happens.
+//
+// `pdf-parse` is shaped like 2.x — `new PDFParse(loadParams)`, `getText(parseParams)`,
+// `destroy()` — and records both parameter objects, because the options this
+// handler passes are the security-relevant part of the upgrade.
+//
+// `first`/`last` behave as 2.4.5's do, measured against the real library: an
+// inclusive page range, clipped at the last page, empty wholly past it, and
+// `total` is always the document's page count.
 const parsed = [];
-stubs.set('pdf-parse', async (buffer) => {
-  parsed.push({ kind: 'pdf', buffer });
-  return { text: 'Quarterly   plan\n\n\nfor the offsite' };
+const pdfParsers = [];
+let pdfThrows = null;
+let pdfPages = null;
+const ONE_PAGE = ['Quarterly   plan\n\n\nfor the offsite'];
+stubs.set('pdf-parse', {
+  PDFParse: class {
+    constructor(loadParams) {
+      this.loadParams = loadParams; this.destroyed = false; this.ranges = []; pdfParsers.push(this);
+    }
+    async getText(parseParams) {
+      this.parseParams = parseParams;
+      if (pdfThrows) throw new Error(pdfThrows);
+      parsed.push({ kind: 'pdf', buffer: this.loadParams.data });
+      const pages = pdfPages || ONE_PAGE;
+      const first = parseParams.first || 1;
+      const last = Math.min(parseParams.last || pages.length, pages.length);
+      this.ranges.push([first, last]);
+      const text = pages.slice(first - 1, last).map((t) => `${t}\n\n`).join('');
+      return { text, total: pages.length, pages: [] };
+    }
+    async destroy() { this.destroyed = true; }
+  },
 });
 stubs.set('mammoth', {
   extractRawText: async ({ buffer }) => {
@@ -84,6 +111,7 @@ process.env.REGION = 'us-east-1';
 const authorizer = require(path.join(REPO, 'lambda-functions/auth/authorizer.js'));
 const { requiredGroupsForRoute, hasPermission } = authorizer;
 const parseDocument = require(PARSE_DOCUMENT);
+const requiredAtLoad = [...parseDocumentRequires];
 const { routesFromTemplate, findRoute, assertScannerWorks, TEMPLATE } = require('./helpers/template-routes');
 
 // ---- Tiny harness ----------------------------------------------------------
@@ -167,8 +195,14 @@ const parse = (body, requestContext) => parseDocument.handler({
     assert.strictEqual(await authorize(['admins'], NEIGHBOUR), true));
 
   console.log('\n4. the handler parses bytes and returns text, and reaches for nothing else');
-  await check('it requires its two parsers and nothing else — no SDK, no table, no bucket', () =>
-    assert.deepStrictEqual([...new Set(parseDocumentRequires)].sort(), ['mammoth', 'pdf-parse']));
+  /*
+    pdf-parse 2 loads pdf.js, which polyfills DOMMatrix from the native
+    `@napi-rs/canvas` binary as it loads and throws `DOMMatrix is not defined`
+    when that binary cannot be loaded. Required at the top of the file, a
+    missing binary would take DOCX uploads down with PDFs.
+  */
+  await check('at load it requires mammoth only — pdf-parse waits for a PDF', () =>
+    assert.deepStrictEqual(requiredAtLoad, ['mammoth']));
   await check('it reads no caller identity and no environment', () => {
     const src = fs.readFileSync(PARSE_DOCUMENT, 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
@@ -185,6 +219,18 @@ const parse = (body, requestContext) => parseDocument.handler({
     assert.strictEqual(parsed[0].buffer.toString('utf8'), '%PDF-1.4 fake');
     assert.strictEqual(JSON.parse(pdf.body).text, 'Quarterly plan for the offsite');
   });
+  await check('...handed over as `data`, never as a `url` the parser would fetch', () => {
+    const { loadParams } = pdfParsers[pdfParsers.length - 1];
+    assert.ok(Buffer.isBuffer(loadParams.data), 'the PDF bytes were not passed as data');
+    assert.strictEqual(loadParams.url, undefined, 'a url was passed — PDFParse would fetch it server-side');
+  });
+  await check('...with pdf.js eval off and no page markers in the text', () => {
+    const { loadParams, parseParams } = pdfParsers[pdfParsers.length - 1];
+    assert.strictEqual(loadParams.isEvalSupported, false);
+    assert.strictEqual(parseParams.pageJoiner, '', '2.x appends "-- 1 of 2 --" per page unless told not to');
+  });
+  await check('...and the parser is destroyed afterwards', () =>
+    assert.strictEqual(pdfParsers[pdfParsers.length - 1].destroyed, true));
 
   parsed.length = 0;
   const docx = await parse({ fileContent: b64('PK fake docx'), fileType: 'docx', fileName: 'agenda.docx' });
@@ -200,6 +246,59 @@ const parse = (body, requestContext) => parseDocument.handler({
     const asNobody = await parse(body);
     assert.deepStrictEqual(asHost, asNobody);
   });
+
+  pdfThrows = 'Invalid PDF structure.';
+  const broken = await parse({ fileContent: b64('not a pdf'), fileType: 'pdf', fileName: 'broken.pdf' });
+  pdfThrows = null;
+  await check('a PDF the parser rejects: an error naming why, and the parser still destroyed', () => {
+    assert.strictEqual(broken.statusCode, 500, broken.body);
+    assert.match(JSON.parse(broken.body).error, /Failed to parse PDF: Invalid PDF structure/);
+    assert.strictEqual(pdfParsers[pdfParsers.length - 1].destroyed, true);
+  });
+
+  /*
+    A LONG PDF IS READ ONLY AS FAR AS THE TEXT THAT IS KEPT.
+
+    cleanText keeps 50,000 characters. Measured on a 400-page PDF: 1.1.1 read
+    it all in 10.4s, 2.4.5 in 19-22s — against a 30s timeout on a function
+    with a third of a vCPU — and 2.4.5 reading ten pages at a time and stopping
+    once past the cap took 0.74s, keeping identical text.
+  */
+  const page = (n) => `Page ${n}: ${'revenue hiring risks owners '.repeat(35)}`;
+  const normalise = (t) => t.replace(/\s+/g, ' ').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
+  const pdfNamed = { fileContent: b64('%PDF-1.4 fake'), fileType: 'pdf', fileName: 'long.pdf' };
+
+  pdfPages = Array.from({ length: 400 }, (_, i) => page(i + 1));
+  const long = await parse(pdfNamed);
+  const longParser = pdfParsers[pdfParsers.length - 1];
+  const fullRead = normalise(pdfPages.map((t) => `${t}\n\n`).join(''));
+  pdfPages = null;
+  await check('a 400-page PDF: the kept text is exactly what a full read would keep', () => {
+    assert.strictEqual(long.statusCode, 200, long.body);
+    assert.strictEqual(JSON.parse(long.body).text, `${fullRead.slice(0, 50000)}... [truncated]`);
+  });
+  await check('...read ten pages at a time, in order, and stopped once past the cap', () => {
+    const expected = longParser.ranges.map((_, i) => [i * 10 + 1, i * 10 + 10]);
+    assert.deepStrictEqual(longParser.ranges, expected);
+    const lastPage = longParser.ranges[longParser.ranges.length - 1][1];
+    assert.ok(lastPage < 400, `read to page ${lastPage} of 400 to keep 50,000 characters`);
+    assert.ok(longParser.destroyed);
+  });
+
+  pdfPages = Array.from({ length: 25 }, (_, i) => page(i + 1));
+  const short = await parse(pdfNamed);
+  const shortParser = pdfParsers[pdfParsers.length - 1];
+  const shortFull = normalise(pdfPages.map((t) => `${t}\n\n`).join(''));
+  pdfPages = null;
+  await check('a 25-page PDF under the cap: every page read, nothing truncated', () => {
+    assert.strictEqual(short.statusCode, 200, short.body);
+    assert.ok(shortFull.length < 50000);
+    assert.strictEqual(JSON.parse(short.body).text, shortFull);
+    assert.deepStrictEqual(shortParser.ranges, [[1, 10], [11, 20], [21, 25]]);
+  });
+
+  await check('across every upload it required its two parsers and nothing else — no SDK, no table, no bucket', () =>
+    assert.deepStrictEqual([...new Set(parseDocumentRequires)].sort(), ['mammoth', 'pdf-parse']));
 
   parsed.length = 0;
   const FIVE_MB = 5 * 1024 * 1024;
