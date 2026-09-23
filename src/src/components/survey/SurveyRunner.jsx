@@ -8,7 +8,7 @@ import { stateRank, SURVEY_OPEN, SURVEY_CLOSED } from '../../utils/playerPhase';
 import {
   identityFor, fetchSurvey, fetchMine, saveAnswer, submitSurvey,
 } from '../../utils/surveyClient';
-import useSurveyAutosave from './useSurveyAutosave';
+import useSurveyAutosave, { RETRY_MS } from './useSurveyAutosave';
 import { isAnswered, summaryFor, seededOrder, countWord } from './surveyAnswers';
 import RatingInput from './RatingInput';
 import ChoiceInput from './ChoiceInput';
@@ -34,7 +34,8 @@ import TextInput from './TextInput';
  *
  * WHERE THE STATE COMES FROM. `state` is PlayerPage's phase (driven by `/state`
  * and the `surveyClosed` / `gameEnded` frames); `GET /survey` reports one too,
- * and a 409 on a save means the survey closed under the person. The screen
+ * and a save or Send refused `SURVEY_CLOSED` means the survey closed under the
+ * person — that code, and no other refusal (utils/surveyClient.js). The screen
  * follows the highest-ranked of the three (utils/playerPhase.js), so no stale
  * source can reopen a closed survey.
  *
@@ -45,6 +46,13 @@ import TextInput from './TextInput';
  */
 
 const TWO_MINUTES = 2;
+
+/** Send is tried this many more times, on the autosave's own back-off, before it says it did not go. */
+const SEND_RETRY_MS = RETRY_MS.slice(0, 3);
+
+const NOTHING_YET = 'Answer at least one question to send.';
+
+const pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 function capitalised(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
@@ -107,6 +115,11 @@ export default function SurveyRunner({
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
   const reasonId = useId();
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const names = survey ? namesMode(survey.names).id : null;
   const identity = useMemo(() => {
@@ -137,7 +150,10 @@ export default function SurveyRunner({
       const got = await fetchSurvey({ fetchFn: doFetch, apiBase, gameId });
       if (cancelled) return;
       if (!got.ok) {
-        if (got.notStarted) setLoad({ status: 'not-started', error: null });
+        if (got.closed) {
+          setClosedHere(true);
+          setLoad({ status: 'closed', error: null });
+        } else if (got.notStarted) setLoad({ status: 'not-started', error: null });
         else setLoad({ status: 'error', error: got.error });
         return;
       }
@@ -178,6 +194,8 @@ export default function SurveyRunner({
   const total = questions.length;
   const current = effectiveState(state, survey && survey.state, closedHere ? SURVEY_CLOSED : null);
   const isOpen = stateRank(current) <= stateRank(SURVEY_OPEN);
+  const openRef = useRef(isOpen);
+  openRef.current = isOpen;
 
   /* ---- answering --------------------------------------------------------- */
   const give = (q, value, opts) => {
@@ -194,7 +212,15 @@ export default function SurveyRunner({
   };
 
   const firstMissingRequired = () => questions.findIndex((q) => q.required && !isAnswered(q, answers[q.qid]));
+  const answeredAny = () => questions.some((q) => isAnswered(q, answers[q.qid]));
 
+  /*
+    SEND. Everything typed is saved first, then the row is marked complete.
+    A refusal worth retrying — no connection, a 5xx (`BUSY`, `CONFLICT`), a
+    409 that is not a close — is sent again on the autosave's back-off, since
+    a second Send of a complete row is a harmless 200; only `SURVEY_CLOSED`
+    puts the closed screen up.
+  */
   const send = async () => {
     const missing = firstMissingRequired();
     if (missing >= 0) {
@@ -202,14 +228,33 @@ export default function SurveyRunner({
       setView({ screen: 'answering', index: missing, fromReview: true });
       return;
     }
+    if (!answeredAny()) {
+      setNotice(NOTHING_YET);
+      return;
+    }
     setSending(true);
     setNotice(null);
     const flushed = await autosave.flushAll();
+    if (!mountedRef.current) return;
     if (flushed.closed) { setSending(false); return; }
-    const result = await submitSurvey({ fetchFn: doFetch, apiBase, gameId, identity: identityRef.current });
+    let result;
+    for (let attempt = 0; ; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      result = await submitSurvey({ fetchFn: doFetch, apiBase, gameId, identity: identityRef.current });
+      if (!mountedRef.current) return;
+      if (!result.retry || attempt >= SEND_RETRY_MS.length || !openRef.current) break;
+      setNotice('Not sent yet – trying again…');
+      // eslint-disable-next-line no-await-in-loop
+      await pause(SEND_RETRY_MS[attempt]);
+      if (!mountedRef.current) return;
+    }
     setSending(false);
-    if (result.ok) { setView({ screen: 'sent', index: 0, fromReview: false }); return; }
+    if (result.ok) { setNotice(null); setView({ screen: 'sent', index: 0, fromReview: false }); return; }
     if (result.closed) { setClosedHere(true); return; }
+    if (result.nothingAnswered && !(result.missing && result.missing.length)) {
+      setNotice(NOTHING_YET);
+      return;
+    }
     if (result.missing && result.missing.length) {
       const at = questions.findIndex((q) => result.missing.includes(q.qid));
       const index = at >= 0 ? at : 0;
@@ -235,8 +280,10 @@ export default function SurveyRunner({
   ) : null;
   const banners = (banner || warningBanner) ? <>{banner}{warningBanner}</> : null;
 
+  // The session's own name in the bar, from GET /survey — or nothing at all.
+  const sessionTitle = (survey && typeof survey.title === 'string' && survey.title.trim()) || null;
   const shell = (props, body) => (
-    <PlayerShell who={playerName} online={online} banner={banners} category={survey && survey.title} {...props}>
+    <PlayerShell who={playerName} online={online} banner={banners} category={sessionTitle} {...props}>
       {body}
     </PlayerShell>
   );
@@ -332,12 +379,16 @@ export default function SurveyRunner({
   if (view.screen === 'review' || total === 0) {
     const skipped = questions.filter((q) => !q.required && !isAnswered(q, answers[q.qid])).length;
     const missing = firstMissingRequired();
+    const nothingYet = total > 0 && !answeredAny();
+    let reason = notice;
+    if (missing >= 0) reason = `Question ${missing + 1} needs an answer before you can send.`;
+    else if (nothingYet) reason = NOTHING_YET;
     const lede = [
       skipped === 1 ? 'One was optional and you skipped it.' : '',
       skipped > 1 ? `${capitalised(countWord(skipped))} were optional and you skipped them.` : '',
       'Anything can change until your host closes the survey.',
     ].filter(Boolean).join(' ');
-    const blocked = missing >= 0 || sending;
+    const blocked = missing >= 0 || nothingYet || sending;
     return shell({
       phase: 'ask',
       volume: 'act',
@@ -346,10 +397,8 @@ export default function SurveyRunner({
       dock: (
         <>
           <SavedLine status={autosave.status} error={autosave.error} idleText="Everything is saved as you go" />
-          {(missing >= 0 || notice) && (
-            <p className="plr-note" id={reasonId}>
-              {missing >= 0 ? `Question ${missing + 1} needs an answer before you can send.` : notice}
-            </p>
+          {reason && (
+            <p className="plr-note" id={reasonId}>{reason}</p>
           )}
           <div className="plr-pair">
             <button
@@ -364,7 +413,7 @@ export default function SurveyRunner({
               type="button"
               className="plr-btn"
               disabled={blocked || total === 0}
-              aria-describedby={missing >= 0 || notice ? reasonId : undefined}
+              aria-describedby={reason ? reasonId : undefined}
               onClick={send}
             >
               {sending ? 'Sending…' : 'Send my answers'}

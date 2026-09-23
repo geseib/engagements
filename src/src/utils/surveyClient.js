@@ -20,7 +20,24 @@
  *
  * NOTHING HERE THROWS. Every function resolves an object with `ok`, and says
  * which of the contract's failures it met (`closed`, `notStarted`, `missing`,
- * `retry`) so the caller can act on it rather than parse a status code.
+ * `nothingAnswered`, `retry`) so the caller can act on it rather than parse a
+ * status code.
+ *
+ * THE CODE DECIDES, NOT THE STATUS. Every refusal is `{error, code}`
+ * (lambda-functions/game/survey-answers.js). A 409 used to be read as "the
+ * survey closed", and it is not only that: the server's optimistic lock gives
+ * up after three lost races and answers `CONFLICT` — "try again" — which put
+ * the closed screen in front of a person whose survey was still open. So:
+ *
+ *   SURVEY_CLOSED              closed; stop saving (409)
+ *   NOT_OPEN                   not open yet; keep the answer and try again (409)
+ *   CONFLICT, BUSY             try again with a back-off (409 then, 503 now)
+ *   any 5xx, 429, no network   try again with a back-off
+ *
+ * A 409 carrying no code this file knows is retried rather than read as
+ * closed: a phone that keeps trying is still told of a real close by the
+ * `surveyClosed` frame and `/state`, while a phone wrongly shown "closed"
+ * stops saving answers that would have counted.
  */
 import { namesMode } from '../config/surveyNames';
 
@@ -36,6 +53,14 @@ async function readJson(response) {
 }
 
 const serverSaid = (body) => (body && typeof body.error === 'string' && body.error.trim() ? body.error : null);
+
+const codeOf = (body) => (body && typeof body.code === 'string' ? body.code : null);
+
+/** Was this refusal the survey having closed? The code says so; nothing else does. */
+const saysClosed = (body) => codeOf(body) === 'SURVEY_CLOSED';
+
+/** Is this a failure worth sending again, the same value, after a pause? */
+const worthRetrying = (status) => status === 0 || status === 409 || status === 429 || status >= 500;
 
 /**
  * What the request body says about WHO is answering, per the Names mode.
@@ -66,7 +91,12 @@ export async function fetchSurvey({ fetchFn = fetch, apiBase, gameId }) {
     return { ok: false, status: 0, error: 'The survey could not be loaded. Check your connection and try again.' };
   }
   const body = await readJson(response);
-  if (response.status === 409) return { ok: false, status: 409, notStarted: true, error: null };
+  if (response.status === 409) {
+    // GET answers 409 only before the survey opens (NOT_OPEN); a closed one is
+    // a 200 with its state. A SURVEY_CLOSED here is still honoured as closed.
+    if (saysClosed(body)) return { ok: false, status: 409, closed: true, error: null };
+    return { ok: false, status: 409, notStarted: true, error: null };
+  }
   if (response.status === 404) {
     return { ok: false, status: 404, notSurvey: true, error: serverSaid(body) || 'This session is not a survey.' };
   }
@@ -82,9 +112,11 @@ export async function fetchSurvey({ fetchFn = fetch, apiBase, gameId }) {
 /**
  * Save one answer. `value: null` clears it.
  *
- * `retry: true` for the failures worth trying again (no connection, 5xx, 429);
- * `closed: true` for 409 (the survey closed under the person); anything else —
- * 400 a value the server refused, 403 `NOT_YOU` — is final for that value.
+ * `closed: true` only for `SURVEY_CLOSED`. `retry: true` for everything worth
+ * trying again — no connection, 5xx (503 `BUSY` / `CONFLICT` among them), 429,
+ * and a 409 that is not a close (`CONFLICT` from the first backend, `NOT_OPEN`
+ * with `notOpen: true`). Anything else — 400 a value the server refused, 403
+ * `NOT_YOU` — is final for that value.
  */
 export async function saveAnswer({ fetchFn = fetch, apiBase, gameId, qid, value, identity }) {
   let response;
@@ -106,9 +138,16 @@ export async function saveAnswer({ fetchFn = fetch, apiBase, gameId, qid, value,
       complete: body?.complete === true,
     };
   }
-  if (response.status === 409) return { ok: false, closed: true, error: serverSaid(body) || 'The survey is closed.' };
-  if (response.status === 429 || response.status >= 500) {
-    return { ok: false, retry: true, error: serverSaid(body) || `The server did not save it (${response.status}).` };
+  if (saysClosed(body)) return { ok: false, closed: true, code: 'SURVEY_CLOSED', error: serverSaid(body) || 'The survey is closed.' };
+  if (worthRetrying(response.status)) {
+    return {
+      ok: false,
+      retry: true,
+      status: response.status,
+      code: codeOf(body),
+      notOpen: codeOf(body) === 'NOT_OPEN',
+      error: serverSaid(body) || `The server did not save it (${response.status}).`,
+    };
   }
   const code = body?.code || (body?.error === 'NOT_YOU' ? 'NOT_YOU' : null);
   const error = code === 'NOT_YOU'
@@ -117,7 +156,15 @@ export async function saveAnswer({ fetchFn = fetch, apiBase, gameId, qid, value,
   return { ok: false, retry: false, status: response.status, code, error };
 }
 
-/** "Send my answers". `missing` lists the required qids the server still lacks (422). */
+/**
+ * "Send my answers". Sending twice is harmless — the server answers a row
+ * already complete with 200 — so a `retry: true` failure (as `saveAnswer`'s)
+ * may simply be sent again.
+ *
+ * 422 comes in two kinds: `MISSING` lists the required qids the server still
+ * lacks; `NOTHING_ANSWERED` (with `nothingAnswered: true`) is a Send with no
+ * answer at all, and `missing` then lists whatever is required, possibly none.
+ */
 export async function submitSurvey({ fetchFn = fetch, apiBase, gameId, identity }) {
   let response;
   try {
@@ -127,15 +174,31 @@ export async function submitSurvey({ fetchFn = fetch, apiBase, gameId, identity 
       body: JSON.stringify({ ...identity }),
     });
   } catch (e) {
-    return { ok: false, error: 'That did not send. Check your connection and try again.' };
+    return { ok: false, retry: true, status: 0, error: 'That did not send. Check your connection and try again.' };
   }
   const body = await readJson(response);
   if (response.ok) return { ok: true, complete: body?.complete !== false };
-  if (response.status === 409) return { ok: false, closed: true, error: serverSaid(body) || 'The survey is closed.' };
+  if (saysClosed(body)) return { ok: false, closed: true, code: 'SURVEY_CLOSED', error: serverSaid(body) || 'The survey is closed.' };
   if (response.status === 422) {
-    return { ok: false, missing: Array.isArray(body?.missing) ? body.missing : [], error: serverSaid(body) };
+    return {
+      ok: false,
+      code: codeOf(body),
+      nothingAnswered: codeOf(body) === 'NOTHING_ANSWERED',
+      missing: Array.isArray(body?.missing) ? body.missing : [],
+      error: serverSaid(body),
+    };
   }
-  return { ok: false, error: serverSaid(body) || `That did not send (${response.status}).` };
+  if (worthRetrying(response.status)) {
+    return {
+      ok: false,
+      retry: true,
+      status: response.status,
+      code: codeOf(body),
+      notOpen: codeOf(body) === 'NOT_OPEN',
+      error: serverSaid(body) || `That did not send (${response.status}).`,
+    };
+  }
+  return { ok: false, status: response.status, code: codeOf(body), error: serverSaid(body) || `That did not send (${response.status}).` };
 }
 
 /** This phone's own row: `{answers, answered, complete, rev}`; a 404 is simply "nothing yet". */
@@ -152,7 +215,8 @@ export async function fetchMine({ fetchFn = fetch, apiBase, gameId, identity }) 
   }
   const body = await readJson(response);
   if (response.status === 404) return { ok: true, none: true, answers: {}, answered: [], complete: false, rev: null };
-  if (response.status === 409) return { ok: false, closed: true, answers: {} };
+  if (saysClosed(body)) return { ok: false, closed: true, answers: {} };
+  if (response.status === 409) return { ok: false, notOpen: codeOf(body) === 'NOT_OPEN', answers: {}, status: 409, error: serverSaid(body) };
   if (!response.ok) return { ok: false, answers: {}, status: response.status, error: serverSaid(body) };
   return {
     ok: true,
