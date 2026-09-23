@@ -124,6 +124,11 @@ export function interpretGenerationJob(job) {
     createdSet: readCreatedSet(payload.createdSet),
     /** Why there is no set, when the worker tried and could not. */
     setCreationError: payload.setCreationError || null,
+    /** The importer's whole 402 when the refusal was the stored-set allowance
+     *  (generated-set.js) — read by GenerationJobPanel as the plan-limit notice. */
+    setCreationLimit: payload.setCreationLimit && typeof payload.setCreationLimit === 'object'
+      ? payload.setCreationLimit
+      : null,
     updatedAt: payload.updatedAt || null,
     terminal: outcome !== 'running',
     /** Asked for 100, holding 84 → 16. Zero when nothing is missing. */

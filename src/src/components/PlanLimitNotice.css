@@ -1,0 +1,173 @@
+/* ==========================================================================
+   PlanLimitNotice — the one notice every plan-limit refusal shows (.plim).
+   Mockup: docs/design/tenancy-redesign/22-plan-limit-notice.html.
+
+   AMBER, NOT RED. A plan limit is "not yet, and here is the way", not a fault,
+   so the rule is --primary amber like the Plan & usage limit box (mockup 12)
+   and never the danger colour. The first words say what ran out, so the state
+   never rests on colour alone.
+
+   SCOPED TOKENS, NOT [data-theme]. The notice lands inside surfaces that carry
+   no reliable theme attribute: GameSetupDialog is portaled under <html
+   data-theme="light"> and paints itself with --gsd-* locals, so an
+   ancestor-driven theme would read paper inside a dusk card. Every colour here
+   is a --plim-* local declared on the scope itself (skill §0.5). Dusk is the
+   default. Paper comes from `surface="paper"` (.plim--paper) or from sitting
+   inside the host shelf's white card (.qsets--onlight), exactly as
+   QuestionSetsPanel.css re-tints — unless the caller pinned `surface="dusk"`
+   (.plim--dusk), because the dark set editor can open inside that card.
+
+   MEASURED CONTRAST (planLimitNoticePalette.test.js composites the real stack:
+   the amber tint over each ground the notice lands on):
+     dusk   tint .08 over #0F1A2E / #1B2942 / #25375A
+            text  #F4EDE4        13.18 / 10.85 / 8.89
+            muted #A9B5C9         7.39 /  6.09 / 4.98  (the site's #9BA8BE is
+                                                        4.30 on #25375A + tint)
+            ink   #F6A94C         7.80 /  6.42 / 5.26
+     paper  tint .13 over #FFFFFF / #FBF7F1 / #F1EDE4
+            text  #1B2942        13.39 / 12.63 / 11.64
+            muted #5E6167         5.71 /  5.39 /  4.96
+            ink   #8A5300         5.82 /  5.49 /  5.06  (the mockup's #9A5B18
+                                                        is 4.32 on #F1EDE4 —
+                                                        CategoryPicker's #8A5300
+                                                        is the repo's other
+                                                        settled paper amber)
+     button navy #1B2942 on amber #F6A94C  7.42
+
+   Ladder: the laptop ladder (12/13/15), nothing below 12px.
+   ========================================================================== */
+
+.plim {
+  --plim-t-floor: 12px;
+  --plim-t-label: 13px;
+  --plim-t-body: 15px;
+  --plim-text: #F4EDE4;
+  --plim-muted: #A9B5C9;
+  --plim-ink: #F6A94C;
+  --plim-accent: #F6A94C;
+  --plim-tint: rgba(246, 169, 76, .08);
+  --plim-edge: rgba(155, 168, 190, .34);
+  --plim-chip: rgba(155, 168, 190, .18);
+  --plim-hover: rgba(155, 168, 190, .12);
+  --plim-on-accent: #1B2942;
+
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 4px 11px;
+  align-items: start;
+  margin: 0 0 14px;
+  padding: 12px 14px 13px;
+  border: 1px solid var(--plim-edge);
+  border-left: 3px solid var(--plim-accent);
+  border-radius: 10px;
+  background: var(--plim-tint);
+  color: var(--plim-text);
+  font-size: var(--plim-t-body);
+  line-height: 1.45;
+  text-align: left;
+}
+
+.plim--paper,
+.qsets--onlight .plim:not(.plim--dusk) {
+  --plim-text: #1B2942;
+  --plim-muted: #5E6167;
+  --plim-ink: #8A5300;
+  --plim-tint: rgba(246, 169, 76, .13);
+  --plim-edge: rgba(27, 41, 66, .22);
+  --plim-chip: rgba(27, 41, 66, .08);
+  --plim-hover: rgba(27, 41, 66, .05);
+}
+
+.plim .plim-ico { grid-column: 1; margin-top: 1px; color: var(--plim-ink); }
+.plim .plim-head { grid-column: 2; margin: 0; }
+.plim .plim-head strong { font-weight: 700; }
+.plim .plim-x {
+  grid-column: 3;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -3px -4px 0 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--plim-muted);
+  cursor: pointer;
+}
+.plim .plim-x:hover { background: var(--plim-hover); color: var(--plim-text); }
+
+.plim .plim-why,
+.plim .plim-who,
+.plim .plim-way { grid-column: 2 / -1; }
+
+.plim .plim-why { margin: 0; color: var(--plim-muted); font-size: var(--plim-t-label); }
+
+.plim .plim-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.plim .plim-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px 3px 4px;
+  border: 1px solid var(--plim-edge);
+  border-radius: 999px;
+  color: var(--plim-text);
+  font-size: var(--plim-t-label);
+  font-weight: 500;
+  text-decoration: none;
+}
+.plim a.plim-person:hover { border-color: var(--plim-muted); }
+.plim .plim-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--plim-chip);
+  color: var(--plim-text);
+  font-size: var(--plim-t-floor);
+  font-weight: 700;
+}
+.plim .plim-role { color: var(--plim-muted); font-size: var(--plim-t-floor); }
+
+.plim .plim-way {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+.plim .plim-or { color: var(--plim-muted); font-size: var(--plim-t-label); }
+
+.plim .plim-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--plim-edge);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--plim-text);
+  font-size: var(--plim-t-label);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.plim .plim-btn:hover { background: var(--plim-hover); border-color: var(--plim-muted); }
+.plim .plim-btn--primary {
+  border-color: var(--plim-accent);
+  background: var(--plim-accent);
+  color: var(--plim-on-accent);
+  font-weight: 700;
+}
+.plim .plim-btn--primary:hover { background: #FFBB66; border-color: #FFBB66; }
+.plim a:focus-visible,
+.plim button:focus-visible { outline: 2px solid var(--plim-ink); outline-offset: 2px; }
+
+.plim.plim--compact { padding: 10px 12px 11px; }

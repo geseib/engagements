@@ -194,3 +194,38 @@ describe('a quickstart set whose content could not be decrypted', () => {
     expect(card.textContent).toMatch(/decrypt/i);
   });
 });
+
+describe('a plan limit lands in the sheet, not in a browser alert', () => {
+  // 22-plan-limit-notice.html: Quickstart said alert(`Failed to create
+  // quickstart game: …`) — the server's sentence and nothing to click.
+  test('a 402 shows the notice in place, starts nothing, and keeps the sheet open', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) {
+        return { ok: true, json: async () => ({ questionSets: SETS }) };
+      }
+      return {
+        ok: false,
+        status: 402,
+        json: async () => ({
+          code: 'upgrade_required',
+          limit: { kind: 'sessions', used: 5, included: 5 },
+          resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
+        }),
+      };
+    });
+    const { onGameCreated, onClose } = renderMenu();
+    fireEvent.click(await screen.findByRole('button', { name: /Tech Trends/ }));
+
+    const box = await screen.findByTestId('plan-limit-notice');
+    // rejects: the alert() coming back for the one refusal that has a way out
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(box).toHaveTextContent('Northwind has used the 5 sessions included this month. Nothing was created.');
+    expect(box).toHaveTextContent('Dana Whitfield');
+    // rejects: calling /start on a session that was never created
+    expect(authFetch.mock.calls.some(([u]) => String(u).endsWith('/start'))).toBe(false);
+    expect(onGameCreated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+});

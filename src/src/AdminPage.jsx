@@ -32,6 +32,7 @@ import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
 import NewSetDialog from './components/NewSetDialog';
 import { parseUpgradeRequired } from './utils/upgradeRequired';
+import { wantsPlanRequest, withoutPlanRequest } from './utils/planLimitCopy';
 import AdminShell from './components/AdminShell';
 import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
@@ -521,6 +522,14 @@ function AdminPage() {
         },
       );
       const body = await res.json().catch(() => ({}));
+      /* A copy is a new stored set, so it meets the set allowance
+         (copy-question-set.js). Refused, it is the plan-limit notice — shown
+         on whichever list pressed Copy, the Question sets list or the library. */
+      const limit = parseUpgradeRequired(res, body);
+      if (limit) {
+        setNotice({ limit, outcome: 'Nothing was copied.', tone: 'error' });
+        return;
+      }
       if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
       await fetchQuestionSets();
       setNotice({
@@ -1149,16 +1158,17 @@ function AdminPage() {
         await fetchQuestionSets(); // Refresh the list
       } else {
         // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section (which renders the refusal with its numbers and the way
-        // forward) and say so here with the link.
+        // section, and say it HERE as the plan-limit notice — what ran out and
+        // what this reader can do about it (22-plan-limit-notice.html). It
+        // used to be text ending "Open Plan & usage to request the Team plan"
+        // with no link, said to people who may not request.
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1251,16 +1261,17 @@ function AdminPage() {
         await fetchQuestionSets(); // Refresh the list
       } else {
         // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section (which renders the refusal with its numbers and the way
-        // forward) and say so here with the link.
+        // section, and say it HERE as the plan-limit notice — what ran out and
+        // what this reader can do about it (22-plan-limit-notice.html). It
+        // used to be text ending "Open Plan & usage to request the Team plan"
+        // with no link, said to people who may not request.
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1370,16 +1381,17 @@ function AdminPage() {
         await fetchQuestionSets(); // Refresh the list
       } else {
         // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section (which renders the refusal with its numbers and the way
-        // forward) and say so here with the link.
+        // section, and say it HERE as the plan-limit notice — what ran out and
+        // what this reader can do about it (22-plan-limit-notice.html). It
+        // used to be text ending "Open Plan & usage to request the Team plan"
+        // with no link, said to people who may not request.
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1584,6 +1596,21 @@ function AdminPage() {
     return fallbackSection;
   })();
   resolvedRef.current = resolvedTab;
+
+  /*
+    "REQUEST THE TEAM PLAN" LANDS ON THE REQUEST. A plan-limit refusal's button
+    (utils/planLimitCopy.js REQUEST_HREF) is Plan & usage with `request=team`:
+    open the request dialog once, for somebody who may ask (owner, or a
+    personal space), then drop the flag so a reload or Back does not reopen it.
+    Anybody else simply lands on Plan & usage.
+  */
+  useEffect(() => {
+    if (resolvedTab !== 'billing' || !activeOrg || showPlanRequest) return;
+    if (!wantsPlanRequest(window.location.search)) return;
+    window.history.replaceState(window.history.state, '', withoutPlanRequest(window.location.href));
+    const mayAsk = orgRole === 'owner' || activeOrg.type === 'personal';
+    if (mayAsk && !(planRequest && planRequest.status === 'requested')) setShowPlanRequest(true);
+  }, [resolvedTab, activeOrg, orgRole, planRequest, showPlanRequest]);
 
   /*
     WHICH SETS THIS SCREEN SHOWS, which is not the same list in both consoles.
@@ -2094,6 +2121,8 @@ function AdminPage() {
               questionSets={questionSets}
               mode="org"
               loading={questionSetsLoading}
+              notice={notice}
+              onDismissNotice={() => setNotice(null)}
               onCopy={handleCopySet}
               onPreview={handleEditQuestionSet}
               /* The way INTO the library, from the library. Same handler as the

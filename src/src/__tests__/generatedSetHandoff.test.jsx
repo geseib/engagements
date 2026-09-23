@@ -309,6 +309,33 @@ describe('a partial run that still produced a draft says so', () => {
     );
     expect(screen.getByText(/The set could not be created for you/i)).toBeInTheDocument();
   });
+
+  test('a set refused at the plan limit is the plan-limit notice, in the reader\'s voice', () => {
+    // rejects: the stored-set allowance said as "The set could not be created
+    // for you: …" with nothing to click (22-plan-limit-notice.html).
+    const setCreationLimit = {
+      code: 'upgrade_required',
+      limit: { kind: 'sets', used: 5, included: 5 },
+      resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
+    };
+    render(
+      <GenerationJobPanel
+        job={partial({ setCreationError: 'This organisation cannot store another question set yet.', setCreationLimit })}
+        noun="scenarios" onReview={() => {}}
+      />
+    );
+    const box = screen.getByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Northwind holds 5 of the 5 question sets it includes.');
+    expect(box).toHaveTextContent('The questions were generated, but no set was saved.');
+    expect(box).toHaveTextContent('Dana Whitfield');
+    expect(screen.queryByText(/The set could not be created for you/i)).toBeNull();
+  });
+
+  test('setCreationLimit travels through the job reader', () => {
+    const read = interpretGenerationJob(jobPayload({ setCreationLimit: { code: 'upgrade_required', limit: { kind: 'sets' } } }));
+    expect(read.setCreationLimit.code).toBe('upgrade_required');
+    expect(interpretGenerationJob(jobPayload()).setCreationLimit).toBeNull();
+  });
 });
 
 describe('the table counts honestly either way', () => {

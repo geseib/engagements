@@ -523,5 +523,3 @@
   font-size: 14px;
   line-height: 1.5;
 }
-.gsd .gsd-refusal--limit { border-left-color: var(--primary); background: rgba(246, 169, 76, .10); }
-.gsd .gsd-refusal a { color: var(--primary); font-weight: 700; }

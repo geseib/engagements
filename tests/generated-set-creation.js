@@ -774,6 +774,45 @@ const scenarioBody = (overrides = {}) => ({
     assert.strictEqual(row.Category, 'Judgement');
   });
 
+  say('\na set refused at the plan limit says who can fix it');
+
+  await test('the job carries the refusal itself, with the reader\'s way out', async () => {
+    // rejects: flattening a 402 into `setCreationError` alone. The builder then
+    // says "The set could not be created for you: This organisation cannot
+    // store another question set yet…" with nothing to click — the plan limit
+    // in a fault's voice, after the generation was already paid for
+    // (22-plan-limit-notice.html).
+    reset();
+    await mint();
+    const { periodOf } = require(path.join(REPO, 'lambda-functions/admin/shared/usage.js'));
+    const period = periodOf(new Date());
+    ddb.set(rowKey('ORG#org_acme', 'METADATA'), { PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
+    ddb.set(rowKey('ORG#org_acme', `USAGE#${period}`), { PK: 'ORG#org_acme', SK: `USAGE#${period}`, orgId: 'org_acme', period, sessionsRun: 0, setsCurrent: 5, setsPeak: 5 });
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'capped'));
+    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+
+    assert.strictEqual(job.createdSet, null, 'a set was created past the allowance');
+    assert.strictEqual(orgSetRows().length, 0);
+    assert.ok(job.setCreationLimit, `no setCreationLimit on the job: ${JSON.stringify(job)}`);
+    assert.strictEqual(job.setCreationLimit.code, 'upgrade_required');
+    assert.strictEqual(job.setCreationLimit.limit.kind, 'sets');
+    // The worker replays the caller's org and role, so the voice is theirs.
+    assert.strictEqual(job.setCreationLimit.resolve.role, 'owner');
+    // An older client still reads the sentence.
+    assert.match(job.setCreationError, /question set/i);
+    assert.strictEqual(job.status, 'complete', 'a refused set must not fail the generation');
+    assert.strictEqual(job.items.length, 2, 'the items were thrown away with the refused set');
+  });
+
+  await test('any other refusal carries no setCreationLimit', async () => {
+    reset();
+    ddb.set(rowKey('SETS', 'SET#worldleaders'), { PK: 'SETS', SK: 'SET#worldleaders', name: 'World Leaders' });
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'clash'));
+    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.match(job.setCreationError, /already exists/i);
+    assert.strictEqual(job.setCreationLimit, null);
+  });
+
   say(`\n${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
 })();

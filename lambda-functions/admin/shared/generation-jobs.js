@@ -234,6 +234,9 @@ function jobToResponse(item) {
       ? { setId: item.createdSetId, setName: item.createdSetName || item.createdSetId }
       : null,
     setCreationError: item.setCreationError || null,
+    // The importer's 402 when the refusal was the stored-set allowance, whole
+    // (generated-set.js) — so the builder can say who can fix it.
+    setCreationLimit: item.setCreationLimit || null,
     updatedAt: item.updatedAt,
   };
 }

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Icon from './Icon';
 import PromptShapePreview from './PromptShapePreview';
 import SetTopicField from './SetTopicField';
+import PlanLimitNotice from './PlanLimitNotice';
+import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import {
@@ -151,6 +153,9 @@ export default function QuestionSetUploadPanel({
   const [setTags, setSetTags] = useState([]);
   const [showDefaultInstructions, setShowDefaultInstructions] = useState(false);
   const [status, setStatus] = useState(null); // { text, tone }
+  // A plan-limit refusal (402) from the last upload — a plan fact with a way
+  // out, not an upload fault (22-plan-limit-notice.html).
+  const [limit, setLimit] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
   /*
@@ -286,6 +291,7 @@ export default function QuestionSetUploadPanel({
   const upload = async () => {
     if (!file || !title.trim()) return;
     setIsUploading(true);
+    setLimit(null);
     setStatus({ text: 'Uploading…', tone: 'pending' });
     try {
       const fileContent = await new Promise((resolve, reject) => {
@@ -319,6 +325,12 @@ export default function QuestionSetUploadPanel({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
+        const refusal = parseUpgradeRequired(response, result);
+        if (refusal) {
+          setStatus(null);
+          setLimit(refusal);
+          return;
+        }
         setStatus({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
         return;
       }
@@ -636,6 +648,11 @@ export default function QuestionSetUploadPanel({
           {blocked && <span className="qsets-dim">Fix what stops the import first — nothing has been sent.</span>}
         </div>
 
+        {limit ? (
+          <div style={{ marginTop: '12px' }}>
+            <PlanLimitNotice refusal={limit} outcome="Nothing was saved." onDismiss={() => setLimit(null)} />
+          </div>
+        ) : null}
         {status && status.text && (
           <div
             className={`qsets-alert${status.tone === 'error' ? ' qsets-alert--error' : ''}${

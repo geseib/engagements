@@ -435,3 +435,36 @@ describe('the ways in are ranked and explained', () => {
     }
   });
 });
+
+/* ------------------------------------------------------------ plan limit */
+
+describe('an upload refused at the stored-set allowance', () => {
+  // 22-plan-limit-notice.html: this said "Upload failed: This organisation
+  // cannot store another question set yet…" — a fault's voice for a plan fact,
+  // and nothing to click.
+  test('shows the plan-limit notice with the way out, not "Upload failed"', async () => {
+    const onUploaded = jest.fn();
+    mount({ onUploaded }, {
+      uploadStatus: 402,
+      uploadBody: {
+        code: 'upgrade_required',
+        error: 'This organisation cannot store another question set yet.',
+        limit: { kind: 'sets', used: 5, included: 5 },
+        resolve: { role: 'owner', canRequest: true, canViewBilling: true, org: { name: 'Amara', type: 'personal' }, contacts: [], request: null, resetsOn: '2026-10-01' },
+      },
+    });
+    await chooseFile(GOOD, 'q3-retro.csv');
+    fireEvent.change(screen.getByLabelText(/question set title/i), { target: { value: 'Q3 Retro' } });
+    chooseShelf();
+    fireEvent.click(uploadButton());
+
+    const box = await screen.findByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Your space holds 5 of the 5 question sets it includes. Nothing was saved.');
+    expect(screen.getByRole('link', { name: 'Request the Team plan' })).toBeInTheDocument();
+    // rejects: the fault banner reporting a plan fact as a failed upload
+    expect(screen.queryByText(/Upload failed/)).toBeNull();
+    expect(onUploaded).not.toHaveBeenCalled();
+    // rejects: clearing the form a refusal left intact
+    expect(screen.getByLabelText(/question set title/i)).toHaveValue('Q3 Retro');
+  });
+});

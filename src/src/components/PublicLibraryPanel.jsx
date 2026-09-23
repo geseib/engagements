@@ -187,7 +187,7 @@ function SharePickerDialog({ sets, onClose, onPick }) {
   );
 }
 
-export default function PublicLibraryPanel({ questionSets = [], mode = 'org', onCopy, onPreview, onShare, onOpenScoreCard, onUnpublish, loading = false }) {
+export default function PublicLibraryPanel({ questionSets = [], mode = 'org', onCopy, onPreview, onShare, onOpenScoreCard, onUnpublish, loading = false, notice = null, onDismissNotice }) {
   const [unpublishing, setUnpublishing] = useState(null);
   const [picking, setPicking] = useState(false);
   const rows = questionSets.filter((s) => (s.scope || 'platform') === 'public');
@@ -262,7 +262,10 @@ export default function PublicLibraryPanel({ questionSets = [], mode = 'org', on
       {rows.length === 0 && !loading ? (
         <p className="publib-empty">Nobody has published a set yet. When an organisation shares one and it passes review, it appears here.</p>
       ) : (
-        <QuestionSetsPanel questionSets={rows} loading={loading} rowActions={rowActions} />
+        /* `notice` is what the last Copy said back — including a copy refused
+           at the stored-set allowance. It used to go only to the Question sets
+           list, a screen not on show, so a copy from here said nothing. */
+        <QuestionSetsPanel questionSets={rows} loading={loading} rowActions={rowActions} notice={notice} onDismissNotice={onDismissNotice} />
       )}
       {unpublishing && <UnpublishDialog set={unpublishing} onClose={() => setUnpublishing(null)} onConfirm={confirmUnpublish} />}
       {picking && <SharePickerDialog sets={mine} onClose={() => setPicking(false)} onPick={pick} />}
