@@ -243,8 +243,11 @@ function hasPermission(groups, requiredGroups) {
 // function has already been the wrong tool once, in both directions.
 //
 // Not included, deliberately: toggle-question-set (global curation — which sets
-// the whole product offers), the AI generation routes (they spend Bedrock
-// budget), download-question-set, and every version route.
+// the whole product offers), download-question-set, every version route, and
+// the AI routes that shape what the AI does for everybody — `ai-prompt-advisor`,
+// `ai-generate-prompt` and PUT/DELETE `admin/ai-prompts/{promptId}`. The AI
+// GENERATION routes were on this list until tenancy gave their Bedrock bill an
+// owner; they are now included, see the builders block below.
 const HOST_ADMIN_ROUTES = new Set([
   // The persona library. A host may already SET the voice narrating their own
   // room (`PUT /games/{gameId}/persona` is hosts+admins) and may already READ
