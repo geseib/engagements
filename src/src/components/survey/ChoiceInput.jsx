@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { countWord, NOTE_LIMIT } from './surveyAnswers';
+import { countWord, NOTE_LIMIT, rovingIndex } from './surveyAnswers';
 
 const isOther = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v) && typeof v.other === 'string';
 
@@ -13,6 +13,14 @@ const isOther = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v) 
  * rule before the first option. At the limit the unpicked options are
  * `aria-disabled` rather than silently ignoring a tap, and the rule line says
  * how to change your mind.
+ *
+ * PICK ONE BEHAVES AS A RADIO GROUP, the ARIA pattern RatingInput and
+ * YesNoInput follow: ONE Tab stop — the chosen option, else the first drawn —
+ * and the arrow keys (Home, End) move the choice with the focus, in the order
+ * drawn, wrapping. Arrowing onto "Something else" chooses it and opens its box
+ * but leaves the focus on the radio, so the next arrow still moves the choice;
+ * the box is one Tab away. Pick several stays a row of checkboxes, each its own
+ * Tab stop, as the checkbox pattern has it.
  *
  * `order` is the DISPLAY order (utils `seededOrder` when the set shuffles).
  * The value is always canonical indexes, whatever was drawn where.
@@ -42,6 +50,7 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
      but only on a tick, never when a resumed answer draws it already open. */
   const otherBox = useRef(null);
   const focusOther = useRef(false);
+  const radios = useRef([]);
   useEffect(() => {
     if (otherOn && focusOther.current && otherBox.current) otherBox.current.focus();
     focusOther.current = false;
@@ -74,9 +83,9 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
     }
   };
 
-  const toggleOther = () => {
+  const toggleOther = ({ fromArrow = false } = {}) => {
     if (!multi) {
-      if (!otherOn) focusOther.current = true;
+      if (!otherOn && !fromArrow) focusOther.current = true;
       setOtherTicked(true);
       emit(build([], true, otherText));
       return;
@@ -96,6 +105,26 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
     setDraft(t);
     emit(build(multi ? picked : [], true, t), { typing: true });
   };
+
+  /* Pick one's roving stop: the drawn options, then "Something else". */
+  const stops = allowOther ? drawn.length + 1 : drawn.length;
+  const chosenStop = !multi && otherOn ? drawn.length : drawn.findIndex((i) => picked.includes(i));
+  const tabStop = chosenStop >= 0 ? chosenStop : 0;
+  const onRadioKey = (event, at) => {
+    if (multi) return;
+    const next = rovingIndex(event.key, at, stops);
+    if (next === null) return;
+    event.preventDefault();
+    if (next === drawn.length) toggleOther({ fromArrow: true });
+    else toggle(drawn[next]);
+    const el = radios.current[next];
+    if (el) el.focus();
+  };
+  const rovingProps = (at) => (multi ? {} : {
+    ref: (el) => { radios.current[at] = el; },
+    tabIndex: at === tabStop ? 0 : -1,
+    onKeyDown: (e) => onRadioKey(e, at),
+  });
 
   const role = multi ? 'checkbox' : 'radio';
   const groupName = multi ? (limit !== null ? `Pick up to ${countWord(limit)}` : 'Pick any') : 'Pick one';
@@ -117,12 +146,13 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
     <>
       <p className="plr-rule">{rule}</p>
       <div className="plr-opts" role={multi ? 'group' : 'radiogroup'} aria-label={groupName}>
-        {drawn.map((i) => {
+        {drawn.map((i, at) => {
           const checked = picked.includes(i) && !(!multi && otherOn);
           const unavailable = multi && atLimit && !checked;
           return (
             <button
               key={i}
+              {...rovingProps(at)}
               type="button"
               role={role}
               aria-checked={checked}
@@ -138,12 +168,13 @@ export default function ChoiceInput({ question, value, onChange, onBlur, order }
         {allowOther && (
           <div className={`plr-other${otherOn ? ' plr-other--on' : ''}`}>
             <button
+              {...rovingProps(drawn.length)}
               type="button"
               role={role}
               aria-checked={otherOn}
               aria-disabled={(multi && atLimit && !otherOn) || undefined}
               className="plr-opt"
-              onClick={toggleOther}
+              onClick={() => toggleOther()}
             >
               <span className={keyClass} aria-hidden="true" />
               <span>Something else</span>

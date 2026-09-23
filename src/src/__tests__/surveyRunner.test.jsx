@@ -235,6 +235,47 @@ describe('Next, Skip and Back', () => {
     expect(screen.getByRole('radio', { name: '4 of 5' })).toHaveAttribute('aria-checked', 'true');
   });
 
+  /*
+    A NEW QUESTION IS SAID ALOUD. Next and Back replace the whole screen, so
+    the button that was pressed goes with it and the focus used to fall to
+    <body> — a screen reader said nothing, and a keyboard user started again
+    from the top. The new screen's heading takes the focus (tabIndex -1: a
+    target, not a Tab stop), so the question is what is announced.
+  */
+  test('Next and Back move the focus to the new question\'s heading', async () => {
+    const server = makeServer();
+    renderRunner(server);
+    await heading(Q1);
+    await answerRating('4 of 5');
+    const next = primary();
+    next.focus();
+    fireEvent.click(next);
+    const h2 = await heading(Q2);
+    await waitFor(() => expect(document.activeElement).toBe(h2));
+    expect(h2).toHaveAttribute('tabindex', '-1');
+    const back = screen.getByRole('button', { name: 'Back' });
+    back.focus();
+    fireEvent.click(back);
+    const h1 = await heading(Q1);
+    await waitFor(() => expect(document.activeElement).toBe(h1));
+  });
+
+  test('reaching the review moves the focus to its heading too', async () => {
+    const server = makeServer({ mine: { answers: { [Q1.qid]: 4, [Q2.qid]: 8, [Q3.qid]: [0] }, answered: [], complete: false, rev: 3 } });
+    renderRunner(server);
+    await heading(Q4);
+    fireEvent.click(primary());
+    const review = await screen.findByRole('heading', { name: 'Check your answers' });
+    await waitFor(() => expect(document.activeElement).toBe(review));
+  });
+
+  test('the first screen does not steal the focus on load', async () => {
+    const server = makeServer();
+    renderRunner(server);
+    await heading(Q1);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   test('the bar carries the session\'s own name from GET /survey', async () => {
     const server = makeServer({ title: 'Q3 All-Hands' });
     const { container } = renderRunner(server);

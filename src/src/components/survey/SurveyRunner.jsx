@@ -115,6 +115,11 @@ export default function SurveyRunner({
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
   const reasonId = useId();
+  /* A screen reached by Next / Back / Review / Send puts the focus on its
+     heading, so the new question is what a screen reader says; a screen
+     reached by loading does not (nothing was pressed). */
+  const headingRef = useRef(null);
+  const focusHeading = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -183,6 +188,12 @@ export default function SurveyRunner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, attempt]);
 
+  useEffect(() => {
+    if (!focusHeading.current) return;
+    focusHeading.current = false;
+    if (headingRef.current) headingRef.current.focus();
+  }, [view.screen, view.index]);
+
   /* A survey that had not opened when this phone arrived loads when it does. */
   useEffect(() => {
     if (load.status === 'not-started' && stateRank(state) >= stateRank(SURVEY_OPEN)) {
@@ -205,10 +216,15 @@ export default function SurveyRunner({
     autosave.change(q.qid, isAnswered(q, value) ? value : null, { debounce: Boolean(opts && opts.typing) });
   };
 
+  const moveTo = (next) => {
+    focusHeading.current = true;
+    setView(next);
+  };
+
   const goTo = (screen, index = 0, fromReview = false) => {
     if (view.screen === 'answering' && questions[view.index]) autosave.flush(questions[view.index].qid);
     setNotice(null);
-    setView({ screen, index, fromReview });
+    moveTo({ screen, index, fromReview });
   };
 
   const firstMissingRequired = () => questions.findIndex((q) => q.required && !isAnswered(q, answers[q.qid]));
@@ -225,7 +241,7 @@ export default function SurveyRunner({
     const missing = firstMissingRequired();
     if (missing >= 0) {
       setNotice(`Question ${missing + 1} needs an answer before you can send.`);
-      setView({ screen: 'answering', index: missing, fromReview: true });
+      moveTo({ screen: 'answering', index: missing, fromReview: true });
       return;
     }
     if (!answeredAny()) {
@@ -249,7 +265,7 @@ export default function SurveyRunner({
       if (!mountedRef.current) return;
     }
     setSending(false);
-    if (result.ok) { setNotice(null); setView({ screen: 'sent', index: 0, fromReview: false }); return; }
+    if (result.ok) { setNotice(null); moveTo({ screen: 'sent', index: 0, fromReview: false }); return; }
     if (result.closed) { setClosedHere(true); return; }
     if (result.nothingAnswered && !(result.missing && result.missing.length)) {
       setNotice(NOTHING_YET);
@@ -259,7 +275,7 @@ export default function SurveyRunner({
       const at = questions.findIndex((q) => result.missing.includes(q.qid));
       const index = at >= 0 ? at : 0;
       setNotice(`Question ${index + 1} needs an answer before you can send.`);
-      setView({ screen: 'answering', index, fromReview: true });
+      moveTo({ screen: 'answering', index, fromReview: true });
       return;
     }
     setNotice(result.error || 'That did not send. Try again.');
@@ -361,7 +377,7 @@ export default function SurveyRunner({
   if (view.screen === 'sent') {
     return shell({ phase: 'quiet', volume: 'rest', ctx: 'Sent', centre: true }, (
       <>
-        <h1 className="plr-h1 plr-h1--primary">Thanks, {playerName} — that’s everything.</h1>
+        <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>Thanks, {playerName} — that’s everything.</h1>
         <p className="plr-lede plr-muted">
           Your answers are in. You can still change them from here until the host closes the survey.
         </p>
@@ -423,7 +439,7 @@ export default function SurveyRunner({
       ),
     }, (
       <>
-        <h1 className="plr-q">Check your answers</h1>
+        <h1 className="plr-q" ref={headingRef} tabIndex={-1}>Check your answers</h1>
         <p className="plr-detail plr-muted">{lede}</p>
         <ol className="plr-rev" aria-label="Your answers">
           {questions.map((q, i) => {
@@ -541,7 +557,7 @@ export default function SurveyRunner({
         Question {index + 1}{' '}
         <span className="plr-req">· {q.required ? 'needs an answer' : 'optional'}</span>
       </p>
-      <h1 className="plr-q">{q.title}</h1>
+      <h1 className="plr-q" ref={headingRef} tabIndex={-1}>{q.title}</h1>
       {String(q.detail || '').trim() && <p className="plr-detail plr-muted">{q.detail}</p>}
       <React.Fragment key={q.qid}>{input}</React.Fragment>
     </>

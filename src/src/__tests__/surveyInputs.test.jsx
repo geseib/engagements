@@ -17,7 +17,7 @@
  * No geometry: jsdom has no layout engine. Roles, names, states and the values
  * handed to onChange are what it models, so that is what is pinned.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import RatingInput from '../components/survey/RatingInput';
 import ChoiceInput from '../components/survey/ChoiceInput';
@@ -225,6 +225,82 @@ describe('ChoiceInput', () => {
     fireEvent.click(radios[0]);
     expect(onChange).toHaveBeenLastCalledWith([3]);
   });
+
+  /*
+    PICK ONE IS A RADIO GROUP, SO IT BEHAVES LIKE ONE — the ARIA radio
+    pattern RatingInput and YesNoInput already follow: one Tab stop (the
+    chosen option, else the first), and the arrows move the choice with the
+    focus. Four Tab stops that arrows ignore is a group announced as radios
+    that does not act like them.
+  */
+  test('pick one: one tab stop — the chosen option, else the first drawn', () => {
+    const { rerender } = render(<ChoiceInput question={choice()} value={null} onChange={() => {}} />);
+    expect(screen.getAllByRole('radio').map((r) => r.tabIndex)).toEqual([0, -1, -1, -1]);
+    rerender(<ChoiceInput question={choice()} value={[2]} onChange={() => {}} />);
+    expect(screen.getAllByRole('radio').map((r) => r.tabIndex)).toEqual([-1, -1, 0, -1]);
+    // Shuffled: the first DRAWN is the stop, whatever its canonical index.
+    rerender(<ChoiceInput question={choice({ shuffle: true })} order={[3, 1, 0, 2]} value={null} onChange={() => {}} />);
+    const radios = screen.getAllByRole('radio');
+    expect(radios[0]).toHaveAccessibleName(/Open Q&A/);
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1, -1]);
+  });
+
+  test('pick one: arrows move the choice and the focus in the order drawn, and wrap', () => {
+    const onChange = jest.fn();
+    const q = choice({ shuffle: true });
+    render(<ChoiceInput question={q} order={[3, 1, 0, 2]} value={[3]} onChange={onChange} />);
+    const radios = screen.getAllByRole('radio');
+    fireEvent.keyDown(radios[0], { key: 'ArrowDown' });
+    expect(onChange).toHaveBeenLastCalledWith([1]);
+    expect(document.activeElement).toBe(radios[1]);
+    fireEvent.keyDown(radios[0], { key: 'ArrowUp' });
+    expect(onChange).toHaveBeenLastCalledWith([2]);
+    expect(document.activeElement).toBe(radios[3]);
+    fireEvent.keyDown(radios[0], { key: 'End' });
+    expect(onChange).toHaveBeenLastCalledWith([2]);
+    // Home lands on the first drawn — already the choice here, so the focus
+    // moves and nothing new is sent.
+    onChange.mockClear();
+    fireEvent.keyDown(radios[1], { key: 'Home' });
+    expect(document.activeElement).toBe(radios[0]);
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(radios[1], { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenLastCalledWith([0]);
+    // Any other key is the browser's.
+    onChange.mockClear();
+    fireEvent.keyDown(radios[1], { key: 'a' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('pick one with a write-in: the arrows reach "Something else" without jumping into its box', () => {
+    function Held() {
+      const [v, setV] = useState([3]);
+      return <ChoiceInput question={choice({ allowOther: true })} value={v} onChange={setV} />;
+    }
+    render(<Held />);
+    const last = screen.getByRole('radio', { name: /Open Q&A/ });
+    last.focus();
+    fireEvent.keyDown(last, { key: 'ArrowDown' });
+    const other = screen.getByRole('radio', { name: /Something else/ });
+    expect(other).toHaveAttribute('aria-checked', 'true');
+    // The focus stays on the radio, so the next arrow still moves the choice;
+    // the box is one Tab away.
+    expect(document.activeElement).toBe(other);
+    expect(screen.getByRole('textbox', { name: 'Something else — say what' })).toBeInTheDocument();
+    expect(screen.getAllByRole('radio').map((r) => r.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
+    fireEvent.keyDown(other, { key: 'ArrowDown' });
+    expect(screen.getByRole('radio', { name: /Live demo/ })).toHaveAttribute('aria-checked', 'true');
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: /Live demo/ }));
+  });
+
+  test('pick several stays a row of checkboxes, each its own tab stop, and the arrows do nothing', () => {
+    const onChange = jest.fn();
+    render(<ChoiceInput question={choice({ allowMultiple: true, maxPicks: 2 })} value={[0]} onChange={onChange} />);
+    const boxes = screen.getAllByRole('checkbox');
+    expect(boxes.map((b) => b.tabIndex)).toEqual([0, 0, 0, 0]);
+    fireEvent.keyDown(boxes[0], { key: 'ArrowDown' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 /* ======================================================================= */
@@ -341,6 +417,72 @@ describe('RankInput', () => {
   test('without a top N it says to rank them all', () => {
     render(<RankInput question={rank({ rankTop: null })} value={null} onChange={() => {}} />);
     expect(screen.queryByText(/is enough/)).toBeNull();
+  });
+
+  /*
+    EVERY RANK ACTION UNMOUNTS OR DISABLES THE BUTTON THAT WAS PRESSED — Add
+    moves the item into the other list, Take out moves it back, and Move up
+    into first place disables Move up. Each dropped a keyboard or screen-reader
+    user's focus on <body>, at the top of the page, with nothing said. Now the
+    focus follows the item to its new control, and a polite live region says
+    where it went.
+  */
+  describe('the focus follows the item, and the move is said aloud', () => {
+    function Held({ initial = null, q = rank() }) {
+      const [v, setV] = useState(initial);
+      return <RankInput question={q} value={v} onChange={setV} />;
+    }
+    const press = (name) => {
+      const button = screen.getByRole('button', { name });
+      button.focus();
+      fireEvent.click(button);
+    };
+    const live = () => document.querySelector('[aria-live="polite"]');
+
+    test('the live region is there, and quiet, before anything is done', () => {
+      render(<Held />);
+      expect(live()).not.toBeNull();
+      expect(live().textContent).toBe('');
+    });
+
+    test('Add: the focus lands on the item\'s place in the order, and says it', () => {
+      render(<Held initial={[0]} />);
+      press('Add Team wins');
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Take out Team wins (place 2)' }));
+      expect(live()).toHaveTextContent('Team wins, place 2');
+    });
+
+    test('Take out: the focus lands on the item back in the pile, and says it', () => {
+      render(<Held initial={[0, 1, 2]} />);
+      press(/Take out Product roadmap/);
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Product roadmap' }));
+      expect(live()).toHaveTextContent('Product roadmap removed');
+    });
+
+    test('Move up into first place: Move up is disabled, so the focus goes to Move down', () => {
+      render(<Held initial={[0, 1, 2]} />);
+      press('Move Product roadmap up');
+      expect(screen.getByRole('button', { name: 'Move Product roadmap up' })).toBeDisabled();
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move Product roadmap down' }));
+      expect(live()).toHaveTextContent('Product roadmap, place 1');
+    });
+
+    test('Move down into last place: the focus goes to Move up', () => {
+      render(<Held initial={[0, 1, 2]} />);
+      press('Move Product roadmap down');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move Product roadmap up' }));
+      expect(live()).toHaveTextContent('Product roadmap, place 3');
+    });
+
+    test('a move that stays mid-list keeps the focus on the same control', () => {
+      render(<Held initial={[0, 1, 2, 3]} />);
+      press('Move Team wins up');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move Team wins up' }));
+      expect(live()).toHaveTextContent('Team wins, place 2');
+    });
   });
 });
 
