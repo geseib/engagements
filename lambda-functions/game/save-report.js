@@ -126,8 +126,10 @@ exports.handler = async (event) => {
       ContentType: orgId ? 'application/json' : 'application/pdf',
       ContentDisposition: `attachment; filename="${baseFileName}"`,
       // The bucket's 90-day rule is filtered on this tag so it cannot reach
-      // `permanent/` (S3 lifecycle has no "every prefix but one"). S3CrudPolicy
-      // grants s3:PutObjectTagging, which a tagged PutObject requires.
+      // `permanent/` (S3 lifecycle has no "every prefix but one"). A tagged
+      // PutObject also needs s3:PutObjectTagging, which S3CrudPolicy does NOT
+      // grant — the template adds it explicitly. Without it this line made
+      // every standard save AccessDenied (tests/s3-tagging-permission.js).
       ...(permanent ? {} : { Tagging: 'retention=standard' }),
       Metadata: {
         'permanent': permanent ? 'true' : 'false',

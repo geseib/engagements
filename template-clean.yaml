@@ -2670,6 +2670,17 @@ Resources:
             TableName: !Ref GameTable
         - S3CrudPolicy:
             BucketName: !Ref ReportsBucket
+        # A standard (90-day) save puts the object WITH a tag,
+        # `retention=standard`, which the bucket's lifecycle rule filters on.
+        # S3 authorises a tagged PutObject against s3:PutObjectTagging as well
+        # as s3:PutObject, and SAM's S3CrudPolicy does not include it — so
+        # every 24-hour save was AccessDenied on every tier from 203ab13f while
+        # the untagged 1-year save worked. tests/s3-tagging-permission.js.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ s3:PutObjectTagging ]
+              Resource: !Sub '${ReportsBucket.Arn}/*'
       Environment:
         Variables:
           REPORTS_BUCKET_NAME: !Ref ReportsBucket
