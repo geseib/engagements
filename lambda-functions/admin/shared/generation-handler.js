@@ -81,8 +81,8 @@ function makeGenerationHandler(config) {
     // structurally incapable, not switched off, which is why this is a config
     // key and not a boolean flag with a default.
     //
-    // `ai-generate-survey` omits it too, and deliberately: survey is not a
-    // playable type and upload-questions.js rejects it outright.
+    // `ai-generate-survey` supplies it since Phase 1 of the survey redesign,
+    // when upload-questions.js began importing the survey CSV.
     // See shared/generated-set.js.
     setCreation = null,
   } = config;
