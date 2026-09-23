@@ -298,6 +298,28 @@ const parse = (body, requestContext) => parseDocument.handler({
     assert.deepStrictEqual(shortParser.ranges, [[1, 10], [11, 20], [21, 25]]);
   });
 
+  /*
+    THE BRIEFING NEEDS TWO MORE FACTS (session-setup-redesign RATIONALE §c):
+    how many pages the PDF had, and whether the text was cut — so the dialog
+    can say "Workie read the first 50,000 characters". Additive: the builders
+    that read only `text` are untouched.
+  */
+  await check('a truncated read says so, and says how many pages the PDF had', () => {
+    const b = JSON.parse(long.body);
+    assert.strictEqual(b.truncated, true);
+    assert.strictEqual(b.pages, 400);
+  });
+  await check('an untruncated read says it was not cut', () => {
+    const b = JSON.parse(short.body);
+    assert.strictEqual(b.truncated, false);
+    assert.strictEqual(b.pages, 25);
+  });
+  await check('a DOCX carries no page count, and is not truncated', () => {
+    const b = JSON.parse(docx.body);
+    assert.strictEqual(b.pages, null);
+    assert.strictEqual(b.truncated, false);
+  });
+
   await check('across every upload it required its two parsers and nothing else — no SDK, no table, no bucket', () =>
     assert.deepStrictEqual([...new Set(parseDocumentRequires)].sort(), ['mammoth', 'pdf-parse']));
 

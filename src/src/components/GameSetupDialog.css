@@ -598,6 +598,285 @@
 
 .gsd-names-lock b { color: var(--gsd-text); font-weight: 700; }
 
+/* ------------------------------------------------- WORKIE'S BRIEFING
+   components/BriefingField.jsx — session-setup-redesign 01, 03, 04, cut from
+   its _src/ss-dialog.css into this scope. One block, five states: empty (an
+   invitation, dashed), working and ready (periwinkle), limit (AMBER: a fact
+   about the file, not a fault) and failed (RED: something broke).
+
+   MEASURED, composited over the card #1B2942 (gameSetupPalette.test.js):
+     muted #A9B5C9 on the periwinkle tint (6%)   6.3:1   text 11.3:1
+     muted         on the amber tint (10%)       5.8:1   text 10.4:1
+     muted         on the danger tint (10%)      6.3:1   text 11.2:1
+     --danger-text #EF8C86 on the danger tint    5.4:1 */
+.gsd .gsd-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--gsd-rule-strong);
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--gsd-muted);
+  vertical-align: 1px;
+}
+
+.gsd .gsd-brief {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  padding: 14px 16px;
+  border: 1px dashed var(--gsd-rule-strong);
+  border-radius: 12px;
+}
+
+.gsd .gsd-brief-file { display: none; }
+
+.gsd .gsd-brief-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(124, 167, 230, 0.12);
+  color: var(--gsd-secondary);
+}
+
+.gsd .gsd-brief-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gsd .gsd-brief-t {
+  margin: 0;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--gsd-text);
+}
+
+.gsd .gsd-brief-d {
+  margin: 0;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-brief-d b { color: var(--gsd-text); font-weight: 700; }
+
+.gsd .gsd-brief-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.gsd .gsd-fine {
+  font-size: var(--gsd-t-floor);
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gsd .gsd-btn:hover { border-color: var(--gsd-primary); }
+
+.gsd .gsd-btn:focus-visible {
+  outline: 2px solid var(--gsd-primary);
+  outline-offset: 2px;
+}
+
+.gsd .gsd-btn--link {
+  padding: 0;
+  border: 0;
+  color: var(--gsd-secondary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.gsd .gsd-btn--link:hover { color: var(--gsd-text); }
+
+.gsd .gsd-brief.is-working,
+.gsd .gsd-brief.is-ready {
+  border-style: solid;
+  border-color: rgba(124, 167, 230, 0.42);
+  background: rgba(124, 167, 230, 0.06);
+}
+
+.gsd .gsd-brief.is-limit {
+  border-style: solid;
+  border-color: rgba(246, 169, 76, 0.55);
+  background: rgba(246, 169, 76, 0.10);
+}
+
+.gsd .gsd-brief.is-limit .gsd-brief-ico {
+  background: rgba(246, 169, 76, 0.16);
+  color: var(--gsd-primary);
+}
+
+.gsd .gsd-brief.is-failed {
+  border-style: solid;
+  border-color: rgba(229, 100, 94, 0.55);
+  background: rgba(229, 100, 94, 0.10);
+}
+
+.gsd .gsd-brief.is-failed .gsd-brief-ico {
+  background: rgba(229, 100, 94, 0.16);
+  color: var(--danger-text);
+}
+
+.gsd .gsd-brief.is-failed .gsd-brief-t { color: var(--danger-text); }
+
+/* Where it came from. The name is truncated with its full text in title=. */
+.gsd .gsd-src {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  font-size: var(--gsd-t-label);
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-src b {
+  min-width: 0;
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--gsd-text);
+}
+
+.gsd .gsd-src .sep { opacity: 0.5; }
+
+.gsd .gsd-row-between {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.gsd .gsd-brief-label { margin: 2px 0 0; }
+
+.gsd textarea.dialog-textarea.gsd-brief-text {
+  min-height: 180px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.gsd .gsd-kept {
+  margin: 0;
+  padding-left: 11px;
+  border-left: 3px solid var(--gsd-secondary);
+  font-size: var(--gsd-t-floor);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-kept b { color: var(--gsd-text); font-weight: 700; }
+
+.gsd .gsd-count { margin: 0; }
+
+/* Two steps, two honest indicators: reading is a step that finishes; writing
+   is one model call that returns once, so it gets a sweep and an expected
+   time, never a fake percentage. */
+.gsd .gsd-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gsd .gsd-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--gsd-text);
+}
+
+.gsd .gsd-steps li span { min-width: 0; }
+
+.gsd .gsd-steps li small {
+  margin-left: 4px;
+  font-size: var(--gsd-t-floor);
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--gsd-rule-strong);
+  border-radius: 50%;
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--gsd-card);
+}
+
+.gsd .gsd-steps li.done .gsd-dot {
+  background: var(--gsd-success);
+  border-color: var(--gsd-success);
+}
+
+.gsd .gsd-steps li.now .gsd-dot { border-color: var(--gsd-primary); }
+
+.gsd .gsd-sweep {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(155, 168, 190, 0.18);
+}
+
+.gsd .gsd-sweep i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -30%;
+  width: 30%;
+  border-radius: 99px;
+  background: var(--gsd-primary);
+  animation: gsd-sweep 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes gsd-sweep { to { left: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gsd .gsd-sweep i { animation: none; left: 0; width: 100%; opacity: 0.45; }
+}
+
 /* ------------------------------------------------------- ADVANCED
    A native <details>, closed by default (session-setup-redesign 01/02). The
    summary line IS the promise: it names every default in force, and a changed

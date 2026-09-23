@@ -23,6 +23,8 @@
  *   visibility          → Visibility       (mirrored onto the GAMES row)
  *   anonymousUntilReveal→ HostPreferences.anonymousUntilReveal (nested path)
  *   names               → Names            (survey only; see below)
+ *   briefing            → Briefing         (Call & Answer only; null clears;
+ *                                           encrypted; see briefing.js)
  *
  * NAMES LOCKS WHEN THE SURVEY OPENS. What a survey writes about people
  * (survey-names.js) is promised on every phone from the first question, so it
@@ -65,6 +67,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
 const { encryptValue } = require('./tenant-crypto');
 const { NAMES } = require('./survey-names');
+const { normalizeBriefing, isCallAndAnswer } = require('./briefing');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -79,7 +82,7 @@ const reply = (statusCode, body) => ({
 const VISIBILITIES = ['public', 'private'];
 const EDITABLE_FIELDS = [
   'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'promptId', 'visibility', 'anonymousUntilReveal',
-  'categoryIds', 'names'
+  'categoryIds', 'names', 'briefing'
 ];
 
 /**
@@ -287,6 +290,29 @@ exports.handler = async (event) => {
       values[':anonymousUntilReveal'] = body.anonymousUntilReveal;
       sets.push('#hostPreferences.#anonymousUntilReveal = :anonymousUntilReveal');
       applied.anonymousUntilReveal = body.anonymousUntilReveal;
+    }
+
+    if ('briefing' in body) {
+      // The Call & Answer briefing (session-setup-redesign Phase 3). Editable
+      // only while CREATED — the gate above — because the design fixes it once
+      // the doors open (RATIONALE §f Q4). null / '' REMOVE it; a value over
+      // 1,500 characters is refused, not cut. Encrypted like the rest of the
+      // session brief: it is a summary of a customer's document.
+      if (!gameMeta.Item || !isCallAndAnswer(gameMeta.Item.GameType)) {
+        return reply(400, { error: 'A briefing applies to Call & Answer sessions only' });
+      }
+      const checked = normalizeBriefing(body.briefing);
+      if (checked.error) return reply(400, { error: checked.error });
+      names['#briefing'] = 'Briefing';
+      if (checked.value === null) {
+        removes.push('#briefing');
+        applied.briefing = null;
+      } else {
+        values[':briefing'] = await store(checked.value);
+        sets.push('#briefing = :briefing');
+        // Echo the size, not the text: the reply is for "what landed".
+        applied.briefing = { chars: checked.value.text.length };
+      }
     }
 
     if ('names' in body) {

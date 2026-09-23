@@ -10,6 +10,7 @@ const { readAllowance } = require('./usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
 const { recordSessionCreated } = require('./platform-metrics');
 const { planLimitResolve } = require('./plan-limit');
+const { normalizeBriefing, isCallAndAnswer } = require('./briefing');
 
 /**
  * WHERE THE PLAYER LINK POINTS, and why it was pointing at a dead host.
@@ -90,10 +91,33 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names, briefing } = JSON.parse(event.body || '{}');
   // A survey is read in the order it was written: nothing shuffles it,
   // whatever the payload says (IMPLEMENTATION-phase-2.md, METADATA).
   const isSurvey = gameType === 'survey';
+
+  /*
+    THE BRIEFING (session-setup-redesign Phase 3): a Call & Answer session's
+    host-checked document summary for Workie. Validated BEFORE anything is
+    written — over its cap, or on another format, is refused out loud rather
+    than stored or silently dropped. The manager encrypts it with the rest of
+    the session brief (ENCRYPTED_FIELDS.session).
+  */
+  let sessionBriefing = null;
+  if (briefing !== undefined && briefing !== null) {
+    const checked = normalizeBriefing(briefing);
+    if (checked.error) {
+      return { statusCode: 400, body: JSON.stringify({ error: checked.error }), headers: { 'Access-Control-Allow-Origin': '*' } };
+    }
+    if (checked.value && !isCallAndAnswer(gameType || 'call-and-answer')) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'A briefing applies to Call & Answer sessions only' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+    sessionBriefing = checked.value;
+  }
 
   /*
     THE OWNING ORGANISATION. Until this line a session had no owner attribute of
@@ -234,6 +258,8 @@ exports.handler = async (event) => {
       // Survey only; the manager falls back to the set's namesDefault, then
       // to anonymous, and stores it on METADATA.Names (survey-names.js).
       ...(isSurvey ? { names } : {}),
+      // Call & Answer only, and already checked above. Absent means unbriefed.
+      ...(sessionBriefing ? { briefing: sessionBriefing } : {}),
       details: engagementInfo || '',
       hostName: hostName || 'Host',
       visibility: visibility || 'public',

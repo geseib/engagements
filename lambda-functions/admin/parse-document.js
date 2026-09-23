@@ -44,11 +44,18 @@ exports.handler = async (event) => {
     console.log(`📄 Processing ${fileType} file: ${fileName || 'unnamed'}`);
 
     let extractedText = '';
+    // A PDF's page count; null for anything that has no pages. The briefing
+    // (session-setup-redesign) says "Workie read the first 50,000 characters —
+    // about pages 1–38" with it.
+    let pages = null;
 
     switch (fileType.toLowerCase()) {
-      case 'pdf':
-        extractedText = await parsePDF(fileContent);
+      case 'pdf': {
+        const pdf = await parsePDF(fileContent);
+        extractedText = pdf.text;
+        pages = pdf.pages;
         break;
+      }
       
       case 'docx':
         extractedText = await parseDOCX(fileContent);
@@ -65,7 +72,10 @@ exports.handler = async (event) => {
         throw new Error(`Unsupported file type: ${fileType}`);
     }
 
-    // Clean up the extracted text
+    // Clean up the extracted text. Measured BEFORE the cut, so `truncated`
+    // says whether the reader lost anything — additive: callers that read only
+    // `text` are untouched.
+    const truncated = normaliseText(extractedText).length > MAX_TEXT_LENGTH;
     extractedText = cleanText(extractedText);
 
     console.log(`✅ Successfully extracted ${extractedText.length} characters from ${fileType} file`);
@@ -80,7 +90,9 @@ exports.handler = async (event) => {
         success: true,
         text: extractedText,
         characterCount: extractedText.length,
-        wordCount: extractedText.split(/\s+/).filter(word => word.length > 0).length
+        wordCount: extractedText.split(/\s+/).filter(word => word.length > 0).length,
+        pages,
+        truncated
       })
     };
 
@@ -119,7 +131,8 @@ async function parsePDF(base64Content) {
     // against this function's 30s timeout; stopping at the cap took 0.74s and
     // keeps the same text. A range past the last page is clipped, not an error.
     let text = '';
-    for (let first = 1, total = 1; first <= total; first += PDF_PAGES_PER_PASS) {
+    let total = 1;
+    for (let first = 1; first <= total; first += PDF_PAGES_PER_PASS) {
       // 2.x appends "-- 1 of 2 --" to every page unless told not to, and this
       // text goes to the AI as the user's own document.
       const result = await parser.getText({ pageJoiner: '', first, last: first + PDF_PAGES_PER_PASS - 1 });
@@ -127,7 +140,7 @@ async function parsePDF(base64Content) {
       text += (text ? '\n' : '') + result.text;
       if (normaliseText(text).length > MAX_TEXT_LENGTH) break;
     }
-    return text;
+    return { text, pages: total };
   } catch (error) {
     console.error('PDF parsing error:', error);
     throw new Error(`Failed to parse PDF: ${error.message}`);

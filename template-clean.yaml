@@ -2802,6 +2802,51 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # The Call & Answer briefing's summariser (session-setup-redesign Phase 3).
+  # The create dialog sends a document's extracted text; Haiku 4.5 returns a
+  # short factual briefing for the host to check. STATELESS — no table policy
+  # on purpose: the document passes through and is dropped, and only the
+  # summary the host signs off is stored, by create or Save.
+  DraftBriefingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-draft-briefing'
+      CodeUri: lambda-functions/game/
+      Handler: draft-briefing.handler
+      Runtime: nodejs22.x
+      # Under the HTTP API's 30s integration limit. One Haiku call over up to
+      # 50,000 characters returns in seconds; if dev's p95 nears 20s, move it to
+      # the generation-job pattern (PLAN Phase 3).
+      Timeout: 29
+      MemorySize: 256
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+      Events:
+        DraftBriefingEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/briefing/draft
+            Method: POST
+            # HOSTS AND ADMINS: it spends Bedrock, and only a host creating a
+            # session has a document to brief from. requiredGroupsForRoute
+            # answers ['hosts','admins'] through its POST/PUT/DELETE + games
+            # rule. tests/draft-briefing.js pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
 
   GetPlayersFunction:
     Type: AWS::Serverless::Function

@@ -20,8 +20,23 @@ below says which default it assumes.
   same press. Found and fixed on the way: the edit prefill never carried
   `promptId` (get-game.js), and the dialog cleared a seeded approach on mount,
   so any edit of a session removed the approach chosen at create.
-- **Phases 2 and 3 are not built**, and still wait for the open questions in
-  RATIONALE §f.
+- **Phase 3 (the briefing) is built** — the owner, 2026-09-23: build it "with
+  the defaults", Call & Answer only. So §f Q1–Q4 take the defaults this plan
+  assumes: the report says which rounds were briefed, not the text; no OCR;
+  general knowledge only when briefed; the briefing is fixed once the session
+  starts. What exists: `game/briefing.js` (+ its guarded-identical websocket
+  copy), `POST /games/briefing/draft` (`game/draft-briefing.js`, Cognito, no
+  table), `Briefing` in `ENCRYPTED_FIELDS.session` ×3, create/PUT/host-GET,
+  `personas.buildBriefingLayer` appended last in `get-ai-summary.js`,
+  `BriefingUsed` on the summary row and "Workie had the host's briefing" in the
+  round report, a "Briefing on" note beside the stage's voice and approach,
+  `utils/documentText.js` (FileUploadPrompt now uses it too) and
+  `components/BriefingField.jsx` in the dialog's main view.
+  **Not done: the measured run** against Haiku (the four checks in §c). It
+  needs AWS access this build did not have — create a Call & Answer session on
+  dev with the MTTR briefing (`_src/content.py`), play a round with the four
+  answers, and read Workie's summary against the four checks, five times.
+- **Phase 2 (Preview) is not built**, and still waits for §f Q5, Q6 and Q9.
 
 Each phase ships on its own, is usable on dev, and leaves nothing half-wired.
 Every phase follows the repo's rules:

@@ -284,6 +284,11 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'HostName',
     'Details',
     'AIContext',
+    // A Call & Answer session's briefing (session-setup-redesign Phase 3): a
+    // host-checked summary of a customer's document, stored as ONE map
+    // { text, source, namesRemoved, draftedAt, editedAt }. The file name rides
+    // inside it — "layoffs-v3.pdf" can say more than the contents.
+    'Briefing',
   ]),
 
   /** A saved PDF report's index row (`report` below is the results report): PK=ORG#<org>#REPORTS, SK=REPORT#<game>#<key>.

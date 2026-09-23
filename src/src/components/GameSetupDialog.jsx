@@ -85,6 +85,7 @@ import {
 } from '../utils/unreadableSet';
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
+import BriefingField from './BriefingField';
 import Modal from './Modal';
 import PlanLimitNotice from './PlanLimitNotice';
 import { authFetch } from '../auth/authFetch';
@@ -195,6 +196,17 @@ export default function GameSetupDialog({
     isEdit ? namesMode(seed.names).id : NAMES_DEFAULT
   );
   const namesTouched = useRef(isEdit);
+  /*
+    WORKIE'S BRIEFING (session-setup-redesign Phase 3) — Call & Answer only.
+    The map BriefingField edits: { text, source, namesRemoved, draftedAt,
+    editedAt } or null. Seeded from the session on an edit (get-game.js's host
+    branch returns it decrypted). Kept while the dialog is open even if the
+    format moves away, so switching back restores it; it only travels in the
+    payload for Call & Answer. `briefingWorking` is true while a document is
+    being read or summarised — Create waits for it.
+  */
+  const [briefing, setBriefing] = useState(isEdit ? (seed.briefing || null) : null);
+  const [briefingWorking, setBriefingWorking] = useState(false);
   const pickNames = (id) => {
     namesTouched.current = true;
     setNamesChoice(namesMode(id).id);
@@ -235,7 +247,10 @@ export default function GameSetupDialog({
     else onEventTitleChange?.(value);
   };
 
-  const canCreate = Boolean(newGameSetId) && title.trim().length > 0;
+  const isCallAndAnswer = normalizeGameType(engagementType) === 'call-and-answer';
+  // A draft still being written would be lost by a Create pressed now.
+  const canCreate = Boolean(newGameSetId) && title.trim().length > 0
+    && !(isCallAndAnswer && briefingWorking);
 
   // Merged by id, page copy first. A set the host just made exists only in
   // `localSets` until the page next re-reads; a set the page already knows about
@@ -408,6 +423,12 @@ export default function GameSetupDialog({
       anonymousResponses,
       // Only a survey carries Names; createGameBody drops it for anything else.
       ...(isSurvey ? { names: namesChoice } : {}),
+      // Only Call & Answer carries a briefing: null when there is none, so an
+      // edit clears one the host removed. createGameBody/updateGameBody drop
+      // it for any other format.
+      ...(isCallAndAnswer
+        ? { briefing: briefing && briefing.text && briefing.text.trim() ? briefing : null }
+        : {}),
     });
   };
 
@@ -444,6 +465,8 @@ export default function GameSetupDialog({
     title, engagementType, newGameSetKey, eventDetails, gameAiContext,
     newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice,
     isEdit ? Array.from(editCategoryNames).sort() : null,
+    // A briefing typed or drafted — or a document still being read — is work.
+    briefing ? briefing.text : null, briefingWorking,
   ]);
   const openedAs = useRef(snapshot);
   const dirty = snapshot !== openedAs.current;
@@ -702,6 +725,24 @@ export default function GameSetupDialog({
             </div>
           )}
         </div>
+
+        {/*
+          WORKIE'S BRIEFING — main view, Call & Answer only (mockups 01, 03).
+          The one Workie input that changes what Workie KNOWS; under Advanced
+          it would never be found. BriefingField owns every state.
+        */}
+        {isCallAndAnswer && (
+          <>
+            <h3 className="gsd-section">
+              Workie’s briefing<span className="gsd-tag">Call &amp; Answer only</span>
+            </h3>
+            <BriefingField
+              value={briefing}
+              onChange={setBriefing}
+              onWorkingChange={setBriefingWorking}
+            />
+          </>
+        )}
 
         {/*
           ── ADVANCED ─────────────────────────────────────────────────────────
@@ -1059,7 +1100,13 @@ export default function GameSetupDialog({
           {/* A survey is created AND opened by this press (the page posts
               /start straight after the create), so the button says what it
               does: phones can answer the moment it lands. */}
-          <button type="button" className="btn-primary" onClick={submit} disabled={!canCreate || busy}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={submit}
+            disabled={!canCreate || busy}
+            title={isCallAndAnswer && briefingWorking ? 'Waiting for Workie to finish the briefing' : undefined}
+          >
             {busy
               ? (isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…'))
               : (isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement'))}

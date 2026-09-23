@@ -686,6 +686,9 @@ exports.handler = async (event) => {
           // spelling, and must stay renderable.
           personaName: questionAISummary.PersonaName || questionAISummary.personaName || null,
           personaId: questionAISummary.PersonaId || questionAISummary.personaId || null,
+          // Written with the host's Call & Answer briefing? A flag the summary
+          // row froze — the report says WHICH rounds, never the brief's text.
+          briefingUsed: questionAISummary.BriefingUsed === true,
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,
         

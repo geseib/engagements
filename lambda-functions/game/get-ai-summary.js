@@ -7,9 +7,10 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, resolveOutputSections, pickOpeningMove,
+  buildContextBlock, buildHostDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
+const { isCallAndAnswer } = require('./briefing');
 const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
 const { extractVariableTokens } = require('./template-variables');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
@@ -717,7 +718,11 @@ exports.handler = async (event) => {
         
         // Add debug information if debug mode is enabled
         if (debug === 'true' && existingSummary.Item.DebugInfo) {
-          responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt || 'Debug info not available';
+          // This route is public: the briefing is withheld from any prompt it
+          // returns (personas.js withholdBriefing).
+          responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt
+            ? withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt)
+            : 'Debug info not available';
           responseData.debugProvenance = existingSummary.Item.DebugInfo.promptProvenance || null;
         }
         
@@ -1275,6 +1280,16 @@ exports.handler = async (event) => {
       */
       gameAiContext: metadata.AIContext || '',
       eventDetails: metadata.EngagementInfo || metadata.Details || '',
+      /*
+        THE BRIEFING (session-setup-redesign Phase 3): the host-checked summary
+        of a document, Call & Answer only. METADATA is decrypted above, so this
+        is the map, and only its TEXT goes on — never the file name. The server
+        refuses a briefing on any other format at create and PUT; the format
+        check here keeps a row written some other way from briefing one.
+      */
+      briefing: isCallAndAnswer(metadata.GameType) && metadata.Briefing && typeof metadata.Briefing.text === 'string'
+        ? metadata.Briefing.text
+        : '',
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
@@ -1354,6 +1369,9 @@ exports.handler = async (event) => {
       PersonaName: summaryData.personaName || null,
       PersonaId: summaryData.personaId || null,
       PersonaSource: summaryData.personaSource || null,
+      // Written with the briefing? Only the model path can say yes; the
+      // data-driven fallback never read it.
+      ...(summaryData.briefingUsed ? { BriefingUsed: true } : {}),
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
@@ -1404,7 +1422,7 @@ exports.handler = async (event) => {
     
     // Add debug information if debug mode is enabled
     if (debug === 'true' && summaryData.debugInfo) {
-      responseData.debugPrompt = summaryData.debugInfo.fullPrompt;
+      responseData.debugPrompt = withholdBriefing(summaryData.debugInfo.fullPrompt);
       responseData.debugProvenance = summaryData.debugInfo.promptProvenance;
     }
     
@@ -1617,7 +1635,7 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -2662,6 +2680,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       unresolvedVariables.map((n) => `{${n}}`).join(', '));
   }
 
+  /*
+    THE BRIEFING LAYER, LAST — after the host's required additions, the
+    position games 1935 and 4567 showed the model obeys (personas.js
+    buildBriefingLayer carries the argument). Appended AFTER the template
+    variables are filled and checked, so a brace in a customer's document is
+    neither substituted nor reported as an unresolved variable: the brief goes
+    to the model exactly as the host signed it off.
+  */
+  const briefingLayer = buildBriefingLayer({ briefing });
+  if (briefingLayer) prompt += `\n\n${briefingLayer}`;
+
   // THE PROMPT IS NEVER LOGGED. It embeds every answer verbatim, the question
   // and the host's brief — all ciphertext at rest on an org's session. To see
   // the prompt a round was given, generate its summary with ?debug=true: the
@@ -2762,7 +2791,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // Whose voice this section is in. Persisted onto the AISummary item so a
       // report generated weeks later can attribute it — by then the game's
       // PersonaId may have been switched again, or the persona edited.
-      ...personaAttribution(persona)
+      ...personaAttribution(persona),
+      // Whether THIS summary was written with the briefing. A flag, never the
+      // text: the report says which rounds were briefed (RATIONALE §f Q1).
+      briefingUsed: Boolean(briefingLayer)
     };
 
     // Include debug information if in debug mode

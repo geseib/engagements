@@ -29,7 +29,9 @@
  *     which unmounts when the dialog closes: confirmingClose, engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
- *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names).
+ *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names),
+ *     briefing and briefingWorking (Workie's briefing, Call & Answer only —
+ *     the session's own row carries the saved one).
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a
  *     session from history, not the one on stage, so it must not live in the
@@ -165,6 +167,8 @@ export function initialGameSession() {
     // --- and its summary approach — same lifetime, same reset ------------
     gamePromptId: '',
     promptSwitchStatus: '',
+    // --- and whether it carries a briefing (the stage's "Briefing on") ----
+    sessionBriefed: false,
 
     // --- AI summaries ---------------------------------------------------
     aiSummaries: {},

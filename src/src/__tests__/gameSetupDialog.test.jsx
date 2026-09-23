@@ -1002,3 +1002,96 @@ describe('a refused Create lands in the dialog, not in a browser alert', () => {
     expect(src).toMatch(/parseUpgradeRequired\(createResponse, errorData\)/);
   });
 });
+
+/*
+  WORKIE'S BRIEFING (session-setup-redesign Phase 3, mockups 01 and 03). In
+  the MAIN view, not under Advanced — the one Workie input that changes what
+  Workie knows, and an upload hidden under a fold would never be found. Call &
+  Answer only: the server refuses it elsewhere. components/BriefingField.jsx
+  has its own suite for every state; this one is about its place in the form.
+*/
+describe("Workie's briefing", () => {
+  const writeIt = (text) => {
+    fireEvent.click(screen.getByRole('button', { name: /write the key points yourself/i }));
+    fireEvent.change(screen.getByLabelText(/what workie will know/i), { target: { value: text } });
+  };
+  const create = () => fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
+
+  test('is in the main view for Call & Answer, above Advanced, not inside it', () => {
+    setup();
+    const invite = screen.getByText(/Brief Workie from a document/);
+    expect(advanced().contains(invite)).toBe(false);
+    expect(screen.getByRole('heading', { name: /Workie.s briefing/i })).toBeInTheDocument();
+  });
+
+  test.each(['Trivia', 'Poll', 'Wavelength', 'Survey'])('is not offered for %s', (label) => {
+    setup();
+    fireEvent.click(pill(label));
+    expect(screen.queryByText(/Brief Workie from a document/)).toBeNull();
+  });
+
+  test('a typed briefing reaches the create payload', () => {
+    const { props } = setup({ eventTitle: 'Q3 review' });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    writeIt('Open issues are up 15%.');
+    create();
+    expect(props.onCreate.mock.calls[0][0].briefing).toEqual(expect.objectContaining({
+      text: 'Open issues are up 15%.', source: null,
+    }));
+  });
+
+  test('no briefing is null in the payload, never a stale value', () => {
+    const { props } = setup({ eventTitle: 'Q3 review' });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    create();
+    expect(props.onCreate.mock.calls[0][0].briefing).toBeNull();
+  });
+
+  test('switching format hides it and leaves it out; switching back brings it back', () => {
+    const { props } = setup({ eventTitle: 'Quiz' });
+    writeIt('Kept while the dialog is open.');
+    fireEvent.click(pill('Trivia'));
+    fireEvent.change(setSelect(), { target: { value: 'platform:space' } });
+    create();
+    expect('briefing' in props.onCreate.mock.calls[0][0]).toBe(false);
+    fireEvent.click(pill('Call & Answer'));
+    expect(screen.getByLabelText(/what workie will know/i).value).toBe('Kept while the dialog is open.');
+  });
+
+  test('a briefing in hand is work in hand: closing asks first', () => {
+    const { props } = setup();
+    writeIt('Half a brief');
+    fireEvent.click(screen.getByRole('button', { name: /close without creating/i }));
+    expect(props.onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  });
+
+  test('Create waits while Workie is writing the briefing, and frees up when it is done', async () => {
+    setup({ eventTitle: 'Q3 review' });
+    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    const createButton = screen.getByRole('button', { name: /create engagement/i });
+    expect(createButton).toBeEnabled();
+    const input = document.querySelector('input[type="file"]');
+    fireEvent.change(input, { target: { files: [new File(['Open issues are up 15%. '.repeat(20)], 'notes.txt')] } });
+    expect(createButton).toBeDisabled();
+    // The mocked API answers the draft with no briefing: the red state, and Create is free again.
+    expect(await screen.findByText(/couldn.t write the briefing/i)).toBeInTheDocument();
+    expect(createButton).toBeEnabled();
+  });
+
+  test('edit: seeded from the saved session, and Save carries it — or null once removed', () => {
+    const { props } = setup({
+      mode: 'edit',
+      initialValues: {
+        title: 'Q3 review', gameType: 'call-and-answer', questionSetId: 'pricing', selectedCategoryNames: ['Leadership'],
+        briefing: { text: 'Saved facts.', source: { name: 'q3.pdf', pages: 14, chars: 19400, truncated: false }, namesRemoved: 2 },
+      },
+    });
+    expect(screen.getByLabelText(/what workie will know/i).value).toBe('Saved facts.');
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate.mock.calls[0][0].briefing.text).toBe('Saved facts.');
+    fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(props.onCreate.mock.calls[1][0].briefing).toBeNull();
+  });
+});

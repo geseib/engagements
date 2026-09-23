@@ -582,6 +582,120 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert.strictEqual((await putGame(gameId, { promptId: '' })).status, 200);
   });
 
+  /*
+    ── THE BRIEFING (session-setup-redesign Phase 3) ────────────────────────
+    A Call & Answer session's document summary for Workie. Stored only as the
+    host-checked map on METADATA.Briefing, encrypted like the rest of the
+    session brief, at most 1,500 characters, Call & Answer only — and returned
+    on the HOST read, never the public one participants' phones make.
+  */
+  console.log('\nthe briefing: create, edit, and who can read it back\n');
+  const envelope = (v) => !!v && typeof v === 'object' && typeof v.ct === 'string' && typeof v.iv === 'string';
+  const BRIEF = {
+    text: 'Q3 review of the support team.\n- Open issues are up 15% on Q2.\n- MTTR is 3 weeks.',
+    source: { name: 'q3-support-ops-review.pdf', pages: 14, chars: 19400, truncated: false },
+    namesRemoved: 2,
+    draftedAt: '2026-09-23T10:00:00.000Z',
+  };
+  const hostRead = async (gameId, role) => {
+    quiet();
+    const res = await getGameHandler({ pathParameters: { gameId }, queryStringParameters: role ? { role } : {} });
+    loud();
+    return JSON.parse(res.body);
+  };
+
+  quiet();
+  const briefed = await createGame({ eventTitle: 'Briefed', gameType: 'call-and-answer', questionSetId: 'set-a', briefing: BRIEF });
+  const unbriefed = await createGame({ eventTitle: 'Unbriefed', gameType: 'call-and-answer', questionSetId: 'set-a' });
+  loud();
+
+  await acheck('a Call & Answer create stores the briefing, encrypted at rest', async () => {
+    assert.strictEqual(briefed.status, 201, JSON.stringify(briefed.body));
+    const raw = rawMetadataOf(briefed.body.gameId);
+    assert(envelope(raw.Briefing), `Briefing is not an envelope at rest: ${JSON.stringify(raw.Briefing)}`);
+    assert.strictEqual(metadataOf(briefed.body.gameId).Briefing.text, BRIEF.text);
+    assert.strictEqual(metadataOf(briefed.body.gameId).Briefing.namesRemoved, 2);
+  });
+
+  await acheck('a create with no briefing stores no Briefing attribute at all', async () => {
+    assert(!('Briefing' in rawMetadataOf(unbriefed.body.gameId)));
+  });
+
+  await acheck('a trivia create with a briefing is refused, and nothing is created', async () => {
+    const m = mark();
+    quiet();
+    const r = await createGame({ eventTitle: 'Quiz', gameType: 'trivia', questionSetId: 'set-a', briefing: BRIEF });
+    loud();
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+    assert.match(r.body.error, /Call & Answer/);
+    assert.deepStrictEqual(writesIn(sentSince(m)), []);
+  });
+
+  await acheck('a create with 1,501 characters is refused', async () => {
+    quiet();
+    const r = await createGame({ eventTitle: 'Long', gameType: 'call-and-answer', questionSetId: 'set-a', briefing: { text: 'x'.repeat(1501) } });
+    loud();
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+  });
+
+  await acheck('the HOST read returns the briefing decrypted, for the edit prefill', async () => {
+    const info = await hostRead(briefed.body.gameId, 'host');
+    assert.strictEqual(info.briefing && info.briefing.text, BRIEF.text);
+    assert.strictEqual(info.briefing.source.name, 'q3-support-ops-review.pdf');
+  });
+
+  await acheck('the PUBLIC read — what a phone makes — carries no briefing key at all', async () => {
+    const info = await hostRead(briefed.body.gameId, null);
+    assert(!('briefing' in info), 'a participant can read the host\'s briefing');
+    assert(!JSON.stringify(info).includes('Open issues are up 15%'));
+  });
+
+  await acheck('PUT sets a briefing on a CREATED session, encrypted at rest', async () => {
+    const gameId = unbriefed.body.gameId;
+    quiet();
+    const r = await putGame(gameId, { briefing: { text: 'Typed by hand.\n- One fact.' } });
+    loud();
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert(envelope(rawMetadataOf(gameId).Briefing));
+    assert.strictEqual(metadataOf(gameId).Briefing.text, 'Typed by hand.\n- One fact.');
+    assert.strictEqual(metadataOf(gameId).Briefing.source, null);
+  });
+
+  await acheck('PUT briefing: null REMOVES it rather than storing an empty one', async () => {
+    const gameId = unbriefed.body.gameId;
+    quiet();
+    const r = await putGame(gameId, { briefing: null });
+    loud();
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert(!('Briefing' in rawMetadataOf(gameId)));
+  });
+
+  await acheck('PUT 1,501 characters is refused and nothing lands', async () => {
+    const gameId = briefed.body.gameId;
+    quiet();
+    const r = await putGame(gameId, { briefing: { text: 'x'.repeat(1501) } });
+    loud();
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+    assert.strictEqual(metadataOf(gameId).Briefing.text, BRIEF.text);
+  });
+
+  await acheck('PUT a briefing on a started session is refused by the state gate', async () => {
+    quiet();
+    const r = await putGame(started.body.gameId, { briefing: { text: 'Too late.' } });
+    loud();
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+    assert(!('Briefing' in rawMetadataOf(started.body.gameId)));
+  });
+
+  await acheck('PUT a briefing on a trivia session is refused', async () => {
+    quiet();
+    const quiz = await createGame({ eventTitle: 'Quiz', gameType: 'trivia', questionSetId: 'set-a' });
+    const r = await putGame(quiz.body.gameId, { briefing: { text: 'No.' } });
+    loud();
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+    assert.match(r.body.error, /Call & Answer/);
+  });
+
   loud();
   console.log('\ncategories: the enabled subset is editable; the set is not\n');
 

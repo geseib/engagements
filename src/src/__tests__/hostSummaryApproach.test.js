@@ -60,3 +60,17 @@ test('it has the same shape as the voice switch beside it', () => {
 test('a resumed session restores the pick from the game record', () => {
   expect(src).toMatch(/setGamePromptId\(gameStateData\.gameMetadata\.promptId \|\| ''\)/);
 });
+
+/*
+  "BRIEFING ON" — session-setup-redesign page 30. The stage says THAT Workie
+  has the host's briefing, beside the voice and the approach; never the file
+  name and never the text. Restored from get-game-state's boolean on a reload,
+  and reset with the rest of the game (config/gameSession.js).
+*/
+test('the stage says "Briefing on" when the session is briefed, and restores it on reload', () => {
+  expect(src).toMatch(/setSessionBriefed\(gameStateData\.gameMetadata\.briefed === true\)/);
+  const at = src.indexOf('id="game-prompt"');
+  const controls = src.slice(at, at + 2000);
+  expect(controls).toMatch(/\{sessionBriefed && \(/);
+  expect(controls).toMatch(/Briefing on/);
+});
