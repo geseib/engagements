@@ -5,7 +5,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
-const { recordRoundServed } = require('./platform-metrics');
+const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1080,6 +1080,14 @@ exports.handler = async (event) => {
         }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
+    }
+
+    // The room is leaving the round on screen — for the next question or for
+    // the end — so count that round's answers, once, in one COUNT query
+    // (platform-metrics.js; never throws). Before both branches, so a
+    // session's last round is counted too; every refusal above has returned.
+    if (currentLessonNumber > 0) {
+      await recordRoundClosed({ gameId, round: currentLessonNumber, metadata: gameMetadata.Item }, { db });
     }
 
     if (!nextQuestion) {
