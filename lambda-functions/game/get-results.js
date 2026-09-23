@@ -6,6 +6,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
+const { shapeForLog } = require('./log-shape');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -853,7 +854,9 @@ async function handleTriviaResults(event, gameId, questionId) {
   console.log(`🏆 Trivia results: ${correctAnswers.length}/${answers.length} correct, total points: ${totalPoints}`);
   console.log(`🔍 TRIVIA DEBUG: Question object available: ${!!question}`);
   if (question) {
-    console.log(`🔍 TRIVIA DEBUG: Question fields - title: ${question.title || question.Title}, correctAnswer: ${question.correctAnswer || question.CorrectAnswer}`);
+    // Shapes, never values: the title was decrypted above, and correctAnswer is
+    // often the right option's text — ciphertext at rest on an org's set.
+    console.log(`🔍 TRIVIA DEBUG: Question fields - title: ${shapeForLog(question.title || question.Title)}, correctAnswer: ${shapeForLog(question.correctAnswer || question.CorrectAnswer)}`);
   }
 
   // Update player scores for trivia results

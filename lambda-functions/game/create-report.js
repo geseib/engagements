@@ -6,6 +6,7 @@ const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
+const { shapeForLog } = require('./log-shape');
 const { reconcileReport } = require('./report-merge');
 
 /**
@@ -505,7 +506,7 @@ exports.handler = async (event) => {
           }
         }
         
-        console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${questionDetails?.Title || 'N/A'}`);
+        console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${shapeForLog(questionDetails?.Title)}`);
       }
 
       // Calculate vote tallies for ranking (same logic as get-ai-summary.js)
@@ -603,9 +604,11 @@ exports.handler = async (event) => {
         console.log(`  - questionDetails exists: ${!!questionDetails}`);
         console.log(`  - questionDetails keys: ${questionDetails ? Object.keys(questionDetails).join(', ') : 'N/A'}`);
         if (questionDetails) {
-          console.log(`  - optionA: ${questionDetails.optionA || questionDetails.OptionA || 'missing'}`);
-          console.log(`  - optionB: ${questionDetails.optionB || questionDetails.OptionB || 'missing'}`);
-          console.log(`  - correctAnswer: ${questionDetails.correctAnswer || questionDetails.CorrectAnswer || 'missing'}`);
+          // Shapes, never values — an org set's options are ciphertext at rest,
+          // and correctAnswer is often the right option's own text.
+          console.log(`  - optionA: ${shapeForLog(questionDetails.optionA || questionDetails.OptionA)}`);
+          console.log(`  - optionB: ${shapeForLog(questionDetails.optionB || questionDetails.OptionB)}`);
+          console.log(`  - correctAnswer: ${shapeForLog(questionDetails.correctAnswer || questionDetails.CorrectAnswer)}`);
         }
       }
 
