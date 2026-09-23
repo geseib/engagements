@@ -191,9 +191,42 @@ describe('saving from the report opens the dialog with the server\'s passkey', (
     });
     render(<GameReport reportData={reportData} status="ready" onClose={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /save report/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save Report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('dialog', { name: 'Report saved' })).toBeInTheDocument();
     expect(screen.getByLabelText('Passkey')).toHaveValue('M4NP2-QRS7T');
     expect(authFetch.mock.calls[0][0]).toMatch(/games\/4821\/save-report$/);
+  });
+});
+
+describe('the save options say what the bucket actually does', () => {
+  /*
+    The owner, 2026-09-23, on the choice "24 hrs or 1 year": the dialog said
+    "Temporary Save (24 hours) — deleted after 24 hours" while the bucket kept a
+    standard report 90 days, and called a 365-day report "Permanent". The
+    numbers come from ReportsBucket's lifecycle rule, read here as text, so the
+    copy cannot drift from them again.
+  */
+  const fs = require('fs');
+  const path = require('path');
+  const template = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'template-clean.yaml'), 'utf8');
+  const rule = template.slice(template.indexOf('Id: DeleteOldReports'));
+  const standardDays = Number(rule.match(/Value: standard\s+ExpirationInDays: (\d+)/)[1]);
+  const permanentDays = Number(rule.match(/Prefix: permanent\/\s+ExpirationInDays: (\d+)/)[1]);
+
+  test('the template still says 90 and 365 (guards the parse)', () => {
+    expect([standardDays, permanentDays]).toEqual([90, 365]);
+  });
+
+  // rejects: "24 hours", "Temporary", "Permanent" — every claim that was false.
+  test('each option names its real retention, and nothing claims forever', () => {
+    render(<GameReport reportData={{ gameId: '4821', eventTitle: 'Q3 Offsite', players: [], questions: [] }} status="ready" onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /save report/i }));
+    // 90 days is the default, as the 24-hour option was.
+    expect(screen.getByLabelText(new RegExp(`Keep for ${standardDays} days`))).toBeChecked();
+    expect(screen.getByText(`Deleted automatically ${standardDays} days after you save it.`)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Keep for 1 year/)).toBeInTheDocument();
+    expect(permanentDays).toBe(365);
+    const dialog = document.querySelector('.save-report-modal');
+    expect(dialog.textContent).not.toMatch(/24 hours|temporary|permanent/i);
   });
 });

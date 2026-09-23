@@ -105,14 +105,17 @@ test('the sheet is labelled as a sample, because it is one', () => {
 
 test('export and sharing say only what exists: PDF, print, a saved link', () => {
   // Adapted from the brief's /temporary or permanent/i to the mockup's own
-  // wording ("kept for a set time or kept permanently") per ruling 4 — same
-  // intent: PDF is mentioned, and the temporary-or-permanent choice is too.
+  // wording per ruling 4 — same intent: PDF is mentioned, and the retention
+  // choice is too. It said "kept permanently" until 2026-09-23; nothing is:
+  // the longer choice is a year (template-clean.yaml DeleteOldReports).
   render(<ReportsPage />);
   // getByText(/PDF/) is ambiguous since fix round 2: the sheet's inert
   // "Export PDF" footer label also matches "PDF", alongside this export
   // card's own heading. getAllByText avoids the "found multiple" failure.
   expect(screen.getAllByText(/PDF/).length).toBeGreaterThan(0);
-  expect(screen.getByText(/kept for a set time or kept permanently/i)).toBeInTheDocument();
+  expect(screen.getByText(/kept for 90 days or a year/i)).toBeInTheDocument();
+  // rejects: promising "permanently" again.
+  expect(screen.queryByText(/permanent/i)).toBeNull();
 });
 
 test('every callout and sharing string from the content module is on the page', () => {
