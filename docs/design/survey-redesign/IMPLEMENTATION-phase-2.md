@@ -121,10 +121,18 @@ Phone `stateRank`: OPEN 1, CLOSED 2, ENDED max.
 - **`SURVEY#DONE#<playerName>`** (Who finished only) — `Name`, `Status`
   (`started`→`finished`), `FinishedAt`, `Session`, `ttl`. No respondent id, no progress.
 - **`SURVEY#RESULTS`** — `Version:1`, `N`, `Finished`, `PerQuestion`, `Order`,
-  `Texts` (encrypted, `surveyResults: ['Texts']`: `{qid:[{id,text,v?}]}` — open
-  answers, write-ins, whys), `orgId`, `Names`, `OpenedAt`, `ClosedAt`, `Session`,
-  set ref + version, `ttl = ClosedAt + 30d`. Self-contained (METADATA expires at
-  start + 7d first).
+  `TextPages` (`{qid: pageCount}`, only qids with texts), `orgId`, `Names`,
+  `OpenedAt`, `ClosedAt`, `Session`, set ref + version, `ttl = ClosedAt + 30d`.
+  Self-contained (METADATA expires at start + 7d first). Written LAST and
+  conditionally (`attribute_not_exists(PK) OR Session <> :session`): its
+  existence means every page it names was written.
+- **`SURVEY#RESULTS#TEXT#<qid>#<page>`** (page `000`, `001`, …) — `Qid`, `Page`,
+  `Texts` (encrypted, `surveyResults: ['Texts']`: `[{id,text,v?}]` for that qid —
+  open answers, write-ins, whys, ids `<qid>:<k>` continuing across pages in
+  order), `orgId`, `Session`, `ttl` = the main item's. Cut at ≤ 256 KB of JSON
+  per page (≈ 342 KB sealed), because one item holding every text passes the
+  400 KB item limit at a few hundred respondents. A reader fetches exactly the
+  keys `TextPages` names (no reader exists until Phase 3).
 - **Respondent id** — Anonymous/Who finished: phone mints `r_` + 22 base64url
   (128 bits) under `surveyResp_<gameId>`; never derived from `clientId`; server
   checks `/^r_[A-Za-z0-9_-]{22}$/`. Named: respondent = player name, server checks
@@ -147,31 +155,42 @@ Indexes are canonical option order; `shuffle` is display-only, seeded by respond
 ### Routes (player: public like `/comments`; host: Cognito + `claims && callerMayDriveSession` → 404)
 | method/path | who | body | 200 | errors |
 |---|---|---|---|---|
-| `GET /games/{id}/survey` | player | — | `{state,names,openedAt,warnedAt,questions:[{qid,n,kind,title,detail,required,…}]}` decrypted from the set's org | 404 not a survey; 409 not started |
-| `PUT /games/{id}/survey/answers` | player | `{qid,value,respondentId?,player?:{name,clientId}}` | `{qid,saved:true,rev,answered:n,complete}` | 400 bad value/qid; 403 `NOT_YOU`; 409 closed |
-| `POST /games/{id}/survey/submit` | player | `{respondentId?,player?}` | `{complete:true}` | 422 `{missing:[qid]}`; 409 closed |
+| `GET /games/{id}/survey` | player | — | `{title,state,names,openedAt,warnedAt,questions:[{qid,n,kind,title,detail,required,…}]}` — questions decrypted from the set's org, `title` (the session's, `''` if none) from the session's | 404 not a survey; 409 not started |
+| `PUT /games/{id}/survey/answers` | player | `{qid,value,respondentId?,player?:{name,clientId}}` | `{qid,saved:true,rev,answered:n,complete}` | 400 bad value/qid; 403 `NOT_YOU`; 409 `SURVEY_CLOSED`/`NOT_OPEN`; **503 `BUSY`** (conflict budget spent) / **503 `CONFLICT`** (Rev lost 3×) — retryable |
+| `POST /games/{id}/survey/submit` | player | `{respondentId?,player?}` | `{complete:true,answered}` | 422 `{code:'NOTHING_ANSWERED',missing:[required qids]}` (nothing answered); 422 `{code:'MISSING',missing}`; 409 closed; 503 `BUSY`/`CONFLICT` — retryable, incl. a Who-finished DONE write that failed |
 | `POST /games/{id}/survey/mine` | player | `{respondentId?,player?}` | `{answers,answered,complete,rev}` | 403; 404 no row |
-| `POST /games/{id}/survey/close` | host | — | `{n,finished,perQuestion}` (no texts); idempotent | 409 not open/closed |
-| `POST /games/{id}/survey/warning` | host | — | `{warnedAt}` | 409 not open |
-| `POST /games/{id}/survey/end` | host | — | `{state:'ENDED'}` | 409 not closed |
+| `POST /games/{id}/survey/close` | host | — | `{n,finished,perQuestion,closedAt}` (no texts); idempotent | 409 not open/closed; 503 `BUSY` |
+| `POST /games/{id}/survey/warning` | host | — | `{warnedAt}` | 409 not open; 503 `BUSY` |
+| `POST /games/{id}/survey/end` | host | — | `{state:'ENDED'}` (freezes first if `SURVEY#RESULTS` is missing) | 409 not closed; 503 `BUSY` |
 | `GET /games/{id}/survey/progress` | host | — | the `surveyProgress` payload | — |
 | `GET /games/{id}/survey/people` | host | — | `{people:[{name,status:'finished'\|'partway'\|'not-started'}]}` | 409 in Anonymous |
 `mine` is POST (deviates from PLAN's GET): it carries a clientId/respondent
 capability that must stay out of URLs and logs (precedent `POST /games/get-results`).
+**409 is a fact about the survey** (closed / not open) and the phone stops on it;
+**every retryable failure is a 503** (`BUSY`, `CONFLICT`) and the phone retries.
+Once sent, `Complete` stays true even if an answer is later cleared.
+`next-question`, `start-vote` and `get-results` (both routes) refuse a survey: 409,
+STATE untouched.
 
 **PUT algorithm:** read METADATA+STATE in parallel → validate against the question →
 ConsistentRead the RESP row, decrypt, set one key, re-encrypt → `TransactWriteCommand`
 with a **ConditionCheck STATE `State = 'SURVEY#OPEN'`** + Put conditioned
-`attribute_not_exists(PK) OR Rev = :rev`, retry ≤3 (precedent `toggle-category.js:231`)
+`attribute_not_exists(PK) OR Rev = :rev`: STATE check failed → 409; Rev failed →
+re-read, ≤3 then 503 `CONFLICT` (precedent `toggle-category.js:231`); cancellation
+reason `TransactionConflict` (every concurrent answer holds STATE — DynamoDB locks
+a ConditionCheck's item too) → jittered backoff, 8 tries ≲1.6 s
+(`game/survey-retry.js`), then 503 `BUSY`
 → if new row and Who finished: conditional DONE `started` (after verifying the player)
 → `countAnsweredQuestion(db, table, gameId, qid, meta)` (a `game/` copy of
 `session-count.js`, so surveys bill at their 2nd answered question) → only if
 `Answered`/`Complete` changed: Query `SURVEY#RESP#` ConsistentRead projecting
 `Answered, Complete` → broadcast progress.
 
-**Close:** conditional STATE OPEN→CLOSED + `ClosedAt` → Query `SURVEY#RESP#`
-ConsistentRead, **paginate** `LastEvaluatedKey` → decrypt, filter to current
-`Session`, `aggregate(questions, rows)` → Put `SURVEY#RESULTS` → broadcast.
+**Close:** conditional STATE OPEN→CLOSED + `ClosedAt` (retrying
+`TransactionConflictException`) → Query `SURVEY#RESP#` ConsistentRead, **paginate**
+`LastEvaluatedKey` → decrypt, filter to current `Session`, `aggregate(questions,
+rows)` → Put the text pages → conditional Put `SURVEY#RESULTS` → only the close whose
+Put landed records metrics and broadcasts; a racing one returns the stored counts.
 
 ### Broadcasts
 | type | to | payload |
@@ -365,3 +384,19 @@ end.
     Named People answers readable 7 days until Phase 3 decides.
 11. **Set-level `namesDefault` isn't in Phase 1's contract** → optional in Track D; the
     create dialog defaults to Anonymous either way.
+12. **Who finished can be de-anonymised by watching.** A host who watches `/people`
+    alongside the live per-question counts (`surveyProgress`) sees a name move to
+    "partway" or "finished" at the moment a question's count ticks up, so can infer
+    which questions a named person answered — and with a small n, which open answer
+    is theirs. Phase 3's results must apply a minimum-n rule before showing texts or
+    themes, and the live counts in Who finished may need coarsening (batched, or
+    rounded, while the list is on screen).
+13. **`progressFor` is a full consistent Query per change** — every first answer to a
+    question (and every Send) re-reads every `SURVEY#RESP#` row, projected, to
+    rebuild the counts. Fine for rooms; revisit near 1,000 respondents (a counter row,
+    or a debounced broadcast).
+14. **The results item still grows with the texts' ids.** The words are paged, but
+    `PerQuestion` keeps each question's text ids (`answerIds`, `otherIds`, `whys`),
+    ~16 bytes a text. That bounds `SURVEY#RESULTS` at roughly 20,000 texts; Phase 3
+    can derive those lists from the pages (every text on a page carries its id and
+    `v`) if a survey ever gets near it.
