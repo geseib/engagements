@@ -74,6 +74,8 @@ const HEADER_TO_FIELD = {
   title: 'Title',
   detail: 'Detail',
   questiondetail: 'Detail',
+  // What every download writes for call-and-answer, poll and survey.
+  detaillesson: 'Detail',
   school: 'School',
   custominstructions: 'CustomInstructions',
   custominstruction: 'CustomInstructions',
@@ -92,6 +94,27 @@ const HEADER_TO_FIELD = {
   difficulty: 'difficulty',
   options: 'options',
   allowmultiple: 'allowMultiple',
+  // The survey branch of the contract (docs/design/survey-redesign/
+  // IMPLEMENTATION-phase-0-1.md). toRow reads the capitalised spellings and
+  // types the strings (booleans, integers, the per-kind defaults).
+  kind: 'Kind',
+  required: 'Required',
+  maxpicks: 'MaxPicks',
+  allowother: 'AllowOther',
+  shuffle: 'Shuffle',
+  scale: 'Scale',
+  lowlabel: 'LowLabel',
+  highlabel: 'HighLabel',
+  yeslabel: 'YesLabel',
+  nolabel: 'NoLabel',
+  unsure: 'Unsure',
+  followupwhen: 'FollowUpWhen',
+  followupprompt: 'FollowUpPrompt',
+  ranktop: 'RankTop',
+  textlength: 'TextLength',
+  maxlength: 'MaxLength',
+  placeholder: 'Placeholder',
+  themes: 'Themes',
 };
 
 /** A CSV in the template's own columns → rows. `{ rows, error }`. */
@@ -107,6 +130,12 @@ export function rowsFromCsv(text) {
     .map((cells) => {
       const source = {};
       fields.forEach((field, i) => { if (field) source[field] = cells[i] ?? ''; });
+      // The file separates options with a pipe, as the importer reads them.
+      // Handing toRow the raw cell would let its tag splitter cut an option
+      // at every comma ("The case studies, with their numbers" became two).
+      if (typeof source.options === 'string') {
+        source.options = source.options.split('|').map((o) => o.trim()).filter(Boolean);
+      }
       return asNewRow(source);
     })
     .filter((row) => row.title);
