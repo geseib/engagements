@@ -319,3 +319,15 @@ describe("rowsToCsv(rows, 'survey') writes the contract CSV", () => {
       + `,${cells({ Kind: 'rating', Required: 'true', Scale: 'stars', LowLabel: 'Too slow', HighLabel: 'Too fast' })},""`);
   });
 });
+
+describe('a | inside an option (review finding, 2026-09-23)', () => {
+  // The importer splits Options on | with no escape, so a pipe inside an
+  // option became two options — and could push a choice past eight or a
+  // ranking past seven, where the importer skips the question on Save.
+  // Folded to '/', as shared/csv.js does for polls, identically on the server.
+  test('is folded to / in the Options cell, and the option count is unchanged', () => {
+    const row = toRow({ Category: 'Survey', Title: 'Q', kind: 'choice', options: ['Before | after', 'Q&A', 'Case study'] });
+    const [, line] = rowsToCsv([row], 'survey').trim().split('\n');
+    expect(line).toContain('"Before / after|Q&A|Case study"');
+  });
+});

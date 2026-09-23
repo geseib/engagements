@@ -316,5 +316,18 @@ check('not JSON throws a readable message', () =>
 check('JSON without a questions list throws a readable message', () =>
   assert.throws(() => K.legacySurveyJsonToCsv('{"title":"x"}'), /questions/));
 
+// A literal `|` in an option cannot be represented — the importer splits on it
+// with no escape — so it is folded to `/`, the rule shared/csv.js already
+// applies to polls. Left alone it split one option into two, pushed a choice
+// past eight or a ranking past seven, and the importer skipped the question.
+check('a | inside an option is folded to /, never split into two options', () => {
+  const cells = K.surveyCsvCells({ kind: 'choice', options: ['Before | after', 'Q&A', 'Case study'] });
+  assert.strictEqual(cells[2], '"Before / after|Q&A|Case study"');
+});
+check('itemsToSurveyCsv folds a | inside an option too', () => {
+  const csv = K.itemsToSurveyCsv([{ kind: 'rank', title: 'Rank', options: ['A|B', 'C', 'D'] }]);
+  assert.ok(csv.includes('"A/B|C|D"'), csv);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

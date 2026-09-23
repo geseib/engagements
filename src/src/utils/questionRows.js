@@ -462,7 +462,9 @@ function surveyCsvCells(r) {
   return [
     quoted(kind),
     bool(true, r.required),
-    str(is('choice', 'rank'), filledOptions(r).join('|')),
+    // A `|` inside an option is folded to `/`: the importer splits on it with
+    // no escape. Same fold as admin/shared/survey-kinds.js cellText('list').
+    str(is('choice', 'rank'), filledOptions(r).map((o) => o.replace(/\|/g, '/')).join('|')),
     bool(is('choice'), r.allowMultiple),
     int(is('choice') && r.allowMultiple === true, r.maxPicks),
     bool(is('choice'), r.allowOther),

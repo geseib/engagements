@@ -316,8 +316,12 @@ function cellText(value, type) {
       if (Number.isInteger(value)) return String(value);
       return typeof value === 'string' && /^\d+$/.test(value.trim()) ? value.trim() : '';
     case 'list':
+      // A `|` inside an option cannot be represented — the importer splits on
+      // it with no escape — so it is folded to `/`, as shared/csv.js does for
+      // polls; left alone it turned one option into two. utils/questionRows.js
+      // folds identically, so the two writers stay byte-identical.
       return Array.isArray(value)
-        ? value.map((v) => String(v ?? '').trim()).filter(Boolean).join('|')
+        ? value.map((v) => String(v ?? '').trim()).filter(Boolean).map((v) => v.replace(/\|/g, '/')).join('|')
         : String(value ?? '').trim();
     default:
       return value === null || value === undefined ? '' : String(value);
