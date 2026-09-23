@@ -49,6 +49,9 @@ jest.mock('../WebSocketClient', () => ({
 const API = window.API_BASE;
 const GAME = '4821';
 const RESPONDENT = /^r_[A-Za-z0-9_-]{22}$/;
+const OPENED = '2026-09-23T10:00:00.000Z';
+/** Where a phone keeps its respondent id: per join code AND per opening. */
+const RESP_KEY = `surveyResp_${GAME}_${OPENED}`;
 
 const Q1 = {
   qid: 'c001#001', n: 1, kind: 'rating', required: true,
@@ -97,7 +100,7 @@ function makeServer(over = {}) {
     names: 'anonymous',
     state: 'SURVEY#OPEN',
     title: 'Q3 All-Hands',
-    openedAt: '2026-09-23T10:00:00.000Z',
+    openedAt: OPENED,
     warnedAt: null,
     questions: QUESTIONS,
     mine: null,                         // null → 404 (no row yet)
@@ -319,7 +322,7 @@ describe('every answer is saved as it is given', () => {
     await waitFor(() => expect(server.puts).toHaveLength(1));
     const [body] = server.puts;
     expect(body).toEqual({ qid: Q1.qid, value: 4, respondentId: expect.stringMatching(RESPONDENT) });
-    expect(body.respondentId).toBe(storage.data.get(`surveyResp_${GAME}`));
+    expect(body.respondentId).toBe(storage.data.get(RESP_KEY));
     expect(JSON.stringify(body)).not.toMatch(/Ada/);
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
   });
@@ -348,7 +351,7 @@ describe('every answer is saved as it is given', () => {
     expect(server.puts[0]).toEqual({
       qid: Q1.qid, value: 2, player: { name: 'Ada', clientId: storage.data.get(`playerClient_${GAME}`) },
     });
-    expect(storage.data.has(`surveyResp_${GAME}`)).toBe(false);
+    expect([...storage.data.keys()].some((k) => k.startsWith('surveyResp_'))).toBe(false);
   });
 
   test('one save in flight per question, and the latest value wins', async () => {
@@ -522,7 +525,7 @@ describe('coming back to it', () => {
     await heading(Q3);
     expect(container.querySelector('.plr-ctx').textContent).toBe('3 of 4');
     // POST, with the identity in the body — never in a URL or a log line.
-    expect(server.mines).toEqual([{ respondentId: storage.data.get(`surveyResp_${GAME}`) }]);
+    expect(server.mines).toEqual([{ respondentId: storage.data.get(RESP_KEY) }]);
     const mineCall = server.fetchFn.mock.calls.find(([u]) => String(u).endsWith('/survey/mine'));
     expect(mineCall[1].method).toBe('POST');
     expect(String(mineCall[0])).not.toMatch(/r_/);
@@ -533,11 +536,31 @@ describe('coming back to it', () => {
 
   test('the same respondent id comes back on the same phone', async () => {
     const storage = memoryStorage();
-    storage.setItem(`surveyResp_${GAME}`, 'r_AAAAAAAAAAAAAAAAAAAAAA');
+    storage.setItem(RESP_KEY, 'r_AAAAAAAAAAAAAAAAAAAAAA');
     const server = makeServer();
     renderRunner(server, { storage });
     await heading(Q1);
     expect(server.mines[0]).toEqual({ respondentId: 'r_AAAAAAAAAAAAAAAAAAAAAA' });
+  });
+
+  // rejects: a respondent keyed by join code alone. Codes are reused, and a
+  // phone that answered the last survey on this code would otherwise file
+  // this one's answers — and resume its row — under the same id.
+  test('a reused join code is a new session: last opening\'s id is not reused', async () => {
+    const storage = memoryStorage();
+    storage.setItem(RESP_KEY, 'r_AAAAAAAAAAAAAAAAAAAAAA');
+    storage.setItem(`surveyResp_${GAME}`, 'r_BBBBBBBBBBBBBBBBBBBBBB');
+    const server = makeServer({ openedAt: '2026-10-02T14:30:00.000Z' });
+    renderRunner(server, { storage });
+    await heading(Q1);
+    const used = server.mines[0].respondentId;
+    expect(used).toMatch(RESPONDENT);
+    expect(used).not.toBe('r_AAAAAAAAAAAAAAAAAAAAAA');
+    expect(used).not.toBe('r_BBBBBBBBBBBBBBBBBBBBBB');
+    expect(storage.data.get(`surveyResp_${GAME}_2026-10-02T14:30:00.000Z`)).toBe(used);
+    await answerRating('4 of 5');
+    await waitFor(() => expect(server.puts).toHaveLength(1));
+    expect(server.puts[0].respondentId).toBe(used);
   });
 
   test('no row yet starts at question 1', async () => {
@@ -725,18 +748,66 @@ describe('checking and sending', () => {
 
 /* ======================================================================= */
 describe('when the host moves on', () => {
-  test('the two-minute warning is a status banner', async () => {
+  /*
+    THE WARNING COUNTS DOWN FROM WHEN IT WAS GIVEN. It said "Two minutes
+    left." whatever the time: a phone that reloaded fifteen minutes after the
+    warning read "two minutes" off GET /survey's warnedAt and was told a close
+    that had long been due was still two minutes away. Now the minutes are
+    worked out from warnedAt (+ the warning's own minutes, two by default)
+    against the clock, and past that it says so. A fixed clock: Date.now.
+  */
+  const WARNED = '2026-09-23T10:20:00.000Z';
+  const at = (iso) => jest.spyOn(Date, 'now').mockReturnValue(Date.parse(iso));
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  test('the warning is a status banner, and says how long is left', async () => {
+    at('2026-09-23T10:20:05.000Z');
     const server = makeServer();
-    renderRunner(server, { warning: { minutes: 2, warnedAt: '2026-09-23T10:20:00.000Z' } });
+    renderRunner(server, { warning: { minutes: 2, warnedAt: WARNED } });
     await heading(Q1);
     const banner = screen.getByRole('status');
     expect(banner).toHaveClass('plr-banner');
     expect(banner).toHaveTextContent(/Two minutes left/);
   });
 
-  test('a warning given before this phone loaded comes from GET /survey', async () => {
-    const server = makeServer({ warnedAt: '2026-09-23T10:20:00.000Z' });
+  test('a minute and ten seconds in, it says one minute', async () => {
+    at('2026-09-23T10:21:10.000Z');
+    const server = makeServer();
+    renderRunner(server, { warning: { minutes: 2, warnedAt: WARNED } });
+    await heading(Q1);
+    expect(screen.getByRole('status')).toHaveTextContent(/One minute left/);
+  });
+
+  test('the warning\'s own minutes are used when it carries them', async () => {
+    at('2026-09-23T10:20:05.000Z');
+    const server = makeServer();
+    renderRunner(server, { warning: { minutes: 5, warnedAt: WARNED } });
+    await heading(Q1);
+    expect(screen.getByRole('status')).toHaveTextContent(/Five minutes left/);
+  });
+
+  test('a warning given before this phone loaded comes from GET /survey, and is counted from then', async () => {
+    at('2026-09-23T10:20:30.000Z');
+    const server = makeServer({ warnedAt: WARNED });
     renderRunner(server);
+    await heading(Q1);
+    expect(screen.getByRole('status')).toHaveTextContent(/Two minutes left/);
+  });
+
+  test('a phone that reloads fifteen minutes after the warning is not told "two minutes"', async () => {
+    at('2026-09-23T10:35:00.000Z');
+    const server = makeServer({ warnedAt: WARNED });
+    renderRunner(server);
+    await heading(Q1);
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveTextContent(/Closing any moment/);
+    expect(banner).not.toHaveTextContent(/minutes? left/);
+  });
+
+  test('a warning frame with no warnedAt counts from when it arrived', async () => {
+    at('2026-09-23T10:20:00.000Z');
+    const server = makeServer();
+    renderRunner(server, { warning: { minutes: 2, warnedAt: null } });
     await heading(Q1);
     expect(screen.getByRole('status')).toHaveTextContent(/Two minutes left/);
   });
@@ -811,7 +882,9 @@ describe('in the player page', () => {
     const server = makeServer();
     await joinSurvey(server);
 
-    await act(async () => { handler('surveyClosingSoon')({ gameId: GAME, minutes: 2, warnedAt: '2026-09-23T10:20:00.000Z' }); });
+    // The frame's warnedAt is "now" on this phone's clock.
+    const now = new Date().toISOString();
+    await act(async () => { handler('surveyClosingSoon')({ gameId: GAME, minutes: 2, warnedAt: now }); });
     // The mocked socket never reports a connection, so the offline banner is up
     // too: find the warning among the status banners rather than assuming one.
     const warning = screen.getAllByRole('status').find((el) => /Two minutes left/.test(el.textContent));

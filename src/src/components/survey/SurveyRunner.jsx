@@ -46,6 +46,21 @@ import TextInput from './TextInput';
  */
 
 const TWO_MINUTES = 2;
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * What the closing-soon banner says, worked out from WHEN the warning was
+ * given — never a fixed "two minutes". Whole minutes left, rounded up, while
+ * there are any; past the host's stated close, that it is closing any moment
+ * (the host closes by hand, so it may yet be open). A phone that reloads long
+ * after the warning reads GET /survey's `warnedAt` and says the truth.
+ */
+export function closingSoonText({ warnedAtMs, minutes = TWO_MINUTES, nowMs }) {
+  const left = warnedAtMs + minutes * MINUTE_MS - nowMs;
+  if (!(left > 0)) return 'Closing any moment.';
+  const m = Math.ceil(left / MINUTE_MS);
+  return `${capitalised(countWord(m))} ${m === 1 ? 'minute' : 'minutes'} left.`;
+}
 
 /** Send is tried this many more times, on the autosave's own back-off, before it says it did not go. */
 const SEND_RETRY_MS = RETRY_MS.slice(0, 3);
@@ -56,6 +71,21 @@ const pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 function capitalised(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+const parseMs = (iso) => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * When the warning was given, in ms: the live frame's `warnedAt`, else the
+ * moment this phone saw a frame that carried none, else GET /survey's
+ * `warnedAt`. null when there has been no warning.
+ */
+function warningStartMs(warning, survey, frameSeenAt) {
+  if (warning) return parseMs(warning.warnedAt) ?? frameSeenAt ?? Date.now();
+  return survey ? parseMs(survey.warnedAt) : null;
 }
 
 /** The rank-highest of the phases this component has heard. */
@@ -127,14 +157,17 @@ export default function SurveyRunner({
   }, []);
 
   const names = survey ? namesMode(survey.names).id : null;
+  // The respondent is per SESSION — the join code and when it opened — so it
+  // is minted only once GET /survey has said when that was (respondent.js).
+  const openedAt = (survey && survey.openedAt) || null;
   const identity = useMemo(() => {
     if (!names) return null;
     return identityFor(names, {
-      respondentId: names === 'named' ? null : getRespondentId(gameId, storage),
+      respondentId: names === 'named' ? null : getRespondentId(gameId, storage, openedAt),
       playerName,
       clientId: getClientId(gameId, storage),
     });
-  }, [names, gameId, playerName, storage]);
+  }, [names, gameId, playerName, storage, openedAt]);
   const identityRef = useRef(identity);
   identityRef.current = identity;
 
@@ -165,7 +198,7 @@ export default function SurveyRunner({
       const s = got.survey;
       const mode = namesMode(s.names).id;
       const who = identityFor(mode, {
-        respondentId: mode === 'named' ? null : getRespondentId(gameId, storage),
+        respondentId: mode === 'named' ? null : getRespondentId(gameId, storage, s.openedAt || null),
         playerName,
         clientId: getClientId(gameId, storage),
       });
@@ -200,6 +233,20 @@ export default function SurveyRunner({
       setAttempt((a) => a + 1);
     }
   }, [state, load.status]);
+
+  /* The warning counts down, so the banner re-renders while it is up. A frame
+     with no warnedAt is counted from the moment it arrived here. */
+  const [frameSeenAt, setFrameSeenAt] = useState(null);
+  useEffect(() => {
+    setFrameSeenAt(warning ? Date.now() : null);
+  }, [warning]);
+  const [, setTick] = useState(0);
+  const warned = Boolean(warning || (survey && survey.warnedAt));
+  useEffect(() => {
+    if (!warned) return undefined;
+    const id = setInterval(() => setTick((n) => n + 1), 10 * 1000);
+    return () => clearInterval(id);
+  }, [warned]);
 
   const questions = survey ? survey.questions || [] : [];
   const total = questions.length;
@@ -282,13 +329,13 @@ export default function SurveyRunner({
   };
 
   /* ---- the warning banner, over whatever is on screen --------------------- */
-  const warnedAt = (warning && (warning.warnedAt || true)) || (survey && survey.warnedAt) || null;
   const minutes = (warning && Number.isInteger(warning.minutes) && warning.minutes > 0) ? warning.minutes : TWO_MINUTES;
-  const warningBanner = warnedAt && isOpen ? (
+  const warnedAtMs = warningStartMs(warning, survey, frameSeenAt);
+  const warningBanner = warnedAtMs !== null && isOpen ? (
     <div className="plr-banner" role="status">
       <Icon name="Timer" weight="bold" size={16} />
       <div>
-        <b>{capitalised(countWord(minutes))} {minutes === 1 ? 'minute' : 'minutes'} left.</b>{' '}
+        <b>{closingSoonText({ warnedAtMs, minutes, nowMs: Date.now() })}</b>{' '}
         Your host will close the survey soon. Everything you have answered counts, even if you
         do not press Send.
       </div>
