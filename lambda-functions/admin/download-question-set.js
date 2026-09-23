@@ -4,6 +4,7 @@ const { resolvePartitionFromMeta } = require('./shared/set-version');
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { ORG } = require('./shared/tenant');
 const { decryptItem, decryptItems } = require('./shared/tenant-crypto');
+const { SURVEY_CSV_COLUMNS, surveyCsvCells } = require('./shared/survey-kinds');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -86,11 +87,17 @@ exports.handler = async (event) => {
       ? await decryptItems(cryptoOrgId, 'question', questionsRes.Items || [])
       : (questionsRes.Items || []);
 
-    // Determine output format based on engagement type and user preference
+    // Determine output format based on engagement type and user preference.
+    //
+    // A SURVEY IS CSV NOW. It used to default to JSON because there was no
+    // survey branch of the CSV and the importer refused surveys anyway, so the
+    // JSON was a dead end: downloadable, not re-importable. The survey branch
+    // below is the contract's (docs/design/survey-redesign/
+    // IMPLEMENTATION-phase-0-1.md), so a survey round-trips like every other
+    // set. `format=json` still returns JSON when a caller asks for it.
     let outputFormat = format;
     if (format === 'auto') {
-      // CSV for simple types, JSON for complex types
-      outputFormat = (engagementType === 'survey' || engagementType === 'mixed') ? 'json' : 'csv';
+      outputFormat = engagementType === 'mixed' ? 'json' : 'csv';
     }
     
     console.log(`Exporting ${questions.length} questions as ${outputFormat} for engagement type: ${engagementType}`);
@@ -254,6 +261,33 @@ exports.handler = async (event) => {
             + `"${esc(q.Title || q.title)}","${esc(q.Detail || q.detail)}",`
             + `"${esc(q.School || q.school)}","${esc(q.CustomInstructions || q.customInstructions)}"`
             + `,"${esc(options)}","${allowMultiple === true || allowMultiple === 'true'}"`
+            + optionalCells(q)
+            + `,"${tagsOf(q)}"`
+            + '\n';
+        });
+      } else if (engagementType === 'survey') {
+        // THE CONTRACT'S SURVEY BRANCH: the six shared columns, then the twenty
+        // from Kind to Themes, then the optional columns by the same rule as
+        // every other type, then Tags. The twenty cells come from
+        // shared/survey-kinds.js — the same module the importer validates with —
+        // quoted like the poll branch: booleans "true"/"false", integers digits
+        // or "", Options pipe-joined, and any field the row's kind does not use
+        // written as its empty value whatever the row carries.
+        //
+        // The browser's rowsToCsv(rows, 'survey') must write these bytes for
+        // the same stored rows; tests/question-set-roundtrip.js holds them
+        // equal, and tests/survey-upload.js holds this branch to a CSV written
+        // out by hand from the contract.
+        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,'
+          + SURVEY_CSV_COLUMNS.join(',')
+          + optionalHeader
+          + ',Tags'
+          + '\n';
+        questions.forEach((q, index) => {
+          csvContent += `"${esc(q.Category || q.category)}",${numberOf(q, index)},`
+            + `"${esc(q.Title || q.title)}","${esc(q.Detail || q.detail)}",`
+            + `"${esc(q.School || q.school)}","${esc(q.CustomInstructions || q.customInstructions)}"`
+            + `,${surveyCsvCells(q).join(',')}`
             + optionalCells(q)
             + `,"${tagsOf(q)}"`
             + '\n';

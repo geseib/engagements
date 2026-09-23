@@ -445,6 +445,152 @@ const questionRows = (pk) => rowsIn(pk)
     assert.strictEqual(v2[0].scale, 'stars');
   });
 
+  say('\n9. the download is the contract CSV, byte for byte');
+
+  // Written out by hand from the contract — not produced by the module under
+  // test — so a change to either the exporter or survey-kinds.js that moves a
+  // byte is caught here.
+  const EXPECTED_DOWNLOAD = [
+    'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,AllowMultiple,MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,FollowUpWhen,FollowUpPrompt,RankTop,TextLength,MaxLength,Placeholder,Themes,Tags',
+    '"Survey",1,"How likely are you to recommend this session?","","","","rating","true","","false","","false","false","0-10","Not at all likely","Extremely likely","","","false","","","","","","","false","nps"',
+    '"Survey",2,"Which formats would you want more of?","","","","choice","false","More time for questions|A hands-on breakout|Slides sent a day ahead|A recording afterwards","true","2","true","false","","","","","","false","","","","","","","false",""',
+    '"Survey",3,"Was the length about right?","","","","yesno","true","","false","","false","false","","","","","","true","no","What would you cut or add?","","","","","false",""',
+    '"Survey",4,"Rank these topics for next time","","","","rank","false","Customer stories|Product roadmap|Team wins|Culture & hiring|Financials","false","","false","false","","","","","","false","","","3","","","","false",""',
+    '"Survey",5,"What would you like to see added?","","","","text","false","","false","","false","false","","","","","","false","","","","short","280","One idea is plenty","true",""',
+    '',
+  ].join('\n');
+
+  const downloadCsv = async (who, setId, query = {}) => {
+    const res = await download({ ...who, pathParameters: { setId }, queryStringParameters: query });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    return parse(res);
+  };
+
+  reset();
+  await doUpload(STAFF, { fileContent: EVERY_KIND, title: 'Team Pulse' });
+  await test('a survey set downloads as CSV by default (no longer JSON)', async () => {
+    const out = await downloadCsv(STAFF, 'teampulse');
+    assert.strictEqual(out.contentType, 'text/csv');
+    assert.match(out.filename, /\.csv$/);
+  });
+  await test('…and the CSV is exactly the contract header and cells', async () =>
+    assert.strictEqual((await downloadCsv(STAFF, 'teampulse')).content, EXPECTED_DOWNLOAD));
+  await test('format=json still works when asked for', async () => {
+    const out = await downloadCsv(STAFF, 'teampulse', { format: 'json' });
+    assert.strictEqual(out.contentType, 'application/json');
+    const doc = JSON.parse(out.content);
+    assert.strictEqual(doc.metadata.engagementType, 'survey');
+    assert.strictEqual(doc.questions.length, 5);
+    assert.strictEqual(doc.questions[1].kind, 'choice');
+  });
+  await test('download → re-upload → the same rows', async () => {
+    const { content } = await downloadCsv(STAFF, 'teampulse');
+    const again = await doUpload(STAFF, { fileContent: content, title: 'Team Pulse Again' });
+    assert.strictEqual(again.statusCode, 200, again.body);
+    assert.strictEqual(parse(again).skippedRowCount, 0);
+    const strip = (r) => ({ ...surveyAttrs(r), Title: r.Title, Category: r.Category, Tags: r.Tags, QuestionNumber: r.QuestionNumber });
+    assert.deepStrictEqual(questionRows('SET#teampulseagain#v1').map(strip), questionRows('SET#teampulse#v1').map(strip));
+  });
+  await test('an ORG survey downloads the same words it was given', async () => {
+    reset();
+    await mintOrg(put, ORG);
+    await doUpload(HOST, { fileContent: EVERY_KIND, title: 'Team Pulse' });
+    const { content } = await downloadCsv(HOST, 'teampulse');
+    assert.strictEqual(content, EXPECTED_DOWNLOAD);
+    assert.ok(!content.includes('"iv"'), 'an envelope was exported into a cell');
+  });
+  await test('the optional columns sit between Themes and Tags, as for every other type', async () => {
+    reset();
+    const header = HEADER.slice(0, -1).concat(['AnswerDetails', 'Tags']);
+    const csv = [header.join(','), header.map((h) => {
+      const v = { ...RATING, AnswerDetails: 'Shared with the room afterwards' }[h];
+      return h === 'Question#' ? String(v) : `"${v ?? ''}"`;
+    }).join(',')].join('\n');
+    await doUpload(STAFF, { fileContent: csv, title: 'With Reveal' });
+    const { content } = await downloadCsv(STAFF, 'withreveal');
+    assert.ok(content.split('\n')[0].endsWith(',Placeholder,Themes,AnswerDetails,Tags'), content.split('\n')[0]);
+    assert.ok(content.split('\n')[1].endsWith(',"false","Shared with the room afterwards","nps"'), content.split('\n')[1]);
+  });
+  await test('a CSV built by itemsToSurveyCsv downloads as itself (the draft-set path)', async () => {
+    reset();
+    const { itemsToSurveyCsv } = require(path.join(REPO, 'lambda-functions/admin/shared/survey-kinds.js'));
+    const built = itemsToSurveyCsv([
+      { kind: 'rating', title: 'How useful was it?', required: true, scale: '1-5', lowLabel: 'Not useful', highLabel: 'Very useful', tags: ['usefulness'] },
+      { kind: 'choice', title: 'Which part helped most?', options: ['The demo', 'The Q&A', 'The "numbers" slide'], allowOther: true },
+      { kind: 'yesno', title: 'Would you come again?', unsure: true },
+      { kind: 'rank', title: 'Order these', options: ['One', 'Two', 'Three', 'Four'], rankTop: 2 },
+      { kind: 'text', title: 'Anything else?' },
+    ]);
+    const res = await doUpload(STAFF, { fileContent: built, title: 'Built' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual((await downloadCsv(STAFF, 'built')).content, built);
+  });
+
+  say('\n10. the survey templates');
+
+  const template = A('download-template.js');
+  const getTemplate = async (query) => {
+    const res = await template({ queryStringParameters: query });
+    return { res, body: parse(res) };
+  };
+  const importTemplate = async (content, title) => {
+    reset();
+    const res = await doUpload(STAFF, { fileContent: content, title });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    return { body: parse(res), setRows: questionRows(`SET#${title.toLowerCase().replace(/[^a-z0-9]/g, '')}#v1`) };
+  };
+
+  await test('type=survey is a CSV now: survey-template.csv', async () => {
+    const { res, body: t } = await getTemplate({ type: 'survey' });
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(t.filename, 'survey-template.csv');
+    assert.ok(t.content.startsWith(`${EXPECTED_DOWNLOAD.split('\n')[0]}\n`), 'not the contract header');
+  });
+  await test('…with one question of every kind, all under Survey, importing with nothing skipped', async () => {
+    const { body: t } = await getTemplate({ type: 'survey' });
+    const { body: imported, setRows } = await importTemplate(t.content, 'Every Kind');
+    assert.strictEqual(imported.skippedRowCount, 0, JSON.stringify(imported.skippedRows));
+    assert.deepStrictEqual(setRows.map((r) => r.kind).sort(), ['choice', 'rank', 'rating', 'text', 'yesno']);
+    assert.ok(setRows.every((r) => r.Category === 'Survey'));
+  });
+
+  const NAMED = ['presentation-feedback', 'event-feedback', 'workshop-retro', 'training-evaluation', 'team-pulse'];
+  for (const id of NAMED) {
+    await test(`template=${id} imports with zero skipped rows, 6–8 questions mixing kinds`, async () => {
+      const { res, body: t } = await getTemplate({ type: 'survey', template: id });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(t.filename, `survey-${id}.csv`);
+      const { body: imported, setRows } = await importTemplate(t.content, id);
+      assert.strictEqual(imported.skippedRowCount, 0, JSON.stringify(imported.skippedRows));
+      assert.ok(setRows.length >= 6 && setRows.length <= 8, `${setRows.length} questions`);
+      assert.ok(new Set(setRows.map((r) => r.kind)).size >= 3, 'fewer than three kinds');
+    });
+  }
+  await test('presentation-feedback is the mockups\' eight questions, in order', async () => {
+    const { body: t } = await getTemplate({ type: 'survey', template: 'presentation-feedback' });
+    const { setRows } = await importTemplate(t.content, 'Preso');
+    assert.deepStrictEqual(setRows.map((r) => [r.kind, r.Title]), [
+      ['rating', 'How useful was today’s session for your work?'],
+      ['rating', 'How likely are you to recommend this session to a colleague?'],
+      ['choice', 'Which part of the presentation was most valuable to you?'],
+      ['choice', 'Which formats would you want more of next time?'],
+      ['yesno', 'Was the length about right?'],
+      ['rank', 'Rank these topics for the next all-hands'],
+      ['text', 'What was the best part of the presentation?'],
+      ['text', 'What would you like to see added or changed?'],
+    ]);
+    assert.strictEqual(setRows[1].scale, '0-10', 'the recommend question is a 0–10 score');
+    assert.strictEqual(setRows[3].maxPicks, 2);
+    assert.strictEqual(setRows[3].allowOther, true);
+    assert.strictEqual(setRows[4].followUpWhen, 'no');
+    assert.strictEqual(setRows[5].rankTop, 3);
+    assert.strictEqual(setRows[7].textLength, 'short');
+  });
+  await test('an unknown template id is refused, naming the ones that exist', async () => {
+    const { res, body: t } = await getTemplate({ type: 'survey', template: 'nope' });
+    assert.strictEqual(res.statusCode, 400);
+    for (const id of NAMED) assert.ok(t.error.includes(id), t.error);
+  });
 
   say(`\n${passed} passed, ${failed} failed\n`);
   process.exit(failed ? 1 : 0);
