@@ -52,7 +52,46 @@
  * chosen point, so both handlers read the same item and then write one after
  * the other — which is precisely the interleaving that a read-then-write
  * implementation gets wrong and a conditional write survives.
+ *
+ * FAULTS DYNAMODB REALLY RAISES, ON DEMAND (`table.inject`). A single-copy
+ * fake never conflicts: two sends run one after the other, so a handler that
+ * treats DynamoDB's transaction conflicts as fatal passes every test here and
+ * 500s the first time a room answers together. `inject(predicate, makeError,
+ * times)` makes the next `times` matching sends throw instead of running, and
+ * two shapes are ready-made because they are the ones the survey routes meet:
+ *
+ *   conflictTransactions(n)  the next n TransactWrites cancel with reason
+ *                            `TransactionConflict` on their first item — the
+ *                            survey PUT's ConditionCheck on STATE, which every
+ *                            concurrent answer in the room also holds
+ *   conflictUpdates(n, pred) the next n UpdateItems (matching `pred`) throw
+ *                            `TransactionConflictException` — the host's close
+ *                            or warning landing on a STATE row a transaction
+ *                            is holding
+ *
+ * THE 400 KB ITEM LIMIT. DynamoDB refuses an item over 400 KB with a
+ * ValidationException; a fake that stores anything let SURVEY#RESULTS grow
+ * one encrypted blob per open answer, forever, and pass. Every Put, Update
+ * result and transactional Put is sized here (the JSON byte length of the
+ * item — a close, slightly generous stand-in for DynamoDB's own measure) and
+ * refused over ITEM_LIMIT_BYTES.
  */
+
+/** DynamoDB's item size limit. */
+const ITEM_LIMIT_BYTES = 400 * 1024;
+
+const itemBytes = (item) => Buffer.byteLength(JSON.stringify(item), 'utf8');
+
+function tooLarge(item) {
+  const error = new Error(`Item size has exceeded the maximum allowed size (${itemBytes(item)} bytes, ${item && item.PK}/${item && item.SK})`);
+  error.name = 'ValidationException';
+  return error;
+}
+
+/** Refuse, as DynamoDB does, an item over the limit. */
+function assertFits(item) {
+  if (itemBytes(item) > ITEM_LIMIT_BYTES) throw tooLarge(item);
+}
 
 /* ---- expression parsing --------------------------------------------------- */
 
@@ -236,11 +275,23 @@ function conditionalFailure() {
   return error;
 }
 
+const REASON_MESSAGES = {
+  ConditionalCheckFailed: 'The conditional request failed',
+  TransactionConflict: 'Transaction is ongoing for the item',
+};
+
 /** DynamoDB's shape for a cancelled transaction: one reason per item, in order. */
 function transactionCancelled(codes) {
   const error = new Error(`Transaction cancelled, please refer cancellation reasons for specific reasons [${codes.join(', ')}]`);
   error.name = 'TransactionCanceledException';
-  error.CancellationReasons = codes.map((Code) => (Code === 'None' ? { Code } : { Code, Message: 'The conditional request failed' }));
+  error.CancellationReasons = codes.map((Code) => (Code === 'None' ? { Code } : { Code, Message: REASON_MESSAGES[Code] || Code }));
+  return error;
+}
+
+/** What a non-transactional write gets when a transaction holds its item. */
+function transactionConflict() {
+  const error = new Error('Transaction is ongoing for the item');
+  error.name = 'TransactionConflictException';
   return error;
 }
 
@@ -259,10 +310,14 @@ function createTable() {
    */
   let gate = null;
 
+  /** Pending injected faults, in the order they were armed. */
+  const faults = [];
+
   const table = {
     store,
     log,
     keyOf,
+    faults,
     /**
      * Rows per Query page when the caller gives no `Limit`. null (the default)
      * is one page holding everything, which is what every suite written before
@@ -273,7 +328,30 @@ function createTable() {
 
     put: (item) => store.set(keyOf(item.PK, item.SK), item),
     get: (pk, sk) => store.get(keyOf(pk, sk)),
-    clear: () => { store.clear(); log.length = 0; gate = null; },
+    clear: () => { store.clear(); log.length = 0; gate = null; faults.length = 0; },
+
+    /**
+     * Make the next `times` sends for which `predicate(command)` is true throw
+     * `makeError(command)` instead of running — nothing is written. Returns a
+     * handle whose `thrown` counts how many actually fired.
+     */
+    inject(predicate, makeError, times = 1) {
+      const fault = { predicate, makeError, left: times, thrown: 0 };
+      faults.push(fault);
+      return fault;
+    },
+    /** The next `n` TransactWrites cancel with TransactionConflict on their first item. */
+    conflictTransactions(n = 1) {
+      return table.inject(
+        (c) => c.type === 'transactWrite',
+        (c) => transactionCancelled((c.input.TransactItems || []).map((_, i) => (i === 0 ? 'TransactionConflict' : 'None'))),
+        n
+      );
+    },
+    /** The next `n` UpdateItems matching `predicate` throw TransactionConflictException. */
+    conflictUpdates(n = 1, predicate = () => true) {
+      return table.inject((c) => c.type === 'update' && predicate(c), () => transactionConflict(), n);
+    },
 
     /**
      * Hold the next command for which `predicate(command)` is true.
@@ -306,6 +384,14 @@ function createTable() {
           await held;
         }
 
+        const fault = faults.find((f) => f.left > 0 && f.predicate(command));
+        if (fault) {
+          fault.left -= 1;
+          fault.thrown += 1;
+          if (fault.left === 0) faults.splice(faults.indexOf(fault), 1);
+          throw fault.makeError(command);
+        }
+
         switch (command.type) {
           case 'get':
             return { Item: store.get(keyOf(input.Key.PK, input.Key.SK)) };
@@ -319,6 +405,7 @@ function createTable() {
               )) {
               throw conditionalFailure();
             }
+            assertFits(input.Item);
             const previous = store.get(k);
             store.set(k, input.Item);
             // ALL_OLD is how a writer learns it OVERWROTE a row rather than
@@ -342,7 +429,9 @@ function createTable() {
             // forgets `attribute_exists(SK)` must be able to create the phantom
             // row here, or the test asserting it does not is asserting nothing.
             const base = current || { ...input.Key };
-            store.set(k, applyUpdate(base, input));
+            const updated = applyUpdate(base, input);
+            assertFits(updated);
+            store.set(k, updated);
             // UPDATED_OLD: the prior values of the attributes this update
             // named, and only those that existed — DynamoDB's own shape.
             if (input.ReturnValues === 'UPDATED_OLD') {
@@ -419,11 +508,18 @@ function createTable() {
               ) ? 'None' : 'ConditionalCheckFailed';
             });
             if (codes.some((c) => c !== 'None')) throw transactionCancelled(codes);
-            for (const { kind, spec, k } of entries) {
-              if (kind === 'Put') store.set(k, spec.Item);
+            // Sized before anything lands: an oversized item fails the whole
+            // transaction (DynamoDB answers ValidationException, nothing written).
+            const next = entries.map(({ kind, spec, k }) => {
+              if (kind === 'Put') return spec.Item;
+              if (kind === 'Update') return applyUpdate(store.get(k) || { ...spec.Key }, spec);
+              return null;
+            });
+            next.forEach((item) => { if (item) assertFits(item); });
+            entries.forEach(({ kind, k }, i) => {
+              if (kind === 'Put' || kind === 'Update') store.set(k, next[i]);
               else if (kind === 'Delete') store.delete(k);
-              else if (kind === 'Update') store.set(k, applyUpdate(store.get(k) || { ...spec.Key }, spec));
-            }
+            });
             return {};
           }
 
@@ -544,6 +640,9 @@ module.exports = {
   updatedAttributes,
   conditionalFailure,
   transactionCancelled,
+  transactionConflict,
+  ITEM_LIMIT_BYTES,
+  itemBytes,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
   BatchGetCommand, TransactWriteCommand,
 };
