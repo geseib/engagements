@@ -5816,9 +5816,10 @@ Focus on actionable business strategy insights.`;
 
             {hostPhase === 'RESULTS' && (
               <>
-                <div className="kicker">
-                  {`${getHostRoundNoun()} ${lessonNumber} · Results`}
-                </div>
+                {/* NO KICKER ON RESULTS. "Round 3 · Results" sat above a card
+                    whose first line now restates the question (QuestionCard's
+                    recap); the chip in the rail already says Results.
+                    refresh-2026-09-22 03-stage-results.html draws none. */}
 
                 {/* THE "Show authors / Hide authors" TOGGLE USED TO BE HERE.
                     RETIRED INTO THE SESSION SETTING, which is the same decision

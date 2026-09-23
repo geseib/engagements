@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/questionCard';
 
 /**
@@ -61,16 +61,47 @@ export default function QuestionCard({
           const isCorrect = isCorrectTriviaOption(question, key, letter);
           const pct = tallied ? optionShare(answers, letter) : 0;
           return (
-            <div key={key} className={`opt ${isCorrect ? 'correct' : 'dim'}`}>
+            <div key={key} className={`opt ${isCorrect ? `correct${tallied ? ' hero-row' : ''}` : 'dim'}`}>
               {tallied && <span className="fill" style={{ width: `${pct}%` }} />}
               <span className="ltr">{letter}</span>
               <span className="txt">{text}</span>
-              {tallied && <span className="pct">{`${pct}%`}</span>}
+              {/* THE WORD, NOT JUST THE BORDER. At 25ft a border-colour change
+                  is not a signal; "Correct" is (refresh-2026-09-22 §6 step 3,
+                  03-stage-results.html). Between the text and the share, as
+                  the mockup places it. Stage only: the preview's Reveal marks
+                  the row and draws no tally, and adds no flag either. */}
+              {tallied && isCorrect && <span className="flag">Correct</span>}
+              {tallied && <Share pct={pct} />}
             </div>
           );
         })}
       </div>
     );
+    if (tallied) {
+      /* THE STAGE'S RESULTS: the question restated above, the explanation
+         below. RESULTS used to draw four bars and nothing else — the room saw
+         a winning answer to a question it could no longer read, and the
+         set's `answerDetails` (written to be "read to the room at the
+         reveal") was read nowhere. The recap is the full prompt, since the
+         trivia generator writes the title as a label and the question as
+         asked into the detail; the title stands in when there is none.
+         Content, so it announces its own loss: "3" sorts after every chrome
+         group (stageShell: chrome before content) and before nothing — the
+         options are never dropped. */
+      const recap = question ? String(question.questionDetail || question.detail || question.title || question.question || '').trim() : '';
+      const explain = question ? String(question.answerDetails || '').trim() : '';
+      return (
+        <>
+          {recap && <p className="recap">{recap}</p>}
+          {options}
+          {explain && (
+            <p className="qdetail explain" data-drop="3" data-drop-note="Explanation">
+              {explain}
+            </p>
+          )}
+        </>
+      );
+    }
     if (!withQuestion || !question) return options;
     return (
       <>
@@ -151,4 +182,40 @@ function QuestionLines({ question, gameType, onExpand }) {
       )}
     </>
   );
+}
+
+/**
+ * THE SHARE COUNTS UP — 03-stage-results.html's `.pct[data-pct]`: from 0 to
+ * its figure over 620ms, starting after the reveal clock (`--rv`) plus its
+ * row's stagger, so the number lands as its bar finishes growing. The DOM
+ * always carries the FINAL figure: it is rendered that way, and the count is
+ * a transient rewrite of the text that ends on the same string. Where motion
+ * is not wanted — reduced-motion, or no matchMedia at all (jsdom, an old
+ * embed) — nothing moves and the figure is simply there.
+ */
+function Share({ pct }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const row = el.closest('.opt');
+    const index = row && row.parentElement ? [...row.parentElement.children].indexOf(row) : 0;
+    const rv = parseFloat(getComputedStyle(el.closest('.stage') || el).getPropertyValue('--rv')) || 1.4;
+    const start = rv * 1000 + 50 + index * 80;
+    const dur = 620;
+    let frame = 0;
+    let t0 = 0;
+    const tick = (now) => {
+      if (!t0) t0 = now;
+      const k = Math.min(1, (now - t0) / dur);
+      const eased = 1 - (1 - k) ** 3;
+      el.textContent = `${Math.round(pct * eased)}%`;
+      if (k < 1) frame = requestAnimationFrame(tick);
+    };
+    el.textContent = '0%';
+    const timer = setTimeout(() => { frame = requestAnimationFrame(tick); }, start);
+    return () => { clearTimeout(timer); cancelAnimationFrame(frame); el.textContent = `${pct}%`; };
+  }, [pct]);
+  return <span className="pct" ref={ref}>{`${pct}%`}</span>;
 }

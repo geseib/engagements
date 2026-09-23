@@ -302,6 +302,57 @@ describe('the phase bar', () => {
     expect(bar).not.toBeNull();
     expect(bar.dataset.phase).toBe('lobby');
   });
+
+  /*
+   * THE WIPE — refresh-2026-09-22 RATIONALE §6 step 4. A phase CHANGE is a
+   * full-width band that plays once and leaves (03-stage-results.html's
+   * `.wipe`). It is keyed on the phase so React mounts a fresh one per change
+   * and never restarts the one on screen; it is not drawn on first mount,
+   * because a reload mid-round is not a change the room witnessed.
+   */
+  test('no wipe on first mount: a reload is not a phase change', () => {
+    const { container } = render(<PhaseBar phase="RESULTS" />);
+    expect(container.querySelector('.wipe')).toBeNull();
+  });
+
+  test('a change to RESULTS plays the results wipe with its two lines, once', () => {
+    const { container, rerender } = render(<PhaseBar phase="ASK" />);
+    rerender(<PhaseBar phase="RESULTS" />);
+    const wipe = container.querySelector('.wipe');
+    expect(wipe).not.toBeNull();
+    expect(wipe.className).toBe('wipe results');
+    expect(wipe.getAttribute('aria-hidden')).toBe('true');
+    expect(wipe.childNodes[0].textContent).toBe('Results');
+    expect(wipe.querySelector('small').textContent).toBe('Look up');
+    // A re-render on the same phase is not a change.
+    rerender(<PhaseBar phase="RESULTS" />);
+    expect(container.querySelectorAll('.wipe')).toHaveLength(1);
+    // It leaves when its animation ends.
+    fireEvent.animationEnd(wipe);
+    expect(container.querySelector('.wipe')).toBeNull();
+    // The bar itself is untouched by the wipe.
+    expect(container.querySelector('.bar').dataset.phase).toBe('results');
+  });
+
+  test.each([
+    ['ASK', 'wipe', 'Answering', 'Write your answer on your phone'],
+    ['VOTE', 'wipe', 'Voting', 'Choose on your phone'],
+  ])('a change to %s wipes with its own words', (phase, className, word, small) => {
+    const { container, rerender } = render(<PhaseBar phase="LOBBY" />);
+    rerender(<PhaseBar phase={phase} />);
+    const wipe = container.querySelector('.wipe');
+    expect(wipe.className).toBe(className);
+    expect(wipe.childNodes[0].textContent).toBe(word);
+    expect(wipe.querySelector('small').textContent).toBe(small);
+  });
+
+  test('a change into the lobby or an unknown phase draws no wipe', () => {
+    const { container, rerender } = render(<PhaseBar phase="RESULTS" />);
+    rerender(<PhaseBar phase="LOBBY" />);
+    expect(container.querySelector('.wipe')).toBeNull();
+    rerender(<PhaseBar phase="NOT_A_REAL_PHASE" />);
+    expect(container.querySelector('.wipe')).toBeNull();
+  });
 });
 
 describe('the room meter', () => {
