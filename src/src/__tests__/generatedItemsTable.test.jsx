@@ -184,3 +184,79 @@ describe('filters', () => {
     expect(bodyRows()).toHaveLength(4);
   });
 });
+
+/**
+ * THE KIND COLUMN — mockup docs/design/survey-redesign/03-review.html.
+ *
+ * A survey's questions are of five kinds, and the review table shows which is
+ * which as a chip (icon and word) in a Kind column BEFORE the question, as the
+ * mockup draws it. Where the rows are still the operator's to change (no draft
+ * set yet), the chip is a select: the table reports the choice with the item's
+ * REAL index and the caller decides what switching costs — this component
+ * knows nothing about convertKind and asks nothing.
+ */
+describe('the Kind column, when the caller supplies kinds', () => {
+  const SURVEY = [
+    { title: 'How useful was it?', kind: 'rating', scale: '1-5' },
+    { title: 'Which part?', kind: 'choice' },
+    { title: 'What was best?', kind: 'text' },
+    { title: 'How likely are you to recommend it?', kind: 'rating', scale: '0-10' },
+  ];
+  const OPTIONS = [
+    { id: 'rating', label: 'Rating', icon: 'Star' },
+    { id: 'choice', label: 'Multiple choice', icon: 'ListBullets' },
+    { id: 'text', label: 'Open answer', icon: 'TextAlignLeft' },
+  ];
+  const kinds = (extra = {}) => ({
+    options: OPTIONS,
+    of: (q) => q.kind,
+    label: (q) => (q.scale === '0-10' ? 'Rating 0–10' : OPTIONS.find((o) => o.id === q.kind).label),
+    ...extra,
+  });
+  const drawSurvey = (props = {}) => render(
+    <GeneratedItemsTable items={SURVEY} noun="questions" primary={(q) => q.title} {...props} />
+  );
+  const headers = () => within(screen.getByRole('table')).getAllByRole('columnheader').map((h) => h.textContent.trim());
+
+  test('no kinds, no Kind column — the other three builders are untouched', () => {
+    // rejects: a Kind column on trivia, poll and scenario tables, whose items
+    // have no kind at all.
+    drawSurvey();
+    expect(headers()).not.toContain('Kind');
+  });
+
+  test('the Kind column sits between the number and the question, as drawn', () => {
+    drawSurvey({ kinds: kinds() });
+    expect(headers().slice(0, 3)).toEqual(['#', 'Kind', 'Question']);
+  });
+
+  test('read-only, each row carries its kind as a chip and offers no select', () => {
+    // rejects: a live select over rows already saved into a draft set — the
+    // same "control that changes nothing" the receipt withholds Edit for.
+    drawSurvey({ kinds: kinds() });
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    expect(rows[0].querySelector('.git-kind').textContent).toBe('Rating');
+    expect(rows[3].querySelector('.git-kind').textContent).toBe('Rating 0–10');
+    expect(screen.queryByRole('combobox', { name: /kind of question/i })).toBeNull();
+  });
+
+  test('editable, the chip is a select naming its question, and a choice reports the real index', () => {
+    // rejects: reporting the position among the rendered rows. Filter to one
+    // row and change it: the caller must hear about item #3, not item #1.
+    const onChange = jest.fn();
+    drawSurvey({ kinds: kinds({ onChange }) });
+    fireEvent.change(screen.getByLabelText(/Filter these 4 questions/i), { target: { value: 'best' } });
+    const select = screen.getByRole('combobox', { name: 'Kind of question 3' });
+    expect(select).toHaveValue('text');
+    fireEvent.change(select, { target: { value: 'choice' } });
+    expect(onChange).toHaveBeenCalledWith(2, 'choice');
+  });
+
+  test('the select names the current kind the way the chip would', () => {
+    // rejects: a select reading "Rating" over a recommend score while the
+    // read-only chip says "Rating 0–10" — two names for one fact.
+    drawSurvey({ kinds: kinds({ onChange: jest.fn() }) });
+    const select = screen.getByRole('combobox', { name: 'Kind of question 4' });
+    expect(within(select).getByRole('option', { name: 'Rating 0–10' }).selected).toBe(true);
+  });
+});
