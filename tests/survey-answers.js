@@ -792,8 +792,29 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     const b = bodyOf(closed);
     assert.strictEqual(b.n, 2);
     assert.strictEqual(b.finished, 1);
-    assert.strictEqual(b.perQuestion[qid('001')].n, 2);
-    assert.strictEqual(b.perQuestion[qid('002')].n, 1);
+    const n = Object.fromEntries(b.perQuestion.map((x) => [x.qid, x.answered]));
+    assert.strictEqual(n[qid('001')], 2);
+    assert.strictEqual(n[qid('002')], 1);
+    // …and the frozen row agrees.
+    assert.strictEqual(results.PerQuestion[qid('001')].n, 2);
+    assert.strictEqual(results.PerQuestion[qid('002')].n, 1);
+  });
+  // rejects: a close answering in a different shape from progress — the stage
+  // would read two shapes of one fact either side of the close.
+  await check('the close\'s perQuestion is the progress shape: every question, in order, zeros included', () => {
+    const b = bodyOf(closed);
+    assert.deepStrictEqual(b.perQuestion.map((x) => x.qid), QUESTIONS.map((q) => qid(q.n)));
+    assert.deepStrictEqual(Object.keys(b.perQuestion[4]).sort(), ['answered', 'qid']);
+    assert.strictEqual(b.perQuestion[4].answered, 0);
+    assert.ok(!Number.isNaN(Date.parse(b.closedAt)), 'closedAt is not an ISO time');
+  });
+  await check('progress still answers after the close, every question listed', async () => {
+    const res = await host('progress', closing);
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const p = bodyOf(res);
+    assert.deepStrictEqual(p.perQuestion.map((x) => x.qid), QUESTIONS.map((q) => qid(q.n)));
+    assert.strictEqual(p.finished, 1);
+    assert.ok(!Number.isNaN(Date.parse(p.at)), 'at is not an ISO time');
   });
   await check('the response carries counts, never the words people wrote', () => {
     assert.ok(!closed.body.includes('roadmap session'), 'answer text in the close response');
@@ -982,6 +1003,17 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(b.openedAt, meta.OpenedAt);
     assert.strictEqual(b.warnedAt, row(`GAME#${described}`, 'STATE').WarnedAt);
     assert.strictEqual(b.state, SURVEY_OPEN);
+  });
+  // rejects: the facts only in gameMetadata — the host page reads the top level first.
+  await check('get-game-state carries them at the top level', async () => {
+    const b = bodyOf(await getGameState({ pathParameters: { gameId: described } }));
+    assert.strictEqual(b.names, 'named');
+    assert.strictEqual(b.openedAt, row(`GAME#${described}`, 'METADATA').OpenedAt);
+    assert.strictEqual(b.warnedAt, row(`GAME#${described}`, 'STATE').WarnedAt);
+  });
+  await check('get-game ?role=host carries names too (the edit dialog seeds from it)', async () => {
+    const b = bodyOf(await getGame({ pathParameters: { gameId: described }, queryStringParameters: { role: 'host' } }));
+    assert.strictEqual(b.names, 'named');
   });
   await check('get-game-state carries them in gameMetadata', async () => {
     const b = bodyOf(await getGameState({ pathParameters: { gameId: described } }));

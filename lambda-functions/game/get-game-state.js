@@ -309,9 +309,18 @@ exports.handler = async (event) => {
       }
     }
 
+    // The survey's own facts, at the top level (where the host page reads them
+    // first) and again in gameMetadata below.
+    const surveyFacts = {
+      names: gameMetadata.Item.GameType === 'survey' ? normalizeNames(gameMetadata.Item.Names) : null,
+      openedAt: gameMetadata.Item.OpenedAt || null,
+      warnedAt: (stateItem && stateItem.WarnedAt) || null
+    };
+
     const response = {
       gameId: gameId,
       state: frontendState,
+      ...surveyFacts,
       currentQuestion: lessonNumber, // Return numeric lesson number for frontend
       currentQuestionData: currentQuestionData,
       authorsRevealed: authorsRevealed,
@@ -344,9 +353,7 @@ exports.handler = async (event) => {
         // A survey's Names (null for every other type), when the room first
         // opened, and the two-minute warning — the three facts a survey page
         // needs back after a reload. Same projection as get-game.js.
-        names: gameMetadata.Item.GameType === 'survey' ? normalizeNames(gameMetadata.Item.Names) : null,
-        openedAt: gameMetadata.Item.OpenedAt || null,
-        warnedAt: (stateItem && stateItem.WarnedAt) || null
+        ...surveyFacts
       }
     };
 

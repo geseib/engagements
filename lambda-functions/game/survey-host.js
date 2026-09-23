@@ -67,8 +67,23 @@ const notFound = () => respond(404, { error: 'Game not found' });
 const stateKey = (gameId) => ({ PK: `GAME#${gameId}`, SK: 'STATE' });
 const isConditionFailure = (e) => Boolean(e && e.name === 'ConditionalCheckFailedException');
 
-/** What a close answers with: counts, never the words (those stay in Texts). */
-const closeBody = (r) => ({ n: r.N, finished: r.Finished, perQuestion: r.PerQuestion, closedAt: r.ClosedAt });
+/**
+ * What a close answers with: counts, never the words (those stay in Texts).
+ * `perQuestion` is the SAME shape as the live progress — `[{qid, answered}]`
+ * in survey order, every question, zeros included — so the stage reads one
+ * shape before and after the close. `answered` is the frozen `n`. The full
+ * per-kind counts stay on SURVEY#RESULTS for the results pages.
+ */
+const closeBody = (r) => {
+  const per = r.PerQuestion || {};
+  const order = Array.isArray(r.Order) && r.Order.length ? r.Order : Object.keys(per);
+  return {
+    n: r.N,
+    finished: r.Finished,
+    perQuestion: order.map((qid) => ({ qid, answered: Number(per[qid] && per[qid].n) || 0 })),
+    closedAt: r.ClosedAt,
+  };
+};
 
 /** This session's frozen results, as stored (Texts still sealed), or null. */
 async function storedResults(gameId, meta) {
