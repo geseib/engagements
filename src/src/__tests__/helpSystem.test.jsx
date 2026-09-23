@@ -192,6 +192,14 @@ describe('§7 derived blocks render from the real tables', () => {
     expect(text).toContain('COLLECTING → CLOSED');
   });
 
+  test('the question-sets guide no longer says a survey cannot be run', () => {
+    render(<HelpSystem section="admin-question-sets" onClose={() => {}} />);
+    const text = document.body.textContent;
+    expect(text).not.toMatch(/no session can run one yet/i);
+    expect(text).not.toMatch(/marked "Not playable"/i);
+    expect(text).toMatch(/Names/);
+  });
+
   /*
     The drift the old guide shipped with: it told hosts trivia's VOTE phase was
     "automatic — no voting needed". Trivia has no VOTE phase.

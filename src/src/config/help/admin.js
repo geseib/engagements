@@ -90,8 +90,8 @@ const questionSets = {
         {
           t: 'note',
           tone: 'info',
-          title: 'Survey sets are marked "Not playable"',
-          text: 'A survey set can be made, imported and edited, but no session can run one yet — that is the next step being built. The console shows survey sets rather than hiding them, and the create dialog leaves Survey out until a session can play one.',
+          title: 'Running a survey',
+          text: 'A survey session collects answers at each person’s own pace: the host opens it, people answer on their phones, and the host closes it when the room is done. Names is chosen when the session is created — Anonymous, Who finished or Named — and cannot change once the survey opens, because it decides what is recorded, not just what is shown.',
         },
       ],
     },

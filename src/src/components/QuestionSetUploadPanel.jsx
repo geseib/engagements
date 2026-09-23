@@ -32,15 +32,6 @@ const SURVEY_TEMPLATES = [
   { id: 'team-pulse', label: 'Team pulse' },
 ];
 
-/*
-  WHAT IS STILL TRUE ABOUT A SURVEY, said where the type is chosen: it can be
-  made, imported, edited and downloaded, but not yet run (phase 2). This
-  panel's own sentence names all four ways in, which notPlayableReason() in
-  config/gameTypes.js does not.
-*/
-const SURVEY_NOT_PLAYABLE_YET =
-  'A survey can be made, imported, edited and downloaded here, but no session can run one yet.';
-
 /**
  * MAKING A NEW QUESTION SET — every path, and the engagement type asked ONCE.
  *
@@ -424,7 +415,7 @@ export default function QuestionSetUploadPanel({
           ))}
         </select>
         {!playable && (
-          <small>{isSurvey ? SURVEY_NOT_PLAYABLE_YET : notPlayableReason(engagementType)}</small>
+          <small>{notPlayableReason(engagementType)}</small>
         )}
       </div>
 

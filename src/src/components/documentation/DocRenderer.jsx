@@ -106,10 +106,9 @@ function PhaseFlow({ gameType }) {
 
 /**
  * THE TYPES A HOST CAN ACTUALLY CREATE, from `PICKER_GAME_TYPES` — the same
- * derived list the create dialog itself renders from. Survey is deliberately
- * absent from both: a survey set can be made and edited, but no session plays
- * one yet (survey phase 2). Documenting it as an option would describe a dead
- * end.
+ * derived list the create dialog itself renders from, so a type the dialog
+ * cannot create is never documented as an option. Survey joined both in survey
+ * phase 2, with its own phases (COLLECTING → CLOSED) rather than a round's.
  */
 function GameTypeTable() {
   return (
