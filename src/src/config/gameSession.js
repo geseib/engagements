@@ -207,6 +207,14 @@ export function initialGameSession() {
     isRestoringState: false,
     manualStateChange: false,
     gameDebugMode: false,
+
+    // --- a survey (surveys phase 2) ---------------------------------------
+    // The session's Names value. Anonymous until the restore says otherwise:
+    // it is the value under which the wall offers no names at all, so the
+    // moment before the real one loads is the safe one.
+    surveyNames: 'anonymous',
+    // When the two-minute warning went out. A new session has not warned.
+    surveyWarnedAt: null,
   };
 }
 

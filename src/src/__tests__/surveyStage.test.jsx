@@ -13,6 +13,8 @@
  * by source assertions at the bottom. jsdom has no layout engine: nothing here
  * asserts a width, and the bars' fills are never measured.
  */
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import { render, screen, within, waitFor, act, renderHook } from '@testing-library/react';
 import SurveyCollecting, { SurveyClosed } from '../components/stage/SurveyCollecting';
@@ -331,5 +333,58 @@ describe('useSurveyProgress', () => {
     const fetchFn = jest.fn();
     renderHook(() => useSurveyProgress({ gameId: '4821', active: false, names: 'anonymous', fetchFn, apiBase: API }));
     expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+/* ---------------------------------------------------------- the wiring */
+
+describe('GameHostPage composes it', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((line) => !/^\s*(\/\/|\*)/.test(line)).join('\n');
+
+  test('the collecting content is SurveyCollecting, and the closed one SurveyClosed', () => {
+    expect(code).toMatch(/import SurveyCollecting, \{ SurveyClosed \} from '\.\/components\/stage\/SurveyCollecting'/);
+    expect(code).toMatch(/hostPhase === 'COLLECTING' && \(\s*<SurveyCollecting/);
+    expect(code).toMatch(/<SurveyClosed/);
+  });
+
+  test('both phases have a ceiling and a bar colour', () => {
+    expect(code).toMatch(/const STAGE_GROW = \{[^}]*COLLECTING:/);
+    expect(code).toMatch(/const STAGE_GROW = \{[^}]*CLOSED:/);
+    expect(code).toMatch(/const BAR_PHASE = \{[\s\S]*?COLLECTING: 'ask'[\s\S]*?\};/);
+    expect(code).toMatch(/const BAR_PHASE = \{[\s\S]*?CLOSED: '[a-z]+'[\s\S]*?\};/);
+  });
+
+  test('the meter is fed the per-question rows', () => {
+    expect(code).toMatch(/rows=\{meter\.rows\}/);
+    expect(code).toMatch(/heading: 'Finished'/);
+  });
+
+  test('names come from surveyWaiting, which fetches on reveal', () => {
+    expect(code).toMatch(/surveyWaiting\(\{/);
+    expect(code).toMatch(/loadPeople\(\)/);
+  });
+
+  test('it listens for surveyProgress and surveyClosed, and lets go of both', () => {
+    for (const type of ['surveyProgress', 'surveyClosed']) {
+      expect(code).toContain(`webSocketClient.onMessage('${type}'`);
+      expect(code).toContain(`webSocketClient.offMessage('${type}'`);
+    }
+    expect(code).toContain("webSocketClient.onMessage('gameEnded'");
+  });
+
+  test('the progress handler reads the hook through a ref, not a stale closure', () => {
+    const start = code.indexOf("webSocketClient.onMessage('surveyProgress'");
+    const body = code.slice(start, code.indexOf('});', start));
+    expect(body).toMatch(/surveyRef\.current/);
+  });
+
+  test('the host calls go through surveyHostClient with authFetch', () => {
+    expect(code).toMatch(/from '\.\/utils\/surveyHostClient'/);
+    for (const fn of ['closeSurvey', 'warnSurvey', 'endSurvey']) {
+      expect(code).toMatch(new RegExp(`${fn}\\(\\{ fetchFn: authFetch`));
+    }
   });
 });

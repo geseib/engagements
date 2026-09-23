@@ -753,4 +753,26 @@ describe('a survey: the four phases, each with exactly one primary', () => {
     expect(survey('ENDED').status.text).not.toMatch(/rounds/i);
   });
 
+  test('the page dispatches every survey intent', () => {
+    const source = fs.readFileSync(HOST_PAGE, 'utf8');
+    for (const name of ['OPEN_SURVEY', 'CLOSE_SURVEY', 'WARN_SURVEY', 'END_SURVEY']) {
+      expect(HOST_INTENTS[name]).toBeTruthy();
+      expect(source).toContain(`case HOST_INTENTS.${name}:`);
+    }
+  });
+
+  test('the close asks before it posts, on every route to it', () => {
+    // The key and the button both reach runHostAction; the confirmation lives
+    // in the one function they share, so neither can skip it.
+    const source = fs.readFileSync(HOST_PAGE, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n').filter((line) => !/^\s*(\/\/|\*)/.test(line)).join('\n');
+    const start = source.indexOf('const closeSurveyNow');
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start, source.indexOf('\n  };', start));
+    const asks = body.indexOf('showConfirmation(');
+    const posts = body.indexOf('closeSurvey(');
+    expect(asks).toBeGreaterThan(-1);
+    expect(posts).toBeGreaterThan(asks);
+  });
 });
