@@ -233,7 +233,9 @@ exports.handler = async (event) => {
       // The session's summary approach, with PersonaId's clear semantics: ''
       // or null REMOVE the attribute, and the round then follows the set's
       // promptId or the format default (get-ai-summary.js:sessionPromptId).
-      // Applies from the NEXT round; the one on screen is Redo's business.
+      // Like personaId above, this is the PRE-START write only: the state gate
+      // refuses a started session, so the stage's mid-session switch goes
+      // through PUT /games/{gameId}/prompt (update-game-prompt.js).
       const promptId = body.promptId === null ? '' : String(body.promptId).trim();
       names['#promptId'] = 'PromptId';
       if (promptId === '') {

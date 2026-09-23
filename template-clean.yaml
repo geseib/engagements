@@ -2279,6 +2279,41 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # Mid-session summary-approach switch: the persona function's twin, for the
+  # "Approach (next round)" select beside the voice one on the results stage.
+  # It was first wired to PUT /games/{gameId} (update-game.js), which refuses
+  # every session not in CREATED, so it failed on every stage it rendered on.
+  # One attribute (PromptId), next-round semantics, '' clears — see the header
+  # of update-game-prompt.js.
+  UpdateGamePromptFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-update-game-prompt'
+      CodeUri: lambda-functions/game/
+      Handler: update-game-prompt.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Events:
+        UpdateGamePromptEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/prompt
+            Method: PUT
+            # HOST/ADMIN ONLY, like /persona above and for its reasons: a join
+            # code is not a secret. requiredGroupsForRoute answers
+            # ['hosts','admins'] through its POST/PUT/DELETE + games rule; the
+            # handler asks callerMayDriveSession for WHICH room.
+            # tests/session-prompt-switch.js pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   GetQuestionFunction:
     Type: AWS::Serverless::Function
     Properties:

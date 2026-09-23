@@ -561,7 +561,7 @@ exports.resolvePromptTemplate = resolvePromptTemplate;
  * WHICH promptId A ROUND STARTS FROM — the session's pick first.
  *
  * `METADATA.PromptId` is what the host chose at setup or switched to mid-game
- * (PUT /games/{id}); the set's `promptId` is what its author attached. The
+ * (PUT /games/{id}/prompt); the set's `promptId` is what its author attached. The
  * session wins because it is the later, more specific decision, exactly as the
  * host's PersonaId beats the set's. '' is the answer "nothing chosen", which
  * resolvePromptTemplate turns into the game-type default. Pure, so
