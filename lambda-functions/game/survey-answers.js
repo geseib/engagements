@@ -71,11 +71,18 @@
  *                              item in a transaction, the ConditionCheck's
  *                              included, so this is ordinary, not an error:
  *                              jittered backoff for the survey-retry.js budget
- *                              (eight tries), then 503 {code:'BUSY'}
+ *                              (eight tries, eight seconds), then 503
+ *                              {code:'BUSY'}
+ *   throttled                  the partition's write rate is spent — every
+ *                              answer in the session writes GAME#<id>, so a
+ *                              big room reaches it (ThrottlingException, or a
+ *                              cancellation reason ThrottlingError). Busy, the
+ *                              same budget, the same 503.
  *
  * 409 is kept for the first: a phone reads 409 as a fact about the survey
  * ("closed", "not open yet") and stops. Everything retryable is a 503, which
- * the phone retries.
+ * the phone retries — a throttled READ included, which the handler's catch
+ * answers BUSY rather than 500.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -246,9 +253,9 @@ async function writeRow(gameId, meta, raw, item) {
       const codes = (err.CancellationReasons || []).map((r) => r && r.Code);
       if (codes[0] === 'ConditionalCheckFailed') return 'closed';
       if (codes[1] === 'ConditionalCheckFailed') return 'stale';
-      if (retry.cancelledByConflict(err)) return 'busy';
     }
-    if (retry.isConflictError(err)) return 'busy';
+    // A conflict on STATE, or the partition's throughput spent: again, later.
+    if (retry.isBusyError(err)) return 'busy';
     throw err;
   }
 }
@@ -266,6 +273,7 @@ async function writeRow(gameId, meta, raw, item) {
 async function saveOwnRow(gameId, meta, key, build) {
   let stale = 0;
   let busyTries = 0;
+  const startedAt = Date.now();
   for (;;) {
     const { raw, current } = await readOwnRow(gameId, key, meta);
     const plan = build(raw, current, new Date().toISOString());
@@ -279,7 +287,10 @@ async function saveOwnRow(gameId, meta, key, build) {
       continue;
     }
     busyTries += 1;
-    if (busyTries >= retry.timing.tries) return { response: busy() };
+    if (!retry.mayRetry(busyTries, startedAt)) {
+      console.warn(`⚠️ SURVEY: an answer write stayed busy for ${busyTries} tries — answering 503 BUSY`);
+      return { response: busy() };
+    }
     await retry.pause(busyTries);
   }
 }
@@ -302,9 +313,19 @@ function baseRow(gameId, who, meta, state, raw, current, now) {
   return item;
 }
 
+/**
+ * The counts to the host's screens. NEVER THROWS, like the broadcast itself
+ * (survey-broadcast.js): by now the answer is written, and a count read that
+ * was throttled must not tell the phone its answer was lost. The wall catches
+ * up on the next answer that moves it.
+ */
 async function announceProgress(gameId, meta, questions) {
-  const payload = await progressFor(db, TABLE(), gameId, meta, questions);
-  await toHosts(db, TABLE(), gameId, { type: 'surveyProgress', ...payload });
+  try {
+    const payload = await progressFor(db, TABLE(), gameId, meta, questions);
+    await toHosts(db, TABLE(), gameId, { type: 'surveyProgress', ...payload });
+  } catch (err) {
+    console.error('⚠️ SURVEY: the host was not sent the new counts (the answer is saved):', err && err.name);
+  }
 }
 
 /** Who finished: the first answer puts the name on the list as "started". */
@@ -588,8 +609,12 @@ exports.handler = async (event) => {
     if (route === 'submit') return await submit(gameId, body);
     return await mine(gameId, body);
   } catch (error) {
-    // A write refused because a transaction held its item is busy, not broken.
-    if (retry.isConflictError(error) || retry.cancelledByConflict(error)) return busy();
+    // Refused because a transaction held the item, or throttled — a read
+    // included: busy, not broken. The phone tries again on a 503.
+    if (retry.isBusyError(error)) {
+      console.warn('⚠️ SURVEY: busy past the retry budget — answering 503 BUSY:', error.name);
+      return busy();
+    }
     console.error('❌ SURVEY: error:', error);
     return respond(500, { error: 'Failed to handle the survey request' });
   }

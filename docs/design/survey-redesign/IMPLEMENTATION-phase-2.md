@@ -169,6 +169,13 @@ Indexes are canonical option order; `shuffle` is display-only, seeded by respond
 capability that must stay out of URLs and logs (precedent `POST /games/get-results`).
 **409 is a fact about the survey** (closed / not open) and the phone stops on it;
 **every retryable failure is a 503** (`BUSY`, `CONFLICT`) and the phone retries.
+**DynamoDB throttling is `BUSY`, on every survey route, player and host** — never a
+500: `ThrottlingException`, `ProvisionedThroughputExceededException`,
+`RequestLimitExceeded`, or a cancellation reason `ThrottlingError` /
+`ProvisionedThroughputExceeded`. Every answer writes the one partition `GAME#<id>`,
+so a big room reaches its write cap (dev, a 240-answer burst:
+`TableWriteKeyRangeThroughputExceeded`). Writes retry in the conflict budget below;
+a throttled read answers 503 `BUSY` at once (the SDK has already retried it).
 Once sent, `Complete` stays true even if an answer is later cleared.
 `next-question`, `start-vote` and `get-results` (both routes) refuse a survey: 409,
 STATE untouched.
@@ -179,16 +186,20 @@ with a **ConditionCheck STATE `State = 'SURVEY#OPEN'`** + Put conditioned
 `attribute_not_exists(PK) OR Rev = :rev`: STATE check failed → 409; Rev failed →
 re-read, ≤3 then 503 `CONFLICT` (precedent `toggle-category.js:231`); cancellation
 reason `TransactionConflict` (every concurrent answer holds STATE — DynamoDB locks
-a ConditionCheck's item too) → jittered backoff, 8 tries ≲1.6 s
-(`game/survey-retry.js`), then 503 `BUSY`
+a ConditionCheck's item too) **or throttling** → jittered backoff, 8 tries ≲1.6 s of
+our own waiting and no new try after 8 s of clock (a throttled send has already
+spent the SDK's back-off; eight of them could reach the 30 s timeout, which is a
+500 at the edge) (`game/survey-retry.js`), then 503 `BUSY`
 → if new row and Who finished: conditional DONE `started` (after verifying the player)
 → `countAnsweredQuestion(db, table, gameId, qid, meta)` (a `game/` copy of
 `session-count.js`, so surveys bill at their 2nd answered question) → only if
 `Answered`/`Complete` changed: Query `SURVEY#RESP#` ConsistentRead projecting
-`Answered, Complete` → broadcast progress.
+`Answered, Complete` → broadcast progress. (The row is written by then, so a
+failed count read is logged and the PUT still answers 200.)
 
 **Close:** conditional STATE OPEN→CLOSED + `ClosedAt` (retrying
-`TransactionConflictException`) → Query `SURVEY#RESP#` ConsistentRead, **paginate**
+`TransactionConflictException` and throttling; the freeze's page and results
+writes retry in the same budget) → Query `SURVEY#RESP#` ConsistentRead, **paginate**
 `LastEvaluatedKey` → decrypt, filter to current `Session`, `aggregate(questions,
 rows)` → Put the text pages → conditional Put `SURVEY#RESULTS` → only the close whose
 Put landed records metrics and broadcasts; a racing one returns the stored counts.

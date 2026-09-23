@@ -69,6 +69,21 @@
  *                            or warning landing on a STATE row a transaction
  *                            is holding
  *
+ * and the throttling a room meets once it outruns ONE PARTITION's write rate
+ * (every answer in a session writes `GAME#<id>`), seen on dev as
+ * `ThrottlingException … TableWriteKeyRangeThroughputExceeded` after the SDK's
+ * own three attempts:
+ *
+ *   throttle(n, pred, name)  the next n sends matching `pred` throw `name` —
+ *                            ThrottlingException (the default, with the
+ *                            `throttlingReasons` the dev log carried),
+ *                            ProvisionedThroughputExceededException or
+ *                            RequestLimitExceeded
+ *   throttleTransactions(n, code, at)
+ *                            the next n TransactWrites cancel with reason
+ *                            `code` (ThrottlingError, the default, or
+ *                            ProvisionedThroughputExceeded) on item `at`
+ *
  * THE 400 KB ITEM LIMIT. DynamoDB refuses an item over 400 KB with a
  * ValidationException; a fake that stores anything let SURVEY#RESULTS grow
  * one encrypted blob per open answer, forever, and pass. Every Put, Update
@@ -278,7 +293,31 @@ function conditionalFailure() {
 const REASON_MESSAGES = {
   ConditionalCheckFailed: 'The conditional request failed',
   TransactionConflict: 'Transaction is ongoing for the item',
+  ThrottlingError: 'Throughput exceeds the current capacity of your table or index.',
+  ProvisionedThroughputExceeded: 'The level of configured provisioned throughput for the table was exceeded.',
 };
+
+const THROTTLE_MESSAGES = {
+  ThrottlingException: 'Throughput exceeds the current capacity of your table or index. DynamoDB is automatically scaling your table or index so please try again shortly.',
+  ProvisionedThroughputExceededException: 'The level of configured provisioned throughput for the table was exceeded. Consider increasing your provisioning level with the UpdateTable API.',
+  RequestLimitExceeded: 'Throughput exceeds the current throughput limit for your account.',
+};
+
+/**
+ * What DynamoDB throws when a partition (or the table, or the account) is out
+ * of throughput — after the SDK's own retries, as the dev log showed it:
+ * `$metadata.attempts: 3` and, for ThrottlingException, the reason.
+ */
+function throttled(name = 'ThrottlingException') {
+  if (!THROTTLE_MESSAGES[name]) throw new Error(`fake: ${name} is not a throttling error`);
+  const error = new Error(THROTTLE_MESSAGES[name]);
+  error.name = name;
+  error.$metadata = { httpStatusCode: 400, attempts: 3 };
+  if (name === 'ThrottlingException') {
+    error.throttlingReasons = [{ reason: 'TableWriteKeyRangeThroughputExceeded', resource: 'table/test-table' }];
+  }
+  return error;
+}
 
 /** DynamoDB's shape for a cancelled transaction: one reason per item, in order. */
 function transactionCancelled(codes) {
@@ -351,6 +390,19 @@ function createTable() {
     /** The next `n` UpdateItems matching `predicate` throw TransactionConflictException. */
     conflictUpdates(n = 1, predicate = () => true) {
       return table.inject((c) => c.type === 'update' && predicate(c), () => transactionConflict(), n);
+    },
+    /** The next `n` sends matching `predicate` throw the throttling error `name`. */
+    throttle(n = 1, predicate = () => true, name = 'ThrottlingException') {
+      throttled(name); // an unknown name fails here, not at the send
+      return table.inject(predicate, () => throttled(name), n);
+    },
+    /** The next `n` TransactWrites cancel with reason `code` on item `at` (the rest 'None'). */
+    throttleTransactions(n = 1, code = 'ThrottlingError', at = 0) {
+      return table.inject(
+        (c) => c.type === 'transactWrite',
+        (c) => transactionCancelled((c.input.TransactItems || []).map((_, i) => (i === at ? code : 'None'))),
+        n
+      );
     },
 
     /**
@@ -641,6 +693,7 @@ module.exports = {
   conditionalFailure,
   transactionCancelled,
   transactionConflict,
+  throttled,
   ITEM_LIMIT_BYTES,
   itemBytes,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,

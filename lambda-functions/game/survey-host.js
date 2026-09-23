@@ -55,9 +55,11 @@
  *
  * Close, the warning and end are UpdateItems on STATE, and every answer in
  * flight holds STATE inside its transaction (survey-answers.js), so they can
- * be refused with TransactionConflictException while a room is answering.
- * That is retried with jittered backoff (survey-retry.js); a budget spent is
- * 503 {code:'BUSY'}, never a 500.
+ * be refused with TransactionConflictException while a room is answering —
+ * or throttled, since the room's answers are spending the same partition's
+ * write rate. Both are retried with jittered backoff (survey-retry.js), and so
+ * are the freeze's own writes; a budget spent — or a throttled read — is 503
+ * {code:'BUSY'}, never a 500.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -165,10 +167,8 @@ async function writeTextPages(gameId, orgId, texts, stamp) {
         Texts: pages[i],
         ...stamp,
       };
-      await db.send(new PutCommand({
-        TableName: TABLE(),
-        Item: orgId ? await encryptItem(orgId, 'surveyResults', item) : item,
-      }));
+      const sealed = orgId ? await encryptItem(orgId, 'surveyResults', item) : item;
+      await retry.retryWhenBusy(() => db.send(new PutCommand({ TableName: TABLE(), Item: sealed })));
     }
     counts[qid] = pages.length;
   }
@@ -224,17 +224,18 @@ async function freeze(gameId, meta, closedAt) {
     ...(set.version !== null && set.version !== undefined ? { QuestionSetVersion: set.version } : {}),
     ttl,
   };
+  // No field of the main item is sealed now that the words are on the pages;
+  // it still goes through the entity so a field added to it later is sealed
+  // without anyone remembering to.
+  const sealedResults = orgId ? await encryptItem(orgId, 'surveyResults', results) : results;
   try {
-    await db.send(new PutCommand({
+    await retry.retryWhenBusy(() => db.send(new PutCommand({
       TableName: TABLE(),
-      // No field of the main item is sealed now that the words are on the
-      // pages; it still goes through the entity so a field added to it later
-      // is sealed without anyone remembering to.
-      Item: orgId ? await encryptItem(orgId, 'surveyResults', results) : results,
+      Item: sealedResults,
       ConditionExpression: 'attribute_not_exists(PK) OR #session <> :session',
       ExpressionAttributeNames: { '#session': 'Session' },
       ExpressionAttributeValues: { ':session': session },
-    }));
+    })));
   } catch (err) {
     if (!isConditionFailure(err)) throw err;
     // Another close froze this session a moment ago, from the same rows.
@@ -263,7 +264,7 @@ async function close(gameId, meta, state) {
   if (current === SURVEY_OPEN) {
     closedAt = new Date().toISOString();
     try {
-      await retry.retryOnConflict(() => db.send(new UpdateCommand({
+      await retry.retryWhenBusy(() => db.send(new UpdateCommand({
         TableName: TABLE(),
         Key: stateKey(gameId),
         UpdateExpression: 'SET #state = :closed, #closedAt = :at, #updatedAt = :at',
@@ -297,7 +298,7 @@ async function warn(gameId, state) {
   }
   const warnedAt = new Date().toISOString();
   try {
-    await retry.retryOnConflict(() => db.send(new UpdateCommand({
+    await retry.retryWhenBusy(() => db.send(new UpdateCommand({
       TableName: TABLE(),
       Key: stateKey(gameId),
       // On STATE, so a phone or a stage that reloads inside the two minutes
@@ -337,7 +338,7 @@ async function end(gameId, meta, state) {
   if (current === 'ENDED') return respond(200, { state: 'ENDED' });
   const now = new Date().toISOString();
   try {
-    await retry.retryOnConflict(() => db.send(new UpdateCommand({
+    await retry.retryWhenBusy(() => db.send(new UpdateCommand({
       TableName: TABLE(),
       Key: stateKey(gameId),
       UpdateExpression: 'SET #state = :ended, #endedAt = :at, #updatedAt = :at',
@@ -444,9 +445,13 @@ exports.handler = async (event) => {
     if (route === 'progress') return await progress(gameId, meta);
     return await people(gameId, meta);
   } catch (error) {
-    // STATE held by the answers in flight for the whole retry budget: busy,
-    // not broken — the host presses again.
-    if (retry.isConflictError(error)) return busy();
+    // STATE held by the answers in flight, or the partition throttled, for
+    // the whole retry budget — or a throttled read: busy, not broken. The
+    // host presses again.
+    if (retry.isBusyError(error)) {
+      console.warn('⚠️ SURVEY HOST: busy past the retry budget — answering 503 BUSY:', error.name);
+      return busy();
+    }
     console.error('❌ SURVEY HOST: error:', error);
     return respond(500, { error: 'Failed to handle the survey request' });
   }

@@ -36,6 +36,7 @@
  *   §22 people leaves out removed players
  *   §23 the player row is read strongly; a legacy row is accepted
  *   §24 two closes at once freeze and announce once
+ *   §25 DynamoDB throttling is busy too: retried, then 503 BUSY — never a 500
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -81,7 +82,7 @@ const surveyHost = require(path.join(REPO, 'lambda-functions/game/survey-host.js
 const removePlayer = require(path.join(REPO, 'lambda-functions/game/remove-player.js')).handler;
 const getResults = require(path.join(REPO, 'lambda-functions/game/get-results.js')).handler;
 const startVote = require(path.join(REPO, 'lambda-functions/websocket/start-vote.js')).handler;
-const { transactionCancelled, ITEM_LIMIT_BYTES, itemBytes } = require('./helpers/player-table');
+const { transactionCancelled, throttled, ITEM_LIMIT_BYTES, itemBytes } = require('./helpers/player-table');
 
 // The conflict backoff, shortened so a suite that exhausts the budget does not
 // sleep for real. The budget itself (the number of tries) is left alone and
@@ -1576,6 +1577,229 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.deepStrictEqual(bodyOf(firstRes), bodyOf(second));
     assert.strictEqual(frames.filter((f) => f.message.type === 'surveyClosed').length, 3, 'surveyClosed went out more than once per screen');
     assert.strictEqual(delta(metricsBefore, monthRow(), 'answersStored'), 2, 'the answers were counted twice');
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§25 throttling is busy too: retried, then 503 BUSY — never a 500');
+
+  // The dev run: every answer in a session writes GAME#<id>, and each one's
+  // transaction also holds STATE, so a room of 240 outran the partition's write
+  // rate — `ThrottlingException … TableWriteKeyRangeThroughputExceeded` at
+  // writeRow, after the SDK's own three attempts — and every one was a 500.
+  const errorNamed = (name) => Object.assign(new Error(name), { name });
+  const isStateUpdate = (c) => c.type === 'update' && c.input.Key && c.input.Key.SK === 'STATE';
+  const isRead = (sk) => (c) => c.type === 'get' && c.input.Key && c.input.Key.SK === sk;
+  const isRespQuery = (c) => c.type === 'query' && c.input.ExpressionAttributeValues[':sk'] === 'SURVEY#RESP#';
+
+  // rejects: a classifier that knows only the two transaction conflicts, so a
+  // throttled write is rethrown and the handler answers 500.
+  await check('survey-retry calls every throttling shape busy, and a failed condition not', () => {
+    assert.strictEqual(typeof surveyRetry.isBusyError, 'function', 'survey-retry.js has no isBusyError');
+    for (const e of [
+      throttled('ThrottlingException'), throttled('ProvisionedThroughputExceededException'), throttled('RequestLimitExceeded'),
+      errorNamed('TransactionConflictException'),
+      transactionCancelled(['ThrottlingError', 'None']),
+      transactionCancelled(['None', 'ProvisionedThroughputExceeded']),
+      transactionCancelled(['TransactionConflict', 'None']),
+    ]) {
+      assert.ok(surveyRetry.isBusyError(e), `${e.name} ${JSON.stringify(e.CancellationReasons || '')} is not busy`);
+    }
+    for (const e of [
+      errorNamed('ConditionalCheckFailedException'), errorNamed('ValidationException'), new Error('boom'), null,
+      transactionCancelled(['ConditionalCheckFailed', 'None']), transactionCancelled(['None', 'ConditionalCheckFailed']),
+    ]) {
+      assert.ok(!surveyRetry.isBusyError(e), `${e && e.name} was called busy`);
+    }
+  });
+  // rejects: the dev failure itself — a throttled answer write rethrown as a 500.
+  await check('a PUT whose write is throttled twice (the dev log\'s shape) retries and saves', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    table.log.length = 0;
+    table.throttle(2, (c) => c.type === 'transactWrite');
+    const res = await answer(g, r, '001', 4);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(txCount(), 3, 'the PUT did not try exactly three times');
+    assert.deepStrictEqual(respRows(g)[0].Answered, [qid('001')]);
+  });
+  for (const code of ['ThrottlingError', 'ProvisionedThroughputExceeded']) {
+    // rejects: reading only TransactionConflict out of the cancellation reasons.
+    await check(`a PUT whose transaction is cancelled for ${code} retries and saves`, async () => {
+      const g = await openSurvey({});
+      const r = newRespondent();
+      const fault = table.throttleTransactions(2, code, 1);
+      const res = await answer(g, r, '002', 7);
+      clearFaults();
+      assert.strictEqual(fault.thrown, 2, 'the injected cancellation never fired');
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(respRows(g).length, 1);
+    });
+  }
+  // rejects: an endless retry, or a spent budget answered 500 or 409.
+  await check('throttling that never clears: 503 {code: BUSY} after eight tries, nothing written', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    table.log.length = 0;
+    table.throttle(50, (c) => c.type === 'transactWrite', 'ProvisionedThroughputExceededException');
+    const res = await answer(g, r, '001', 4);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
+    assert.strictEqual(bodyOf(res).code, 'BUSY');
+    assert.strictEqual(txCount(), 8);
+    assert.strictEqual(respRows(g).length, 0);
+  });
+  // rejects: a retry budget measured in tries alone. Each throttled send has
+  // already spent the SDK's own three attempts and their back-off (up to ~3 s),
+  // so eight of them can run past the function's timeout — and a timed-out
+  // Lambda is a 500 at the edge, the very thing this section forbids.
+  await check('the budget is also a clock: past it, no new try starts — 503 BUSY', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    assert.ok(Number(surveyRetry.timing.deadlineMs) > 0, 'survey-retry.js has no deadlineMs');
+    const was = surveyRetry.timing.deadlineMs;
+    surveyRetry.timing.deadlineMs = 0;
+    try {
+      table.log.length = 0;
+      table.throttle(50, (c) => c.type === 'transactWrite');
+      const res = await answer(g, r, '001', 4);
+      clearFaults();
+      assert.strictEqual(res.statusCode, 503, res.body);
+      assert.strictEqual(bodyOf(res).code, 'BUSY');
+      assert.strictEqual(txCount(), 1, 'a try started after the deadline');
+      table.throttle(50, isStateUpdate, 'RequestLimitExceeded');
+      table.log.length = 0;
+      const closing = await host('close', g);
+      clearFaults();
+      assert.strictEqual(closing.statusCode, 503, closing.body);
+      assert.strictEqual(stateUpdates(), 1, 'a close try started after the deadline');
+    } finally {
+      surveyRetry.timing.deadlineMs = was;
+      clearFaults();
+    }
+  });
+  // rejects: only the write classified — a throttled READ of STATE, METADATA or
+  // the row escaped to the handler's catch and 500'd.
+  await check('a throttled read on the PUT, Send or mine: 503 BUSY, never 500', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 4);
+    await answer(g, r, '007', 'fine');
+    for (const [route, body] of [
+      ['answers', { qid: qid('002'), value: 3, respondentId: r }],
+      ['submit', { respondentId: r }],
+      ['mine', { respondentId: r }],
+    ]) {
+      table.throttle(1, isRead('STATE'));
+      const res = await phone(route, g, body);
+      clearFaults();
+      assert.strictEqual(res.statusCode, 503, `${route}: ${res.body}`);
+      assert.strictEqual(bodyOf(res).code, 'BUSY', route);
+    }
+    table.throttle(1, isRead(`SURVEY#RESP#${r}`));
+    const res = await phone('answers', g, { qid: qid('002'), value: 3, respondentId: r });
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
+  });
+  await check('Send meets throttling and still sends; throttled for good, 503 BUSY and not complete', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    await answer(g, r, '001', 4);
+    await answer(g, r, '007', 'ok');
+    table.throttle(50, (c) => c.type === 'transactWrite');
+    const stuck = await phone('submit', g, { respondentId: r });
+    clearFaults();
+    assert.strictEqual(stuck.statusCode, 503, stuck.body);
+    assert.strictEqual(bodyOf(stuck).code, 'BUSY');
+    assert.notStrictEqual(respRows(g)[0].Complete, true);
+    table.throttleTransactions(2, 'ThrottlingError', 0);
+    const sent = await phone('submit', g, { respondentId: r });
+    clearFaults();
+    assert.strictEqual(sent.statusCode, 200, sent.body);
+    assert.strictEqual(respRows(g)[0].Complete, true);
+  });
+  // rejects: failing a PUT whose answer IS saved because the host's count read
+  // was throttled afterwards — the phone would be told its answer was lost.
+  await check('the count read after a saved answer is throttled: still 200, the answer kept', async () => {
+    const g = await openSurvey({});
+    const r = newRespondent();
+    frames.length = 0;
+    table.throttle(1, isRespQuery);
+    const res = await answer(g, r, '001', 5);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).saved, true);
+    assert.deepStrictEqual(respRows(g)[0].Answered, [qid('001')]);
+  });
+  // rejects: the host's close, warning and end knowing only TransactionConflict.
+  await check('close meets ProvisionedThroughputExceeded on STATE and still closes', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 3);
+    const fault = table.throttle(2, isStateUpdate, 'ProvisionedThroughputExceededException');
+    const res = await host('close', g);
+    clearFaults();
+    assert.strictEqual(fault.thrown, 2, 'the injected throttle never fired');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_CLOSED);
+    assert.strictEqual(bodyOf(res).n, 1);
+  });
+  await check('close throttled for good: 503 BUSY, still open', async () => {
+    const g = await openSurvey({});
+    table.throttle(50, isStateUpdate, 'RequestLimitExceeded');
+    const res = await host('close', g);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
+    assert.strictEqual(bodyOf(res).code, 'BUSY');
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_OPEN);
+  });
+  // rejects: a freeze whose writes are not retried — the flip lands, the
+  // results write is throttled, and the host is sent back to press again.
+  await check('the freeze\'s own writes are retried: a throttled text page and results write still close', async () => {
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '007', 'The coffee.');
+    const onPage = table.throttle(2, (c) => c.type === 'put' && String(c.input.Item.SK).startsWith('SURVEY#RESULTS#TEXT#'));
+    const onResults = table.throttle(2, (c) => c.type === 'put' && c.input.Item.SK === 'SURVEY#RESULTS');
+    const res = await host('close', g);
+    clearFaults();
+    assert.deepStrictEqual([onPage.thrown, onResults.thrown], [2, 2], 'an injected throttle never fired');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.ok(row(`GAME#${g}`, 'SURVEY#RESULTS'), 'no results were written');
+    assert.ok(row(`GAME#${g}`, `SURVEY#RESULTS#TEXT#${qid('007')}#000`), 'no text page was written');
+  });
+  await check('warning and end: throttled once they still land; throttled for good, 503 BUSY', async () => {
+    const g = await openSurvey({});
+    table.throttle(1, isStateUpdate);
+    assert.strictEqual((await host('warning', g)).statusCode, 200);
+    table.throttle(50, isStateUpdate);
+    const warned = await host('warning', g);
+    clearFaults();
+    assert.strictEqual(warned.statusCode, 503, warned.body);
+    assert.strictEqual(bodyOf(warned).code, 'BUSY');
+    assert.strictEqual((await host('close', g)).statusCode, 200);
+    table.throttle(50, isStateUpdate);
+    const stuck = await host('end', g);
+    clearFaults();
+    assert.strictEqual(stuck.statusCode, 503, stuck.body);
+    assert.strictEqual(bodyOf(stuck).code, 'BUSY');
+    table.throttle(1, isStateUpdate);
+    const ended = await host('end', g);
+    clearFaults();
+    assert.strictEqual(ended.statusCode, 200, ended.body);
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, 'ENDED');
+  });
+  await check('progress and people throttled: 503 BUSY, never 500', async () => {
+    const g = await openSurvey({ names: 'finished' });
+    for (const route of ['progress', 'people']) {
+      table.throttle(1, (c) => c.type === 'query');
+      const res = await host(route, g);
+      clearFaults();
+      assert.strictEqual(res.statusCode, 503, `${route}: ${res.body}`);
+      assert.strictEqual(bodyOf(res).code, 'BUSY', route);
+    }
+    table.throttle(1, isRead('METADATA'));
+    const res = await host('progress', g);
+    clearFaults();
+    assert.strictEqual(res.statusCode, 503, res.body);
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);
