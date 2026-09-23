@@ -17,6 +17,7 @@ import './components/PlayerSurface.css';
 import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
 import BrandMark from './components/BrandMark';
+import { stateRank } from './utils/playerPhase';
 
 const API_BASE = window.API_BASE;
 
@@ -374,17 +375,9 @@ function PlayerPage() {
   const [useWebSocket, setUseWebSocket] = useState(true); // Always use WebSocket
 
   // A3: monotonic phase guard — prevents a slow GET /state from clobbering a
-  // newer phase delivered via WebSocket (or vice versa). Accepts both the WS
-  // message spellings (RESULT#/END) and the server state spellings (RESULTS#/ENDED).
+  // newer phase delivered via WebSocket (or vice versa). The order itself,
+  // survey states included, is utils/playerPhase.js.
   const lastRankRef = useRef(-1);
-  const stateRank = (s) => {
-    if (!s) return -1;
-    if (s === 'ENDED' || s === 'END') return Number.MAX_SAFE_INTEGER;
-    const m = s.match(/^(ASK|VOTE|RESULTS?)#(\d+)/);   // accepts RESULT# and RESULTS#
-    if (!m) return -1;                                  // CREATED/STARTED never overwrite a live phase
-    const phase = { ASK: 0, VOTE: 1, RESULT: 2, RESULTS: 2 }[m[1]];
-    return parseInt(m[2], 10) * 10 + phase;
-  };
   const applyGameState = (next) => {
     const r = stateRank(next);
     if (r < lastRankRef.current) {
