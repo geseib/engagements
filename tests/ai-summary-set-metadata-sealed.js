@@ -35,13 +35,32 @@
  * (lambda-functions/game/log-shape.js; tests/ai-summary-content-not-logged.js
  * holds the rest of this file to the same rule).
  *
+ * ── THE NAME AND DESCRIPTION ───────────────────────────────────────────────
+ *
+ * generateAISummary filled {questionSetName} and {questionSetDescription} from
+ * that row's `SetName` and `Description`, and the handler's prompt provenance
+ * named the set by `SetName`. No writer puts either field on the row:
+ * upload-questions.js writes lowercase `name` and `description`. So every set
+ * the current importer made reached Workie as "Question Set" with no
+ * description, org or platform alike, and the provenance fell back to the id.
+ * Reading the real fields puts an org's own prose in the clear, so the
+ * `📚 Found question set metadata (old structure)` line, which printed both,
+ * describes them instead. A legacy row that does carry `SetName` and
+ * `Description` still reads.
+ *
  * rejects: an org set's customInstruction or aiContextInstruction missing from
  *          the Bedrock prompt, or reaching it as "[object Object]" or an
  *          envelope; a worker that fails on an org set with no persona picked;
  *          either value (or the set's name or description) in any console
  *          output, printed at unlimited depth; the two log lines silenced
  *          rather than described; the set row written back in the clear; a
- *          platform set's plaintext row no longer passing straight through.
+ *          platform set's plaintext row no longer passing straight through;
+ *          {questionSetName} or {questionSetDescription} rendering the default
+ *          instead of the set's own, for an org set or a platform one; the
+ *          set-metadata log line quoting them, or silenced; the provenance
+ *          naming a named set by its id, or carrying the name onto the summary
+ *          row in the clear; a legacy `SetName`/`Description` row no longer
+ *          read.
  *
  * Drives the REAL worker path against a stubbed DynamoDB and a KMS that
  * enforces the key policy, exactly as tests/ai-summary-session-brief.js does,
@@ -239,6 +258,8 @@ const SET_ID = 'retro-set';
 // {sessionContext} is placed explicitly; there is no {contextSections}, so the
 // context layer (QUESTION SET CONTEXT / PARTICIPANT INSTRUCTIONS) is injected.
 const TEMPLATE =
+  'SET: {questionSetName}\n' +
+  'ABOUT: {questionSetDescription}\n' +
   'SESSION: {sessionContext}\n' +
   'Q: {questionTitle}\n' +
   'RESPONSES: {responsesText}\n' +
@@ -256,8 +277,11 @@ async function mintOrg(orgId) {
  * One round at RESULTS, played from SET_ID in `orgId`'s library (or the
  * platform's when orgId is ''), with the set's METADATA row written the way
  * upload-questions.js writes it — sealed under the org for an org set.
+ * `promptId` attaches a Workie to the set, as the importer does when one is
+ * picked; `legacy` writes the name and description as `SetName`/`Description`
+ * instead, the shape a row from before the importer carries.
  */
-async function seedRound(gameId, { orgId, secrets, personaId = null }) {
+async function seedRound(gameId, { orgId, secrets, personaId = null, promptId = null, legacy = false }) {
   const scope = orgId ? 'org' : '';
   const setRef = { scope, orgId, setId: SET_ID };
   const seal = (entity, item) => (orgId ? crypto.encryptItem(orgId, entity, item) : item);
@@ -278,8 +302,10 @@ async function seedRound(gameId, { orgId, secrets, personaId = null }) {
     ...(orgId ? { orgId } : {}),
     activeVersion: 1,
     engagementType: 'call-and-answer',
-    name: secrets.name,
-    description: secrets.description,
+    ...(legacy
+      ? { SetName: secrets.name, Description: secrets.description }
+      : { name: secrets.name, description: secrets.description }),
+    ...(promptId ? { promptId } : {}),
     customInstruction: secrets.customInstruction,
     aiContextInstruction: secrets.aiContextInstruction,
   }));
@@ -312,19 +338,33 @@ const freshSecrets = () => ({
   aiContextInstruction: `Speak as a blunt CFO who hates jargon ${marker('ctx')}`,
 });
 
+/**
+ * Run the worker with ?debug=true, so the summary row keeps DebugInfo — the
+ * prompt provenance among it — and the debug-only paths are held to the same
+ * log rule as the rest.
+ */
 async function runWorker(gameId) {
   bedrockBodies = [];
   // Worker mode RETHROWS (so the Event invoke retries); catch it here so one
   // failing section reports instead of ending the file.
   const { out: res, logs } = await captureLogs(async () => {
     try {
-      return await getAiSummary({ __workerMode: true, gameId, questionId: '001' });
+      return await getAiSummary({ __workerMode: true, gameId, questionId: '001', debug: 'true' });
     } catch (e) {
       return { error: e.message };
     }
   });
   const prompt = bedrockBodies.length ? bedrockBodies[0].messages[0].content : '';
-  return { res, logs, prompt };
+  const stored = store.get(key(`GAME#${gameId}`, 'QUESTION#001#AISummary'));
+  return { res, logs, prompt, stored };
+}
+
+/** The prompt provenance the summary row kept, opened with the session's org. */
+async function storedProvenance(stored, orgId) {
+  assert.ok(stored, 'no AISummary row was written');
+  const row = orgId ? await crypto.decryptItem(orgId, 'aiSummary', stored) : stored;
+  assert.ok(row.DebugInfo && row.DebugInfo.promptProvenance, 'the summary row kept no prompt provenance');
+  return row.DebugInfo.promptProvenance;
 }
 
 (async () => {
@@ -351,9 +391,13 @@ async function runWorker(gameId) {
     assert.ok(org.prompt.includes(orgSecrets.customInstruction), `customInstruction missing from:\n${org.prompt}`));
   await check("the set's AI context is in the prompt, in the clear", () =>
     assert.ok(org.prompt.includes(orgSecrets.aiContextInstruction), `aiContextInstruction missing from:\n${org.prompt}`));
+  await check("{questionSetName} is the set's own name, in the clear", () =>
+    assert.ok(org.prompt.includes(`SET: ${orgSecrets.name}\n`), `name missing from:\n${org.prompt}`));
+  await check("{questionSetDescription} is the set's own description, in the clear", () =>
+    assert.ok(org.prompt.includes(`ABOUT: ${orgSecrets.description}\n`), `description missing from:\n${org.prompt}`));
   await check('no "[object Object]" and no envelope fragment in the prompt', () => {
     assert.ok(!org.prompt.includes('[object Object]'), `stringified envelope in:\n${org.prompt}`);
-    for (const f of ['customInstruction', 'aiContextInstruction']) {
+    for (const f of ['name', 'description', 'customInstruction', 'aiContextInstruction']) {
       assert.ok(!org.prompt.includes(atRest[f].ct), `${f} ciphertext reached the prompt`);
     }
   });
@@ -370,6 +414,12 @@ async function runWorker(gameId) {
     const line = lineMentioning(org.logs, 'ai context');
     assert.ok(line, 'no log line mentions the set\'s AI context any more');
     assert.ok(line.includes(`${orgSecrets.aiContextInstruction.length} chars`), `no length in: ${line}`);
+  });
+  await check('the set-metadata line still says what happened: name and description, and how long', () => {
+    const line = lineMentioning(org.logs, 'question set metadata');
+    assert.ok(line, 'no log line mentions the set metadata any more');
+    assert.ok(line.includes(`${orgSecrets.name.length} chars`), `no name length in: ${line}`);
+    assert.ok(line.includes(`${orgSecrets.description.length} chars`), `no description length in: ${line}`);
   });
 
   say('\n4. a host-picked persona wins the voice: nothing throws, so this is the quiet half');
@@ -409,11 +459,54 @@ async function runWorker(gameId) {
     assert.ok(plat.prompt.includes(platSecrets.customInstruction), `customInstruction missing from:\n${plat.prompt}`);
     assert.ok(plat.prompt.includes(platSecrets.aiContextInstruction), `aiContextInstruction missing from:\n${plat.prompt}`);
   });
+  await check("{questionSetName} and {questionSetDescription} are the set's own", () => {
+    assert.ok(plat.prompt.includes(`SET: ${platSecrets.name}\n`), `name missing from:\n${plat.prompt}`);
+    assert.ok(plat.prompt.includes(`ABOUT: ${platSecrets.description}\n`), `description missing from:\n${plat.prompt}`);
+  });
   await check('and the log lines describe them rather than quote them', () =>
-    assertNothingLogged(plat.logs, {
-      customInstruction: platSecrets.customInstruction,
-      aiContextInstruction: platSecrets.aiContextInstruction,
-    }));
+    assertNothingLogged(plat.logs, platSecrets));
+
+  say('\n7. a set with its own Workie: the provenance names the set, and only where it is sealed');
+  const namedOrgSecrets = freshSecrets();
+  await seedRound('5104', { orgId: ORG, secrets: namedOrgSecrets, promptId: 'lessons-learned' });
+  const namedOrg = await runWorker('5104');
+  await check('the worker completed', () =>
+    assert.strictEqual(namedOrg.res && namedOrg.res.ok, true, JSON.stringify(namedOrg.res)));
+  await check("an org set's provenance names it by its name, not its id", async () => {
+    const prov = await storedProvenance(namedOrg.stored, ORG);
+    assert.strictEqual(prov.source, 'question_set', JSON.stringify(prov));
+    assert.ok(prov.details.includes(`question set "${namedOrgSecrets.name}"`), `details: ${prov.details}`);
+  });
+  await check('…and the name is not on the summary row in the clear', () =>
+    assert.ok(!JSON.stringify(namedOrg.stored).includes(namedOrgSecrets.name),
+      'the set name is readable on the stored AISummary row'));
+  await check('nothing from the set reaches the logs', () =>
+    assertNothingLogged(namedOrg.logs, namedOrgSecrets));
+
+  const namedPlatSecrets = freshSecrets();
+  await seedRound('5105', { orgId: '', secrets: namedPlatSecrets, promptId: 'lessons-learned' });
+  const namedPlat = await runWorker('5105');
+  await check("a platform set's provenance names it by its name, not its id", async () => {
+    const prov = await storedProvenance(namedPlat.stored, '');
+    assert.ok(prov.details.includes(`question set "${namedPlatSecrets.name}"`), `details: ${prov.details}`);
+  });
+
+  say('\n8. a legacy row: SetName and Description still read');
+  const legacySecrets = freshSecrets();
+  await seedRound('5106', { orgId: '', secrets: legacySecrets, promptId: 'lessons-learned', legacy: true });
+  const legacy = await runWorker('5106');
+  await check('the worker completed', () =>
+    assert.strictEqual(legacy.res && legacy.res.ok, true, JSON.stringify(legacy.res)));
+  await check('{questionSetName} and {questionSetDescription} come from SetName and Description', () => {
+    assert.ok(legacy.prompt.includes(`SET: ${legacySecrets.name}\n`), `name missing from:\n${legacy.prompt}`);
+    assert.ok(legacy.prompt.includes(`ABOUT: ${legacySecrets.description}\n`), `description missing from:\n${legacy.prompt}`);
+  });
+  await check('the provenance names it by SetName', async () => {
+    const prov = await storedProvenance(legacy.stored, '');
+    assert.ok(prov.details.includes(`question set "${legacySecrets.name}"`), `details: ${prov.details}`);
+  });
+  await check('and neither reaches the logs', () =>
+    assertNothingLogged(legacy.logs, { name: legacySecrets.name, description: legacySecrets.description }));
 
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

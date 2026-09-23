@@ -1192,7 +1192,9 @@ exports.handler = async (event) => {
             console.log('🎨 Found custom prompt ID:', promptId);
             promptProvenance = {
               source: 'question_set',
-              details: `Custom prompt "${promptId}" attached to question set "${setResult.Item.SetName || questionSetId}"`,
+              // `name` is what upload-questions.js writes; `SetName` a legacy row's.
+              // Provenance lands in the summary's DebugInfo, sealed with the rest.
+              details: `Custom prompt "${promptId}" attached to question set "${setResult.Item.name || setResult.Item.SetName || questionSetId}"`,
               promptId: promptId,
               promptName: setResult.Item.promptName || promptId,
               hierarchy: promptProvenance.hierarchy
@@ -1858,10 +1860,15 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
         oldSetMetadata.Item = await decryptItem(setOrgId, 'set', oldSetMetadata.Item);
       }
 
+      // upload-questions.js writes `name` and `description`; `SetName` and
+      // `Description` are what a row from before it carries. Both are the set
+      // author's own prose, sealed at rest on an org's set, so the log says
+      // what was found and never what it says. See shapeForLog.
       if (oldSetMetadata.Item) {
-        questionSetName = oldSetMetadata.Item.SetName || questionSetName;
-        questionSetDescription = oldSetMetadata.Item.Description || '';
-        console.log(`📚 Found question set metadata (old structure): ${questionSetName} - ${questionSetDescription}`);
+        questionSetName = oldSetMetadata.Item.name || oldSetMetadata.Item.SetName || questionSetName;
+        questionSetDescription = oldSetMetadata.Item.description || oldSetMetadata.Item.Description || '';
+        console.log(`📚 Found question set metadata (old structure): name ${shapeForLog(questionSetName)}, `
+          + `description ${shapeForLog(questionSetDescription)}`);
       }
     }
     
