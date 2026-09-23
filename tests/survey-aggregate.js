@@ -355,11 +355,33 @@ check('unplaced items share the mean of the unfilled places (top 3 of 5 → 4.5 
   const r = aggregate(q, [{ Answers: { k: [2, 0, 4] } }]).PerQuestion.k;
   assert.deepStrictEqual(r.avgPlace, [2, 4.5, 1, 4.5, 3]);
   assert.deepStrictEqual(r.unplaced, [0, 1, 0, 1, 0]);
-  // a full ranking leaves nothing unplaced; a single pick shares 2..5 → 3.5
-  const full = aggregate(q, [{ Answers: { k: [4, 3, 2, 1, 0] } }]).PerQuestion.k;
+  // a full ranking (of a rank-all question) leaves nothing unplaced; a single
+  // pick shares 2..5 → 3.5
+  const all = [{ qid: 'k', kind: 'rank', options: ['a', 'b', 'c', 'd', 'e'] }];
+  const full = aggregate(all, [{ Answers: { k: [4, 3, 2, 1, 0] } }]).PerQuestion.k;
   assert.deepStrictEqual(full.avgPlace, [5, 4, 3, 2, 1]);
   const one = aggregate(q, [{ Answers: { k: [1] } }]).PerQuestion.k;
   assert.deepStrictEqual(one.avgPlace, [3.5, 1, 3.5, 3.5, 3.5]);
+});
+
+// rejects: counting 4th and 5th places on a top-3 question. The dev run saved
+// [0,1,2,3,4] against rankTop 3; the PUT now refuses it, and a row that slipped
+// past is a value that does not fit its question — ignored WHOLE, like any other.
+check('a ranking longer than rankTop is ignored whole; exactly rankTop, or fewer, counts', () => {
+  const q = [{ qid: 'k', kind: 'rank', rankTop: 3, options: ['a', 'b', 'c', 'd', 'e'] }];
+  const r = aggregate(q, [
+    { Answers: { k: [2, 0, 4] } },
+    { Answers: { k: [0, 1, 2, 3, 4] } },
+    { Answers: { k: [1, 0, 2, 3] } },
+  ]);
+  const k = r.PerQuestion.k;
+  assert.strictEqual(k.n, 1);
+  assert.strictEqual(r.N, 1, 'a row whose only answer was ignored still counted as answering');
+  assert.deepStrictEqual(k.firsts, [0, 0, 1, 0, 0]);
+  assert.deepStrictEqual(k.avgPlace, [2, 4.5, 1, 4.5, 3]);
+  k.placeHist.forEach((h) => assert.deepStrictEqual(h.slice(3), [0, 0], 'a 4th or 5th place was counted'));
+  const short = aggregate(q, [{ Answers: { k: [3] } }]).PerQuestion.k;
+  assert.strictEqual(short.n, 1);
 });
 
 check('an unanswered rank has null average places, not NaN', () => {

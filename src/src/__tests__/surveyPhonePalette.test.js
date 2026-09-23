@@ -136,6 +136,7 @@ describe('the pairings a survey paints', () => {
     ['a review answer, and the "Change" link, on the field', T.text, FIELD],
     ['the counter nearing its limit, amber on the field', T.primary, FIELD],
     ['an unavailable option at the pick limit, muted on its --surface row', T.muted, CARD],
+    ['an item past a ranking\'s top N, muted on the field (its row is transparent)', T.muted, FIELD],
   ];
   test.each(pairs)('%s clears AA', (_label, fg, layers) => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
@@ -198,6 +199,14 @@ describe('what a person types into or taps is never small', () => {
   ])('%s renders at --plr-t-%s', (sel, rung) => {
     expect(block(sel)).toMatch(new RegExp(`font-size:\\s*var\\(--plr-t-${rung}\\)`));
     expect(phoneRung(rung)).toBeGreaterThanOrEqual(15);
+  });
+
+  // rejects: an item past the top N that looks exactly like one on offer — a
+  // tap that does nothing, on a control that says it would.
+  test('an item past a ranking\'s top N is visibly not on offer: muted, no pointer', () => {
+    const rule = block('.plr-rank-row--unplaced .plr-it[aria-disabled="true"]');
+    expect(rule).toMatch(/color:\s*var\(--plr-muted\)/);
+    expect(rule).toMatch(/cursor:\s*default/);
   });
 
   test('the new controls carry the tap floor', () => {

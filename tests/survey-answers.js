@@ -538,6 +538,10 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     ['006', [2, 2], false, 'an item ranked twice'],
     ['006', [9], false, 'an item that is not there'],
     ['006', [], false, 'an empty ranking'],
+    ['006', [4, 3, 2], true, 'exactly the top three of a top-3 ranking'],
+    ['006', [1], true, 'fewer places than the top three'],
+    ['006', [0, 1, 2, 3, 4], false, 'all five placed on a top-3 ranking (the dev run saved this)'],
+    ['006', [0, 1, 2, 3], false, 'one place past the top three'],
     ['007', SECRET_ANSWER, true, 'text'],
     ['007', 'x'.repeat(501), false, 'text over maxLength'],
     ['008', 'Brilliant', true, 'short text'],
@@ -570,6 +574,21 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     const mine = bodyOf(await phone('mine', checking, { respondentId: who }));
     assert.deepStrictEqual(mine.answers[qid('005')], { v: 'no', why: 'Too long' });
     assert.deepStrictEqual(mine.answers[qid('003')], [{ other: 'Lunch' }]);
+  });
+  // rejects: a ranking longer than rankTop saved as an answer — the phone kept
+  // offering "tap to add" after three, and the aggregate counted 4th and 5th
+  // places on a question that only asked for a top three.
+  await check('a ranking past rankTop is 400 BAD_VALUE with a sentence; rank-all takes every item', async () => {
+    const res = await answer(checking, who, '006', [0, 1, 2, 3, 4]);
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.strictEqual(bodyOf(res).code, 'BAD_VALUE');
+    assert.match(bodyOf(res).error, /at most 3/);
+    const { checkAnswer } = require(path.join(REPO, 'lambda-functions/game/survey-answer.js'));
+    const options = ['a', 'b', 'c', 'd', 'e'];
+    assert.strictEqual(checkAnswer({ kind: 'rank', options, rankTop: null }, [0, 1, 2, 3, 4]).ok, true);
+    assert.strictEqual(checkAnswer({ kind: 'rank', options }, [4, 3, 2, 1, 0]).ok, true);
+    assert.strictEqual(checkAnswer({ kind: 'rank', options, rankTop: 2 }, [1, 0]).ok, true);
+    assert.strictEqual(checkAnswer({ kind: 'rank', options, rankTop: 2 }, [1, 0, 3]).ok, false);
   });
   // rejects: a why after "not sure" — a follow-up of 'any' asks after a yes or
   // a no, and the phone never offers one after unsure.

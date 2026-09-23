@@ -420,6 +420,52 @@ describe('RankInput', () => {
   });
 
   /*
+    A TOP THREE IS THREE. On dev the phone kept offering "tap to add" after
+    three placements and the server saved [0,1,2,3,4] on a rankTop-3 question,
+    so the results counted 4th and 5th places nobody was asked for. At the top
+    N the rest stay readable but are not on offer — aria-disabled, as the
+    choice question's options are at their pick limit — and the rule line says
+    how to change your mind.
+  */
+  describe('at the top N', () => {
+    /** The rule line's whole sentence — its bold part is a child element. */
+    const rule = () => document.querySelector('.plr-rule').textContent.replace(/\s+/g, ' ').trim();
+
+    test('nothing more is offered to add, and the rule says how to change it', () => {
+      const onChange = jest.fn();
+      render(<RankInput question={rank()} value={[0, 1, 2]} onChange={onChange} />);
+      expect(screen.queryByText(/tap to add/i)).toBeNull();
+      expect(rule()).toBe('Tap them in the order you’d put them. Top three placed — move or take one out to change it.');
+      for (const name of ['Add Culture & hiring', 'Add Financials']) {
+        const add = screen.getByRole('button', { name });
+        expect(add).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(add);
+      }
+      expect(onChange).not.toHaveBeenCalled();
+      // Moving and taking out still work.
+      fireEvent.click(screen.getByRole('button', { name: 'Move Team wins up' }));
+      expect(onChange).toHaveBeenLastCalledWith([0, 2, 1]);
+      fireEvent.click(screen.getByRole('button', { name: /Take out Customer stories/ }));
+      expect(onChange).toHaveBeenLastCalledWith([1, 2]);
+    });
+
+    test('below the top N every item is on offer', () => {
+      render(<RankInput question={rank()} value={[0, 1]} onChange={() => {}} />);
+      expect(screen.getByText(/Not placed · tap to add/)).toBeInTheDocument();
+      for (const name of ['Add Team wins', 'Add Culture & hiring', 'Add Financials']) {
+        expect(screen.getByRole('button', { name })).not.toHaveAttribute('aria-disabled');
+      }
+      expect(rule()).toBe('Tap them in the order you’d put them. Your top three is enough.');
+    });
+
+    test('ranking them all: every item can be placed, and nothing is held back', () => {
+      render(<RankInput question={rank({ rankTop: null })} value={[0, 1, 2, 3]} onChange={() => {}} />);
+      expect(screen.getByRole('button', { name: 'Add Financials' })).not.toHaveAttribute('aria-disabled');
+      expect(rule()).toBe('Tap them in the order you’d put them.');
+    });
+  });
+
+  /*
     EVERY RANK ACTION UNMOUNTS OR DISABLES THE BUTTON THAT WAS PRESSED — Add
     moves the item into the other list, Take out moves it back, and Move up
     into first place disables Move up. Each dropped a keyboard or screen-reader
@@ -459,6 +505,17 @@ describe('RankInput', () => {
       expect(document.activeElement).not.toBe(document.body);
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Product roadmap' }));
       expect(live()).toHaveTextContent('Product roadmap removed');
+      // Out of the top three again: it, and the rest, are on offer.
+      expect(document.activeElement).not.toHaveAttribute('aria-disabled');
+      expect(screen.getByRole('button', { name: 'Add Financials' })).not.toHaveAttribute('aria-disabled');
+    });
+
+    test('the Add that fills the top N: the focus follows the item, and the limit is said', () => {
+      render(<Held initial={[0, 1]} />);
+      press('Add Team wins');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Take out Team wins (place 3)' }));
+      expect(live()).toHaveTextContent('Team wins, place 3. Top three placed.');
+      expect(screen.getByRole('button', { name: 'Add Financials' })).toHaveAttribute('aria-disabled', 'true');
     });
 
     test('Move up into first place: Move up is disabled, so the focus goes to Move down', () => {
@@ -478,7 +535,7 @@ describe('RankInput', () => {
     });
 
     test('a move that stays mid-list keeps the focus on the same control', () => {
-      render(<Held initial={[0, 1, 2, 3]} />);
+      render(<Held initial={[0, 1, 2, 3]} q={rank({ rankTop: null })} />);
       press('Move Team wins up');
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move Team wins up' }));
       expect(live()).toHaveTextContent('Team wins, place 2');

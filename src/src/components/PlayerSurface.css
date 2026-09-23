@@ -1630,6 +1630,14 @@
   cursor: default;
 }
 
+/* Past the top N: still listed, still focusable, visibly not on offer — the
+   choice option's own treatment at its pick limit. Muted on the field is the
+   rule line's pairing, measured in surveyPhonePalette.test.js. */
+.plr-rank-row--unplaced .plr-it[aria-disabled="true"] {
+  color: var(--plr-muted);
+  cursor: default;
+}
+
 .plr-it:focus-visible,
 .plr-mv button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 

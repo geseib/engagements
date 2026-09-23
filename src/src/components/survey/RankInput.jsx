@@ -25,6 +25,14 @@ import { countWord } from './surveyAnswers';
  * The value is the canonical indexes in the order given. With a `rankTop` the
  * rule line says the top few is enough — the server counts unplaced items at
  * the mean of the places left (IMPLEMENTATION-phase-2.md §2 "Aggregate").
+ *
+ * A TOP THREE IS THREE. Once `rankTop` items are placed the rest stay listed
+ * and readable but are not on offer: `aria-disabled`, as the choice question's
+ * options are at their pick limit, and a tap on one does nothing. The rule line
+ * says how to change your mind, and the Add that fills the last place says so
+ * aloud. The server refuses a longer ranking (400), and the aggregate would
+ * ignore one whole — offering a fourth place was offering an answer that could
+ * never count.
  */
 export default function RankInput({ question, value, onChange }) {
   const options = question.options || [];
@@ -32,6 +40,7 @@ export default function RankInput({ question, value, onChange }) {
   const placed = Array.isArray(value) ? [...new Set(value.filter(inRange))] : [];
   const unplaced = options.map((_, i) => i).filter((i) => !placed.includes(i));
   const top = Number.isInteger(question.rankTop) && question.rankTop > 0 ? question.rankTop : null;
+  const full = top !== null && placed.length >= top;
 
   const [said, setSaid] = useState('');
   const controls = useRef(new Map());          // `${kind}:${item}` → the button
@@ -54,8 +63,12 @@ export default function RankInput({ question, value, onChange }) {
   });
 
   const add = (i) => {
+    if (full) return;
+    const place = placed.length + 1;
     focusNext.current = `take:${i}`;
-    setSaid(`${options[i]}, place ${placed.length + 1}`);
+    setSaid(top !== null && place === top
+      ? `${options[i]}, place ${place}. Top ${countWord(top)} placed.`
+      : `${options[i]}, place ${place}`);
     onChange([...placed, i]);
   };
   const takeOut = (i) => {
@@ -80,7 +93,8 @@ export default function RankInput({ question, value, onChange }) {
     <>
       <p className="plr-rule">
         Tap them in the order you’d put them.
-        {top && <> <b>Your top {countWord(top)} is enough.</b></>}
+        {top && !full && <> <b>Your top {countWord(top)} is enough.</b></>}
+        {full && <> <b>Top {countWord(top)} placed</b> — move or take one out to change it.</>}
       </p>
 
       {placed.length > 0 && (
@@ -127,7 +141,7 @@ export default function RankInput({ question, value, onChange }) {
 
       {unplaced.length > 0 && (
         <>
-          <p className="plr-rank-h">{placed.length ? 'Not placed · tap to add' : 'Tap to place'}</p>
+          <p className="plr-rank-h">{full ? 'Not placed' : placed.length ? 'Not placed · tap to add' : 'Tap to place'}</p>
           <ul className="plr-rank" aria-label="Not placed">
             {unplaced.map((i) => (
               <li key={i} className="plr-rank-row plr-rank-row--unplaced">
@@ -137,6 +151,7 @@ export default function RankInput({ question, value, onChange }) {
                   type="button"
                   className="plr-it"
                   aria-label={`Add ${options[i]}`}
+                  aria-disabled={full || undefined}
                   onClick={() => add(i)}
                 >
                   {options[i]}

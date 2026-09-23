@@ -14,7 +14,8 @@
  *   yesno   {v: 'yes'|'no'|'unsure', why?} — unsure only where offered; a why
  *           only where followUpWhen asks for one ('any' = after yes or no,
  *           never after unsure), ≤ 280
- *   rank    [index…] in order — distinct, in range, at least one
+ *   rank    [index…] in order — distinct, in range, at least one, and no more
+ *           than `rankTop` when the question asks for a top few
  *   text    a string, trimmed, ≤ maxLength (never past 2000)
  *   any     null — clears the answer
  *
@@ -118,12 +119,21 @@ function checkYesNo(q, value) {
   return ok({ v, why });
 }
 
+/** The top N a rank question asks for, or null when it ranks them all. */
+const rankTopOf = (q) => (Number.isInteger(q.rankTop) && q.rankTop >= 1 ? q.rankTop : null);
+
 function checkRank(q, value) {
   if (!Array.isArray(value)) return no('a ranking is a list of option numbers, first place first');
   const options = Array.isArray(q.options) ? q.options : [];
   const { indexes, error } = indexesOf(value, options.length);
   if (error) return no(error);
   if (!indexes.length) return no('place at least one item, or send null to clear');
+  // A top-3 question asks for three places. A fourth and fifth would be
+  // counted as places nobody was asked for (the aggregate ignores such a value
+  // whole — survey-aggregate.js — so accepting it would say "Saved" for an
+  // answer that is never counted).
+  const top = rankTopOf(q);
+  if (top !== null && indexes.length > top) return no(`this question ranks at most ${top} items`);
   return ok(indexes);
 }
 

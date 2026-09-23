@@ -148,7 +148,7 @@ Phone `stateRank`: OPEN 1, CLOSED 2, ENDED max.
 | rating | integer | within scale (`1-5`,`1-10`,`0-10`; `stars`=1–5) |
 | choice | `[index…]` or `[index…, {other}]` | distinct, in range, exactly 1 unless `allowMultiple`; ≤ `maxPicks`; `other` only if `allowOther`, ≤280 |
 | yesno | `{v:'yes'\|'no'\|'unsure', why?}` | `unsure` only if offered; `why` only when `followUpWhen` matches, ≤280 |
-| rank | `[index…]` in order | distinct, in range, length ≥1 |
+| rank | `[index…]` in order | distinct, in range, length ≥1 and, when `rankTop` is set, ≤ `rankTop` (a top 3 takes at most three; more → 400 `BAD_VALUE`) |
 | text | string | trimmed, ≤ `maxLength` (cap 2000) |
 | any | `null` | clears the key |
 Indexes are canonical option order; `shuffle` is display-only, seeded by respondent + qid.
@@ -218,7 +218,8 @@ Put landed records metrics and broadcasts; a racing one returns the stored count
 rating `{n,counts,mean,topTwo}` (+ for `0-10` `{detractors,passives,promoters,score}`,
 score = %9–10 − %0–6); choice `{n,counts,other}`; yesno `{n,counts:{yes,no,unsure},whys}`;
 rank `{n,avgPlace,firsts,placeHist}` — **unplaced items share the mean of the unfilled
-places** (the only rule under which the mockup's averages sum to 15); text `{n,answerIds}`.
+places** (the only rule under which the mockup's averages sum to 15); a ranking longer
+than `rankTop` does not fit its question and is ignored whole; text `{n,answerIds}`.
 Text ids `<qid>:<k>` after a deterministic shuffle (ids never carry respondent order).
 
 ## 3. Step 0 (main session) — DONE

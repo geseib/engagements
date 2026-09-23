@@ -42,8 +42,9 @@
  *   yesno   { kind, n, counts: { yes, no, unsure }, whys: { yes, no, unsure } }
  *           whys are text ids, filed under the answer they explain.
  *   rank    { kind, n, avgPlace, firsts, placeHist, unplaced } per canonical item.
- *           An item left out of a partial ranking takes the MEAN OF THE
- *           UNFILLED PLACES (top 3 of 5 → places 4 and 5 → 4.5 each), so every
+ *           A ranking longer than `rankTop` does not fit its question and is
+ *           ignored whole. An item left out of a partial ranking takes the
+ *           MEAN OF THE UNFILLED PLACES (top 3 of 5 → places 4 and 5 → 4.5 each), so every
  *           respondent contributes 1+2+…+k and the averages sum to k(k+1)/2 —
  *           the only rule under which the mockup's 2.1+2.3+2.9+3.6+4.1 = 15.
  *           placeHist[i][p] counts explicit placements at place p+1;
@@ -184,12 +185,14 @@ function yesnoKind(q, texts) {
 
 function rankKind(q) {
   const k = optionCount(q);
+  const most = Number.isInteger(q.rankTop) && q.rankTop >= 1 ? q.rankTop : k;
   const placeSums = new Array(k).fill(0);
   const firsts = new Array(k).fill(0);
   const placeHist = Array.from({ length: k }, () => new Array(k).fill(0));
   const unplaced = new Array(k).fill(0);
   return {
-    read: (v) => (Array.isArray(v) && v.length >= 1 && v.every((i) => isIndex(i, k)) && new Set(v).size === v.length
+    read: (v) => (Array.isArray(v) && v.length >= 1 && v.length <= most
+      && v.every((i) => isIndex(i, k)) && new Set(v).size === v.length
       ? v : null),
     add: (order) => {
       // the places nobody was put in (order.length+1 … k), shared evenly by the items left out
