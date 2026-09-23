@@ -1,8 +1,27 @@
 # Create an engagement, and preview it — build plan
 
-The design is in `RATIONALE.md` and the mockups in this folder. **Nothing is
-built yet.** This plan waits for the owner's go-ahead and their answers to the
-open questions in RATIONALE §f. Each phase below says which default it assumes.
+The design is in `RATIONALE.md` and the mockups in this folder. Each phase
+below says which default it assumes.
+
+**Status (2026-09-23):**
+
+- **Phase 0 is done.** Decrypt (`a11dcb17`), host parse-document (`05d1a756`),
+  and the category-name contrast and edit note (with Phase 1). The mid-round
+  approach switch was fixed differently from the table below: it got its own
+  route, `PUT /games/{id}/prompt` (`f9a44110`), the twin of `/persona`, and
+  `update-game.js` keeps its CREATED-only gate for every field.
+- **Phase 1 is built** — the owner asked for it: "anonymous and random all
+  belong under advance same goes for workie and voice etc this advance section
+  should be an expanding click section." Two departures from the text below,
+  both because Phase 2 and 3 are not built: the foot says "Nobody can join
+  until you start it" (the history row's button is Start; there is no "open
+  the doors" yet), and the Instructions help text points at Event details, not
+  at a briefing. A survey shows no foot note — it is created and opened by the
+  same press. Found and fixed on the way: the edit prefill never carried
+  `promptId` (get-game.js), and the dialog cleared a seeded approach on mount,
+  so any edit of a session removed the approach chosen at create.
+- **Phases 2 and 3 are not built**, and still wait for the open questions in
+  RATIONALE §f.
 
 Each phase ships on its own, is usable on dev, and leaves nothing half-wired.
 Every phase follows the repo's rules:

@@ -105,11 +105,76 @@ describe('every pairing is measured, composited from the real paint stack', () =
     expect(CSS).toMatch(/\.gsd-three-opt\[aria-checked="true"\]\s*\{[^}]*background:\s*var\(--gsd-row-sel\)/);
   });
 
+  /*
+    THE ADVANCED LINE (session-setup-redesign 01/02). A changed value is named
+    in amber on the card — the one place amber carries running words here.
+  */
+  test('the Advanced line: the changed words are amber on the card, the rest muted', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-adv-s b\s*\{[^}]*color:\s*var\(--gsd-primary\)/);
+    expect(ratio(token('--gsd-primary'), card())).toBeGreaterThanOrEqual(AA);
+    expect(CSS).toMatch(/\.gsd \.gsd-adv-s\s*\{[^}]*color:\s*var\(--gsd-muted\)/);
+  });
+
+  /*
+    THE DISCARD QUESTION, inline in the foot. Its own dark ground, declared as
+    a scope token; the Discard button is the filled deep danger, carrying the
+    dialog's text colour (--danger never carries text — skill §1).
+  */
+  test('the confirm foot: text on its ground, and Discard\'s words on deep danger', () => {
+    expect(ratio(text(), token('--gsd-confirm'))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(muted(), token('--gsd-confirm'))).toBeGreaterThanOrEqual(AA);
+    const deep = GLOBAL.match(/--danger-deep:\s*(#[0-9A-Fa-f]{6})/);
+    expect(deep).not.toBeNull();
+    expect(ratio(text(), parseHex(deep[1]))).toBeGreaterThanOrEqual(AA);
+    expect(CSS).toMatch(/\.gsd \.dialog-actions\.is-confirm\s*\{[^}]*background:\s*var\(--gsd-confirm\)/);
+    expect(CSS).toMatch(/\.gsd \.gsd-discard\s*\{[^}]*background:\s*var\(--danger-deep\)[^}]*color:\s*var\(--gsd-text\)/s);
+    expect(CSS).not.toMatch(/color:\s*var\(--danger\)/);
+  });
+
+  /*
+    FOUND BY RENDERING THE TWO SHEETS TOGETHER (session-setup-redesign
+    RATIONALE §a): styles.css colours `.category-name` #333 directly, which
+    beats the colour the chip hands down, so an UNSELECTED name read 1.15:1 on
+    the card. The selected one is white by another styles.css rule, which is
+    why a test of the selected chip passed.
+  */
+  test('an unselected category name takes the chip\'s text colour, not styles.css\'s #333', () => {
+    expect(GLOBAL).toMatch(/\.category-name\s*\{[^}]*color:\s*#333/);
+    expect(CSS).toMatch(/\.gsd \.category-button \.category-name\s*\{[^}]*color:\s*inherit/);
+    const chip = CSS.match(/\.gsd \.category-button\s*\{[^}]*color:\s*var\((--gsd-[a-z-]+)\)/);
+    expect(chip[1]).toBe('--gsd-text');
+    expect(ratio(text(), card())).toBeGreaterThanOrEqual(AA);
+  });
+
   test('the filled primary button carries DARK text, never white', () => {
     // #F6A94C under white is 1.9:1 in either theme. The dark navy clears 7:1.
     const m = CSS.match(/\.gsd \.btn-primary \{[^}]*color:\s*(#[0-9A-Fa-f]{6})/);
     expect(m).not.toBeNull();
     expect(ratio(parseHex(m[1]), token('--gsd-primary'))).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+/*
+  BOTH EXITS STAY ON SCREEN (hard rule 2 is about exits you can SEE). The card
+  is the scroll container (styles.css .new-game-dialog: max-height 90vh,
+  overflow-y auto), so an absolute X scrolled away with the title and Cancel
+  sat below the last field. The head and foot stick, on an OPAQUE ground — a
+  transparent sticky bar lets the fields scroll visibly through it.
+*/
+describe('the head and foot stick', () => {
+  test('the head sticks to the top on the card colour', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-head\s*\{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*background:\s*var\(--gsd-card\)/s);
+    expect(JSX).toMatch(/<div className="gsd-head">[\s\S]*?className="gsd-close"/);
+  });
+
+  test('the foot sticks to the bottom on the card colour', () => {
+    expect(CSS).toMatch(/\.gsd \.dialog-actions\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0[^}]*background:\s*var\(--gsd-card\)/s);
+  });
+
+  test('the Advanced summary drops the browser marker and keeps a visible focus ring', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-adv > summary::-webkit-details-marker\s*\{[^}]*display:\s*none/);
+    expect(CSS).toMatch(/\.gsd \.gsd-adv > summary\s*\{[^}]*list-style:\s*none/);
+    expect(CSS).toMatch(/\.gsd \.gsd-adv > summary:focus-visible\s*\{[^}]*outline:/);
   });
 });
 
@@ -165,16 +230,14 @@ describe('the ladder', () => {
     expect(fieldRule[0]).toMatch(/font-size:\s*var\(--gsd-t-body\)/);
   });
 
-  test('nothing below the floor except the two documented glance-only echoes', () => {
+  test('nothing below the floor — the old glance-only dispensations are retired', () => {
     /*
-      The floor protects copy read in runs. Two survivors sit under it, both
-      inherited from the shipped paper design with the same dispensation:
-      .gsd-opt-state (ON/OFF beside an 18px checkbox that already carries the
-      fact) and the preview card captions/attribution (.gsd-pv h6, .gsd-pv-who).
-      Anything else under 12px is a regression.
+      Three captions used to sit under it (.gsd-opt-state at 11px, .gsd-pv h6
+      at 10.5px, .gsd-pv-who at 11px) on a dispensation inherited from the
+      paper design. The survey start dialog raised its own to the floor, and
+      session-setup-redesign raises these: one dialog family, one floor.
     */
     const sizes = [...CSS.matchAll(/font-size:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
-    const below = sizes.filter((px) => px < 12);
-    expect(below.sort((a, b) => a - b)).toEqual([10.5, 11, 11]);
+    expect(sizes.filter((px) => px < 12)).toEqual([]);
   });
 });

@@ -168,6 +168,14 @@
 
 .rshare-copyrow .rshare-input { flex: 1 1 13rem; }
 
+/* Empty until a copy is refused, then "Press and hold the text above". */
+.rshare-copynote {
+  margin: 4px 0 0;
+  font-size: var(--rshare-t-label);
+  color: var(--muted);
+}
+.rshare-copynote:empty { display: none; }
+
 /* --------------------------------------------------------- the buttons -- */
 .rshare-btn {
   display: inline-flex;

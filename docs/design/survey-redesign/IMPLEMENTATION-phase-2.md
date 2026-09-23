@@ -389,7 +389,8 @@ end.
    fraction; the per-question rows are a different fact.
 8. **`/people` would be open to any signed-in account** (`[]` like `GET …/up-next`,
    `/queue`, `/exclusions` today) → explicit rule for the survey routes; file the three
-   existing ones as a separate task.
+   existing ones as a separate task. *Closed 2026-09-23:* `RUNNING_ORDER_HOST_READ` in
+   `auth/authorizer.js`, held by `tests/session-control-routes-authorization.js`.
 9. **Harness gaps** — `player-table.js` lacks TransactWrite and paging; budget it in
    Track A.
 10. **Out of scope, stated plainly:** the remote can't drive a survey (states parse

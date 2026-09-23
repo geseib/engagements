@@ -36,17 +36,28 @@
  * report saved before passkeys existed has no hash and opens for nobody here;
  * its team still opens it from Reports (download-saved-report.js).
  *
- * What it must NOT do is become an oracle. No passkey, a wrong passkey, an
- * object that is not there and an object belonging to a session that no longer
- * exists all answer the same 404, and the key is never echoed back in an error.
+ * What it must NOT do is become an oracle. No passkey, a wrong passkey and an
+ * object that is not there all answer the same 404, and the key is never
+ * echoed back in an error.
+ *
+ * ── HOW LONG A LINK WORKS: AS LONG AS THE REPORT ──────────────────────────
+ *
+ * This read the org off the SESSION's METADATA row, so a shared link died with
+ * the session record, about seven days after it started — while the report
+ * itself is kept 90 days or a year, and the Reports list now hands the link
+ * and passkey back out (the owner: "no way to get the link and passkey back").
+ * A link found there a fortnight later would have opened nothing.
+ *
+ * So the org comes from the OBJECT: save-report.js writes `org-id` into its
+ * metadata beside the passkey hash. Trusting it is safe because it cannot
+ * widen anything — the envelope was sealed under that org's key with the org
+ * as encryption context, so a wrong org-id fails to decrypt rather than
+ * opening someone else's report. `game-id` on the object must match the link.
  */
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { decryptValue, isEnvelope } = require('./tenant-crypto');
 const { verifyPasskey } = require('./report-passkey');
 
-const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
 
 const NOT_FOUND = {
@@ -100,16 +111,6 @@ exports.handler = async (event) => {
     if (!expected.test(key) || key.includes('..')) return NOT_FOUND;
     if (key.includes('/') && !key.startsWith('permanent/')) return NOT_FOUND;
 
-    // The org comes from the SESSION, never from the caller: this route is
-    // public and its callers are anonymous.
-    const meta = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'orgId',
-    }));
-    if (!meta.Item) return NOT_FOUND;
-    const orgId = typeof meta.Item.orgId === 'string' ? meta.Item.orgId.trim() : '';
-
     const obj = await s3.send(new GetObjectCommand({
       Bucket: process.env.REPORTS_BUCKET_NAME,
       Key: key,
@@ -117,10 +118,14 @@ exports.handler = async (event) => {
     // The passkey before a single byte of the body. S3 hands user metadata
     // back lower-cased and without the x-amz-meta- prefix.
     const stored = obj.Metadata || {};
-    if (!(await verifyPasskey(passkey, stored['passkey-salt'], stored['passkey-hash']))) {
+    if (String(stored['game-id'] || '') !== String(gameId)
+      || !(await verifyPasskey(passkey, stored['passkey-salt'], stored['passkey-hash']))) {
       discard(obj.Body);
       return NOT_FOUND;
     }
+    // The org off the object, never the caller: this route is public and its
+    // callers are anonymous. Empty for an orgless session's plain PDF.
+    const orgId = String(stored['org-id'] || '').trim();
     const bytes = await bytesOf(obj.Body);
 
     // A report saved before tenancy, or by an orgless session, is a real PDF

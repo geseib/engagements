@@ -77,6 +77,39 @@ describe('ReportsPanel', () => {
     expect(screen.getByTestId('reports-nomatch')).toBeInTheDocument();
   });
 
+  /*
+    SHARE. The owner, 2026-09-23: "the record of the report is filed under
+    reports menu on host screen but no way to get the link and passkey back."
+    get-reports.js now returns the passkey (kept encrypted on the row since
+    that day); the list shows it with the page link, inline under the row.
+  */
+  it('Share opens the link and passkey under the row, and closes again', async () => {
+    const withKey = [{ ...reports[0], passkey: 'K7QM3-XPD9Z' }, reports[1], reports[2]];
+    authFetch.mockImplementation(() => respond({ reports: withKey }));
+    render(<ReportsPanel />);
+    await waitFor(() => screen.getAllByTestId('report-row'));
+    const share = screen.getByRole('button', { name: /share nakamura/i });
+    expect(share).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(share);
+    expect(share).toHaveAttribute('aria-expanded', 'true');
+    const row = screen.getByTestId('report-share-row');
+    expect(row).toBeInTheDocument();
+    expect(screen.getByLabelText('Passkey')).toHaveValue('K7QM3-XPD9Z');
+    expect(screen.getByLabelText('Link')).toHaveValue(`${window.location.origin}/shared-report?game=4812&key=permanent%2Fx.pdf.enc`);
+    expect(row).toHaveTextContent(/needs both/);
+    fireEvent.click(share);
+    expect(screen.queryByTestId('report-share-row')).toBeNull();
+  });
+
+  it('a report saved before passkeys were kept says how to get one, instead of an empty field', async () => {
+    authFetch.mockImplementation(() => respond({ reports }));
+    render(<ReportsPanel />);
+    await waitFor(() => screen.getAllByTestId('report-row'));
+    fireEvent.click(screen.getByRole('button', { name: /share sales kickoff/i }));
+    expect(screen.getByTestId('report-share-row')).toHaveTextContent(/saved before its passkey was kept/);
+    expect(screen.queryByLabelText('Passkey')).toBeNull();
+  });
+
   it('an empty library says what a report is and where it comes from', async () => {
     authFetch.mockImplementation(() => respond({ reports: [] }));
     render(<ReportsPanel />);

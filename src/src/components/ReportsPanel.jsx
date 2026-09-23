@@ -5,6 +5,8 @@ import Icon from './Icon';
 import ListControls from './ListControls';
 import useListControls from '../hooks/useListControls';
 import { formatWhen } from '../config/tableCells';
+import { shareLinkFor } from '../config/reportShare';
+import CopyField from './CopyField';
 import './ReportsPanel.css';
 
 /**
@@ -15,7 +17,18 @@ import './ReportsPanel.css';
  *   - "Kept until" is a DATE, never a countdown; red inside seven days; the pin
  *     marks the year-long keep.
  *   - The session column says "Expired" rather than offering a dead Open.
- *   - A second save of one session is a second row.
+ *
+ * One the mockup took is REVERSED: "a second save of one session is a second
+ * row". The owner, 2026-09-23: "creating the report again doesn't overwrite it
+ * for the same session it creates a new line item. Probably wasteful." A save
+ * now replaces the session's earlier one (save-report.js), so a session is one
+ * row here. Rows saved twice before that change collapse the next time that
+ * session's report is saved.
+ *
+ * SHARE, per row: the link and passkey a person with no account needs, found
+ * again here (the owner: "no way to get the link and passkey back"). It opens
+ * INLINE under the row, not as a dialog — on the host screen this whole list
+ * is already inside one, and a dialog is never opened from a dialog.
  *
  * Reads GET /reports (lambda-functions/game/get-reports.js). Downloads go
  * through GET /reports/download, which authorises on the caller's own index
@@ -42,6 +55,16 @@ const LIST_CONFIG = {
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
+/** The list's look for the shared CopyField (ReportsPanel.css). */
+const SHARE_FIELD = {
+  field: 'rp-share-field',
+  label: 'rp-share-label',
+  row: 'rp-share-row',
+  input: 'rp-share-input',
+  button: 'rp-btn',
+  note: 'rp-share-copynote',
+};
+
 /** "6 Aug 2027" — a date the page can be printed with. */
 export function formatKeptUntil(iso) {
   if (!iso) return '—';
@@ -55,6 +78,7 @@ export default function ReportsPanel({ heading = null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [sharingId, setSharingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,11 +218,15 @@ export default function ReportsPanel({ heading = null }) {
                 </tr>
               </thead>
               <tbody>
-                {shown.map((report) => {
+                {shown.map((report, index) => {
                   const expires = report.expiresAt ? new Date(report.expiresAt).getTime() : 0;
                   const soon = expires > 0 && expires - now < WEEK;
+                  const sharing = sharingId === report.id;
+                  const shareId = `rp-share-${index}`;
+                  const rowClass = [busyId === report.id ? 'rp-busy' : '', sharing ? 'rp-open' : ''].filter(Boolean).join(' ');
                   return (
-                    <tr key={report.id} className={busyId === report.id ? 'rp-busy' : ''} data-testid="report-row">
+                    <React.Fragment key={report.id}>
+                    <tr className={rowClass} data-testid="report-row">
                       <td>
                         <span className="rp-name" title={report.title || report.gameId}>{report.title || 'Untitled report'}</span>
                         <span className="rp-sub">
@@ -221,6 +249,16 @@ export default function ReportsPanel({ heading = null }) {
                           <button
                             type="button"
                             className="rp-btn rp-btn--sm"
+                            onClick={() => setSharingId(sharing ? null : report.id)}
+                            aria-expanded={sharing}
+                            aria-controls={shareId}
+                            aria-label={`Share ${report.title || report.gameId}`}
+                          >
+                            <Icon name="LinkSimple" weight="bold" size={13} color="currentColor" /> Share
+                          </button>
+                          <button
+                            type="button"
+                            className="rp-btn rp-btn--sm"
                             disabled={busyId === report.id}
                             onClick={() => download(report)}
                             aria-label={`Download ${report.title || report.gameId}`}
@@ -230,6 +268,43 @@ export default function ReportsPanel({ heading = null }) {
                         </div>
                       </td>
                     </tr>
+                    {sharing && (
+                      <tr className="rp-sharerow" data-testid="report-share-row">
+                        <td colSpan={5}>
+                          <div className="rp-share" id={shareId}>
+                            {report.passkey ? (
+                              <>
+                                <CopyField
+                                  id={`${shareId}-link`}
+                                  label="Link"
+                                  value={shareLinkFor(window.location.origin, report.gameId, report.s3Key)}
+                                  copyLabel={`Copy the link to ${report.title || report.gameId}`}
+                                  classes={SHARE_FIELD}
+                                />
+                                <CopyField
+                                  id={`${shareId}-key`}
+                                  label="Passkey"
+                                  value={report.passkey}
+                                  inputClassName="rp-share-input--key"
+                                  copyLabel={`Copy the passkey for ${report.title || report.gameId}`}
+                                  classes={SHARE_FIELD}
+                                />
+                                <p className="rp-share-note">
+                                  Someone without an account needs both to download it, until {formatKeptUntil(report.expiresAt)}.
+                                  Sending the passkey separately keeps a forwarded link from opening it.
+                                </p>
+                              </>
+                            ) : (
+                              <p className="rp-share-note">
+                                This report was saved before its passkey was kept, so there is no link to share.
+                                Save the session&apos;s report again to get one, or download the PDF and send that.
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

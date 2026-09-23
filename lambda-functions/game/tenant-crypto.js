@@ -290,7 +290,9 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  `Title` is the same string as the session's — it is what a person
    *  recognises in a list, and it is ciphertext on the session row, so it is
    *  ciphertext here. The S3 key and the dates are not content. */
-  reportIndex: Object.freeze(['Title']),
+  // `passkey`: the second item a shared report link needs (game/report-passkey.js),
+  // kept so the team can find it again in Reports. Same key as the report itself.
+  reportIndex: Object.freeze(['Title', 'passkey']),
 
   /** A participant's answer: SK=QUESTION#<num>#ANSWER#<player> (or ROUND#…).
    *  The single most sensitive thing in the table — what a named person said

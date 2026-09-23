@@ -42,16 +42,20 @@ const key = (pk, sk) => `${pk}|${sk}`;
 class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
 class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class QueryCommand { constructor(input) { this.kind = 'query'; this.input = input; } }
+class DeleteCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 const doc = {
   send: async (cmd) => {
     const i = cmd.input;
     if (cmd.kind === 'get') return { Item: ddb.get(key(i.Key.PK, i.Key.SK)) };
     if (cmd.kind === 'put') { ddb.set(key(i.Item.PK, i.Item.SK), i.Item); return {}; }
-    return { Items: [] };
+    if (cmd.kind === 'delete') { ddb.delete(key(i.Key.PK, i.Key.SK)); return {}; }
+    // PK = :pk [AND begins_with(SK, :sk)], as DynamoDB answers it.
+    const v = i.ExpressionAttributeValues || {};
+    return { Items: [...ddb.values()].filter((r) => r.PK === v[':pk'] && (v[':sk'] === undefined || String(r.SK).startsWith(v[':sk']))) };
   },
 };
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
-stub('@aws-sdk/lib-dynamodb', { DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand });
+stub('@aws-sdk/lib-dynamodb', { DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, DeleteCommand });
 
 // The bucket, as S3 really answers: user metadata comes back lower-cased and
 // without its x-amz-meta- prefix, and the body is a stream of BYTES.
@@ -59,6 +63,7 @@ const bucket = new Map();
 let readBodies = 0;
 class PutObjectCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class GetObjectCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
+class DeleteObjectCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 stub('@aws-sdk/client-s3', {
   S3Client: class {
     async send(cmd) {
@@ -66,6 +71,7 @@ stub('@aws-sdk/client-s3', {
         bucket.set(cmd.input.Key, { body: Buffer.from(cmd.input.Body), meta: { ...(cmd.input.Metadata || {}) } });
         return {};
       }
+      if (cmd.kind === 'delete') { bucket.delete(cmd.input.Key); return {}; }
       const obj = bucket.get(cmd.input.Key);
       if (!obj) { const e = new Error('NoSuchKey'); e.name = 'NoSuchKey'; throw e; }
       const meta = Object.fromEntries(Object.entries(obj.meta).map(([k, v]) => [k.toLowerCase(), v]));
@@ -81,7 +87,7 @@ stub('@aws-sdk/client-s3', {
       };
     }
   },
-  PutObjectCommand, GetObjectCommand,
+  PutObjectCommand, GetObjectCommand, DeleteObjectCommand,
 });
 stub('@aws-sdk/s3-request-presigner', { getSignedUrl: async () => 'https://signed.example/x' });
 
@@ -92,6 +98,9 @@ installTestKeyLoader();
 const save = require(path.join(REPO, 'lambda-functions/game/save-report.js')).handler;
 const download = require(path.join(REPO, 'lambda-functions/game/download-report.js')).handler;
 const passkeys = require(path.join(REPO, 'lambda-functions/game/report-passkey.js'));
+const { reportsIndexPk } = require(path.join(REPO, 'lambda-functions/game/tenant.js'));
+const { plainRowAuto } = require('./helpers/tenant-crypto-stub');
+const rowsFor = (orgId, gameId) => [...ddb.values()].filter((r) => r.PK === reportsIndexPk(orgId) && r.gameId === gameId);
 const { routesFromTemplate, findRoute, assertScannerWorks } = require('./helpers/template-routes');
 
 let pass = 0; let fail = 0;
@@ -142,20 +151,32 @@ const fetchReport = (gameId, s3Key, passkey) => download({
     assert.strictEqual(passkeys.normalizePasskey('K7QM3-XPD9U'), '');  // U is not in the alphabet
   });
 
-  console.log('\n2. saving mints one and keeps only its hash');
+  console.log('\n2. saving mints one; the object keeps its hash, the row keeps it sealed');
   const org = await saveAs('1111');
   await check('the host gets the passkey, a relative link, and how long they work', () => {
     assert.ok(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/.test(org.passkey), `passkey was ${org.passkey}`);
     assert.strictEqual(org.downloadUrl, `games/1111/report/download?key=${encodeURIComponent(org.fileName)}`);
     assert.strictEqual(org.downloadUrlIsRelative, true);
-    assert.strictEqual(org.shareUntil, '2026-09-30T12:00:00.000Z');
   });
-  await check('the object carries a salted hash, and the passkey appears nowhere in plaintext', () => {
+  // rejects: tying the link to the session record (about 7 days) again.
+  await check('...for as long as the report is kept: 90 days, not the session\'s record', () => {
+    const days = (Date.parse(org.shareUntil) - Date.now()) / 86400000;
+    assert.ok(Math.abs(days - 90) < 0.01, `shareUntil is ${days.toFixed(2)} days away`);
+    assert.strictEqual(org.shareUntil, plainRowAuto(rowsFor('org_acme', '1111')[0]).expiresAt);
+  });
+  await check('the object carries only a salted hash; the passkey is nowhere in the bucket', () => {
     const { meta } = bucket.get(org.fileName);
     assert.ok(meta['passkey-salt'] && meta['passkey-hash'], 'no passkey hash on the object');
     const canonical = passkeys.normalizePasskey(org.passkey);
-    const everywhere = JSON.stringify([meta, [...ddb.values()]]);
-    assert.ok(!everywhere.includes(org.passkey) && !everywhere.includes(canonical), 'the passkey was stored');
+    const inBucket = JSON.stringify(meta);
+    assert.ok(!inBucket.includes(org.passkey) && !inBucket.includes(canonical), 'the passkey is in S3 metadata');
+  });
+  // rejects: "no way to get the link and passkey back" — and a plaintext copy.
+  await check('the team can find it again: it is on the index row, encrypted under the org', () => {
+    const [row] = rowsFor('org_acme', '1111');
+    assert.ok(row.passkey, 'no passkey on the row');
+    assert.notStrictEqual(row.passkey, org.passkey, 'the passkey is plaintext on an org row');
+    assert.strictEqual(plainRowAuto(row).passkey, org.passkey);
   });
 
   console.log('\n3. the link alone opens nothing');
@@ -204,15 +225,73 @@ const fetchReport = (gameId, s3Key, passkey) => download({
     assert.strictEqual((await fetchReport('2222', orgless.fileName)).statusCode, 404);
   });
 
-  console.log('\n6. what the passkey does not rescue');
-  bucket.set('Old-2026-08-01-1111.pdf.enc', { body: bucket.get(org.fileName).body, meta: { 'org-id': 'org_acme' } });
+  console.log('\n6. what the passkey does and does not rescue');
+  bucket.set('Old-2026-08-01-1111.pdf.enc', { body: bucket.get(org.fileName).body, meta: { 'org-id': 'org_acme', 'game-id': '1111' } });
   const legacy = await fetchReport('1111', 'Old-2026-08-01-1111.pdf.enc', org.passkey);
   await check('a report saved before passkeys opens for nobody on the public route', () => assert.strictEqual(legacy.statusCode, 404));
+  bucket.set('Other-2026-09-23-1111.pdf.enc', { body: bucket.get(org.fileName).body, meta: { ...bucket.get(org.fileName).meta, 'game-id': '5555' } });
+  const foreign = await fetchReport('1111', 'Other-2026-09-23-1111.pdf.enc', org.passkey);
+  await check('an object whose own game-id is another session: 404', () => assert.strictEqual(foreign.statusCode, 404));
   ddb.delete(key('GAME#1111', 'METADATA'));
   const gone = await fetchReport('1111', org.fileName, org.passkey);
-  await check('once the session record has expired, the public link stops (the team has Reports)', () => assert.strictEqual(gone.statusCode, 404));
+  // rejects: a link handed back out of Reports that opens nothing a week later.
+  await check('after the session record has expired, the link and passkey still open it', () => {
+    assert.strictEqual(gone.statusCode, 200, gone.body);
+    assert.ok(Buffer.from(gone.body, 'base64').equals(PDF));
+  });
+  ddb.set(key('GAME#1111', 'METADATA'), { PK: 'GAME#1111', SK: 'METADATA', orgId: 'org_acme', ttl: SESSION_TTL });
 
-  console.log('\n7. the wiring');
+  console.log('\n7. saving the same session again replaces it — one report per session');
+  const again = await saveAs('1111');
+  await check('same retention: the same file, the same link, the same passkey', () => {
+    assert.strictEqual(again.fileName, org.fileName);
+    assert.strictEqual(again.passkey, org.passkey);
+  });
+  await check('...and still one row for the session', () => assert.strictEqual(rowsFor('org_acme', '1111').length, 1));
+  const toYear = await save({
+    pathParameters: { gameId: '1111' }, requestContext: HOST,
+    body: JSON.stringify({ eventTitle: 'Q3 Offsite', pdfBlob: PDF.toString('base64'), permanent: true }),
+  });
+  const year = JSON.parse(toYear.body);
+  await check('switching to a year: the file moves under permanent/, the passkey stays', () => {
+    assert.strictEqual(toYear.statusCode, 200, toYear.body);
+    assert.ok(year.fileName.startsWith('permanent/'), year.fileName);
+    assert.strictEqual(year.passkey, org.passkey);
+  });
+  await check('...one row, now the year-long one, and the 90-day file is gone from the bucket', () => {
+    const rows = rowsFor('org_acme', '1111').map(plainRowAuto);
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].permanent, true);
+    assert.strictEqual(rows[0].s3Key, year.fileName);
+    assert.ok(!bucket.has(org.fileName), 'the replaced 90-day object was left behind');
+  });
+  await check('the new link opens with the same passkey', async () => {
+    assert.strictEqual((await fetchReport('1111', year.fileName, org.passkey)).statusCode, 200);
+  });
+
+  // Two rows the old way — a timestamped SK per save — as test and dev hold
+  // for every session saved twice before this change.
+  ddb.set(key('GAME#4444', 'METADATA'), { PK: 'GAME#4444', SK: 'METADATA' });
+  for (const [when, k] of [['2026-09-21T10:00:00.000Z', 'Old-2026-09-21-4444.pdf'], ['2026-09-22T10:00:00.000Z', 'Old-2026-09-22-4444.pdf']]) {
+    ddb.set(key('REPORTS', `REPORT#4444#${when}#abc`), { PK: 'REPORTS', SK: `REPORT#4444#${when}#abc`, gameId: '4444', s3Key: k, permanent: false, savedAt: when });
+    bucket.set(k, { body: PDF, meta: { 'game-id': '4444' } });
+  }
+  ddb.set(key('REPORTS', 'REPORT#44440'), { PK: 'REPORTS', SK: 'REPORT#44440', gameId: '44440', s3Key: 'X-2026-09-22-44440.pdf', savedAt: 'x' });
+  const merged = await saveAs('4444');
+  await check('earlier duplicate rows of the session collapse into the one', () => {
+    assert.deepStrictEqual(rowsFor('', '4444').map((r) => r.SK), ['REPORT#4444']);
+    assert.strictEqual(merged.replaced, 2);
+  });
+  await check('...the newest save\'s file is overwritten in place (its link keeps working), the older is removed', () => {
+    assert.strictEqual(merged.fileName, 'Old-2026-09-22-4444.pdf');
+    assert.ok(bucket.has('Old-2026-09-22-4444.pdf'));
+    assert.ok(!bucket.has('Old-2026-09-21-4444.pdf'), 'the superseded file was left behind');
+  });
+  await check('...and a session whose id merely starts the same is untouched', () => {
+    assert.ok(ddb.has(key('REPORTS', 'REPORT#44440')), 'session 44440 was swept up by a prefix match');
+  });
+
+  console.log('\n8. the wiring');
   const template = fs.readFileSync(path.join(REPO, 'template-clean.yaml'), 'utf8');
   await check('CORS allows X-Report-Passkey, or the browser never sends it', () => {
     const m = /^\s*AllowHeaders:\s*\[([^\]]*)\]/m.exec(template);

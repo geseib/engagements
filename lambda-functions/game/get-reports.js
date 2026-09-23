@@ -57,6 +57,12 @@ exports.handler = async (event) => {
       // Relative, resolved by the console against its own API base (the same
       // rule save-report.js gives for its download URL).
       downloadUrl: `reports/download?key=${encodeURIComponent(r.s3Key)}`,
+      // The two items a person with no account needs: the page link is built
+      // by the console from gameId + s3Key, and this is the passkey. Only on
+      // rows saved since passkeys were kept; an older report has none and is
+      // shared by saving it again. The caller is a signed-in member of the
+      // partition's own team, who can download the report outright anyway.
+      passkey: r.passkey || null,
     }));
 
     return {

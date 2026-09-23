@@ -565,6 +565,22 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert(!('accessCode' in info), 'accessCode came back — get-game.js:79-92 records why it must not');
   });
 
+  await acheck('the host branch carries the summary approach, so an edit cannot silently drop it', async () => {
+    // rejects: the prefill without promptId. The edit dialog seeds '' from an
+    // absent key, updateGameBody sends promptId: '', and this handler REMOVEs
+    // PromptId — so renaming a session erased the approach chosen at create.
+    const gameId = created.body.gameId;
+    assert.strictEqual((await putGame(gameId, { promptId: 'trivia-quiet' })).status, 200);
+    quiet();
+    const res = await getGameHandler({
+      pathParameters: { gameId },
+      queryStringParameters: { role: 'host' },
+    });
+    loud();
+    assert.strictEqual(JSON.parse(res.body).promptId, 'trivia-quiet', 'promptId missing from the host branch');
+    assert.strictEqual((await putGame(gameId, { promptId: '' })).status, 200);
+  });
+
   loud();
   console.log('\ncategories: the enabled subset is editable; the set is not\n');
 

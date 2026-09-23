@@ -4,7 +4,8 @@
  * The owner, 2026-09-21: "how does one find these reports, if the sessions are
  * cleared out." Until now a report was an S3 object whose key existed only in
  * one HTTP response; with session rows expiring (session-ttl.js) it was
- * unfindable. save-report.js now writes REPORT#<game>#<when> under the org's
+ * unfindable. save-report.js now writes REPORT#<game> — ONE row per session,
+ * a second save replacing the first (owner, 2026-09-23) — under the org's
  * REPORTS partition (platform's for an orgless session), Title encrypted the
  * way the session's is, with a ttl that matches the bucket rule for its prefix.
  *
@@ -38,12 +39,17 @@ class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; }
 class QueryCommand { constructor(input) { this.kind = 'query'; this.input = input; } }
 class UpdateCommand { constructor(input) { this.kind = 'update'; this.input = input; } }
 class BatchGetCommand { constructor(input) { this.kind = 'batchGet'; this.input = input; } }
+class DeleteCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 const doc = {
   send: async (cmd) => {
     const i = cmd.input;
     if (cmd.kind === 'get') return { Item: ddb.get(key(i.Key.PK, i.Key.SK)) };
     if (cmd.kind === 'put') { ddb.set(key(i.Item.PK, i.Item.SK), i.Item); return {}; }
-    if (cmd.kind === 'query') return { Items: [...ddb.values()].filter((r) => r.PK === i.ExpressionAttributeValues[':pk']) };
+    if (cmd.kind === 'delete') { ddb.delete(key(i.Key.PK, i.Key.SK)); return {}; }
+    if (cmd.kind === 'query') {
+      const v = i.ExpressionAttributeValues;
+      return { Items: [...ddb.values()].filter((r) => r.PK === v[':pk'] && (v[':sk'] === undefined || String(r.SK).startsWith(v[':sk']))) };
+    }
     if (cmd.kind === 'batchGet') {
       const [table, spec] = Object.entries(i.RequestItems)[0];
       return { Responses: { [table]: spec.Keys.map((k) => ddb.get(key(k.PK, k.SK))).filter(Boolean) } };
@@ -53,25 +59,32 @@ const doc = {
 };
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
-  DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, UpdateCommand, BatchGetCommand,
+  DynamoDBDocumentClient: { from: () => doc }, GetCommand, PutCommand, QueryCommand, UpdateCommand, BatchGetCommand, DeleteCommand,
 });
 const s3Puts = [];
 const s3Objects = new Map();
 class PutObjectCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class GetObjectCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
+class DeleteObjectCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 stub('@aws-sdk/client-s3', {
   S3Client: class {
     async send(cmd) {
       if (cmd.kind === 'put') { s3Puts.push(cmd.input); s3Objects.set(cmd.input.Key, cmd.input.Body); return {}; }
+      if (cmd.kind === 'delete') { s3Objects.delete(cmd.input.Key); return {}; }
       if (cmd.kind === 'get') {
         if (!s3Objects.has(cmd.input.Key)) { const e = new Error('NoSuchKey'); e.name = 'NoSuchKey'; throw e; }
         const body = s3Objects.get(cmd.input.Key);
-        return { Body: { transformToString: async () => (Buffer.isBuffer(body) ? body.toString('utf8') : String(body)) } };
+        return {
+          Body: {
+            transformToString: async () => (Buffer.isBuffer(body) ? body.toString('utf8') : String(body)),
+            transformToByteArray: async () => new Uint8Array(Buffer.isBuffer(body) ? body : Buffer.from(String(body))),
+          },
+        };
       }
       return {};
     }
   },
-  PutObjectCommand, GetObjectCommand,
+  PutObjectCommand, GetObjectCommand, DeleteObjectCommand,
 });
 stub('@aws-sdk/s3-request-presigner', { getSignedUrl: async () => 'https://signed.example/x' });
 
@@ -115,7 +128,7 @@ const rowsIn = (pk) => [...ddb.values()].filter((r) => r.PK === pk);
     assert.strictEqual(plainRowAuto(rows[0]).Title, 'Q3 Offsite');
     assert.strictEqual(rows[0].gameId, '1111');
     assert.ok(rows[0].s3Key.endsWith('.pdf.enc'));
-    assert.ok(rows[0].SK.startsWith('REPORT#1111#'));
+    assert.strictEqual(rows[0].SK, 'REPORT#1111');   // the session, nothing else
   });
 
   await check('a standard report expires with the bucket\'s 90 days, and is tagged for that rule', async () => {
@@ -157,11 +170,15 @@ const rowsIn = (pk) => [...ddb.values()].filter((r) => r.PK === pk);
     const res = await listReports(asMember('org_acme'));
     assert.strictEqual(res.statusCode, 200, res.body);
     const { reports } = JSON.parse(res.body);
-    assert.strictEqual(reports.length, 2);
-    reports.forEach((r) => assert.strictEqual(r.title, 'Q3 Offsite'));
-    reports.forEach((r) => assert.strictEqual(r.sessionGone, true));
-    assert.ok(reports.some((r) => r.permanent) && reports.some((r) => !r.permanent));
+    // ONE: the session was saved twice (90 days, then a year) and the second
+    // replaced the first — the owner found the second line item "wasteful".
+    assert.strictEqual(reports.length, 1);
+    assert.strictEqual(reports[0].title, 'Q3 Offsite');
+    assert.strictEqual(reports[0].sessionGone, true);
+    assert.strictEqual(reports[0].permanent, true);
     assert.ok(reports[0].downloadUrl.startsWith('reports/download?key='));
+    // ...and the passkey comes back to the team, decrypted.
+    assert.ok(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/.test(reports[0].passkey), `passkey was ${reports[0].passkey}`);
   });
 
   await check('another org sees none of them', async () => {
@@ -171,7 +188,7 @@ const rowsIn = (pk) => [...ddb.values()].filter((r) => r.PK === pk);
 
   await check('the download works AFTER the session is gone, and returns a real PDF', async () => {
     const { reports } = JSON.parse((await listReports(asMember('org_acme'))).body);
-    const k = reports.find((r) => !r.permanent).s3Key;
+    const k = reports[0].s3Key;
     const res = await downloadSaved(asMember('org_acme', { queryStringParameters: { key: k } }));
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(res.headers['Content-Type'], 'application/pdf');
