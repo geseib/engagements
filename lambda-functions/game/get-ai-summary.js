@@ -829,6 +829,18 @@ exports.handler = async (event) => {
           }
         }));
         question = questionResponse.Item;
+        // DECRYPTED, with the SET's org — the one the REF row pinned, exactly as
+        // get-question.js does. ENCRYPTED_FIELDS.question puts Title, Detail,
+        // the options and the reveal on an org set's rows as envelopes, and
+        // this read was the one question read that never opened them, so
+        // {questionTitle} reached Workie as "[object Object]" on every org
+        // session. Platform and public sets are never encrypted and pass
+        // through untouched (a non-envelope is returned as-is).
+        const questionSetRef = refSetRef(questionRef.Item, questionSetId);
+        const questionOrgId = questionSetRef.scope === ORG ? questionSetRef.orgId : '';
+        if (question && questionOrgId) {
+          question = await decryptItem(questionOrgId, 'question', question);
+        }
         console.log(`📋 Question data fetched from question set:`, question ? 'Success' : 'Not found');
       } else {
         console.log(`❌ Question reference not found: QUESTION#${paddedQuestionNumber}#REF`);
