@@ -51,7 +51,11 @@ function mockApi({ uploadStatus = 200, uploadBody = null } = {}) {
         : jsonResponse(uploadStatus, uploadBody || { error: 'Missing required columns: Title' });
     }
     if (method === 'GET' && url.includes('/admin/download-template')) {
-      return jsonResponse(200, { filename: 'trivia-template.csv', content: 'Category,Title' });
+      const query = new URL(url).searchParams;
+      const filename = query.get('template')
+        ? `survey-${query.get('template')}.csv`
+        : `${query.get('type')}-template.csv`;
+      return jsonResponse(200, { filename, content: 'Category,Title' });
     }
     throw new Error(`Unhandled request: ${method} ${url}`);
   });
@@ -179,14 +183,6 @@ describe('one engagement-type control, once', () => {
     const { onEngagementTypeChange } = mount();
     fireEvent.change(typeSelect(), { target: { value: 'poll' } });
     expect(onEngagementTypeChange).toHaveBeenCalledWith('poll');
-  });
-
-  test('the survey builder button says it exports rather than creates', () => {
-    // handleSurveyGenerated builds a Blob and clicks an anchor; it does not
-    // upload. rejects: a button that reads identically to the four that do
-    // create a set (OPEN-QUESTIONS #3, the copy from option (c)).
-    mount({ engagementType: 'survey' });
-    expect(screen.getByRole('button', { name: /exports json/i })).toBeInTheDocument();
   });
 
   test('the Art Title template is offered only for call-and-answer', () => {
@@ -433,5 +429,119 @@ describe('the ways in are ranked and explained', () => {
     for (const route of document.querySelectorAll('.qsets-route')) {
       expect(route.querySelector('button')).toBeTruthy();
     }
+  });
+});
+
+/**
+ * A SURVEY HAS FOUR WAYS IN — docs/design/survey-redesign/01-new-survey.html.
+ *
+ * Surveys stop being a dead end (surveys phases 0+1, C2): the importer reads
+ * a CSV with a Kind column and the JSON the old builder exported, the builder
+ * leaves a draft set, and five named templates exist on the server (A3). What
+ * is still true, and still said: no session can run a survey yet.
+ */
+describe('a survey has four ways in (mockup 01)', () => {
+  const SURVEY_CSV = [
+    'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,AllowMultiple,MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,FollowUpWhen,FollowUpPrompt,RankTop,TextLength,MaxLength,Placeholder,Themes,Tags',
+    '"Survey",1,"How useful was it?","","","","rating","true","","false","","false","false","1-5","Not useful","Very useful","","","false","","","","","","","false",""',
+    '"Survey",2,"What was best?","","","","text","false","","false","","false","false","","","","","","false","","","","long","500","","true",""',
+  ].join('\n');
+
+  const routeNames = () => [...document.querySelectorAll('.qsets-route-nm')].map((n) => n.textContent.trim());
+
+  beforeEach(() => {
+    window.URL.createObjectURL = jest.fn(() => 'blob:survey');
+    window.URL.revokeObjectURL = jest.fn();
+  });
+
+  test('the survey routes replace the generic ones', () => {
+    // rejects: offering the manual /builder (it has no survey form) and the
+    // generic template button beside the five named ones.
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    expect(routeNames()).toEqual(['Your own material', 'A template', 'A file']);
+    expect(screen.queryByRole('button', { name: /Manual builder/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Download Survey template/i })).toBeNull();
+  });
+
+  test('your own material is the lead, and opens the survey builder', () => {
+    const onOpenBuilder = jest.fn();
+    mount({ engagementType: 'survey', onOpenBuilder });
+    const lead = document.querySelector('.qsets-route--lead');
+    expect(lead.querySelector('.qsets-route-nm').textContent).toBe('Your own material');
+    expect(lead.textContent).toMatch(/draft/i);
+    fireEvent.click(within(lead).getByRole('button'));
+    expect(onOpenBuilder).toHaveBeenCalledWith('survey');
+  });
+
+  test.each([
+    ['Presentation feedback', 'presentation-feedback'],
+    ['Event feedback', 'event-feedback'],
+    ['Workshop retro', 'workshop-retro'],
+    ['Training evaluation', 'training-evaluation'],
+    ['Team pulse', 'team-pulse'],
+  ])('the %s template downloads by its id', async (label, id) => {
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`survey-${id}.csv downloaded.`));
+    const [url] = authFetch.mock.calls.find(([u]) => u.includes('download-template'));
+    expect(url).toBe(`https://api.example.test/dev/admin/download-template?type=survey&template=${id}`);
+  });
+
+  test('the file route offers the every-kind template, the one with a row of each kind', async () => {
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    const fileRoute = [...document.querySelectorAll('.qsets-route')]
+      .find((r) => r.querySelector('.qsets-route-nm').textContent === 'A file');
+    expect(fileRoute.textContent).toMatch(/Kind column/);
+    expect(fileRoute.textContent).toMatch(/JSON/);
+    fireEvent.click(within(fileRoute).getByRole('button', { name: /Download the template/i }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('survey-template.csv downloaded.'));
+    const [url] = authFetch.mock.calls.find(([u]) => u.includes('download-template'));
+    expect(url).toBe('https://api.example.test/dev/admin/download-template?type=survey');
+  });
+
+  test('no blank-survey route, because the importer makes no empty set', () => {
+    // rejects: drawing mockup 01's "A blank survey" over an importer that
+    // answers "No valid questions" for a set with nothing in it. There is no
+    // create-empty path to put behind the button.
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    expect(screen.queryByText(/A blank survey/i)).toBeNull();
+  });
+
+  test('nothing on screen says a survey cannot be imported — and it says it cannot be run yet', () => {
+    // rejects: the retired "(exports JSON)" button suffix and the importer-
+    // rejects copy; and rejects dropping the one thing that is still true.
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    const panel = document.querySelector('.qsets-panel');
+    expect(panel.textContent).not.toMatch(/exports JSON|rejects survey|cannot be imported|can.t be imported/i);
+    expect(panel.textContent).toMatch(/no session can run one yet/i);
+  });
+
+  test('a survey CSV with a Kind column preflights clean and uploads as a survey', async () => {
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    await chooseFile(SURVEY_CSV, 'q3-feedback.csv');
+    expect(screen.getByText(/nothing to fix/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/question set title/i), { target: { value: 'Q3 feedback' } });
+    chooseShelf();
+    expect(uploadButton()).toBeEnabled();
+    fireEvent.click(uploadButton());
+    await waitFor(() => expect(authFetch.mock.calls.some(([u]) => u.includes('upload-questions'))).toBe(true));
+    const [, options] = authFetch.mock.calls.find(([u]) => u.includes('upload-questions'));
+    expect(JSON.parse(options.body)).toMatchObject({ engagementType: 'survey', fileName: 'q3-feedback.csv' });
+  });
+
+  test('the JSON the old survey builder exported is accepted', async () => {
+    mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
+    await chooseFile(JSON.stringify({ title: 'Q3', questions: [{ question: 'How?', type: 'rating' }] }), 'survey-Q3.json');
+    expect(screen.queryByText(/looks like JSON/i)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/question set title/i), { target: { value: 'Q3 feedback' } });
+    chooseShelf();
+    expect(uploadButton()).toBeEnabled();
+  });
+
+  test('the same JSON under trivia is still refused', async () => {
+    mount({ engagementType: 'trivia' });
+    await chooseFile(JSON.stringify({ questions: [{ question: 'How?' }] }), 'quiz.json');
+    expect(screen.getByText(/looks like JSON/i)).toBeInTheDocument();
+    expect(uploadButton()).toBeDisabled();
   });
 });
