@@ -89,17 +89,26 @@ export function stillGoingNames(people) {
  * The reveal is offered BEFORE the names are fetched — the count of people
  * still going is known from /progress, the names are not until the host asks
  * — so `count` carries the number and `loading` says the list is on its way.
+ *
+ * `error` is a /people that FAILED. `loading` used to be "people is not a list
+ * yet", so a failure left "Loading names…" on the wall for good; now a failed
+ * read with no list stops loading and carries the line to say instead. The
+ * count stays, and the next reveal (or progress frame while it is up) asks
+ * again.
  */
 export function surveyWaiting({
-  names, people = null, stillGoing = 0, loading = false, mode = null,
+  names, people = null, stillGoing = 0, loading = false, error = null, mode = null,
   onPreview, onPreviewEnd, onPin,
 } = {}) {
   if (namesMode(names).id === 'anonymous') return null;
   if (!(Number(stillGoing) > 0)) return null;
+  const listed = Array.isArray(people);
+  const failed = Boolean(error) && !listed && !loading;
   return {
     names: stillGoingNames(people),
     count: count(stillGoing),
-    loading: Boolean(loading) || !Array.isArray(people),
+    loading: failed ? false : (Boolean(loading) || !listed),
+    error: failed ? String(error) : null,
     mode,
     onPreview,
     onPreviewEnd,
@@ -144,6 +153,7 @@ export default function useSurveyProgress({
   const [progress, setProgress] = useState(null);
   const [people, setPeople] = useState(null);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleError, setPeopleError] = useState(null);
 
   // Read through refs so the returned callbacks are STABLE: the host page's
   // socket handlers are registered once per game (effect deps [gameId,
@@ -163,6 +173,7 @@ export default function useSurveyProgress({
     setProgress(null);
     setPeople(null);
     setPeopleLoading(false);
+    setPeopleError(null);
   }, [gameId]);
 
   /** A `surveyProgress` frame, or a /progress body. Ignores other sessions and older news. */
@@ -191,7 +202,11 @@ export default function useSurveyProgress({
     if (active && gameId) refresh();
   }, [active, gameId, refresh]);
 
-  /** On reveal, and on each frame while the list is up. Never in Anonymous. */
+  /**
+   * On reveal, and on each frame while the list is up. Never in Anonymous.
+   * A failure is kept as `peopleError` (the list already held, if any, stays),
+   * so the wall can say the names did not load instead of loading forever.
+   */
   const loadPeople = useCallback(async () => {
     if (namesMode(namesRef.current).id === 'anonymous') return;
     const id = gameRef.current;
@@ -200,14 +215,20 @@ export default function useSurveyProgress({
     const result = await fetchSurveyPeople({ fetchFn: fetchRef.current, apiBase: apiRef.current, gameId: id });
     if (gameRef.current !== id) return;
     setPeopleLoading(false);
-    if (result.ok) setPeople(result.people);
+    if (result.ok) {
+      setPeople(result.people);
+      setPeopleError(null);
+    } else {
+      setPeopleError('The names could not be loaded.');
+    }
   }, []);
 
   /**
    * The close landed — from the host's own POST (which carries perQuestion)
    * or from the `surveyClosed` frame (which carries n and finished only).
-   * The counts freeze here; a late progress frame from before the close is
-   * older than `closedAt` and is ignored by applyProgress.
+   * Both carry `closedAt`, and it becomes the ordering stamp: the counts
+   * freeze here, and a late progress frame from before the close is older
+   * than `closedAt` and is ignored by applyProgress.
    */
   const markClosed = useCallback(({ n, finished, perQuestion, closedAt } = {}) => {
     setProgress((prev) => ({
@@ -220,5 +241,7 @@ export default function useSurveyProgress({
     }));
   }, []);
 
-  return { progress, people, peopleLoading, refresh, loadPeople, applyProgress, markClosed };
+  return {
+    progress, people, peopleLoading, peopleError, refresh, loadPeople, applyProgress, markClosed,
+  };
 }

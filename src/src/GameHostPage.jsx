@@ -64,6 +64,8 @@ import useSurveyProgress, {
   surveyRoomCounts, surveyMeterRows, surveyWaiting, stillGoingNames,
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
+import { readStartRefusal } from './utils/startRefusal';
+import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
 import {
   anonymityApplies, authorsHiddenNow, createPayloadFor, displayLabelFor,
@@ -474,6 +476,14 @@ function GameHostPage() {
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [gamesList, setGamesList] = useState([]);
   const [reportsModalMode, setReportsModalMode] = useState('reports'); // 'reports' or 'select'
+  // Why a start from the sessions list — or the create dialog's "Open the
+  // survey", which falls back to that list — was refused, in the server's
+  // words (utils/startRefusal.js). Shown on the list; cleared whenever the
+  // list goes away, by whichever route, so it never greets the next opening.
+  const [historyNotice, setHistoryNotice] = useState('');
+  useEffect(() => {
+    if (!showReportsModal) setHistoryNotice('');
+  }, [showReportsModal]);
   
   // `showFinalReport` used to live here. Nothing ever rendered it, and after
   // the end-of-game dialog was deleted nothing set it either, so it survived
@@ -638,6 +648,7 @@ function GameHostPage() {
     title: '',
     message: '',
     confirmText: 'Proceed',
+    arrowConfirms: true,
     onConfirm: () => {},
     onCancel: () => {}
   });
@@ -2121,7 +2132,9 @@ Focus on actionable business strategy insights.`;
       // A refusal said earlier (say, this device's close racing another's)
       // is about a survey that is now closed; it would only mislead.
       setSurveyActionError('');
-      setGameState('SURVEY#CLOSED');
+      // Forward only: a frame delivered after the session ENDED (on this
+      // device or another) must not put the stage back on "closed".
+      setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
     });
 
     // Connect as host - WebSocket is required
@@ -4301,25 +4314,36 @@ Focus on actionable business strategy insights.`;
    * open (start-game.js writes STATE `SURVEY#OPEN`). One helper, so the three
    * routes cannot start a session three different ways.
    *
-   * Resolves true once the session is on stage, false if the start was
-   * refused — the caller decides what the host sees next.
+   * Resolves `{ok: true}` once the session is on stage, or `{ok: false,
+   * error}` if the start was refused — `error` is the SERVER's sentence
+   * (utils/startRefusal.js), e.g. start-game.js's "Nothing to ask yet: this
+   * survey's question set has no questions in it…". The caller decides where
+   * the host reads it; nothing here reaches for alert().
    */
   const startSession = async (selectedGameId, selectedEventTitle, overrides = {}) => {
+    let response;
     try {
       console.log(`🚀 HOST: Starting game ${selectedGameId}`);
-
-      const response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
+      response = await authFetch(`${API_BASE}games/${selectedGameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
+    } catch (err) {
+      console.error('❌ Error starting game:', err);
+      return { ok: false, error: 'That did not reach the server. Check the connection and try again.' };
+    }
 
-      if (!response.ok) {
-        throw new Error(`Failed to start game: ${response.status} ${response.statusText}`);
-      }
+    if (!response.ok) {
+      const error = await readStartRefusal(response);
+      console.error(`❌ Start refused (${response.status}):`, error);
+      return { ok: false, error };
+    }
 
+    try {
       console.log(`✅ Game ${selectedGameId} started`);
 
       // Close modal and go to game screen
+      setHistoryNotice('');
       setShowReportsModal(false);
       switchToGame(selectedGameId, {
         eventTitle: selectedEventTitle || 'Engagement Session',
@@ -4331,16 +4355,18 @@ Focus on actionable business strategy insights.`;
       url.searchParams.set('gameId', selectedGameId);
       url.searchParams.set('eventTitle', encodeURIComponent(selectedEventTitle || ''));
       window.history.replaceState(null, '', url);
-      return true;
     } catch (err) {
-      console.error('❌ Error starting game:', err);
-      alert(`Failed to start game: ${err.message}`);
-      return false;
+      // The session DID start; only putting it on this screen failed. Saying
+      // it did not start would invite a second press of Start.
+      console.error('❌ Started, but could not load the stage:', err);
     }
+    return { ok: true };
   };
 
   const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
-    await startSession(selectedGameId, selectedEventTitle);
+    setHistoryNotice('');
+    const started = await startSession(selectedGameId, selectedEventTitle);
+    if (!started.ok) setHistoryNotice(`That session did not start: ${started.error}`);
   };
 
   /**
@@ -4352,14 +4378,15 @@ Focus on actionable business strategy insights.`;
    *
    * If the start is refused the survey still EXISTS, unopened — so the host is
    * shown it in history, where its Start button is, rather than left on a
-   * blank screen.
+   * blank screen, with the server's reason on the list (never an alert()).
    */
   const openNewSurvey = async (newGameId, form) => {
     const opened = await startSession(newGameId, form.title, {
       currentGameType: 'survey',
       selectedSetId: form.setId,
     });
-    if (opened) return;
+    if (opened.ok) return;
+    setHistoryNotice(`The survey was created but did not open: ${opened.error}`);
     await fetchGamesList();
     setReportsModalMode('select');
     setShowReportsModal(true);
@@ -4819,13 +4846,16 @@ Focus on actionable business strategy insights.`;
     closeQuestionBrowser();
   };
 
-  // Function to show custom confirmation modal
-  const showConfirmation = (title, message, confirmText = 'Proceed') => {
+  // Function to show custom confirmation modal. `arrowConfirms: false` for an
+  // act that cannot be undone — → then cancels nothing and confirms nothing
+  // (components/ConfirmDialog.jsx).
+  const showConfirmation = (title, message, confirmText = 'Proceed', { arrowConfirms = true } = {}) => {
     return new Promise((resolve) => {
       setConfirmModalProps({
         title,
         message,
         confirmText,
+        arrowConfirms,
         onConfirm: () => {
           setShowConfirmModal(false);
           resolve(true);
@@ -5125,7 +5155,9 @@ Focus on actionable business strategy insights.`;
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
+            notice={historyNotice}
             onClose={() => {
+              setHistoryNotice('');
               setShowReportsModal(false);
               if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
                 setShowWelcomeScreen(true);
@@ -5286,34 +5318,25 @@ Focus on actionable business strategy insights.`;
   */
 
   /**
-   * CLOSE ASKS FIRST, EVERY TIME (IMPLEMENTATION-phase-2.md §5 risk 6).
-   *
-   * The dock binds SPACE and → to the primary, and a presenter's clicker sends
-   * exactly those, so the one irreversible primary on the stage gets the
-   * confirmation — here, where the key and the button both arrive, so neither
-   * route can skip it. The question states the CONSEQUENCE and counts before
-   * it asks (hard rules §7): every phone stops, the counts freeze, nothing
-   * reopens — and it names the reversible neighbour, the warning.
+   * CLOSE — once the host has said yes. The ask is not here: it is the
+   * control's `confirm` (config/hostControls.js surveyCloseConfirm), which
+   * runHostAction honours before it dispatches, on every route to the control.
    */
   const closeSurveyNow = async () => {
-    const counts = surveyCounts;
-    const where = counts
-      ? `${counts.finished} of ${counts.joined} have finished and ${counts.partway} ${counts.partway === 1 ? 'is' : 'are'} partway — what they have answered so far still counts. `
-      : '';
-    const ok = await showConfirmation(
-      'Close the survey?',
-      `Every phone stops taking answers now and the counts are frozen. ${where}A closed survey cannot be reopened. Not yet? The two-minute warning tells every phone the close is coming.`,
-      'Close the survey',
-    );
-    if (!ok) return;
     const result = await closeSurvey({ fetchFn: authFetch, apiBase: API_BASE, gameId });
     if (!result.ok) {
       setSurveyActionError(`The survey did not close: ${result.error}`);
       return;
     }
     setSurveyActionError('');
-    survey.markClosed({ n: result.n, finished: result.finished, perQuestion: result.perQuestion });
-    setGameState('SURVEY#CLOSED');
+    // closedAt orders what follows: a progress frame sent before the close
+    // and delivered after this POST cannot overwrite the frozen counts.
+    survey.markClosed({
+      n: result.n, finished: result.finished, perQuestion: result.perQuestion, closedAt: result.closedAt,
+    });
+    // Forward only — the session may have ENDED from another device while
+    // this POST was in flight.
+    setGameState((prev) => forwardOnly(prev, SURVEY_CLOSED));
   };
 
   const warnSurveyNow = async () => {
@@ -5336,8 +5359,24 @@ Focus on actionable business strategy insights.`;
     setGameState('ENDED');
   };
 
-  const runHostAction = (action) => {
+  const runHostAction = async (action) => {
     if (!action) return;
+    /*
+      A CONTROL THAT ASKS FIRST. config/hostControls.js marks an act that
+      cannot be undone with `confirm` — {title, message, confirmText,
+      irreversible} — and every route to a control comes through here: the
+      dock's button, SPACE and → (HostActionBar), auto-mode's timer. So asking
+      here is asking on every route, and no handler has to remember to. An
+      irreversible ask does not take → as yes: → is the key that pressed the
+      control, and a clicker sends it twice.
+    */
+    if (action.confirm) {
+      const ask = action.confirm;
+      const ok = await showConfirmation(ask.title, ask.message, ask.confirmText, {
+        arrowConfirms: !ask.irreversible,
+      });
+      if (!ok) return;
+    }
     // A page turn is a content move, not a round advance — it must not close
     // the panel the host is reading beside, nor unpin anything.
     if (action.intent !== HOST_INTENTS.PAGE) {
@@ -5389,8 +5428,11 @@ Focus on actionable business strategy insights.`;
         break;
       case HOST_INTENTS.OPEN_SURVEY:
         // A survey still in CREATED — its create-time open was refused, or it
-        // was continued from history. The same /start the create path uses.
-        startSession(gameId, eventTitle, { currentGameType: 'survey', selectedSetId });
+        // was continued from history. The same /start the create path uses; a
+        // refusal is said in the dock, in the server's words, where the other
+        // survey acts say theirs.
+        startSession(gameId, eventTitle, { currentGameType: 'survey', selectedSetId })
+          .then((opened) => setSurveyActionError(opened.ok ? '' : `The survey did not open: ${opened.error}`));
         break;
       case HOST_INTENTS.CLOSE_SURVEY:
         closeSurveyNow();
@@ -5625,6 +5667,7 @@ Focus on actionable business strategy insights.`;
       people: survey.people,
       stillGoing: surveyCounts ? surveyCounts.joined - surveyCounts.finished : 0,
       loading: survey.peopleLoading,
+      error: survey.peopleError,
       mode: rosterReveal,
       ...surveyRosterHandlers,
     })
@@ -6102,6 +6145,7 @@ Focus on actionable business strategy insights.`;
                 handed to it at all. */}
             {hostPhase === 'COLLECTING' && (
               <SurveyCollecting
+                title={eventTitle}
                 questionCount={surveyQuestionCount}
                 names={surveyNames}
                 playUrl={playUrl}
@@ -6969,6 +7013,7 @@ Focus on actionable business strategy insights.`;
           title={confirmModalProps.title}
           message={confirmModalProps.message}
           confirmText={confirmModalProps.confirmText}
+          arrowConfirms={confirmModalProps.arrowConfirms !== false}
           onConfirm={confirmModalProps.onConfirm}
           onCancel={confirmModalProps.onCancel}
         />

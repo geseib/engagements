@@ -711,8 +711,28 @@ describe('a survey: the four phases, each with exactly one primary', () => {
 
   test('COLLECTING: "Close the survey" always confirms; the warning is the secondary', () => {
     const c = survey('COLLECTING');
-    expect(c.primary).toMatchObject({ label: 'Close the survey', intent: HOST_INTENTS.CLOSE_SURVEY, confirm: true, disabled: false });
+    expect(c.primary).toMatchObject({
+      label: 'Close the survey',
+      intent: HOST_INTENTS.CLOSE_SURVEY,
+      confirm: { title: 'Close the survey?', confirmText: 'Close the survey', irreversible: true },
+      disabled: false,
+    });
     expect(c.secondary).toMatchObject({ label: 'Two-minute warning', intent: HOST_INTENTS.WARN_SURVEY });
+    expect(c.secondary.confirm).toBeFalsy();
+  });
+
+  test('the close states the consequence, the counts, and the reversible neighbour', () => {
+    const counted = survey('COLLECTING', { survey: { joined: 42, finished: 21, partway: 15, notStarted: 6 } }).primary.confirm.message;
+    expect(counted).toMatch(/Every phone stops taking answers now and the counts are frozen/);
+    expect(counted).toMatch(/21 of 42 have finished and 15 are partway — what they have answered so far still counts/);
+    expect(counted).toMatch(/cannot be reopened/);
+    expect(counted).toMatch(/two-minute warning/i);
+    expect(survey('COLLECTING', { survey: { joined: 3, finished: 2, partway: 1, notStarted: 0 } }).primary.confirm.message)
+      .toMatch(/1 is partway/);
+    // No counts yet: the consequence alone, no "undefined of undefined".
+    const early = survey('COLLECTING').primary.confirm.message;
+    expect(early).not.toMatch(/undefined|null|NaN/);
+    expect(early).toMatch(/cannot be reopened/);
   });
 
   test('CLOSED: "End the session", and nothing beside it', () => {
@@ -734,9 +754,10 @@ describe('a survey: the four phases, each with exactly one primary', () => {
     // primary must confirm; nothing else should grow a speed bump.
     for (const type of ALL_TYPES) {
       for (const phase of HOST_PHASES) {
-        const { primary } = hostControlsFor({ gameType: type, phase, ...READY });
-        if (primary.intent === HOST_INTENTS.CLOSE_SURVEY) expect(primary.confirm).toBe(true);
+        const { primary, secondary } = hostControlsFor({ gameType: type, phase, ...READY });
+        if (primary.intent === HOST_INTENTS.CLOSE_SURVEY) expect(primary.confirm).toMatchObject({ irreversible: true });
         else expect(primary.confirm).toBeFalsy();
+        if (secondary) expect(secondary.confirm).toBeFalsy();
       }
     }
   });
@@ -761,18 +782,37 @@ describe('a survey: the four phases, each with exactly one primary', () => {
     }
   });
 
-  test('the close asks before it posts, on every route to it', () => {
-    // The key and the button both reach runHostAction; the confirmation lives
-    // in the one function they share, so neither can skip it.
+  /*
+    THE FLAG IS THE MECHANISM. `confirm` used to be set here and read nowhere —
+    closeSurveyNow hard-coded its own ask — so the flag documented a behaviour
+    it did not cause. runHostAction now honours `confirm` on ANY control, before
+    it dispatches, and every route to a control (the dock's button, SPACE / →,
+    auto-mode's timer) comes through runHostAction, so asking there is asking
+    on every route. closeSurveyNow no longer asks: two asks would be one too many.
+  */
+  test('the dock asks before it dispatches any control that carries confirm — on every route', () => {
     const source = fs.readFileSync(HOST_PAGE, 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .split('\n').filter((line) => !/^\s*(\/\/|\*)/.test(line)).join('\n');
-    const start = source.indexOf('const closeSurveyNow');
-    expect(start).toBeGreaterThan(-1);
-    const body = source.slice(start, source.indexOf('\n  };', start));
-    const asks = body.indexOf('showConfirmation(');
-    const posts = body.indexOf('closeSurvey(');
-    expect(asks).toBeGreaterThan(-1);
-    expect(posts).toBeGreaterThan(asks);
+    const bodyOf = (name) => {
+      const start = source.indexOf(`const ${name} = `);
+      expect(start).toBeGreaterThan(-1);
+      return source.slice(start, source.indexOf('\n  };', start));
+    };
+    const run = bodyOf('runHostAction');
+    const reads = run.indexOf('action.confirm');
+    const asks = run.indexOf('showConfirmation(');
+    const dispatches = run.indexOf('switch (action.intent)');
+    expect(reads).toBeGreaterThan(-1);
+    expect(asks).toBeGreaterThan(reads);
+    expect(dispatches).toBeGreaterThan(asks);
+    // A refusal stops it: nothing is dispatched after a Cancel.
+    expect(run.slice(asks, dispatches)).toMatch(/if \(!ok\) return;/);
+
+    const close = bodyOf('closeSurveyNow');
+    expect(close).toContain('closeSurvey(');
+    expect(close).not.toContain('showConfirmation(');
+    // The only callers of closeSurveyNow are the dispatch itself.
+    expect(source.match(/closeSurveyNow\(/g)).toHaveLength(1);
   });
 });

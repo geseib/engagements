@@ -100,6 +100,32 @@ describe('the collecting stage keeps the way in', () => {
     }
   });
 
+  /*
+    THE HEADLINE IS THE SESSION'S OWN NAME. It defaulted to the mockup's
+    sample sentence, "Tell us how today went", and the page passed nothing —
+    so every survey on every wall asked the room how today went, whatever it
+    was about. Now the page hands in the session's name; with none, a neutral
+    instruction.
+  */
+  test('the headline is the title it is given — the session\'s own name', () => {
+    const { container } = render(
+      <SurveyCollecting questionCount={8} names="anonymous" playUrl="u" joinUrl="j" code="4821" title="Q3 All-Hands feedback" />,
+    );
+    expect(container.querySelector('.stitle')).toHaveTextContent('Q3 All-Hands feedback');
+    expect(container.textContent).not.toMatch(/Tell us how today went/);
+  });
+
+  test.each([['absent', undefined], ['empty', ''], ['blank', '   '], ['null', null]])(
+    'with the title %s, a neutral line — never the mockup\'s sample sentence',
+    (_l, title) => {
+      const { container } = render(
+        <SurveyCollecting questionCount={8} names="anonymous" playUrl="u" joinUrl="j" code="4821" title={title} />,
+      );
+      expect(container.querySelector('.stitle')).toHaveTextContent('Answer on your phone');
+      expect(container.textContent).not.toMatch(/Tell us how today went/);
+    },
+  );
+
   test('the subtitle helper counts in words the room reads aloud', () => {
     expect(surveyWallSubtitle({ questionCount: 1, names: 'anonymous' }))
       .toBe(`One quick question on your phone. ${namesMode('anonymous').wallLine}`);
@@ -212,6 +238,29 @@ describe('names on the wall — only on request, only in the two recorded modes'
     expect(container.querySelector('[data-waiting-list]')).toHaveTextContent(/loading/i);
   });
 
+  /*
+    A FAILED /people IS SAID, NOT WAITED ON FOREVER. `loading` was "people is
+    not a list yet", so a /survey/people that failed left "Loading names…" on
+    the wall for the rest of the survey. Now the failure is a short line; the
+    count and the fraction stay, and the next reveal (or the next progress
+    frame while it is up) asks again.
+  */
+  test('names that failed to load say so, and the counts stay', () => {
+    const waiting = surveyWaiting({
+      names: 'finished', people: null, stillGoing: 21, loading: false,
+      error: 'The names could not be loaded.', mode: 'pinned', ...handlers,
+    });
+    expect(waiting.loading).toBe(false);
+    expect(waiting.error).toBe('The names could not be loaded.');
+    const { container } = render(
+      <RoomMeter phase="COLLECTING" heading="Finished" body={<>21<small> / 42</small></>} waiting={waiting} />,
+    );
+    const list = container.querySelector('[data-waiting-list]');
+    expect(list).toHaveTextContent('The names could not be loaded.');
+    expect(list).not.toHaveTextContent(/Loading names/);
+    expect(container.querySelector('.count')).toHaveTextContent('21 / 42');
+  });
+
   test('nobody still going: nothing to reveal', () => {
     expect(surveyWaiting({ names: 'finished', people: PEOPLE, stillGoing: 0, ...handlers })).toBeNull();
     expect(stillGoingNames(PEOPLE)).toEqual(['Tomás Ortega', 'Aleksandra Wiśniewska']);
@@ -240,9 +289,10 @@ describe('the requests the host sends', () => {
   const call = (fetchFn, i = 0) => ({ url: fetchFn.mock.calls[i][0], init: fetchFn.mock.calls[i][1] || {} });
 
   test('close, warning and end are POSTs to the survey routes', async () => {
-    const fetchFn = jest.fn(async () => okJson({ n: 36, finished: 21, perQuestion: [] }));
+    const fetchFn = jest.fn(async () => okJson({ n: 36, finished: 21, perQuestion: [], closedAt: '2026-09-23T14:22:00Z' }));
     const closed = await closeSurvey({ fetchFn, apiBase: API, gameId: '4821' });
-    expect(closed).toMatchObject({ ok: true, n: 36, finished: 21 });
+    // closedAt is the close's own stamp — the host orders later frames by it.
+    expect(closed).toMatchObject({ ok: true, n: 36, finished: 21, closedAt: '2026-09-23T14:22:00Z' });
     expect(call(fetchFn)).toMatchObject({ url: `${API}games/4821/survey/close`, init: { method: 'POST' } });
 
     fetchFn.mockResolvedValueOnce(okJson({ warnedAt: '2026-09-23T14:20:00Z' }));
@@ -329,6 +379,65 @@ describe('useSurveyProgress', () => {
     expect(result.current.people).toEqual(PEOPLE);
   });
 
+  /*
+    THE HOST'S OWN CLOSE FREEZES THE COUNTS AGAINST LATER NEWS. The close
+    response carries `closedAt`, and closeSurvey dropped it — so markClosed
+    kept the last frame's `at`, and a progress frame from BEFORE the close
+    that arrived AFTER the POST passed the "older than what is on screen"
+    check and overwrote the frozen counts. Now closedAt is the ordering stamp.
+  */
+  test('after the host\'s close, a progress frame from before it cannot overwrite the frozen counts', async () => {
+    const fetchFn = jest.fn(async () => okJson(PROGRESS));
+    const { result } = renderHook(() => useSurveyProgress({
+      gameId: '4821', active: true, names: 'anonymous', fetchFn, apiBase: API,
+    }));
+    await waitFor(() => expect(result.current.progress).not.toBeNull());
+    act(() => result.current.markClosed({
+      n: 38, finished: 30, perQuestion: PROGRESS.perQuestion, closedAt: '2026-09-23T14:22:00Z',
+    }));
+    // Sent at 14:21:59, delivered after the POST came back.
+    act(() => result.current.applyProgress({ ...PROGRESS, started: 37, finished: 29, at: '2026-09-23T14:21:59Z' }));
+    expect(result.current.progress).toMatchObject({ started: 38, finished: 30, at: '2026-09-23T14:22:00Z' });
+  });
+
+  test('a /people that fails ends the loading, says so, and leaves the counts alone', async () => {
+    const fetchFn = jest.fn(async (url) => (url.endsWith('/people')
+      ? { ok: false, status: 500, json: async () => ({ error: 'Failed to handle the survey request' }) }
+      : okJson(PROGRESS)));
+    const { result } = renderHook(() => useSurveyProgress({
+      gameId: '4821', active: true, names: 'finished', fetchFn, apiBase: API,
+    }));
+    await waitFor(() => expect(result.current.progress).not.toBeNull());
+    await act(async () => { await result.current.loadPeople(); });
+    expect(result.current.peopleLoading).toBe(false);
+    expect(result.current.people).toBeNull();
+    expect(result.current.peopleError).toMatch(/\S/);
+    expect(result.current.progress).toEqual(PROGRESS);
+    const waiting = surveyWaiting({
+      names: 'finished', people: result.current.people, stillGoing: 21,
+      loading: result.current.peopleLoading, error: result.current.peopleError, mode: 'pinned', ...handlers,
+    });
+    expect(waiting.loading).toBe(false);
+  });
+
+  test('a later /people that lands clears the failure', async () => {
+    let fail = true;
+    const fetchFn = jest.fn(async (url) => {
+      if (!url.endsWith('/people')) return okJson(PROGRESS);
+      return fail ? { ok: false, status: 503, json: async () => ({}) } : okJson({ people: PEOPLE });
+    });
+    const { result } = renderHook(() => useSurveyProgress({
+      gameId: '4821', active: true, names: 'finished', fetchFn, apiBase: API,
+    }));
+    await waitFor(() => expect(result.current.progress).not.toBeNull());
+    await act(async () => { await result.current.loadPeople(); });
+    expect(result.current.peopleError).toBeTruthy();
+    fail = false;
+    await act(async () => { await result.current.loadPeople(); });
+    expect(result.current.peopleError).toBeNull();
+    expect(result.current.people).toEqual(PEOPLE);
+  });
+
   test('nothing is fetched while inactive', () => {
     const fetchFn = jest.fn();
     renderHook(() => useSurveyProgress({ gameId: '4821', active: false, names: 'anonymous', fetchFn, apiBase: API }));
@@ -379,6 +488,40 @@ describe('GameHostPage composes it', () => {
     const start = code.indexOf("webSocketClient.onMessage('surveyProgress'");
     const body = code.slice(start, code.indexOf('});', start));
     expect(body).toMatch(/surveyRef\.current/);
+  });
+
+  test('the collecting wall is headed with the session\'s own name', () => {
+    expect(code).toMatch(/<SurveyCollecting[\s\S]*?title=\{eventTitle\}/);
+  });
+
+  test('the host\'s close hands its closedAt to the freeze', () => {
+    const start = code.indexOf('const closeSurveyNow');
+    const body = code.slice(start, code.indexOf('\n  };', start));
+    expect(body).toMatch(/markClosed\(\{[^}]*closedAt: result\.closedAt/);
+  });
+
+  test('a failed /people reaches the meter', () => {
+    expect(code).toMatch(/surveyWaiting\(\{[\s\S]*?error: survey\.peopleError/);
+  });
+
+  /*
+    A LATE surveyClosed CANNOT MOVE THE HOST BACK FROM ENDED. The handler set
+    SURVEY#CLOSED unconditionally, so a frame delivered after the host (or
+    another of their devices) had ended the session put the stage back on
+    "Survey closed" with End the session as the primary — for a session that
+    no longer exists to end. It now goes through forwardOnly, the phone's own
+    rank order, as does the host's own POST resolving late.
+  */
+  test('surveyClosed, and the host\'s own close, never move the stage backwards', () => {
+    const start = code.indexOf("webSocketClient.onMessage('surveyClosed'");
+    // To the handler's own close — the markClosed({…}) inside it has one too.
+    const handler = code.slice(start, code.indexOf('\n    });', start));
+    expect(handler).toMatch(/markClosed\(/);
+    expect(handler).not.toMatch(/setGameState\('SURVEY#CLOSED'\)/);
+    expect(handler).toMatch(/setGameState\(\(\w+\) => forwardOnly\(\w+, SURVEY_CLOSED\)\)/);
+    const close = code.slice(code.indexOf('const closeSurveyNow'), code.indexOf('\n  };', code.indexOf('const closeSurveyNow')));
+    expect(close).not.toMatch(/setGameState\('SURVEY#CLOSED'\)/);
+    expect(close).toMatch(/forwardOnly\(/);
   });
 
   test('the host calls go through surveyHostClient with authFetch', () => {

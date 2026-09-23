@@ -106,6 +106,20 @@
 
 .shist__close:hover { background: var(--surface); }
 
+/* A refused start, in the server's words (the `notice` prop). Amber, not
+   red: a start refused because the set is empty destroyed nothing. --text
+   on --surface, a pairing this sheet already inherits the measurement of. */
+.shist__notice {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--shist-t-body);
+  line-height: 1.5;
+}
+
 /* --------------------------------------------------------------- filters --- */
 
 .shist__filters {

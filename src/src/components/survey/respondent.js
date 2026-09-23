@@ -15,11 +15,20 @@
  * Named mode never calls this: there the respondent IS the player, proven by
  * the clientId, and minting an id nobody reads would only leave a key behind.
  *
- * PER GAME, like `playerClient_<gameId>`: one id across sessions would be a
- * tracking handle.
+ * PER SESSION, NOT PER JOIN CODE. One id across sessions would be a tracking
+ * handle — and a join code is NOT a session: codes are four digits and are
+ * reused, so an id kept under the code alone would file this week's answers on
+ * 4821 (and resume its row) under last week's respondent on 4821. The key is
+ * the code plus the moment the survey opened (`openedAt`, from GET /survey), so
+ * the id is minted only once the survey payload has arrived, and a new opening
+ * on an old code is a new person. Without an `openedAt` (a server that does
+ * not send one) it falls back to the code alone — the old behaviour, and the
+ * old risk.
  */
 
-export const respondentStorageKey = (gameId) => `surveyResp_${gameId}`;
+export const respondentStorageKey = (gameId, openedAt = null) => (
+  openedAt ? `surveyResp_${gameId}_${openedAt}` : `surveyResp_${gameId}`
+);
 
 const SHAPE = /^r_[A-Za-z0-9_-]{22}$/;
 
@@ -58,11 +67,11 @@ export function mintRespondentId() {
 */
 const memory = new Map();
 
-export function getRespondentId(gameId, storage) {
+export function getRespondentId(gameId, storage, openedAt = null) {
   const store = storage === undefined
     ? (typeof localStorage !== 'undefined' ? localStorage : null)
     : storage;
-  const key = respondentStorageKey(gameId);
+  const key = respondentStorageKey(gameId, openedAt);
 
   if (store) {
     try {

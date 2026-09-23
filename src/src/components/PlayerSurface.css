@@ -368,6 +368,13 @@
   letter-spacing: -.01em;
 }
 
+/* A survey screen's heading takes the focus when Next / Back reaches it
+   (SurveyRunner), so a screen reader announces the question. It is a focus
+   TARGET, not a control — tabIndex -1, never a Tab stop — so it wears no ring:
+   a ring round a question reads as something to press. */
+.plr-q[tabindex="-1"]:focus,
+.plr-h1[tabindex="-1"]:focus { outline: none; }
+
 /* THE ONE REDUCTION IN THE DESIGN, AND IT IS RECOVERABLE (§5.3).
    With a soft keyboard up there are roughly 430 usable pixels and a nine-line
    question and a composer cannot both have them. On focus the question
@@ -1625,6 +1632,22 @@
 
 .plr-it:focus-visible,
 .plr-mv button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* SAID, NOT SHOWN. The rank's live region ("Customer stories, place 1")
+   is for a screen reader; sighted people see the list move. Clipped to
+   nothing rather than `display:none`, which would silence it. */
+.plr-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 .plr-rank-h {
   margin: 14px 0 8px;

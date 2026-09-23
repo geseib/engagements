@@ -5,16 +5,22 @@
  * answered by a fake that speaks docs/design/survey-redesign/
  * IMPLEMENTATION-phase-2.md §2 "THE CONTRACT" and nothing else:
  *
- *   GET  /games/{id}/survey           → {state, names, openedAt, warnedAt, questions}
+ *   GET  /games/{id}/survey           → {state, names, title, openedAt, warnedAt, questions}
  *   PUT  /games/{id}/survey/answers   {qid, value, respondentId?, player?}
- *   POST /games/{id}/survey/submit    {respondentId?, player?}  → 422 {missing}
+ *   POST /games/{id}/survey/submit    {respondentId?, player?}  → 422 {code, missing}
  *   POST /games/{id}/survey/mine      {respondentId?, player?}  → 404 no row yet
+ *
+ * Refusals carry `{error, code}` (lambda-functions/game/survey-answers.js), and
+ * the phone branches on the CODE, never on the status alone: a 409 is
+ * `SURVEY_CLOSED` (closed) or `NOT_OPEN` (not yet), and a lost optimistic lock
+ * is `CONFLICT` — 409 from the first backend, 503 (with `BUSY`) from the
+ * second — which means "try again", never "closed".
  *
  * What is pinned is the phone's half: the Names promise on question 1 and
  * nowhere else, the required/optional rule at Next, one PUT per answer carrying
- * the right identity for the Names mode, one save in flight per question with
- * the latest value winning, resume at the first unanswered question, the
- * review list, Send, and the closed / ended / two-minute screens.
+ * the right identity for the Names mode, ONE save in flight per phone with the
+ * latest value per question winning, resume at the first unanswered question,
+ * the review list, Send, and the closed / ended / closing-soon screens.
  *
  * No geometry: jsdom has no layout engine.
  */
@@ -43,6 +49,9 @@ jest.mock('../WebSocketClient', () => ({
 const API = window.API_BASE;
 const GAME = '4821';
 const RESPONDENT = /^r_[A-Za-z0-9_-]{22}$/;
+const OPENED = '2026-09-23T10:00:00.000Z';
+/** Where a phone keeps its respondent id: per join code AND per opening. */
+const RESP_KEY = `surveyResp_${GAME}_${OPENED}`;
 
 const Q1 = {
   qid: 'c001#001', n: 1, kind: 'rating', required: true,
@@ -90,6 +99,8 @@ function makeServer(over = {}) {
   const server = {
     names: 'anonymous',
     state: 'SURVEY#OPEN',
+    title: 'Q3 All-Hands',
+    openedAt: OPENED,
     warnedAt: null,
     questions: QUESTIONS,
     mine: null,                         // null → 404 (no row yet)
@@ -100,21 +111,31 @@ function makeServer(over = {}) {
   server.puts = [];
   server.submits = [];
   server.mines = [];
+  // How many PUTs are on the wire at once, and the most there ever were.
+  server.putsOpen = 0;
+  server.maxPutsOpen = 0;
   server.fetchFn = jest.fn((url, opts = {}) => {
     const u = String(url);
     const method = opts.method || 'GET';
     const body = opts.body ? JSON.parse(opts.body) : undefined;
     const answer = (r) => Promise.resolve(r).then(([status, b]) => reply(status, b));
     if (u === `${API}games/${GAME}/survey` && method === 'GET') {
-      if (server.state === 'CREATED') return reply(409, { error: 'The survey has not opened yet.' });
-      return reply(200, {
-        state: server.state, names: server.names, openedAt: '2026-09-23T10:00:00.000Z',
+      if (server.state === 'CREATED') {
+        return reply(409, { error: 'This survey is not open yet.', code: 'NOT_OPEN', state: 'CREATED' });
+      }
+      const payload = {
+        state: server.state, names: server.names, openedAt: server.openedAt,
         warnedAt: server.warnedAt, questions: server.questions,
-      });
+      };
+      if (server.title !== undefined) payload.title = server.title;
+      return reply(200, payload);
     }
     if (u === `${API}games/${GAME}/survey/answers` && method === 'PUT') {
       server.puts.push(body);
-      return answer(server.put(body, server.puts.length));
+      server.putsOpen += 1;
+      server.maxPutsOpen = Math.max(server.maxPutsOpen, server.putsOpen);
+      return Promise.resolve(server.put(body, server.puts.length))
+        .then(([status, b]) => { server.putsOpen -= 1; return reply(status, b); });
     }
     if (u === `${API}games/${GAME}/survey/submit` && method === 'POST') {
       server.submits.push(body);
@@ -217,6 +238,66 @@ describe('Next, Skip and Back', () => {
     expect(screen.getByRole('radio', { name: '4 of 5' })).toHaveAttribute('aria-checked', 'true');
   });
 
+  /*
+    A NEW QUESTION IS SAID ALOUD. Next and Back replace the whole screen, so
+    the button that was pressed goes with it and the focus used to fall to
+    <body> — a screen reader said nothing, and a keyboard user started again
+    from the top. The new screen's heading takes the focus (tabIndex -1: a
+    target, not a Tab stop), so the question is what is announced.
+  */
+  test('Next and Back move the focus to the new question\'s heading', async () => {
+    const server = makeServer();
+    renderRunner(server);
+    await heading(Q1);
+    await answerRating('4 of 5');
+    const next = primary();
+    next.focus();
+    fireEvent.click(next);
+    const h2 = await heading(Q2);
+    await waitFor(() => expect(document.activeElement).toBe(h2));
+    expect(h2).toHaveAttribute('tabindex', '-1');
+    const back = screen.getByRole('button', { name: 'Back' });
+    back.focus();
+    fireEvent.click(back);
+    const h1 = await heading(Q1);
+    await waitFor(() => expect(document.activeElement).toBe(h1));
+  });
+
+  test('reaching the review moves the focus to its heading too', async () => {
+    const server = makeServer({ mine: { answers: { [Q1.qid]: 4, [Q2.qid]: 8, [Q3.qid]: [0] }, answered: [], complete: false, rev: 3 } });
+    renderRunner(server);
+    await heading(Q4);
+    fireEvent.click(primary());
+    const review = await screen.findByRole('heading', { name: 'Check your answers' });
+    await waitFor(() => expect(document.activeElement).toBe(review));
+  });
+
+  test('the first screen does not steal the focus on load', async () => {
+    const server = makeServer();
+    renderRunner(server);
+    await heading(Q1);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('the bar carries the session\'s own name from GET /survey', async () => {
+    const server = makeServer({ title: 'Q3 All-Hands' });
+    const { container } = renderRunner(server);
+    await heading(Q1);
+    expect(container.querySelector('.plr-cat')).toHaveTextContent('Q3 All-Hands');
+  });
+
+  test.each([
+    ['absent', undefined],
+    ['null', null],
+    ['blank', '   '],
+  ])('a title that is %s leaves the bar clean — no empty chip, no "undefined"', async (_l, title) => {
+    const server = makeServer({ title });
+    const { container } = renderRunner(server);
+    await heading(Q1);
+    expect(container.querySelector('.plr-cat')).toBeNull();
+    expect(container.querySelector('.plr-bar').textContent).not.toMatch(/undefined|null/);
+  });
+
   test('the bar says where you are, and the strip fills as you go', async () => {
     const server = makeServer();
     const { container } = renderRunner(server);
@@ -241,7 +322,7 @@ describe('every answer is saved as it is given', () => {
     await waitFor(() => expect(server.puts).toHaveLength(1));
     const [body] = server.puts;
     expect(body).toEqual({ qid: Q1.qid, value: 4, respondentId: expect.stringMatching(RESPONDENT) });
-    expect(body.respondentId).toBe(storage.data.get(`surveyResp_${GAME}`));
+    expect(body.respondentId).toBe(storage.data.get(RESP_KEY));
     expect(JSON.stringify(body)).not.toMatch(/Ada/);
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
   });
@@ -270,7 +351,7 @@ describe('every answer is saved as it is given', () => {
     expect(server.puts[0]).toEqual({
       qid: Q1.qid, value: 2, player: { name: 'Ada', clientId: storage.data.get(`playerClient_${GAME}`) },
     });
-    expect(storage.data.has(`surveyResp_${GAME}`)).toBe(false);
+    expect([...storage.data.keys()].some((k) => k.startsWith('surveyResp_'))).toBe(false);
   });
 
   test('one save in flight per question, and the latest value wins', async () => {
@@ -330,12 +411,107 @@ describe('every answer is saved as it is given', () => {
   });
 
   test('a save refused because the survey closed puts the closed screen up', async () => {
-    const server = makeServer({ put: () => [409, { error: 'The survey is closed.' }] });
+    const server = makeServer({
+      put: () => [409, { error: 'This survey has closed.', code: 'SURVEY_CLOSED', state: 'SURVEY#CLOSED' }],
+    });
     renderRunner(server);
     await heading(Q1);
     await answerRating('4 of 5');
     expect(await screen.findByRole('heading', { name: /The survey is closed/ })).toBeInTheDocument();
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
+  });
+
+  /*
+    A LOST OPTIMISTIC LOCK IS "TRY AGAIN", NOT "CLOSED". The server retries its
+    own conditional write three times and then answers CONFLICT — 409 on the
+    first backend, 503 (or BUSY, a transaction conflict) on the second. The
+    phone that read every 409 as closed put the closed screen up in front of a
+    person whose survey was still open.
+  */
+  test.each([
+    ['409 CONFLICT', 409, 'CONFLICT'],
+    ['503 CONFLICT', 503, 'CONFLICT'],
+    ['503 BUSY', 503, 'BUSY'],
+  ])('%s is retried and lands — never the closed screen', async (_label, status, code) => {
+    const server = makeServer({
+      put: (_b, n) => (n === 1
+        ? [status, { error: 'Another save for this person landed at the same moment. Try again.', code }]
+        : [200, { saved: true, rev: 2 }]),
+    });
+    renderRunner(server);
+    await heading(Q1);
+    await answerRating('4 of 5');
+    expect(await screen.findByText('Not saved – retrying')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /The survey is closed/ })).toBeNull();
+    await waitFor(() => expect(server.puts).toHaveLength(2), { timeout: 3000 });
+    expect(server.puts[1]).toMatchObject({ qid: Q1.qid, value: 4 });
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: /The survey is closed/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: Q1.title })).toBeInTheDocument();
+  });
+
+  test('a save refused as NOT_OPEN keeps the answer and keeps trying — it is not closed', async () => {
+    const server = makeServer({
+      put: (_b, n) => (n === 1
+        ? [409, { error: 'This survey is not open yet.', code: 'NOT_OPEN', state: 'CREATED' }]
+        : [200, { saved: true, rev: 1 }]),
+    });
+    renderRunner(server);
+    await heading(Q1);
+    await answerRating('3 of 5');
+    expect(await screen.findByText('Not saved – retrying')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /The survey is closed/ })).toBeNull();
+    await waitFor(() => expect(server.puts).toHaveLength(2), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+  });
+
+  /*
+    THE CAUSE OF THE CONFLICTS, REMOVED. Every answer is a conditional write
+    of the SAME row (one row per person), so two PUTs from one phone race each
+    other for the lock. One save in flight per PHONE, later ones queued with
+    the latest value per question winning, means this phone never fights
+    itself.
+  */
+  test('rapid answers to three questions never put two PUTs on the wire at once', async () => {
+    const server = makeServer({
+      put: () => new Promise((resolve) => { setTimeout(() => resolve([200, { saved: true }]), 25); }),
+    });
+    renderRunner(server);
+    await heading(Q1);
+    await answerRating('4 of 5');
+    fireEvent.click(primary());
+    await heading(Q2);
+    await answerRating('8 of 10');
+    fireEvent.click(primary());
+    await heading(Q3);
+    fireEvent.click(screen.getByRole('radio', { name: /Case studies/ }));
+    await waitFor(() => expect(server.puts).toHaveLength(3), { timeout: 2000 });
+    expect(server.maxPutsOpen).toBe(1);
+    expect(server.puts.map((b) => [b.qid, b.value])).toEqual([[Q1.qid, 4], [Q2.qid, 8], [Q3.qid, [1]]]);
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+  });
+
+  test('queued behind a slow save, a question changed twice sends only its latest value', async () => {
+    let release;
+    const server = makeServer({
+      put: (_b, n) => (n === 1
+        ? new Promise((resolve) => { release = () => resolve([200, { saved: true }]); })
+        : [200, { saved: true }]),
+    });
+    renderRunner(server);
+    await heading(Q1);
+    await answerRating('4 of 5');
+    await waitFor(() => expect(server.puts).toHaveLength(1));
+    fireEvent.click(primary());
+    await heading(Q2);
+    await answerRating('6 of 10');
+    await answerRating('9 of 10');
+    expect(server.puts).toHaveLength(1);
+    await act(async () => { release(); });
+    await waitFor(() => expect(server.puts).toHaveLength(2));
+    expect(server.puts[1]).toMatchObject({ qid: Q2.qid, value: 9 });
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+    expect(server.puts).toHaveLength(2);
   });
 });
 
@@ -349,7 +525,7 @@ describe('coming back to it', () => {
     await heading(Q3);
     expect(container.querySelector('.plr-ctx').textContent).toBe('3 of 4');
     // POST, with the identity in the body — never in a URL or a log line.
-    expect(server.mines).toEqual([{ respondentId: storage.data.get(`surveyResp_${GAME}`) }]);
+    expect(server.mines).toEqual([{ respondentId: storage.data.get(RESP_KEY) }]);
     const mineCall = server.fetchFn.mock.calls.find(([u]) => String(u).endsWith('/survey/mine'));
     expect(mineCall[1].method).toBe('POST');
     expect(String(mineCall[0])).not.toMatch(/r_/);
@@ -360,11 +536,31 @@ describe('coming back to it', () => {
 
   test('the same respondent id comes back on the same phone', async () => {
     const storage = memoryStorage();
-    storage.setItem(`surveyResp_${GAME}`, 'r_AAAAAAAAAAAAAAAAAAAAAA');
+    storage.setItem(RESP_KEY, 'r_AAAAAAAAAAAAAAAAAAAAAA');
     const server = makeServer();
     renderRunner(server, { storage });
     await heading(Q1);
     expect(server.mines[0]).toEqual({ respondentId: 'r_AAAAAAAAAAAAAAAAAAAAAA' });
+  });
+
+  // rejects: a respondent keyed by join code alone. Codes are reused, and a
+  // phone that answered the last survey on this code would otherwise file
+  // this one's answers — and resume its row — under the same id.
+  test('a reused join code is a new session: last opening\'s id is not reused', async () => {
+    const storage = memoryStorage();
+    storage.setItem(RESP_KEY, 'r_AAAAAAAAAAAAAAAAAAAAAA');
+    storage.setItem(`surveyResp_${GAME}`, 'r_BBBBBBBBBBBBBBBBBBBBBB');
+    const server = makeServer({ openedAt: '2026-10-02T14:30:00.000Z' });
+    renderRunner(server, { storage });
+    await heading(Q1);
+    const used = server.mines[0].respondentId;
+    expect(used).toMatch(RESPONDENT);
+    expect(used).not.toBe('r_AAAAAAAAAAAAAAAAAAAAAA');
+    expect(used).not.toBe('r_BBBBBBBBBBBBBBBBBBBBBB');
+    expect(storage.data.get(`surveyResp_${GAME}_2026-10-02T14:30:00.000Z`)).toBe(used);
+    await answerRating('4 of 5');
+    await waitFor(() => expect(server.puts).toHaveLength(1));
+    expect(server.puts[0].respondentId).toBe(used);
   });
 
   test('no row yet starts at question 1', async () => {
@@ -488,28 +684,130 @@ describe('checking and sending', () => {
 
   test('if the server says a required answer is missing, the phone goes to it and says so', async () => {
     const server = threeOfFour();
-    server.submit = () => [422, { missing: [Q3.qid] }];
+    server.submit = () => [422, { error: 'Some required questions have no answer yet.', code: 'MISSING', missing: [Q3.qid] }];
     await reachReview(server);
     fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
     await heading(Q3);
     expect(screen.getByText(/needs an answer before you can send/i)).toBeInTheDocument();
   });
+
+  test.each([
+    ['503 BUSY', 503, 'BUSY'],
+    ['503 CONFLICT', 503, 'CONFLICT'],
+    ['409 CONFLICT', 409, 'CONFLICT'],
+  ])('a Send refused with %s is tried again, and lands — never the closed screen', async (_l, status, code) => {
+    const server = threeOfFour();
+    server.submit = () => (server.submits.length === 1
+      ? [status, { error: 'Another save for this person landed at the same moment. Try again.', code }]
+      : [200, { complete: true }]);
+    await reachReview(server);
+    fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
+    expect(await screen.findByRole('heading', { name: 'Thanks, Ada — that’s everything.' }, { timeout: 3000 })).toBeInTheDocument();
+    expect(server.submits).toHaveLength(2);
+    expect(screen.queryByRole('heading', { name: /The survey is closed/ })).toBeNull();
+  });
+
+  test('a Send refused because the survey closed puts the closed screen up', async () => {
+    const server = threeOfFour();
+    server.submit = () => [409, { error: 'This survey has closed.', code: 'SURVEY_CLOSED', state: 'SURVEY#CLOSED' }];
+    await reachReview(server);
+    fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
+    expect(await screen.findByRole('heading', { name: /The survey is closed/ })).toBeInTheDocument();
+  });
+
+  test('nothing answered: Send waits, and says what it needs', async () => {
+    const server = makeServer({ questions: [Q2, Q4] });
+    renderRunner(server);
+    await heading(Q2);
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await heading(Q4);
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await screen.findByRole('heading', { name: 'Check your answers' });
+    const send = screen.getByRole('button', { name: 'Send my answers' });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAccessibleDescription('Answer at least one question to send.');
+    // Answering one lets it go.
+    fireEvent.click(screen.getByRole('button', { name: 'Answer question 1' }));
+    await heading(Q2);
+    await answerRating('7 of 10');
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    await screen.findByRole('heading', { name: 'Check your answers' });
+    expect(screen.getByRole('button', { name: 'Send my answers' })).toBeEnabled();
+  });
+
+  test('a 422 NOTHING_ANSWERED that arrives anyway is said plainly, and Send stays usable', async () => {
+    const server = threeOfFour();
+    server.submit = () => [422, { error: 'Nothing has been answered yet.', code: 'NOTHING_ANSWERED', missing: [] }];
+    await reachReview(server);
+    fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
+    expect(await screen.findByText('Answer at least one question to send.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Check your answers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send my answers' })).toBeEnabled();
+  });
 });
 
 /* ======================================================================= */
 describe('when the host moves on', () => {
-  test('the two-minute warning is a status banner', async () => {
+  /*
+    THE WARNING COUNTS DOWN FROM WHEN IT WAS GIVEN. It said "Two minutes
+    left." whatever the time: a phone that reloaded fifteen minutes after the
+    warning read "two minutes" off GET /survey's warnedAt and was told a close
+    that had long been due was still two minutes away. Now the minutes are
+    worked out from warnedAt (+ the warning's own minutes, two by default)
+    against the clock, and past that it says so. A fixed clock: Date.now.
+  */
+  const WARNED = '2026-09-23T10:20:00.000Z';
+  const at = (iso) => jest.spyOn(Date, 'now').mockReturnValue(Date.parse(iso));
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  test('the warning is a status banner, and says how long is left', async () => {
+    at('2026-09-23T10:20:05.000Z');
     const server = makeServer();
-    renderRunner(server, { warning: { minutes: 2, warnedAt: '2026-09-23T10:20:00.000Z' } });
+    renderRunner(server, { warning: { minutes: 2, warnedAt: WARNED } });
     await heading(Q1);
     const banner = screen.getByRole('status');
     expect(banner).toHaveClass('plr-banner');
     expect(banner).toHaveTextContent(/Two minutes left/);
   });
 
-  test('a warning given before this phone loaded comes from GET /survey', async () => {
-    const server = makeServer({ warnedAt: '2026-09-23T10:20:00.000Z' });
+  test('a minute and ten seconds in, it says one minute', async () => {
+    at('2026-09-23T10:21:10.000Z');
+    const server = makeServer();
+    renderRunner(server, { warning: { minutes: 2, warnedAt: WARNED } });
+    await heading(Q1);
+    expect(screen.getByRole('status')).toHaveTextContent(/One minute left/);
+  });
+
+  test('the warning\'s own minutes are used when it carries them', async () => {
+    at('2026-09-23T10:20:05.000Z');
+    const server = makeServer();
+    renderRunner(server, { warning: { minutes: 5, warnedAt: WARNED } });
+    await heading(Q1);
+    expect(screen.getByRole('status')).toHaveTextContent(/Five minutes left/);
+  });
+
+  test('a warning given before this phone loaded comes from GET /survey, and is counted from then', async () => {
+    at('2026-09-23T10:20:30.000Z');
+    const server = makeServer({ warnedAt: WARNED });
     renderRunner(server);
+    await heading(Q1);
+    expect(screen.getByRole('status')).toHaveTextContent(/Two minutes left/);
+  });
+
+  test('a phone that reloads fifteen minutes after the warning is not told "two minutes"', async () => {
+    at('2026-09-23T10:35:00.000Z');
+    const server = makeServer({ warnedAt: WARNED });
+    renderRunner(server);
+    await heading(Q1);
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveTextContent(/Closing any moment/);
+    expect(banner).not.toHaveTextContent(/minutes? left/);
+  });
+
+  test('a warning frame with no warnedAt counts from when it arrived', async () => {
+    at('2026-09-23T10:20:00.000Z');
+    const server = makeServer();
+    renderRunner(server, { warning: { minutes: 2, warnedAt: null } });
     await heading(Q1);
     expect(screen.getByRole('status')).toHaveTextContent(/Two minutes left/);
   });
@@ -584,7 +882,9 @@ describe('in the player page', () => {
     const server = makeServer();
     await joinSurvey(server);
 
-    await act(async () => { handler('surveyClosingSoon')({ gameId: GAME, minutes: 2, warnedAt: '2026-09-23T10:20:00.000Z' }); });
+    // The frame's warnedAt is "now" on this phone's clock.
+    const now = new Date().toISOString();
+    await act(async () => { handler('surveyClosingSoon')({ gameId: GAME, minutes: 2, warnedAt: now }); });
     // The mocked socket never reports a connection, so the offline banner is up
     // too: find the warning among the status banners rather than assuming one.
     const warning = screen.getAllByRole('status').find((el) => /Two minutes left/.test(el.textContent));

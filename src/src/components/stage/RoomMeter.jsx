@@ -266,6 +266,8 @@ export default function RoomMeter({
   const rest = names.length - shown.length;
   const listCount = names.length || offered;
   const loadingNames = interactive && !names.length && Boolean(waiting.loading);
+  // …and a list that could not be fetched says so, rather than loading forever.
+  const namesFailed = interactive && !names.length && !loadingNames && Boolean(waiting.error);
   const progressRows = !revealed && Array.isArray(rows) ? rows : [];
 
   const countProps = interactive
@@ -355,6 +357,7 @@ export default function RoomMeter({
             {shown.map((name) => <li key={name}>{name}</li>)}
           </ul>
           {loadingNames && <span className="more">Loading names…</span>}
+          {namesFailed && <span className="more">{waiting.error}</span>}
           {rest > 0 && <span className="more">{`+ ${rest} more`}</span>}
         </div>
       )}

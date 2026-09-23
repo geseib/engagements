@@ -187,7 +187,9 @@ describe('a survey create opens the survey, with no history modal in between', (
     // The history modal is only the fallback for a start that failed.
     const fallback = open.indexOf('setShowReportsModal(true)');
     expect(fallback === -1 || fallback > starts).toBe(true);
-    expect(open).toMatch(/if \(opened\) return;/);
+    // startSession resolves {ok, error} (the refusal in the server's words,
+    // utils/startRefusal.js), so success is `opened.ok`, not a bare boolean.
+    expect(open).toMatch(/if \(opened\.ok\) return;/);
 
     const start = bodyOf('startSession');
     expect(start).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{\w+\}\/start`/);

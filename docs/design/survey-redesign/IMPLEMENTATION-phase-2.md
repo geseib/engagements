@@ -134,7 +134,8 @@ Phone `stateRank`: OPEN 1, CLOSED 2, ENDED max.
   400 KB item limit at a few hundred respondents. A reader fetches exactly the
   keys `TextPages` names (no reader exists until Phase 3).
 - **Respondent id** — Anonymous/Who finished: phone mints `r_` + 22 base64url
-  (128 bits) under `surveyResp_<gameId>`; never derived from `clientId`; server
+  (128 bits) under `surveyResp_<gameId>_<openedAt>` — per session, since join codes
+  are reused; minted once GET /survey has said `openedAt`; never derived from `clientId`; server
   checks `/^r_[A-Za-z0-9_-]{22}$/`. Named: respondent = player name, server checks
   `PLAYER#<name>.ClientId === clientId` (legacy row without ClientId accepted, like
   join). The server derives the key from `Names`; never trusts a client-sent key.
@@ -290,9 +291,10 @@ under `lambda-functions/` or `src/src/` computes `avgPlace` or a survey mean.
 a circular import) + optional `progress` prop (strip `--p`); `components/survey/`:
 `SurveyRunner.jsx` (loading → answering(i) → review → sent → closed), `RatingInput`,
 `ChoiceInput`, `YesNoInput`, `RankInput`, `TextInput`, `surveyAnswers.js`
-(`isAnswered`, `summaryFor`, `seededOrder`), `useSurveyAutosave.js` (one in-flight save
-per qid, latest wins; text saves on 600 ms idle or blur; Saving / Saved / Not saved –
-retrying), `respondent.js` (`getRespondentId(gameId, storage)`, in-memory fallback with
+(`isAnswered`, `summaryFor`, `seededOrder`), `useSurveyAutosave.js` (ONE in-flight save
+per phone — the row is one conditional write, so two would race for its lock — later saves
+queued, latest per qid wins; text saves on 600 ms idle or blur; Saving / Saved / Not saved –
+retrying), `respondent.js` (`getRespondentId(gameId, storage, openedAt)`, in-memory fallback with
 a note); `utils/playerPhase.js` (`stateRank` from `PlayerPage.jsx:379-387` + survey
 ranks); `PlayerPage.jsx` (survey + joined → `<SurveyRunner>` after all hooks, before the
 ENDED branch; `surveyClosed`/`surveyClosingSoon` handlers; survey ENDED shows no

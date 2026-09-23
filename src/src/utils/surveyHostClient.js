@@ -81,6 +81,10 @@ function perQuestionRows(value) {
  * SURVEY#OPEN → SURVEY#CLOSED. Idempotent on the server: a second close
  * returns the stored counts and broadcasts nothing. The counts, never the
  * texts — open answers stay out of every host response until phase 3.
+ *
+ * `closedAt` is the close's own stamp (STATE's ClosedAt, the same one the
+ * `surveyClosed` frame carries). The host orders later progress frames by it,
+ * so a frame sent before the close cannot overwrite the frozen counts.
  */
 export function closeSurvey({ fetchFn, apiBase, gameId }) {
   return call({
@@ -89,6 +93,7 @@ export function closeSurvey({ fetchFn, apiBase, gameId }) {
       n: Number(b.n) || 0,
       finished: Number(b.finished) || 0,
       perQuestion: perQuestionRows(b.perQuestion),
+      closedAt: typeof b.closedAt === 'string' && b.closedAt ? b.closedAt : null,
     }),
   });
 }

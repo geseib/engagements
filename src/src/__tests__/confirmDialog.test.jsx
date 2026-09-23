@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ConfirmDialog from '../components/ConfirmDialog';
 import HostActionBar from '../components/HostActionBar';
 import { hostControlsFor } from '../config/hostControls';
@@ -117,6 +118,98 @@ describe('ConfirmDialog keys', () => {
   });
 });
 
+/*
+  AN IRREVERSIBLE ASK DOES NOT TAKE → AS YES.
+
+  The dock binds SPACE and → to its primary, and a presenter's clicker sends
+  →. On a collecting survey the primary is "Close the survey", so → pressed
+  twice — a double click on the clicker, or the host pressing on because the
+  wall did not seem to move — opened the confirm and then confirmed it, and
+  a survey cannot be reopened. `arrowConfirms={false}` keeps ← and Escape as
+  cancel, drops → as confirm, and takes the → hint off the button, so the
+  only yes is a deliberate press of the button itself.
+*/
+describe('ConfirmDialog with arrowConfirms={false} — for acts that cannot be undone', () => {
+  const draw = (props = {}) => render(
+    <ConfirmDialog
+      title="Close the survey?"
+      message="m"
+      confirmText="Close the survey"
+      arrowConfirms={false}
+      onConfirm={props.onConfirm || (() => {})}
+      onCancel={props.onCancel || (() => {})}
+    />
+  );
+
+  test('→ does not confirm', () => {
+    const onConfirm = jest.fn();
+    draw({ onConfirm });
+    press('ArrowRight');
+    press('ArrowRight');
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  test('← and Escape still cancel', () => {
+    const onCancel = jest.fn();
+    draw({ onCancel });
+    press('ArrowLeft');
+    press('Escape');
+    expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+
+  test('a click on the button confirms', () => {
+    const onConfirm = jest.fn();
+    draw({ onConfirm });
+    fireEvent.click(screen.getByRole('button', { name: /Close the survey/ }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  test('Enter on the focused button confirms', async () => {
+    const onConfirm = jest.fn();
+    const user = userEvent.setup();
+    draw({ onConfirm });
+    screen.getByRole('button', { name: /Close the survey/ }).focus();
+    await user.keyboard('{Enter}');
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  test('the confirm button wears no → hint; Cancel keeps its ←', () => {
+    const { container } = draw();
+    const [cancel, confirm] = container.querySelectorAll('.dialog-actions button');
+    expect(cancel.textContent).toContain('←');
+    expect(confirm.textContent).toContain('Close the survey');
+    expect(confirm.textContent).not.toContain('→');
+  });
+
+  test('→ is swallowed, not passed on to the dock behind it', () => {
+    // Even with the dock's keys LIVE (a suppressor that has drifted), the
+    // press the dialog refused must not advance anything either.
+    const onAction = jest.fn();
+    const onConfirm = jest.fn();
+    const controls = hostControlsFor({
+      gameType: 'poll', phase: 'ASK', playerCount: 4, answeredCount: 4,
+      votedCount: 0, answerCount: 4, hasQuestionSet: true,
+    });
+    render(
+      <>
+        <HostActionBar controls={controls} onAction={onAction} shortcutsEnabled />
+        <ConfirmDialog title="t" message="m" arrowConfirms={false} onConfirm={onConfirm} onCancel={() => {}} />
+      </>
+    );
+    press('ArrowRight');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  test('without the prop nothing changed: → confirms and wears its hint', () => {
+    const onConfirm = jest.fn();
+    const { container } = render(<ConfirmDialog title="t" message="m" confirmText="Skip" onConfirm={onConfirm} onCancel={() => {}} />);
+    press('ArrowRight');
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll('.dialog-actions button')[1].textContent).toContain('→');
+  });
+});
+
 describe('the call site', () => {
   const fs = require('fs');
   const path = require('path');
@@ -127,5 +220,11 @@ describe('the call site', () => {
     const host = strip(fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8'));
     expect(host).toMatch(/<ConfirmDialog/);
     expect(host).not.toMatch(/confirmation-header/);
+  });
+
+  test('the page hands the dialog its arrowConfirms, and a control marked irreversible sets it false', () => {
+    const host = strip(fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8'));
+    expect(host).toMatch(/<ConfirmDialog[\s\S]*?arrowConfirms=\{confirmModalProps\.arrowConfirms !== false\}/);
+    expect(host).toMatch(/arrowConfirms:\s*!ask\.irreversible/);
   });
 });

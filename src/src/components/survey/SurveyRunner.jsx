@@ -8,7 +8,7 @@ import { stateRank, SURVEY_OPEN, SURVEY_CLOSED } from '../../utils/playerPhase';
 import {
   identityFor, fetchSurvey, fetchMine, saveAnswer, submitSurvey,
 } from '../../utils/surveyClient';
-import useSurveyAutosave from './useSurveyAutosave';
+import useSurveyAutosave, { RETRY_MS } from './useSurveyAutosave';
 import { isAnswered, summaryFor, seededOrder, countWord } from './surveyAnswers';
 import RatingInput from './RatingInput';
 import ChoiceInput from './ChoiceInput';
@@ -34,7 +34,8 @@ import TextInput from './TextInput';
  *
  * WHERE THE STATE COMES FROM. `state` is PlayerPage's phase (driven by `/state`
  * and the `surveyClosed` / `gameEnded` frames); `GET /survey` reports one too,
- * and a 409 on a save means the survey closed under the person. The screen
+ * and a save or Send refused `SURVEY_CLOSED` means the survey closed under the
+ * person — that code, and no other refusal (utils/surveyClient.js). The screen
  * follows the highest-ranked of the three (utils/playerPhase.js), so no stale
  * source can reopen a closed survey.
  *
@@ -45,9 +46,46 @@ import TextInput from './TextInput';
  */
 
 const TWO_MINUTES = 2;
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * What the closing-soon banner says, worked out from WHEN the warning was
+ * given — never a fixed "two minutes". Whole minutes left, rounded up, while
+ * there are any; past the host's stated close, that it is closing any moment
+ * (the host closes by hand, so it may yet be open). A phone that reloads long
+ * after the warning reads GET /survey's `warnedAt` and says the truth.
+ */
+export function closingSoonText({ warnedAtMs, minutes = TWO_MINUTES, nowMs }) {
+  const left = warnedAtMs + minutes * MINUTE_MS - nowMs;
+  if (!(left > 0)) return 'Closing any moment.';
+  const m = Math.ceil(left / MINUTE_MS);
+  return `${capitalised(countWord(m))} ${m === 1 ? 'minute' : 'minutes'} left.`;
+}
+
+/** Send is tried this many more times, on the autosave's own back-off, before it says it did not go. */
+const SEND_RETRY_MS = RETRY_MS.slice(0, 3);
+
+const NOTHING_YET = 'Answer at least one question to send.';
+
+const pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 function capitalised(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+const parseMs = (iso) => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * When the warning was given, in ms: the live frame's `warnedAt`, else the
+ * moment this phone saw a frame that carried none, else GET /survey's
+ * `warnedAt`. null when there has been no warning.
+ */
+function warningStartMs(warning, survey, frameSeenAt) {
+  if (warning) return parseMs(warning.warnedAt) ?? frameSeenAt ?? Date.now();
+  return survey ? parseMs(survey.warnedAt) : null;
 }
 
 /** The rank-highest of the phases this component has heard. */
@@ -107,16 +145,29 @@ export default function SurveyRunner({
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
   const reasonId = useId();
+  /* A screen reached by Next / Back / Review / Send puts the focus on its
+     heading, so the new question is what a screen reader says; a screen
+     reached by loading does not (nothing was pressed). */
+  const headingRef = useRef(null);
+  const focusHeading = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const names = survey ? namesMode(survey.names).id : null;
+  // The respondent is per SESSION — the join code and when it opened — so it
+  // is minted only once GET /survey has said when that was (respondent.js).
+  const openedAt = (survey && survey.openedAt) || null;
   const identity = useMemo(() => {
     if (!names) return null;
     return identityFor(names, {
-      respondentId: names === 'named' ? null : getRespondentId(gameId, storage),
+      respondentId: names === 'named' ? null : getRespondentId(gameId, storage, openedAt),
       playerName,
       clientId: getClientId(gameId, storage),
     });
-  }, [names, gameId, playerName, storage]);
+  }, [names, gameId, playerName, storage, openedAt]);
   const identityRef = useRef(identity);
   identityRef.current = identity;
 
@@ -137,14 +188,17 @@ export default function SurveyRunner({
       const got = await fetchSurvey({ fetchFn: doFetch, apiBase, gameId });
       if (cancelled) return;
       if (!got.ok) {
-        if (got.notStarted) setLoad({ status: 'not-started', error: null });
+        if (got.closed) {
+          setClosedHere(true);
+          setLoad({ status: 'closed', error: null });
+        } else if (got.notStarted) setLoad({ status: 'not-started', error: null });
         else setLoad({ status: 'error', error: got.error });
         return;
       }
       const s = got.survey;
       const mode = namesMode(s.names).id;
       const who = identityFor(mode, {
-        respondentId: mode === 'named' ? null : getRespondentId(gameId, storage),
+        respondentId: mode === 'named' ? null : getRespondentId(gameId, storage, s.openedAt || null),
         playerName,
         clientId: getClientId(gameId, storage),
       });
@@ -167,6 +221,12 @@ export default function SurveyRunner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, attempt]);
 
+  useEffect(() => {
+    if (!focusHeading.current) return;
+    focusHeading.current = false;
+    if (headingRef.current) headingRef.current.focus();
+  }, [view.screen, view.index]);
+
   /* A survey that had not opened when this phone arrived loads when it does. */
   useEffect(() => {
     if (load.status === 'not-started' && stateRank(state) >= stateRank(SURVEY_OPEN)) {
@@ -174,10 +234,26 @@ export default function SurveyRunner({
     }
   }, [state, load.status]);
 
+  /* The warning counts down, so the banner re-renders while it is up. A frame
+     with no warnedAt is counted from the moment it arrived here. */
+  const [frameSeenAt, setFrameSeenAt] = useState(null);
+  useEffect(() => {
+    setFrameSeenAt(warning ? Date.now() : null);
+  }, [warning]);
+  const [, setTick] = useState(0);
+  const warned = Boolean(warning || (survey && survey.warnedAt));
+  useEffect(() => {
+    if (!warned) return undefined;
+    const id = setInterval(() => setTick((n) => n + 1), 10 * 1000);
+    return () => clearInterval(id);
+  }, [warned]);
+
   const questions = survey ? survey.questions || [] : [];
   const total = questions.length;
   const current = effectiveState(state, survey && survey.state, closedHere ? SURVEY_CLOSED : null);
   const isOpen = stateRank(current) <= stateRank(SURVEY_OPEN);
+  const openRef = useRef(isOpen);
+  openRef.current = isOpen;
 
   /* ---- answering --------------------------------------------------------- */
   const give = (q, value, opts) => {
@@ -187,47 +263,79 @@ export default function SurveyRunner({
     autosave.change(q.qid, isAnswered(q, value) ? value : null, { debounce: Boolean(opts && opts.typing) });
   };
 
+  const moveTo = (next) => {
+    focusHeading.current = true;
+    setView(next);
+  };
+
   const goTo = (screen, index = 0, fromReview = false) => {
     if (view.screen === 'answering' && questions[view.index]) autosave.flush(questions[view.index].qid);
     setNotice(null);
-    setView({ screen, index, fromReview });
+    moveTo({ screen, index, fromReview });
   };
 
   const firstMissingRequired = () => questions.findIndex((q) => q.required && !isAnswered(q, answers[q.qid]));
+  const answeredAny = () => questions.some((q) => isAnswered(q, answers[q.qid]));
 
+  /*
+    SEND. Everything typed is saved first, then the row is marked complete.
+    A refusal worth retrying — no connection, a 5xx (`BUSY`, `CONFLICT`), a
+    409 that is not a close — is sent again on the autosave's back-off, since
+    a second Send of a complete row is a harmless 200; only `SURVEY_CLOSED`
+    puts the closed screen up.
+  */
   const send = async () => {
     const missing = firstMissingRequired();
     if (missing >= 0) {
       setNotice(`Question ${missing + 1} needs an answer before you can send.`);
-      setView({ screen: 'answering', index: missing, fromReview: true });
+      moveTo({ screen: 'answering', index: missing, fromReview: true });
+      return;
+    }
+    if (!answeredAny()) {
+      setNotice(NOTHING_YET);
       return;
     }
     setSending(true);
     setNotice(null);
     const flushed = await autosave.flushAll();
+    if (!mountedRef.current) return;
     if (flushed.closed) { setSending(false); return; }
-    const result = await submitSurvey({ fetchFn: doFetch, apiBase, gameId, identity: identityRef.current });
+    let result;
+    for (let attempt = 0; ; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      result = await submitSurvey({ fetchFn: doFetch, apiBase, gameId, identity: identityRef.current });
+      if (!mountedRef.current) return;
+      if (!result.retry || attempt >= SEND_RETRY_MS.length || !openRef.current) break;
+      setNotice('Not sent yet – trying again…');
+      // eslint-disable-next-line no-await-in-loop
+      await pause(SEND_RETRY_MS[attempt]);
+      if (!mountedRef.current) return;
+    }
     setSending(false);
-    if (result.ok) { setView({ screen: 'sent', index: 0, fromReview: false }); return; }
+    if (result.ok) { setNotice(null); moveTo({ screen: 'sent', index: 0, fromReview: false }); return; }
     if (result.closed) { setClosedHere(true); return; }
+    if (result.nothingAnswered && !(result.missing && result.missing.length)) {
+      setNotice(NOTHING_YET);
+      return;
+    }
     if (result.missing && result.missing.length) {
       const at = questions.findIndex((q) => result.missing.includes(q.qid));
       const index = at >= 0 ? at : 0;
       setNotice(`Question ${index + 1} needs an answer before you can send.`);
-      setView({ screen: 'answering', index, fromReview: true });
+      moveTo({ screen: 'answering', index, fromReview: true });
       return;
     }
     setNotice(result.error || 'That did not send. Try again.');
   };
 
   /* ---- the warning banner, over whatever is on screen --------------------- */
-  const warnedAt = (warning && (warning.warnedAt || true)) || (survey && survey.warnedAt) || null;
   const minutes = (warning && Number.isInteger(warning.minutes) && warning.minutes > 0) ? warning.minutes : TWO_MINUTES;
-  const warningBanner = warnedAt && isOpen ? (
+  const warnedAtMs = warningStartMs(warning, survey, frameSeenAt);
+  const warningBanner = warnedAtMs !== null && isOpen ? (
     <div className="plr-banner" role="status">
       <Icon name="Timer" weight="bold" size={16} />
       <div>
-        <b>{capitalised(countWord(minutes))} {minutes === 1 ? 'minute' : 'minutes'} left.</b>{' '}
+        <b>{closingSoonText({ warnedAtMs, minutes, nowMs: Date.now() })}</b>{' '}
         Your host will close the survey soon. Everything you have answered counts, even if you
         do not press Send.
       </div>
@@ -235,8 +343,10 @@ export default function SurveyRunner({
   ) : null;
   const banners = (banner || warningBanner) ? <>{banner}{warningBanner}</> : null;
 
+  // The session's own name in the bar, from GET /survey — or nothing at all.
+  const sessionTitle = (survey && typeof survey.title === 'string' && survey.title.trim()) || null;
   const shell = (props, body) => (
-    <PlayerShell who={playerName} online={online} banner={banners} category={survey && survey.title} {...props}>
+    <PlayerShell who={playerName} online={online} banner={banners} category={sessionTitle} {...props}>
       {body}
     </PlayerShell>
   );
@@ -314,7 +424,7 @@ export default function SurveyRunner({
   if (view.screen === 'sent') {
     return shell({ phase: 'quiet', volume: 'rest', ctx: 'Sent', centre: true }, (
       <>
-        <h1 className="plr-h1 plr-h1--primary">Thanks, {playerName} — that’s everything.</h1>
+        <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>Thanks, {playerName} — that’s everything.</h1>
         <p className="plr-lede plr-muted">
           Your answers are in. You can still change them from here until the host closes the survey.
         </p>
@@ -332,12 +442,16 @@ export default function SurveyRunner({
   if (view.screen === 'review' || total === 0) {
     const skipped = questions.filter((q) => !q.required && !isAnswered(q, answers[q.qid])).length;
     const missing = firstMissingRequired();
+    const nothingYet = total > 0 && !answeredAny();
+    let reason = notice;
+    if (missing >= 0) reason = `Question ${missing + 1} needs an answer before you can send.`;
+    else if (nothingYet) reason = NOTHING_YET;
     const lede = [
       skipped === 1 ? 'One was optional and you skipped it.' : '',
       skipped > 1 ? `${capitalised(countWord(skipped))} were optional and you skipped them.` : '',
       'Anything can change until your host closes the survey.',
     ].filter(Boolean).join(' ');
-    const blocked = missing >= 0 || sending;
+    const blocked = missing >= 0 || nothingYet || sending;
     return shell({
       phase: 'ask',
       volume: 'act',
@@ -346,10 +460,8 @@ export default function SurveyRunner({
       dock: (
         <>
           <SavedLine status={autosave.status} error={autosave.error} idleText="Everything is saved as you go" />
-          {(missing >= 0 || notice) && (
-            <p className="plr-note" id={reasonId}>
-              {missing >= 0 ? `Question ${missing + 1} needs an answer before you can send.` : notice}
-            </p>
+          {reason && (
+            <p className="plr-note" id={reasonId}>{reason}</p>
           )}
           <div className="plr-pair">
             <button
@@ -364,7 +476,7 @@ export default function SurveyRunner({
               type="button"
               className="plr-btn"
               disabled={blocked || total === 0}
-              aria-describedby={missing >= 0 || notice ? reasonId : undefined}
+              aria-describedby={reason ? reasonId : undefined}
               onClick={send}
             >
               {sending ? 'Sending…' : 'Send my answers'}
@@ -374,7 +486,7 @@ export default function SurveyRunner({
       ),
     }, (
       <>
-        <h1 className="plr-q">Check your answers</h1>
+        <h1 className="plr-q" ref={headingRef} tabIndex={-1}>Check your answers</h1>
         <p className="plr-detail plr-muted">{lede}</p>
         <ol className="plr-rev" aria-label="Your answers">
           {questions.map((q, i) => {
@@ -492,7 +604,7 @@ export default function SurveyRunner({
         Question {index + 1}{' '}
         <span className="plr-req">· {q.required ? 'needs an answer' : 'optional'}</span>
       </p>
-      <h1 className="plr-q">{q.title}</h1>
+      <h1 className="plr-q" ref={headingRef} tabIndex={-1}>{q.title}</h1>
       {String(q.detail || '').trim() && <p className="plr-detail plr-muted">{q.detail}</p>}
       <React.Fragment key={q.qid}>{input}</React.Fragment>
     </>
