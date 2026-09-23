@@ -2112,6 +2112,14 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Opening a SURVEY tells every screen (`gameStateChanged`), so a phone
+        # that loaded it before it opened reloads into it. Without this the
+        # post is a silent AccessDenied and that phone waits forever.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
         StartGameEvent:
           Type: HttpApi

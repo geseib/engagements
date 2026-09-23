@@ -12,7 +12,8 @@
  *           whole answer to a pick-one question, and it counts toward maxPicks.
  *           A blank write-in is dropped, the picks beside it kept.
  *   yesno   {v: 'yes'|'no'|'unsure', why?} — unsure only where offered; a why
- *           only where followUpWhen asks for one, ≤ 280
+ *           only where followUpWhen asks for one ('any' = after yes or no,
+ *           never after unsure), ≤ 280
  *   rank    [index…] in order — distinct, in range, at least one
  *   text    a string, trimmed, ≤ maxLength (never past 2000)
  *   any     null — clears the answer
@@ -91,8 +92,13 @@ function checkChoice(q, value) {
   return ok(other === null ? indexes : [...indexes, { other }]);
 }
 
-/** Does `followUpWhen` ask for a why after answer `v`? */
+/**
+ * Does `followUpWhen` ask for a why after answer `v`? 'any' is "after a yes or
+ * a no" — never after "not sure", which is not a position to explain. The
+ * phone never asks there; this refuses a why that arrives anyway.
+ */
 function asksWhy(followUpWhen, v) {
+  if (v === 'unsure') return false;
   if (followUpWhen === 'any') return true;
   return followUpWhen === v;
 }

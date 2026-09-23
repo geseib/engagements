@@ -6,6 +6,7 @@ const { startSession } = require('./session-start');
 const { SURVEY_OPEN } = require('./survey-names');
 const { readSurveyRows, isAnswerable } = require('./survey-set');
 const { recordSurveyOpened } = require('./platform-metrics');
+const { toAll } = require('./survey-broadcast');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -118,6 +119,16 @@ exports.handler = async (event) => {
         set: { scope: surveySet.scope, pk: surveySet.pk },
         questionId: surveyRows[0].SK
       }, { db });
+      // A phone that loaded the survey before it opened was told "not open
+      // yet"; `gameStateChanged` is what both pages already re-fetch on
+      // (get-results.js), so it reloads into the survey. Never throws.
+      await toAll(db, process.env.TABLE_NAME, gameId, {
+        type: 'gameStateChanged',
+        gameId,
+        state: `GAME#${gameId} ${SURVEY_OPEN}`,
+        newState: SURVEY_OPEN,
+        timestamp: now
+      });
     }
 
     console.log(`✅ Game ${gameId} started successfully`);

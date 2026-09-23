@@ -307,6 +307,14 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(meta.ttl, startedTtl(meta.OpenedAt));
   });
 
+  // rejects: a phone that loaded the survey before it opened waiting forever.
+  await check('opening tells every screen, phones included (gameStateChanged)', () => {
+    const f = frames.filter((x) => x.message.type === 'gameStateChanged');
+    assert.deepStrictEqual(f.map((x) => x.connectionId).sort(), ['host-1', 'host-2', 'phone-1']);
+    assert.strictEqual(f[0].message.newState, SURVEY_OPEN);
+    assert.strictEqual(f[0].message.gameId, opening);
+  });
+
   // rejects: Names editable after the survey has opened — the promise on the
   // phone would change under the people it was made to.
   await check('PUT /games/{id} with names after the survey opened: 400', async () => {
@@ -397,6 +405,15 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(b.questions[4].followUpPrompt, 'What would you cut?');
     assert.strictEqual(b.questions[0].required, true);
     assert.strictEqual(b.questions[0].scale, '1-5');
+    assert.strictEqual(b.questions[0].lowLabel, 'Not at all');
+    assert.strictEqual(b.questions[0].highLabel, 'Very');
+    assert.strictEqual(b.questions[3].allowMultiple, true);
+    assert.strictEqual(b.questions[3].maxPicks, 3);
+    assert.strictEqual(b.questions[2].allowOther, true);
+    assert.strictEqual(b.questions[4].unsure, true);
+    assert.strictEqual(b.questions[4].followUpWhen, 'no');
+    assert.strictEqual(b.questions[6].maxLength, 500);
+    assert.strictEqual(b.questions[6].textLength, 'long');
     assert.strictEqual(b.questions[5].rankTop, 3);
   });
   // rejects: a question payload carrying fields another kind would use.
@@ -428,6 +445,7 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     ['003', [], false, 'no pick'],
     ['004', [0, 2, { other: 'Coffee' }], true, 'several picks with a write-in'],
     ['004', [0, 1, 2, 3], false, 'more than maxPicks'],
+    ['004', [0, 1, 2, { other: 'Coffee' }], false, 'a write-in that makes one pick too many'],
     ['004', [0, 0], false, 'the same pick twice'],
     ['004', [0, { other: 'x'.repeat(281) }], false, 'a write-in over 280'],
     ['004', [0, { other: '   ' }], true, 'a blank write-in beside a pick (dropped, the pick kept)'],
@@ -474,6 +492,16 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     const mine = bodyOf(await phone('mine', checking, { respondentId: who }));
     assert.deepStrictEqual(mine.answers[qid('005')], { v: 'no', why: 'Too long' });
     assert.deepStrictEqual(mine.answers[qid('003')], [{ other: 'Lunch' }]);
+  });
+  // rejects: a why after "not sure" — a follow-up of 'any' asks after a yes or
+  // a no, and the phone never offers one after unsure.
+  await check('followUpWhen any: a why after yes or no, never after unsure', () => {
+    const { checkAnswer } = require(path.join(REPO, 'lambda-functions/game/survey-answer.js'));
+    const q = { kind: 'yesno', unsure: true, followUpWhen: 'any' };
+    assert.strictEqual(checkAnswer(q, { v: 'yes', why: 'a' }).ok, true);
+    assert.strictEqual(checkAnswer(q, { v: 'no', why: 'b' }).ok, true);
+    assert.strictEqual(checkAnswer(q, { v: 'unsure', why: 'c' }).ok, false);
+    assert.strictEqual(checkAnswer(q, { v: 'unsure' }).ok, true);
   });
   await check('an unknown qid, and a qid from outside the pinned set: 400', async () => {
     assert.strictEqual((await phone('answers', checking, { qid: 'c001#099', value: 1, respondentId: who })).statusCode, 400);
@@ -838,6 +866,10 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual(res.statusCode, 409, res.body);
     assert.strictEqual(JSON.stringify(respRows(closing)), before);
     assert.strictEqual((await phone('submit', closing, { respondentId: ca })).statusCode, 409);
+    // The phone reads 409 on mine as "closed", too.
+    const m = await phone('mine', closing, { respondentId: ca });
+    assert.strictEqual(m.statusCode, 409, m.body);
+    assert.strictEqual(bodyOf(m).code, 'SURVEY_CLOSED');
   });
   // rejects: a PUT that read STATE as open and then wrote after the close —
   // its answer would miss the frozen results and sit in the row as if counted.
@@ -954,6 +986,7 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
   await check('get-game-state carries them in gameMetadata', async () => {
     const b = bodyOf(await getGameState({ pathParameters: { gameId: described } }));
     assert.strictEqual(b.state, SURVEY_OPEN);
+    assert.strictEqual(b.gameType, 'survey');
     assert.strictEqual(b.gameMetadata.names, 'named');
     assert.strictEqual(b.gameMetadata.openedAt, row(`GAME#${described}`, 'METADATA').OpenedAt);
     assert.strictEqual(b.gameMetadata.warnedAt, row(`GAME#${described}`, 'STATE').WarnedAt);

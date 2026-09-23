@@ -4,7 +4,8 @@
  *     GET  /games/{gameId}/survey          the questions, and where the survey is
  *     PUT  /games/{gameId}/survey/answers  one answer: {qid, value}, autosaved
  *     POST /games/{gameId}/survey/submit   Send — marks this person's row complete
- *     POST /games/{gameId}/survey/mine     this person's own answers back (resume)
+ *     POST /games/{gameId}/survey/mine     this person's own answers back (resume,
+ *                                          while the survey is open)
  *
  * docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2 is the contract.
  *
@@ -408,7 +409,10 @@ async function submit(gameId, body) {
 async function mine(gameId, body) {
   const { meta, state } = await readSession(db, TABLE(), gameId);
   if (!isSurvey(meta)) return notFound();
-  if (!opened(state)) return refuse(409, 'NOT_OPEN', 'This survey is not open yet.', { state: (state && state.State) || null });
+  // Resume is for a survey still collecting: once it has closed a phone is
+  // told so (409, as the PUT and Send are), not handed answers to edit.
+  const gate = collectingOr(state);
+  if (gate) return gate;
   const names = normalizeNames(meta.Names);
   const who = await respondentFor(gameId, names, body, { forWrite: false });
   if (who.response) return who.response;
