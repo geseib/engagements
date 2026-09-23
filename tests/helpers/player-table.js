@@ -336,6 +336,8 @@ function createTable() {
             if (input.FilterExpression === 'ConnectionType = :type') {
               items = items.filter((i) => i.ConnectionType === input.ExpressionAttributeValues[':type']);
             }
+            // Select COUNT returns the number and no rows, as DynamoDB does.
+            if (input.Select === 'COUNT') return { Count: items.length };
             return { Items: items };
           }
 

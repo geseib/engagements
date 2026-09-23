@@ -11,7 +11,8 @@
  *
  *   §1  the three copies are one module, byte for byte
  *   §2  each event counts ONCE — a retried start, a retried or racing round,
- *       an answer resubmitted by the same player, do not count again
+ *       a round closed twice, do not count again; answers are counted per
+ *       ROUND when the host moves on, one per person, never per submission
  *   §3  an organisation's category is never NAMED and never even READ
  *   §4  a recorder cannot throw, whatever the table does
  *   §5  the rows carry numbers only and no ttl
@@ -69,6 +70,13 @@ function seedSets() {
 const PLATFORM_SET = { scope: 'platform', pk: 'SET#shared#v1' };
 const PUBLIC_SET = { scope: 'public', pk: 'PUBLIC#SET#pubset#v2' };
 const ORG_SET = { scope: 'org', orgId: ORG, pk: `ORG#${ORG}#SET#ours#v1` };
+
+/** One person's answer to round `q` — content an envelope, as at rest. */
+function answerRow(gameId, q, who) {
+  table.put({ PK: `GAME#${gameId}`, SK: `QUESTION#${q}#ANSWER#${who}`, Answer: { v: 1, ct: 'x' } });
+}
+
+const metadataOf = (gameId) => row(`GAME#${gameId}`, 'METADATA');
 
 function ref(gameId, q, fields) {
   table.put({ PK: `GAME#${gameId}`, SK: `QUESTION#${q}#REF`, QuestionNumber: q, ...fields });
@@ -198,20 +206,46 @@ const brokenDb = (mode) => ({
 
   reset();
   session('4200');
-  ref('4200', '001', { SourceQuestionId: 'QUESTION#c001#001', SetId: 'shared', SetScope: 'platform', SetVersion: 1 });
-  await check('a new answer is counted', async () => {
-    const r = await M.recordAnswerStored({ gameId: '4200', questionNumber: '001', previous: undefined }, opts());
+  await M.recordRoundServed({ gameId: '4200', round: 1, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, opts());
+  for (const who of ['Ada', 'Bob', 'Cy']) answerRow('4200', '001', who);
+  answerRow('4200', '002', 'Ada');                      // another round's row
+  await check('closing a round counts its answer rows, one per person', async () => {
+    const r = await M.recordRoundClosed({ gameId: '4200', round: 1, metadata: metadataOf('4200') }, opts());
     assert.strictEqual(r.counted, true);
-    assert.strictEqual(month().answersStored, 1);
+    assert.strictEqual(r.answers, 3);
+    assert.strictEqual(month().answersStored, 3);
+    assert.strictEqual(category('platform#leadership').answers, 3);
   });
-  // rejects: counting on every Put. The answer row's key is the player and
-  // the question, so a changed answer OVERWRITES — message.js hands over what
-  // it overwrote, and that is a resubmission.
-  await check('an answer that overwrote an earlier one is not counted again', async () => {
-    const r = await M.recordAnswerStored({ gameId: '4200', questionNumber: '001', previous: { PK: 'GAME#4200', Answer: 'x' } }, opts());
+  // rejects: per-answer or per-round re-reading — the served round kept its
+  // bucket on METADATA, so the close reads no question.
+  await check('…without reading the question again', () => {
+    assert.strictEqual(readsOf(PLATFORM_SET.pk).length, 1, 'the question was read more than once');
+  });
+  // rejects: a racing press that read METADATA before the marker landed
+  // counting the round a second time.
+  await check('closing the same round again counts nothing, even from a stale read', async () => {
+    const r = await M.recordRoundClosed({ gameId: '4200', round: 1, metadata: {} }, opts());
     assert.strictEqual(r.counted, false);
-    assert.strictEqual(r.reason, 'resubmitted');
-    assert.strictEqual(month().answersStored, 1);
+    assert.strictEqual(month().answersStored, 3);
+  });
+  await check('…and a current read short-circuits before any query', async () => {
+    const before = table.log.length;
+    const r = await M.recordRoundClosed({ gameId: '4200', round: 1, metadata: metadataOf('4200') }, opts());
+    assert.strictEqual(r.reason, 'already');
+    assert.strictEqual(table.log.length, before);
+  });
+  await check('a round nobody answered adds nothing', async () => {
+    await M.recordRoundServed({ gameId: '4200', round: 3, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, opts());
+    const r = await M.recordRoundClosed({ gameId: '4200', round: 3, metadata: metadataOf('4200') }, opts());
+    assert.strictEqual(r.answers, 0);
+    assert.strictEqual(month().answersStored, 3);
+  });
+  // rejects: a close conjuring METADATA for a session that has none.
+  await check('a round of a session with no METADATA row is not counted', async () => {
+    answerRow('4997', '001', 'Ada');
+    const r = await M.recordRoundClosed({ gameId: '4997', round: 1 }, opts());
+    assert.strictEqual(r.counted, false);
+    assert.strictEqual(row('GAME#4997', 'METADATA'), undefined);
   });
 
   /* ----------------------------------------------------------------------- */
@@ -257,35 +291,48 @@ const brokenDb = (mode) => ({
     assert.deepStrictEqual(readsOf(ORG_SET.pk), []);
   });
 
+  // A round served before its bucket was kept on METADATA (a session running
+  // across the deploy) falls back to the round's REF row.
   reset();
   session('4400');
   ref('4400', '001', { SourceQuestionId: 'QUESTION#c001#001', SetId: 'ours', SetScope: 'org', SetOrgId: ORG, SetVersion: 1 });
   ref('4400', '002', { SourceQuestionId: 'QUESTION#c001#001', SetId: 'pubset', SetScope: 'public', SetVersion: 2 });
   ref('4400', '003', { SourceQuestionId: 'QUESTION#c002#004', SetId: 'legacy' });   // pre-tenancy: no scope, no version
-  await check('an answer to a team’s own question counts unnamed, without reading the set', async () => {
-    await M.recordAnswerStored({ gameId: '4400', questionNumber: '001' }, opts());
+  for (const q of ['001', '002', '003', '004', '009']) answerRow('4400', q, 'Ada');
+  const close = (round) => M.recordRoundClosed({ gameId: '4400', round, metadata: {} }, opts());
+  await check('a team’s own question counts unnamed, without reading the set', async () => {
+    await close(1);
     assert.strictEqual(category('org').answers, 1);
     assert.deepStrictEqual(readsOf(ORG_SET.pk), []);
   });
-  await check('an answer to a public question counts under its name, from the version the round served', async () => {
-    await M.recordAnswerStored({ gameId: '4400', questionNumber: '002' }, opts());
+  await check('a public question counts under its name, from the version the round served', async () => {
+    await close(2);
     assert.strictEqual(category('public#party games').answers, 1);
   });
   // rejects: a REF written before scope pinning read as anything but platform.
   await check('a REF with no scope and no version reads the legacy platform partition', async () => {
-    await M.recordAnswerStored({ gameId: '4400', questionNumber: '003' }, opts());
+    await close(3);
     assert.strictEqual(category('platform#retro').answers, 1);
   });
   await check('a REF that names an org but no scope is still the unnamed bucket', async () => {
     ref('4400', '004', { SourceQuestionId: 'QUESTION#c001#001', SetId: 'ours', SetOrgId: ORG });
-    await M.recordAnswerStored({ gameId: '4400', questionNumber: '004' }, opts());
+    await close(4);
     assert.strictEqual(category('org').answers, 2);
     assert.deepStrictEqual(readsOf(ORG_SET.pk), []);
   });
-  await check('an answer whose REF row is gone still counts, unnamed', async () => {
-    await M.recordAnswerStored({ gameId: '4400', questionNumber: '009' }, opts());
+  await check('a round whose REF row is gone still counts, unnamed', async () => {
+    await close(9);
     assert.strictEqual(month().answersStored, 5);
     assert.strictEqual(category('org').answers, 3);
+  });
+  // rejects: trusting a bucket kept on METADATA — anything but platform or
+  // public is the unnamed bucket, whatever label it carries.
+  await check('a kept bucket that names a team category is still the unnamed bucket', async () => {
+    session('4401', { [M.ROUNDS_MARKER]: 1, [M.BUCKET_ATTR]: { key: 'x', label: SECRET_CATEGORY, library: 'org' } });
+    answerRow('4401', '001', 'Ada');
+    await M.recordRoundClosed({ gameId: '4401', round: 1, metadata: metadataOf('4401') }, opts());
+    assert.strictEqual(category('org').answers, 4);
+    assert.ok(!JSON.stringify(metricsRows()).includes(SECRET_CATEGORY), 'the kept label reached a metrics row');
   });
 
   /* ----------------------------------------------------------------------- */
@@ -300,7 +347,7 @@ const brokenDb = (mode) => ({
         M.recordSessionCreated({}, bad),
         M.recordSessionStarted({ gameId: '1' }, bad),
         M.recordRoundServed({ gameId: '1', round: 1, set: PLATFORM_SET, questionId: 'QUESTION#c001#001' }, bad),
-        M.recordAnswerStored({ gameId: '1', questionNumber: '001' }, bad),
+        M.recordRoundClosed({ gameId: '1', round: 1 }, bad),
       ]);
       for (const r of results) assert.deepStrictEqual(r, { counted: false, reason: 'error' });
     });
@@ -309,7 +356,8 @@ const brokenDb = (mode) => ({
     assert.strictEqual((await M.recordSessionStarted(undefined, opts())).counted, false);
     assert.strictEqual((await M.recordRoundServed({ gameId: '1', round: 'x' }, opts())).counted, false);
     assert.strictEqual((await M.recordRoundServed({ gameId: '1', round: 0 }, opts())).counted, false);
-    assert.strictEqual((await M.recordAnswerStored({}, opts())).counted, false);
+    assert.strictEqual((await M.recordRoundClosed({}, opts())).counted, false);
+    assert.strictEqual((await M.recordRoundClosed({ gameId: '1', round: 0 }, opts())).counted, false);
   });
 
   /* ----------------------------------------------------------------------- */
@@ -324,7 +372,7 @@ const brokenDb = (mode) => ({
   // rejects: a session id, an org id or a title riding along on a counter.
   await check('no metrics row names a session, an organisation or a title', () => {
     const text = JSON.stringify(metricsRows());
-    for (const s of ['4400', '4200', ORG, 'GAME#', 'Title', 'orgId', 'gameId']) {
+    for (const s of ['4400', '4200', ORG, 'GAME#', 'Title', 'orgId', 'gameId', 'Ada', 'ANSWER#']) {
       assert.ok(!text.includes(s), `a metrics row contains ${s}`);
     }
   });
@@ -340,7 +388,9 @@ const brokenDb = (mode) => ({
     }
   }
   await M.recordSessionCreated({}, opts(OCT));
-  await M.recordAnswerStored({ gameId: 'none', questionNumber: '001' }, opts(OCT));
+  session('5004');
+  answerRow('5004', '001', 'Ada');
+  await M.recordRoundClosed({ gameId: '5004', round: 1, metadata: {} }, opts(OCT));
   // A row that CLAIMS a name for the teams' bucket — the reader must not
   // believe a stored label over the rule.
   table.put({ PK: M.METRICS_PK, SK: M.categorySk('2026-10', 'org'), label: SECRET_CATEGORY, library: 'org', rounds: 1, answers: 0 });

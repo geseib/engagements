@@ -20,7 +20,8 @@
  *       sessionsStarted   a session left the lobby (either door, session-start.js)
  *       roundsServed      a question was put in front of the room (next-question.js)
  *       sessionsServed    sessions that served their FIRST question this month
- *       answersStored     a NEW answer row — one per person per question
+ *       answersStored     answer rows a question had when the host moved on
+ *                         from it — one per person per question
  *       firstRecordedAt   the first event ever written to this month's row
  *
  *   PK: PLATFORM#METRICS  SK: MONTH#<yyyy-mm>#CATEGORY#<key>
@@ -59,9 +60,25 @@
  *             for setsPeak. A retried or racing next-question for the same round
  *             carries the same number and bounces. The OLD value (UPDATED_OLD)
  *             says whether this was the session's first served round.
- *   answer    the caller passes what its own Put overwrote (ReturnValues
- *             ALL_OLD). A resubmitted answer overwrites its row, so it arrives
- *             with a `previous` and is not counted again.
+ *   answers   counted PER ROUND, not per answer, when the host moves on
+ *             (next-question.js, before it serves the next round or ends the
+ *             session): one COUNT query over the round's answer rows, then one
+ *             ADD. A changed answer overwrites its row, so it is one row. A
+ *             second high-water mark, `MetricsAnswersCounted`, makes a retried
+ *             or racing press count the round once.
+ *
+ * WHY PER ROUND. Per answer it was four calls for every person on every
+ * question — the round's REF row, the question's category, two ADDs — all
+ * answering the same question for everyone in the room, and every answer on the
+ * platform writing the same monthly row. Per round it is three calls however
+ * big the room is, and nothing extra runs while people are answering. The
+ * round's category is worked out once, when it is served, and kept on METADATA
+ * (`MetricsRoundBucket`) for the close to reuse.
+ *
+ * THE ONE GAP, accepted: a session abandoned mid-question never has that last
+ * question closed, so its answers are not counted. At most one round per
+ * abandoned session, and answer rows expire in 7 days, so it cannot be
+ * recovered later either.
  *
  * The markers live on METADATA because a session code is reused once its
  * reservation expires, and the next session's create PUTS a fresh METADATA
@@ -70,16 +87,16 @@
  * ── IT NEVER THROWS, AND NEVER BLOCKS WHAT IT RIDES ON ─────────────────────
  *
  * Every export catches everything, logs, and returns a small result object.
- * These calls sit inside the create, the start, the round and the answer — a
- * metrics write that could fail any of those would be a room stopped for a
- * dashboard. Losing a count is strictly better.
+ * These calls sit inside the create, the start and the round — a metrics
+ * write that could fail any of those would be a room stopped for a dashboard.
+ * Losing a count is strictly better. Nothing here runs on the answer path.
  *
  * TRIPLICATED, BYTE FOR BYTE: lambda-functions/game/platform-metrics.js,
  * lambda-functions/websocket/platform-metrics.js and
  * lambda-functions/admin/shared/platform-metrics.js — CodeUri is per-directory
- * and there are no layers. game/ serves rounds and starts, websocket/ creates
- * sessions and stores answers, admin/ reads it all back for the platform
- * console. tests/platform-metrics.js fails the build if the copies drift.
+ * and there are no layers. game/ starts sessions and serves and closes
+ * rounds, websocket/ creates sessions, admin/ reads it all back for the
+ * platform console. tests/platform-metrics.js fails the build if the copies drift.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -103,6 +120,9 @@ const TEAM_SETS_KEY = 'org';
 /** The attributes this module keeps on a session's METADATA row. */
 const STARTED_MARKER = 'MetricsStartedAt';
 const ROUNDS_MARKER = 'MetricsRoundsServed';
+const ANSWERS_MARKER = 'MetricsAnswersCounted';
+/** The served round's bucket, kept for the close: { key, label, library }. */
+const BUCKET_ATTR = 'MetricsRoundBucket';
 
 /** Tests inject a db, a table and a clock; production reads env per call. */
 function ctx(opts = {}) {
@@ -185,8 +205,8 @@ async function bumpMonth(c, counters) {
   }));
 }
 
-/** ADD one to `attr` on this month's row for the bucket. */
-async function bumpCategory(c, bucket, attr) {
+/** ADD `n` (default one) to `attr` on this month's row for the bucket. */
+async function bumpCategory(c, bucket, attr, n = 1) {
   const period = periodOf(c.now);
   await c.db.send(new UpdateCommand({
     TableName: c.tableName,
@@ -196,7 +216,7 @@ async function bumpCategory(c, bucket, attr) {
       '#n': attr, '#label': 'label', '#library': 'library', '#period': 'period',
     },
     ExpressionAttributeValues: {
-      ':one': 1, ':label': bucket.label, ':library': bucket.library, ':p': period,
+      ':one': n, ':label': bucket.label, ':library': bucket.library, ':p': period,
     },
   }));
 }
@@ -209,7 +229,7 @@ function swallow(what, error) {
   return { counted: false, reason: 'error' };
 }
 
-// ── The four recorders ─────────────────────────────────────────────────────
+// ── The recorders ─────────────────────────────────────────────────────
 
 /** A host created a session. Call once, after the create succeeded. */
 async function recordSessionCreated(_args = {}, opts = {}) {
@@ -266,15 +286,24 @@ async function recordRoundServed({ gameId, round, set, questionId } = {}, opts =
     const n = Math.trunc(Number(round));
     if (!id || !Number.isFinite(n) || n < 1) return { counted: false, reason: 'no-round' };
 
+    // Worked out ONCE per round, here, and kept on METADATA beside the marker
+    // so the close (recordRoundClosed) counts the answers under it without
+    // reading the question again.
+    const bucket = await bucketForQuestion(c, {
+      scope: set && set.scope,
+      contentPk: set && set.pk,
+      questionId,
+    });
+
     let firstForSession;
     try {
       const res = await c.db.send(new UpdateCommand({
         TableName: c.tableName,
         Key: { PK: `GAME#${id}`, SK: 'METADATA' },
-        UpdateExpression: 'SET #r = :n',
+        UpdateExpression: 'SET #r = :n, #b = :bucket',
         ConditionExpression: 'attribute_exists(PK) AND (attribute_not_exists(#r) OR #r < :n)',
-        ExpressionAttributeNames: { '#r': ROUNDS_MARKER },
-        ExpressionAttributeValues: { ':n': n },
+        ExpressionAttributeNames: { '#r': ROUNDS_MARKER, '#b': BUCKET_ATTR },
+        ExpressionAttributeValues: { ':n': n, ':bucket': bucket },
         ReturnValues: 'UPDATED_OLD',
       }));
       const old = res && res.Attributes ? res.Attributes[ROUNDS_MARKER] : undefined;
@@ -284,11 +313,6 @@ async function recordRoundServed({ gameId, round, set, questionId } = {}, opts =
       throw error;
     }
 
-    const bucket = await bucketForQuestion(c, {
-      scope: set && set.scope,
-      contentPk: set && set.pk,
-      questionId,
-    });
     await Promise.all([
       bumpMonth(c, { roundsServed: 1, sessionsServed: firstForSession ? 1 : 0 }),
       bumpCategory(c, bucket, 'rounds'),
@@ -300,55 +324,112 @@ async function recordRoundServed({ gameId, round, set, questionId } = {}, opts =
 }
 
 /**
- * websocket/message.js stored an answer.
+ * The bucket a round's question belongs to, from its REF row — the fallback
+ * for a round served before its bucket was kept on METADATA.
+ */
+async function bucketForRound(c, gameId, round) {
+  const q = String(round).padStart(3, '0');
+  const refRes = await c.db.send(new GetCommand({
+    TableName: c.tableName,
+    Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${q}#REF` },
+    ProjectionExpression: 'SourceQuestionId, SetId, SetScope, SetOrgId, SetVersion',
+  }));
+  const ref = (refRes && refRes.Item) || null;
+  if (!ref) return bucketFor('', '');
+  // A REF written before scope pinning carries no SetScope and reads as
+  // platform — unless it names an org, which is the safe reading.
+  const scope = clean(ref.SetScope) || (clean(ref.SetOrgId) ? 'org' : PLATFORM);
+  let contentPk = '';
+  if (scope === PLATFORM || scope === PUBLIC) {
+    try {
+      contentPk = setContentPk(scope, '', ref.SetId, ref.SetVersion);
+    } catch {
+      contentPk = '';
+    }
+  }
+  return bucketForQuestion(c, { scope, contentPk, questionId: ref.SourceQuestionId });
+}
+
+/**
+ * A bucket kept on METADATA, re-derived rather than trusted: anything but a
+ * platform or public bucket is the one unnamed teams' bucket.
+ */
+function keptBucket(stored) {
+  if (!stored || typeof stored !== 'object') return null;
+  if (stored.library === 'platform') return bucketFor(PLATFORM, stored.label);
+  if (stored.library === 'public') return bucketFor(PUBLIC, stored.label);
+  return bucketFor('', '');
+}
+
+/** How many answer rows round `round` holds: one per person who answered. */
+async function countAnswers(c, gameId, round) {
+  const prefix = `QUESTION#${String(round).padStart(3, '0')}#ANSWER#`;
+  let total = 0;
+  let ExclusiveStartKey;
+  do {
+    const page = await c.db.send(new QueryCommand({
+      TableName: c.tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': prefix },
+      // COUNT: no answer row — a person's words, under their team's key —
+      // enters this function. Only the number does.
+      Select: 'COUNT',
+      ExclusiveStartKey,
+    }));
+    total += Math.max(0, Math.trunc(Number(page && page.Count) || 0));
+    ExclusiveStartKey = page && page.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return total;
+}
+
+/**
+ * next-question.js is moving the room on from round `round` — to the next
+ * question or to the end. Count that round's answers, once.
  *
  * @param {object} args
  * @param {string} args.gameId
- * @param {string} args.questionNumber  the padded round number, e.g. '004'
- * @param {object} [args.previous]      what the Put overwrote (ALL_OLD). Present
- *                                      means a resubmission: not counted again.
+ * @param {number} args.round     the round being left (LessonNumber)
+ * @param {object} [args.metadata] the METADATA item the caller already read;
+ *                                 carries the round's kept bucket and markers
  */
-async function recordAnswerStored({ gameId, questionNumber, previous } = {}, opts = {}) {
+async function recordRoundClosed({ gameId, round, metadata } = {}, opts = {}) {
   try {
-    if (previous && typeof previous === 'object' && Object.keys(previous).length) {
-      return { counted: false, reason: 'resubmitted' };
-    }
     const c = ctx(opts);
     const id = clean(String(gameId || ''));
-    const q = clean(String(questionNumber || ''));
-    if (!id || !q) return { counted: false, reason: 'no-question' };
+    const n = Math.trunc(Number(round));
+    if (!id || !Number.isFinite(n) || n < 1) return { counted: false, reason: 'no-round' };
+    const meta = metadata && typeof metadata === 'object' ? metadata : {};
+    // The caller's own read already says whether this round was counted: a
+    // repeat press costs nothing.
+    if (Number(meta[ANSWERS_MARKER]) >= n) return { counted: false, reason: 'already' };
 
-    // The REF row says which set and question this round served. Its scope
-    // decides the bucket before anything else is read.
-    const refRes = await c.db.send(new GetCommand({
-      TableName: c.tableName,
-      Key: { PK: `GAME#${id}`, SK: `QUESTION#${q}#REF` },
-      ProjectionExpression: 'SourceQuestionId, SetId, SetScope, SetOrgId, SetVersion',
-    }));
-    const ref = (refRes && refRes.Item) || null;
-    let bucket = bucketFor('', '');
-    if (ref) {
-      // A REF written before scope pinning carries no SetScope and reads as
-      // platform — unless it names an org, which is the safe reading.
-      const scope = clean(ref.SetScope) || (clean(ref.SetOrgId) ? 'org' : PLATFORM);
-      let contentPk = '';
-      if (scope === PLATFORM || scope === PUBLIC) {
-        try {
-          contentPk = setContentPk(scope, '', ref.SetId, ref.SetVersion);
-        } catch {
-          contentPk = '';
-        }
-      }
-      bucket = await bucketForQuestion(c, { scope, contentPk, questionId: ref.SourceQuestionId });
+    // Count BEFORE claiming, so a failed count leaves the round unclaimed and
+    // the next press can count it.
+    const answers = await countAnswers(c, id, n);
+    try {
+      await c.db.send(new UpdateCommand({
+        TableName: c.tableName,
+        Key: { PK: `GAME#${id}`, SK: 'METADATA' },
+        UpdateExpression: 'SET #a = :n',
+        ConditionExpression: 'attribute_exists(PK) AND (attribute_not_exists(#a) OR #a < :n)',
+        ExpressionAttributeNames: { '#a': ANSWERS_MARKER },
+        ExpressionAttributeValues: { ':n': n },
+      }));
+    } catch (error) {
+      if (isConditionFailure(error)) return { counted: false, reason: 'already' };
+      throw error;
     }
+    if (!answers) return { counted: true, answers: 0 };
 
+    const kept = Number(meta[ROUNDS_MARKER]) === n ? keptBucket(meta[BUCKET_ATTR]) : null;
+    const bucket = kept || await bucketForRound(c, id, n);
     await Promise.all([
-      bumpMonth(c, { answersStored: 1 }),
-      bumpCategory(c, bucket, 'answers'),
+      bumpMonth(c, { answersStored: answers }),
+      bumpCategory(c, bucket, 'answers', answers),
     ]);
-    return { counted: true, library: bucket.library };
+    return { counted: true, answers, library: bucket.library };
   } catch (error) {
-    return swallow('answer', error);
+    return swallow('round closed', error);
   }
 }
 
@@ -438,7 +519,7 @@ module.exports = {
   recordSessionCreated,
   recordSessionStarted,
   recordRoundServed,
-  recordAnswerStored,
+  recordRoundClosed,
   readRecordedMetrics,
   averageRounds,
   bucketFor,
@@ -449,4 +530,6 @@ module.exports = {
   TEAM_SETS_LABEL,
   STARTED_MARKER,
   ROUNDS_MARKER,
+  ANSWERS_MARKER,
+  BUCKET_ATTR,
 };

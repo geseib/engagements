@@ -226,6 +226,8 @@ describe('what each number means', () => {
     expect(defs).toHaveTextContent(/Questions ÷ sessions that put at least one question on screen, that month/);
     expect(defs).toHaveTextContent(/Questions a set holds but nobody reached are not counted/);
     expect(defs).toHaveTextContent(/Changing an answer does not count again/);
+    // rejects: a definition that hides when answers land — per round, on moving on.
+    expect(defs).toHaveTextContent(/counted when the host moves on from it/);
   });
 
   // rejects: a plan column that does not say which sessions count. The owner,

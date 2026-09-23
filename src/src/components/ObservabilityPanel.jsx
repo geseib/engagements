@@ -240,7 +240,7 @@ const DEFINITIONS = [
   ['Counted', 'Sessions that counted toward a team’s plan that month: two of their questions were answered. Rehearsals and false starts are not here. Summed across every organisation.'],
   ['Questions', 'A question counts when it is put on screen, once per session. Questions a set holds but nobody reached are not counted.'],
   ['Per session', 'Questions ÷ sessions that put at least one question on screen, that month.'],
-  ['Answers', 'One per person per question. Changing an answer does not count again.'],
+  ['Answers', 'One per person per question, counted when the host moves on from it. Changing an answer does not count again.'],
 ];
 
 export default function ObservabilityPanel() {

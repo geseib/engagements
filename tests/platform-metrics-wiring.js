@@ -9,7 +9,9 @@
  *   started   game/session-start.js        both doors: POST start, and
  *                                          next-question from CREATED
  *   served    game/next-question.js        each round put on screen
- *   answered  websocket/message.js         each NEW answer row
+ *   answers   game/next-question.js        a round's answer rows, counted once
+ *                                          when the host moves on — nothing
+ *                                          runs on the answer path itself
  *
  * A usage meter that was defined and never called is exactly what shipped once
  * already here: recordBillableSession had no call site for a month
@@ -154,26 +156,43 @@ const answer = (gameId, playerName, text, q = '001') => wsMessage({
     assert.strictEqual(month().roundsServed, 1);
   });
 
-  say('\n4. answers arrive');
+  say('\n4. answers arrive, and are counted when the host moves on');
   await answer(gameId, 'Ada', 'first thought');
   await answer(gameId, 'Bob', 'another view');
-  // rejects: message.js not calling recordAnswerStored after the Put.
-  await check('two players answering is two answers', () => {
+  // rejects: counting on the answer path — four calls for every person on
+  // every question, the pattern this replaced (the owner chose per round).
+  await check('answering writes no metrics at all', () => {
+    assert.strictEqual(month().answersStored, undefined);
+    assert.strictEqual(category('platform#pricing').answers, undefined);
+  });
+  await answer(gameId, 'Ada', 'second thought');         // overwrites her row
+
+  const second = await press(gameId, { action: 'skip' });
+  // rejects: next-question.js not calling recordRoundClosed as it moves on.
+  await check('moving on counts the round: two people, two answers', () => {
+    assert.strictEqual(second.statusCode, 200, second.body);
     assert.strictEqual(month().answersStored, 2);
     assert.strictEqual(category('platform#pricing').answers, 2);
   });
-  // rejects: the answer Put not asking for ALL_OLD, which makes every
-  // resubmission look new.
-  await check('Ada changing her answer does not count again', async () => {
-    await answer(gameId, 'Ada', 'second thought');
+  // rejects: counting submissions rather than rows — Ada answered twice.
+  await check('Ada changing her answer is still one answer', () => {
     assert.strictEqual(month().answersStored, 2);
   });
-
-  const second = await press(gameId, { action: 'skip' });
   await check('round two is a second question, from the SAME session', () => {
-    assert.strictEqual(second.statusCode, 200, second.body);
     assert.strictEqual(month().roundsServed, 2);
     assert.strictEqual(month().sessionsServed, 1);
+  });
+
+  await answer(gameId, 'Cy', 'a third view', '002');
+  await press(gameId, { action: 'skip' });                // round three
+  await answer(gameId, 'Dee', 'last word', '003');
+  const end = await press(gameId, { action: 'skip' });    // nothing left: ENDED
+  // rejects: closing rounds only on the way to another question — the last
+  // round of every finished session would never be counted.
+  await check('the last round is counted when the session ends', () => {
+    assert.strictEqual(JSON.parse(end.body).gameEnded, true, end.body);
+    assert.strictEqual(month().answersStored, 4);
+    assert.strictEqual(month().roundsServed, 3);
   });
 
   say('\n5. the lobby door starts it too');
@@ -186,14 +205,14 @@ const answer = (gameId, playerName, text, q = '001') => wsMessage({
     assert.strictEqual(month().sessionsCreated, 2);
     assert.strictEqual(month().sessionsStarted, 2);
     assert.strictEqual(month().sessionsServed, 2);
-    assert.strictEqual(month().roundsServed, 3);
+    assert.strictEqual(month().roundsServed, 4);
   });
 
   say('\n6. what the counters hold');
   // rejects: a session title, org id or answer riding into a metrics row.
   await check('no metrics row carries a title, an org, a session code or an answer', () => {
     const text = JSON.stringify([...store.values()].filter((r) => r.PK === M.METRICS_PK));
-    for (const s of [SECRET, ACME, gameId, lobbyGame, 'first thought', 'Ada']) {
+    for (const s of [SECRET, ACME, gameId, lobbyGame, 'first thought', 'last word', 'Ada']) {
       assert.ok(!text.includes(s), `a metrics row contains ${JSON.stringify(s)}`);
     }
   });
@@ -206,10 +225,15 @@ const answer = (gameId, playerName, text, q = '001') => wsMessage({
     ['lambda-functions/websocket/create-game.js', 'recordSessionCreated'],
     ['lambda-functions/game/session-start.js', 'recordSessionStarted'],
     ['lambda-functions/game/next-question.js', 'recordRoundServed'],
-    ['lambda-functions/websocket/message.js', 'recordAnswerStored'],
+    ['lambda-functions/game/next-question.js', 'recordRoundClosed'],
   ]) {
     await check(`${file} calls ${fn} exactly once`, () => assert.strictEqual(calls(file, fn), 1));
   }
+  // rejects: metrics creeping back onto the answer path.
+  await check('websocket/message.js does not touch platform-metrics', () => {
+    const src = fs.readFileSync(path.join(REPO, 'lambda-functions/websocket/message.js'), 'utf8');
+    assert.ok(!/require\(['"]\.\/platform-metrics['"]\)/.test(src), 'message.js requires platform-metrics');
+  });
   await check('start-game.js does not count on its own — session-start.js does, for both doors', () => {
     assert.strictEqual(calls('lambda-functions/game/start-game.js', 'recordSessionStarted'), 0);
   });
