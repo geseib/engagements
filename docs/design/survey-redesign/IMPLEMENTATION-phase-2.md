@@ -1,10 +1,18 @@
-# Surveys — Phase 2 implementation plan (DRAFT — starts after Phase 1 is on test)
+# Surveys — Phase 2 implementation plan (started 2026-09-23; Phase 1 is on test at 1f8dd04b)
 
-> Drafted 2026-09-23 by a read-only planning pass over `working/survey-phase-0-1`.
-> Re-verify line numbers against `origin/dev` before each track starts: dev had
-> moved 5 commits ahead (notably `83f71ded`: `websocket/session-count.js` bills
-> a session at its second answered question, called from `message.js:549`; and
-> `startSession` now also runs from next-question's CREATED path).
+> Drafted 2026-09-23 by a read-only planning pass over `working/survey-phase-0-1`;
+> re-based on `origin/dev` 945c55e3 the same day (branch `working/survey-phase-2`).
+> Two facts dev added since the draft, both folded in below:
+> - **Billing**: `websocket/session-count.js` bills a session at its second
+>   answered question, called only from `message.js:551`, and
+>   `tests/billable-session-wiring.js:618-633` holds it the ONLY caller of
+>   `recordBillableSession`. A survey PUT must call a guarded-identical `game/`
+>   copy (`game/usage.js` already exists), and that test widens to both copies.
+> - **Platform metrics**: answers are counted per round when next-question moves
+>   the room on (`recordRoundClosed`, `game/platform-metrics.js:395`, called at
+>   `next-question.js:1090`), by counting `QUESTION#nnn#ANSWER#` rows. A survey
+>   has no rounds and never calls next-question, so it needs its own two
+>   recorders (Track A, "Metrics" below) or it is invisible on the console.
 > Test-first throughout (superpowers:test-driven-development). Never write either
 > deploy phrase `tests/no-retired-twin-references.js` bans.
 
@@ -182,15 +190,19 @@ rank `{n,avgPlace,firsts,placeHist}` — **unplaced items share the mean of the 
 places** (the only rule under which the mockup's averages sum to 15); text `{n,answerIds}`.
 Text ids `<qid>:<k>` after a deterministic shuffle (ids never carry respondent order).
 
-## 3. Step 0 (main session)
-- `src/src/config/surveyNames.js` (ESM): `NAMES_MODES` (`id,label,hostLine,phoneLine`
-  verbatim from `_src/content.py:147-154`, `wallLine`, `does`), `NAMES_DEFAULT`,
-  `namesPayloadFor({gameType,names})` (survey only).
+## 3. Step 0 (main session) — DONE
+- `src/src/config/surveyNames.js` (ESM): `NAMES_MODES` (`id,label,hostLine,does,
+  phoneLead,phoneLine,wallLine`; phone lines verbatim from p-01/p-11/p-12),
+  `NAMES_DEFAULT`, `namesMode(id)` (unknown → default), `namesPayloadFor({gameType,names})`
+  (survey only). Every sentence a person reads about a Names value lives here once.
 - `lambda-functions/game/survey-names.js` (CJS): `NAMES`, `NAMES_DEFAULT`,
   `normalizeNames()`, `SURVEY_OPEN`, `SURVEY_CLOSED`.
-- `tests/survey-names-agree.js` (reads the ESM as text, like `feedback-round-beat.js`).
-- **Owner wording needed:** the "does" line for Anonymous and Named (the mockups
-  only wrote Who finished's) — derive from 40-data-model's "Host gets" and confirm.
+- `tests/survey-names-agree.js` (reads the ESM as text); `src/src/__tests__/surveyNames.test.js`.
+- The "does" lines for Anonymous and Named were derived from 40-data-model's "Host
+  gets" (the mockups wrote only Who finished's): Anonymous "Nobody is recorded.
+  You'll see totals and the words people write, never who wrote them."; Named "Each
+  answer is kept with the person's name. You'll see who said what in the console and
+  the CSV. The wall, the shared link and the report never show a name." 
 
 ## 4. Tracks (parallel after Step 0)
 
@@ -214,6 +226,14 @@ cleanup), `survey-answers.js` (player handler, routeKey routing like `comments.j
 `tests/helpers/player-table.js` gains `TransactWriteCommand` (ConditionCheck, Put,
 Update, atomic) and ConsistentRead/`LastEvaluatedKey` paging (today Get/Put/Query/
 Delete/Update/BatchGet only, `:290-295`).
+**Metrics** (`platform-metrics.js`, all copies, guarded as today): `recordSurveyOpened
+({gameId, questions, set, questionId})` — once per session (the same METADATA marker
+condition as `recordRoundServed`), `sessionsServed +1`, `roundsServed +questions` (a
+survey serves every question at once), bucket kept on METADATA; `recordSurveyClosed
+({gameId, answers, metadata})` — once (the `ANSWERS_MARKER` condition), `answersStored
++answers` where answers = Σ per-question `n` from the aggregate. Called from start (survey
+branch) and close; both swallow errors like the round recorders. Extend
+`tests/platform-metrics.js` / `-wiring.js`.
 Tests `tests/survey-answers.js`: idempotent overwrite (one row, one Answered entry,
 one progress frame); partial answers count (A q1+q2 unsent, B q1 sent → q1.n=2,
 q2.n=1, N=2, Finished=1); closed rejects (PUT after close 409; PUT interleaved with
