@@ -146,7 +146,7 @@ function MonthTable({ months, countingSince }) {
         <>
           <p className="pobs-cap">
             {countingSince ? <>Counted since <strong>{dateLabel(countingSince)}</strong>. </> : null}
-            “Toward plans” is each team’s plan meter, summed across organisations.
+            “Counted” is sessions that counted toward a team’s plan, summed across organisations.
           </p>
           <div className="pobs-tablewrap">
             <table className="pobs-tbl" aria-labelledby="pobs-months">
@@ -155,7 +155,7 @@ function MonthTable({ months, countingSince }) {
                   <th scope="col">Month</th>
                   <th scope="col" className="pobs-col-num pobs-num">Created</th>
                   <th scope="col" className="pobs-col-num pobs-num">Started</th>
-                  <th scope="col" className="pobs-col-num pobs-num" title="Counted toward plans">Toward plans</th>
+                  <th scope="col" className="pobs-col-num pobs-num" title="Counted toward a plan: two questions answered">Counted</th>
                   <th scope="col" className="pobs-col-num pobs-num">Questions</th>
                   <th scope="col" className="pobs-col-num pobs-num">Per session</th>
                   <th scope="col" className="pobs-col-num pobs-num">Answers</th>
@@ -237,7 +237,7 @@ function CategoryTable({ categories, countingSince }) {
 const DEFINITIONS = [
   ['Created', 'A host made a session, whether or not it was ever played.'],
   ['Started', 'A session left the lobby — Start, or its first question from the remote. Once per session.'],
-  ['Toward plans', 'What each team’s Plan & usage counted that month, summed across every organisation.'],
+  ['Counted', 'Sessions that counted toward a team’s plan that month: two of their questions were answered. Rehearsals and false starts are not here. Summed across every organisation.'],
   ['Questions', 'A question counts when it is put on screen, once per session. Questions a set holds but nobody reached are not counted.'],
   ['Per session', 'Questions ÷ sessions that put at least one question on screen, that month.'],
   ['Answers', 'One per person per question. Changing an answer does not count again.'],

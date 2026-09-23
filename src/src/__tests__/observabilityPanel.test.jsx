@@ -227,6 +227,19 @@ describe('what each number means', () => {
     expect(defs).toHaveTextContent(/Questions a set holds but nobody reached are not counted/);
     expect(defs).toHaveTextContent(/Changing an answer does not count again/);
   });
+
+  // rejects: a plan column that does not say which sessions count. The owner,
+  // 2026-09-23: a session counts once two of its questions have been answered
+  // (websocket/session-count.js); a rehearsal is not a session.
+  it('names the counted column and states the two-question rule', async () => {
+    serve(FULL);
+    render(<ObservabilityPanel />);
+    const table = await loaded();
+    expect(within(table).getByRole('columnheader', { name: 'Counted' })).toBeInTheDocument();
+    const defs = screen.getByRole('region', { name: /what each number means/i });
+    expect(defs).toHaveTextContent(/two of their questions were answered/);
+    expect(defs).toHaveTextContent(/Rehearsals and false starts are not here/);
+  });
 });
 
 describe('when the server refuses', () => {
