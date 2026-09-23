@@ -621,6 +621,24 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && SURVEY_HOST_READ.test(path)) {
     return ['hosts', 'admins'];
   }
+  // ── THE RUNNING ORDER'S HOST READS ───────────────────────────────────────
+  //
+  // `GET /games/{gameId}/up-next`, `/queue` and `/exclusions` each list
+  // questions the room has NOT been asked yet — on a trivia round, most of the
+  // way to the answers. Same shape as the survey reads above: they carry the
+  // Cognito authorizer, fell through to "GET + games is public", and so let
+  // any account in the pool through, `pending` included. The handlers' own
+  // callerMayDriveSession could not stop it: it allows every caller on a
+  // session with no orgId, and reads an account in no group as an anonymous
+  // participant on every session. Their POSTs were already host-only (below).
+  //
+  // Named exactly, template AND concrete path, never a prefix: every other
+  // GET under games/{gameId}/ is the participant journey.
+  // tests/session-control-routes-authorization.js holds both sides.
+  const RUNNING_ORDER_HOST_READ = /^games\/[^/]+\/(up-next|queue|exclusions)$/;
+  if (method === 'GET' && RUNNING_ORDER_HOST_READ.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // THE STORED REPORT, `GET /games/{gameId}/report`. Closed 2026-09-23: it was
   // public, and `?role=host` handed anyone the whole decrypted room. Named here
   // for the same reason `GET games` is above — the generic "GET + games is

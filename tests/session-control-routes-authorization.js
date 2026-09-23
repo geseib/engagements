@@ -106,6 +106,15 @@ const MUST_BE_CLOSED = [
   // The stored report. It was on the list below as a participant read; it is
   // not one — `?role=host` returned the whole room (tests/get-report-authorization.js).
   ['GET', '/games/{gameId}/report'],
+  // THE RUNNING ORDER. Each names questions the room has NOT been asked yet —
+  // on a trivia round, most of the way to the answers. All three carried the
+  // authorizer and then fell through to "GET + games is public", so any account
+  // in the pool passed, `pending` included; the handlers' callerMayDriveSession
+  // lets any caller through on a session with no orgId. Filed by the survey
+  // phase 2 plan (§5 risk 8) and closed the same way as the survey host reads.
+  ['GET', '/games/{gameId}/up-next'],
+  ['GET', '/games/{gameId}/queue'],
+  ['GET', '/games/{gameId}/exclusions'],
 ];
 
 // The participant journey. None of these carries a token, ever.
@@ -159,6 +168,12 @@ for (const [method, p] of MUST_BE_CLOSED) {
   check(`${method} ${bare} refuses a pending account`, () =>
     assert.strictEqual(hasPermission(['pending'], requiredGroupsForRoute(method, bare)), false,
       'an unapproved signup could drive live sessions'));
+  // An account in NO group is the sharper case: callerMayDriveSession reads an
+  // empty group list as an anonymous participant and waves it through on every
+  // session, org-owned ones included. Only the authorizer can stop it.
+  check(`${method} ${bare} refuses an account in no group`, () =>
+    assert.strictEqual(hasPermission([], requiredGroupsForRoute(method, bare)), false,
+      'a groupless account would reach the handler, which then asks nothing'));
 }
 
 // The rawPath hazard, in the shape it takes here. `requiredGroupsForRoute`
@@ -190,6 +205,29 @@ for (const bare of ['games/1234/survey/people', 'games/1234/survey/progress']) {
 for (const p of ['games/{gameId}/survey', 'games/1234/survey']) {
   check(`GET ${p} stays public`, () =>
     assert.deepStrictEqual(requiredGroupsForRoute('GET', p), []));
+}
+
+// The running-order reads by concrete path, for the same rawPath reason.
+console.log('\n   and the running-order reads are not public by their concrete path');
+for (const bare of ['games/1234/up-next', 'games/1234/queue', 'games/1234/exclusions']) {
+  check(`GET ${bare} requires hosts or admins`, () =>
+    assert.deepStrictEqual(requiredGroupsForRoute('GET', bare), ['hosts', 'admins'],
+      `got ${JSON.stringify(requiredGroupsForRoute('GET', bare))} — any signed-in account could read the unasked questions`));
+}
+
+// EVERY participant GET stays `[]` in the authorizer, template and concrete.
+// They carry no authorizer today (§5), so this answer is not consulted — but a
+// rule written as a prefix, or a regex left unanchored, would change it, and
+// the day one of them gains an optional authorizer every phone would 401.
+console.log('\n   and no participant GET is caught by a host-read rule');
+for (const [method, p] of MUST_STAY_OPEN.filter(([m]) => m === 'GET')) {
+  const template = p.replace(/^\//, '');
+  const concrete = template.replace('{gameId}', '1234').replace('{playerId}', 'p-1');
+  for (const bare of [template, concrete]) {
+    check(`${method} ${bare} stays public`, () =>
+      assert.deepStrictEqual(requiredGroupsForRoute(method, bare), [],
+        `got ${JSON.stringify(requiredGroupsForRoute(method, bare))} — participants carry no token`));
+  }
 }
 
 // ---------- 4. The client half ----------
