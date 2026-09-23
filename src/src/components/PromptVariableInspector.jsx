@@ -444,9 +444,10 @@ const ALWAYS_EMPTY_NOTE =
 export function variableSamples(rawGameType, sizeId = DEFAULT_ROOM_SIZE) {
   const gameType = normalizeGameType(rawGameType);
   const vars = sampleTemplateVars(gameType, sizeId);
-  // No survey set can exist: upload-questions.js rejects survey uploads, so no
-  // survey round has ever been summarised and there is no emitted shape to
-  // copy. Saying so beats printing the catalogue's guess.
+  // No survey has ever been RUN: survey sets can be made since surveys phase 1,
+  // but no session plays one until phase 2, so no survey has been summarised
+  // and there is no emitted shape to copy. Saying so beats printing the
+  // catalogue's guess.
   const unknown = gameType === 'survey';
 
   return TEMPLATE_VARIABLES.map((v) => {
@@ -629,9 +630,9 @@ export default function PromptVariableInspector({
                         )}
                         {s.unknown ? (
                           <p className="pvi-nosample">
-                            <strong>No sample.</strong> No survey set can exist &mdash; the importer
-                            refuses survey uploads &mdash; so no survey round has ever been
-                            summarised and there is no emitted value to copy. The catalogue&rsquo;s
+                            <strong>No sample.</strong> No survey has been run in a session yet, so
+                            no survey has ever been summarised and there is no emitted value to
+                            copy. The catalogue&rsquo;s
                             description is a guess and is not shown here.
                           </p>
                         ) : (

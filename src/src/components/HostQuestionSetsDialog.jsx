@@ -920,10 +920,12 @@ export default function HostQuestionSetsDialog({
             <PollAIBuilder onClose={() => setBuilder(null)} onPollGenerated={finishBuilder} />
           )}
           {builder === 'survey' && (
-            /* Survey EXPORTS rather than uploading — upload-questions.js rejects
-               the type outright — so there is no set to re-read afterwards and
-               the button says so. Closing is the whole callback. */
-            <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={() => setBuilder(null)} />
+            /* THE PHASE 0 FIX (surveys phases 0+1, fix 2). This used to be
+               `() => setBuilder(null)`: survey only exported JSON, so closing
+               was the whole callback and a finished generation opened nothing.
+               The survey worker now creates a draft set like the other three,
+               so it finishes through the same finishBuilder. */
+            <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={finishBuilder} />
           )}
         </>
       )}

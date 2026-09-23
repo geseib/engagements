@@ -74,6 +74,8 @@ const HEADER_TO_FIELD = {
   title: 'Title',
   detail: 'Detail',
   questiondetail: 'Detail',
+  // What every download writes for call-and-answer, poll and survey.
+  detaillesson: 'Detail',
   school: 'School',
   custominstructions: 'CustomInstructions',
   custominstruction: 'CustomInstructions',
@@ -92,7 +94,50 @@ const HEADER_TO_FIELD = {
   difficulty: 'difficulty',
   options: 'options',
   allowmultiple: 'allowMultiple',
+  // The survey branch of the contract (docs/design/survey-redesign/
+  // IMPLEMENTATION-phase-0-1.md). toRow reads the capitalised spellings and
+  // types the strings (booleans, integers, the per-kind defaults).
+  kind: 'Kind',
+  required: 'Required',
+  maxpicks: 'MaxPicks',
+  allowother: 'AllowOther',
+  shuffle: 'Shuffle',
+  scale: 'Scale',
+  lowlabel: 'LowLabel',
+  highlabel: 'HighLabel',
+  yeslabel: 'YesLabel',
+  nolabel: 'NoLabel',
+  unsure: 'Unsure',
+  followupwhen: 'FollowUpWhen',
+  followupprompt: 'FollowUpPrompt',
+  ranktop: 'RankTop',
+  textlength: 'TextLength',
+  maxlength: 'MaxLength',
+  placeholder: 'Placeholder',
+  themes: 'Themes',
 };
+
+/*
+  A hand-made survey file, read as upload-questions.js reads it
+  (admin/shared/survey-kinds.js): yes / y / 1 are true, and a capitalised or
+  legacy kind (Rating, multiple_choice, text_entry, yes_no, ranking, nps) is
+  understood — toRow alone takes only the contract's own spellings.
+*/
+const SURVEY_BOOLEANS = ['Required', 'allowMultiple', 'AllowMultiple', 'AllowOther', 'Shuffle', 'Unsure', 'Themes'];
+const LEGACY_KIND = {
+  multiple_choice: 'choice', 'multiple-choice': 'choice', text_entry: 'text', 'text-entry': 'text',
+  yes_no: 'yesno', 'yes-no': 'yesno', ranking: 'rank',
+};
+function readSurveyCellsAsTheImporterDoes(source) {
+  SURVEY_BOOLEANS.forEach((field) => {
+    if (typeof source[field] !== 'string' || source[field].trim() === '') return;
+    source[field] = /^(true|yes|y|1)$/i.test(source[field].trim()) ? 'true' : 'false';
+  });
+  if (typeof source.Kind === 'string' && source.Kind.trim()) {
+    const kind = source.Kind.trim().toLowerCase();
+    if (kind === 'nps') { source.Kind = 'rating'; source.Scale = '0-10'; } else source.Kind = LEGACY_KIND[kind] || kind;
+  }
+}
 
 /** A CSV in the template's own columns → rows. `{ rows, error }`. */
 export function rowsFromCsv(text) {
@@ -107,6 +152,13 @@ export function rowsFromCsv(text) {
     .map((cells) => {
       const source = {};
       fields.forEach((field, i) => { if (field) source[field] = cells[i] ?? ''; });
+      // The file separates options with a pipe, as the importer reads them.
+      // Handing toRow the raw cell would let its tag splitter cut an option
+      // at every comma ("The case studies, with their numbers" became two).
+      if (typeof source.options === 'string') {
+        source.options = source.options.split('|').map((o) => o.trim()).filter(Boolean);
+      }
+      readSurveyCellsAsTheImporterDoes(source);
       return asNewRow(source);
     })
     .filter((row) => row.title);

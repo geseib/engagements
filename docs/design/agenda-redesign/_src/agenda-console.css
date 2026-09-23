@@ -1,0 +1,260 @@
+/* ===========================================================================
+   agenda-console.css — the event screens in the console, as a DIFF against
+   admin-redesign/_src/shell.css (inlined above, verbatim). Every class here
+   is prefixed ag- so it cannot collide with the shell's .chip / .seg / .field /
+   .top, nor with anything in styles.css or stage.css (checked: no .ag-, .ev-,
+   .event or .agenda selector exists in src/src or docs/design).
+
+   Type is the shell's ladder only (--t-floor 12 / label 13 / body 15 / head 19
+   / title 24 / numeral 30); rows are the shell's 36px. No colour is new: every
+   fill is a Warm Summit token or one of the shell's own rgba tints.
+
+   MEASURED against the shell's real stack (dusk, no black-lift — a laptop):
+     --text  #F4EDE4 on --surface #1B2942  12.53   on --bg #0F1A2E  14.97
+     --muted #B6C2D4 on --surface           8.08   on --bg          9.65
+     --primary #F6A94C on --surface         7.42   "Now", a newer version
+     #0F1A2E on --primary                   8.86   a selected option
+     --success-text #6FD0A4 on --surface    7.79   "Done", "Joined"
+     --danger-text #EF8C86 on --surface     6.08   "Bounced", a refusal
+     --text / --muted on row-sel (#F6A94C @10% over --bg = #262831)  12.64 / 8.15
+     --text / --muted on the picker's selected row #2A344A           10.71 / 6.90
+     --text / --muted on --surface-2 (the file chip)                 10.20 / 6.58
+     --text / --muted on the amber strips (the cap reason, the passcodes
+       just made: #F6A94C @8% over --surface = #2D3343)             10.85 / 7.00
+     --muted on the break row's tint (#B6C2D4 @3.5% over --surface)   7.55
+     the printed card (paper): #1B2942 14.56, #5E6167 6.21, the
+       passcode in #9A5B18 5.41 — all on #FFFFFF
+   ======================================================================== */
+
+/* ------------------------------------------------ the scrim that scrolls --
+   shell.css's .scrim centres with place-items:center, the pattern hard rule 10
+   bans (it has recurred four times). The event dialogs are tall — the deck
+   uploader lists thumbnails — so they use the shipped Modal's reachable shape:
+   flex-start + overflow-y on the scrim, margin:auto on the card. */
+.scrim.ag-scrim{display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 24px}
+.scrim.ag-scrim > .modal{margin:auto;max-height:none;overflow:visible}
+.modal.ag-modal{width:min(760px,100%)}
+.modal.ag-modal.wide{width:min(940px,100%)}
+.modal .ag-x{margin-left:auto}
+
+/* ------------------------------------------------------------ type chip --
+   An item's type carries an icon AND a word, everywhere (colour never alone).
+   One neutral chip: the types are not ranked, so none of them gets a colour.
+   A presentation differs by its dashed edge — nobody answers anything. */
+.ag-type{display:inline-flex;align-items:center;gap:5px;font-size:var(--t-floor);font-weight:600;
+  padding:2px 8px 2px 6px;border-radius:999px;border:1px solid var(--rule-strong);color:var(--text);
+  white-space:nowrap;line-height:1.5}
+.ag-type .ico{width:13px;height:13px;vertical-align:0;opacity:.9}
+.ag-type.slides{border-style:dashed}
+.ag-type.brk{border-color:transparent;color:var(--muted)}
+.ag-agenda tr.brk td{background:rgba(182,194,212,.035)}
+.ag-agenda tr.brk .nm{font-weight:500;color:var(--muted)}
+
+/* ------------------------------------------------------- the event facts --
+   Date, time, place, code, access: five facts, each said once, each with its
+   label. The code is the display numeral — the one a panel is allowed. */
+.ag-facts{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--rule);border-radius:var(--radius);
+  background:var(--surface);margin:0 0 14px}
+.ag-facts > div{padding:10px 16px;border-right:1px solid var(--rule);min-width:0;display:flex;flex-direction:column;gap:3px}
+.ag-facts > div:last-child{border-right:0}
+.ag-facts .grow{flex:1 1 auto}
+.ag-facts .lab{font-size:var(--t-floor);letter-spacing:.09em;text-transform:uppercase;font-weight:700}
+.ag-facts .v{font-size:var(--t-body);font-weight:600;white-space:nowrap}
+.ag-facts .v .dim{font-weight:400}
+.ag-facts .code{font:800 var(--t-numeral)/1 var(--font-display);letter-spacing:.08em;color:var(--primary)}
+.ag-facts .acts{flex-direction:row;align-items:center;gap:8px;margin-left:auto}
+.ag-lock{display:inline-flex;align-items:center;gap:6px}
+.ag-lock .ico{width:14px;height:14px;color:var(--primary)}
+
+/* ------------------------------------------------------- the agenda table --
+   The .tbl as shipped, plus a grip, a place number and a time column. Rows
+   are 48px, not 36: each carries a title and a source line, like the set list
+   (.nm + .sub), and the pair does not fit 36 at the 15/13 ladder. */
+.ag-agenda td{height:48px}
+.ag-agenda td.grip{color:var(--muted);text-align:center;padding:0;cursor:grab}
+.ag-agenda td.grip .ico{width:14px;height:14px;opacity:.55}
+.ag-agenda td.no{font:700 var(--t-label)/1 var(--font-ui);color:var(--muted);text-align:right;padding-right:4px}
+.ag-agenda td.at{font-weight:700;font-variant-numeric:tabular-nums}
+.ag-agenda td.at small{display:block;font-size:var(--t-floor);color:var(--muted);font-weight:600}
+.ag-agenda .rowact,.ag-hub .rowact{opacity:1;justify-content:flex-start;flex-wrap:wrap}
+.ag-agenda .rowact > :first-child,.ag-hub .rowact > :first-child{margin-left:auto}
+.ag-agenda .ico-btn{width:26px;padding:0;justify-content:center}
+.ag-agenda .ico-btn .ico{width:13px;height:13px}
+.ag-agenda tr.moving td{background:var(--row-sel)}
+.ag-agenda tr.moving td.grip{color:var(--primary)}
+.ag-agenda tfoot td{height:40px;border-bottom:0;font-size:var(--t-label);color:var(--muted)}
+.ag-agenda tfoot b{color:var(--text)}
+.ag-warn{color:var(--primary);font-size:var(--t-floor);font-weight:700;margin-left:6px}
+.ag-ver{font-size:var(--t-floor);color:var(--muted);font-weight:600}
+.ag-ver b{color:var(--primary);font-weight:700}
+
+/* The add menu: a popover under its button. Six types, each one sentence.
+   Grouped, because a presentation and an engagement are different kinds of
+   thing: one is watched, the others are answered. */
+.ag-menu{position:absolute;z-index:40;width:392px;background:var(--surface);border:1px solid var(--rule-strong);
+  border-radius:10px;box-shadow:0 20px 48px rgba(0,0,0,.5);padding:6px}
+.ag-menu h6{margin:8px 10px 4px;font-size:var(--t-floor);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.ag-menu button{display:flex;gap:11px;align-items:flex-start;width:100%;text-align:left;padding:8px 10px;
+  border:0;border-radius:7px;background:none;color:var(--text);font:inherit;cursor:pointer}
+.ag-menu button:hover,.ag-menu button.hi{background:var(--row-hover)}
+.ag-menu button[disabled]{opacity:.5;cursor:not-allowed}
+.ag-menu .ico{width:17px;height:17px;color:var(--primary);margin-top:1px}
+.ag-menu b{display:block;font-size:var(--t-body)}
+.ag-menu span{display:block;font-size:var(--t-label);color:var(--muted);line-height:1.4}
+.ag-menu hr{border:0;border-top:1px solid var(--rule);margin:5px 4px}
+/* The cap's reason: full contrast, above the disabled kinds it explains. A
+   disabled control is exempt from contrast rules; the sentence saying WHY is
+   not, so it is never drawn at the disabled opacity. */
+.ag-capnote{margin:2px 10px 8px;padding:8px 10px;border-left:3px solid var(--primary);border-radius:0 6px 6px 0;
+  background:rgba(246,169,76,.08);font-size:var(--t-label);color:var(--muted);line-height:1.45}
+.ag-capnote b{color:var(--text);font-weight:600}
+.ag-menu button[disabled] .ico{color:var(--muted)}
+
+/* ------------------------------------------------- the one-of-N option --
+   Radio rows for a choice that needs a sentence each (access, start from).
+   The whole row is the target; selected = amber edge + row-sel tint + the
+   native radio, never the tint alone. */
+.ag-opts{display:flex;flex-direction:column;gap:8px}
+.ag-opt{display:flex;gap:11px;align-items:flex-start;padding:11px 13px;border-radius:9px;
+  border:1px solid var(--rule-strong);background:var(--bg);cursor:pointer;color:var(--text)}
+.ag-opt:hover{border-color:var(--muted);background:var(--row-hover)}
+.ag-opt[aria-checked="true"]{border-color:var(--primary);background:var(--row-sel)}
+.ag-opt input{margin:2px 0 0}
+.ag-opt .ico{width:18px;height:18px;color:var(--primary);flex:none;margin-top:1px}
+.ag-opt b{display:block;font-size:var(--t-body);font-weight:700}
+.ag-opt span{display:block;font-size:var(--t-label);color:var(--muted);margin-top:2px;line-height:1.45}
+.ag-opts.row{flex-direction:row}
+.ag-opts.row .ag-opt{flex:1 1 0;min-width:0}
+.ag-opts--3 .ag-opt{padding:9px 12px}
+.ag-bill{display:flex;gap:10px;align-items:flex-start;margin:16px 0 0;max-width:none}
+.ag-bill .ico{width:16px;height:16px;flex:none;margin-top:2px;color:var(--text)}
+
+.ag-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ag-grid .span2{grid-column:span 2}
+.ag-grid .span4{grid-column:1 / -1}
+.ag-step + .ag-step{margin-top:16px}
+.ag-hint{font-size:var(--t-label);color:var(--muted);margin:6px 0 0;line-height:1.45}
+.ag-hint b{color:var(--text)}
+
+/* ------------------------------------------------------- the set picker --
+   The sets of ONE type, as a table (lists are tables, not cards), filtered by
+   the type the add menu chose. The version shown is the one that will play. */
+.ag-pick{border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--bg)}
+.ag-pick .tbl th{background:var(--bg)}
+.ag-pick .tbl td{background:var(--surface);height:40px}
+.ag-pick .tbl tr[aria-selected=true] td{background:#2A344A}
+.ag-pick .tbl td.r{width:34px;text-align:center;padding:0}
+.ag-len{display:flex;align-items:center;gap:8px}
+.ag-len .inp{width:78px;text-align:center}
+
+/* ------------------------------------------------ the reference copy -----
+   A presentation's optional PDF: one file row and one switch. Engage never
+   renders its pages (owner, 23 Sep, decision 8). */
+.ag-file{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;
+  background:var(--surface-2);margin:12px 0 0}
+.ag-file .nm{font-weight:600;min-width:0;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-file .dim{font-size:var(--t-label);white-space:nowrap}
+.field .ag-file{margin-top:4px}
+/* It sits inside .field, whose `> label` rule is the muted 600 label style;
+   a switch's label is body copy, so it restates weight, colour and spacing. */
+.field > label.ag-switch{display:flex;gap:9px;align-items:flex-start;margin:10px 0 0;cursor:pointer;
+  font-size:var(--t-body);font-weight:400;color:var(--text);letter-spacing:0}
+.ag-switch input{margin:3px 0 0}
+.ag-switch b{font-weight:600}
+.ag-switch .dim{display:block;font-size:var(--t-label)}
+
+/* ------------------------------------------------------------ the invite list */
+.ag-two{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:14px;align-items:start}
+.ag-two > .panel{margin:0}
+@media (max-width:1320px){.ag-two{grid-template-columns:1fr}}
+.ag-inv tr.walkin td{background:var(--row-sel)}
+.ag-inv td.say{height:auto;padding:0 10px 10px;background:var(--row-sel);white-space:normal}
+.ag-inv td.say .note-box{margin:0}
+.ag-inv td .st{display:inline-flex;align-items:center;gap:6px}
+.ag-paste{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
+.ag-paste textarea.inp{min-height:64px;font-family:var(--font-mono);font-size:14px}
+.ag-paste .acts{display:flex;flex-direction:column;gap:7px}
+.ag-tally{display:flex;gap:18px;flex-wrap:wrap;font-size:var(--t-label);color:var(--muted);align-items:baseline}
+.ag-tally b{font:800 var(--t-head)/1 var(--font-display);color:var(--text);margin-right:4px}
+.ag-code{font:700 14px/1 var(--font-mono);letter-spacing:.12em;color:var(--muted)}
+
+/* The passcodes just made: the one moment they exist in readable form. The
+   strip is the warn note-box's treatment (amber edge, amber tint), because it
+   is the one thing on the screen that decays if nobody acts on it. */
+.ag-fresh{margin:14px 0 0;border-left:3px solid var(--primary);background:rgba(246,169,76,.08);
+  border-radius:0 8px 8px 0;padding:10px 12px}
+.ag-fresh > p{margin:0 0 8px;font-size:var(--t-label);color:var(--muted);line-height:1.5}
+.ag-fresh > p b{color:var(--text)}
+.ag-fresh .tbl td{height:40px;background:transparent}
+.ag-fresh .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.ag-pass{font:700 17px/1 var(--font-mono);letter-spacing:.16em;color:var(--text)}
+
+/* What each person gets: the printable card, drawn as the card itself. It is
+   PAPER (it is printed), so it re-enters the paper theme's two colours —
+   #1B2942 on #FFFFFF 14.56:1, #5E6167 on #FFFFFF 6.21:1 — and the amber is
+   the paper-safe deep amber #9A5B18 (QuestionSetsPanel.css:592), 5.41:1. */
+.ag-card{background:#FFFFFF;color:#1B2942;border-radius:10px;padding:16px 18px;max-width:440px;
+  box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.ag-card-t{border-bottom:1px solid #E3DED4;padding-bottom:10px;margin-bottom:12px}
+.ag-card-t b{display:block;font:800 var(--t-head)/1.2 var(--font-display)}
+.ag-card-t span{display:block;font-size:var(--t-label);color:#5E6167;margin-top:3px}
+.ag-card-b{display:grid;grid-template-columns:112px minmax(0,1fr);gap:16px;align-items:center}
+.ag-card-qr{width:112px;height:112px;border:1px solid #E3DED4;border-radius:6px;padding:6px;background:#fff}
+.ag-card-qr svg{width:100%;height:100%;display:block}
+.ag-card dl{margin:0}
+.ag-card dt{font-size:var(--t-floor);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5E6167;margin-top:8px}
+.ag-card dt:first-child{margin-top:0}
+.ag-card dd{margin:2px 0 0;font-weight:700;font-size:var(--t-body)}
+.ag-card dd.code{font:800 var(--t-title)/1.1 var(--font-mono);letter-spacing:.12em}
+.ag-card dd.pc{color:#9A5B18}
+.ag-card > p{margin:12px 0 0;font-size:var(--t-label);color:#5E6167;line-height:1.45}
+
+/* ------------------------------------------------ the Team-plan-only page */
+.ag-teamonly{max-width:66ch}
+.ag-teamonly .glyph{color:var(--primary);opacity:.85}
+.ag-teamonly p b{color:var(--text)}
+
+/* ------------------------------------------------------------- the hub ---- */
+.ag-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--rule);
+  border-radius:var(--radius);background:var(--surface);margin:0 0 14px}
+.ag-stats > div{padding:12px 16px;border-right:1px solid var(--rule);min-width:0}
+.ag-stats > div:last-child{border-right:0}
+.ag-stats .lab{display:block;font-size:var(--t-floor);letter-spacing:.09em;text-transform:uppercase;font-weight:700;margin:0 0 4px}
+.ag-stats .v{font:800 var(--t-head)/1.1 var(--font-display)}
+.ag-stats .v.big{font-size:var(--t-numeral);color:var(--primary)}
+.ag-stats .v small{font:600 var(--t-label)/1 var(--font-ui);color:var(--muted);margin-left:4px}
+.ag-stats .s{display:block;font-size:var(--t-label);color:var(--muted);margin-top:3px}
+.ag-hub td{height:52px}
+.ag-day td b{font-weight:800}
+textarea.inp.ag-desc{min-height:58px}
+.ag-hub select.ag-see{height:32px;padding:4px 8px}
+.ag-hub select.ag-see.is-changed{border-color:var(--primary)}
+.ag-share{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:11px 14px;border-bottom:1px solid var(--rule);
+  background:var(--bg)}
+.ag-share .lab{font-size:var(--t-label);font-weight:600;color:var(--muted)}
+.ag-share .ag-hint{flex:1 1 420px;min-width:0}
+.ag-links{display:flex;gap:6px;flex-wrap:wrap}
+.ag-link{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;
+  border:1px solid var(--rule-strong);color:var(--text);font:600 var(--t-label)/1 var(--font-ui);
+  text-decoration:none;white-space:nowrap;background:transparent}
+.ag-link .ico{width:13px;height:13px;color:var(--muted)}
+.ag-link:hover{background:var(--row-hover);border-color:var(--muted)}
+.ag-link.gone{border-style:dashed;color:var(--muted)}
+.ag-hub button.chip{cursor:pointer;min-height:24px;background:transparent;font-family:inherit}
+
+/* ------------------------------------------------------------- data model */
+.ag-pre{margin:0;font:13px/1.55 var(--font-mono);color:var(--text);white-space:pre-wrap;word-break:break-word;
+  background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;overflow:auto}
+.ag-pre .k{color:var(--primary)}
+.ag-pre .s{color:var(--success-text)}
+.ag-pre .c{color:var(--muted)}
+.ag-key{font:13px/1.3 var(--font-mono);color:var(--primary)}
+.ag-dm{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:14px}
+.ag-dm .panel{margin:0}
+.ag-flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;margin:0 0 14px;
+  border:1px solid var(--rule);border-radius:var(--radius);background:var(--surface);overflow:hidden}
+.ag-flow .s{padding:10px 12px;border-right:1px solid var(--rule);font-size:var(--t-label);color:var(--muted);line-height:1.45;min-width:0}
+.ag-flow .s:last-child{border-right:0}
+.ag-flow .s b{display:block;color:var(--text);font-size:var(--t-body);margin:0 0 3px}
+.ag-flow code,.ag-dm code{font-family:var(--font-mono);font-size:12px;color:var(--primary)}
+.ag-dmt td.wrap{line-height:1.45;padding-top:7px;padding-bottom:7px;height:auto}

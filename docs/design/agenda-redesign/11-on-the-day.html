@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Before, during and after, on a phone</title>
+<style>
+
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#B6C2D4}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#B6C2D4;margin:4px 0 14px}
+.bd .arrow{align-self:center;font:800 24px/1 "Inter",system-ui,sans-serif;color:#F6A94C;padding:0 2px}
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<main class="bd">
+
+<h1>Before, during and after, on a phone</h1>
+<p class="lede">Before the day the agenda can be read and nothing can be done. Between items the phone rests on the agenda. During a talk it says &ldquo;look up&rdquo;, and during a break when to be back. When the host starts an engagement it switches by itself &mdash; one beat that names the item &mdash; into the mechanic that already ships. At the end the agenda becomes the list of what was shared.</p>
+<h2>Before the day</h2>
+<div class="row">
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-05a-before.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="The agenda, days aheadTimes, presenters, descriptions; every item Not started"></iframe></div><figcaption><b>The agenda, days ahead</b><span>Times, presenters, descriptions; every item Not started</span></figcaption></figure>
+<figure style="--w:640px"><div class="frame stage" style="width:640px;height:410px"><iframe src="p-05a-before.html" width="1280" height="820" style="transform:scale(0.5)" loading="lazy" title="The same page on a laptopThe player&rsquo;s laptop ladder; the gutter absorbs the width"></iframe></div><figcaption><b>The same page on a laptop</b><span>The player&rsquo;s laptop ladder; the gutter absorbs the width</span></figcaption></figure>
+</div>
+<h2>On the day</h2>
+<div class="row">
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-05-agenda.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Between itemsRest volume: no dock. Done / Next said in words"></iframe></div><figcaption><b>Between items</b><span>Rest volume: no dock. Done / Next said in words</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-06-watching.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="A talk is onWatch volume: look up; the slides copy, if shared"></iframe></div><figcaption><b>A talk is on</b><span>Watch volume: look up; the slides copy, if shared</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-09-break.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="A breakBack at 10:28, and what&rsquo;s next"></iframe></div><figcaption><b>A break</b><span>Back at 10:28, and what&rsquo;s next</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-07-switching.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="The host pressed Start trivia1.2 s, then the item&rsquo;s own lobby. No tap, no code"></iframe></div><figcaption><b>The host pressed Start trivia</b><span>1.2 s, then the item&rsquo;s own lobby. No tap, no code</span></figcaption></figure>
+</div>
+<h2>&hellip; and then it is today&rsquo;s player, unchanged</h2>
+<div class="row">
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="../player-redesign/05-lobby.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="The item&rsquo;s lobbyplayer-redesign/05 as approved, with its own sample session"></iframe></div><figcaption><b>The item&rsquo;s lobby</b><span>player-redesign/05 as approved, with its own sample session</span></figcaption></figure>
+<span class="arrow" aria-hidden="true">&rsaquo;</span>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="../player-redesign/06-ask-trivia.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="A trivia questionplayer-redesign/06 as approved, its own sample question"></iframe></div><figcaption><b>A trivia question</b><span>player-redesign/06 as approved, its own sample question</span></figcaption></figure>
+<span class="arrow" aria-hidden="true">&rsaquo;</span>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-08-ended.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="The day is overThe agenda, with reports, results and slides the host shared"></iframe></div><figcaption><b>The day is over</b><span>The agenda, with reports, results and slides the host shared</span></figcaption></figure>
+</div>
+</main>
+<aside class="mk-anno-rail" aria-label="Design notes">
+<h6>Design notes</h6>
+<div class="mk-anno"><b>The phone follows; it is never re-joined</b>Today a phone belongs to one session: <code>connect.js:9-11</code> takes a <code>gameId</code> and writes <code>GAME#&lt;id&gt;/CONNECTION#</code>. The event adds one row per phone under the event, and when an item starts the phone registers the same connection under the new session. <code>disconnect.js:14-20</code> already finds every row with that <code>CONNECTION#</code> key, so both go when the phone does.</div><div class="mk-anno"><b>Three volumes, as the player defines them</b>Rest (between items, the end): no dock, no amber. Watch (a presentation): the phone carries only what is personal. Act (an engagement): the item's own screens. The agenda adds no fourth.</div><div class="mk-anno"><b>One context at a time</b>The bar says &lsquo;Q4 Kickoff&rsquo; between items. Inside an item the item's own context wins (&lsquo;Question 4 of 10&rsquo;), which is why the two approved frames are shown unchanged: nothing in them needs to know it is part of an event.</div><div class="mk-anno"><b>The talk is not on the phone</b>Owner, 23 Sep: slides run from the presenter's own presentation mode; &lsquo;the only share is the copy for others to have and reference.&rsquo; So the watch screen names the talk and offers that copy &mdash; open or save, the one personal thing it can do. Shown only when the host left the copy shared (04, 07).</div><div class="mk-anno"><b>Reports follow the host's setting</b>Full by default, so the trivia reports link straight from the final agenda. Item 4 was switched to Anonymous, so its link says <b>no names</b> and serves the server-stripped PDF. Unsaved or unshared items show no link at all. &lsquo;You came 5th of 36&rsquo; is only ever on that person's own phone.</div><div class="mk-anno"><b>Before the day: readable, not active</b>Decision 11: people can visit the agenda beforehand and read each item's description; nothing can be answered, no survey opened, and no slides copy offered until the host starts that item on the day (then it stays). An open event's agenda is visible to anyone with the link; an invite-only event's only after the passcode &mdash; a proposal, flagged in RATIONALE.</div><div class="mk-anno"><b>Breaks and the day's place</b>A break says when to be back (decision 7). The day's standings (decision 6) are the sum of every scored item's points; each phone shows only its own place &mdash; &lsquo;4th on the day so far&rsquo;.</div><div class="mk-anno"><b>Planned times, labelled as such</b>The phone shows the agenda's planned times and never &lsquo;running late&rsquo;: the host decides the pace, and a printed agenda does not apologise either.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>

@@ -1194,14 +1194,15 @@ function GameHostPage() {
   /**
    * Switch Workie's summary approach mid-session. Like the voice: it applies
    * from the NEXT round, and Redo rewrites the one on screen. Written through
-   * PUT /games/{gameId}, which already scopes the caller to this session.
+   * its own route, PUT /games/{gameId}/prompt, as the voice uses /persona —
+   * never PUT /games/{gameId}, which refuses any session that has started.
    */
   const handleChangeGamePrompt = async (promptId) => {
     const previous = gamePromptId;
     setGamePromptId(promptId);
     setPromptSwitchStatus('Saving...');
     try {
-      const response = await authFetch(`${API_BASE}games/${gameId}`, {
+      const response = await authFetch(`${API_BASE}games/${gameId}/prompt`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ promptId: promptId || '' })

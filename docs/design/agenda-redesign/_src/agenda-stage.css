@@ -1,0 +1,113 @@
+/* ===========================================================================
+   agenda-stage.css — the event on the wall, as a DIFF against the audited
+   stage (stage-base.css + refresh-stage.css, inlined above). Every size reads
+   the profile ladder (--t-*, --floor) so Room / TV / Call / Table each get
+   their own literal numbers; every animation is refresh-stage.css's (wipe,
+   arrive) with its reduced-motion path; every colour is a Warm Summit token.
+   Nothing loops. New classes are prefixed ag-.
+
+   Reuse, not invention:
+     the way in      = .joinblock / .qr / .joininfo — "exactly one QR exists in
+                       the product and it lives here" (stage-base.css)
+     a presentation  = phase band and chip in the LOBBY treatment: nobody needs
+                       a phone, which is what the lobby band already means;
+                       the slides themselves never touch the stage
+     the trigger     = refresh-stage.css's .wipe, once, then the item's own
+                       lobby (.howto + the meter's count)
+   New shapes only where the stage has no ancestor: the wall agenda list and
+   the presenter line. Both are one element deep and ladder-sized.
+
+   MEASURED on the stage's own lifted stack (§4.3 black-lift, #2A3550):
+     --text on lifted #2A3550              10.49:1  agenda titles
+     --muted #B6C2D4 on lifted             6.76:1   times, type lines
+     --success-text on lifted              6.52:1   "Done"
+     --primary on lifted                   6.21:1   "Up next", the type line
+     on the now row (#F6A94C @10% over lifted = #3E4150):
+       --text 8.71 · --primary 5.15 · --muted 5.61
+     #14203A on --primary (the dock .btn)  8.25:1
+     --secondary #7CA7E6 on lifted         4.95:1   the rehearsal kicker
+       (label tier, uppercase 700 — clears AA; unlifted it is 6.59)
+   ======================================================================== */
+
+/* ----------------------------------------------------- the wall agenda --
+   Every item, in order, its state said in a WORD. Done items step back
+   (muted, a tick); the live or next one carries the amber edge. Titles wrap —
+   an agenda title is content, not chrome (the podium's own ruling). */
+.ag-wall{min-width:0;display:flex;flex-direction:column;gap:calc(.6vh + 2px);
+  border-left:var(--hair) solid var(--rule);padding-left:calc(1.4vw + 10px);
+  width:clamp(420px, 38vw, 760px);align-self:start;max-height:100%;overflow:hidden}
+.ag-wall h4{margin:0 0 calc(.4vh + 2px);font-size:var(--t-meta);color:var(--muted);font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase}
+.ag-wl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ag-wl li{display:grid;grid-template-columns:4.2em minmax(0,1fr) auto;gap:.1em calc(.7vw + 8px);align-items:baseline;
+  padding:calc(.7vh + 4px) calc(.6vw + 6px);border-bottom:var(--hair) solid var(--rule);min-width:0}
+.ag-wl li:last-child{border-bottom:0}
+.ag-wl .at{font-size:var(--t-meta);color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.ag-wl .tt{font-size:var(--t-body);font-weight:700;line-height:1.18;color:var(--text);min-width:0}
+.ag-wl .ty{display:block;font-size:var(--t-meta);color:var(--muted);font-weight:600;letter-spacing:.03em;margin-top:.15em}
+.ag-wl .st{font-family:var(--font-display);font-weight:800;font-size:var(--t-meta);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.ag-wl li.done .tt{color:var(--muted);font-weight:600}
+.ag-wl li.done .st{color:var(--success-text)}
+.ag-wl li.now{background:rgba(246,169,76,.10);border-left:calc(var(--hair) * 4) solid var(--primary);
+  border-radius:0 10px 10px 0;border-bottom-color:transparent}
+.ag-wl li.now .st{color:var(--primary)}
+.ag-wl li.now .tt{font-size:var(--t-secondary);line-height:1.1}
+.ag-wl li.more .tt{font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.04em}
+
+/* ----------------------------------------------------------- up next --- */
+.ag-up{display:flex;flex-direction:column;gap:calc(1.2vh + 4px);min-width:0}
+.ag-up .ty{display:flex;align-items:center;gap:.5em;font-family:var(--font-display);font-weight:800;
+  font-size:var(--t-meta);letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
+.ag-up .ty svg{width:1.3em;height:1.3em;flex:none}
+.ag-up .q{max-width:22ch}
+.ag-up .qdetail{max-width:40ch}
+.ag-up .joinblock{margin-top:calc(1.2vh + 6px)}
+.ag-up .qr{width:clamp(220px, 26vh, 320px);height:clamp(220px, 26vh, 320px)}
+.ag-lockline{display:flex;align-items:baseline;gap:.5em;font-size:var(--t-body);color:var(--text);margin:.25em 0 0;max-width:30ch;line-height:1.25}
+.ag-lockline b{color:var(--primary)}
+
+/* The event's own title card, before item 1: the stage's hero tier, once. */
+.ag-title{font-family:var(--font-display);font-weight:800;font-size:var(--t-hero);line-height:.98;
+  letter-spacing:-.01em;margin:0;max-width:16ch}
+.ag-date{font-size:var(--t-secondary);font-weight:600;color:var(--text);margin:0;opacity:.9}
+
+/* ------------------------------------------------------ now presenting --
+   Owner, 23 Sep: the presenter presents from their own presentation mode;
+   Engage never shows or drives slides. So a presentation item gets a HOLDING
+   screen, for rooms where the projector stays on Engage: what is on, who is
+   presenting, the way in for latecomers, and what comes next. It is the
+   between-items screen's shape (.ag-up + .ag-wall), so nothing new is drawn
+   but the presenter line. */
+.ag-who{margin:-.2em 0 0;font-size:var(--t-secondary);font-weight:600;color:var(--text);opacity:.9}
+
+/* ------------------------------------------------------------- a break --
+   Decision 7: a countdown to the planned return, at the hero tier, once. It
+   stops at 0:00 and reads "Starting now"; it never goes negative on the wall
+   (lateness is host-facing). +5 min moves the return time. */
+.ag-count{margin:0;font-family:var(--font-display);font-weight:800;font-size:calc(var(--t-hero) * 1.6);
+  line-height:.95;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+/* The day's standings (decision 6): the stage's own roster rhythm, ranked. */
+.ag-rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ag-rank li{display:grid;grid-template-columns:2.2em minmax(0,1fr) auto;gap:calc(.6vw + 6px);align-items:baseline;
+  padding:calc(.7vh + 4px) calc(.4vw + 4px);border-bottom:var(--hair) solid var(--rule);font-size:var(--t-body);font-weight:600}
+.ag-rank li:last-child{border-bottom:0}
+.ag-rank .ag-rk{font-family:var(--font-display);font-weight:800;color:var(--primary)}
+.ag-rank .nm{min-width:0;overflow-wrap:anywhere;line-height:1.15}
+.ag-rank .sc{font-family:var(--font-display);font-weight:800;color:var(--text)}
+.ag-rnote{margin:calc(.8vh + 4px) 0 0;font-size:var(--t-meta);color:var(--muted);line-height:1.3;max-width:30ch}
+
+/* --------------------------------------------------------- rehearsal ---
+   Decision 9 reuses the session-setup design's Preview marks (ss-stage.css
+   :20-22, copied, not imported): a dashed chip and a dashed band — "not yet",
+   without a fifth phase colour. */
+.chip.ag-rehearse{color:var(--muted);border-style:dashed}
+.chip.ag-rehearse .dot{background:transparent;border:2px solid currentColor;width:.62em;height:.62em}
+.bar[data-phase="rehearse"]{background:repeating-linear-gradient(90deg,rgba(182,194,212,.55) 0 22px,transparent 22px 36px)}
+.kicker.ag-rh{color:var(--secondary)}
+
+/* --------------------------------------------------------- the trigger --
+   The wipe names the item AND says the phones have moved — the one thing a
+   room heads-down or heads-up needs to know in the same second. Two lines,
+   the refresh's own .wipe + small. */
+.wipe.ag-go small b{color:var(--primary)}

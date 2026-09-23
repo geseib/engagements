@@ -4,7 +4,6 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 
 const { openSessionOr } = require('./session-gate');
 const { nowSeconds, handoverOpenFor } = require('./handover');
-const { recordBillableSession } = require('./usage');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -367,23 +366,11 @@ exports.handler = async (event) => {
     console.log(`✅ Created score record for ${playerName} with afterRound: 000 (not scored yet)`);
 
     /*
-      THE BILLABLE MOMENT (usage.js header): a session is billed on its first
-      successful player join — somebody came, so it ran in front of a room. A
-      join is only possible once /start has set METADATA.Started, so this is
-      "started AND joined", and it covers every route a session goes live by.
-
-      Called on EVERY new player; the conditional put on
-      LEDGER#<period>#SESSION#<gameId> decides which one was first, so the rest
-      of the room, retries and redeliveries all bounce off the same key.
-
-      The owner is the SESSION's org from METADATA, never the caller — a player
-      carries no org. No orgId (a platform demo, a pre-tenancy row) bills
-      nobody. It never throws: a metering failure is logged and the player is
-      in, because the one promise with no exceptions is that nothing stops a
-      room (RATIONALE.md §3). From 2026-08-23 until this call existed, nothing
-      was ever billed — tests/billable-session-wiring.js drives the real join.
+      A JOIN IS NOT BILLED. It happens in every rehearsal and every QR test, so
+      a session counts at the first answer to its second answered question
+      instead — websocket/session-count.js, behind the answer write. 4b39c871
+      billed here on the first join for one day; the owner moved the moment.
     */
-    await recordBillableSession(gate.metadata.orgId, gameId, { db });
 
     console.log(`Player ${playerName} successfully joined game ${gameId}`);
 

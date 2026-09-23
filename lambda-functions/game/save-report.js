@@ -1,10 +1,10 @@
 const crypto = require('crypto');
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { encryptValue, encryptItem } = require('./tenant-crypto');
 const { reportsIndexPk, callerMayDriveSession } = require('./tenant');
+const { generatePasskey, hashPasskey } = require('./report-passkey');
 
 const s3Client = new S3Client({});
 const dynamoClient = new DynamoDBClient({});
@@ -112,6 +112,12 @@ exports.handler = async (event) => {
       ? Buffer.from(JSON.stringify(await encryptValue(orgId, pdfBlob)), 'utf8')
       : Buffer.from(pdfBlob, 'base64');
 
+    // The second item a shared link needs (report-passkey.js). Only its salted
+    // hash is stored, on the object it opens; the passkey itself goes back to
+    // the host in this response and is never written or logged anywhere.
+    const passkey = generatePasskey();
+    const passkeyHash = await hashPasskey(passkey);
+
     // Upload to S3
     const uploadCommand = new PutObjectCommand({
       Bucket: process.env.REPORTS_BUCKET_NAME,
@@ -120,8 +126,10 @@ exports.handler = async (event) => {
       ContentType: orgId ? 'application/json' : 'application/pdf',
       ContentDisposition: `attachment; filename="${baseFileName}"`,
       // The bucket's 90-day rule is filtered on this tag so it cannot reach
-      // `permanent/` (S3 lifecycle has no "every prefix but one"). S3CrudPolicy
-      // grants s3:PutObjectTagging, which a tagged PutObject requires.
+      // `permanent/` (S3 lifecycle has no "every prefix but one"). A tagged
+      // PutObject also needs s3:PutObjectTagging, which S3CrudPolicy does NOT
+      // grant — the template adds it explicitly. Without it this line made
+      // every standard save AccessDenied (tests/s3-tagging-permission.js).
       ...(permanent ? {} : { Tagging: 'retention=standard' }),
       Metadata: {
         'permanent': permanent ? 'true' : 'false',
@@ -133,40 +141,41 @@ exports.handler = async (event) => {
         // The org is recorded instead, because a reader needs to know which
         // key opens the object and the orgId is not a secret (it is the
         // encryption context, which CloudTrail logs by design).
-        ...(orgId ? { 'org-id': orgId, 'encrypted': 'org' } : {})
+        ...(orgId ? { 'org-id': orgId, 'encrypted': 'org' } : {}),
+        // What download-report.js checks a presented passkey against. A salted
+        // scrypt hash, not the passkey: this metadata is readable by anyone who
+        // can list the bucket.
+        'passkey-salt': passkeyHash.salt,
+        'passkey-hash': passkeyHash.hash
       }
     });
 
     const uploadResult = await s3Client.send(uploadCommand);
     
-    // Generate presigned URL for download (valid for 24 hours)
-    const getObjectCommand = new GetObjectCommand({
-      Bucket: process.env.REPORTS_BUCKET_NAME,
-      Key: fileName
-    });
-    
-    // WHICH URL THE CALLER GETS, AND WHY IT DIFFERS.
+    // THE SHARE LINK, FOR EVERY REPORT, GOES THROUGH download-report.js.
     //
-    // An orgless session still stores a real PDF, so a presigned S3 link works
-    // and keeps its 24-hour expiry — nothing changes for it.
-    //
-    // An org's report is an ENVELOPE in the bucket. A presigned link to that
-    // hands a browser ciphertext, and the UI's "Copy Link" is meant to be sent
-    // to a colleague — so the link goes through `download-report.js`, which
-    // decrypts with the SESSION's key and returns a real PDF. It is a bearer
-    // URL exactly as the presigned one was: holding it is the authorisation,
-    // which is how sharing a report already worked.
+    // An org's report is an ENVELOPE in the bucket, so a presigned S3 link would
+    // hand a browser ciphertext; an orgless session's was a presigned link to a
+    // plain PDF. Both now share one route, because that route is where the
+    // passkey is checked, and a presigned link would be a way around it. The
+    // link alone opens nothing: the recipient also needs `passkey`, which the
+    // host gives out separately.
     //
     // The API base is not knowable from inside Lambda, so the route is returned
     // RELATIVE and the console resolves it against its own `window.API_BASE`.
     // Hardcoding a host is how `create-game.js` came to point every join link
     // at the retired eng.dev twin for months.
-    const downloadUrl = orgId
-      ? `games/${gameId}/report/download?key=${encodeURIComponent(fileName)}`
-      : await getSignedUrl(s3Client, getObjectCommand, {
-        expiresIn: 24 * 60 * 60 // 24 hours in seconds
-      });
-    
+    const downloadUrl = `games/${gameId}/report/download?key=${encodeURIComponent(fileName)}`;
+
+    // How long the link and passkey work. download-report.js reads the org off
+    // the session's METADATA row, so the public route opens a report exactly as
+    // long as that row lives — its `ttl` (session-ttl.js), not the object's 90
+    // or 365 days. After that the team opens it from Reports instead.
+    const sessionTtl = Number(gameMetadata.Item.ttl);
+    const shareUntil = Number.isFinite(sessionTtl) && sessionTtl > 0
+      ? new Date(sessionTtl * 1000).toISOString()
+      : null;
+
     /*
       THE ROW THAT OUTLIVES THE SESSION. The session's rows expire (7 days
       from start, session-ttl.js) and this was the only record of the report —
@@ -214,10 +223,13 @@ exports.handler = async (event) => {
         // Says what the object actually IS, so no caller has to infer it from
         // an extension. False for an orgless session, which still stores a PDF.
         encrypted: !!orgId,
-        // `downloadUrl` is RELATIVE when the report is encrypted (it points at
-        // this API), and absolute when it is a presigned S3 link. The console
-        // has to resolve it rather than assume.
-        downloadUrlIsRelative: !!orgId
+        // `downloadUrl` is always RELATIVE now (it points at this API). Kept
+        // so a console that still branches on it resolves it correctly.
+        downloadUrlIsRelative: true,
+        // Shown to the host once, here, and nowhere else. Lose it and the
+        // report is saved again for a new one; the team still has Reports.
+        passkey,
+        shareUntil
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

@@ -1,5 +1,10 @@
-const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+// pdf-parse is required inside parsePDF, not here — see the note there.
+
+// cleanText keeps this many characters of a document and drops the rest.
+const MAX_TEXT_LENGTH = 50000;
+// Pages parsePDF reads per pass. See the note there.
+const PDF_PAGES_PER_PASS = 10;
 
 exports.handler = async (event) => {
   try {
@@ -96,18 +101,38 @@ exports.handler = async (event) => {
   }
 };
 
+// pdf-parse 2 loads pdf.js, which polyfills DOMMatrix from the native
+// `@napi-rs/canvas` binary as it loads and throws `DOMMatrix is not defined`
+// when that binary cannot be loaded. Required here rather than at the top of
+// the file, a missing binary fails PDFs with a message instead of taking DOCX
+// uploads down with them.
 async function parsePDF(base64Content) {
+  let parser;
   try {
-    // Convert base64 to buffer
-    const buffer = Buffer.from(base64Content, 'base64');
-    
-    // Parse PDF
-    const data = await pdfParse(buffer);
-    
-    return data.text;
+    const { PDFParse } = require('pdf-parse');
+    // `data`, never `url`: PDFParse fetches a url it is given, server-side, and
+    // hosts reach this route. Eval off: pdf.js does not need it to read text.
+    parser = new PDFParse({ data: Buffer.from(base64Content, 'base64'), isEvalSupported: false });
+    // Read a few pages at a time and stop once there is more text than
+    // cleanText keeps. Reading a whole long document only to drop all but the
+    // first 50,000 characters took 2.4.5 19-22s on 400 pages (1.1.1: 10s),
+    // against this function's 30s timeout; stopping at the cap took 0.74s and
+    // keeps the same text. A range past the last page is clipped, not an error.
+    let text = '';
+    for (let first = 1, total = 1; first <= total; first += PDF_PAGES_PER_PASS) {
+      // 2.x appends "-- 1 of 2 --" to every page unless told not to, and this
+      // text goes to the AI as the user's own document.
+      const result = await parser.getText({ pageJoiner: '', first, last: first + PDF_PAGES_PER_PASS - 1 });
+      total = result.total;
+      text += (text ? '\n' : '') + result.text;
+      if (normaliseText(text).length > MAX_TEXT_LENGTH) break;
+    }
+    return text;
   } catch (error) {
     console.error('PDF parsing error:', error);
     throw new Error(`Failed to parse PDF: ${error.message}`);
+  } finally {
+    if (parser) await parser.destroy().catch(() => {});
   }
 }
 
@@ -130,22 +155,25 @@ async function parseDOCX(base64Content) {
   }
 }
 
-function cleanText(text) {
+function normaliseText(text) {
   // Remove excessive whitespace
   text = text.replace(/\s+/g, ' ');
-  
+
   // Remove non-printable characters
   text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  
+
   // Trim
-  text = text.trim();
-  
+  return text.trim();
+}
+
+function cleanText(text) {
+  text = normaliseText(text);
+
   // Limit length to prevent issues with AI processing
-  const MAX_LENGTH = 50000; // 50k characters
-  if (text.length > MAX_LENGTH) {
-    console.warn(`⚠️ Text truncated from ${text.length} to ${MAX_LENGTH} characters`);
-    text = text.substring(0, MAX_LENGTH) + '... [truncated]';
+  if (text.length > MAX_TEXT_LENGTH) {
+    console.warn(`⚠️ Text truncated from ${text.length} to ${MAX_TEXT_LENGTH} characters`);
+    text = text.substring(0, MAX_TEXT_LENGTH) + '... [truncated]';
   }
-  
+
   return text;
 }

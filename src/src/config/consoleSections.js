@@ -182,6 +182,20 @@ const SECTION = {
     contentTheme: 'dark',
   },
   /*
+    OBSERVABILITY — how Engage is used, in numbers (ObservabilityPanel.jsx).
+    Totals only: GET /platform/observability counts rows and reads counters,
+    and nothing a team wrote reaches the screen. Second in the platform nav,
+    after the landing section, because it is the other overview.
+  */
+  observability: {
+    id: 'observability',
+    label: 'Observability',
+    icon: 'ChartLineUp',
+    title: 'Observability',
+    subtitle: 'How Engage is being used, in numbers. Totals only — nothing a team wrote is read to make them.',
+    contentTheme: 'dark',
+  },
+  /*
     PLAN REQUESTS — the one thing staff DO for a customer (mockup 15). Its own
     section rather than a tab under Organisations because a request nobody
     sees is a customer nobody answered: the nav carries the waiting count.
@@ -303,6 +317,7 @@ export function sectionsFor({
        and `defaultSectionIdFor` takes the first item of the first group. */
     return [group('platform', 'Engage', [
       SECTION.orgs,
+      SECTION.observability,
       SECTION.planrequests,
       SECTION.discountcodes,
       SECTION.platformsets,

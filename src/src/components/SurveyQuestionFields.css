@@ -1,0 +1,464 @@
+/* ============================================================================
+   A SURVEY QUESTION IN THE SET EDITOR — `.sqf`
+
+   components/SurveyQuestionFields.jsx: the Kind chip, the answer preview and
+   Required / Optional on a survey question's row, the Add question menu of the
+   five kinds, and the question dialog's kind bar and each kind's fields.
+   Mounted only by components/QuestionsPanel.jsx, for a survey set.
+
+   DERIVED FROM docs/design/survey-redesign/04-editor.html, 05-edit-question.html
+   and 06-kind-fields.html (their `sv-kind`, `sv-kindbar`, `sv-opt`, `sv-optlist`,
+   `sv-switch`, `sv-sub`, `sv-menu`, `sv-prev`, `sv-req`), re-cut under `.sqf-*`
+   at the console ladder. The mockups draw the editor's rows as a table; here
+   the Questions panel keeps the `<ol>` of rows it has for every set type, and a
+   survey row gains the mockup's Kind and Required columns inside it.
+
+   THE GROUND IS THE EDITOR'S, AND IT IS DUSK. Every place this sheet paints is
+   inside `.qs-editor`, which declares `data-theme="dark"` on its own root (so
+   it is dusk in the console and inside the host's set shelf alike —
+   QuestionSetEditor.css says why). The stack, read from the sheets that paint
+   it: --bg field / --surface card / --bg panel / --surface row, and the
+   question dialog --surface on the card.
+
+   TOKENS ONLY. The inks and grounds are styles.css's; the hairlines and tints
+   are declared on `.sqf` below as rgba() of the dusk --muted and --primary —
+   never borrowed from QuestionSetEditor.css, because an undefined custom
+   property invalidates the whole declaration and this sheet must not depend on
+   an ancestor happening to be there.
+
+   MEASURED, composited up that stack, in
+   __tests__/surveyQuestionFieldsPalette.test.js. AA is 4.5:1.
+     --text  on a row 12.53, on a changed row 10.63, on a removed row 11.35
+     --muted on a row  6.06, on a changed row  5.14, on a removed row  5.49
+     --muted in the dialog 6.06, on a hovered kind 5.26, a chosen segment 5.04
+     --text  on a hovered kind 10.89, on a chosen segment 10.42
+     --text  on a number box (--surface-2) 10.20; --muted on a held one 7.24
+     --bg on the chosen kind's amber 8.86
+     --text / --muted in the Add menu 12.53 / 6.06, highlighted 10.89 / 5.26
+
+   SPECIFICITY, NOT SOURCE ORDER. Component sheets load before styles.css, so
+   the three overrides of shared form controls below are one class deeper than
+   the global they replace.
+   ========================================================================== */
+
+.sqf {
+  --sqf-t-floor: 12px;
+  --sqf-t-label: 13px;
+  --sqf-t-body: 15px;
+  --sqf-t-head: 19px;
+  --sqf-row-h: 36px;
+
+  --sqf-rule: rgba(155, 168, 190, .20);
+  --sqf-rule-strong: rgba(155, 168, 190, .34);
+  --sqf-row-hover: rgba(155, 168, 190, .08);
+  --sqf-row-sel: rgba(246, 169, 76, .10);
+  --sqf-shadow: rgba(4, 8, 16, .50);
+}
+
+/* -- the Kind chip ----------------------------------------------------------
+   An icon AND a word, everywhere a kind is named. One neutral chip: the kinds
+   are not ranked, so none of them is coloured. */
+.sqf-cell-kind {
+  flex: 0 0 160px;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.sqf-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid var(--sqf-rule-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: var(--sqf-t-floor);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* -- the answer preview under a question's title ----------------------------
+   One line: the leading figure in the text ink, the rest muted. A single text
+   run with its own min-width, so an overlong line is cut rather than pushing
+   the row's actions out of reach. */
+.sqf-prev {
+  display: block;
+  min-width: 0;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sqf-prev b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* -- Required / Optional ---------------------------------------------------- */
+.sqf-req {
+  flex: 0 0 76px;
+  padding-top: 3px;
+  color: var(--muted);
+  font-size: var(--sqf-t-floor);
+}
+
+.sqf-req.on {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* -- Add question: a button and the menu of five kinds under it -------------- */
+.sqf-add {
+  position: relative;
+  display: inline-block;
+}
+
+.sqf-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--sqf-rule-strong);
+  border-radius: 10px;
+  box-shadow: 0 20px 48px var(--sqf-shadow);
+}
+
+.sqf-menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-height: var(--sqf-row-h);
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Under the pointer, and under the keyboard: the menu moves real focus
+   (↑ ↓ Home End), so the focused item wears the same highlight. */
+.sqf-menu-item:hover {
+  background: var(--sqf-row-hover);
+}
+
+.sqf-menu-item:focus-visible {
+  background: var(--sqf-row-hover);
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.sqf-menu-item .ws-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+.sqf-menu-item b {
+  display: block;
+  color: var(--text);
+  font-size: var(--sqf-t-body);
+}
+
+.sqf-menu-item span {
+  display: block;
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+  line-height: 1.4;
+}
+
+.sqf-menu-rule {
+  margin: 5px 4px;
+  border: 0;
+  border-top: 1px solid var(--sqf-rule);
+}
+
+/* -- the question form ------------------------------------------------------
+   The kind decides every field after it, so it comes first. Room is left
+   beside the fields for the phone preview (mockup 05); in Phase 1 that slot is
+   empty and the fields take the whole width. */
+.sqf-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.sqf-form.has-preview {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.sqf-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sqf-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+
+.sqf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sqf-lab {
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+  font-weight: 600;
+}
+
+.sqf-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+  line-height: 1.45;
+}
+
+.sqf-dim {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* The shared controls, at this surface's reading step. Every input renders at
+   body, never at label (engage-design §2). `.form-group input[type="text"]`
+   is AIPromptManager.css's surviving global and sets 14px at 0,2,1. */
+.sqf .form-input,
+.sqf .form-select,
+.sqf .form-group input[type="text"],
+.sqf .form-group select {
+  font-size: var(--sqf-t-body);
+}
+
+.sqf .form-group {
+  margin-bottom: 0;
+}
+
+.sqf .form-group label {
+  font-size: var(--sqf-t-label);
+}
+
+/* -- the kind bar, and every one-of-N segment -------------------------------
+   The chosen kind is filled AND named by the pressed state, never by colour
+   alone. */
+.sqf-kindbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sqf-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--sqf-row-h);
+  padding: 0 13px 0 10px;
+  border: 1px solid var(--sqf-rule-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--sqf-t-label);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sqf-opt:hover {
+  background: var(--sqf-row-hover);
+  border-color: var(--muted);
+}
+
+.sqf-opt[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary-deep);
+  color: var(--bg);
+}
+
+.sqf-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  border: 1px solid var(--sqf-rule-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sqf-seg button {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-right: 1px solid var(--sqf-rule);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sqf-seg button:last-child {
+  border-right: 0;
+}
+
+.sqf-seg button[aria-pressed="true"] {
+  background: var(--sqf-row-sel);
+  color: var(--text);
+}
+
+.sqf-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--sqf-t-body);
+}
+
+.sqf-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.sqf-row > .form-group {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.sqf-row > .form-group.sqf-narrow {
+  flex: 0 0 130px;
+}
+
+.sqf-num {
+  width: 72px;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--sqf-rule-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--sqf-t-body);
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sqf-num:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* -- a list of options or items ------------------------------------------- */
+.sqf-optlist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sqf-o {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sqf-o .form-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sqf-k {
+  flex: none;
+  width: 22px;
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+  font-weight: 700;
+  text-align: center;
+}
+
+.sqf-x {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sqf-x:hover:not(:disabled) {
+  background: var(--sqf-row-hover);
+  color: var(--text);
+}
+
+.sqf-x:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+.sqf-addline {
+  align-self: flex-start;
+}
+
+/* -- a switch: a checkbox whose whole label is the target ------------------ */
+.sqf-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: var(--sqf-t-body);
+  cursor: pointer;
+}
+
+.sqf-switch input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: var(--primary);
+}
+
+.sqf-switch small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--sqf-t-label);
+}
+
+/* What a switch opens, indented under it. */
+.sqf-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--sqf-rule-strong);
+}
+
+@media (max-width: 720px) {
+  .sqf-form.has-preview { grid-template-columns: minmax(0, 1fr); }
+  .sqf-cell-kind { flex-basis: auto; }
+  .sqf-req { flex-basis: auto; }
+}

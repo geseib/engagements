@@ -24,8 +24,9 @@
  *
  * The fix routes both doors through session-start.js. §1 and §2 drive the lobby
  * door through the real create and next-question handlers and read the ROWS;
- * §3 pins that it happens once, at the start, and not on every round; §4 is
- * the structural half — one writer, so the two doors cannot drift apart again.
+ * §3 pins that it happens once, at the start, and not on every round; §4 that
+ * a first round with nothing to ask is refused and starts nothing; §5 is the
+ * structural half — one writer, so the two doors cannot drift apart again.
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -228,7 +229,65 @@ function assertStartedRows(gameId) {
     }
   });
 
-  say('\n4. one writer');
+  say('\n4. nothing to ask is a setup problem, not a start and not an end');
+  // The owner, 2026-09-23: a false start is "something was not correct and they
+  // likely will restart". So a first round with nothing to serve is refused and
+  // the session is left exactly where it was, for the host to fix and retry.
+  const emptyCategory = (gameId) => {
+    const cats = row(`GAME#${gameId}`, 'STATE#CATS');
+    for (const k of ['HostMask1-8', 'AvailMask1-8']) cats[k] = '00000000';
+  };
+  const emptyGame = await createdSession();
+  emptyCategory(emptyGame);
+  const before = JSON.parse(JSON.stringify(fourRows(emptyGame)));
+  const emptyRes = await press(emptyGame);
+  // rejects: ENDING a session whose first round had nothing to serve — the
+  // host could never fix the categories and start it again.
+  await check('from CREATED: refused with 409 and a reason the host can act on', () => {
+    assert.strictEqual(emptyRes.statusCode, 409, emptyRes.body);
+    const body = JSON.parse(emptyRes.body);
+    assert.strictEqual(body.nothingToAsk, true);
+    assert.match(body.error, /nothing to ask/i);
+    assert.strictEqual(body.error, body.message, 'the host page reads error, the remote reads message');
+  });
+  // rejects: startSession running before the nothing-to-ask check — a false
+  // start moved to the 7-day clock and opened to players.
+  await check('from CREATED: not started, not ended, all four rows untouched', () => {
+    // Both sides through JSON: creation leaves `QuestionSetId: undefined` on
+    // the index row, which a snapshot drops.
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(fourRows(emptyGame))), before);
+  });
+  await check('fixing the categories and pressing again starts it', async () => {
+    const cats = row(`GAME#${emptyGame}`, 'STATE#CATS');
+    for (const k of ['HostMask1-8', 'AvailMask1-8']) cats[k] = '10000000';
+    const res = await press(emptyGame);
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(fourRows(emptyGame).state.State, 'ASK#001');
+    assertStartedRows(emptyGame);
+  });
+  await check('from STARTED with no round yet: refused, still STARTED', async () => {
+    const g = await createdSession();
+    const started = await startGame(asHost(ACME, { pathParameters: { gameId: g } }));
+    assert.strictEqual(started.statusCode, 200, started.body);
+    emptyCategory(g);
+    const res = await press(g);
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(fourRows(g).state.State, 'STARTED');
+  });
+  // rejects: the refusal widened to every round — a session that has played
+  // its questions must still end.
+  await check('a later round running dry still ENDS the session', async () => {
+    const g = await createdSession();
+    assert.strictEqual((await press(g)).statusCode, 200);
+    emptyCategory(g);
+    row(`GAME#${g}`, 'STATE').State = 'RESULTS#001';
+    const res = await press(g);
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(JSON.parse(res.body).gameEnded, true);
+    assert.strictEqual(fourRows(g).state.State, 'ENDED');
+  });
+
+  say('\n5. one writer');
   const strip = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');

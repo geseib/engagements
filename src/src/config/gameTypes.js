@@ -146,15 +146,15 @@ export const GAME_TYPE_LIST = Object.values(GAME_TYPES);
  * Types a host may NOT create, and why. One id per reason, so the fix is a
  * deletion rather than an edit.
  *
- * `survey` — `lambda-functions/admin/upload-questions.js:146-157` rejects survey
- * uploads outright ("surveys cannot be imported as playable question sets until
- * game sessions support the survey engagement type"). So no survey question set
- * can exist; the create dialog's set dropdown filters by type, so a Survey
- * option would open onto a permanently empty list with Create permanently
- * disabled — a dead end that looks like a feature. When that upload block is
- * lifted, delete the id from this array and the option appears. Nothing else
- * changes, because the picker renders from GAME_TYPE_LIST rather than a
- * hand-written list of its own.
+ * `survey` — since surveys phase 1 (docs/design/survey-redesign/) a survey set
+ * CAN exist: the importer accepts the survey CSV and the old survey JSON, the
+ * AI builder writes a draft survey set, and the editor edits one. What does not
+ * exist yet is a session that PLAYS one — that is phase 2 (the player's five
+ * question inputs, answer rows, the collecting stage). Until then the create
+ * dialog must not offer Survey: its set dropdown would list survey sets that
+ * open onto a session nothing can run. When phase 2 ships, delete the id from
+ * this array and the option appears; the picker renders from GAME_TYPE_LIST,
+ * so nothing else changes.
  */
 export const UNPLAYABLE_GAME_TYPES = ['survey'];
 
@@ -196,6 +196,6 @@ export const NOT_PLAYABLE_LABEL = 'Not playable';
  */
 export function notPlayableReason(type) {
   if (isPlayableGameType(type)) return '';
-  return 'The importer rejects survey uploads and no game session plays a survey, '
-    + 'so a survey set can be authored here but never run.';
+  return 'A survey set can be made and edited here, but no session can run one yet — '
+    + 'running a survey in a live session is the next step being built.';
 }

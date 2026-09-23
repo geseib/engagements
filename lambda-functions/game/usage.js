@@ -18,19 +18,25 @@
  * the rows that produced it. usage-reconcile.js does exactly that daily, which
  * is only possible because the ledger exists.
  *
- * ── WHY A SESSION IS BILLED ON THE FIRST JOIN, NOT ON CREATION ─────────────
+ * ── WHY A SESSION IS BILLED AT ITS SECOND ANSWERED QUESTION ────────────────
  *
- * A host who creates a session and abandons it has used nothing, and charging
- * for it teaches them not to experiment. A session somebody actually joined ran
- * in front of a room. So the billable moment is the first successful player
- * join. The call is in game/join-game.js, on the new-player branch. Until
- * 2026-09-23 there was no call at all and nothing was ever billed;
- * tests/billable-session-wiring.js drives the real join so that cannot recur.
+ * The owner, 2026-09-23: "the session only counts if at least 2 questions get
+ * answered by 1 or more people. otherwise we chalk it up to test, or something
+ * was not correct and they likely will restart." Creating, starting, joining
+ * and a room answering one question are all free — charging for a rehearsal
+ * teaches a host not to experiment. The billable moment is the first answer to
+ * the second DIFFERENT question to be answered, whenever that comes (skipped
+ * questions do not matter). websocket/session-count.js decides it, behind the
+ * answer write in websocket/message.js, and is the only caller of
+ * `recordBillableSession`; tests/billable-session-wiring.js holds that.
  *
- * "First" is not something the caller has to work out. `recordBillableSession`
+ * History: from 2026-08-23 nothing called the meter and nothing was billed;
+ * 4b39c871 then billed the first join, for one day, until the owner moved it.
+ *
+ * "Once" is not something the caller has to work out. `recordBillableSession`
  * is a CONDITIONAL PUT on `LEDGER#<period>#SESSION#<gameId>` guarded by
- * `attribute_not_exists(SK)`: the second, tenth and hundredth player to join
- * the same session all attempt the same write and all but one bounce off the
+ * `attribute_not_exists(SK)`: every later answer, and a retry after a failed
+ * write, attempts the same write and all but one bounce off the
  * condition. Idempotency is a property of the key, not of a check-then-write
  * the caller could race. Retries, WebSocket reconnects, Lambda's own at-least-
  * once redelivery and a player refreshing their phone are all the same case.
@@ -66,7 +72,9 @@
  * and there are no layers, and all three bundles now need the meter: game/ runs
  * the joins, admin/ runs the reconciler and the set gate, websocket/ runs
  * create-game.js and the session gate. tests/usage-metering.js pins the first
- * two against each other and tests/plan-gating.js pins all three.
+ * two against each other and tests/plan-gating.js pins all three. Each copy
+ * needs pricing.js AND pricing-adjust.js beside it (readAllowance gates on the
+ * effective plan); tests/pricing-adjust.js pins that module's three copies.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -74,6 +82,7 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { orgPk, setsMetadataPk, ORG } = require('./tenant');
 const { planFor, allowanceState, TEAM_PLAN } = require('./pricing');
+const { effectivePlan } = require('./pricing-adjust');
 
 const client = new DynamoDBClient({});
 const defaultDb = DynamoDBDocumentClient.from(client, {
@@ -139,15 +148,16 @@ const ZERO = Object.freeze({ sessionsRun: 0, setsCurrent: 0, setsPeak: 0 });
 /**
  * Bill one session, once, ever.
  *
- * Call it on EVERY successful new-player join; the condition decides which one
- * was the first. Returns `{ billed }` — true only for the join that actually
- * created the ledger row.
+ * Called by websocket/session-count.js when a session reaches its second
+ * answered question; the condition makes any repeat a no-op. Returns
+ * `{ billed }` — true only for the call that actually created the ledger row.
  *
  * IT NEVER THROWS. The one product promise on 04-billing.html that has no
  * exceptions is "we do not block a session you are about to run in front of a
- * room", and a meter that can reject a join is a hard limit wearing a
- * disguise. A failure here is logged, left for the daily reconciler, and the
- * player joins. Losing a quarter is strictly better than losing the room.
+ * room", and a meter that can lose an answer is a hard limit wearing a
+ * disguise. A failure here is logged and reported as `reason: 'error'`, so the
+ * caller can try again on the next answer. Losing a quarter is strictly better
+ * than losing the room.
  */
 async function recordBillableSession(orgId, gameId, opts = {}) {
   const { db, tableName, now } = ctx(opts);
@@ -363,16 +373,54 @@ async function readUsage(orgId, period, opts = {}) {
 }
 
 /**
+ * Every adjustment row an organisation holds (`ORG#<org>` / `ADJ#…`, written
+ * by orgs/adjustments.js), whatever its window or state. Which of them are in
+ * force is NOT decided here — pricing-adjust.js's `isActive` decides, inside
+ * `effectivePlan`, exactly as it does for the bill. Paginates, like the counts
+ * above; the ledger is append-only and revoked rows stay in it.
+ */
+async function readAdjustments(orgId, opts = {}) {
+  const { db, tableName } = ctx(opts);
+  const rows = [];
+  let ExclusiveStartKey;
+  do {
+    const page = await db.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': orgPk(orgId), ':sk': 'ADJ#' },
+      ExclusiveStartKey,
+    }));
+    rows.push(...(page.Items || []));
+    ExclusiveStartKey = page.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return rows;
+}
+
+/**
  * WHAT THIS ORGANISATION MAY STILL DO — the read behind the two gates.
  *
- * One Get for the organisation's plan, one Get for the period's counters, and
- * `allowanceState` does the arithmetic. It lives here rather than in pricing.js
- * because it touches DynamoDB and pricing.js must stay importable by the React
- * console (tests/pricing.js fails the build on a `require` in that file).
+ * One Get for the organisation's plan, one Get for the period's counters, one
+ * Query for its adjustments, and `allowanceState` does the arithmetic. It lives
+ * here rather than in pricing.js because it touches DynamoDB and pricing.js
+ * must stay importable by the React console (tests/pricing.js fails the build
+ * on a `require` in that file).
+ *
+ * ── IT GATES ON THE EFFECTIVE PLAN, NOT THE BARE ONE ───────────────────────
+ *
+ * Engage staff can grant a team extra allowance — a CREDIT_UNITS row adding
+ * sessions or sets — and the bill has always counted it: get-usage.js prints
+ * `adjusted.plan.includedSessions` from pricing-adjust.js's `effectivePlan`.
+ * This read gated on `planFor(orgRow)` alone, so a free org granted five more
+ * sessions was told ten were included and refused its sixth. It stayed latent
+ * until 2026-09-23, when join-game.js began metering sessions and the session
+ * gate first had a counter to fire on. The gate now folds the same rows in with
+ * the same function, so the refusal and the bill cannot count differently.
  *
  * ── IT FAILS OPEN, ON PURPOSE, AND THAT IS NOT A SECURITY HOLE ─────────────
  *
- * If either read throws, this returns an UNGATED state and logs. The gate is a
+ * If any read throws, this returns an UNGATED state and logs. An unreadable
+ * adjustments ledger included: gating on the bare plan instead would refuse
+ * exactly the customer Engage had just given more to. The gate is a
  * COMMERCIAL limit, not an authorisation boundary — nothing here decides who
  * may see whose data, only whether a free account has had its five. A DynamoDB
  * blip must not stop a paying customer starting a session, and the worst case
@@ -430,11 +478,19 @@ async function readAllowance(orgId, opts = {}) {
     return ungated('usage-unreadable');
   }
 
+  let adjustments;
+  try {
+    adjustments = await readAdjustments(org, opts);
+  } catch (error) {
+    console.error(`⚠️ usage: could not read the adjustments for ${org}; not gating:`, error);
+    return ungated('adjustments-unreadable');
+  }
+
   return {
     orgId: org,
     period,
     org: orgRow,
-    ...allowanceState(planFor(orgRow), usage),
+    ...allowanceState(effectivePlan(planFor(orgRow), adjustments, period), usage),
   };
 }
 

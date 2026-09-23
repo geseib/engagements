@@ -64,6 +64,9 @@ const { ownerStamp } = require('./shared/question-set-access');
 const { resolvePromptRef, resolvePersonaRef } = require('./shared/workie-refs');
 const { encryptItem, decryptItem } = require('./shared/tenant-crypto');
 const { LIFECYCLE_SKS } = require('./shared/archive-snapshot');
+const { readAllowance } = require('./shared/usage');
+const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./shared/pricing');
+const { planLimitResolve } = require('./shared/plan-limit');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -141,6 +144,22 @@ exports.handler = async (event) => {
     const scope = String(body.scope || tenant.PLATFORM);
     if (scope !== tenant.PLATFORM && scope !== tenant.PUBLIC) {
       return fail(400, 'Only the shared and public libraries are copied. Your own sets are already yours.');
+    }
+
+    /*
+      A COPY IS A NEW STORED SET, SO IT MEETS THE SAME ALLOWANCE AN UPLOAD DOES.
+      This handler wrote a sixth set into a free organisation that
+      upload-questions.js would have refused — the copy was the way round the
+      limit. Checked before the source is read, so a refusal reads and writes
+      nothing. `readAllowance` fails OPEN (usage.js): a blip never blocks a copy.
+    */
+    const allowance = await readAllowance(orgId);
+    if (allowance.mustUpgradeForSet) {
+      console.log(`🚧 ${orgId} is at its stored-set allowance (${allowance.setsUsed}/${allowance.setsIncluded}) — refusing a COPY`);
+      return json(UPGRADE_REQUIRED_STATUS, {
+        ...upgradeRequired('sets', allowance),
+        resolve: await planLimitResolve(event, allowance),
+      });
     }
 
     const source = setRef({ scope, orgId: '', setId });

@@ -5,6 +5,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
+const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1051,22 +1052,42 @@ exports.handler = async (event) => {
     const queueNotes = queueOutcome && queueOutcome.staleSet ? { staleSet: true } : {};
 
     /*
-      OPENING FROM CREATED IS STARTING. The phone remote's "Start First Round"
-      is this route, and it never passes through start-game.js — so a room
-      played that way kept its 90-day expiry and, worse, METADATA.Started stayed
-      unset and session-gate.js told every phone "Game not started" while the
-      round was on the wall. The same writes, from the same function
-      (session-start.js), and only here: every refusal above has already
-      returned, and a session that is already started keeps its StartedAt and
-      its expiry through every later round.
+      NOTHING TO ASK ON THE FIRST ROUND IS A SETUP PROBLEM, NOT AN ENDING.
 
-      Before the ENDED branch as well as the ASK one — either way the session
-      has left the lobby.
+      With no round played yet, an empty pool means the host chose categories
+      (or a set) with nothing in them. Ending the session here left it
+      unrestartable — the host had to make a new one — and starting it put a
+      false start on the 7-day clock. The owner, 2026-09-23: a false start is
+      "something was not correct and they likely will restart". So refuse, and
+      leave every row exactly as it was: not started, not ended. `error` and
+      `message` carry the same sentence because the host page reads one and
+      the phone remote the other (utils/nextQuestion.js, config/hostRemote.js).
+
+      A session that HAS played a round still ends below when the pool runs dry.
     */
-    if (currentState === 'CREATED') {
-      await startSession(db, process.env.TABLE_NAME, gameId, {
-        orgId: (ownerRead.Item && ownerRead.Item.orgId) || ''
-      });
+    if (!nextQuestion && currentLessonNumber === 0) {
+      const reason = 'Nothing to ask yet: none of the categories chosen for this session has a '
+        + 'question to serve. Choose categories with questions in them, then start again.';
+      return {
+        statusCode: 409,
+        body: JSON.stringify({
+          error: reason,
+          message: reason,
+          nothingToAsk: true,
+          gameId: gameId,
+          state: currentState,
+          ...queueNotes
+        }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    // The room is leaving the round on screen — for the next question or for
+    // the end — so count that round's answers, once, in one COUNT query
+    // (platform-metrics.js; never throws). Before both branches, so a
+    // session's last round is counted too; every refusal above has returned.
+    if (currentLessonNumber > 0) {
+      await recordRoundClosed({ gameId, round: currentLessonNumber, metadata: gameMetadata.Item }, { db });
     }
 
     if (!nextQuestion) {
@@ -1114,6 +1135,23 @@ exports.handler = async (event) => {
         }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
+    }
+
+    /*
+      OPENING FROM CREATED IS STARTING. The phone remote's "Start First Round"
+      is this route, and it never passes through start-game.js — so a room
+      played that way kept its 90-day expiry and, worse, METADATA.Started stayed
+      unset and session-gate.js told every phone "Game not started" while the
+      round was on the wall. The same writes, from the same function
+      (session-start.js), and only here, where a round is about to be served:
+      every refusal above — including nothing to ask — has already returned,
+      and a session that is already started keeps its StartedAt and its expiry
+      through every later round.
+    */
+    if (currentState === 'CREATED') {
+      await startSession(db, process.env.TABLE_NAME, gameId, {
+        orgId: (ownerRead.Item && ownerRead.Item.orgId) || ''
+      });
     }
 
     // CREATE QUESTION REFERENCE (as per game flow specification)
@@ -1168,6 +1206,9 @@ exports.handler = async (event) => {
         ':updatedAt': now
       }
     }));
+
+    // Served: one question put to the room, counted once per round (platform-metrics.js; never throws).
+    await recordRoundServed({ gameId, round: newLessonNumber, set: resolvedSet, questionId: nextQuestion.questionId }, { db });
 
     /*
       THE CURSOR AND THE EXHAUSTION FLAG BELONG TO THE AUTOMATIC PATH ONLY.

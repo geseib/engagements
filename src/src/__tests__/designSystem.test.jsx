@@ -125,8 +125,8 @@ describe('gameTypes registry', () => {
       }
     });
 
-    // upload-questions.js:146-157 rejects survey uploads outright, so a Survey
-    // set cannot exist and the pill would be a dead end.
+    // Survey sets can be made (surveys phase 1) but not yet played (phase 2),
+    // so the create dialog's pill would be a dead end.
     it('holds survey, and offers poll', () => {
       expect(UNPLAYABLE_GAME_TYPES).toContain('survey');
       expect(PICKER_GAME_TYPES.map((t) => t.id)).toContain('poll');

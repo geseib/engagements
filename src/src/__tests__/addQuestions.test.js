@@ -69,3 +69,51 @@ describe('adding questions to an existing set', () => {
       .toBe('1 question added in 1 new category. 2 left out: “History” already exists in this set; it has no category. Nothing is saved until you press Save.');
   });
 });
+
+describe('adding questions from a survey CSV (surveys phase 1)', () => {
+  // The contract's own header, as download-question-set.js and rowsToCsv write it.
+  const HEADER = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,AllowMultiple,MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,FollowUpWhen,FollowUpPrompt,RankTop,TextLength,MaxLength,Placeholder,Themes,Tags';
+  const csv = [
+    HEADER,
+    '"Survey",1,"How useful was it?","Think about next week","","","rating","true","","false","","false","false","1-10","Not useful","Very useful","","","false","","","","","","","false",""',
+    '"Survey",2,"Most valuable part?","","","","choice","false","The live demo|The case studies, with their renewal numbers|Q&A","true","2","true","false","","","","","","false","","","","","","","false",""',
+    '"Survey",3,"Length right?","","","","yesno","true","","false","","false","false","","","","","","true","no","What would you cut?","","","","","false",""',
+    '"Survey",4,"Rank these","","","","rank","false","A|B|C|D","false","","false","false","","","","","","false","","","2","","","","false",""',
+    '"Survey",5,"Best part?","","","","text","false","","false","","false","false","","","","","","false","","","","short","280","Say it in a line","true",""',
+  ].join('\n') + '\n';
+
+  test('every survey column reaches the row, typed', () => {
+    const { rows, error } = rowsFromCsv(csv);
+    expect(error).toBe('');
+    expect(rows.map((r) => r.kind)).toEqual(['rating', 'choice', 'yesno', 'rank', 'text']);
+    expect(rows[0]).toMatchObject({ required: true, scale: '1-10', lowLabel: 'Not useful', highLabel: 'Very useful' });
+    expect(rows[1]).toMatchObject({ allowMultiple: true, maxPicks: 2, allowOther: true });
+    expect(rows[2]).toMatchObject({ required: true, unsure: true, followUpWhen: 'no', followUpPrompt: 'What would you cut?' });
+    expect(rows[3]).toMatchObject({ options: ['A', 'B', 'C', 'D'], rankTop: 2 });
+    expect(rows[4]).toMatchObject({ textLength: 'short', maxLength: 280, placeholder: 'Say it in a line', themes: true });
+  });
+
+  // rejects: an options cell split on commas as well as pipes. The file's
+  // separator is the pipe; a comma is part of an option's words.
+  test('an option containing a comma stays one option', () => {
+    const { rows } = rowsFromCsv(csv);
+    expect(rows[1].options).toEqual(['The live demo', 'The case studies, with their renewal numbers', 'Q&A']);
+  });
+
+  // rejects: the Detail_lesson column — the one every download writes for
+  // call-and-answer, poll and survey — being dropped on the way in.
+  test('the Detail_lesson column is read as the detail', () => {
+    expect(rowsFromCsv(csv).rows[0].detail).toBe('Think about next week');
+  });
+});
+
+describe('Add questions reads a hand-made survey file the way the importer does (review finding)', () => {
+  test('yes / 1 read as true, and a capitalised or legacy kind is understood', () => {
+    const csv = 'Category,Title,Kind,Required,Options,AllowMultiple\n'
+      + '"Survey","Pick","multiple_choice","yes","a|b|c","1"\n'
+      + '"Survey","Rate","Rating","Y","",""\n';
+    const { rows } = rowsFromCsv(csv);
+    expect(rows[0]).toMatchObject({ kind: 'choice', required: true, allowMultiple: true });
+    expect(rows[1]).toMatchObject({ kind: 'rating', required: true });
+  });
+});

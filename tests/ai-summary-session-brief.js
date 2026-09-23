@@ -328,6 +328,42 @@ async function runWorker(gameId) {
   await check('no "[object Object]" in the platform prompt either', () =>
     assert.ok(!plat.prompt.includes('[object Object]')));
 
+  say('\n6. the QUESTION row, served from an org set, reaches the prompt in the clear');
+  // The same file's worker also reads the question the round was served
+  // from — via the REF row the host pinned — and ENCRYPTED_FIELDS.question
+  // puts Title / Detail / the options on an org set's rows as envelopes.
+  // It read that row with a plain GetCommand too, so {questionTitle} came out
+  // as "[object Object]" on every org session of every game type.
+  {
+    const gameId = '4823';
+    await seedRound(gameId, { orgId: ORG });
+    const { setMetadataKey } = require(path.join(REPO, 'lambda-functions/game/set-version.js'));
+    const setRef = { scope: 'org', orgId: ORG, setId: 'retro-set' };
+    put({ ...setMetadataKey(setRef), orgId: ORG, activeVersion: 1, engagementType: 'call-and-answer' });
+    put(await crypto.encryptItem(ORG, 'question', {
+      PK: `ORG#${ORG}#SET#retro-set#v1`, SK: 'QUESTION#c001#001',
+      Title: 'Which handoff hurt most this quarter?',
+      Detail: 'Think of the one that cost the most days.',
+      Category: 'Delivery',
+    }));
+    put({ PK: `GAME#${gameId}`, SK: 'QUESTION#001#REF', SourceQuestionId: 'QUESTION#c001#001',
+      SetId: 'retro-set', SetVersion: 1, SetScope: 'org', SetOrgId: ORG });
+    const atRest = store.get(key(`ORG#${ORG}#SET#retro-set#v1`, 'QUESTION#c001#001'));
+    await check('the seeded question row carries envelopes, as the importer leaves it', () =>
+      assert.ok(isEnvelope(atRest.Title) && isEnvelope(atRest.Detail), 'fixture is not encrypted'));
+    const run = await runWorker(gameId);
+    await check('the worker completed', () =>
+      assert.strictEqual(run.res && run.res.ok, true, JSON.stringify(run.res)));
+    await check("the question's title is in the prompt", () =>
+      assert.ok(run.prompt.includes('Which handoff hurt most this quarter?'), `title missing from:\n${run.prompt}`));
+    await check('no "[object Object]" and no envelope in the prompt', () => {
+      assert.ok(!run.prompt.includes('[object Object]'), `stringified envelope in:\n${run.prompt}`);
+      assert.ok(!run.prompt.includes(atRest.Title.ct), 'question ciphertext reached the prompt');
+    });
+    await check('the question row is still ciphertext after the run', () =>
+      assert.ok(isEnvelope(store.get(key(`ORG#${ORG}#SET#retro-set#v1`, 'QUESTION#c001#001')).Title)));
+  }
+
   say(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { say(`CRASH ${e.stack}`); process.exit(1); });

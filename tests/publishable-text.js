@@ -60,6 +60,26 @@ const categories = [{ PK: 'ORG#org_x#SET#s#v2', SK: 'CATEGORY#c001', Name: 'Inju
     assert.strictEqual(P.snapshotHasImages(none), false);
     assert.strictEqual(P.snapshotHasImages(some), true);
   });
+  // rejects: a survey set shared to the public library with its scale labels,
+  // yes/no labels, follow-up question and placeholder never judged — six text
+  // fields a room reads, added by surveys phase 1 (review finding 2026-09-23).
+  await check('questionText carries a survey question\'s own words too', () => {
+    const survey = {
+      PK: 'ORG#org_x#SET#s#v1', SK: 'QUESTION#c001#002', Title: 'How was it?', kind: 'yesno',
+      lowLabel: 'Dire', highLabel: 'Superb', yesLabel: 'Loved it', noLabel: 'Hated it',
+      followUpPrompt: 'Who ruined it?', placeholder: 'Name names', options: ['Opt one', 'Opt two'],
+    };
+    const t = P.questionText(survey);
+    for (const w of ['Dire', 'Superb', 'Loved it', 'Hated it', 'Who ruined it?', 'Name names', 'Opt one']) {
+      assert.ok(t.includes(w), `missing ${JSON.stringify(w)} in ${JSON.stringify(t)}`);
+    }
+  });
+  await check('an edit to a survey follow-up question changes the content hash', () => {
+    const row = { SK: 'QUESTION#c001#001', Title: 'Q', kind: 'yesno', followUpPrompt: 'Why?' };
+    const a = P.contentHash({ meta: {}, categories: [], questions: [row] });
+    const b = P.contentHash({ meta: {}, categories: [], questions: [{ ...row, followUpPrompt: 'Why not?' }] });
+    assert.notStrictEqual(a, b);
+  });
   console.log(`\n${pass} passed, ${fail} failed\n`);
   if (fail) process.exit(1);
 })();

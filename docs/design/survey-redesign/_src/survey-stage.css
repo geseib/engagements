@@ -1,0 +1,107 @@
+/* ===========================================================================
+   survey-stage.css — the survey and poll on the wall, as a DIFF against the
+   audited stage (stage-base.css + refresh-stage.css, inlined above). Every
+   size reads the profile ladder (--t-*, --floor), every animation is one of
+   refresh-stage.css's (grow, arrive, land, flagin) with its reduced-motion
+   path, and every colour is a Warm Summit token. Nothing loops.
+
+   Reuse, not invention:
+     choice    = trivia's .opts/.opt/.fill/.pct, with "Most picked" in place
+                 of "Correct" — no answer is right, so the flag is amber, not
+                 green, and it lands on the largest share
+     rank      = the answer cards (.cards/.card/.rank/.tally)
+     themes    = the answer cards with their .fill share
+     featured  = stage.css's .featured (the feedback wall), copied below
+                 verbatim because stage-base.css predates it
+   New shapes only where a kind has no ancestor: the rating histogram and the
+   yes/no split. Both are one element deep and ladder-sized.
+   ======================================================================== */
+
+/* ----------------------------------------------------------- choice ---- */
+.opt .flag.most{color:var(--primary);border-color:var(--primary)}
+.opt.most{border-color:var(--primary);border-width:2px}
+.opt.most .ltr{background:rgba(246,169,76,.16)}
+.opt.most .fill{background:rgba(246,169,76,.18)}
+.opt.most{animation:landm .4s cubic-bezier(.16,1,.3,1) calc(var(--rv) + .55s) both}
+@keyframes landm{from{border-color:var(--rule)}to{border-color:var(--primary)}}
+.opt .pct small{display:block;font-family:var(--font-ui);font-weight:700;font-size:var(--t-meta);
+  color:var(--muted);text-align:right;letter-spacing:.04em}
+.rule-note{font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.06em}
+
+/* ----------------------------------------------------------- rating ---- */
+/* The mean is the headline (hero tier, once); the histogram is the evidence.
+   Columns grow from the baseline in the same 80ms stagger as trivia's rows. */
+.srate{display:grid;grid-template-columns:auto minmax(0,1fr);gap:calc(3vw + 20px);align-items:end;min-height:0}
+.srate .mean{display:flex;flex-direction:column;gap:.2em}
+.srate .mean .hero{font-size:calc(var(--t-hero) * 1.5);color:var(--primary);line-height:.9}
+.srate .mean .of{font-size:var(--t-body);color:var(--muted);font-weight:700}
+.srate .mean .n{font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-top:.6em}
+.hist{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:calc(.8vw + 6px);
+  align-items:end;height:38vh;border-bottom:calc(var(--hair) * 2) solid var(--rule)}
+.hist .c{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:.3em;min-width:0}
+.hist .c i{display:block;width:100%;border-radius:10px 10px 0 0;background:rgba(155,168,190,.34);
+  transform-origin:bottom;animation:rise .62s cubic-bezier(.16,1,.3,1) both}
+.hist .c.top i{background:var(--primary)}
+.hist .c em{font-style:normal;font-family:var(--font-display);font-weight:800;font-size:var(--t-body);color:var(--text)}
+.hist .c:nth-child(1) i{animation-delay:calc(var(--rv) + .05s)}
+.hist .c:nth-child(2) i{animation-delay:calc(var(--rv) + .13s)}
+.hist .c:nth-child(3) i{animation-delay:calc(var(--rv) + .21s)}
+.hist .c:nth-child(4) i{animation-delay:calc(var(--rv) + .29s)}
+.hist .c:nth-child(5) i{animation-delay:calc(var(--rv) + .37s)}
+@keyframes rise{from{transform:scaleY(0)}to{transform:none}}
+.histx{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:calc(.8vw + 6px);margin-top:.35em;
+  text-align:center;font-family:var(--font-display);font-weight:800;font-size:var(--t-secondary)}
+.histends{display:flex;justify-content:space-between;font-size:var(--t-meta);color:var(--muted);font-weight:700;margin-top:.2em}
+
+/* ----------------------------------------------------------- yes / no -- */
+.syn{display:flex;flex-direction:column;gap:calc(1.6vh + 6px)}
+.syn .split{display:flex;height:calc(12vh + 20px);border-radius:var(--radius);overflow:hidden;gap:calc(var(--hair) * 3)}
+.syn .split i{display:flex;align-items:center;gap:.45em;padding:0 calc(1.4vw + 12px);font-style:normal;min-width:0;
+  font-family:var(--font-display);font-weight:800;font-size:var(--t-primary);color:#0F1A2E;
+  transform-origin:left center;animation:grow .62s cubic-bezier(.16,1,.3,1) calc(var(--rv) + .05s) both;white-space:nowrap;overflow:hidden}
+.syn .split i small{font-size:var(--t-body);font-family:var(--font-ui);font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.syn .split .yes{background:var(--primary)}
+.syn .split .no{background:var(--secondary)}
+.syn .split .ns{background:#8A96AB}
+.syn .why{display:grid;grid-template-columns:1fr 1fr;gap:calc(1.2vw + 10px)}
+.syn .why h5{margin:0 0 .4em;font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.syn .why .arr{animation-delay:calc(var(--rv) + .7s)}
+
+/* ------------------------------------------------------------- rank ---- */
+.card .avg{flex:none;font-size:var(--t-meta);color:var(--muted);font-weight:700;text-align:right;line-height:1.2}
+.card .avg b{display:block;font-family:var(--font-display);font-size:var(--t-secondary);color:var(--text)}
+.cards .card{animation:arrive .3s cubic-bezier(.16,1,.3,1) both}
+.cards .card:nth-child(1){animation-delay:calc(var(--rv) + .05s)}
+.cards .card:nth-child(2){animation-delay:calc(var(--rv) + .13s)}
+.cards .card:nth-child(3){animation-delay:calc(var(--rv) + .21s)}
+.cards .card:nth-child(4){animation-delay:calc(var(--rv) + .29s)}
+.cards .card:nth-child(5){animation-delay:calc(var(--rv) + .37s)}
+
+/* ------------------------------------------------------ featured quote -- */
+.featured{margin:calc(1.5vh + 6px) 0 0;padding:calc(1.2vh + 6px) calc(1.4vw + 12px);
+  border-left:4px solid var(--primary);background:rgba(27,41,66,.55);border-radius:var(--radius);
+  max-width:var(--measure);animation:arrive .4s cubic-bezier(.16,1,.3,1) both}
+.featured .say{margin:0;font-family:var(--font-display);font-weight:800;line-height:1.08;
+  font-size:max(var(--floor),calc(var(--t-primary) * .9));color:var(--text);overflow-wrap:anywhere}
+.featured footer{display:flex;flex-wrap:wrap;gap:.3em .9em;margin-top:.5em;font-size:var(--t-meta);font-weight:700}
+.featured .who{color:var(--primary);letter-spacing:.06em;text-transform:uppercase}
+.featured .on{color:var(--muted)}
+
+/* ----------------------------------------------- the survey, collecting -- */
+/* Self-paced: nobody is looking up, so the wall is the way IN (the QR stays)
+   and the room's progress. Per-question completion is a row of short bars,
+   never names — a survey is anonymous by default. */
+.sprog{display:flex;flex-direction:column;gap:calc(.8vh + 4px);min-width:0}
+.sprog .r{display:grid;grid-template-columns:2.2em minmax(0,1fr) 11ch;gap:calc(.6vw + 8px);align-items:center;
+  font-size:var(--t-meta);font-weight:700;color:var(--muted)}
+.sprog .r .t{height:calc(.9vh + 6px);border-radius:99px;background:rgba(155,168,190,.16);overflow:hidden}
+.sprog .r .t i{display:block;height:100%;border-radius:99px;background:var(--primary)}
+.sprog .r .t i.full{background:var(--success)}
+.sprog .r .k{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sprog .r .v{text-align:right;font-variant-numeric:tabular-nums}
+.stitle{font-family:var(--font-display);font-weight:800;font-size:var(--t-primary);line-height:1.05;margin:0}
+.ssub{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;max-width:44ch;line-height:1.3}
+
+@media (prefers-reduced-motion:reduce){
+  .opt.most,.hist .c i,.syn .split i,.cards .card,.featured{animation:none}
+}

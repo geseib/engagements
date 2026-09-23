@@ -1,0 +1,161 @@
+/* ===========================================================================
+   ss-dialog.css — the create / edit dialog, as a DIFF against the shipped
+   GameSetupDialog.css (inlined above this block, verbatim, together with the
+   styles.css rules it inherits).
+
+   In the product every rule here moves INTO GameSetupDialog.css, rooted at
+   .gsd, as gsd-* — the dialog owns its one sheet. The ss- prefix exists only
+   so the mockup's diff is legible and cannot collide with anything shipped.
+   Colour is the dialog's own --gsd-* locals (GameSetupDialog.css:43-69); the
+   two tokens it borrows from :root (--danger-text, --danger-deep) are the ones
+   the shipped refusal already borrows (:516-527).
+
+   MEASURED (composited up the real stack: tint over card #1B2942):
+     --gsd-text  #F4EDE4 on card 12.53 · on field #25375A 10.20
+     --gsd-muted #A9B5C9 on card  7.03 · on field  5.72
+                 on the briefing's periwinkle tint (6% over card)    6.30
+                 on the amber limit tint (10% over card)             5.83
+                 on the danger tint (10% over card)                  6.28
+     --gsd-secondary #7CA7E6 on card 5.91 · on the periwinkle tint 5.30
+     --gsd-primary   #F6A94C on card 7.42 (the "changed" words in the
+                     Advanced summary)
+     --danger-text   #EF8C86 on the danger tint 5.43
+     --danger-deep   #B03A34 carrying --gsd-text 5.16 (styles.css:31-33)
+     --gsd-text on the confirm foot #2A2E42 11.53
+   Ladder: the laptop ladder, 12/13/15/19/24. Nothing new below 12px.
+   ======================================================================== */
+
+.gsd svg.ico{width:16px;height:16px;flex:none;vertical-align:-3px}
+
+/* ---------------------------------------------- the head and foot STICK
+   The shipped card scrolls as one piece (styles.css .new-game-dialog:
+   max-height 90vh, overflow-y auto), so the absolute X scrolls away with the
+   title and Cancel sits below the last field. Both exits stay on screen now,
+   whatever is open — hard rule 2 is about exits you can SEE. */
+.gsd .ss-head{position:sticky;top:0;z-index:3;background:var(--gsd-card);
+  border-bottom:1px solid var(--gsd-rule);padding-bottom:12px}
+.gsd .ss-head h2{margin:0;padding:22px 64px 0 26px}
+.gsd .ss-head .ss-sub{margin:3px 0 0;padding:0 64px 0 26px;font-size:var(--gsd-t-label);
+  color:var(--gsd-muted);line-height:1.45}
+.gsd .ss-head .gsd-close{top:14px}
+.gsd .dialog-actions.ss-foot{position:sticky;bottom:0;z-index:3;background:var(--gsd-card);
+  align-items:center;margin-top:0;padding:14px 26px 18px;flex-wrap:wrap}
+.gsd .ss-foot-note{margin:0 auto 0 0;display:flex;gap:7px;align-items:center;
+  font-size:var(--gsd-t-label);color:var(--gsd-muted);line-height:1.4;min-width:0}
+.gsd .ss-foot-note svg.ico{color:var(--gsd-secondary)}
+
+/* The dirty-close confirm, INLINE in the foot — never a modal from a modal.
+   Both exits (X and Cancel) route through one requestClose(); with nothing
+   typed it just closes, with a briefing or an edit in hand it turns the foot
+   into this. Escape answers the same way. */
+.gsd .dialog-actions.ss-foot.is-confirm{background:#2A2E42;border-top-color:rgba(229,100,94,.55)}
+.gsd .ss-confirm-t{margin:0 auto 0 0;font-size:14px;line-height:1.45;color:var(--gsd-text);min-width:0;flex:1 1 260px}
+.gsd .ss-confirm-t b{font-weight:700}
+.gsd .btn-danger-deep{font:inherit;font-size:var(--gsd-t-body);font-weight:700;padding:10px 18px;border-radius:8px;
+  border:1px solid var(--danger-deep);background:var(--danger-deep);color:var(--gsd-text);cursor:pointer;min-width:120px}
+
+/* ------------------------------------------------------- small pieces */
+.gsd .ss-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:99px;
+  border:1px solid var(--gsd-rule-strong);font-size:var(--gsd-t-floor);font-weight:700;letter-spacing:.04em;
+  text-transform:none;color:var(--gsd-muted);vertical-align:1px}
+.gsd .ss-btn{font:inherit;font-size:var(--gsd-t-label);font-weight:700;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--gsd-rule-strong);background:transparent;color:var(--gsd-text);cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.gsd .ss-btn:hover{border-color:var(--gsd-primary)}
+.gsd .ss-btn--link{border:0;padding:0;color:var(--gsd-secondary);text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.gsd .ss-fine{font-size:var(--gsd-t-floor);color:var(--gsd-muted);line-height:1.45}
+.gsd .ss-locked{display:flex;gap:7px;align-items:center;margin-top:6px;font-size:var(--gsd-t-floor);color:var(--gsd-muted)}
+
+/* FIX, found by rendering the two shipped sheets together: an UNSELECTED
+   category name computes #333 on the card — 1.15:1 — because styles.css:4858
+   styles .category-name directly and beats the colour .gsd .category-button
+   hands down (GameSetupDialog.css:289-316 re-colours only .category-count).
+   Selected names are white by styles.css:7432, which is why a test of the
+   selected chip passes. */
+.gsd .category-button .category-name{color:inherit}
+
+/* The shipped captions at 10.5 / 11px, raised to the 12px floor as the survey
+   start dialog (survey-redesign 07) already did — one dialog family, one floor. */
+.gsd .gsd-pv h6,.gsd .gsd-pv-who,.gsd .gsd-opt-state{font-size:var(--gsd-t-floor)}
+
+/* ---------------------------------------------------------- THE BRIEFING
+   One block, five states: empty (an invitation), working (read, then write),
+   ready (the editable summary), limit (amber: a fact about the file, not a
+   fault) and failed (danger rule: something broke). Call & Answer only. */
+.gsd .ss-brief{border:1px dashed var(--gsd-rule-strong);border-radius:12px;padding:14px 16px;
+  display:flex;gap:14px;align-items:flex-start;margin-bottom:6px}
+.gsd .ss-brief-ico{width:34px;height:34px;border-radius:9px;background:rgba(124,167,230,.12);
+  color:var(--gsd-secondary);display:grid;place-items:center;flex:none}
+.gsd .ss-brief-ico svg.ico{width:18px;height:18px}
+.gsd .ss-brief-main{min-width:0;flex:1;display:flex;flex-direction:column;gap:8px}
+.gsd .ss-brief-t{margin:0;font-size:var(--gsd-t-body);font-weight:700;color:var(--gsd-text);line-height:1.35}
+.gsd .ss-brief-d{margin:0;font-size:var(--gsd-t-label);color:var(--gsd-muted);line-height:1.5}
+.gsd .ss-brief-d b{color:var(--gsd-text);font-weight:700}
+.gsd .ss-brief-acts{display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+
+.gsd .ss-brief.is-ready,.gsd .ss-brief.is-working{border-style:solid;border-color:rgba(124,167,230,.42);
+  background:rgba(124,167,230,.06)}
+.gsd .ss-brief.is-limit{border-style:solid;border-color:rgba(246,169,76,.55);background:rgba(246,169,76,.10)}
+.gsd .ss-brief.is-limit .ss-brief-ico{background:rgba(246,169,76,.16);color:var(--gsd-primary)}
+.gsd .ss-brief.is-failed{border-style:solid;border-color:rgba(229,100,94,.55);background:rgba(229,100,94,.10)}
+.gsd .ss-brief.is-failed .ss-brief-ico{background:rgba(229,100,94,.16);color:var(--danger-text)}
+
+.gsd .ss-src{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:var(--gsd-t-label);color:var(--gsd-muted)}
+.gsd .ss-src b{color:var(--gsd-text);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:30ch}
+.gsd .ss-src .sep{opacity:.5}
+.gsd textarea.dialog-textarea.ss-brief-text{min-height:200px;line-height:1.5;font-size:14px}
+.gsd .ss-row{display:flex;gap:12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+.gsd .ss-kept{margin:0;font-size:var(--gsd-t-floor);line-height:1.5;color:var(--gsd-muted);
+  border-left:3px solid var(--gsd-secondary);padding-left:11px}
+.gsd .ss-kept b{color:var(--gsd-text);font-weight:700}
+
+/* The two-step progress: a real step that finishes, then an honest sweep —
+   the summarising call returns once, so there is no fraction to show. */
+.gsd .ss-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.gsd .ss-steps li{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--gsd-text);line-height:1.35}
+.gsd .ss-steps li span{min-width:0}
+.gsd .ss-steps li small{color:var(--gsd-muted);font-size:var(--gsd-t-floor);margin-left:4px}
+.gsd .ss-dot{width:18px;height:18px;border-radius:50%;flex:none;border:2px solid var(--gsd-rule-strong);
+  display:grid;place-items:center;font-size:11px;font-weight:800;line-height:1;color:#1B2942}
+.gsd .ss-steps li.done .ss-dot{background:var(--gsd-success);border-color:var(--gsd-success)}
+.gsd .ss-steps li.now .ss-dot{border-color:var(--gsd-primary)}
+.gsd .ss-steps li.todo{color:var(--gsd-muted)}
+.gsd .ss-sweep{height:4px;border-radius:99px;background:rgba(155,168,190,.18);overflow:hidden;position:relative}
+.gsd .ss-sweep i{position:absolute;top:0;bottom:0;left:-30%;width:30%;border-radius:99px;background:var(--gsd-primary);
+  animation:ss-sweep 1.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes ss-sweep{to{left:100%}}
+@media (prefers-reduced-motion:reduce){.gsd .ss-sweep i{animation:none;left:0;width:100%;opacity:.45}}
+
+/* ------------------------------------------------ THE ADVANCED DISCLOSURE
+   A native <details>, closed by default. The summary line IS the promise:
+   it names every default in force, and a changed value is named in amber in
+   the same sentence, so closing the section never hides a decision. */
+.gsd .ss-adv{margin:14px 0 2px;border-top:1px solid var(--gsd-rule)}
+.gsd .ss-adv > summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr);
+  gap:2px 14px;align-items:baseline;padding:14px 0 6px;border-radius:6px}
+.gsd .ss-adv > summary::-webkit-details-marker{display:none}
+.gsd .ss-adv > summary:focus-visible{outline:2px solid var(--gsd-primary);outline-offset:3px}
+.gsd .ss-adv-k{display:inline-flex;align-items:center;gap:7px;font-size:var(--gsd-t-floor);font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--gsd-text);white-space:nowrap}
+.gsd .ss-chev{display:inline-block;width:8px;height:8px;border-right:2px solid var(--gsd-muted);
+  border-bottom:2px solid var(--gsd-muted);transform:rotate(-45deg);transition:transform .15s ease;margin-right:2px}
+.gsd .ss-adv[open] .ss-chev{transform:rotate(45deg)}
+.gsd .ss-adv-s{margin:0;font-size:var(--gsd-t-label);color:var(--gsd-muted);line-height:1.5}
+.gsd .ss-adv-s b{color:var(--gsd-primary);font-weight:700}
+.gsd .ss-adv-s .ss-open-only{display:none}
+.gsd .ss-adv[open] .ss-adv-s .ss-open-only{display:inline}
+.gsd .ss-adv-body{padding:6px 0 2px;display:flex;flex-direction:column;gap:2px}
+.gsd .ss-adv-body .gsd-section{margin-top:12px}
+.gsd .ss-adv-body .gsd-section:first-child{margin-top:4px;border-top:0;padding-top:4px}
+.gsd .ss-two{display:flex;gap:16px;flex-wrap:wrap}
+.gsd .ss-two > .form-group{flex:1 1 240px;min-width:0}
+.gsd .ss-changed{color:var(--gsd-primary);font-weight:700}
+
+/* ------------------------------------------------ mockup tooling only
+   The rail reserves 320px on the right; the shipped overlay is 100vw. */
+body.mk-anno-on .new-game-overlay{width:auto;right:320px}
+@media (max-width:1440px){body.mk-anno-on .new-game-overlay{right:0}}
+.ss-behind{position:fixed;left:0;top:0;border:0;width:100%;height:100%}
+body.mk-anno-on .ss-behind{width:calc(100% - 320px)}
+@media (max-width:1440px){body.mk-anno-on .ss-behind{width:100%}}
+.new-game-overlay.ss-lighter{background:rgba(6,10,18,.62)}

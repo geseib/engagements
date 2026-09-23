@@ -187,6 +187,9 @@
   line-height: 1.5;
 }
 .bill-note--after { margin-top: 14px; }
+/* A link in a note keeps the note's measured colour and is marked by its
+   underline, so it adds no pairing to the palette test. */
+.bill-note a { color: inherit; text-decoration: underline; }
 
 /* --------------------------------------------------------------- the boxes -- */
 

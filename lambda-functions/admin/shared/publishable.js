@@ -18,6 +18,10 @@ const crypto = require('crypto');
 const QUESTION_FIELDS = Object.freeze([
   'Title', 'Detail', 'AnswerDetails', 'CustomInstructions',
   'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF', 'options',
+  // A survey question's own words (surveys phase 1): the ends of a scale, the
+  // yes/no labels, the follow-up question and the answer box's placeholder.
+  // Absent on every other type's rows, so no existing set's hash moves.
+  'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder',
 ]);
 /** The editable set prose (`edit-question-set.js` OPTIONAL_FIELDS that are text). */
 const SET_FIELDS = Object.freeze([

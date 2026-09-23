@@ -1,0 +1,296 @@
+/* ==========================================================================
+   SHARING A SAVED REPORT — the host's "Report saved" dialog
+   (ReportSavedDialog.jsx) and the recipient's page at /shared-report
+   (SharedReportPage.jsx).
+
+   One stylesheet for both because they are two ends of one hand-off and show
+   the same two things: a link and a passkey.
+
+   THEME. Paper, like the report they are about (GameReport.jsx sets
+   data-theme="light" on the document). The page declares it on its root and
+   the dialog through Modal's `theme` prop, so --bg, --surface, --text and
+   --muted resolve to the paper set whatever sits around them.
+
+   SCOPE. Every selector starts `.rshare`. The scrim is `.rshare-scrim` because
+   Modal renders it OUTSIDE the dialog box, so it cannot inherit `.rshare`'s
+   tokens and declares the one it needs itself.
+
+   MEASURED on paper (__tests__/reportSharePalette.test.js does the arithmetic):
+     --text        #1B2942 on --surface #FFFFFF   14.9:1
+     --muted       #5E6167 on --surface            6.2:1   kicker, meta, facts
+     --danger-deep #B03A34 on --surface            5.9:1   refusals. NOT
+                   --danger-text: #EF8C86 is a DUSK tint, 2.6:1 on white.
+     --rshare-success       on --surface           ≥ 4.5   "Downloaded"
+     --rshare-on-primary on --primary #F6A94C       ≥ 4.5  the filled button
+     --rshare-accent #9A5B18 on --surface           5.4:1  focus ring. --primary
+                   is 1.96:1 on white and cannot mark focus on paper.
+   ========================================================================== */
+
+.rshare {
+  --rshare-t-meta: 13px;    /* floor: dates and the kicker, never a sentence */
+  --rshare-t-label: 14px;   /* field labels, the facts under the fields */
+  --rshare-t-body: 16px;    /* prose AND every input: below 16px iOS zooms on focus */
+  --rshare-t-head: 20px;    /* the dialog heading, the brand */
+  --rshare-t-key: 22px;     /* the passkey itself, spaced to be read aloud */
+  --rshare-t-title: 26px;   /* the report's name on the recipient's page */
+  --rshare-tap: 48px;
+
+  --rshare-on-primary: #2A1B08;             /* ink on the amber button (GameReport.css:107) */
+  --rshare-accent: #9A5B18;                 /* deep amber for paper: focus */
+  --rshare-success: #1F6B47;                /* "Downloaded" */
+  --rshare-rule: rgba(27, 41, 66, 0.14);    /* card and dialog edges */
+  --rshare-field-rule: rgba(27, 41, 66, 0.55); /* input and button edges: 3:1 non-text */
+  --rshare-shadow: rgba(15, 26, 46, 0.28);
+  --rshare-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--rshare-t-body);
+  line-height: 1.5;
+}
+
+.rshare *,
+.rshare *::before,
+.rshare *::after { box-sizing: border-box; }
+
+.rshare :focus-visible {
+  outline: 3px solid var(--rshare-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ the page -- */
+.rshare-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.rshare-top { padding: 18px 20px; }
+
+.rshare-brand {
+  font-family: var(--font-display);
+  font-size: var(--rshare-t-head);
+  font-weight: 800;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.rshare-main {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 4vh 16px 64px;
+}
+
+.rshare-card {
+  width: 100%;
+  max-width: 30rem;
+  padding: 28px 24px;
+  background: var(--surface);
+  border: 1px solid var(--rshare-rule);
+  border-radius: 16px;
+}
+
+.rshare-kicker {
+  margin: 0 0 6px;
+  font-size: var(--rshare-t-meta);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rshare-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--rshare-t-title);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rshare-meta {
+  margin: 6px 0 0;
+  font-size: var(--rshare-t-meta);
+  color: var(--muted);
+}
+
+.rshare-lead {
+  margin: 16px 0 20px;
+  font-size: var(--rshare-t-body);
+}
+
+.rshare-form { display: grid; gap: 10px; }
+
+.rshare-status { min-height: 1.5em; margin-top: 12px; }
+
+/* ---------------------------------------------------------- the fields -- */
+.rshare-label {
+  font-size: var(--rshare-t-label);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rshare-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--rshare-tap);
+  padding: 10px 12px;
+  font: 400 var(--rshare-t-body)/1.3 var(--font-ui);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--rshare-field-rule);
+  border-radius: 10px;
+}
+
+.rshare-input::placeholder { color: var(--muted); }
+
+.rshare-input--key {
+  font-family: var(--rshare-mono);
+  font-size: var(--rshare-t-key);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rshare-field { margin-top: 14px; }
+
+/* WRAPS, so the Copy button drops under the field on a phone rather than
+   squeezing it. Unwrapped, a 375px screen showed "K7QM3-XPD9" — the passkey
+   with its last character cut off, which is the one value that must be read
+   exactly. 13rem holds all eleven characters at --rshare-t-key. */
+.rshare-copyrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.rshare-copyrow .rshare-input { flex: 1 1 13rem; }
+
+/* --------------------------------------------------------- the buttons -- */
+.rshare-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: var(--rshare-tap);
+  padding: 0 18px;
+  font: 600 var(--rshare-t-body)/1 var(--font-ui);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--rshare-field-rule);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.rshare-btn:hover:not(:disabled) { background: var(--surface-2); }
+
+.rshare-btn:disabled { cursor: default; opacity: 0.6; }
+
+.rshare-btn--primary {
+  color: var(--rshare-on-primary);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Not --primary-deep with white ink, as the report toolbar does on hover:
+   white on #C77B4A is 3.1:1. The ink stays and the edge darkens instead. */
+.rshare-btn--primary:hover:not(:disabled) {
+  background: var(--primary);
+  box-shadow: inset 0 0 0 2px var(--rshare-on-primary);
+}
+
+/* ------------------------------------------------------------ outcomes -- */
+/* Plain text flow, NOT flex: as a flex container every text run and inline
+   element becomes its own column, and "like K7QM3-XPD9Z." split into three on
+   a phone. The one icon sits inline instead. */
+.rshare-note {
+  margin: 12px 0 0;
+  font-size: var(--rshare-t-body);
+  line-height: 1.45;
+}
+
+.rshare-note svg { vertical-align: -3px; margin-right: 6px; }
+
+/* A passkey quoted in a sentence must not break at its dash. */
+.rshare-nowrap { white-space: nowrap; }
+
+.rshare-note--error { color: var(--danger-deep); }
+.rshare-note--done { color: var(--rshare-success); }
+
+/* ----------------------------------------------------------- the dialog -- */
+/* The scrim scrolls and the card centres by its own margin: `align-items:
+   center` on a scrolling scrim overflows both ways and only one is reachable. */
+.rshare-scrim {
+  --rshare-scrim: rgba(15, 26, 46, 0.55);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 6vh 16px 32px;
+  background: var(--rshare-scrim);
+}
+
+.rshare-dialog {
+  width: 100%;
+  max-width: 34rem;
+  margin: auto;
+  padding: 20px 24px 22px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px var(--rshare-shadow);
+}
+
+.rshare-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rshare-head {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--rshare-t-head);
+}
+
+.rshare-x {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.rshare-x:hover { color: var(--text); background: var(--surface-2); }
+
+.rshare-dialog .rshare-lead { margin: 10px 0 4px; }
+
+.rshare-facts {
+  margin: 18px 0 0;
+  padding-left: 1.1em;
+  font-size: var(--rshare-t-label);
+  color: var(--muted);
+}
+
+.rshare-facts li + li { margin-top: 4px; }
+
+/* margin-left: auto on the first action, never justify-content: flex-end —
+   a wrapped row that overflows toward its start cannot be reached. */
+.rshare-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.rshare-actions > :first-child { margin-left: auto; }

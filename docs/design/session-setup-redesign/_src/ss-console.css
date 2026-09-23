@@ -1,0 +1,61 @@
+/* ===========================================================================
+   ss-console.css — the data & prompt page, drawn in the console's own
+   vocabulary (panels, tables, mono keys) so it reads as part of the product's
+   documentation rather than a separate diagram style. A DIFF against
+   admin-redesign/_src/shell.css (inlined above). Every class is prefixed ss-.
+
+   MEASURED against the shell's real stack (--surface #1B2942, --bg #0F1A2E):
+     --text on --bg 14.97 · --muted #B6C2D4 on --bg 9.65
+     --secondary on --bg 7.06 (keys) · #E6D8C6 on --bg 12.42 (strings)
+     --primary on the new-layer tint (8% over --bg) 7.80
+     --text on the highlight (22% amber over --bg) 9.68
+   ======================================================================== */
+
+.ss-pre{margin:0;font:12px/1.6 var(--font-mono);color:var(--text);background:var(--bg);border:1px solid var(--rule);
+  border-radius:8px;padding:12px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ss-pre .c{color:var(--muted)}
+.ss-pre .k{color:var(--secondary)}
+.ss-pre .s{color:#E6D8C6}
+.ss-pre .new{display:block;margin:4px -14px;padding:4px 14px;background:rgba(246,169,76,.08);
+  border-left:3px solid var(--primary)}
+.ss-pre .new .k{color:var(--primary)}
+.ss-pre .hl{background:rgba(246,169,76,.22);border-radius:3px;padding:0 2px}
+
+/* ------------------------------------------------------- the states row */
+.ss-states{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:stretch}
+.ss-state{border:1px solid var(--rule-strong);border-radius:8px;background:var(--bg);padding:10px 12px;
+  display:flex;flex-direction:column;gap:6px;position:relative;min-width:0}
+.ss-state h3{margin:0;font:700 var(--t-body)/1.2 var(--font-ui);display:flex;align-items:center;gap:7px}
+.ss-state h3 .n{font:800 var(--t-floor)/1 var(--font-ui);color:var(--muted);letter-spacing:.08em}
+.ss-state code{font:12px/1.4 var(--font-mono);color:var(--secondary)}
+.ss-state p{margin:0;font-size:var(--t-label);color:var(--muted);line-height:1.45}
+.ss-state p b{color:var(--text);font-weight:600}
+.ss-state.view{border-style:dashed}
+.ss-state.cur{border-color:var(--primary)}
+.ss-state .tag{align-self:flex-start;font:700 var(--t-floor)/1.4 var(--font-ui);padding:0 7px;border-radius:99px;
+  border:1px solid var(--rule-strong);color:var(--muted)}
+.ss-state .how{margin-top:auto;padding-top:6px;border-top:1px solid var(--rule);font-size:var(--t-floor);color:var(--muted)}
+.ss-state .how b{color:var(--primary);font-weight:700}
+@media (max-width:1200px){.ss-states{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ------------------------------------------------------------ the path */
+.ss-path{margin:0;padding:0;list-style:none;counter-reset:p;display:flex;flex-direction:column;gap:0}
+.ss-path li{counter-increment:p;display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,15rem);gap:10px;
+  padding:9px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.ss-path li:last-child{border-bottom:0}
+.ss-path li::before{content:counter(p);font:800 var(--t-label)/1 var(--font-ui);color:var(--primary);text-align:right}
+.ss-path li b{font-weight:700}
+.ss-path li span{font-size:var(--t-label);color:var(--muted);line-height:1.45}
+.ss-path li code,.ss-kv code,.tbl code{font:12px/1.4 var(--font-mono);color:var(--secondary)}
+.ss-path li .where{font:12px/1.4 var(--font-mono);color:var(--muted);overflow-wrap:anywhere}
+
+.tbl.ss-tbl{table-layout:fixed;width:100%}
+.tbl.ss-tbl td{white-space:normal;vertical-align:top;line-height:1.45;padding-top:8px;padding-bottom:8px;height:auto}
+.tbl.ss-tbl td.k{font-weight:700}
+.ss-no{color:var(--danger-text);font-weight:700}
+.ss-yes{color:var(--success-text);font-weight:700}
+
+/* the row, then the table: stacked, so the mono block keeps its columns
+   (white-space:pre) instead of wrapping mid-attribute in a half-width panel */
+.ss-where{display:block}
+.ss-where .ss-pre{white-space:pre;overflow-x:auto}

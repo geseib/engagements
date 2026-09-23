@@ -351,6 +351,25 @@ describe('the one banner', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Saved');
   });
+
+  test('a plan-limit refusal is the shared notice, with the reader\'s way out and the same dismiss', () => {
+    // rejects: the console reporting a refused upload or copy as plain text
+    // ("… Open Plan & usage to request the Team plan.") with nothing to click,
+    // and saying "request" to people who cannot (22-plan-limit-notice.html).
+    const { parseUpgradeRequired } = require('../utils/upgradeRequired');
+    const limit = parseUpgradeRequired(402, {
+      code: 'upgrade_required',
+      limit: { kind: 'sets', used: 5, included: 5 },
+      resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
+    });
+    const onDismissNotice = jest.fn();
+    render(<QuestionSetsPanel questionSets={SETS} notice={{ limit, outcome: 'Nothing was copied.', tone: 'error' }} onDismissNotice={onDismissNotice} />);
+    const box = screen.getByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Northwind holds 5 of the 5 question sets it includes. Nothing was copied.');
+    expect(within(box).getByRole('link', { name: /Dana Whitfield/ })).toHaveAttribute('href', 'mailto:dana@x.example');
+    fireEvent.click(within(box).getByRole('button', { name: /dismiss/i }));
+    expect(onDismissNotice).toHaveBeenCalled();
+  });
 });
 
 /* ------------------------------------------------------------ the predicate */

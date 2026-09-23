@@ -123,9 +123,9 @@ describe('the poll response says whether a set already exists', () => {
 
   test('a job with no set reads as no set, and that is the manual path', () => {
     // rejects: defaulting createdSet to a truthy placeholder. A job started
-    // before server-side creation shipped, and every survey job, carries
-    // neither field — and the client must offer to create the set in that case
-    // or the items are lost.
+    // before server-side creation shipped (and every survey job before the
+    // survey worker gained setCreation) carries neither field — and the client
+    // must offer to create the set in that case or the items are lost.
     expect(interpretGenerationJob(jobPayload()).createdSet).toBeNull();
     expect(interpretGenerationJob({ status: 'complete', items: [{ title: 'a' }] }).createdSet).toBeNull();
   });
@@ -249,10 +249,10 @@ describe('the running panel only promises what its worker really does', () => {
   });
 
   test('a builder whose worker does NOT create one stays silent about it', () => {
-    // rejects: hardcoding the promise into the shared panel. The survey
-    // builder's worker creates nothing — survey is not a playable type and
-    // upload-questions.js refuses it — so this panel over that builder would be
-    // telling the same lie in a new place.
+    // rejects: hardcoding the promise into the shared panel. A worker with no
+    // setCreation (the survey worker, until surveys phase 1 gave it one) makes
+    // nothing, so this panel over its builder would be telling the same lie in
+    // a new place.
     render(<GenerationJobPanel job={running} noun="questions" onKeepRunning={() => {}} />);
     expect(screen.queryByText(/The set gets made without you/i)).not.toBeInTheDocument();
   });
@@ -286,9 +286,9 @@ describe('a partial run that still produced a draft says so', () => {
   });
 
   test('a partial with NO set keeps the original copy and the Discard button', () => {
-    // rejects: applying the created-set copy unconditionally. The survey
-    // builder and any refused creation still reach this screen with nothing
-    // saved, and for them the old wording is the true one.
+    // rejects: applying the created-set copy unconditionally. An older job
+    // and any refused creation still reach this screen with nothing saved,
+    // and for them the old wording is the true one.
     render(
       <GenerationJobPanel
         job={partial()} noun="scenarios" onReview={() => {}} onDiscard={() => {}}
@@ -309,6 +309,33 @@ describe('a partial run that still produced a draft says so', () => {
     );
     expect(screen.getByText(/The set could not be created for you/i)).toBeInTheDocument();
   });
+
+  test('a set refused at the plan limit is the plan-limit notice, in the reader\'s voice', () => {
+    // rejects: the stored-set allowance said as "The set could not be created
+    // for you: …" with nothing to click (22-plan-limit-notice.html).
+    const setCreationLimit = {
+      code: 'upgrade_required',
+      limit: { kind: 'sets', used: 5, included: 5 },
+      resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
+    };
+    render(
+      <GenerationJobPanel
+        job={partial({ setCreationError: 'This organisation cannot store another question set yet.', setCreationLimit })}
+        noun="scenarios" onReview={() => {}}
+      />
+    );
+    const box = screen.getByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Northwind holds 5 of the 5 question sets it includes.');
+    expect(box).toHaveTextContent('The questions were generated, but no set was saved.');
+    expect(box).toHaveTextContent('Dana Whitfield');
+    expect(screen.queryByText(/The set could not be created for you/i)).toBeNull();
+  });
+
+  test('setCreationLimit travels through the job reader', () => {
+    const read = interpretGenerationJob(jobPayload({ setCreationLimit: { code: 'upgrade_required', limit: { kind: 'sets' } } }));
+    expect(read.setCreationLimit.code).toBe('upgrade_required');
+    expect(interpretGenerationJob(jobPayload()).setCreationLimit).toBeNull();
+  });
 });
 
 describe('the table counts honestly either way', () => {
@@ -325,5 +352,63 @@ describe('the table counts honestly either way', () => {
     render(<GeneratedItemsTable items={items} noun="scenarios" onToggleExclude={() => {}} />);
     expect(screen.getByText(/3 will be saved/i)).toBeInTheDocument();
     expect(screen.getByText(/Nothing has been saved yet/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * THE SURVEY BUILDER HANDS OVER THE SAME WAY (surveys phases 0+1, C1).
+ *
+ * The survey worker gained `setCreation` (Track A, A5), so the survey builder
+ * joins the three above: it sends the set's copy with the request, opens the
+ * set the worker made, and posts nothing itself. Its own form and review are
+ * surveyAIBuilder.test.jsx; this is only the hand-over contract, held beside
+ * the other builders' so the four cannot drift apart.
+ */
+describe('the survey builder hands over like the other three', () => {
+  const SurveyAIBuilder = require('../components/SurveyAIBuilder').default;
+  const surveyItems = [
+    { kind: 'rating', title: 'How useful was it?', required: true, scale: '1-5', lowLabel: '', highLabel: '', tags: [] },
+    { kind: 'text', title: 'What was best?', required: false, textLength: 'long', maxLength: 500, placeholder: '', themes: true, tags: [] },
+  ];
+
+  async function generateSurvey(job) {
+    const posted = [];
+    authFetch.mockImplementation(async (url, options = {}) => {
+      const method = options.method || 'GET';
+      if (method === 'POST' && url.includes('admin/ai-generate-survey')) {
+        posted.push(JSON.parse(options.body));
+        return jsonResponse(202, { jobId: 'job-1', status: 'queued', requested: 2 });
+      }
+      if (method === 'GET' && url.includes('admin/ai-generate-survey/job-1')) return jsonResponse(200, job);
+      throw new Error(`unexpected ${method} ${url}`);
+    });
+    const onSurveyGenerated = jest.fn();
+    render(<SurveyAIBuilder onClose={() => {}} onSurveyGenerated={onSurveyGenerated} />);
+    fireEvent.change(screen.getByLabelText(/What do you want to find out/i), { target: { value: 'Did it work?' } });
+    fireEvent.change(screen.getByLabelText(/Name it/i), { target: { value: 'World Leaders' } });
+    fireEvent.click(screen.getByRole('button', { name: /Write the survey/i }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    return { posted, onSurveyGenerated };
+  }
+
+  test('the generation request carries the set metadata the worker names the set from', async () => {
+    // rejects: sending only A5's `title`. readSetMetadata() reads
+    // `setMetadata.title` (or `customTitle`) and creates no set without one.
+    const { posted } = await generateSurvey(jobPayload({ items: surveyItems, requested: 2, completed: 2, createdSet: CREATED }));
+    expect(posted[0].setMetadata).toEqual({ title: 'World Leaders', description: expect.any(String) });
+    expect(posted[0].title).toBe('World Leaders');
+  });
+
+  test('the running panel over it promises the set gets made', async () => {
+    await generateSurvey(jobPayload({ status: 'running', items: surveyItems.slice(0, 1), requested: 2, completed: 1 }));
+    expect(await screen.findByText(/The set gets made without you/i)).toBeInTheDocument();
+  });
+
+  test('a made set is opened, handed over as a pointer, and nothing is posted', async () => {
+    const { onSurveyGenerated } = await generateSurvey(jobPayload({ items: surveyItems, requested: 2, completed: 2, createdSet: CREATED }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open .World Leaders./ }));
+    expect(onSurveyGenerated).toHaveBeenCalledWith({ createdSet: CREATED });
+    expect(authFetch.mock.calls.filter(([url]) => String(url).includes('upload-questions'))).toHaveLength(0);
+    expect(screen.queryByText(/Nothing has been saved yet/i)).not.toBeInTheDocument();
   });
 });

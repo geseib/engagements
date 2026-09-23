@@ -17,7 +17,7 @@
     "@aws-sdk/s3-request-presigner": "^3.600.0",
     "@smithy/signature-v4": "^5.7.3",
     "mammoth": "^1.6.0",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "2.4.5"
   },
   "keywords": [
     "aws",

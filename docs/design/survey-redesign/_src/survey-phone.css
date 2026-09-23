@@ -1,0 +1,154 @@
+/* ===========================================================================
+   survey-phone.css — the participant's survey, as a DIFF against the shipped
+   player (player-redesign/build.py CSS, inlined above; PlayerSurface.css is
+   its re-cut under .plr). Every rule reads the phone ladder (--L-*), the 44px
+   tap floor (--tap) and the Warm Summit tokens already declared there. No new
+   colour: the one amber fill is the player's own "chosen" (.opt[aria-checked])
+   and the ranked fill is its own vote slot (.slot.filled).
+
+   MEASURED against the player's real stack (--bg #0F1A2E, --surface #182640):
+     --text on --surface  13.9:1   scale digits, ranked item text
+     --muted on --surface  8.6:1   the scale's end labels, "3 of 8"
+     #0F1A2E on --primary  8.86:1  a chosen scale step / yes / no
+   ======================================================================== */
+
+/* ---------------------------------------- the font shorthand, as shipped --
+   The player mockup's CSS writes `font:800 … inherit`, which is INVALID (a
+   family of `inherit` cannot sit in the shorthand), so every button fell back
+   to the UA's 400 weight. PlayerSurface.css ships `font-family:inherit` with
+   the weight declared on its own (:487-505); restated here so the mockups
+   render what ships. */
+.btn,.opt,.inp,.step,.rk,.more{font-family:inherit}
+.btn{font-weight:800;font-size:var(--L-secondary);line-height:1.2}
+.btn.ghost,.btn[disabled]{font-weight:700}
+.opt{font-weight:400;font-size:var(--L-secondary);line-height:1.35}
+.opt .k,.row .k{font-family:inherit;font-weight:800;font-size:var(--L-meta)}
+.inp{font-weight:400;font-size:var(--L-secondary);line-height:1.35}
+.step{font-weight:800;font-size:var(--L-secondary);line-height:1}
+
+/* ------------------------------------------------ progress, one line ---- */
+/* A survey is the only thing on the phone that has a LENGTH, so it is the only
+   thing that carries a meter. It sits in the bar's own strip — the 4px phase
+   band grows left to right — so no second bar is invented. */
+.strip.prog{background:linear-gradient(90deg,var(--primary) 0 var(--p),rgba(182,194,212,.20) var(--p) 100%)}
+.qno{font-size:var(--L-meta);font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 8px}
+.req{color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:none}
+
+/* ------------------------------------------------------- RATING -------- */
+/* One row of equal steps. Five steps fit a 390px phone at 60px each; ten
+   (and NPS's eleven) wrap to two rows of 5/6 rather than shrinking below the
+   tap floor. The end labels sit UNDER the ends they name, never inside. */
+.scale{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:8px;margin:4px 0 8px}
+.scale.wrap{grid-template-columns:repeat(6,minmax(0,1fr))}
+.step{min-height:56px;border:1px solid var(--rule);border-radius:13px;background:var(--surface);
+  color:var(--text);font-family:inherit;font-weight:800;font-size:var(--L-secondary);line-height:1;cursor:pointer;
+  display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.step[aria-checked="true"]{background:var(--primary);border-color:var(--primary);color:#0F1A2E}
+.ends{display:flex;justify-content:space-between;gap:14px;font-size:var(--L-meta);
+  color:var(--muted);line-height:1.35;margin:0 0 18px}
+.ends span:last-child{text-align:right}
+/* Stars are the same buttons drawn as glyphs; a filled run reads left to the
+   chosen one. The digit stays in the accessible name ("4 of 5"). */
+.stars{display:flex;gap:6px;margin:4px 0 8px}
+.stars .step{flex:1;min-height:60px;font-size:30px;line-height:1;color:var(--muted);background:transparent}
+.stars .step.on{color:var(--primary);border-color:rgba(246,169,76,.5);background:rgba(246,169,76,.08)}
+.stars .step[aria-checked="true"]{background:rgba(246,169,76,.16);border-color:var(--primary);color:var(--primary)}
+
+/* ------------------------------------------------------- YES / NO ------ */
+/* Two big halves. Not a toggle: a switch has a default, and a default here is
+   an answer the participant never gave. */
+.yn{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 16px}
+.yn .step{min-height:88px;font-size:var(--L-primary);font-weight:800;border-radius:16px}
+.yn.three{grid-template-columns:1fr 1fr 1fr}
+.yn.three .step:last-child{font-size:var(--L-secondary);font-weight:700}
+
+/* The follow-up that a yes/no can carry opens IN PLACE under the answer that
+   triggered it — one screen, not a second question the progress bar counts. */
+.follow{border-left:2px solid var(--primary);padding:2px 0 0 13px;margin:0 0 6px}
+.follow .lab{margin-bottom:6px}
+.follow textarea.inp{min-height:108px}
+
+/* ------------------------------------------------------- CHOICE -------- */
+/* The player's own option row (.opt), unchanged, with a square key for
+   pick-several so the shape says the rule before the words do. */
+.opt .k.sq{border-radius:6px}
+.opt[aria-checked="true"] .k.sq::after{content:"\2713";font-weight:800}
+.opt .k.sq{font-size:0}
+.opt[aria-checked="true"] .k.sq{font-size:var(--L-body)}
+.opt.other{flex-wrap:wrap}
+.opt.other .inp{flex-basis:100%;min-height:48px;margin-top:4px;font-size:var(--L-body);padding:10px 12px}
+.rule-line{font-size:var(--L-meta);color:var(--muted);margin:-2px 0 12px}
+.rule-line b{color:var(--text)}
+
+/* ------------------------------------------------------- RANKING ------- */
+/* Tap in order — the Call & Answer vote's own mechanic (.slots/.slot), grown
+   to N places. Each item shows the place it was given; tapping a placed item
+   takes it out and closes the gap. Up/down buttons are the non-drag route
+   (drag is offered, never required — WCAG 2.5.7). */
+.rank{margin:0 0 10px;padding:0;list-style:none}
+.rank li{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 8px 8px 12px;
+  margin:0 0 8px;border:1px solid var(--rule);border-radius:13px;background:var(--surface);
+  font-size:var(--L-secondary);line-height:1.3}
+.rank li .pl{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  font-family:inherit;font-weight:800;font-size:var(--L-body);line-height:1;border:1px dashed var(--rule);color:var(--muted)}
+.rank li.placed .pl{border:0;background:var(--primary);color:#0F1A2E}
+.rank li .it{flex:1;min-width:0}
+.rank li .mv{flex:none;display:flex;gap:4px}
+.rank li .mv button{width:var(--tap);height:var(--tap);border-radius:10px;border:1px solid var(--rule);
+  background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:18px;line-height:1;cursor:pointer}
+.rank li.unplaced{background:transparent;border-style:dashed}
+.rank-h{font-size:var(--L-meta);font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:14px 0 8px}
+
+/* ------------------------------------------------------- OPEN TEXT ----- */
+.count.near{color:var(--primary)}
+
+/* ------------------------------------------------------ the pager dock -- */
+/* Back is a quiet half, Next the filled half. The player dock is one full
+   button today (.btn), so the pair is two of them side by side — no new
+   button. Skip is Next with its words changed, not a third control. */
+.pair{display:grid;grid-template-columns:minmax(0,.62fr) minmax(0,1fr);gap:10px}
+.pair .btn+.btn{margin-top:0}
+.saved{font-size:var(--L-meta);color:var(--muted);margin:0 0 9px;display:flex;gap:7px;align-items:center}
+.saved i{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block}
+
+/* ------------------------------------------------ the review list ------- */
+.rev{margin:0 0 6px;padding:0;list-style:none}
+.rev li{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.rev li:last-child{border-bottom:0}
+.rev .n{flex:none;width:22px;font-size:var(--L-meta);font-weight:800;color:var(--muted)}
+.rev .b{flex:1;min-width:0}
+.rev .t{display:block;font-size:var(--L-body);line-height:1.35}
+.rev .a{display:block;font-size:var(--L-body);font-weight:700;color:var(--text);margin-top:2px}
+.rev .a.none{color:var(--primary);font-weight:600}
+.rev .ed{flex:none;font-size:var(--L-meta);font-weight:700;color:var(--muted);text-decoration:underline;
+  text-underline-offset:4px;min-height:var(--tap);display:flex;align-items:center}
+
+/* ------------------------------------------- shared results (read-only) -- */
+/* What a participant sees when the host shares results back. A distribution
+   is a row of the player's own result row (.row) with its share as a fill —
+   the same idiom the phone already uses for trivia results. */
+.dist{margin:0 0 6px}
+.dist .dr{position:relative;overflow:hidden;display:flex;align-items:center;gap:10px;
+  min-height:46px;padding:9px 12px;margin:0 0 7px;border:1px solid var(--rule);border-radius:11px;
+  background:var(--surface);font-size:var(--L-body)}
+.dist .dr > *{position:relative;z-index:1}
+.dist .dr .fill{position:absolute;left:0;top:0;bottom:0;background:rgba(182,194,212,.14);z-index:0}
+.dist .dr.top .fill{background:rgba(246,169,76,.20)}
+.dist .dr.top{border-color:rgba(246,169,76,.55)}
+.dist .dr .v{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums}
+.dist .dr .you{font-size:var(--L-meta);font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--primary)}
+.meanline{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+.meanline .big{font-size:var(--L-hero)}
+.meanline small{font-size:var(--L-meta);color:var(--muted);font-weight:700;letter-spacing:.06em}
+.theme{border:1px solid var(--rule);border-radius:13px;background:var(--surface);padding:12px 14px;margin:0 0 9px}
+.theme .th{display:flex;align-items:baseline;gap:10px;font-size:var(--L-secondary);font-weight:700;line-height:1.3}
+.theme .th .c{margin-left:auto;font-size:var(--L-meta);color:var(--muted);font-weight:800;white-space:nowrap}
+.theme p{margin:6px 0 0;font-size:var(--L-body);color:var(--muted);line-height:1.45}
+.wk{border-left:2px solid var(--secondary);padding:2px 0 2px 13px;margin:0 0 20px}
+.wk .lab{color:var(--secondary)}
+.wk p{margin:0;font-size:var(--L-body);line-height:1.5}
+.sec-h{font-size:var(--L-secondary);font-weight:800;margin:26px 0 4px;line-height:1.25}
+.sec-s{font-size:var(--L-meta);color:var(--muted);margin:0 0 12px}

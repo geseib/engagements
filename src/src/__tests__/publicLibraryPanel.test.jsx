@@ -288,3 +288,26 @@ test('a failed unpublish keeps the dialog, the note and the message; a retry tha
   expect(onUnpublish.mock.calls[0][1]).toBe('Reported; taken down pending an edit.');
   expect(onUnpublish.mock.calls[1][1]).toBe('Reported; taken down pending an edit.');
 });
+
+describe('what a copy from the library says back', () => {
+  // The library's Copy used AdminPage's handleCopySet, whose notice went to the
+  // Question sets list — a screen not on show — so a copy from here said
+  // nothing, whether it worked or was refused at the stored-set allowance.
+  test('a copy refused at the limit is said here, with the way out', () => {
+    const { parseUpgradeRequired } = require('../utils/upgradeRequired');
+    const limit = parseUpgradeRequired(402, {
+      code: 'upgrade_required',
+      limit: { kind: 'sets', used: 5, included: 5 },
+      resolve: { role: 'owner', canRequest: true, canViewBilling: true, org: { name: 'Amara', type: 'personal' }, contacts: [], resetsOn: '2026-10-01' },
+    });
+    render(<PublicLibraryPanel questionSets={ROWS} mode="org" onCopy={() => {}} onPreview={() => {}} notice={{ limit, outcome: 'Nothing was copied.' }} onDismissNotice={() => {}} />);
+    const box = screen.getByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Your space holds 5 of the 5 question sets it includes. Nothing was copied.');
+    expect(within(box).getByRole('link', { name: 'Request the Team plan' })).toBeInTheDocument();
+  });
+
+  test('and a copy that worked says so', () => {
+    render(<PublicLibraryPanel questionSets={ROWS} mode="org" onCopy={() => {}} onPreview={() => {}} notice={{ text: 'Team retro is now yours to change.', tone: 'success' }} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Team retro is now yours to change.');
+  });
+});

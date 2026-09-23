@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Surveys and polls — mockups</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#9BA8BE}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#9BA8BE;margin:4px 0 14px}
+
+.bd{max-width:1180px}
+.grp{margin:0 0 26px}
+.grp h2{margin:0 0 10px}
+.lst{list-style:none;margin:0;padding:0;border-top:1px solid rgba(244,237,228,.12)}
+.lst li{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;padding:10px 0;border-bottom:1px solid rgba(244,237,228,.12)}
+.lst a{color:#F4EDE4;font-weight:700;text-decoration:none}
+.lst a:hover{color:#F6A94C}
+.lst span{color:#B6C2D4}
+.st{width:100%;border-collapse:collapse;margin:0 0 28px;font-size:14px}
+.st th,.st td{text-align:left;padding:9px 10px;border-bottom:1px solid rgba(244,237,228,.12);vertical-align:top}
+.st th{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#9BA8BE}
+.st td:first-child{font-weight:700;white-space:nowrap}
+.st code{color:#F6A94C;font:12.5px ui-monospace,Menlo,monospace}
+.no{color:#EF8C86;font-weight:700}.pt{color:#F6A94C;font-weight:700}.ok{color:#6FD0A4;font-weight:700}
+</style></head>
+<body><main class="bd">
+<h1>Surveys and polls</h1>
+<p class="lede">Five question kinds &mdash; rating, multiple choice, yes/no, ranking, open answer &mdash; shared by two ways of running them. A <b>Survey</b> is a form people fill in at their own pace; results come together when the host closes it, and a <b>Names</b> setting decides whether it is Anonymous, records Who finished, or is Named. A <b>Poll</b> is the same questions one at a time, each result revealed on the wall. Every page is built from the approved stylesheets (admin console, player, stage, report) with a small survey sheet on top; press N on any page to hide the design notes. See <code>RATIONALE.md</code> and <code>PLAN.md</code> beside this file.</p>
+<h2>Where it stands today (22 Sep 2026)</h2>
+<table class="st"><thead><tr><th style="width:210px">Piece</th><th style="width:80px">State</th><th>Evidence</th></tr></thead><tbody><tr><td>Survey type</td><td class="no">Missing</td><td>Exists in <code>gameTypes.js</code> but is listed unplayable (<code>:159</code>). The importer rejects it (<code>upload-questions.js:286-300</code>); no session can run one; no player screen draws one.</td></tr><tr><td>Survey AI builder</td><td class="pt">Partial</td><td><code>SurveyAIBuilder.jsx</code> + <code>ai-generate-survey.js</code> (Sonnet 4.6) generate rating / multiple choice / text items, but <b>only download JSON</b>. Two of its three kind checkboxes are dead (<code>:589-591</code>). &lsquo;Export JSON and close&rsquo; on the host shelf downloads nothing.</td></tr><tr><td>Poll</td><td class="pt">Partial</td><td>Plays exactly like Call &amp; Answer: free text, then rank a top three. Its <code>options[]</code> / <code>allowMultiple</code> are saved and never read by the game; the AI summary reads poll options from the wrong fields (<code>get-ai-summary.js:2107</code>).</td></tr><tr><td>Multiple choice</td><td class="ok">Works</td><td>Trivia&rsquo;s A&ndash;F only: player option rows, answer rows, stage bars with the reveal. The mechanism to reuse.</td></tr><tr><td>Rating, yes/no, ranking, NPS</td><td class="no">Missing</td><td>Absent from every game path. Ranking exists only as Call &amp; Answer&rsquo;s top-three vote.</td></tr><tr><td>Results back to participants</td><td class="no">Missing</td><td>No shared page. The ENDED screen promises a link the host may share; nothing publishes one.</td></tr><tr><td>AI commentary</td><td class="pt">Partial</td><td>Workie (persona + approach) writes per-round summaries for the other types. No survey persona, no survey default prompt.</td></tr></tbody></table>
+<section class="grp"><h2>Create and edit</h2><ul class="lst"><li><a href="01-new-survey.html">New survey</a><span>Survey joins the kinds of round; four ways in: your material, a template, blank, a file.</span></li><li><a href="02-generate.html">Generate from your material</a><span>Paste the outline or attach the deck; say what you want to find out; pick the kinds; pick how many.</span></li><li><a href="03-review.html">Review the draft</a><span>The shared review table with a Kind column; keep, edit, rewrite one, change its kind; saved as a draft set.</span></li><li><a href="04-editor.html">The editor</a><span>The set editor's Questions tab for a survey: kind, question, answer preview; the Add question menu open.</span></li><li><a href="05-edit-question.html">Edit a question</a><span>One form whose fields follow the kind, with the real player beside it as the preview.</span></li><li><a href="06-kind-fields.html">The fields each kind asks for</a><span>Multiple choice, Yes / No, Ranking and Open answer, side by side.</span></li><li><a href="07-start-survey.html">Start a survey session</a><span>Names — Anonymous, Who finished or Named — fixed once it opens; the results link's two-day clock starts at open.</span></li></ul></section><section class="grp"><h2>Answer</h2><ul class="lst"><li><a href="10-answering.html">Answering on a phone (board)</a><span>Rating 1–5, rating 0–10, multiple choice, yes/no with its why, ranking, open answer.</span></li><li><a href="11-finishing.html">Finishing, and results coming back (board)</a><span>Check and send, the thank-you, the ENDED screen with results, the shared page.</span></li><li><a href="12-names.html">Names (board)</a><span>What each phone promises under the three settings; who's left on the wall, on request.</span></li></ul></section><section class="grp"><h2>On the wall</h2><ul class="lst"><li><a href="20-wall.html">On the wall (board)</a><span>Collecting at its own pace, then a result screen per kind — the same screens a poll reveals.</span></li></ul></section><section class="grp"><h2>Results and sharing</h2><ul class="lst"><li><a href="30-results.html">Results</a><span>Workie's read on top; a chart per question, each with Workie's one-line note.</span></li><li><a href="31-open-text.html">Open answers</a><span>Themes as filters, every answer readable, put one on the wall, held-back answers that name a person.</span></li><li><a href="32-share.html">Share the results</a><span>A frozen, read-only copy: anyone with the link, two days from when the survey opened; three ways out — wall, phones, link.</span></li><li><a href="33-people.html">People</a><span>Named: who finished, who stopped partway, and each person's answers. Names stop at the console.</span></li><li><a href="34-report.html">The PDF report</a><span>The survey section of the paper report, in GameReport's own type.</span></li></ul></section><section class="grp"><h2>Store and record</h2><ul class="lst"><li><a href="40-data-model.html">Data model</a><span>Rows, keys, how each kind is counted, how long each thing is kept, the routes.</span></li></ul></section>
+</main></body></html>

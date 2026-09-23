@@ -107,8 +107,9 @@ function PhaseFlow({ gameType }) {
 /**
  * THE TYPES A HOST CAN ACTUALLY CREATE, from `PICKER_GAME_TYPES` — the same
  * derived list the create dialog itself renders from. Survey is deliberately
- * absent from both: the importer rejects survey uploads, so no survey set can
- * exist to play. Documenting it as an option would describe a dead end.
+ * absent from both: a survey set can be made and edited, but no session plays
+ * one yet (survey phase 2). Documenting it as an option would describe a dead
+ * end.
  */
 function GameTypeTable() {
   return (

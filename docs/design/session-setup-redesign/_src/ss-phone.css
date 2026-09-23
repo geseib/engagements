@@ -1,0 +1,35 @@
+/* ===========================================================================
+   ss-phone.css — the phone that arrives before the doors open, as a DIFF
+   against the shipped player (player-redesign/build.py CSS, inlined above).
+   Every rule reads the phone ladder (--L-*), the 44px tap floor (--tap) and
+   the Warm Summit tokens already declared there. No new colour.
+
+   MEASURED against the player's real stack (--bg #0F1A2E, --surface #182640):
+     --text  on --bg 14.97 · on --surface 13.01
+     --muted #B6C2D4 on --bg 9.65 · on --surface 8.39
+     --secondary #7CA7E6 on --bg 7.06 (the waiting dot is non-text and
+                   needs only 3:1; its label is --muted)
+   ======================================================================== */
+
+/* ---------------------------------------- the font shorthand, as shipped --
+   The player mockup's CSS writes `font:800 … inherit`, which is INVALID (a
+   family of `inherit` cannot sit in the shorthand), so every button fell back
+   to the UA's 400 weight. PlayerSurface.css ships `font-family:inherit` with
+   the weight declared on its own; restated here, as survey-redesign does, so
+   the mockups render what ships. */
+.btn,.opt,.inp{font-family:inherit}
+.btn{font-weight:800;font-size:var(--L-secondary);line-height:1.2}
+.btn.ghost,.btn[disabled]{font-weight:700}
+.inp{font-weight:400;font-size:var(--L-secondary);line-height:1.35}
+
+/* ------------------------------------------------ waiting at the door ----
+   The join-ended / join-locked family (player-redesign 03, 04): a heading that
+   says what happened, one line of what to do, and only the actions that can
+   succeed. This one can succeed by itself, so it says so and keeps the name. */
+.ss-wait{display:flex;align-items:center;gap:10px;margin:4px 0 0;font-size:var(--L-meta);
+  color:var(--muted);font-weight:600;letter-spacing:.02em}
+/* A still dot, not a pulse: the player's lobby rule is "no pulse animation"
+   (player-redesign 05), and a live region carries the liveness instead. */
+.ss-wait i{width:10px;height:10px;border-radius:50%;background:var(--secondary);flex:none}
+.ss-title{font-size:var(--L-meta);font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}

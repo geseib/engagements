@@ -11,6 +11,7 @@ import SessionsPanel from './components/SessionsPanel';
 import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
+import ObservabilityPanel from './components/ObservabilityPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
 import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
@@ -31,6 +32,7 @@ import QuestionSetDeleteDialog from './components/QuestionSetDeleteDialog';
 import ShareSetDialog from './components/ShareSetDialog';
 import NewSetDialog from './components/NewSetDialog';
 import { parseUpgradeRequired } from './utils/upgradeRequired';
+import { wantsPlanRequest, withoutPlanRequest } from './utils/planLimitCopy';
 import AdminShell from './components/AdminShell';
 import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
@@ -48,6 +50,7 @@ import {
 } from './config/adminSection';
 import { tagsToCsvCell } from './utils/tags';
 import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './utils/csv';
+import { surveyItemsToCsv } from './utils/surveyDraft';
 
 const API_BASE = window.API_BASE;
 
@@ -175,7 +178,7 @@ function urlNamesKnownSection() {
    a banner to the shape of the nav. Deliberately not counted in this sentence:
    it said "the four" while the array held five, which is the reliable fate of
    a number written beside a list that grows. */
-const PLATFORM_SECTION_IDS = ['orgs', 'publiclibrary', 'moderation', 'users', 'archive'];
+const PLATFORM_SECTION_IDS = ['orgs', 'observability', 'publiclibrary', 'moderation', 'users', 'archive'];
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -520,6 +523,14 @@ function AdminPage() {
         },
       );
       const body = await res.json().catch(() => ({}));
+      /* A copy is a new stored set, so it meets the set allowance
+         (copy-question-set.js). Refused, it is the plan-limit notice — shown
+         on whichever list pressed Copy, the Question sets list or the library. */
+      const limit = parseUpgradeRequired(res, body);
+      if (limit) {
+        setNotice({ limit, outcome: 'Nothing was copied.', tone: 'error' });
+        return;
+      }
       if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
       await fetchQuestionSets();
       setNotice({
@@ -1148,16 +1159,17 @@ function AdminPage() {
         await fetchQuestionSets(); // Refresh the list
       } else {
         // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section (which renders the refusal with its numbers and the way
-        // forward) and say so here with the link.
+        // section, and say it HERE as the plan-limit notice — what ran out and
+        // what this reader can do about it (22-plan-limit-notice.html). It
+        // used to be text ending "Open Plan & usage to request the Team plan"
+        // with no link, said to people who may not request.
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1250,16 +1262,17 @@ function AdminPage() {
         await fetchQuestionSets(); // Refresh the list
       } else {
         // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section (which renders the refusal with its numbers and the way
-        // forward) and say so here with the link.
+        // section, and say it HERE as the plan-limit notice — what ran out and
+        // what this reader can do about it (22-plan-limit-notice.html). It
+        // used to be text ending "Open Plan & usage to request the Team plan"
+        // with no link, said to people who may not request.
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1369,16 +1382,17 @@ function AdminPage() {
         await fetchQuestionSets(); // Refresh the list
       } else {
         // A 402 is a plan fact, not an upload fault: keep it for the Billing
-        // section (which renders the refusal with its numbers and the way
-        // forward) and say so here with the link.
+        // section, and say it HERE as the plan-limit notice — what ran out and
+        // what this reader can do about it (22-plan-limit-notice.html). It
+        // used to be text ending "Open Plan & usage to request the Team plan"
+        // with no link, said to people who may not request.
         const limit = parseUpgradeRequired(response, result);
-        if (limit) setUploadRefusal(limit);
-        setNotice({
-          text: limit
-            ? `${limit.message || result.error} Open Plan & usage to request the Team plan.`
-            : `Upload failed: ${result.error || 'Unknown error'}`,
-          tone: 'error',
-        });
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -1426,37 +1440,75 @@ function AdminPage() {
     return buildCsv(headers, rows);
   };
 
-  // Handle AI-generated surveys
+  // Handle AI-generated surveys.
+  //
+  // THE PHASE 0 FIX (surveys phases 0+1, fix 2). This used to build a Blob,
+  // click an anchor and report "exported as a JSON file" — there was no survey
+  // write path at all. The survey worker now creates a draft set like the
+  // other three (ai-generate-survey.js `setCreation`), so this is the same
+  // handler as handleTriviaGenerated: open the set the worker made, or — the
+  // manual fallback, when it could not — make it from the kept questions.
   const handleSurveyGenerated = async (surveyData) => {
     setShowSurveyAIBuilder(false);
 
-    // surveyData includes survey and metadata
-    const { survey, metadata } = surveyData;
+    const { questions, metadata, createdSet } = surveyData;
 
-    // Export survey as JSON file
-    const jsonContent = JSON.stringify(survey, null, 2);
+    // THE WORKER ALREADY MADE IT — same rule as handleScenariosGenerated.
+    // Uploading again would be refused and the refusal would be reported as a
+    // failure over a set that exists.
+    if (createdSet?.setId) {
+      await fetchQuestionSets();
+      handleEditQuestionSet({ id: createdSet.setId });
+      setNotice({
+        text: `"${createdSet.setName}" was created while the generator ran. It is switched off `
+          + 'until you review it and turn it on.',
+        tone: 'success',
+      });
+      return;
+    }
+
+    // The survey branch of the one CSV contract (utils/surveyDraft.js →
+    // questionRows.rowsToCsv), not a survey writer of this page's own.
+    const csvContent = surveyItemsToCsv(questions);
     const timestamp = Date.now();
-    const fileName = `survey-${survey.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.json`;
 
     try {
-      setNotice({ text: 'Exporting AI-generated survey…', tone: 'pending' });
+      setNotice({ text: 'Processing AI-generated survey questions…', tone: 'pending' });
 
-      // Create download link for JSON
-      const blob = new Blob([jsonContent], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      const response = await authFetch(`${API_BASE}admin/upload-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: `${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.csv`,
+          fileContent: csvContent,
+          customTitle: metadata.title,
+          customDescription: metadata.description,
+          engagementType: 'survey',
+          isAIGenerated: true
+        })
+      });
 
-      setNotice({ text: `Survey "${survey.title}" exported as a JSON file with ${survey.questions.length} questions. It is NOT a question set: the importer rejects survey uploads and no session plays one.`, tone: 'success' });
+      const result = await response.json();
 
+      if (response.ok) {
+        setNotice({ text: `${result.message} — draft survey created. Open it from the list to review it.`, tone: 'success' });
+        await fetchQuestionSets(); // Refresh the list
+      } else {
+        // A 402 is a plan fact, not an upload fault — the plan-limit notice,
+        // as handlePollGenerated says it (22-plan-limit-notice.html).
+        const limit = parseUpgradeRequired(response, result);
+        if (limit) {
+          setUploadRefusal(limit);
+          setNotice({ limit, outcome: 'Nothing was saved.', tone: 'error' });
+        } else {
+          setNotice({ text: `Upload failed: ${result.error || 'Unknown error'}`, tone: 'error' });
+        }
+      }
     } catch (error) {
-      console.error('Survey export error:', error);
-      setNotice({ text: `Survey export failed: ${error.message}`, tone: 'error' });
+      console.error('Upload error:', error);
+      setNotice({ text: `Upload failed: ${error.message}`, tone: 'error' });
     }
   };
 
@@ -1583,6 +1635,21 @@ function AdminPage() {
     return fallbackSection;
   })();
   resolvedRef.current = resolvedTab;
+
+  /*
+    "REQUEST THE TEAM PLAN" LANDS ON THE REQUEST. A plan-limit refusal's button
+    (utils/planLimitCopy.js REQUEST_HREF) is Plan & usage with `request=team`:
+    open the request dialog once, for somebody who may ask (owner, or a
+    personal space), then drop the flag so a reload or Back does not reopen it.
+    Anybody else simply lands on Plan & usage.
+  */
+  useEffect(() => {
+    if (resolvedTab !== 'billing' || !activeOrg || showPlanRequest) return;
+    if (!wantsPlanRequest(window.location.search)) return;
+    window.history.replaceState(window.history.state, '', withoutPlanRequest(window.location.href));
+    const mayAsk = orgRole === 'owner' || activeOrg.type === 'personal';
+    if (mayAsk && !(planRequest && planRequest.status === 'requested')) setShowPlanRequest(true);
+  }, [resolvedTab, activeOrg, orgRole, planRequest, showPlanRequest]);
 
   /*
     WHICH SETS THIS SCREEN SHOWS, which is not the same list in both consoles.
@@ -2070,6 +2137,7 @@ function AdminPage() {
           )}
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
+          {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
           {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 
@@ -2092,6 +2160,8 @@ function AdminPage() {
               questionSets={questionSets}
               mode="org"
               loading={questionSetsLoading}
+              notice={notice}
+              onDismissNotice={() => setNotice(null)}
               onCopy={handleCopySet}
               onPreview={handleEditQuestionSet}
               /* The way INTO the library, from the library. Same handler as the

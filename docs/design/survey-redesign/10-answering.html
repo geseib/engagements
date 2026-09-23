@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Answering on a phone — survey</title>
+<style>
+
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#9BA8BE}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#9BA8BE;margin:4px 0 14px}
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<main class="bd">
+
+<h1>Answering on a phone</h1>
+<p class="lede">Five kinds, one player. Each screen is the shipped participant surface (bar, question, dock) with the kind&rsquo;s control in the middle. The 4px phase strip at the top doubles as progress through the survey. Open any frame on its own to see it full size.</p>
+<div class="row">
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-01-rating.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Rating 1–5Q1 · required · 4 chosen"></iframe></div><figcaption><b>Rating 1–5</b><span>Q1 · required · 4 chosen</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-02-nps.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Rating 0–10Q2 · optional, nothing chosen: Next reads Skip"></iframe></div><figcaption><b>Rating 0–10</b><span>Q2 · optional, nothing chosen: Next reads Skip</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-03-choice.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Multiple choiceQ4 · pick up to two, with a write-in"></iframe></div><figcaption><b>Multiple choice</b><span>Q4 · pick up to two, with a write-in</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-04-yesno.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Yes / NoQ5 · Not sure offered; ‘why?’ opens on No"></iframe></div><figcaption><b>Yes / No</b><span>Q5 · Not sure offered; ‘why?’ opens on No</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-05-rank.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="RankingQ6 · tap in order; top three is enough"></iframe></div><figcaption><b>Ranking</b><span>Q6 · tap in order; top three is enough</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-06-text.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Open answerQ7 · long, 500 characters"></iframe></div><figcaption><b>Open answer</b><span>Q7 · long, 500 characters</span></figcaption></figure>
+</div>
+</main>
+<aside class="mk-anno-rail" aria-label="Design notes">
+<h6>Design notes</h6>
+<div class="mk-anno"><b>Nothing here is new furniture</b>The option row (<code>.opt</code>, trivia's), the dock button, the bar, the anonymity line and the counter are all the shipped player's (<code>PlayerSurface.css</code>). New shapes only where no ancestor exists: the scale steps, the yes/no halves, the ranking list.</div><div class="mk-anno"><b>Chosen is always amber, always filled</b>A picked scale step, a picked yes, a placed rank and a ticked option all use the player's one &lsquo;chosen&rsquo; fill (#0F1A2E on #F6A94C, 8.86:1). Pick-several gets a square key and a tick so the shape says the rule before the words do.</div><div class="mk-anno"><b>Yes / No is not a switch</b>A switch has a default, and a default here is an answer nobody gave. Two big halves, nothing chosen until tapped.</div><div class="mk-anno"><b>Ranking without drag</b>Tap in order, the way the Call &amp; Answer vote already fills its three slots; &uarr;/&darr; to adjust. Drag can be added; it is never required (WCAG 2.5.7).</div><div class="mk-anno"><b>Saved, visibly</b>Every answer is written as it is given. The dock says so, so nobody hunts for a Save button, and a reload resumes on the same question.</div><div class="mk-anno"><b>Back and Next</b>Two of the player's full-width buttons side by side &mdash; no new button. Optional questions let Next read Skip; required ones leave Next disabled with the reason in the question line.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>

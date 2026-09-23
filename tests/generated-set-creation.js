@@ -650,26 +650,76 @@ const scenarioBody = (overrides = {}) => ({
       'a handler that must not create a set must not report a creation failure either');
   });
 
-  await test('a survey generation creates NO set', async () => {
-    // rejects: opting survey in. Survey is not a playable type and
-    // upload-questions.js refuses it outright, which is why SurveyAIBuilder
-    // exports JSON instead of loading — a worker trying to create one would be
-    // asking for a 400 on every single run.
+  /*
+    SURVEY OPTS IN, since Phase 1 of the survey redesign. It was deliberately
+    absent while upload-questions.js refused every survey — a worker creating
+    one would have been asking for a 400 on every run — and SurveyAIBuilder
+    could only export JSON. The importer now takes the contract's survey CSV
+    (docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md), so a survey run
+    leaves a draft survey set behind like every other whole-set builder.
+  */
+  const surveyItems = () => [
+    { kind: 'rating', title: 'How useful was today for your work?', required: true, scale: '1-5', lowLabel: 'Not useful', highLabel: 'Very useful', tags: ['usefulness'] },
+    { kind: 'choice', title: 'Which part was most valuable?', required: true, options: ['The live demo', 'The case studies', 'The Q&A'], allowOther: true, tags: ['content'] },
+    { kind: 'yesno', title: 'Was the length about right?', required: false, unsure: true, followUpWhen: 'no', followUpPrompt: 'What would you cut or add?', tags: ['format'] },
+    { kind: 'rank', title: 'Rank these for next time', required: false, options: ['Customer stories', 'Roadmap', 'Team wins'], tags: ['topics'] },
+    { kind: 'text', title: 'What would you change?', required: false, textLength: 'short', placeholder: 'One idea is plenty', tags: ['ideas'] },
+  ];
+  const surveyBody = (overrides = {}) => ({
+    questionCount: 5,
+    kinds: ['rating', 'choice', 'yesno', 'rank', 'text'],
+    source: 'The Q3 all-hands outline.',
+    goal: 'what landed and what to change',
+    setMetadata: { title: 'Feedback Survey', description: 'After the all-hands.', customInstructions: '', aiContextInstructions: '' },
+    ...overrides,
+  });
+
+  await test('a survey generation creates a draft SURVEY set, every question imported', async () => {
+    // rejects: leaving survey out of setCreation (the pre-Phase-1 behaviour),
+    // and a toCsv that writes a row the importer would skip — a question the
+    // host was shown in the builder and then silently lost from the set.
     reset();
-    bedrockHandler = () => toolResponse([{
-      question: 'How was it?', type: 'scale', category: 'Feedback', required: true, tags: ['feedback'],
-    }]);
-    const { job } = await runJob(survey, {
-      count: 1,
-      setMetadata: { title: 'Feedback Survey', description: 'd', customInstructions: 'c', aiContextInstructions: 'a' },
-    });
-    assert.strictEqual(setRows().length, 0, 'a survey set was created; nothing can play it');
-    assert.strictEqual(job.createdSet, null);
-    // Not merely "no set": no ATTEMPT. Opting survey in would reach the
-    // importer, be refused for the engagement type, and leave a
-    // setCreationError describing a problem nobody asked to have.
-    assert.strictEqual(job.setCreationError, null,
-      `survey tried to create a set and was refused: ${job.setCreationError}`);
+    bedrockHandler = () => toolResponse(surveyItems());
+    const { job } = await runJob(survey, surveyBody());
+    assert.strictEqual(job.setCreationError, null, 'set creation failed: ' + job.setCreationError);
+    const sets = setRows();
+    assert.strictEqual(sets.length, 1, 'expected one set, found ' + sets.length);
+    assert.strictEqual(sets[0].engagementType, 'survey');
+    assert.strictEqual(sets[0].active, false, 'a generated survey must land as a draft');
+    assert.strictEqual(sets[0].isAIGenerated, true);
+    assert.strictEqual(sets[0].questionCount, job.items.length, 'the importer skipped some of the generated rows');
+    assert.ok(job.createdSet, 'the job does not name the set it made');
+  });
+
+  await test('the survey rows carry their kinds and fields, filed under Survey', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(surveyItems());
+    await runJob(survey, surveyBody());
+    const rows = questionRows('feedbacksurvey');
+    assert.deepStrictEqual(rows.map((r) => r.kind), ['rating', 'choice', 'yesno', 'rank', 'text']);
+    assert.ok(rows.every((r) => r.Category === 'Survey'));
+    assert.strictEqual(rows[0].lowLabel, 'Not useful');
+    assert.deepStrictEqual(rows[1].options, ['The live demo', 'The case studies', 'The Q&A']);
+    assert.strictEqual(rows[1].allowOther, true);
+    assert.strictEqual(rows[2].followUpPrompt, 'What would you cut or add?');
+    assert.strictEqual(rows[4].maxLength, 280);
+    assert.deepStrictEqual(rows[0].Tags, ['usefulness']);
+    assert.ok(rows.every((r) => r.Active === false), 'a draft survey\'s questions must be inactive too');
+  });
+
+  await test('a host\'s generated survey lands in their org, its options ciphertext at rest', async () => {
+    reset();
+    await mint();
+    bedrockHandler = () => toolResponse(surveyItems());
+    await runJob(survey, surveyBody(), ctx(), hostEvent);
+    assert.deepStrictEqual(setRows(), [], 'a customer\'s survey went into the shared library');
+    assert.strictEqual(orgSetRows().length, 1);
+    const orgRows = [...ddb.values()].filter((row) => row.PK === 'ORG#org_acme#SET#feedbacksurvey#v1'
+      && String(row.SK).startsWith('QUESTION#'));
+    assert.strictEqual(orgRows.length, 5);
+    const raw = JSON.stringify(orgRows);
+    assert.ok(!raw.includes('The case studies'), 'an option is readable at rest');
+    assert.ok(!raw.includes('What would you cut or add?'), 'a follow-up question is readable at rest');
   });
 
   say('\na partial run still leaves a draft');
@@ -772,6 +822,45 @@ const scenarioBody = (overrides = {}) => ({
     assert.strictEqual(row.Title, 'THE "RIGHT" CALL', 'the quote was eaten or the row was shifted');
     assert.strictEqual(row.Detail, 'A hard one, with a comma, too.');
     assert.strictEqual(row.Category, 'Judgement');
+  });
+
+  say('\na set refused at the plan limit says who can fix it');
+
+  await test('the job carries the refusal itself, with the reader\'s way out', async () => {
+    // rejects: flattening a 402 into `setCreationError` alone. The builder then
+    // says "The set could not be created for you: This organisation cannot
+    // store another question set yet…" with nothing to click — the plan limit
+    // in a fault's voice, after the generation was already paid for
+    // (22-plan-limit-notice.html).
+    reset();
+    await mint();
+    const { periodOf } = require(path.join(REPO, 'lambda-functions/admin/shared/usage.js'));
+    const period = periodOf(new Date());
+    ddb.set(rowKey('ORG#org_acme', 'METADATA'), { PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
+    ddb.set(rowKey('ORG#org_acme', `USAGE#${period}`), { PK: 'ORG#org_acme', SK: `USAGE#${period}`, orgId: 'org_acme', period, sessionsRun: 0, setsCurrent: 5, setsPeak: 5 });
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'capped'));
+    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+
+    assert.strictEqual(job.createdSet, null, 'a set was created past the allowance');
+    assert.strictEqual(orgSetRows().length, 0);
+    assert.ok(job.setCreationLimit, `no setCreationLimit on the job: ${JSON.stringify(job)}`);
+    assert.strictEqual(job.setCreationLimit.code, 'upgrade_required');
+    assert.strictEqual(job.setCreationLimit.limit.kind, 'sets');
+    // The worker replays the caller's org and role, so the voice is theirs.
+    assert.strictEqual(job.setCreationLimit.resolve.role, 'owner');
+    // An older client still reads the sentence.
+    assert.match(job.setCreationError, /question set/i);
+    assert.strictEqual(job.status, 'complete', 'a refused set must not fail the generation');
+    assert.strictEqual(job.items.length, 2, 'the items were thrown away with the refused set');
+  });
+
+  await test('any other refusal carries no setCreationLimit', async () => {
+    reset();
+    ddb.set(rowKey('SETS', 'SET#worldleaders'), { PK: 'SETS', SK: 'SET#worldleaders', name: 'World Leaders' });
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'clash'));
+    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.match(job.setCreationError, /already exists/i);
+    assert.strictEqual(job.setCreationLimit, null);
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);

@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from './Icon';
+import PlanLimitNotice from './PlanLimitNotice';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
 import SetShelfBrowse from './SetShelfBrowse';
@@ -222,7 +223,12 @@ export default function QuestionSetsPanel({
 
   return (
     <div className="qsets">
-      {notice && notice.text ? (
+      {/* A PLAN LIMIT (`notice.limit`, from parseUpgradeRequired) is the shared
+          notice — what ran out and what THIS reader can do about it
+          (22-plan-limit-notice.html). Everything else is the one banner. */}
+      {notice && notice.limit ? (
+        <PlanLimitNotice refusal={notice.limit} outcome={notice.outcome} onDismiss={onDismissNotice} />
+      ) : notice && notice.text ? (
         <div
           className={`qsets-alert${notice.tone === 'error' ? ' qsets-alert--error' : ''}${
             notice.tone === 'success' ? ' qsets-alert--success' : ''

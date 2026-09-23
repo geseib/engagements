@@ -180,6 +180,9 @@ for (const rel of [
   // `hosts` account holding one of 9,000 codes. Missed by every sweep before it,
   // including the one that called itself "the REST of the host controls".
   'lambda-functions/game/update-game-persona.js',
+  // Its twin for the summary approach, the select beside it on the results
+  // stage. Born asking, in the same change that gave it a route of its own.
+  'lambda-functions/game/update-game-prompt.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')

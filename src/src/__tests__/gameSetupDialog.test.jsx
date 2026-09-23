@@ -9,6 +9,7 @@
 import React from 'react';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
+import { parseUpgradeRequired } from '../utils/upgradeRequired';
 
 /*
   THE CATALOG'S SUMMARY PROMPTS. The dialog fetches `admin/ai-prompts` itself
@@ -76,9 +77,9 @@ describe('the format picker', () => {
     expect(pill('Poll')).toBeInTheDocument();
   });
 
-  // rejects: building the mockup's five pills as drawn. upload-questions.js:146-157
-  // rejects survey uploads outright, so no survey set can exist, so the pill
-  // would open onto an empty list with Create permanently disabled.
+  // rejects: building the mockup's five pills as drawn. Survey sets can be made
+  // since surveys phase 1, but no session plays one until phase 2, so the pill
+  // would open onto sets nothing can run.
   test('does not offer Survey', () => {
     setup();
     expect(screen.queryByRole('button', { name: 'Survey' })).toBeNull();
@@ -721,13 +722,31 @@ describe('a question set whose content could not be decrypted', () => {
 describe('a refused Create lands in the dialog, not in a browser alert', () => {
   // docs/handoff/billing-experience-2026-09-22.md §1.7: the 402 said "upgrade"
   // and offered nothing to click; it arrived as alert('Failed to create game').
-  test('a plan limit names the numbers and links to Plan & usage', () => {
-    setup({ refusal: { blocked: true, kind: 'sessions', used: 5, included: 5, message: 'A personal organisation includes 5 sessions.' } });
-    const box = screen.getByTestId('gsd-refusal');
-    expect(box).toHaveTextContent('sessions for this period are used up — 5 of 5');
-    expect(box).toHaveClass('gsd-refusal--limit');
-    expect(box.querySelector('a')).toHaveAttribute('href', '/admin?section=billing');
-    expect(box).toHaveTextContent(/request the Team plan/i);
+  test('a plan limit is the shared notice, in the owner\'s voice when the server says owner', () => {
+    // rejects: telling everybody to "request the Team plan" — only an owner can
+    // (22-plan-limit-notice.html; the role is the server's, via `resolve`).
+    setup({ refusal: parseUpgradeRequired(402, {
+      code: 'upgrade_required',
+      limit: { kind: 'sessions', used: 5, included: 5 },
+      resolve: { role: 'owner', canRequest: true, canViewBilling: true, org: { name: 'Amara', type: 'personal' }, contacts: [], request: null, resetsOn: '2026-10-01' },
+    }) });
+    expect(screen.queryByTestId('gsd-refusal')).toBeNull();
+    const box = screen.getByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('You’ve used the 5 sessions included this month. Nothing was created.');
+    expect(within(box).getByRole('link', { name: 'Request the Team plan' }))
+      .toHaveAttribute('href', '/admin?section=billing&request=team');
+  });
+
+  test('a member at the limit is told whom to ask, with no request button', () => {
+    setup({ refusal: parseUpgradeRequired(402, {
+      code: 'upgrade_required',
+      limit: { kind: 'sessions', used: 5, included: 5 },
+      resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
+    }) });
+    const box = screen.getByTestId('plan-limit-notice');
+    expect(box).toHaveTextContent('Ask an owner or admin to move Northwind to the Team plan.');
+    expect(within(box).getByRole('link', { name: /Dana Whitfield/ })).toHaveAttribute('href', 'mailto:dana@x.example');
+    expect(within(box).queryByRole('link', { name: /Request/ })).toBeNull();
   });
 
   test('any other failure is said plainly, with no upgrade link', () => {
@@ -735,7 +754,7 @@ describe('a refused Create lands in the dialog, not in a browser alert', () => {
     const box = screen.getByTestId('gsd-refusal');
     expect(box).toHaveTextContent('Could not create the session: the question set could not be read.');
     expect(box.querySelector('a')).toBeNull();
-    expect(box).not.toHaveClass('gsd-refusal--limit');
+    expect(screen.queryByTestId('plan-limit-notice')).toBeNull();
   });
 
   test('the host page no longer alerts', () => {

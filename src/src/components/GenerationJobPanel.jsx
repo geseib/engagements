@@ -1,6 +1,8 @@
 import React from 'react';
 import Icon from './Icon';
 import { warningsMayBeIncomplete } from '../utils/generationJob';
+import PlanLimitNotice from './PlanLimitNotice';
+import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import './GenerationJobPanel.css';
 
 /**
@@ -48,11 +50,10 @@ export default function GenerationJobPanel({
    * Does THIS builder's worker create the question set itself?
    *
    * Default false, and the default is the honest one. The whole-set generators
-   * (scenarios, trivia, polls) create an inactive draft set before the job goes
-   * terminal, so "Close — this keeps running" now produces something to come
-   * back to. The survey builder's worker creates nothing — survey is not a
-   * playable type and upload-questions.js refuses it — so it must not be handed
-   * this promise. A panel that says "and it makes the set for you" over a
+   * (scenarios, trivia, polls, and since surveys phase 1 surveys) create an
+   * inactive draft set before the job goes terminal, so "Close — this keeps
+   * running" produces something to come back to. A builder whose worker does
+   * NOT create a set must not be handed this promise. A panel that says "and it makes the set for you" over a
    * builder that does not is the exact defect this whole change repairs, in a
    * new coat.
    */
@@ -102,7 +103,7 @@ export default function GenerationJobPanel({
 
   const {
     outcome, phase, items, completed, requested, warnings, error, shortfall, promptSource,
-    createdSet, setCreationError,
+    createdSet, setCreationError, setCreationLimit,
   } = job;
 
   if (outcome === 'running') {
@@ -261,11 +262,20 @@ export default function GenerationJobPanel({
       {/* The worker tried to make the set and could not. Said plainly, because
           the manual path below is the only way out of it and the operator has
           to know why they are being asked to take it. */}
-      {setCreationError && !createdSet && (
+      {/* A refusal at the stored-set ALLOWANCE is a plan fact with a way out,
+          not a fault: the plan-limit notice, in the reader's voice
+          (22-plan-limit-notice.html). The items are still here to keep. */}
+      {setCreationLimit && !createdSet ? (
+        <PlanLimitNotice
+          refusal={parseUpgradeRequired(402, setCreationLimit)}
+          outcome="The questions were generated, but no set was saved."
+          surface="paper"
+        />
+      ) : setCreationError && !createdSet ? (
         <p className="gjp-errmsg">
           The set could not be created for you: {setCreationError}
         </p>
-      )}
+      ) : null}
 
       {error && (
         <>

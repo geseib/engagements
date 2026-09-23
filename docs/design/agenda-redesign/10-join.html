@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Joining an invite-only event</title>
+<style>
+
+*{box-sizing:border-box}
+body{margin:0;background:#0B1322;color:#F4EDE4;font:400 15px/1.5 "Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.bd{padding:26px 30px 60px}
+.bd h1{font:800 24px/1.15 "Archivo Expanded","Archivo",system-ui,sans-serif;margin:0 0 6px}
+.bd .lede{color:#B6C2D4;margin:0 0 22px;max-width:96ch}
+.bd .row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:0 0 30px}
+.bd figure{margin:0}
+.bd figcaption{font:700 12px/1.4 "Inter",system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+  color:#B6C2D4;margin:9px 0 0;max-width:var(--w)}
+.bd figcaption b{color:#F6A94C}
+.bd figcaption span{display:block;text-transform:none;letter-spacing:0;font-weight:400;margin-top:3px;color:#B6C2D4}
+.frame{position:relative;overflow:hidden;border-radius:26px;border:1px solid rgba(244,237,228,.16);
+  background:#0F1A2E;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.frame.stage{border-radius:12px}
+.frame iframe{border:0;display:block;transform-origin:0 0;position:absolute;left:0;top:0}
+.bd h2{font:800 15px/1.2 "Inter",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#B6C2D4;margin:4px 0 14px}
+.bd .arrow{align-self:center;font:800 24px/1 "Inter",system-ui,sans-serif;color:#F6A94C;padding:0 2px}
+
+/* ============================================================= design notes
+   Not part of the product surface. Fixed rail on the right; the page reserves
+   its width so a note can never cover the thing it describes. Press N.
+   ========================================================================== */
+.mk-anno-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 90;
+  background: #141C2E; border-left: 1px solid var(--mk-hair, rgba(244,237,228,0.14));
+  overflow: auto; padding: 14px 15px 60px; display: flex; flex-direction: column; gap: 11px;
+}
+.mk-anno-rail > h6 {
+  margin: 0 0 2px; font: 800 var(--mk-t-floor, 12px)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em; text-transform: uppercase; color: #9BA8BE;
+}
+.mk-anno {
+  font: 400 var(--mk-t-floor, 12px)/1.5 "Inter", system-ui, sans-serif;
+  background: rgba(246,169,76,0.07); color: #EFE2D2;
+  border: 1px solid rgba(246,169,76,0.34); border-left-width: 3px;
+  border-radius: 0 7px 7px 0; padding: 9px 11px;
+}
+.mk-anno > b:first-child {
+  display: block; margin-bottom: 4px; color: #F6A94C;
+  font-size: var(--mk-t-floor, 12px); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.mk-anno b { color: #FFD9A6; font-weight: 700; }
+.mk-anno code { font-family: ui-monospace, Menlo, monospace; color: #F6A94C; }
+body.mk-anno-on { padding-right: 320px; }
+body.mk-anno-off .mk-anno-rail { display: none; }
+.mk-anno-toggle {
+  position: fixed; right: 12px; bottom: 12px; z-index: 95;
+  background: #25375A; color: #F4EDE4; border: 1px solid rgba(244,237,228,0.26);
+  border-radius: 999px; padding: 8px 15px; cursor: pointer;
+  font: 700 var(--mk-t-label, 13px)/1 "Inter", system-ui, sans-serif;
+}
+@media (max-width: 1440px) {
+  body.mk-anno-on { padding-right: 0; }
+  .mk-anno-rail { display: none; }
+}
+
+</style>
+</head>
+<body class="mk-anno-on">
+<main class="bd">
+
+<h1>Joining an invite-only event</h1>
+<p class="lede">The event code finds the event; the personal passcode the host handed out lets one phone in as that person. The same four digits on the wall, then one field &mdash; and three honest ways it can go wrong. No email is typed. Open any frame on its own to see it full size.</p>
+<div class="row">
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-01-join-invite.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="PasscodeAfter typing 5307: the event is named; the name comes from the invitation list"></iframe></div><figcaption><b>Passcode</b><span>After typing 5307: the event is named; the name comes from the invitation list</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-02-join-mismatch.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Not recognisedOne message for every wrong passcode; what was typed is kept"></iframe></div><figcaption><b>Not recognised</b><span>One message for every wrong passcode; what was typed is kept</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-03-join-in-use.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Already on another phoneMove it here, or tell the host"></iframe></div><figcaption><b>Already on another phone</b><span>Move it here, or tell the host</span></figcaption></figure>
+<figure style="--w:281px"><div class="frame phone" style="width:281px;height:608px"><iframe src="p-04-join-paused.html" width="390" height="844" style="transform:scale(0.72)" loading="lazy" title="Too many triesA pause, a time, and who can help"></iframe></div><figcaption><b>Too many tries</b><span>A pause, a time, and who can help</span></figcaption></figure>
+</div>
+</main>
+<aside class="mk-anno-rail" aria-label="Design notes">
+<h6>Design notes</h6>
+<div class="mk-anno"><b>A passcode, not an email</b>Owner, 23 Sep: &lsquo;for now no email is needed, perhaps just the passcode.&rsquo; So the join is the event code plus one personal passcode. Email matching comes back only if Engage ever sends the invitations itself (PLAN Phase 4).</div><div class="mk-anno"><b>One message for every wrong passcode</b>&lsquo;That passcode doesn&rsquo;t let anyone into Q4 Kickoff&rsquo; covers a typo, a replaced passcode and one from another event alike, so a guess learns nothing about which passcodes ever existed.</div><div class="mk-anno"><b>Amber, not red</b>The player's own rule (02-join-code-bad): red is for destructive things; a mistyped passcode is not one. The error is attached to the field and keeps what was typed.</div><div class="mk-anno"><b>No name field</b>The invitation list carries the name. Players today are keyed by the name they type (<code>join-game.js:326-342</code>); an attendee is keyed by the invitation, so two Priyas never collide and a rename never splits a person.</div><div class="mk-anno"><b>One passcode, one phone</b>Moving the seat is allowed and says what happens to the other phone. A forwarded passcode shows up (the host sees one person, not two) without locking out someone who switched phones.</div><div class="mk-anno"><b>A pause, not a lock</b>Five wrong tries start a 10-minute pause, counted per phone and per network address. With 30 symbols and six places a guess is one in about 729 million, so the pause only has to stop a script, not a person.</div><div class="mk-anno"><b>Told before they join</b>p-01 says reports are shared afterwards, with names &mdash; the host's default. That promise is why the hub can remove names later but never add them back.</div><div class="mk-anno"><b>Today's private session is different</b>The shipped &lsquo;This session is private.&rsquo; screen (<code>PlayerPage.jsx:2254-2300</code>) asks for one shared code, only after a failed join (<code>joinResult.js:77-78</code>). A passcode per person needs its own screen; this is it.</div>
+</aside>
+<button class="mk-anno-toggle" type="button" id="mkAnno">Hide design notes</button>
+<script>/* Design-notes rail. Not part of the product surface — nothing here becomes
+   React. Toggle with the button or the N key, matching the other mockup sets
+   in docs/design. The choice is remembered per browser. */
+(function () {
+  var btn = document.getElementById('mkAnno');
+  if (!btn) return;
+  function set(off) {
+    document.body.classList.toggle('mk-anno-off', off);
+    document.body.classList.toggle('mk-anno-on', !off);
+    btn.textContent = off ? 'Show design notes' : 'Hide design notes';
+    try { localStorage.setItem('mkAnno', off ? '0' : '1'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('mkAnno') === '0') set(true); } catch (e) {}
+  btn.addEventListener('click', function () {
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    set(!document.body.classList.contains('mk-anno-off'));
+  });
+})();
+</script>
+</body>
+</html>
