@@ -37,12 +37,28 @@ exports.handler = async (event) => {
     const ownerRead = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'orgId'
+      ProjectionExpression: 'orgId, GameType'
     }));
     if (!callerMayDriveSession(event, ownerRead.Item || {})) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Game not found' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /*
+      A SURVEY HAS NO ROUNDS, and the unconditional write below would put one
+      into SURVEY#OPEN: VOTE#nnn on STATE sends every phone off the survey to a
+      round that does not exist, and no answer can be saved again (the survey
+      PUT's ConditionCheck needs SURVEY#OPEN). Refused as next-question refuses
+      it — 409, STATE untouched (IMPLEMENTATION-phase-2.md §1).
+    */
+    if (ownerRead.Item && ownerRead.Item.GameType === 'survey') {
+      const reason = 'A survey has no rounds to vote on.';
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: reason, message: reason, survey: true, gameId }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }

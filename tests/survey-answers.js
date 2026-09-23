@@ -31,6 +31,7 @@
  *   §17 the frozen words are paged by bytes, so a big room still closes
  *   §18 Send: nothing answered is 422; a DONE that did not land is retryable
  *   §19 end freezes first when the close's freeze never landed
+ *   §20 start-vote and get-results refuse a survey
  *   §22 people leaves out removed players
  *   §23 the player row is read strongly; a legacy row is accepted
  *   §24 two closes at once freeze and announce once
@@ -77,6 +78,8 @@ const getGameState = require(path.join(REPO, 'lambda-functions/game/get-game-sta
 const surveyAnswers = require(path.join(REPO, 'lambda-functions/game/survey-answers.js'));
 const surveyHost = require(path.join(REPO, 'lambda-functions/game/survey-host.js'));
 const removePlayer = require(path.join(REPO, 'lambda-functions/game/remove-player.js')).handler;
+const getResults = require(path.join(REPO, 'lambda-functions/game/get-results.js')).handler;
+const startVote = require(path.join(REPO, 'lambda-functions/websocket/start-vote.js')).handler;
 const { transactionCancelled, ITEM_LIMIT_BYTES, itemBytes } = require('./helpers/player-table');
 
 // The conflict backoff, shortened so a suite that exhausts the budget does not
@@ -1452,6 +1455,35 @@ const hostFrames = (type) => frames.filter((f) => f.message.type === type);
     assert.strictEqual((await host('end', g)).statusCode, 200);
     assert.deepStrictEqual(table.log.filter((l) => l.type === 'put' && /^SURVEY#RESULTS/.test(l.input.Item.SK)), []);
     assert.deepStrictEqual(frames.filter((f) => f.message.type === 'surveyClosed'), []);
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§20 no other route pushes a survey into a round');
+
+  const closeRoundEvent = (gameId, body = {}) => ({
+    routeKey: 'POST /games/{gameId}/close-round',
+    requestContext: { routeKey: 'POST /games/{gameId}/close-round', ...hostCtx(ACME) },
+    pathParameters: { gameId },
+    body: JSON.stringify(body),
+  });
+  // rejects: start-vote writing VOTE#001 over SURVEY#OPEN — the phones would
+  // leave the survey for a round that does not exist.
+  await check('start-vote on a survey: 409, STATE untouched', async () => {
+    const g = await openSurvey({});
+    const res = await startVote(asHost(ACME, { pathParameters: { gameId: g }, body: JSON.stringify({ questionNumber: 1 }) }));
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_OPEN);
+    assert.strictEqual(bodyOf(res).survey, true);
+  });
+  // rejects: close-round writing RESULTS#001 (and a ROUND# row) on a survey.
+  await check('close-round (the host path of get-results) on a survey: 409, STATE untouched, no round row', async () => {
+    const g = await openSurvey({});
+    const res = await getResults(closeRoundEvent(g, { questionNumber: 1 }));
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(row(`GAME#${g}`, 'STATE').State, SURVEY_OPEN);
+    assert.deepStrictEqual(partition(g).filter((i) => /^ROUND#/.test(i.SK)), []);
+    const pub = await getResults({ routeKey: 'POST /games/get-results', requestContext: { routeKey: 'POST /games/get-results' }, body: JSON.stringify({ gameId: g, questionNumber: 1 }) });
+    assert.strictEqual(pub.statusCode, 409, pub.body);
   });
 
   /* ----------------------------------------------------------------------- */
