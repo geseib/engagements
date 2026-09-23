@@ -83,12 +83,27 @@ const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.tri
  * every one of them — which is the bug wearing a different hat.
  */
 function sessionSetKey(metadata, setId) {
-  const scope = metadata && metadata.QuestionSetScope;
   return setMetadataKey({
-    scope,
-    orgId: scope === ORG ? ((metadata && metadata.orgId) || '') : '',
+    scope: metadata && metadata.QuestionSetScope,
+    orgId: sessionSetOrgId(metadata),
     setId,
   });
+}
+
+/**
+ * THE ORG THAT OWNS THIS SESSION'S SET — the key its METADATA row is sealed
+ * under, or '' for a platform or public set, which is never encrypted.
+ *
+ * upload-questions.js writes an org set's row through `encryptItem(orgId,
+ * 'set', …)`, so customInstruction and aiContextInstruction come back as
+ * {v,iv,tag,ct} envelopes. Read raw, the AI context reached personas.js's
+ * `.trim()` and threw (the room got aiSummaryError), and the custom
+ * instruction reached the prompt as "[object Object]". Same rule as
+ * get-question.js and create-report.js: the session's pinned scope, never the
+ * caller. tests/ai-summary-set-metadata-sealed.js.
+ */
+function sessionSetOrgId(metadata) {
+  return metadata && metadata.QuestionSetScope === ORG ? (metadata.orgId || '') : '';
 }
 
 async function sessionOrgId(gameId) {
@@ -1134,11 +1149,20 @@ exports.handler = async (event) => {
           TableName: process.env.TABLE_NAME,
           Key: sessionSetKey(metadata, questionSetId),
         }));
-        
+        // Opened with the SET's org (see sessionSetOrgId) into a new object —
+        // decryptItem never mutates, so nothing here writes plaintext back.
+        const setOrgId = sessionSetOrgId(metadata);
+        if (setResult.Item && setOrgId) {
+          setResult.Item = await decryptItem(setOrgId, 'set', setResult.Item);
+        }
+
+        // The two instructions are the set author's own prose, sealed at rest
+        // on an org's set: the log says they were found and how long they are,
+        // never what they say. See shapeForLog.
         if (setResult.Item) {
           if (setResult.Item.customInstruction) {
             customInstruction = setResult.Item.customInstruction;
-            console.log('📋 Found custom instruction for AI prompt:', customInstruction);
+            console.log(`📋 Found the set's custom instruction for the AI prompt: ${shapeForLog(customInstruction)}`);
             promptProvenance.hierarchy.push({
               type: 'customInstruction',
               source: 'question_set',
@@ -1147,7 +1171,7 @@ exports.handler = async (event) => {
           }
           if (setResult.Item.aiContextInstruction) {
             questionSetAiContext = setResult.Item.aiContextInstruction;
-            console.log('🎯 Found question set AI context:', questionSetAiContext);
+            console.log(`🎯 Found the question set's AI context: ${shapeForLog(questionSetAiContext)}`);
             promptProvenance.hierarchy.push({
               type: 'aiContext',
               source: 'question_set',
@@ -1808,7 +1832,14 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
         // it most.
         Key: setKey,
       }));
-      
+      // Sealed under the set's org, like the handler's read of the same row
+      // (sessionSetOrgId): the session's pinned scope, and for an org set the
+      // session's org — the same pair the partition lookup below resolves.
+      const setOrgId = setScope === ORG ? orgId : '';
+      if (oldSetMetadata.Item && setOrgId) {
+        oldSetMetadata.Item = await decryptItem(setOrgId, 'set', oldSetMetadata.Item);
+      }
+
       if (oldSetMetadata.Item) {
         questionSetName = oldSetMetadata.Item.SetName || questionSetName;
         questionSetDescription = oldSetMetadata.Item.Description || '';
