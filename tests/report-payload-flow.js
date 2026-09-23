@@ -325,7 +325,7 @@ const seedAISummary = (n, extra = {}) =>
     assert.strictEqual(report.questionSetData.customInstruction, 'Answer in one line'));
 
   say('\n   get-report is an explicit whitelist — it must name roundNoun too');
-  let hostRes = await getReport({ pathParameters: { gameId: GAME }, queryStringParameters: { role: 'host' } });
+  let hostRes = await getReport({ requestContext: { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } }, pathParameters: { gameId: GAME }, queryStringParameters: { role: 'host' } });
   check('get-report returns 200', () =>
     assert.strictEqual(hostRes.statusCode, 200, `got ${hostRes.statusCode}: ${hostRes.body}`));
   check('the host projection carries roundNoun', () =>
@@ -346,7 +346,7 @@ const seedAISummary = (n, extra = {}) =>
   report = parse(await build()).report;
   check('roundNoun is null when the set does not override it', () =>
     assert.strictEqual(report.roundNoun, null));
-  hostRes = await getReport({ pathParameters: { gameId: GAME }, queryStringParameters: { role: 'host' } });
+  hostRes = await getReport({ requestContext: { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } }, pathParameters: { gameId: GAME }, queryStringParameters: { role: 'host' } });
   check('get-report reports null too', () =>
     assert.strictEqual(parse(hostRes).roundNoun, null));
 

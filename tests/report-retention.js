@@ -354,6 +354,8 @@ function seedFinishedSession({ gameId = GAME, orgId = null } = {}) {
   expireSevenDayRows();
   await build();
   const hostView = JSON.parse((await getReport({
+    // A signed-in host: the route carries the Cognito authorizer since 2026-09-23.
+    requestContext: { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } },
     pathParameters: { gameId: GAME }, queryStringParameters: { role: 'host' },
   })).body);
 
