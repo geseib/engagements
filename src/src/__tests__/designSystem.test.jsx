@@ -98,7 +98,9 @@ describe('gameTypes registry', () => {
     expect(hasVotePhase('wavelength')).toBe(false);
     expect(hasVotePhase('call-and-answer')).toBe(true);
     expect(hasVotePhase('poll')).toBe(true);
-    expect(hasVotePhase('survey')).toBe(true);
+    // Surveys phase 2: a survey has no rounds and so no vote — COLLECTING
+    // then CLOSED. It used to fall through to start-vote by accident.
+    expect(hasVotePhase('survey')).toBe(false);
   });
 
   it('exposes a label and accent for every type', () => {
@@ -125,12 +127,12 @@ describe('gameTypes registry', () => {
       }
     });
 
-    // Survey sets can be made (surveys phase 1) but not yet played (phase 2),
-    // so the create dialog's pill would be a dead end.
-    it('holds survey, and offers poll', () => {
-      expect(UNPLAYABLE_GAME_TYPES).toContain('survey');
+    // Surveys phase 2: a session plays a survey now, so the pill that was
+    // held back as a dead end is offered with the other four.
+    it('offers survey and poll', () => {
+      expect(UNPLAYABLE_GAME_TYPES).not.toContain('survey');
       expect(PICKER_GAME_TYPES.map((t) => t.id)).toContain('poll');
-      expect(PICKER_GAME_TYPES.map((t) => t.id)).not.toContain('survey');
+      expect(PICKER_GAME_TYPES.map((t) => t.id)).toContain('survey');
     });
 
     // rejects: rendering a blurb line under the picker for a type that has none,

@@ -35,6 +35,12 @@ const CHIP = {
   VOTE: ['vote', 'Voting'],
   RESULTS: ['results', 'Results'],
   FIELD_NOTES: ['results', 'What we heard'],
+  // A survey's two phases (s-01-collecting draws the collecting chip as
+  // "Answering" on the ask hue — the room IS answering, at its own pace).
+  // CLOSED shares ENDED's hue: collection is over, and phase 3's
+  // walk-through will carry its own word.
+  COLLECTING: ['ask', 'Answering'],
+  CLOSED: ['done', 'Closed'],
   ENDED: ['done', 'Complete'],
 };
 
@@ -67,6 +73,13 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
             once said "Lesson 3" while RESULTS said "Question 3". */}
         {context.round != null && <b>{`${context.noun || 'Round'} ${context.round}`}</b>}
         {context.of != null && <span>{`of ${context.of}`}</span>}
+        {/* A survey has no round to count: "Survey / 8 questions" (s-01). */}
+        {context.detail && context.round == null && (
+          <>
+            {context.category && <i>/</i>}
+            <b>{context.detail}</b>
+          </>
+        )}
       </span>
       {timer && <span className="rail-timer">{timer}</span>}
       {hasJoin && closed && (

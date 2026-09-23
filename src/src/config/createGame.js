@@ -23,12 +23,26 @@
  *    The ids now arrive in the form payload and the ordering stops mattering.
  */
 import { createPayloadFor } from './anonymity';
+import { namesPayloadFor } from './surveyNames';
 import { DEFAULT_SCOPE } from '../utils/setRef';
+
+/*
+ * 4. **A survey carries `names`, and is never shuffled** (surveys phase 2,
+ *    docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2 METADATA).
+ *    `names` decides what the server WRITES about people, and create-game.js
+ *    is a whitelist, so the key is built here where createGamePayload.test.js
+ *    can hold it — by `namesPayloadFor`, which sends it for a survey and
+ *    nothing for any other type. A survey is a form read in the order it was
+ *    written; the dialog hides the shuffle card for one, and the body says
+ *    `false` whatever the form carried, so a stale `true` cannot shuffle it.
+ */
+const neverShuffled = (gameType) => gameType === 'survey';
 
 /**
  * @param form  what `<GameSetupDialog>` raises through `onCreate`:
  *              { title, gameType, setId, setScope, categoryIds, eventDetails,
- *                aiContext, personaId, randomizeQuestions, anonymousResponses }
+ *                aiContext, personaId, randomizeQuestions, anonymousResponses,
+ *                names (survey only) }
  */
 export function createGameBody(form = {}) {
   const {
@@ -43,6 +57,7 @@ export function createGameBody(form = {}) {
     promptId = '',
     randomizeQuestions = true,
     anonymousResponses = true,
+    names,
   } = form;
 
   return {
@@ -56,7 +71,7 @@ export function createGameBody(form = {}) {
     // would stop agreeing the moment that default moves. A form that carries no
     // scope is a platform set, which is what every pre-tenancy set is.
     questionSetScope: setScope || DEFAULT_SCOPE,
-    randomizeQuestions,
+    randomizeQuestions: neverShuffled(gameType) ? false : randomizeQuestions,
     // Always an array. `undefined` would be deleted by JSON.stringify, so the
     // backend would read "no categories key" where the host meant "all of them".
     selectedCategories: Array.from(categoryIds || []),
@@ -68,6 +83,7 @@ export function createGameBody(form = {}) {
     promptId: promptId || '',
     hostName: 'Host',
     ...createPayloadFor({ gameType, anonymousResponses }),
+    ...namesPayloadFor({ gameType, names }),
   };
 }
 
@@ -109,6 +125,7 @@ export function updateGameBody(form = {}) {
     personaId = '',
     promptId = '',
     anonymousResponses = true,
+    names,
   } = form;
 
   return {
@@ -125,5 +142,10 @@ export function updateGameBody(form = {}) {
     ...(Array.isArray(form.categoryIds) && form.categoryIds.length > 0
       ? { categoryIds: form.categoryIds } : {}),
     ...createPayloadFor({ gameType, anonymousResponses }),
+    // A survey's Names, editable only until it opens: update-game.js
+    // conditions the write on `attribute_not_exists(OpenedAt)`, so an edit
+    // that races the start fails rather than breaking a promise already on
+    // the phones.
+    ...namesPayloadFor({ gameType, names }),
   };
 }

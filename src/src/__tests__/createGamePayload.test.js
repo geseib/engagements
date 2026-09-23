@@ -215,3 +215,47 @@ describe('the question set reference is a pair', () => {
     expect(body.questionSetScope).toBe('org');
   });
 });
+
+/**
+ * SURVEYS PHASE 2: NAMES, AND A FIXED ORDER.
+ *
+ * `names` is the one survey setting that decides what the server WRITES about
+ * people (config/surveyNames.js). create-game.js is a whitelist, so the key
+ * must be built here where it can be asserted — and only for a survey, because
+ * no other type has anything to do with it. A survey is also a form, read in
+ * the order it was written, so the shuffle is forced off whatever the form
+ * said (the setup dialog hides that card for a survey).
+ */
+describe('Names — a survey sends it, every other type does not', () => {
+  const survey = { ...form, gameType: 'survey', names: 'finished' };
+
+  test('the create body carries the chosen value for a survey', () => {
+    expect(createGameBody(survey).names).toBe('finished');
+    expect(createGameBody({ ...survey, names: undefined }).names).toBe('anonymous');
+    // An unknown value never reaches the wire as itself.
+    expect(createGameBody({ ...survey, names: 'everyone' }).names).toBe('anonymous');
+  });
+
+  test('no other type sends the key at all', () => {
+    for (const gameType of ['call-and-answer', 'trivia', 'poll', 'wavelength']) {
+      expect('names' in createGameBody({ ...form, gameType, names: 'named' })).toBe(false);
+      expect('names' in updateGameBody({ ...form, gameType, names: 'named' })).toBe(false);
+    }
+  });
+
+  test('an edit of a survey carries it too (the server refuses it once the survey opens)', () => {
+    expect(updateGameBody(survey).names).toBe('finished');
+  });
+
+  test('a survey is never shuffled', () => {
+    expect(createGameBody({ ...survey, randomizeQuestions: true }).randomizeQuestions).toBe(false);
+    // …and nothing else lost its shuffle.
+    expect(createGameBody({ ...form, randomizeQuestions: true }).randomizeQuestions).toBe(true);
+  });
+
+  test('a survey sends no voting-shaped anonymity flag of its own', () => {
+    // anonymityApplies('survey') is false now: the flag goes out as an explicit
+    // false, the way trivia's does, and Names says what is recorded.
+    expect(createGameBody(survey).anonymousUntilReveal).toBe(false);
+  });
+});

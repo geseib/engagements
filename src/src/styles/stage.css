@@ -374,6 +374,51 @@ body, .stage-ladder-table{
 .meter .waiting .more{font-size:var(--t-meta);color:var(--muted);font-weight:600;
   white-space:nowrap}
 
+/* ---------------------------------------------- A SURVEY, COLLECTING (s-01)
+   Ported from docs/design/survey-redesign/_src/survey-stage.css ("the survey,
+   collecting"), minus one line and one class:
+
+     - NOT `.bar2`. s-01 draws a progress bar under the Finished fraction; the
+       meter block above cut that bar on purpose, as a second statement of the
+       one fraction, and it is not re-added (IMPLEMENTATION-phase-2.md §5
+       risk 7). __tests__/surveyStagePalette.test.js holds its absence.
+     - no `.sprog .r .k` (a question's title in the row): RoomMeter prints the
+       question's number, and a survey's question text stays on the phones.
+
+   The rows ARE kept, because they state a different fact — how far through
+   the FORM the room is, per question — and each prints its own count beside
+   its bar, so the bar is never the only statement of a number. They live in
+   the meter's column (RoomMeter.jsx `rows`) and give way to the "Still going"
+   list while it is up. Sizes read the profile ladder; the row text is
+   --muted, which on the stage's re-entered dusk is #B6C2D4 (9.6:1 on the
+   field, 6.8:1 on the projector-lifted #2A3550 — measured in the test). The
+   fill is --primary on a 16% grey track (6.7:1 non-text), --success once
+   everyone in the room has answered that question. */
+/* THE ROWS TAKE THE METER'S FULL CAP. `.meter` is `width:max-content`, and a
+   bar track's max-content is zero — so without an explicit width the column
+   would shrink to the numbers and draw every bar at nothing. Seen at 1280x720
+   on Room: the old nowrap heading was the only thing holding the column open,
+   and it clipped to "ANSWERED, BY QUE". So the rows claim the cap the meter
+   already has, the heading wraps, and the count column is as wide as its
+   widest count rather than a guessed 11ch. */
+.sprog{display:flex;flex-direction:column;gap:calc(.8vh + 4px);min-width:0;
+  width:clamp(210px, 21vw, 460px);max-width:100%}
+.sprog h4{white-space:normal}
+.sprog .r{display:grid;grid-template-columns:2.2em minmax(0,1fr) auto;gap:calc(.6vw + 8px);align-items:center;
+  font-size:var(--t-meta);font-weight:700;color:var(--muted)}
+.sprog .r .t{height:calc(.9vh + 6px);border-radius:99px;background:rgba(155,168,190,.16);overflow:hidden}
+.sprog .r .t i{display:block;height:100%;border-radius:99px;background:var(--primary)}
+.sprog .r .t i.full{background:var(--success)}
+.sprog .r .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* The collecting content: an invitation and the Names promise above the join
+   block (SurveyCollecting.jsx). The subtitle is --text at .82 — the same
+   treatment as .qdetail, because it is a sentence the room reads, not a
+   label — and it carries `wallLine` from config/surveyNames.js verbatim. */
+.stitle{font-family:var(--font-display);font-weight:800;font-size:var(--t-primary);
+  line-height:1.05;margin:0;max-width:var(--measure);color:var(--text)}
+.ssub{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;max-width:44ch;line-height:1.3}
+
 /* ------------------------------------------------------------------- DOCK */
 .dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
   display:flex;align-items:center;gap:calc(1.2vw + 8px);
