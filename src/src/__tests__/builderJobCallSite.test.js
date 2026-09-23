@@ -84,24 +84,53 @@ describe('the page does not create a set the worker already created', () => {
   // phases 0+1, fix 2): it used to build a Blob and click an anchor — a JSON
   // download, with no set anywhere — and the survey worker now creates a
   // draft set like the other three.
-  for (const handler of ['handleScenariosGenerated', 'handleTriviaGenerated', 'handlePollGenerated', 'handleSurveyGenerated']) {
+  // The upload itself is utils/generatedSetUpload.js since the host shelf
+  // began sharing it; each handler hands its builder's kind to that path.
+  const HANDLERS = {
+    handleScenariosGenerated: 'scenario',
+    handleTriviaGenerated: 'trivia',
+    handlePollGenerated: 'poll',
+    handleSurveyGenerated: 'survey',
+  };
+  for (const [handler, kind] of Object.entries(HANDLERS)) {
     test(`${handler} returns on createdSet without uploading`, () => {
       // rejects: leaving the old unconditional POST in place. The worker now
       // creates the set before the job goes terminal, so this path would send
       // the same questions to /admin/upload-questions a second time — the
       // importer refuses to overwrite an existing set, and the operator would
       // be shown "already exists" over a set that is sitting in the list.
-      const body = source.split(`const ${handler} = async`)[1];
+      const body = source.split(`const ${handler} = async`)[1].split('\n  };\n')[0];
       expect(body).toBeTruthy();
       const guard = body.indexOf('createdSet?.setId');
-      const upload = body.indexOf('admin/upload-questions');
+      const upload = body.indexOf(`uploadBuilderResult('${kind}'`);
       expect(guard).toBeGreaterThan(-1);
       expect(upload).toBeGreaterThan(-1);
       expect(guard).toBeLessThan(upload);
-      // The early return has to be inside the guard, before the POST.
+      // The early return has to be inside the guard, before the upload.
       expect(body.slice(guard, upload)).toMatch(/return;/);
     });
   }
+
+  test('the four handlers upload through the one shared path', () => {
+    // rejects: a handler growing its own POST or CSV writer again. There were
+    // four handlers and three CSV writers here, the host shelf could reach
+    // none of them, and so the shelf saved nothing on this path.
+    const upload = source.split('const uploadBuilderResult = async')[1];
+    expect(upload).toBeTruthy();
+    expect(upload.split('\n  };\n')[0]).toMatch(/uploadGeneratedSet\(kind, data, options\)/);
+    expect(source).not.toMatch(/admin\/upload-questions/);
+    expect(source).not.toMatch(/generateTriviaCSV|generatePollCSV|generateScenariosCSV|surveyItemsToCsv/);
+  });
+});
+
+describe('the host shelf uploads through the same path', () => {
+  test('HostQuestionSetsDialog has no upload of its own', () => {
+    // The behaviour is rendered in hostShelfBuilderFallback.test.jsx; this is
+    // the anti-copy half. rejects: a second writer of the builders' CSV.
+    const host = read('components', 'HostQuestionSetsDialog.jsx');
+    expect(host).toMatch(/uploadGeneratedSet\(kind, result/);
+    expect(host).not.toMatch(/admin\/upload-questions/);
+  });
 });
 
 describe('every whole-set builder promises a set gets made — survey included now', () => {
@@ -152,14 +181,15 @@ describe('the survey builder is a draft-set builder, not an exporter', () => {
 
   test('the page makes the manual-path set from the survey CSV contract', () => {
     // The fallback, when the worker could not create the set: the same
-    // upload the trivia and poll handlers make, typed as survey, with the CSV
-    // from rowsToCsv's survey branch (utils/surveyDraft.js) — not a Blob.
+    // upload the trivia and poll handlers make, as the survey kind — not a
+    // Blob. The kind's CSV is rowsToCsv's survey branch (utils/surveyDraft.js),
+    // typed survey; generatedSetUpload.test.js pins both.
     const page = read('AdminPage.jsx');
     const body = page.split('const handleSurveyGenerated = async')[1].split('\n  };\n')[0];
-    expect(body).toMatch(/surveyItemsToCsv\(questions\)/);
-    expect(body).toMatch(/engagementType: 'survey'/);
-    expect(body).toMatch(/isAIGenerated: true/);
+    expect(body).toMatch(/uploadBuilderResult\('survey', surveyData\)/);
     expect(body).not.toMatch(/new Blob/);
+    const helper = read('utils', 'generatedSetUpload.js');
+    expect(helper).toMatch(/survey: \{[\s\S]*?toCsv: surveyItemsToCsv, type: 'survey'/);
   });
 });
 

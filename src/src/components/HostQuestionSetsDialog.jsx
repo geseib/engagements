@@ -15,6 +15,8 @@ import {
   UNREADABLE_LABEL, UNREADABLE_REASON, UNREADABLE_SUB,
 } from '../utils/unreadableSet';
 import { recallAllGenerationJobs } from '../utils/generationJob';
+import { uploadGeneratedSet, generatedSetPendingNotice } from '../utils/generatedSetUpload';
+import PlanLimitNotice from './PlanLimitNotice';
 import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -178,24 +180,31 @@ export default function HostQuestionSetsDialog({
   };
 
   /*
-    WHAT A FINISHED GENERATION DOES HERE.
+    WHAT A FINISHED GENERATION DOES HERE. The builder that is open is the one
+    finishing, so `builder` names the kind — the same four names
+    utils/generatedSetUpload.js takes.
 
-    The worker already created the set — `createdSet` on the job row, see
-    admin/shared/generated-set.js — so there is nothing to upload and uploading
-    would be REFUSED anyway: the importer will not write over a set that exists,
-    and it would report that refusal as a failure over a set sitting right
-    there. So this re-reads the list and opens the draft, which is what
-    AdminPage's own handler does with the same value.
+    USUALLY the worker already created the set — `createdSet` on the job row,
+    see admin/shared/generated-set.js — so there is nothing to upload and
+    uploading would be REFUSED anyway: the importer will not write over a set
+    that exists, and it would report that refusal as a failure over a set
+    sitting right there. So this re-reads the list and opens the draft, which is
+    what AdminPage's own handler does with the same value.
 
-    A generation that produced no set (an older job, or one whose set creation
-    failed) still closes and re-reads: the items are on the job and the panel
-    inside the builder offers them, which is the pre-existing fallback.
+    OTHERWISE the worker could not (the organisation is at its stored-set
+    allowance, or the job is older than server-side creation), and the builder
+    hands over the kept questions for the PAGE to upload. This used to close and
+    re-read and nothing more: nothing was saved, and the builder had already
+    forgotten the job, so there was nothing to go back to. It is now the
+    console's own upload (uploadGeneratedSet, shared with AdminPage), and a
+    plan-limit refusal is the plan-limit notice, as it is there.
   */
   const finishBuilder = async (result) => {
+    const kind = builder;
     setBuilder(null);
     const created = result && result.createdSet;
-    const fresh = await load();
     if (created?.setId) {
+      const fresh = await load();
       const row = (fresh || []).find((item) => item.id === created.setId);
       setEditingQuestions(row || { id: created.setId, name: created.setName });
       setNotice({
@@ -203,7 +212,14 @@ export default function HostQuestionSetsDialog({
           + 'until you review it and turn it on.',
         tone: 'success',
       });
+      return;
     }
+    setNotice(generatedSetPendingNotice(kind));
+    // A scenario set is imported as the format the host picked, which is the
+    // one the scenario builder was opened with. The other three are fixed.
+    const outcome = await uploadGeneratedSet(kind, result, { engagementType: newSetType });
+    setNotice(outcome.notice);
+    if (outcome.ok) await load();
   };
 
   const load = useCallback(async (announce) => {
@@ -442,13 +458,22 @@ export default function HostQuestionSetsDialog({
       </header>
 
       <div className="qsets-modal-body">
-        {notice && notice.text && (
+        {/* A PLAN LIMIT (`notice.limit`) is the shared notice — what ran out and
+            what THIS reader can do about it (22-plan-limit-notice.html), as
+            QuestionSetsPanel draws it in the console. Everything else is the
+            one banner. A `pending` notice is neither success nor error, so it
+            takes neither tint and no tick. */}
+        {notice && notice.limit ? (
+          <PlanLimitNotice refusal={notice.limit} outcome={notice.outcome} onDismiss={() => setNotice(null)} />
+        ) : notice && notice.text ? (
           <div
-            className={`qsets-alert${notice.tone === 'error' ? ' qsets-alert--error' : ' qsets-alert--success'}`}
+            className={`qsets-alert${notice.tone === 'error' ? ' qsets-alert--error' : ''}${
+              notice.tone === 'success' ? ' qsets-alert--success' : ''
+            }`}
             role={notice.tone === 'error' ? 'alert' : 'status'}
           >
             <Icon
-              name={notice.tone === 'error' ? 'Warning' : 'Check'}
+              name={notice.tone === 'error' ? 'Warning' : notice.tone === 'pending' ? 'Clock' : 'Check'}
               weight="fill"
               size={16}
               color="currentColor"
@@ -458,7 +483,7 @@ export default function HostQuestionSetsDialog({
               Dismiss
             </button>
           </div>
-        )}
+        ) : null}
 
         {/*
           A GENERATION THE PERSON STARTED, said where its RESULT will appear.
