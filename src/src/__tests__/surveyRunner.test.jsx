@@ -925,14 +925,21 @@ describe('in the player page', () => {
     unknown the page now says only that it is loading.
   */
   describe('before /state has said what the session is', () => {
+    // A successful join rewrites the URL to carry the code and the name, and
+    // the next page would auto-join from it; each test here starts at the form.
+    beforeEach(() => { window.history.pushState({}, '', '/play'); });
+
     /** The page's fetch, with /state held until `answer(body)` is called. */
-    function heldState(server) {
+    function heldState(server, { brief = null } = {}) {
       let release;
       const held = new Promise((resolve) => { release = resolve; });
       const inner = pageFetch(server);
-      global.fetch = jest.fn((url, opts = {}) => (String(url) === `${API}games/${GAME}/state`
-        ? held.then(({ status, body }) => reply(status, body))
-        : inner(url, opts)));
+      global.fetch = jest.fn((url, opts = {}) => {
+        const u = String(url);
+        if (u === `${API}games/${GAME}/state`) return held.then(({ status, body }) => reply(status, body));
+        if (brief && u === `${API}games/${GAME}?role=player`) return reply(200, brief);
+        return inner(url, opts);
+      });
       return { answer: (body, status = 200) => act(async () => { release({ status, body }); }) };
     }
     async function join() {
@@ -964,6 +971,21 @@ describe('in the player page', () => {
       await state.answer({ error: 'Internal Server Error' }, 500);
       await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
       expect(screen.getByText(/Loading the session/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+    });
+
+    // The brief the join screen reads (for its copy) is the server naming the
+    // type too — GameType never changes — so a join it already knew about goes
+    // straight to the survey instead of waiting on /state.
+    test('a survey the join screen already knew about opens without waiting for /state', async () => {
+      heldState(makeServer(), { brief: { gameId: GAME, gameType: 'survey', names: 'anonymous' } });
+      render(<PlayerPage />);
+      fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+      await waitFor(() => expect(document.getElementById('plr-name-help').textContent).toMatch(/^Used to get you back in/));
+      fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
+      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      await heading(Q1);
+      expect(screen.queryByText(/Loading the session/i)).toBeNull();
       expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
     });
 

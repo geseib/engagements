@@ -17,6 +17,7 @@ import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
 import { PlayerShell } from './components/PlayerShell';
 import SurveyRunner from './components/survey/SurveyRunner';
+import { namesMode } from './config/surveyNames';
 import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 
 const API_BASE = window.API_BASE;
@@ -284,12 +285,11 @@ function PlayerPage() {
   const [allPlayers, setAllPlayers] = useState([]);
   const [customInstruction, setCustomInstruction] = useState(null);
   const [setRoundNoun, setSetRoundNoun] = useState(null); // per-set override, e.g. "Lesson"
-  // What the host typed into Event Details at setup. Stored by create-game.js
-  // as `Details` and returned to participants by get-game.js as
-  // `engagementInfo` — and until this existed, read by nothing at all, which
-  // made the setup field's own help text ("shown to participants when they
-  // join") false for the whole life of the field.
-  const [engagementInfo, setEngagementInfo] = useState('');
+  // The session brief — GET /games/{id}?role=player — for ONE code:
+  // `{ code, gameType, names, engagementInfo }`, or null. Read as soon as a
+  // code is known, before joining as well as after (the effect below says
+  // when), because the join screens speak the session's own terms.
+  const [brief, setBrief] = useState(null);
   // Which question the on-screen draft belongs to. A ref, not state: it is
   // read and claimed inside async fetches that would otherwise close over a
   // stale value, and changing it must never itself cause a render.
@@ -446,6 +446,10 @@ function PlayerPage() {
 
   /** Everything that must be true once the server has actually let us in. */
   const enterSession = (gid, name, data) => {
+    // The brief the join screen read for THIS code already named the session's
+    // type (GameType never changes), so the joined surface need not wait on
+    // /state to know it. Anything else waits: see `gameType`.
+    if (brief && brief.code === String(gid || '').trim() && brief.gameType) setGameType(brief.gameType);
     setPlayerName(name);
     setJoined(true);
     setJoinCollision(null);
@@ -548,7 +552,20 @@ function PlayerPage() {
   }, [useWebSocket]);
 
   /**
-   * The host's session brief, fetched once the participant is in.
+   * The host's session brief, as soon as there is a code to ask about.
+   *
+   * WHEN. Once the participant is in, always. Before that, when the code is
+   * one the page did not have to guess at: it came in the link (the QR code's
+   * route), the rejoin prompt is up for it, or four digits have been typed —
+   * never on every keystroke. The join screens need it: a survey's name field
+   * and rejoin prompt used to promise a scoreboard, voting rounds and "your
+   * score", none of which a survey has.
+   *
+   * WHAT. `engagementInfo` — what the host typed into Event Details at setup,
+   * stored by create-game.js as `Details` and until this existed read by
+   * nothing at all, which made the setup field's own help text ("shown to
+   * participants when they join") false for the whole life of the field —
+   * plus `gameType` and, for a survey, `names`.
    *
    * `role=player` explicitly, though it no longer buys secrecy: the host view
    * of this endpoint DID return the private-game access code, and no longer
@@ -558,27 +575,41 @@ function PlayerPage() {
    * the host branch carries setup fields a participant has no use for.
    *
    * Every failure is swallowed. The brief is a nicety; being in the room is
-   * not, and a 404 or a flaky network must never take the lobby down with it.
+   * not, and a 404 or a flaky network must never take the lobby down with it
+   * — nor change a word of the join screen, which then reads as it always did.
    */
+  const typedCode = String(gameId || '').trim();
+  const briefCode = typedCode && (joined || rejoinPrompt || (gameIdFromUrl && !codeUnlocked) || /^\d{4}$/.test(typedCode))
+    ? typedCode
+    : '';
   useEffect(() => {
-    if (!joined || !gameId) return undefined;
+    if (!briefCode) return undefined;
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}games/${gameId}?role=player`);
+        const res = await fetch(`${API_BASE}games/${briefCode}?role=player`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && typeof data.engagementInfo === 'string') {
-          setEngagementInfo(data.engagementInfo);
-        }
+        if (cancelled || !data || typeof data !== 'object') return;
+        setBrief({
+          code: briefCode,
+          gameType: typeof data.gameType === 'string' && data.gameType ? data.gameType : null,
+          names: typeof data.names === 'string' && data.names ? data.names : null,
+          engagementInfo: typeof data.engagementInfo === 'string' ? data.engagementInfo : '',
+        });
       } catch (error) {
         console.warn('PLAYER: session details unavailable:', error.message);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [joined, gameId]);
+  }, [briefCode]);
+
+  /** The brief, if it is for the code on this page; null otherwise. */
+  const briefHere = brief && brief.code === typedCode ? brief : null;
+  const engagementInfo = (briefHere && briefHere.engagementInfo) || '';
+  const briefSaysSurvey = Boolean(briefHere && briefHere.gameType === 'survey');
 
   // WebSocket connection effect - only runs when WebSocket is enabled and player has joined
   useEffect(() => {
@@ -2198,8 +2229,11 @@ function PlayerPage() {
         <h1 className="plr-h1">Welcome back.</h1>
         <p className="plr-lede plr-muted">
           This phone joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
-          <strong>{rejoinPrompt.name}</strong>. Rejoining brings your answers and your score
-          back with you.
+          <strong>{rejoinPrompt.name}</strong>.{' '}
+          {/* A survey has answers and no score (the brief says which this is). */}
+          {briefSaysSurvey
+            ? 'Rejoining brings your answers back with you.'
+            : 'Rejoining brings your answers and your score back with you.'}
         </p>
       </PlayerShell>
     );
@@ -2369,9 +2403,25 @@ function PlayerPage() {
                 (RATIONALE §6.3). Telling somebody at the ballot that their
                 answer was unattributed is telling them after they wrote it. */}
             <p className="plr-help" id="plr-name-help">
-              Used for the scoreboard and to get you back in if you lose this page. On rounds
-              where the room votes, your name is <b>not</b> shown next to your answer until
-              voting closes.
+              {briefSaysSurvey ? (
+                /* A SURVEY HAS NO SCOREBOARD AND NO VOTING ROUNDS. What the name
+                   is for there is the Names value's own promise, in its own
+                   words (config/surveyNames.js — never retyped); with no value
+                   in the brief, only what is true of every survey. */
+                <>
+                  Used to get you back in if you lose this page.
+                  {briefHere.names && (() => {
+                    const mode = namesMode(briefHere.names);
+                    return <>{' '}{mode.phoneLead && <><b>{mode.phoneLead}</b>{' '}</>}{mode.phoneLine}</>;
+                  })()}
+                </>
+              ) : (
+                <>
+                  Used for the scoreboard and to get you back in if you lose this page. On rounds
+                  where the room votes, your name is <b>not</b> shown next to your answer until
+                  voting closes.
+                </>
+              )}
             </p>
           </div>
 
