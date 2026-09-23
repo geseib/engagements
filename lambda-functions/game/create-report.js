@@ -505,7 +505,18 @@ exports.handler = async (event) => {
             console.log(`Could not fetch question details (old format) for ${sourceQuestionId}:`, error.message);
           }
         }
-        
+
+        // DECRYPTED, with the SET's org from the pinned pair — both branches
+        // above read `resolvedSet.pk`, and on an org set ENCRYPTED_FIELDS.question
+        // seals Title, Detail, the options and AnswerDetails, which the report
+        // quotes below. Not the caller's org, and not the session's by
+        // assumption: the same rule get-question.js and get-results.js follow.
+        // Platform and public sets are never encrypted and pass through.
+        const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+        if (questionDetails && setOrgId) {
+          questionDetails = await decryptItem(setOrgId, 'question', questionDetails);
+        }
+
         console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${shapeForLog(questionDetails?.Title)}`);
       }
 
