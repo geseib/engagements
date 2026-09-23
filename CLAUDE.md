@@ -104,9 +104,15 @@ not repeated here. This section carries only what those two sections do not say.
   one of a session's four rows (the `GAMES` reservation, the org's
   `ORG#<org>#GAMES` index row, METADATA, STATE) carries `ttl`. It is written at
   creation by `websocket/schema-compliant-manager.js` (`unstartedTtl`) and
-  rewritten to started + 7 days by `game/start-game.js` (`startedTtl`). The rule
-  lives in `session-ttl.js`, copied identically into `game/` and `websocket/`
-  (`tests/tenant-session-scoping.js` §9 holds them equal).
+  rewritten to started + 7 days by `game/session-start.js` (`startSession`, the
+  ONLY caller of `startedTtl`). Two doors start play and both call it:
+  `game/start-game.js`, and `game/next-question.js` when it opens a round from
+  CREATED — the phone remote's "Start First Round". Until 2026-09-23 the writes
+  lived in start-game alone, so the second door left the 90-day ttl in place
+  AND left `METADATA.Started` unset, which locked every phone out of a live
+  round ("Game not started"); `tests/lobby-start-ttl.js` holds both doors. The
+  rule lives in `session-ttl.js`, copied identically into `game/` and
+  `websocket/` (`tests/tenant-session-scoping.js` §9 holds them equal).
 
   History, so nobody re-derives it: this line said "90 days (creation), 7 days
   (active)", then "never expires — create-game.js writes no ttl". Both were
