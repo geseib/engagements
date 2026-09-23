@@ -66,7 +66,9 @@
  * and there are no layers, and all three bundles now need the meter: game/ runs
  * the joins, admin/ runs the reconciler and the set gate, websocket/ runs
  * create-game.js and the session gate. tests/usage-metering.js pins the first
- * two against each other and tests/plan-gating.js pins all three.
+ * two against each other and tests/plan-gating.js pins all three. Each copy
+ * needs pricing.js AND pricing-adjust.js beside it (readAllowance gates on the
+ * effective plan); tests/pricing-adjust.js pins that module's three copies.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
@@ -74,6 +76,7 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { orgPk, setsMetadataPk, ORG } = require('./tenant');
 const { planFor, allowanceState, TEAM_PLAN } = require('./pricing');
+const { effectivePlan } = require('./pricing-adjust');
 
 const client = new DynamoDBClient({});
 const defaultDb = DynamoDBDocumentClient.from(client, {
@@ -363,16 +366,54 @@ async function readUsage(orgId, period, opts = {}) {
 }
 
 /**
+ * Every adjustment row an organisation holds (`ORG#<org>` / `ADJ#…`, written
+ * by orgs/adjustments.js), whatever its window or state. Which of them are in
+ * force is NOT decided here — pricing-adjust.js's `isActive` decides, inside
+ * `effectivePlan`, exactly as it does for the bill. Paginates, like the counts
+ * above; the ledger is append-only and revoked rows stay in it.
+ */
+async function readAdjustments(orgId, opts = {}) {
+  const { db, tableName } = ctx(opts);
+  const rows = [];
+  let ExclusiveStartKey;
+  do {
+    const page = await db.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': orgPk(orgId), ':sk': 'ADJ#' },
+      ExclusiveStartKey,
+    }));
+    rows.push(...(page.Items || []));
+    ExclusiveStartKey = page.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return rows;
+}
+
+/**
  * WHAT THIS ORGANISATION MAY STILL DO — the read behind the two gates.
  *
- * One Get for the organisation's plan, one Get for the period's counters, and
- * `allowanceState` does the arithmetic. It lives here rather than in pricing.js
- * because it touches DynamoDB and pricing.js must stay importable by the React
- * console (tests/pricing.js fails the build on a `require` in that file).
+ * One Get for the organisation's plan, one Get for the period's counters, one
+ * Query for its adjustments, and `allowanceState` does the arithmetic. It lives
+ * here rather than in pricing.js because it touches DynamoDB and pricing.js
+ * must stay importable by the React console (tests/pricing.js fails the build
+ * on a `require` in that file).
+ *
+ * ── IT GATES ON THE EFFECTIVE PLAN, NOT THE BARE ONE ───────────────────────
+ *
+ * Engage staff can grant a team extra allowance — a CREDIT_UNITS row adding
+ * sessions or sets — and the bill has always counted it: get-usage.js prints
+ * `adjusted.plan.includedSessions` from pricing-adjust.js's `effectivePlan`.
+ * This read gated on `planFor(orgRow)` alone, so a free org granted five more
+ * sessions was told ten were included and refused its sixth. It stayed latent
+ * until 2026-09-23, when join-game.js began metering sessions and the session
+ * gate first had a counter to fire on. The gate now folds the same rows in with
+ * the same function, so the refusal and the bill cannot count differently.
  *
  * ── IT FAILS OPEN, ON PURPOSE, AND THAT IS NOT A SECURITY HOLE ─────────────
  *
- * If either read throws, this returns an UNGATED state and logs. The gate is a
+ * If any read throws, this returns an UNGATED state and logs. An unreadable
+ * adjustments ledger included: gating on the bare plan instead would refuse
+ * exactly the customer Engage had just given more to. The gate is a
  * COMMERCIAL limit, not an authorisation boundary — nothing here decides who
  * may see whose data, only whether a free account has had its five. A DynamoDB
  * blip must not stop a paying customer starting a session, and the worst case
@@ -430,11 +471,19 @@ async function readAllowance(orgId, opts = {}) {
     return ungated('usage-unreadable');
   }
 
+  let adjustments;
+  try {
+    adjustments = await readAdjustments(org, opts);
+  } catch (error) {
+    console.error(`⚠️ usage: could not read the adjustments for ${org}; not gating:`, error);
+    return ungated('adjustments-unreadable');
+  }
+
   return {
     orgId: org,
     period,
     org: orgRow,
-    ...allowanceState(planFor(orgRow), usage),
+    ...allowanceState(effectivePlan(planFor(orgRow), adjustments, period), usage),
   };
 }
 
