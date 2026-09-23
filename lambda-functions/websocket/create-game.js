@@ -8,6 +8,7 @@ const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const { readAllowance } = require('./usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
+const { recordSessionCreated } = require('./platform-metrics');
 
 /**
  * WHERE THE PLAYER LINK POINTS, and why it was pointing at a dead host.
@@ -255,6 +256,7 @@ exports.handler = async (event) => {
   }
 
   console.log(`✅ Game ${gameId} created successfully`);
+  await recordSessionCreated({ gameId }); // platform-metrics.js: never throws
   return {
     statusCode: 201,
     body: JSON.stringify({

@@ -5,6 +5,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
+const { recordRoundServed } = require('./platform-metrics');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1197,6 +1198,9 @@ exports.handler = async (event) => {
         ':updatedAt': now
       }
     }));
+
+    // Served: one question put to the room, counted once per round (platform-metrics.js; never throws).
+    await recordRoundServed({ gameId, round: newLessonNumber, set: resolvedSet, questionId: nextQuestion.questionId }, { db });
 
     /*
       THE CURSOR AND THE EXHAUSTION FLAG BELONG TO THE AUTOMATIC PATH ONLY.
