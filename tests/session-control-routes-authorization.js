@@ -103,6 +103,9 @@ const MUST_BE_CLOSED = [
   ['POST', '/games/{gameId}/survey/end'],
   ['GET', '/games/{gameId}/survey/progress'],
   ['GET', '/games/{gameId}/survey/people'],
+  // The stored report. It was on the list below as a participant read; it is
+  // not one — `?role=host` returned the whole room (tests/get-report-authorization.js).
+  ['GET', '/games/{gameId}/report'],
 ];
 
 // The participant journey. None of these carries a token, ever.
@@ -117,7 +120,6 @@ const MUST_STAY_OPEN = [
   ['GET', '/games/{gameId}/votes'],
   ['POST', '/games/{gameId}/votes'],
   ['POST', '/games/get-results'],
-  ['GET', '/games/{gameId}/report'],
   ['GET', '/games/{gameId}/ai-summary'],
   ['POST', '/games/{gameId}/players/{playerName}/handover-request'],
   // A phone answering a survey (game/survey-answers.js). No token, ever.

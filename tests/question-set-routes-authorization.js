@@ -85,7 +85,8 @@ const MUST_STAY_OPEN = [
   ['GET', '/games/{gameId}/votes'],
   ['POST', '/games/{gameId}/votes'],
   ['POST', '/games/get-results'],
-  ['GET', '/games/{gameId}/report'],
+  // GET /games/{gameId}/report left this list 2026-09-23: it is the host's
+  // read of the whole room, not a participant route (tests/get-report-authorization.js).
   ['GET', '/games/{gameId}/ai-summary'],
 ];
 

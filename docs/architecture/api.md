@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-133 routes across 7 groups. 115 carry the Cognito authorizer; 18 are public.
+134 routes across 7 groups. 117 carry the Cognito authorizer; 17 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -42,7 +42,7 @@ on `requestContext.routeKey`.
 | GET | `/games/{gameId}/question` | public | `lambda-functions/game/get-question.js` |
 | GET | `/games/{gameId}/queue` | **Cognito** | `lambda-functions/game/question-queue.js` |
 | POST | `/games/{gameId}/queue` | **Cognito** | `lambda-functions/game/question-queue.js` |
-| GET | `/games/{gameId}/report` | public | `lambda-functions/game/get-report.js` |
+| GET | `/games/{gameId}/report` | **Cognito** | `lambda-functions/game/get-report.js` |
 | POST | `/games/{gameId}/report` | **Cognito** | `lambda-functions/game/create-report.js` |
 | POST | `/games/{gameId}/reveal-authors` | **Cognito** | `lambda-functions/game/reveal-authors.js` |
 | POST | `/games/{gameId}/save-report` | **Cognito** | `lambda-functions/game/save-report.js` |
@@ -176,6 +176,7 @@ on `requestContext.routeKey`.
 |---|---|---|---|
 | GET | `/platform/codes` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
 | POST | `/platform/codes` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |
+| GET | `/platform/observability` | **Cognito** | `lambda-functions/admin/orgs/platform-observability.js` |
 | GET | `/platform/orgs` | **Cognito** | `lambda-functions/admin/orgs/platform-orgs.js` |
 | GET | `/platform/plan-requests` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
 | POST | `/platform/codes/{code}/retire` | **Cognito** | `lambda-functions/admin/orgs/adjustments.js` |

@@ -621,6 +621,17 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && SURVEY_HOST_READ.test(path)) {
     return ['hosts', 'admins'];
   }
+  // THE STORED REPORT, `GET /games/{gameId}/report`. Closed 2026-09-23: it was
+  // public, and `?role=host` handed anyone the whole decrypted room. Named here
+  // for the same reason `GET games` is above — the generic "GET + games is
+  // public" rule below would otherwise answer `[]`, and every account in the
+  // pool would pass, `pending` included. Anchored at both ends and matched on
+  // the template AND a concrete rawPath: `/report/download` (link + passkey,
+  // no authorizer) and every participant GET must not be caught.
+  // tests/get-report-authorization.js.
+  if (method === 'GET' && (path === 'games/{gameId}/report' || /^games\/[^/]+\/report$/.test(path))) {
+    return ['hosts', 'admins'];
+  }
   // Game creation/management requires host or admin group
   if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
     return ['hosts', 'admins'];
