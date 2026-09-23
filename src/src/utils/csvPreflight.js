@@ -138,7 +138,8 @@ function surveyRowProblems(row, columns) {
     if (options.length > 8) problems.push('has more than eight options');
     const picks = get('MaxPicks');
     // MaxPicks belongs to "pick several" alone; with one pick it is not stored.
-    if (picks && /^true$/i.test(get('AllowMultiple'))) {
+    // The importer reads true/yes/y/1 as true (shared/survey-kinds.js).
+    if (picks && /^(true|yes|y|1)$/i.test(get('AllowMultiple'))) {
       const n = wholeNumber(picks);
       if (n === null || n < 2 || n > options.length) {
         problems.push(`can't allow ${picks} picks from ${options.length} options`);
@@ -361,7 +362,9 @@ export function preflight(text, engagementType, meta = {}) {
   */
   const missing = [];
   if (col.title === -1) missing.push('Title');
-  if (col.category === -1) missing.push('Category');
+  // A survey needs no Category column: the importer files every survey row
+  // under "Survey" (shared/survey-kinds.js), since surveys expose none.
+  if (col.category === -1 && type !== 'survey') missing.push('Category');
   if (missing.length) {
     blocking.push({
       code: 'missing-columns',

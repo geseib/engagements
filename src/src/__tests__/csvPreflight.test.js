@@ -443,3 +443,28 @@ describe('surveys — the JSON the old builder exported', () => {
     expect(report.blocking.map((b) => b.code)).toEqual(['survey-json-empty']);
   });
 });
+
+describe('survey preflight agrees with the importer (integration of surveys phase 1)', () => {
+  // The importer (upload-questions.js via shared/survey-kinds.js) files a
+  // survey row with no Category under "Survey", so a survey file needs no
+  // Category column at all — the preflight must not block what imports.
+  test('a survey file with no Category column is not blocked', () => {
+    const csv = 'Title,Kind,Options\n"Best part?","text",""\n';
+    const report = preflight(csv, 'survey');
+    expect(report.blocking).toEqual([]);
+    expect(report.importedCount).toBe(1);
+  });
+
+  test('a trivia file with no Category column is still blocked', () => {
+    const report = preflight('Title,OptionA\n"Q","a"\n', 'trivia');
+    expect(report.blocking.map((b) => b.code)).toContain('missing-columns');
+  });
+
+  // The importer reads true/yes/y/1 as true; with "yes" it validates MaxPicks,
+  // so the preflight must too — or it passes a row the importer will skip.
+  test('AllowMultiple "yes" still has its MaxPicks checked', () => {
+    const csv = 'Category,Title,Kind,Options,AllowMultiple,MaxPicks\n"Survey","Q","choice","a|b|c","yes","9"\n';
+    const report = preflight(csv, 'survey');
+    expect(report.skipped.map((s) => s.problem).join(' ')).toMatch(/can't allow 9 picks from 3 options/);
+  });
+});
