@@ -23,6 +23,17 @@ import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 const API_BASE = window.API_BASE;
 
 /**
+ * What a survey's join screen adds about the name: the Names value's own phone
+ * promise, lead and line (config/surveyNames.js — the one place those
+ * sentences live), or nothing when the brief carried no value to speak for.
+ */
+function surveyNamePromise(names) {
+  if (!names) return null;
+  const mode = namesMode(names);
+  return <>{' '}{mode.phoneLead && <><b>{mode.phoneLead}</b>{' '}</>}{mode.phoneLine}</>;
+}
+
+/**
  * THE LOOK-UP CUE — the same sentence shape, in the same position, in every
  * WATCH and REST state.
  *
@@ -2410,10 +2421,7 @@ function PlayerPage() {
                    in the brief, only what is true of every survey. */
                 <>
                   Used to get you back in if you lose this page.
-                  {briefHere.names && (() => {
-                    const mode = namesMode(briefHere.names);
-                    return <>{' '}{mode.phoneLead && <><b>{mode.phoneLead}</b>{' '}</>}{mode.phoneLine}</>;
-                  })()}
+                  {surveyNamePromise(briefHere.names)}
                 </>
               ) : (
                 <>
