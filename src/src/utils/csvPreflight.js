@@ -79,6 +79,145 @@ function resolveColumns(headers) {
     difficulty: exact(headers, 'Difficulty'),
     optionLetters: ['A', 'B', 'C', 'D', 'E', 'F'].map((l) => exact(headers, `Option${l}`)),
     optionNumbers: [1, 2, 3, 4, 5].map((n) => exact(headers, `Option${n}`)),
+    // The survey branch of the contract, matched exactly like every other
+    // engagement-type column.
+    survey: Object.fromEntries(SURVEY_COLUMNS.map((name) => [name, exact(headers, name)])),
+  };
+}
+
+/* ---------------------------------------------------------------- surveys -- */
+
+/*
+  THE SURVEY ROWS, CHECKED IN THE CONTRACT'S OWN WORDS.
+
+  docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md, "THE CONTRACT" —
+  the importer skips a survey row for exactly these reasons and reports them in
+  exactly this wording (Track A: shared/survey-kinds.js `validateSurvey`, the
+  browser editor: questionRows `rowProblems`), joined with "; ". Reading a CSV
+  cell by cell is this file's job and nobody else's, so the check is restated
+  here over the cells rather than borrowed from the editor's row shape; if the
+  contract's wording moves, all three move together.
+*/
+const SURVEY_COLUMNS = [
+  'Kind', 'Required', 'Options', 'AllowMultiple', 'MaxPicks', 'AllowOther', 'Shuffle',
+  'Scale', 'LowLabel', 'HighLabel', 'YesLabel', 'NoLabel', 'Unsure', 'FollowUpWhen',
+  'FollowUpPrompt', 'RankTop', 'TextLength', 'MaxLength', 'Placeholder', 'Themes',
+];
+
+const SURVEY_KIND_IDS = ['rating', 'choice', 'yesno', 'rank', 'text'];
+/** Spellings the importer accepts on import only (the contract's "Kinds"). */
+const LEGACY_KINDS = {
+  multiple_choice: 'choice',
+  text_entry: 'text',
+  yes_no: 'yesno',
+  'yes-no': 'yesno',
+  ranking: 'rank',
+  nps: 'rating',
+};
+const SCALES = ['1-5', '1-10', '0-10', 'stars'];
+const FOLLOW_UPS = ['', 'yes', 'no', 'any'];
+
+/** A whole number written as digits, or null for anything else. */
+const wholeNumber = (raw) => (/^\d+$/.test(raw) ? Number(raw) : null);
+
+/** What would stop one survey row importing, in the contract's words. */
+function surveyRowProblems(row, columns) {
+  const get = (name) => cell(row, columns[name]);
+  const problems = [];
+
+  const rawKind = get('Kind');
+  if (!rawKind) return ['needs a kind'];
+  const folded = rawKind.toLowerCase();
+  const kind = SURVEY_KIND_IDS.includes(folded) ? folded : LEGACY_KINDS[folded];
+  if (!kind) return [`unknown kind '${rawKind}'`];
+
+  const options = get('Options').split('|').map((o) => o.trim()).filter(Boolean);
+
+  if (kind === 'choice') {
+    if (options.length < 2) problems.push('needs at least two options');
+    if (options.length > 8) problems.push('has more than eight options');
+    const picks = get('MaxPicks');
+    // MaxPicks belongs to "pick several" alone; with one pick it is not stored.
+    if (picks && /^true$/i.test(get('AllowMultiple'))) {
+      const n = wholeNumber(picks);
+      if (n === null || n < 2 || n > options.length) {
+        problems.push(`can't allow ${picks} picks from ${options.length} options`);
+      }
+    }
+  } else if (kind === 'rank') {
+    if (options.length < 3) problems.push('needs at least three items');
+    if (options.length > 7) problems.push('has more than seven items');
+    const top = get('RankTop');
+    if (top) {
+      const n = wholeNumber(top);
+      if (n === null || n < 1 || n > options.length - 1) {
+        problems.push(`can't rank the top ${top} of ${options.length}`);
+      }
+    }
+  } else if (kind === 'rating') {
+    // A legacy `nps` row IS a 0–10 rating; its Scale cell is not read.
+    const scale = get('Scale');
+    if (folded !== 'nps' && scale && !SCALES.includes(scale.toLowerCase())) {
+      problems.push(`unknown scale '${scale}'`);
+    }
+  } else if (kind === 'yesno') {
+    const when = get('FollowUpWhen');
+    if (!FOLLOW_UPS.includes(when.toLowerCase())) problems.push(`unknown follow-up '${when}'`);
+    else if (when && !get('FollowUpPrompt')) problems.push('needs the follow-up question');
+  } else if (kind === 'text') {
+    const length = get('TextLength');
+    if (length && !['short', 'long'].includes(length.toLowerCase())) problems.push(`unknown length '${length}'`);
+    const limit = get('MaxLength');
+    if (limit) {
+      const n = wholeNumber(limit);
+      if (n === null || n < 20 || n > 2000) problems.push('answer limit must be 20–2000 characters');
+    }
+  }
+  return problems;
+}
+
+/**
+ * THE SURVEY JSON THE OLD BUILDER EXPORTED. The importer converts it to the
+ * CSV contract before it reads a row (A2, `legacySurveyJsonToCsv`), so all
+ * this can honestly say is whether it IS that file and how many questions it
+ * holds; a question the conversion cannot read is reported by the import.
+ */
+function surveyJsonPreflight(source) {
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    return {
+      ...EMPTY,
+      blocking: [{
+        code: 'survey-json-unreadable',
+        title: 'That file is not readable JSON.',
+        detail: 'A survey can be imported from the JSON the survey builder used to export, or from '
+          + 'a CSV with a Kind column. This file is neither: it does not parse.',
+      }],
+    };
+  }
+  const questions = Array.isArray(parsed)
+    ? parsed
+    : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
+  if (!questions.length) {
+    return {
+      ...EMPTY,
+      blocking: [{
+        code: 'survey-json-empty',
+        title: 'That JSON has no questions in it.',
+        detail: 'The importer answers "No valid questions found" and writes nothing.',
+      }],
+    };
+  }
+  const title = parsed && !Array.isArray(parsed) ? String(parsed.title ?? '').trim() : '';
+  return {
+    ...EMPTY,
+    ok: true,
+    dataRowCount: questions.length,
+    importedCount: questions.length,
+    categories: ['Survey'],
+    suggestedDescription: title ? `Imported from the survey “${title}”` : '',
   };
 }
 
@@ -159,28 +298,27 @@ export function preflight(text, engagementType, meta = {}) {
   const gaps = [];
 
   /*
-    THE SURVEY GATE IS A THREE-WAY OR (upload-questions.js:150-161): the selected
-    type, a .json filename, OR content that merely starts with [ or {. All three
-    answer 400. The console has been offering Survey in two selects, enabling the
-    Upload button, and admitting the problem only in a sentence beside the file
-    picker — see OPEN-QUESTIONS #3, decided as "label it".
+    JSON IS FOR SURVEYS ONLY. The importer converts the JSON the old survey
+    builder exported (upload-questions.js, surveys phase 1) and refuses JSON
+    for every other type — a .json filename, or content that merely starts
+    with [ or {. This used to be a three-way gate that refused survey outright,
+    with a survey-unsupported block here to match; surveys import now.
   */
-  if (engagementType === 'survey') {
-    blocking.push({
-      code: 'survey-unsupported',
-      title: 'Survey sets cannot be imported.',
-      detail:
-        'The importer rejects every survey upload, and no game session plays a survey. '
-        + 'Nothing would be created. Pick another engagement type, or use the survey '
-        + 'builder to export JSON for use elsewhere.',
-    });
-  } else if (/^\s*[[{]/.test(source) || /\.json$/i.test(fileName)) {
+  const looksJson = /^\s*[[{]/.test(source) || /\.json$/i.test(fileName);
+  if (looksJson && type === 'survey') {
+    if (!source.trim()) {
+      return { ...EMPTY, blocking: [{ code: 'empty-file', title: 'That file is empty.', detail: 'There is nothing to read.' }] };
+    }
+    return surveyJsonPreflight(source);
+  }
+  if (looksJson) {
     blocking.push({
       code: 'json-content',
       title: 'This looks like JSON, not CSV.',
       detail:
         'The importer refuses any file whose name ends in .json or whose content starts '
-        + 'with [ or {, whatever engagement type is selected.',
+        + 'with [ or {, whatever engagement type is selected — only a survey can be imported '
+        + 'from JSON.',
     });
   }
 
@@ -235,6 +373,20 @@ export function preflight(text, engagementType, meta = {}) {
     });
   }
 
+  // A survey row says what kind of question it is. With no Kind column every
+  // row is "needs a kind" and the importer answers "No valid questions".
+  const surveyWithoutKind = type === 'survey' && col.survey.Kind === -1;
+  if (surveyWithoutKind) {
+    blocking.push({
+      code: 'survey-no-kind',
+      title: 'There is no Kind column.',
+      detail:
+        'Every survey row says what kind of question it is — rating, choice, yesno, rank or '
+        + 'text — in a column called Kind. Download the survey template for the full set of '
+        + `columns. Headers found: ${headers.join(', ') || '(none)'}.`,
+    });
+  }
+
   const unterminated = unterminatedQuoteRow(source);
   if (unterminated !== null) {
     skipped.push({
@@ -268,7 +420,9 @@ export function preflight(text, engagementType, meta = {}) {
       return;
     }
 
-    const category = cell(row, col.category);
+    // A survey row with no Category is filed under Survey by the importer —
+    // surveys expose no categories — so only its Title can be missing.
+    const category = cell(row, col.category) || (type === 'survey' ? 'Survey' : '');
     const title = cell(row, col.title);
     if (!title || !category) {
       const absent = [!category && 'Category', !title && 'Title'].filter(Boolean).join(' + ');
@@ -279,6 +433,19 @@ export function preflight(text, engagementType, meta = {}) {
         result: 'Row skipped',
       });
       return;
+    }
+
+    if (type === 'survey' && !surveyWithoutKind) {
+      const problems = surveyRowProblems(row, col.survey);
+      if (problems.length) {
+        skipped.push({
+          row: reportedRow,
+          problem: problems.join('; '),
+          excerpt: excerpt(row),
+          result: 'Row skipped',
+        });
+        return;
+      }
     }
 
     importedCount += 1;
@@ -304,7 +471,7 @@ export function preflight(text, engagementType, meta = {}) {
     }
   });
 
-  if (!importedCount && !blocking.some((b) => b.code === 'missing-columns')) {
+  if (!importedCount && !blocking.some((b) => b.code === 'missing-columns' || b.code === 'survey-no-kind')) {
     blocking.push({
       code: 'no-usable-rows',
       title: 'Every row would be skipped.',
