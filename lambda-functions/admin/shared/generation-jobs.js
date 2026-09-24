@@ -28,9 +28,25 @@
  * configuration rows that were silently self-deleting because someone stamped a
  * `ttl` on them. A few days is long enough to debug a failed run and short
  * enough that the table does not accumulate dead result blobs.
+ *
+ * WHOSE, AND SEALED. A job is read only by the user who started it, acting for
+ * the same organisation, through the builder that started it — `isCallersJob`
+ * below, the one statement of that rule. A job id is not a capability: it sits
+ * in localStorage and in every network panel, and the authorizer opens the
+ * builders' polls to hosts as well as admins.
+ *
+ * An organisation's content on the row — ENCRYPTED_FIELDS.job in
+ * tenant-crypto.js — is sealed under that organisation's key on every write
+ * whose caller passes `sealFor`, and opened by `openJob` on the owner's read.
+ * `sealFor` is OPT-IN per call site rather than inferred from the caller on the
+ * row: the set-check jobs share these helpers, their worker reads `request`
+ * straight off the row, and they carry ids and bands rather than content.
+ * Engage's own library (no organisation) is plaintext by decision, as every
+ * platform row is.
  */
 
 const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { encryptItem, decryptItem } = require('./tenant-crypto');
 
 const JOB_PK = 'AIJOBS';
 const JOB_SK_PREFIX = 'AIJOB#';
@@ -55,12 +71,56 @@ function newJobId() {
 const ttlFromNow = () => Math.floor(Date.now() / 1000) + JOB_TTL_SECONDS;
 
 /**
+ * The job's content fields, sealed under `orgId` — or returned untouched when
+ * there is none, which is Engage's own library. Only the fields
+ * ENCRYPTED_FIELDS.job names are touched; counts, phase and status stay
+ * readable, because they are what the privacy page already concedes is visible.
+ */
+async function sealJobFields(orgId, fields) {
+  return orgId ? encryptItem(orgId, 'job', fields) : fields;
+}
+
+/**
+ * The row as its owner reads it: every sealed field opened under the org that
+ * started the job. A platform row, and a field written before sealing began,
+ * pass through as they are.
+ */
+async function openJob(item) {
+  if (!item || !item.callerOrgId) return item;
+  return decryptItem(item.callerOrgId, 'job', item);
+}
+
+/**
+ * IS THIS THE CALLER'S JOB? The user who started it, acting for the same
+ * organisation — or for none, on both sides — and read through the builder
+ * that started it. Everything else is "not found", never "not yours", and the
+ * refusal carries nothing of the job.
+ *
+ * A job that recorded no user is nobody's (createJob writes no owner rather
+ * than an owner of ''), and a caller with no user id owns nothing — `'' === ''`
+ * would otherwise hand every such job to every such request.
+ */
+function isCallersJob(job, { kind, userId, orgId }) {
+  return Boolean(job)
+    && job.kind === kind
+    && Boolean(userId)
+    && job.callerUserId === userId
+    && (job.callerOrgId || '') === (orgId || '');
+}
+
+/**
  * Create the record BEFORE the worker is invoked. If the self-invoke fails, the
  * client still has something to poll that explains why, instead of a jobId that
  * 404s forever.
+ *
+ * `sealFor` — the caller's organisation, or absent — seals `request` and the
+ * empty `items` from the row's first write.
  */
-async function createJob(dynamodb, tableName, { jobId, kind, requested, request = {}, caller = {} }) {
+async function createJob(dynamodb, tableName, {
+  jobId, kind, requested, request = {}, caller = {}, sealFor = '',
+}) {
   const now = new Date().toISOString();
+  const content = await sealJobFields(sealFor, { items: [], request });
   const item = {
     ...jobKey(jobId),
     jobId,
@@ -91,15 +151,23 @@ async function createJob(dynamodb, tableName, { jobId, kind, requested, request 
     requested,
     completed: 0,
     phase: 'Queued',
-    items: [],
+    items: content.items,
     warnings: [],
-    request,
+    request: content.request,
     createdAt: now,
     updatedAt: now,
     ttl: ttlFromNow(),
   };
   await dynamodb.send(new PutCommand({ TableName: tableName, Item: item }));
   return item;
+}
+
+/** Seal whichever of `items` and `meta` this write carries. */
+async function sealedContent(sealFor, { items, meta }) {
+  const content = {};
+  if (Array.isArray(items)) content.items = items;
+  if (meta && typeof meta === 'object') content.meta = meta;
+  return sealJobFields(sealFor, content);
 }
 
 /**
@@ -111,20 +179,21 @@ async function createJob(dynamodb, tableName, { jobId, kind, requested, request 
  * scenarios it already produced behind rather than throwing them away.
  */
 async function updateJobProgress(dynamodb, tableName, jobId, {
-  completed, phase, items, warnings, meta,
+  completed, phase, items, warnings, meta, sealFor = '',
 }) {
   const sets = ['#status = :running', 'updatedAt = :now'];
   const names = { '#status': 'status' };
   const values = { ':running': STATUS.RUNNING, ':now': new Date().toISOString() };
+  const content = await sealedContent(sealFor, { items, meta });
 
   if (typeof completed === 'number') { sets.push('completed = :completed'); values[':completed'] = completed; }
   if (phase) { sets.push('phase = :phase'); values[':phase'] = phase; }
-  if (Array.isArray(items)) { sets.push('#items = :items'); names['#items'] = 'items'; values[':items'] = items; }
+  if ('items' in content) { sets.push('#items = :items'); names['#items'] = 'items'; values[':items'] = content.items; }
   if (Array.isArray(warnings)) { sets.push('warnings = :warnings'); values[':warnings'] = warnings; }
   // Set-level result, distinct from the items: the survey builder's AI-improved
   // title and description. Written only when a worker actually produced one, so
   // every existing caller is unaffected.
-  if (meta && typeof meta === 'object') { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = meta; }
+  if ('meta' in content) { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = content.meta; }
 
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
@@ -135,7 +204,10 @@ async function updateJobProgress(dynamodb, tableName, jobId, {
   }));
 }
 
-async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], meta, promptSource }) {
+async function completeJob(dynamodb, tableName, jobId, {
+  items, warnings = [], meta, promptSource, sealFor = '',
+}) {
+  const content = await sealedContent(sealFor, { items, meta });
   const sets = [
     '#status = :status', '#items = :items', 'warnings = :warnings',
     'completed = :completed', 'phase = :phase', 'updatedAt = :now',
@@ -143,7 +215,7 @@ async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], m
   const names = { '#status': 'status', '#items': 'items' };
   const values = {
     ':status': STATUS.COMPLETE,
-    ':items': items,
+    ':items': content.items,
     ':warnings': warnings,
     ':completed': items.length,
     ':phase': `Generated ${items.length} of ${items.length}`,
@@ -151,7 +223,7 @@ async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], m
   };
   // Omitted meta must LEAVE an earlier one alone, not overwrite it with null —
   // the survey worker writes meta on its first pass and completes much later.
-  if (meta && typeof meta === 'object') { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = meta; }
+  if ('meta' in content) { sets.push('#meta = :meta'); names['#meta'] = 'meta'; values[':meta'] = content.meta; }
   /*
     WHICH PROMPT PRODUCED THIS. Not a warning — a warning is for a problem, and
     this is provenance, wanted just as much when the run went well. Without it,
@@ -178,7 +250,7 @@ async function completeJob(dynamodb, tableName, jobId, { items, warnings = [], m
  * and then hit a Bedrock error is far more useful surfaced as "14 scenarios and
  * here is what went wrong" than as a bare error.
  */
-async function failJob(dynamodb, tableName, jobId, message, { items } = {}) {
+async function failJob(dynamodb, tableName, jobId, message, { items, sealFor = '' } = {}) {
   const sets = ['#status = :status', 'errorMessage = :error', 'phase = :phase', 'updatedAt = :now'];
   const names = { '#status': 'status' };
   const values = {
@@ -190,7 +262,7 @@ async function failJob(dynamodb, tableName, jobId, message, { items } = {}) {
   if (Array.isArray(items)) {
     sets.push('#items = :items', 'completed = :completed');
     names['#items'] = 'items';
-    values[':items'] = items;
+    values[':items'] = (await sealedContent(sealFor, { items })).items;
     values[':completed'] = items.length;
   }
   await dynamodb.send(new UpdateCommand({
@@ -210,6 +282,9 @@ async function getJob(dynamodb, tableName, jobId) {
 /**
  * Poll payload. Deliberately omits `request` — the client already has it — and
  * the caller identity, which is nobody's business but the worker's.
+ *
+ * Give it the row `openJob` returned, and only once `isCallersJob` said yes: a
+ * sealed row passed straight in would hand the owner envelopes.
  *
  * `createdSet` is the field that stops the client creating a SECOND set. The
  * worker writes it BEFORE the job goes terminal, so any client that sees a
@@ -254,4 +329,7 @@ module.exports = {
   failJob,
   getJob,
   jobToResponse,
+  sealJobFields,
+  openJob,
+  isCallersJob,
 };

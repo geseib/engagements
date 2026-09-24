@@ -52,7 +52,7 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { isKnownGameType, normalizeGameType } = require('./shared/game-types');
 const { describeVariablesForPrompt } = require('./shared/template-variable-usage');
 const {
-  STATUS, jobKey, newJobId, createJob, getJob, failJob,
+  STATUS, jobKey, newJobId, createJob, getJob, failJob, isCallersJob,
 } = require('./shared/generation-jobs');
 const { requireAdmin, callerUsername } = require('./shared/require-admin');
 const { callerUserId } = require('./shared/question-set-access');
@@ -659,13 +659,9 @@ async function readJob(event, jobId) {
 
   // THE CALLER WHO ASKED, ACTING WHERE THEY ASKED. Anything else — another
   // admin, the same admin standing in another organisation, a job of another
-  // kind — is not found, and carries nothing of the job.
-  const me = callerUserId(event);
-  const mine = Boolean(job)
-    && job.kind === KIND
-    && Boolean(me)
-    && job.callerUserId === me
-    && (job.callerOrgId || '') === callerOrgId(event);
+  // kind — is not found, and carries nothing of the job. The rule is stated
+  // once, in shared/generation-jobs.js, for this poll and the builders' alike.
+  const mine = isCallersJob(job, { kind: KIND, userId: callerUserId(event), orgId: callerOrgId(event) });
   if (!mine) return json(404, { error: 'Job not found or expired' });
 
   let result = null;

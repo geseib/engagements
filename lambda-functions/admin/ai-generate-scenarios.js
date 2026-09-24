@@ -47,6 +47,7 @@ const {
 } = require('./shared/structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
+  openJob, isCallersJob,
 } = require('./shared/generation-jobs');
 const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
@@ -69,6 +70,8 @@ const CORS = {
 const json = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), headers: CORS });
 
 const MAX_COUNT = 100;
+/** The job-row `kind`. The poll serves this kind and no other. */
+const JOB_KIND = 'scenarios';
 /** Observed Sonnet throughput on this account. Used only to budget the deadline. */
 const OUTPUT_TOKENS_PER_SEC = 45;
 
@@ -327,6 +330,9 @@ async function runWorker(event, context) {
   } catch (error) {
     console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
   }
+  // Everything this worker writes back is sealed under the organisation that
+  // asked (shared/generation-jobs.js). Absent for Engage's own library.
+  const sealFor = caller.orgId || '';
 
   try {
     const {
@@ -466,6 +472,7 @@ async function runWorker(event, context) {
         phase: `Generated ${produced.length} of ${total}...`,
         items: produced,
         warnings,
+        sealFor,
       });
 
       // No forward progress means another pass will not help either.
@@ -494,9 +501,9 @@ async function runWorker(event, context) {
   });
 
   if (generationError) {
-    await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced });
+    await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced, sealFor });
   } else {
-    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, promptSource });
+    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, promptSource, sealFor });
     console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
   }
 }
@@ -520,26 +527,43 @@ exports.handler = async (event, context) => {
     if (method === 'GET' || jobIdParam) {
       if (!jobIdParam) return json(400, { error: 'jobId is required' });
       const item = await getJob(dynamodb, tableName, jobIdParam);
-      if (!item) return json(404, { error: 'Job not found or expired' });
-      return json(200, jobToResponse(item));
+      // THE CALLER WHO STARTED IT, ACTING WHERE THEY STARTED IT — the rule
+      // shared/generation-jobs.js states once. This poll is open to hosts as
+      // well as admins (auth/authorizer.js, AI_JOB_POLL), and a job id is not a
+      // capability: anyone else gets the same bare 404 as an expired job.
+      const mine = isCallersJob(item, {
+        kind: JOB_KIND, userId: callerUserId(event), orgId: callerOrgId(event),
+      });
+      if (!mine) return json(404, { error: 'Job not found or expired' });
+      return json(200, jobToResponse(await openJob(item)));
     }
 
     // ---- start ------------------------------------------------------------
+    // A job is handed over only to the user who started it, so one started
+    // with no user could never be read — and its set would be filed as an
+    // internal write, in Engage's library. The authorizer always supplies one.
+    const userId = callerUserId(event);
+    if (!userId) return json(401, { error: 'This request carried no signed-in user. Sign in again and retry.' });
+
     if (!event.body) return json(400, { error: 'No request body provided' });
     const payload = JSON.parse(event.body);
 
     const requested = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
     const jobId = newJobId();
+    const orgId = callerOrgId(event);
 
     await createJob(dynamodb, tableName, {
       jobId,
-      kind: 'scenarios',
+      kind: JOB_KIND,
       requested,
       request: {
         scenarioType: payload.scenarioType,
         engagementType: payload.engagementType,
         count: requested,
       },
+      // Sealed from the row's first write for a caller acting inside an
+      // organisation; Engage's own library stays plaintext.
+      sealFor: orgId,
       // THE ONLY PLACE THE CALLER CAN STILL BE READ — the worker runs without
       // an authorizer. Both parsers are the existing ones: `callerUserId` from
       // question-set-access.js (what `ownerStamp` reads) and `callerUsername`
@@ -557,9 +581,9 @@ exports.handler = async (event, context) => {
       // write without one: an orgId alone would resolve to no writable scope
       // and the set would be refused rather than misfiled.
       caller: {
-        userId: callerUserId(event),
+        userId,
         username: callerUsername(event),
-        orgId: callerOrgId(event),
+        orgId,
         orgRole: callerOrgRole(event),
       },
     });

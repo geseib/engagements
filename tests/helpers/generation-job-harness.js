@@ -16,6 +16,7 @@
  */
 const Module = require('module');
 const suiteFinished = require('./finish-guard');
+const kmsStub = require('./tenant-crypto-stub');
 
 const state = {
   ddb: new Map(),
@@ -86,6 +87,10 @@ function install() {
   process.env.TABLE_NAME = 'engage-test';
   process.env.ACCOUNT_ID = '000000000000';
   process.env.AWS_REGION = 'us-east-1';
+  // A job started by a caller acting inside an organisation is sealed under
+  // that organisation's key from its first write (shared/generation-jobs.js),
+  // so every suite here needs a KMS that behaves like the key policy.
+  process.env.TENANT_KMS_KEY_ID = 'alias/engage-tenant';
 
   const stubs = new Map([
     ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
@@ -95,6 +100,7 @@ function install() {
     }],
     ['@aws-sdk/client-bedrock-runtime', { BedrockRuntimeClient, InvokeModelCommand }],
     ['@aws-sdk/client-lambda', { LambdaClient, InvokeCommand }],
+    ['@aws-sdk/client-kms', kmsStub.makeKmsStub().exports],
   ]);
 
   const realLoad = Module._load;
@@ -102,6 +108,8 @@ function install() {
     if (stubs.has(request)) return stubs.get(request);
     return realLoad.call(this, request, parent, isMain);
   };
+  // Every org gets a stable, per-org test key with no METADATA row to seed.
+  kmsStub.installTestKeyLoader();
 }
 
 function reset() {
@@ -132,11 +140,27 @@ function summary() {
 }
 
 /**
+ * THE CALLER every POST and poll here carries, in this API's real authorizer
+ * shape (require-admin.js's header). A job is read only by the user who started
+ * it (shared/generation-jobs.js, isCallersJob), so the poll must be the same
+ * person as the POST, and a POST with no user is refused. No groups and no
+ * organisation, so a set the worker creates is filed exactly as before.
+ */
+const CALLER = { authorizer: { lambda: { userId: 'sub-harness', username: 'harness' } } };
+
+/**
  * Build the POST/worker/poll driver for one handler. Each suite calls this once
  * with its own handler and function name.
  */
 function makeRunner(handler, functionName) {
-  const postEvent = (body) => ({ requestContext: { http: { method: 'POST' } }, body: JSON.stringify(body) });
+  const postEvent = (body, caller = CALLER) => ({
+    requestContext: { http: { method: 'POST' }, ...caller },
+    body: JSON.stringify(body),
+  });
+  const pollEvent = (jobId, caller = CALLER) => ({
+    requestContext: { http: { method: 'GET' }, ...caller },
+    pathParameters: { jobId },
+  });
   const ctx = (remainingMs = 900000) => ({ functionName, getRemainingTimeInMillis: () => remainingMs });
 
   /** Start a job over HTTP, then run the worker the way Lambda's Event invoke would. */
@@ -144,14 +168,11 @@ function makeRunner(handler, functionName) {
     const started = await handler(postEvent(body), ctx());
     const { jobId } = JSON.parse(started.body);
     await handler({ __workerMode: true, jobId, payload: body }, workerCtx);
-    const polled = await handler(
-      { requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } },
-      ctx(),
-    );
+    const polled = await handler(pollEvent(jobId), ctx());
     return { started, jobId, job: JSON.parse(polled.body) };
   }
 
-  return { postEvent, ctx, runJob };
+  return { postEvent, pollEvent, ctx, runJob };
 }
 
-module.exports = { state, install, reset, toolResponse, test, summary, makeRunner, docClient };
+module.exports = { state, install, reset, toolResponse, test, summary, makeRunner, docClient, CALLER };

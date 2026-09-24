@@ -372,8 +372,20 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  and "optimize", rewrites the whole of it. It is the Workie's text in a
    *  second row, so it is sealed as the Workie is. The advisor's job row holds
    *  no other content — the prompt it analyses rides in the worker's invoke
-   *  payload and is never stored. */
-  job: Object.freeze(['request', 'items', 'meta', 'result']),
+   *  payload and is never stored.
+   *
+   *  `createdSetName` and `setCreationError` are where a whole-set generator
+   *  records the draft set it made (admin/shared/generated-set.js): the first
+   *  IS the set's title, which the `set` entity seals as `name`, and the second
+   *  is the importer's refusal, which quotes that title back. `createdSetId`
+   *  stays plaintext — it is a key, like every SK above.
+   *
+   *  These are sealed only where a call site passes `sealFor`
+   *  (admin/shared/generation-jobs.js): the AI builders' jobs do; the set-check
+   *  jobs, which carry ids and bands and no content, do not. */
+  job: Object.freeze([
+    'request', 'items', 'meta', 'result', 'createdSetName', 'setCreationError',
+  ]),
 
   /** A comment on one section of a round's report:
    *  SK=COMMENT#<nnn>#<anchorKind>#<anchorRef>#<commentId>.

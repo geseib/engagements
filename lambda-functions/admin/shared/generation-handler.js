@@ -28,6 +28,7 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { itemsPerCall, maxTokensFor, perItemTokens, invokeStructured } = require('./structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
+  openJob, isCallersJob,
 } = require('./generation-jobs');
 const { createSetForJob } = require('./generated-set');
 const { callerUsername } = require('./require-admin');
@@ -122,6 +123,9 @@ function makeGenerationHandler(config) {
     } catch (error) {
       console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
     }
+    // Everything this worker writes back is sealed under the organisation that
+    // asked (generation-jobs.js). Absent for Engage's own library.
+    const sealFor = caller.orgId || '';
 
     try {
       const { total, config: reqConfig } = parseRequest(payload);
@@ -220,6 +224,7 @@ function makeGenerationHandler(config) {
           items: produced,
           warnings,
           meta,
+          sealFor,
         });
 
         // No forward progress means another pass will not help either.
@@ -249,9 +254,9 @@ function makeGenerationHandler(config) {
     });
 
     if (generationError) {
-      await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced });
+      await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced, sealFor });
     } else {
-      await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, meta });
+      await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, meta, sealFor });
       console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
     }
   }
@@ -272,18 +277,37 @@ function makeGenerationHandler(config) {
       if (method === 'GET' || jobIdParam) {
         if (!jobIdParam) return json(400, { error: 'jobId is required' });
         const item = await getJob(dynamodb, tableName, jobIdParam);
-        if (!item) return json(404, { error: 'Job not found or expired' });
-        return json(200, jobToResponse(item));
+        // THE CALLER WHO STARTED IT, ACTING WHERE THEY STARTED IT, through this
+        // builder. auth/authorizer.js opens this poll to hosts as well as
+        // admins, and a job id is not a capability: anyone else — another
+        // member, the same person in another organisation, a job of another
+        // kind — gets the same bare 404 as an expired job.
+        const mine = isCallersJob(item, {
+          kind, userId: callerUserId(event), orgId: callerOrgId(event),
+        });
+        if (!mine) return json(404, { error: 'Job not found or expired' });
+        return json(200, jobToResponse(await openJob(item)));
       }
+
+      // A job is handed over only to the user who started it, so one started
+      // with no user could never be read — and its set would be filed as an
+      // internal write, in Engage's library. The authorizer always supplies
+      // one; this is the refusal for any path that does not.
+      const userId = callerUserId(event);
+      if (!userId) return json(401, { error: 'This request carried no signed-in user. Sign in again and retry.' });
 
       if (!event.body) return json(400, { error: 'No request body provided' });
       const payload = JSON.parse(event.body);
 
       const { total } = parseRequest(payload);
       const jobId = newJobId();
+      const orgId = callerOrgId(event);
 
       await createJob(dynamodb, tableName, {
         jobId, kind, requested: total, request: { kind, count: total },
+        // Sealed from the row's first write for a caller acting inside an
+        // organisation; Engage's own library stays plaintext.
+        sealFor: orgId,
         // THE ONLY PLACE THE CALLER CAN STILL BE READ. Both parsers are the
         // existing ones — `callerUserId` from question-set-access.js (which is
         // what `ownerStamp` reads) and `callerUsername` from require-admin.js.
@@ -303,9 +327,9 @@ function makeGenerationHandler(config) {
         // to "no writable scope" and the set would be refused instead of
         // misfiled — a different bug, not a fix.
         caller: {
-          userId: callerUserId(event),
+          userId,
           username: callerUsername(event),
-          orgId: callerOrgId(event),
+          orgId,
           orgRole: callerOrgRole(event),
         },
       });

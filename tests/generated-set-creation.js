@@ -279,10 +279,17 @@ async function runJob(handler, body, workerCtx = ctx(), starter = adminEvent) {
   const { jobId } = JSON.parse(started.body);
   const dispatch = dispatched[dispatched.length - 1].payload;
   await handler(dispatch, workerCtx);
+  // Polled AS THE STARTER: a job is read only by whoever started it, acting for
+  // the same organisation (tests/generation-job-owner.js).
   const polled = await handler(
-    { requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
+    { requestContext: { http: { method: 'GET' }, authorizer: starter(body).requestContext.authorizer }, pathParameters: { jobId } },
+    ctx());
   return { started, jobId, dispatch, job: JSON.parse(polled.body) };
 }
+const jobRow = (jobId) => ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
+const isEnvelope = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+  && typeof v.v === 'number' && typeof v.iv === 'string'
+  && typeof v.tag === 'string' && typeof v.ct === 'string';
 
 const setRows = () => [...ddb.values()].filter((row) => row.PK === 'SETS');
 /** Set metadata rows in ONE organisation's library. tenant.js keys it this way. */
@@ -472,21 +479,65 @@ const scenarioBody = (overrides = {}) => ({
     assert.deepStrictEqual(orgSetRows(), []);
   });
 
-  await test('an unidentifiable caller leaves the set unowned rather than owned by ""', async () => {
+  await test('an unidentifiable caller starts nothing, so no set is ever owned by ""', async () => {
     // rejects: falling back to a username or to an empty string. isSetOwner
     // requires both halves to be non-empty precisely because `'' === ''` would
     // hand every legacy set to every unauthenticated request.
+    //
+    // Since a job is read only by the user who started it, a POST with no user
+    // is refused outright (401): its job could never be handed over, and its
+    // set would have landed in Engage's library through createSetRef's
+    // no-groups-no-org "internal" branch. The authorizer always supplies one.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'anon'));
     const started = await scenarios(
       { requestContext: { http: { method: 'POST' } }, body: JSON.stringify(scenarioBody({ count: 2 })) },
       ctx());
-    const { jobId } = JSON.parse(started.body);
-    await scenarios(dispatched[dispatched.length - 1].payload, ctx());
-    const set = setRows()[0];
-    assert.ok(set, 'no set was created for an anonymous caller');
-    assert.strictEqual(set.createdBy, undefined, 'an unattributable write recorded an owner of ""');
-    assert.ok(jobId);
+    assert.strictEqual(started.statusCode, 401, `an anonymous POST answered ${started.statusCode}`);
+    assert.strictEqual(dispatched.length, 0, 'an anonymous POST dispatched a worker');
+    assert.deepStrictEqual(setRows(), [], 'an anonymous POST created a set');
+    assert.strictEqual([...ddb.keys()].filter((k) => k.startsWith('AIJOBS|')).length, 0,
+      'an anonymous POST wrote a job row');
+  });
+
+  /*
+    THE SET'S NAME IS CONTENT, and the job row is a second copy of it. The set
+    row seals `name` (ENCRYPTED_FIELDS.set); the job row carried the same title
+    readable as `createdSetName`, and an importer refusal quotes it back in
+    `setCreationError` ("Question set "World Leaders" already exists"). Both are
+    sealed under the caller's organisation and opened on the owner's poll.
+  */
+  await test('an org job names its new set only under the org\'s key', async () => {
+    reset();
+    await mint();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'sealedname'));
+    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    const row = jobRow(jobId);
+    assert.ok(isEnvelope(row.createdSetName), `createdSetName at rest was ${JSON.stringify(row.createdSetName)}`);
+    assert.ok(!JSON.stringify(row).includes('World Leaders'), 'the set\'s title is readable on the job row');
+    assert.deepStrictEqual(job.createdSet, { setId: 'worldleaders', setName: 'World Leaders' },
+      'the owner\'s poll did not open the set name');
+  });
+
+  await test('an org job\'s set-creation refusal is sealed too, and read back by its owner', async () => {
+    reset();
+    await mint();
+    ddb.set(rowKey('ORG#org_acme#SETS', 'SET#worldleaders'),
+      { PK: 'ORG#org_acme#SETS', SK: 'SET#worldleaders', orgId: 'org_acme' });
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'sealedclash'));
+    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    assert.match(job.setCreationError || '', /already exists/i, `the refusal was ${JSON.stringify(job.setCreationError)}`);
+    const row = jobRow(jobId);
+    assert.ok(isEnvelope(row.setCreationError), `setCreationError at rest was ${JSON.stringify(row.setCreationError)}`);
+    assert.ok(!JSON.stringify(row).includes('World Leaders'), 'the set\'s title is readable on the job row');
+  });
+
+  await test('Engage\'s own job names its set in plaintext, as every platform row is', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'plainname'));
+    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.strictEqual(jobRow(jobId).createdSetName, 'World Leaders');
+    assert.strictEqual(job.createdSet.setName, 'World Leaders');
   });
 
   say('\nthe direction travels with the set');
@@ -837,7 +888,10 @@ const scenarioBody = (overrides = {}) => ({
     await mint();
     const { periodOf } = require(path.join(REPO, 'lambda-functions/admin/shared/usage.js'));
     const period = periodOf(new Date());
-    ddb.set(rowKey('ORG#org_acme', 'METADATA'), { PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
+    // MERGED onto the row `mint()` wrote, not over it: the real METADATA row
+    // carries the plan AND the wrapped data key, and the job row is sealed
+    // under that key from the POST onward.
+    ddb.set(rowKey('ORG#org_acme', 'METADATA'), { ...ddb.get(rowKey('ORG#org_acme', 'METADATA')), PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
     ddb.set(rowKey('ORG#org_acme', `USAGE#${period}`), { PK: 'ORG#org_acme', SK: `USAGE#${period}`, orgId: 'org_acme', period, sessionsRun: 0, setsCurrent: 5, setsPeak: 5 });
     bedrockHandler = () => toolResponse(scenarioItems(2, 'capped'));
     const { job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);

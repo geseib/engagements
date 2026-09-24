@@ -78,7 +78,7 @@
  */
 
 const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { jobKey } = require('./generation-jobs');
+const { jobKey, sealJobFields } = require('./generation-jobs');
 const { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell, tagsToCsvCell } = require('./csv');
 const { normalizeRoundKind } = require('./round-kinds');
 const { normalizeSetTags } = require('./set-topics');
@@ -149,13 +149,21 @@ async function claimSetCreation(dynamodb, tableName, jobId) {
   }
 }
 
-/** Record the set on the job, so the client can point at it instead of making one. */
-async function recordCreatedSet(dynamodb, tableName, jobId, { setId, setName }) {
+/**
+ * Record the set on the job, so the client can point at it instead of making one.
+ *
+ * THE NAME IS SEALED for an organisation's job (`sealFor`): it is the set's
+ * title, which the set row itself seals as `name`, and a readable copy here
+ * would undo that for the job's three days. The id stays readable — it is a
+ * key, structural like every SK (tenant-crypto.js, "WHAT STAYS PLAINTEXT").
+ */
+async function recordCreatedSet(dynamodb, tableName, jobId, { setId, setName }, sealFor = '') {
+  const { createdSetName } = await sealJobFields(sealFor, { createdSetName: setName });
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
     Key: jobKey(jobId),
     UpdateExpression: 'SET createdSetId = :id, createdSetName = :name',
-    ExpressionAttributeValues: { ':id': setId, ':name': setName },
+    ExpressionAttributeValues: { ':id': setId, ':name': createdSetName },
   }));
 }
 
@@ -167,14 +175,21 @@ async function recordCreatedSet(dynamodb, tableName, jobId, { setId, setName }) 
  * (plan-limit.js). Kept whole so the builder can show the plan-limit notice
  * (22-plan-limit-notice.html) instead of a fault's sentence; the sentence stays
  * in `setCreationError` for a client that predates it.
+ *
+ * The sentence is sealed for an organisation's job (`sealFor`), like the name
+ * above: the importer's refusal quotes the title back ("Question set "…"
+ * already exists").
  */
-async function recordSetCreationError(dynamodb, tableName, jobId, message, limit = null) {
+async function recordSetCreationError(dynamodb, tableName, jobId, message, limit = null, sealFor = '') {
+  const { setCreationError } = await sealJobFields(sealFor, {
+    setCreationError: String(message || 'The set could not be created.'),
+  });
   await dynamodb.send(new UpdateCommand({
     TableName: tableName,
     Key: jobKey(jobId),
     UpdateExpression: limit ? 'SET setCreationError = :error, setCreationLimit = :limit' : 'SET setCreationError = :error',
     ExpressionAttributeValues: {
-      ':error': String(message || 'The set could not be created.'),
+      ':error': setCreationError,
       ...(limit ? { ':limit': limit } : {}),
     },
   }));
@@ -259,13 +274,16 @@ async function createSetForJob({
     one on the job.
   */
   if (payload && payload.appendOnly === true) return null;
+  // What this records on the job is sealed under the organisation that asked;
+  // absent for Engage's own library (generation-jobs.js).
+  const sealFor = caller?.orgId || '';
 
   try {
     const metadata = readSetMetadata(payload);
     if (!metadata.title) {
       await recordSetCreationError(dynamodb, tableName, jobId,
         'No title was given for the set, so nothing could be created automatically. '
-        + 'Review these and load them by hand.');
+        + 'Review these and load them by hand.', null, sealFor);
       return null;
     }
 
@@ -324,19 +342,19 @@ async function createSetForJob({
       const why = parsed.error || `The importer returned ${response?.statusCode}.`;
       console.error(`❌ Job ${jobId} could not create its set: ${why}`);
       const limit = response?.statusCode === 402 && parsed.code === 'upgrade_required' ? parsed : null;
-      await recordSetCreationError(dynamodb, tableName, jobId, why, limit);
+      await recordSetCreationError(dynamodb, tableName, jobId, why, limit, sealFor);
       return null;
     }
 
     const created = { setId: parsed.setId, setName: parsed.setName || metadata.title };
-    await recordCreatedSet(dynamodb, tableName, jobId, created);
+    await recordCreatedSet(dynamodb, tableName, jobId, created, sealFor);
     console.log(`✅ Job ${jobId} created draft set "${created.setName}" (${created.setId})`);
     return created;
   } catch (error) {
     console.error(`❌ Job ${jobId} set creation threw:`, error);
     try {
       await recordSetCreationError(dynamodb, tableName, jobId,
-        `The set could not be created: ${error.message}`);
+        `The set could not be created: ${error.message}`, null, sealFor);
     } catch (e) {
       console.error(`❌ Job ${jobId} could not even record the failure:`, e);
     }

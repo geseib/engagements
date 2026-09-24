@@ -176,10 +176,19 @@ function reset({ seedCurated = true } = {}) {
   if (seedCurated) ddb.set(rowKey(CURATED.PK, CURATED.SK), { ...CURATED });
 }
 
+/**
+ * A signed-in caller, in this API's real authorizer shape. A job is read only by
+ * the user who started it (shared/generation-jobs.js, isCallersJob), so every
+ * poll below is the same person as the POST; a POST with no user is refused.
+ * No groups and no organisation, so nothing here is sealed and a created set is
+ * filed exactly as before.
+ */
+const CALLER = { authorizer: { lambda: { userId: 'sub-scenarios', username: 'scenarios' } } };
 const postEvent = (body) => ({
-  requestContext: { http: { method: 'POST' } },
+  requestContext: { http: { method: 'POST' }, ...CALLER },
   body: JSON.stringify(body),
 });
+const pollEvent = (jobId) => ({ requestContext: { http: { method: 'GET' }, ...CALLER }, pathParameters: { jobId } });
 const ctx = (remainingMs = 900000) => ({
   functionName: 'engagedev-admin-ai-generate-scenarios',
   getRemainingTimeInMillis: () => remainingMs,
@@ -190,10 +199,7 @@ async function runJob(body, workerCtx = ctx()) {
   const started = await handler(postEvent(body), ctx());
   const { jobId } = JSON.parse(started.body);
   await handler({ __workerMode: true, jobId, payload: body }, workerCtx);
-  const polled = await handler(
-    { requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } },
-    ctx(),
-  );
+  const polled = await handler(pollEvent(jobId), ctx());
   return { started, jobId, job: JSON.parse(polled.body) };
 }
 
@@ -232,7 +238,7 @@ async function runJob(body, workerCtx = ctx()) {
     reset();
     const res = await handler(postEvent({ scenarioType: 'custom', engagementType: 'call-and-answer', count: 3 }), ctx());
     const { jobId } = JSON.parse(res.body);
-    const polled = await handler({ requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
+    const polled = await handler(pollEvent(jobId), ctx());
     assert.strictEqual(polled.statusCode, 200);
     assert.strictEqual(JSON.parse(polled.body).status, 'queued');
   });
@@ -250,8 +256,7 @@ async function runJob(body, workerCtx = ctx()) {
 
   await test('polling an unknown job is a 404, not a hang', async () => {
     reset();
-    const res = await handler(
-      { requestContext: { http: { method: 'GET' } }, pathParameters: { jobId: 'nope' } }, ctx());
+    const res = await handler(pollEvent('nope'), ctx());
     assert.strictEqual(res.statusCode, 404);
   });
 

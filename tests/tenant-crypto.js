@@ -391,7 +391,9 @@ const MUST_NOT_LEAK = {
     'questionSummaries', 'questionSetData'],
   // `result` is the prompt advisor's analysis of an org's Workie, which quotes
   // the Workie's own prose back and rewrites it (admin/ai-prompt-advisor.js).
-  job: ['request', 'items', 'meta', 'result'],
+  // `createdSetName` and `setCreationError` carry the generated set's title,
+  // which the set row itself seals as `name` (shared/generated-set.js).
+  job: ['request', 'items', 'meta', 'result', 'createdSetName', 'setCreationError'],
   // A Workie. defaultSettings and tags added after review — see the
   // ENCRYPTED_FIELDS.prompt comment for why they belong here and not with
   // category/status.
