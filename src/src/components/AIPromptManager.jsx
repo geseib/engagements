@@ -14,6 +14,10 @@ import PromptVariableInspector, { DEFAULT_ROOM_SIZE } from './PromptVariableInsp
 import PromptAssembledPreview from './PromptAssembledPreview';
 import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
 import PromptLibraryPanel from './PromptLibraryPanel';
+import {
+  ADVISOR_GIVE_UP_MS, ADVISOR_POLL_INTERVAL_MS,
+  asSentence, describeAdviceProgress, startPromptAdvice, waitForPromptAdvice,
+} from '../utils/promptAdvisorJob';
 
 const API_BASE = window.API_BASE;
 
@@ -1009,12 +1013,39 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
   );
 }
 
-// AI Prompt Advisor Modal Component
-function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
+/*
+  AI PROMPT ADVISOR — A JOB, NOT A REQUEST.
+
+  The analysis takes Sonnet 35-60 seconds and the API gateway gives up at 30,
+  so the old single POST came back as a 503 every time and this dialog said
+  "Failed to analyze prompt" without reading why. The POST now starts a job
+  (202 + jobId) and the dialog polls it (utils/promptAdvisorJob.js), showing
+  where it has got to and, if it fails, the server's own sentence.
+
+  `pollIntervalMs` and `giveUpMs` are props only so the tests need not wait on
+  real seconds; the screen always uses the defaults.
+*/
+export function AIPromptAdvisor({
+  prompt, onClose, onApplyImprovedPrompt,
+  pollIntervalMs = ADVISOR_POLL_INTERVAL_MS,
+  giveUpMs = ADVISOR_GIVE_UP_MS,
+}) {
   const [analysisType, setAnalysisType] = useState('improve');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [notice, setNotice] = useState('');
+  const [progress, setProgress] = useState('');
+  /*
+    Closing the dialog mid-run must stop the polling and every state update
+    after it. Set in the effect body, not just its cleanup, because StrictMode
+    mounts, unmounts and remounts once in development — a flag set only by the
+    cleanup would read "closed" for the whole life of the real mount.
+  */
+  const closedRef = useRef(false);
+  useEffect(() => {
+    closedRef.current = false;
+    return () => { closedRef.current = true; };
+  }, []);
 
   const analysisTypes = [
     { value: 'improve', label: 'Improve Prompt', icon: 'Sparkle' },
@@ -1023,38 +1054,45 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
   ];
 
   const runAnalysis = async () => {
+    const url = `${API_BASE}admin/ai-prompt-advisor`;
+    const startedAt = Date.now();
     setIsAnalyzing(true);
     setAnalysis(null);
     setNotice('');
+    setProgress(describeAdviceProgress(null, 0));
 
     try {
-      const response = await authFetch(`${API_BASE}admin/ai-prompt-advisor`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          promptText: prompt.template || (prompt.instructions + '\n\n' + prompt.outputFormat),
-          gameType: prompt.gameType,
-          scenario: prompt.scenario,
-          analysisType,
-          existingPromptId: prompt.promptId
-        })
+      const { jobId } = await startPromptAdvice(url, {
+        promptText: prompt.template || (prompt.instructions + '\n\n' + prompt.outputFormat),
+        gameType: prompt.gameType,
+        scenario: prompt.scenario,
+        analysisType,
+        existingPromptId: prompt.promptId
       });
+      if (closedRef.current) return;
 
-      if (!response.ok) {
-        throw new Error('Failed to analyze prompt');
-      }
-
-      const result = await response.json();
+      const result = await waitForPromptAdvice(url, jobId, {
+        intervalMs: pollIntervalMs,
+        giveUpMs,
+        isCancelled: () => closedRef.current,
+        onProgress: (job) => {
+          if (!closedRef.current) setProgress(describeAdviceProgress(job, Date.now() - startedAt));
+        },
+      });
+      if (closedRef.current) return;
       setAnalysis(result.analysis);
     } catch (error) {
+      if (closedRef.current) return;
       console.error('Error analyzing prompt:', error);
       // Nothing was changed and nothing was stored: the prompt is exactly as it
-      // was, and this reading simply did not happen.
-      setNotice(`No analysis was produced (${error.message}). The prompt itself is untouched — nothing here writes to it.`);
+      // was, and this reading simply did not happen. The sentence is the
+      // server's own when it gave one (utils/promptAdvisorJob.js).
+      setNotice(`No analysis was produced. ${asSentence(error.message)} The prompt itself is untouched — nothing here writes to it.`);
     } finally {
-      setIsAnalyzing(false);
+      if (!closedRef.current) {
+        setIsAnalyzing(false);
+        setProgress('');
+      }
     }
   };
 
@@ -1117,6 +1155,12 @@ function AIPromptAdvisor({ prompt, onClose, onApplyImprovedPrompt }) {
           >
             {isAnalyzing ? 'Analyzing...' : 'Run Analysis'}
           </button>
+
+          {isAnalyzing && progress && (
+            <div className="pmgr-notice" data-testid="pmgr-advisor-progress">
+              <StatusMessage message={progress} tone="pending" />
+            </div>
+          )}
 
           {notice && (
             <div className="pmgr-notice" data-testid="pmgr-advisor-notice">

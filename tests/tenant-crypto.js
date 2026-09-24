@@ -389,7 +389,9 @@ const MUST_NOT_LEAK = {
     'FullResponse', 'MarkdownResponse', 'DebugInfo'],
   report: ['gameTitle', 'hostName', 'playerPerformance', 'detailedQuestions',
     'questionSummaries', 'questionSetData'],
-  job: ['request', 'items', 'meta'],
+  // `result` is the prompt advisor's analysis of an org's Workie, which quotes
+  // the Workie's own prose back and rewrites it (admin/ai-prompt-advisor.js).
+  job: ['request', 'items', 'meta', 'result'],
   // A Workie. defaultSettings and tags added after review — see the
   // ENCRYPTED_FIELDS.prompt comment for why they belong here and not with
   // category/status.

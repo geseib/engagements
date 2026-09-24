@@ -4750,6 +4750,14 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # THE PROMPT ADVISOR, AS A JOB. It called Sonnet inside the request and took
+  # 35-62s, so API Gateway's hard 30s integration ceiling answered 503 while the
+  # Lambda was still working. POST now records a job and self-invokes a worker
+  # (Event), which gets this function's full 900s; the screen polls the GET
+  # route below. Same shape as the AI builders' generation jobs.
+  #
+  # Admins only, POST and GET alike — auth/authorizer.js keeps it off the host
+  # routes on purpose, and the handler checks again with require-admin.js.
   AdminAIPromptAdvisorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -4757,12 +4765,27 @@ Resources:
       CodeUri: lambda-functions/admin/
       Handler: ai-prompt-advisor.handler
       Runtime: nodejs22.x
-      Timeout: 120
+      Timeout: 900
       MemorySize: 512
       Environment:
         Variables:
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # Tenant content is encrypted per organisation. This function opens an
+        # org's own Workie to analyse it and seals the analysis on the job row,
+        # so it needs to unwrap that org's data key — and ONLY with an orgId
+        # encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        # Async analysis: the POST self-invokes the worker (Event).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-prompt-advisor'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - S3CrudPolicy:
@@ -4790,6 +4813,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompt-advisor
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The handler hands a job only to the admin who
+        # started it, acting for the same organisation.
+        AdminAIPromptAdvisorStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-prompt-advisor/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

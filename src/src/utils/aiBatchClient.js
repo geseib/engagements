@@ -178,7 +178,11 @@ export const pollGenerationJob = async (url, jobId, options = {}) => {
   while (true) {
     if (isCancelled()) throw new Error(`${label}: cancelled`);
     if (Date.now() - startedAt > timeoutMs) {
-      throw new Error(`${label}: timed out after ${Math.round(timeoutMs / 60000)} minutes. The job may still finish - reopen the builder to check.`);
+      const late = new Error(`${label}: timed out after ${Math.round(timeoutMs / 60000)} minutes. The job may still finish - reopen the builder to check.`);
+      // Marked, like `jobMissing` below, so a caller with no builder to reopen
+      // (the prompt advisor) can say something true instead of this sentence.
+      late.timedOut = true;
+      throw late;
     }
 
     if (first) first = false;
