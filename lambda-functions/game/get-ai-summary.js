@@ -362,7 +362,10 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
     // `decryptValue` returns a non-envelope unchanged, so this is safe on any
     // pre-migration body.
     const promptData = isOrgRow ? await decryptValue(orgId, raw) : raw;
-    console.log(`✅ Successfully fetched prompt: ${promptData.name || 'Unknown'}`);
+    // An org Workie's name is sealed at rest (ENCRYPTED_FIELDS.prompt) and is
+    // open here, so the line names the prompt by its id — a pointer — and only
+    // describes the name. tests/ai-summary-prompt-name-not-logged.js.
+    console.log(`✅ Successfully fetched prompt ${promptId}: name ${shapeForLog(promptData.name)}`);
 
     return promptData;
   } catch (error) {
@@ -551,7 +554,7 @@ const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
       recoveryReason = 'unusable';
       unusableDefect = summaryPromptDefect(promptData);
       console.error(
-        `❌ Prompt ${promptId} ("${promptData.name || 'unnamed'}") EXISTS but cannot drive a summary: ` +
+        `❌ Prompt ${promptId} (name ${shapeForLog(promptData.name)}) EXISTS but cannot drive a summary: ` +
         `${summaryPromptDefect(promptData)}. Fields present: ${Object.keys(promptData).join(', ')}. ` +
         `Falling back to the ${gameType} default — the attached prompt is having NO effect.`
       );
@@ -1743,7 +1746,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     }
   }
 
-  console.log(`📝 Using prompt template: ${promptData.name}`);
+  // By id, never by name: an org Workie's name is sealed at rest.
+  console.log(`📝 Using prompt template ${resolved.promptId}: name ${shapeForLog(promptData.name)}`);
 
   // Decide whose voice Workie speaks in. Precedence and the fall-through
   // behaviour live in ./personas.js; a dangling or inactive personaId degrades
