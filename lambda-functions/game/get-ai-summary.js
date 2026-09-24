@@ -7,7 +7,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
+  buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isCallAndAnswer } = require('./briefing');
@@ -2580,7 +2580,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     throw new Error('Prompt must have either template OR both instructions and outputFormat');
   }
 
-  console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`);
+  console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`
+    + `${persona.requiredAddition ? ', with its required addition' : ''}`);
 
   // Structure is prompt-owned but system-validated: a prompt that declares a
   // well-formed `outputSections` gets that shape, anything else (absent, or
@@ -2636,6 +2637,12 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   });
   const hostLayer = hostDirective ? `\n\n${hostDirective}` : '';
 
+  // THE VOICE'S REQUIRED ADDITION, after the contract and before the host's —
+  // a voice stated only at the top is not heard (personas.js
+  // buildVoiceDirective carries the measurements).
+  const voiceDirective = buildVoiceDirective(persona);
+  const voiceLayer = voiceDirective ? `\n\n${voiceDirective}` : '';
+
   /*
     ONE OPENING MOVE PER ROUND — the anti-template device (personas.js:
     OPENING_MOVES carries the argument). Drawn here, at generation time, so
@@ -2647,7 +2654,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const openingMove = pickOpeningMove();
   console.log(`🎬 OPENING MOVE: ${openingMove}`);
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${hostLayer}`;
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${voiceLayer}${hostLayer}`;
 
   /*
     WHICH VARIABLES ARE EMPTY, NOT WHAT THE FULL ONES SAY.
