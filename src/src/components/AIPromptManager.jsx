@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import './AIPromptManager.css';
+import RoundAnglesField from './RoundAnglesField';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType } from '../config/gameTypes';
 import {
@@ -170,7 +171,13 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     status: prompt?.status || 'draft',
     tags: prompt?.tags || [],
     isDefault: prompt?.isDefault || false,
-    questionSetIds: prompt?.questionSetIds || []
+    questionSetIds: prompt?.questionSetIds || [],
+    // Round angles (RoundAnglesField). Loaded as they are so an untouched save
+    // sends back exactly what it loaded; `undefined` when there are none, which
+    // JSON.stringify drops, so a save can never clear weights it never showed.
+    // `null` is only ever set by "Use the house mix" — it clears the override.
+    angleWeights: prompt?.angleWeights && Object.keys(prompt.angleWeights).length
+      ? { ...prompt.angleWeights } : undefined,
   });
 
   const [tagInput, setTagInput] = useState('');
@@ -871,6 +878,12 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
             />
           </div>
 
+          <RoundAnglesField
+            gameType={formData.gameType}
+            value={formData.angleWeights}
+            onChange={(angleWeights) => setFormData({ ...formData, angleWeights })}
+          />
+
           <div className="form-group">
             <label>Tags</label>
             <div className="tag-input-container">
@@ -1395,7 +1408,9 @@ function AIPromptManager() {
         instructions: prompt.promptContent?.instructions || '',
         outputFormat: prompt.promptContent?.outputFormat || '',
         description: prompt.promptContent?.description || prompt.description || '',
-        tags: prompt.promptContent?.tags || prompt.tags || []
+        tags: prompt.promptContent?.tags || prompt.tags || [],
+        // The S3 body is what the summary worker reads; the row is its mirror.
+        angleWeights: prompt.promptContent?.angleWeights || prompt.angleWeights || undefined,
       }));
       
       setPrompts(transformedPrompts);

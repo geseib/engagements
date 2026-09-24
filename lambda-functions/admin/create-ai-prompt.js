@@ -2,7 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
-const { inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
+const { inferPromptType, normalizeOutputSections, normalizeAngleWeights } = require('./shared/prompt-shape');
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
@@ -73,6 +73,9 @@ exports.handler = async (event) => {
       // takes the system default triad, which is what every prompt authored
       // before this field existed does.
       outputSections: rawOutputSections,
+      // This Workie's own round-angle mix (game/round-angles.js). Absent means
+      // the house mix.
+      angleWeights: rawAngleWeights,
       defaultSettings = {},
       // Common fields
       isDefault = false,
@@ -144,6 +147,10 @@ exports.handler = async (event) => {
     if (rawOutputSections && !outputSections) {
       throw new Error('outputSections must be 1-8 entries of { heading, guidance }, each heading unique, single-line plain text without markdown syntax');
     }
+    // Same door, same reason: a weight typed as "20" or 1.5 is refused, not guessed at.
+    const angleWeightsCheck = normalizeAngleWeights(rawAngleWeights);
+    if (!angleWeightsCheck.ok) throw new Error(angleWeightsCheck.error);
+    const angleWeights = angleWeightsCheck.weights;
     const gameType = normalizeGameType(rawGameType);
 
     // promptType decides which surfaces list this prompt. AIPromptManager used
@@ -295,6 +302,7 @@ exports.handler = async (event) => {
       ...(categoryTemplate && { categoryTemplate }),
       ...(outputFormat && { outputFormat }),
       ...(outputSections && { outputSections }),
+      ...(angleWeights && { angleWeights }),
       ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,
@@ -377,6 +385,7 @@ exports.handler = async (event) => {
       ...(categoryTemplate && { categoryTemplate }),
       ...(outputFormat && { outputFormat }),
       ...(outputSections && { outputSections }),
+      ...(angleWeights && { angleWeights }),
       ...(Object.keys(defaultSettings).length > 0 && { defaultSettings }),
       isDefault,
       status,

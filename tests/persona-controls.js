@@ -615,7 +615,7 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
     // (tests/persona-required-addition.js), so the host's stays the last word.
     assert(/hostInstructions: gameAiContext/.test(summarySrc));
     assert(/eventDetails,/.test(summarySrc));
-    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData, \{ openingMove \}\)\}\$\{voiceLayer\}\$\{hostLayer\}/.test(summarySrc),
+    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData, \{ openingMove \}\)\}\$\{angleLayer\}\$\{voiceLayer\}\$\{hostLayer\}/.test(summarySrc),
       'the assembled prompt must read template → contract (with the round\'s opening move) → voice addition → host additions');
   });
 

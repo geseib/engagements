@@ -37,15 +37,15 @@ One angle per round, chosen by the lambda.
 |---|---|---|---|
 | `question` | always | Stay on the question and the answers: no scoreboard, no event talk | 40 |
 | `race` | the round is not anonymous-and-unrevealed; round 2 or later; at least 2 players with a score | The top three overall against who won this round, written into the block. Say whether it is a runaway, a close race, a lead change or a comeback, and state the gap exactly as given | 25 |
-| `event` | the host's event details, the set's AI context or the briefing is non-empty | Tie this round's answers back to what the event is for, using the event's own words | 20 |
-| `fact` | always | One well-known fact, origin story or precedent tied to the question's topic, under the same general-knowledge rule the Historian's required addition carries | 15 |
+| `event` | the host's event details, the set's AI context or the briefing is non-empty | Quote the host's own event words (never the briefing), and make the first discussion question ask which answer does the most for that purpose | 20 |
+| `fact` | always | Open the first discussion question with one piece of real, *named* history (an event, invention, person, company or origin story) tied to an answer, under the same general-knowledge rule the Historian's required addition carries | 15 |
 
 - **Unavailable angles** drop out and the draw is over what remains, by weight.
 - **No repeats:** `race`, `event` and `fact` never run two rounds in a row. `question` may.
 - **Final round lean:** when the session is on its last round and `race` is available, its weight
   doubles.
-- **Turnout** (how many answered, how many voted, how many are in the room) is given to the model
-  on every angle, so any angle may mention it.
+- **Turnout** (how many answered, how many voted, how many joined the session — the worker cannot see
+  who is still in the room) is given to the model on every angle, so any angle may mention it.
 - **Voice and angle are independent.** A persona's required addition still applies — the Historian
   can call a close race.
 
@@ -111,6 +111,23 @@ A Redo draws again.
   plaintext: a setting, not prose, and never pushed into a FilterExpression.
 - The Workie editor in `AIPromptManager.jsx` gets a "Round angles" section: four number fields and
   a "Use the house mix" reset that clears the field.
+
+## Measured (2026-09-24, Haiku 4.5, the draft-5 default Workie, the real worker)
+
+| Angle | First wording | Result | Shipped wording | Result |
+|---|---|---|---|---|
+| race | numbers written into the block | 4/4, every figure exact | same | — |
+| question | stay off the scoreboard | 3/3 | same | — |
+| event | "tie the answers to what the session is for" | 1/4 | the host's words quoted + the first discussion question named as the place | 4/4 |
+| fact | "one well-known fact" | 0/4 — truisms ("status updates are a classic meeting tax") | *named* history + the first discussion question as the place | 3/4 |
+
+What did not help, each tried on its own: a "malformed / confirm before you reply" self-check (now on every
+block anyway), moving the block after the host's additions, and a one-line nudge at the top of the prompt —
+which also produced an invented history ("the Paxlovirus team at the Rockefeller Institute, 1938").
+Content and a named place are what the model keeps, which is why the race worked first.
+
+The fact angle carries the accuracy cost the owner accepted for the Historian: roughly one detail in four is
+wrong (*Rework* dated 2013, not 2010; Moore's law dated 1971).
 
 ## Out of scope
 

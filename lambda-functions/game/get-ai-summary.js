@@ -11,7 +11,8 @@ const {
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isCallAndAnswer } = require('./briefing');
-const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
+const { isUsableSummaryPrompt, summaryPromptDefect, normalizeAngleWeights } = require('./prompt-shape');
+const { houseWeightsFor, availableAngles, pickAngle, buildAngleDirective } = require('./round-angles');
 const { extractVariableTokens } = require('./template-variables');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
@@ -445,6 +446,51 @@ const PREFERRED_DEFAULT_CATEGORY = {
   poll: 'general',
   wavelength: 'general',
   survey: 'general',
+};
+
+/**
+ * The angle the previous round was read from, or null. Stored plaintext as
+ * `Angle` on its AISummary row (round-angles.js), so an org session's sealed
+ * row needs no key to read it.
+ */
+const previousRoundAngle = async (gameId, paddedQuestionNumber) => {
+  const n = parseInt(paddedQuestionNumber, 10);
+  if (!(n > 1)) return null;
+  const prev = String(n - 1).padStart(String(paddedQuestionNumber).length, '0');
+  try {
+    const hit = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${prev}#AISummary` },
+      ProjectionExpression: '#angle',
+      ExpressionAttributeNames: { '#angle': 'Angle' },
+    }));
+    return (hit.Item && hit.Item.Angle) || null;
+  } catch (error) {
+    console.warn(`⚠️ ROUND ANGLE: could not read the previous round's angle: ${error.message}`);
+    return null;
+  }
+};
+
+/**
+ * Best effort: is this the session's last round? The session stores no round
+ * count — next-question.js walks each active category's cursor — so a round is
+ * final when every CATEGORY#<id>#ACTIVE row has served its last question.
+ * Unreadable means "not final": the lean toward the race is a nicety.
+ */
+const sessionOnFinalRound = async (gameId) => {
+  try {
+    const rows = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CATEGORY#' },
+    }));
+    const active = (rows.Items || []).filter((item) => /#ACTIVE$/.test(String(item.SK || '')));
+    return active.length > 0
+      && active.every((item) => Number(item.ActiveIndex || 0) >= Number(item.QuestionCount || 0));
+  } catch (error) {
+    console.warn(`⚠️ ROUND ANGLE: could not read the session's categories: ${error.message}`);
+    return false;
+  }
 };
 
 // Find default prompt ID for a given game type
@@ -1377,6 +1423,9 @@ exports.handler = async (event) => {
       // Written with the briefing? Only the model path can say yes; the
       // data-driven fallback never read it.
       ...(summaryData.briefingUsed ? { BriefingUsed: true } : {}),
+      // Which angle this round was read from (round-angles.js). Plaintext, like
+      // PersonaSource: a word from a fixed list, never the room's content.
+      ...(summaryData.angle ? { Angle: summaryData.angle } : {}),
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
@@ -1902,6 +1951,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   let leaderboard = [];
   let totalScores = '';
   let averageScore = 0;
+  // The race angle's numbers (round-angles.js): standings after this round and
+  // before it, and how many joined. Empty on a hidden round, like the leaderboard.
+  let raceStandings = [];
+  let raceStandingsBefore = [];
+  let joinedCount = 0;
   
   try {
     // Query for player score records using efficient SK pattern
@@ -1917,12 +1971,33 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // Filter for score records only (SK contains '#SCORE')
     const scoreRecords = scoresQuery.Items?.filter(item => item.SK && item.SK.includes('#SCORE')) || [];
     
+    // A join writes PLAYER#<name>; the score and other rows carry a suffix.
+    joinedCount = (scoresQuery.Items || []).filter((item) => /^PLAYER#[^#]+$/.test(String(item.SK || ''))).length;
+
     if (scoreRecords.length > 0) {
       console.log(`📊 Found ${scoreRecords.length} player score records`);
-      const playerScores = scoreRecords.map(scoreRecord => ({
-        name: scoreRecord.PlayerName,
-        score: scoreRecord.score || 0  // Note: lowercase 'score' based on get-results.js
-      })).sort((a, b) => b.score - a.score);
+      /*
+        THE STANDINGS AFTER THIS ROUND. get-results.js adds a round's vote
+        points to each scorer's row and stamps `afterRound`; a row without this
+        round's stamp has not counted them yet, so they are added here, and a
+        row that has is left alone — never counted twice. Call & Answer only:
+        its points are the vote tallies this function already holds; other
+        game types keep the stored score as it was.
+      */
+      const roundPointsByName = {};
+      if (normalizeGameType(gameType) === 'call-and-answer') {
+        for (const t of Object.values(results.voteTallies || {})) {
+          if (t && t.playerName && Number(t.totalScore) > 0) {
+            roundPointsByName[t.playerName] = (roundPointsByName[t.playerName] || 0) + Number(t.totalScore);
+          }
+        }
+      }
+      const playerScores = scoreRecords.map(scoreRecord => {
+        const stored = scoreRecord.score || 0;  // Note: lowercase 'score' based on get-results.js
+        const thisRound = roundPointsByName[scoreRecord.PlayerName] || 0;
+        const after = scoreRecord.afterRound === paddedQuestionNumber ? stored : stored + thisRound;
+        return { name: scoreRecord.PlayerName, score: after, before: after - thisRound };
+      }).sort((a, b) => b.score - a.score);
 
       // ANONYMITY: cumulative standings are attribution by arithmetic — the
       // same leak `standingsVisible` exists to prevent on the host screen. A
@@ -1938,6 +2013,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
         console.log('🔒 Round is unrevealed — withholding the leaderboard from the prompt');
       } else {
         leaderboard = playerScores;
+        raceStandings = playerScores.map(({ name, score }) => ({ name, score }));
+        raceStandingsBefore = playerScores.map(({ name, before }) => ({ name, score: before }));
         totalScores = playerScores.slice(0, 5).map((p, idx) =>
           `${idx + 1}. ${p.name}: ${p.score} pts`
         ).join(', ');
@@ -2654,7 +2731,45 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const openingMove = pickOpeningMove();
   console.log(`🎬 OPENING MOVE: ${openingMove}`);
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${voiceLayer}${hostLayer}`;
+  /*
+    THIS ROUND'S ANGLE — question, race, event or fact, drawn per round
+    (round-angles.js; docs/superpowers/specs/2026-09-24-workie-round-angles-design.md).
+    After the contract, where the model measurably obeys, and before the
+    voice's and the host's additions so the host keeps the last word. A game
+    type with no house mix draws nothing and its prompt is unchanged.
+  */
+  let angle = null;
+  let anglesAvailable = [];
+  let isFinalRound = false;
+  let angleLayer = '';
+  const houseWeights = houseWeightsFor(gameType);
+  if (houseWeights) {
+    const override = normalizeAngleWeights(promptData.angleWeights);
+    if (!override.ok) console.warn(`⚠️ ROUND ANGLE: ignoring the Workie's angleWeights — ${override.error}`);
+    const weights = override.ok && override.weights ? { ...houseWeights, ...override.weights } : houseWeights;
+    const hasEventText = [eventDetails, questionSetAiContext, briefing].some((t) => String(t || '').trim());
+    anglesAvailable = availableAngles({
+      hidden, roundNumber: parseInt(paddedQuestionNumber, 10), standings: raceStandings, hasEventText,
+    });
+    const lastAngle = await previousRoundAngle(gameId, paddedQuestionNumber);
+    isFinalRound = await sessionOnFinalRound(gameId);
+    angle = pickAngle({ available: anglesAvailable, weights, lastAngle, isFinalRound });
+    const angleDirective = buildAngleDirective(angle, {
+      turnout: { answered: answers.length, voted: votes ? votes.length : 0, joined: joinedCount },
+      // The host's own description of the session — never the briefing, which
+      // is the host's private summary and has its own layer (personas.js).
+      eventWords: eventDetails,
+      standings: raceStandings,
+      standingsBefore: raceStandingsBefore,
+      roundWinners: (results.winners || []).map((w) => ({ name: w.playerName, points: w.score })),
+    });
+    angleLayer = angleDirective ? `\n\n${angleDirective}` : '';
+    // The angle and what was on offer, never the standings they are drawn from.
+    console.log(`🧭 ROUND ANGLE: ${angle} (available: ${anglesAvailable.join(', ')}`
+      + `${lastAngle ? `; last round ${lastAngle}` : ''}${isFinalRound ? '; final round' : ''})`);
+  }
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${angleLayer}${voiceLayer}${hostLayer}`;
 
   /*
     WHICH VARIABLES ARE EMPTY, NOT WHAT THE FULL ONES SAY.
@@ -2729,7 +2844,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     outputShape: describeOutputShape(promptData),
     outputShapeSource: customShape ? 'prompt' : 'system-default',
     promptName: promptData.name,
-    promptSource: promptProvenance.source
+    promptSource: promptProvenance.source,
+    angle,
+    anglesAvailable,
+    isFinalRound,
   };
 
   // Haiku 4.5 is the single fast model in the hot path. It finishes in ~3–8s,
@@ -2819,7 +2937,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       ...personaAttribution(persona),
       // Whether THIS summary was written with the briefing. A flag, never the
       // text: the report says which rounds were briefed (RATIONALE §f Q1).
-      briefingUsed: Boolean(briefingLayer)
+      briefingUsed: Boolean(briefingLayer),
+      // The round's angle: vocabulary, stored plaintext like PersonaSource, and
+      // read back by the next round so race/event/fact never run twice in a row.
+      ...(angle ? { angle } : {}),
     };
 
     // Include debug information if in debug mode
