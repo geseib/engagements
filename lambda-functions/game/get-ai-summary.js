@@ -2757,7 +2757,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     modelId: haikuModelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: 1024,     // content is ~600–1000 tok; caps tail latency (bump to 1536 only if stop_reason:"max_tokens")
+      // 2048, up from 1024: a Workie may declare its own sections, and dev's
+      // five-section "Leadership Principals" Workie hit 1024 in 2 of 3 runs
+      // and lost its Next Steps (tests/ai-summary-reply-cap.js). The cap only
+      // costs time when a reply actually runs that long.
+      max_tokens: 2048,
       // 0.7, up from 0.5. Every fact the reply may state is IN the prompt and
       // fenced by the material-only rules, so temperature buys phrasing
       // variety, not hallucination risk — and 0.5 flattened exactly the
@@ -2793,6 +2797,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // answers and stored sealed (ENCRYPTED_FIELDS.aiSummary). A stop_reason of
     // max_tokens is the one thing here worth an alert.
     console.log(`✅ CLAUDE SUCCESS: AI response received, ${aiResponse.length} chars, stop_reason ${responseBody.stop_reason || 'not given'}`);
+    if (responseBody.stop_reason === 'max_tokens') {
+      console.warn(`⚠️ BEDROCK: reply cut off at max_tokens after ${aiResponse.length} chars — the last section may be missing`);
+    }
 
     // Parse the structured response
     const parsed = parseAIResponse(aiResponse, { customShape });
