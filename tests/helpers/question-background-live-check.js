@@ -84,6 +84,14 @@ async function createdSession() {
   table.put({ PK, SK: 'CATEGORY#c001#ORDER', QuestionOrder: ['001', '002', '003'], IsRandomized: false });
   table.put({ PK, SK: 'STATE#CATS#COUNTS', '1-8': [3], '9-16': [], '17-24': [], TotalEnabled: 3, TotalRemaining: 3, Version: 1 });
   table.put({ PK: SETPK, SK: 'CATEGORY#c001', Name: 'Pricing' });
+  // A connected host and player, so next-question's broadcastToGame actually
+  // has somewhere to send — with none, it returns before posting anything
+  // (next-question.js's connections.length === 0 guard) and the "no websocket
+  // frame carries Background" check below would pass on an empty `sent`
+  // whether or not a frame ever leaked it. Shape from
+  // tests/answer-content-not-logged.js's seedRoom.
+  table.put({ PK, SK: 'CONNECTION#host-conn', ConnectionId: 'host-conn', ConnectionType: 'HOST', GameId: gameId });
+  table.put({ PK, SK: 'CONNECTION#player-conn', ConnectionId: 'player-conn', ConnectionType: 'PLAYER', GameId: gameId, PlayerName: 'Ada' });
   // Keyed as upload-questions.js keys them, category first — the same shape
   // round-ref-lives-with-session.js's fixture uses.
   for (const n of ['001', '002', '003']) {
@@ -123,6 +131,13 @@ module.exports = async (check) => {
     const res = await getGameState({ pathParameters: { gameId } });
     assert.ok(!res.body.includes('zqbackground-sentinel'), res.body.slice(0, 400));
   });
+  // Not itself one of the pinned checks, same reason as the statusCode guard
+  // above: with no connections in the room, broadcastToGame returns before
+  // posting anything (next-question.js's connections.length === 0 branch),
+  // `sent` stays [], and "no websocket frame carries Background" would pass
+  // for having sent nothing at all. The CONNECTION# rows above exist so this
+  // can never go quiet again.
+  assert.ok(sent.length > 0, `next-question broadcast nothing — sent is empty, so the check below is vacuous`);
   await check('no websocket frame carries Background', () =>
     assert.ok(!JSON.stringify(sent).includes('zqbackground-sentinel')));
 };
