@@ -22,7 +22,10 @@ import {
   fieldNotesFrom,
   sessionActionMessage,
   questionSetFailure,
+  scoreboardControl,
 } from './config/hostRemote';
+import { scoreboardRequest } from './config/scoreboard';
+import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
 
 /**
  * The host's phone.
@@ -120,6 +123,7 @@ function HostRemote() {
   const [focusAnswers, setFocusAnswers] = useState([]);
   const [focusOpen, setFocusOpen] = useState(false);
   const [focusBusy, setFocusBusy] = useState(false);
+  const [scoreboardBusy, setScoreboardBusy] = useState(false);
   const [connected, setConnected] = useState(false);
   /*
     HOW MANY COMMENTS THE ROOM HAS LEFT SO FAR — a count, never the text.
@@ -468,6 +472,47 @@ function HostRemote() {
       setFocusBusy(false);
     }
   }, [gameId, focusBusy, stageFocus, snapshot, pollState]);
+
+  /* ------------------------------------------------------------ scoreboard */
+
+  /**
+   * THE SCOREBOARD, from the phone (docs/superpowers/specs/2026-09-25-scoreboard-design.md).
+   *
+   * Open or close, the next page, and the look — each one POST to
+   * /scoreboard, the route the stage's own S / V use. `authFetch`: it puts
+   * every name in the room, with its total, on the wall, which is why it is
+   * not a public route. Re-read rather than patched, for setStageFocus's
+   * reason: the state poll is the phone's only source of truth about the board.
+   */
+  const scoreboard = scoreboardControl({ snapshot, roster });
+  const sendScoreboard = useCallback(async (change) => {
+    const body = scoreboardRequest(change);
+    if (!gameId || scoreboardBusy || !body) return;
+    setScoreboardBusy(true);
+    try {
+      const res = await authFetch(`${apiBase()}games/${gameId}/scoreboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(sessionActionMessage({
+          status: res.status,
+          payload: payload.error || payload.message
+            ? payload
+            : { error: 'Could not change the scoreboard.' },
+          live: !!snapshot,
+        }));
+        return;
+      }
+      await pollState(gameId);
+    } catch {
+      setError('No connection. Check signal and try again.');
+    } finally {
+      setScoreboardBusy(false);
+    }
+  }, [gameId, scoreboardBusy, snapshot, pollState]);
 
   /* ------------------------------------------------------------ categories */
 
@@ -1070,6 +1115,18 @@ function HostRemote() {
                 </div>
               )}
             </section>
+
+            {/* THE SCOREBOARD — the owner asked for it "from the remote".
+                Absent for game types without a board; disabled, with its
+                reason, before the first round is scored. */}
+            <RemoteScoreboardPanel
+              board={scoreboard.board}
+              availability={scoreboard}
+              busy={scoreboardBusy}
+              onToggle={(open) => sendScoreboard({ open })}
+              onNextPage={() => sendScoreboard({ step: 'next' })}
+              onStyle={(style) => sendScoreboard({ style })}
+            />
 
             {/* SESSION — 17-remote.html's second card.
 

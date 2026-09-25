@@ -752,3 +752,22 @@
   font-size: .875rem;
   align-self: flex-start;
 }
+
+/* ------------------------------------------------------------ scoreboard
+   components/RemoteScoreboardPanel.jsx. The three looks sit in one row of
+   equal buttons under the open/next pair; the one on the room's screen is
+   marked by aria-pressed, in --primary on the card's --surface (7.42:1),
+   plus a doubled border — never colour alone. */
+.hr-sb-reason { margin-top: 10px; }
+.hr-sb-looks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.hr-sb-looks .hr-btn--small { align-self: stretch; min-width: 0; }
+.hr-sb-looks .hr-btn[aria-pressed="true"] {
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}

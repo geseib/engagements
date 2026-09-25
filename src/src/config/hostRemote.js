@@ -22,6 +22,7 @@
 
 import { gameTypeMeta, normalizeGameType } from './gameTypes';
 import { rosterRows } from './setupPanel';
+import { normaliseScoreboard, scoreboardAvailability } from './scoreboard';
 
 /**
  * The beats from which the only way on is the next round.
@@ -920,4 +921,25 @@ export function sessionActionMessage({ status, payload = {}, live = false } = {}
   return NO_STATUS(status)
     ? 'No connection. Check signal and try again.'
     : `That did not go through (${status}).`;
+}
+
+/* -------------------------------------------------------------- scoreboard */
+
+/**
+ * The phone's Scoreboard control, from the two polls it already makes.
+ *
+ * docs/superpowers/specs/2026-09-25-scoreboard-design.md §3. `/state` carries
+ * the server's board (get-game-state's `scoreboard`); `/players` carries the
+ * last fully scored round (`afterRound`). Other game types get no control
+ * (`show: false`); before the first scored round it is disabled with its
+ * reason. A roster that has not loaded yet reads as "not yet": the phone has
+ * no evidence a round was scored, so it must not offer to open an empty board.
+ */
+export function scoreboardControl({ snapshot, roster } = {}) {
+  const gameType = snapshot?.gameType || snapshot?.gameMetadata?.gameType;
+  const afterRound = roster && Number.isInteger(roster.afterRound) ? roster.afterRound : null;
+  return {
+    ...scoreboardAvailability({ gameType, afterRound }),
+    board: normaliseScoreboard(snapshot?.scoreboard),
+  };
 }
