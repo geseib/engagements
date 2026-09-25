@@ -36,14 +36,21 @@ exports.handler = async (event) => {
       expressionAttributeValues[':search'] = search;
     }
     
-    // Scan archive items from DynamoDB
-    const result = await db.send(new ScanCommand({
-      TableName: process.env.TABLE_NAME,
-      FilterExpression: filterExpression,
-      ExpressionAttributeValues: expressionAttributeValues
-    }));
-    
-    const items = result.Items || [];
+    // Scan archive items from DynamoDB, every page: a Scan reads 1 MB and
+    // filters afterwards, so one page can hold none of the matches while more
+    // remain. tests/library-reads-paged.js.
+    const items = [];
+    let ExclusiveStartKey;
+    do {
+      const result = await db.send(new ScanCommand({
+        TableName: process.env.TABLE_NAME,
+        FilterExpression: filterExpression,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ExclusiveStartKey,
+      }));
+      items.push(...(result.Items || []));
+      ExclusiveStartKey = result.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
     
     // Sort by CreatedAt descending (newest first)
     items.sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));

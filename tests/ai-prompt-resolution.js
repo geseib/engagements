@@ -135,13 +135,13 @@ const fakeDoc = {
     if (cmd.type === 'get') {
       return { Item: ddbItems.get(`${inp.Key.PK}|${inp.Key.SK}`) };
     }
-    if (cmd.type === 'scan') {
-      // findDefaultPromptId scans PK=AIPROMPTS + isDefault. It deliberately no
+    const v = inp.ExpressionAttributeValues || {};
+    if (cmd.type === 'query' && v[':isDefault'] !== undefined) {
+      // findDefaultPromptId queries PK=AIPROMPTS + isDefault. It deliberately no
       // longer filters on gameType server-side: rows exist under both
       // `callandanswer` and `call-and-answer`, and a FilterExpression cannot
       // normalize, so the game-type match happens in JS. Honour whichever
       // values the handler actually supplied rather than assuming a fixed set.
-      const v = inp.ExpressionAttributeValues || {};
       const items = [...ddbItems.values()].filter((i) =>
         (v[':pk'] === undefined || i.PK === v[':pk']) &&
         (v[':gameType'] === undefined || i.gameType === v[':gameType']) &&

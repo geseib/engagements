@@ -33,18 +33,27 @@ exports.handler = async (event) => {
     // exactly the drift that ends with two spellings of one partition.
     const refs = readableSetRefs(event, '');
     const perScope = await Promise.all(refs.map(async (ref) => {
-      const res = await db.send(new QueryCommand({
-        TableName: process.env.TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk',
-        ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK },
-        // READ YOUR OWN WRITE. Copy-on-save, create and import put a row here
-        // and re-read the list a moment later to rebind the editor to it; an
-        // eventually-consistent Query can miss that row and leave the editor
-        // bound to a bare id (tests/question-sets-list-consistent.js). The
-        // org's partition is small and is the caller's own; the shared
-        // libraries are nobody's fresh write and stay eventually consistent.
-        ...(ref.scope === ORG ? { ConsistentRead: true } : {}),
-      }));
+      // Every page: the shared libraries grow with every organisation, and a
+      // Query stops at 1 MB. tests/library-reads-paged.js.
+      const res = { Items: [] };
+      let ExclusiveStartKey;
+      do {
+        const page = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK },
+          // READ YOUR OWN WRITE. Copy-on-save, create and import put a row here
+          // and re-read the list a moment later to rebind the editor to it; an
+          // eventually-consistent Query can miss that row and leave the editor
+          // bound to a bare id (tests/question-sets-list-consistent.js). The
+          // org's partition is small and is the caller's own; the shared
+          // libraries are nobody's fresh write and stay eventually consistent.
+          ...(ref.scope === ORG ? { ConsistentRead: true } : {}),
+          ExclusiveStartKey,
+        }));
+        res.Items.push(...((page && page.Items) || []));
+        ExclusiveStartKey = page && page.LastEvaluatedKey;
+      } while (ExclusiveStartKey);
       // The row is stamped with its own scope (ownerStamp), EXCEPT on platform
       // rows where absence IS the stamp — so the ref that found it fills in
       // what the row does not say, and canManageSet still reads the row.

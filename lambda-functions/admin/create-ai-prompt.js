@@ -435,14 +435,23 @@ exports.handler = async (event) => {
         // (D17). One default per game type, full stop.
         console.log(`🧹 Clearing default status from other ${gameType} prompts`);
 
-        const { Items: allPrompts } = await dynamodb.send(new QueryCommand({
-          TableName: tableName,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': 'AIPROMPTS',
-            ':sk': 'AIPROMPT#'
-          }
-        }));
+        // Every page: a default past the first 1 MB would survive the sweep and
+        // leave two. tests/library-reads-paged.js.
+        const allPrompts = [];
+        let ExclusiveStartKey;
+        do {
+          const page = await dynamodb.send(new QueryCommand({
+            TableName: tableName,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues: {
+              ':pk': 'AIPROMPTS',
+              ':sk': 'AIPROMPT#'
+            },
+            ExclusiveStartKey,
+          }));
+          allPrompts.push(...(page.Items || []));
+          ExclusiveStartKey = page.LastEvaluatedKey;
+        } while (ExclusiveStartKey);
 
         // Match on the NORMALIZED type so a legacy `callandanswer` row is
         // cleared too, and filter in JS because a FilterExpression cannot

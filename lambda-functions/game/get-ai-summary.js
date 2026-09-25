@@ -1,6 +1,6 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
@@ -565,18 +565,32 @@ const findDefaultPromptId = async (gameType) => {
     console.log(`🔍 Finding default prompt for game type: ${gameType} → ${canonical}`);
 
     // Rows exist under BOTH spellings (`callandanswer` from the analysis
-    // manager, `call-and-answer` from the generation editor). Scan on PK alone
+    // manager, `call-and-answer` from the generation editor). Read on PK alone
     // and match in JS so either spelling resolves.
-    const scanResult = await db.send(new ScanCommand({
-      TableName: process.env.TABLE_NAME,
-      FilterExpression: 'PK = :pk AND isDefault = :isDefault',
-      ExpressionAttributeValues: {
-        ':pk': 'AIPROMPTS',
-        ':isDefault': true
-      }
-    }));
+    //
+    // A Query on the AIPROMPTS partition, followed to its last page. This was
+    // one table Scan: a Scan reads 1 MB and filters afterwards, so on dev
+    // (6,083 rows) it saw the first 1,987, none of them defaults, and every
+    // summary fell back to the data-driven template.
+    // tests/ai-summary-default-prompt-paged.js.
+    const defaults = [];
+    let ExclusiveStartKey;
+    do {
+      const page = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk',
+        FilterExpression: 'isDefault = :isDefault',
+        ExpressionAttributeValues: {
+          ':pk': 'AIPROMPTS',
+          ':isDefault': true
+        },
+        ExclusiveStartKey,
+      }));
+      defaults.push(...(page.Items || []));
+      ExclusiveStartKey = page.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
 
-    const candidates = (scanResult.Items || []).filter(item =>
+    const candidates = defaults.filter(item =>
       item.promptId && normalizeGameType(item.gameType) === canonical);
 
     if (candidates.length > 0) {

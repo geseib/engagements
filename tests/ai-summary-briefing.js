@@ -65,16 +65,10 @@ const fakeDoc = {
       case 'get': return { Item: project(store.get(key(inp.Key.PK, inp.Key.SK)), inp) };
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
       case 'query': {
+        // `:isDefault` is findDefaultPromptId's filter on the AIPROMPTS partition.
         const v = inp.ExpressionAttributeValues || {};
         const items = [...store.values()].filter((i) =>
-          i.PK === v[':pk'] && String(i.SK).startsWith(String(v[':sk'] ?? '')));
-        return { Items: items, Count: items.length };
-      }
-      case 'scan': {
-        // findDefaultPromptId's `PK = :pk AND isDefault = :isDefault` shape.
-        const v = inp.ExpressionAttributeValues || {};
-        const items = [...store.values()].filter((i) =>
-          (v[':pk'] === undefined || i.PK === v[':pk'])
+          i.PK === v[':pk'] && String(i.SK).startsWith(String(v[':sk'] ?? ''))
           && (v[':isDefault'] === undefined || i.isDefault === v[':isDefault']));
         return { Items: items, Count: items.length };
       }

@@ -93,21 +93,23 @@ class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class ScanCommand { constructor(i) { this.input = i; this.type = 'scan'; } }
 
-// Scan order is deliberately RANDOMISED on every call. DynamoDB gives no order
-// guarantee, and a resolver that "takes the first one" must fail this test.
-let scanCalls = 0;
+// Read order is deliberately RANDOMISED on every call. The resolver matches
+// game types in JS, so it must not depend on the order rows come back in, and a
+// resolver that "takes the first one" must fail this test.
+let defaultReads = 0;
 const fakeDoc = {
   send: async (cmd) => {
     const inp = cmd.input || {};
     if (cmd.type === 'get') return { Item: ddbItems.get(`${inp.Key.PK}|${inp.Key.SK}`) };
-    if (cmd.type === 'scan') {
-      scanCalls++;
-      const v = inp.ExpressionAttributeValues || {};
+    // findDefaultPromptId's Query: `PK = :pk` with `isDefault = :isDefault`.
+    if (cmd.type === 'query' && (inp.ExpressionAttributeValues || {})[':isDefault'] !== undefined) {
+      defaultReads++;
+      const v = inp.ExpressionAttributeValues;
       const items = [...ddbItems.values()]
         .filter((i) => i.PK === v[':pk'] && i.isDefault === v[':isDefault']);
-      // Rotate by one on every call, so consecutive scans return the same set
+      // Rotate by one on every call, so consecutive lookups get the same set
       // in a different order. "Just take the first one" cannot survive this.
-      const n = items.length ? scanCalls % items.length : 0;
+      const n = items.length ? defaultReads % items.length : 0;
       return { Items: [...items.slice(n), ...items.slice(0, n)] };
     }
     return { Items: [], Count: 0 };

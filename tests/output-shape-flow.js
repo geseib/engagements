@@ -126,18 +126,13 @@ const fakeDoc = {
       case 'update':
         return {};
       case 'query': {
+        // `:isDefault` is findDefaultPromptId's filter on the AIPROMPTS partition.
         const v = inp.ExpressionAttributeValues || {};
         const pk = v[':pk'];
         const prefix = v[':sk'] ?? '';
         const items = [...ddb.values()].filter(
-          (i) => i.PK === pk && String(i.SK).startsWith(String(prefix)));
-        return { Items: items, Count: items.length };
-      }
-      case 'scan': {
-        const v = inp.ExpressionAttributeValues || {};
-        const items = [...ddb.values()].filter((i) =>
-          (v[':pk'] === undefined || i.PK === v[':pk']) &&
-          (v[':isDefault'] === undefined || i.isDefault === v[':isDefault']));
+          (i) => i.PK === pk && String(i.SK).startsWith(String(prefix))
+            && (v[':isDefault'] === undefined || i.isDefault === v[':isDefault']));
         return { Items: items, Count: items.length };
       }
       default:

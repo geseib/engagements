@@ -148,15 +148,25 @@ exports.handler = async (event) => {
     // fresh promptId for the same prompt. That is how seven call-and-answer
     // prompts all ended up flagged isDefault (D17). Query the key we actually
     // write.
+    //
+    // Every page, too: a prompt past the first 1 MB would read as missing and
+    // be minted again. tests/library-reads-paged.js.
     console.log('📋 Checking existing prompts...');
-    const existingPrompts = await dynamodb.send(new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': 'AIPROMPTS',
-        ':sk': 'AIPROMPT#'
-      }
-    }));
+    const existingPrompts = { Items: [] };
+    let ExclusiveStartKey;
+    do {
+      const page = await dynamodb.send(new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: {
+          ':pk': 'AIPROMPTS',
+          ':sk': 'AIPROMPT#'
+        },
+        ExclusiveStartKey,
+      }));
+      existingPrompts.Items.push(...(page.Items || []));
+      ExclusiveStartKey = page.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
 
     console.log(`📊 Found ${existingPrompts.Items?.length || 0} existing prompts`);
 

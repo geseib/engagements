@@ -618,14 +618,23 @@ exports.handler = async (event) => {
           // First, clear isDefault from all other prompts in the same category
           console.log(`🧹 Clearing default status from other prompts in ${currentPrompt.gameType}/${updatedContent.category}`);
           
-          const { Items: allPrompts } = await dynamodb.send(new QueryCommand({
-            TableName: tableName,
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-            ExpressionAttributeValues: {
-              ':pk': 'AIPROMPTS',
-              ':sk': 'AIPROMPT#'
-            }
-          }));
+          // Every page: a default past the first 1 MB would survive the sweep
+          // and leave two. tests/library-reads-paged.js.
+          const allPrompts = [];
+          let ExclusiveStartKey;
+          do {
+            const page = await dynamodb.send(new QueryCommand({
+              TableName: tableName,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: {
+                ':pk': 'AIPROMPTS',
+                ':sk': 'AIPROMPT#'
+              },
+              ExclusiveStartKey,
+            }));
+            allPrompts.push(...(page.Items || []));
+            ExclusiveStartKey = page.LastEvaluatedKey;
+          } while (ExclusiveStartKey);
 
           // One default per GAME TYPE, not per game type + category — see the
           // matching note in create-ai-prompt.js (D17). Matched on the

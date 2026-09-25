@@ -10,17 +10,26 @@ exports.handler = async (event) => {
   console.log(`🔌 WebSocket Disconnect: ${connectionId}`);
 
   try {
-    // Find and remove connection info - need to scan since we don't know the gameId
-    const scanResult = await db.send(new ScanCommand({
-      TableName: process.env.TABLE_NAME,
-      FilterExpression: 'SK = :sk',
-      ExpressionAttributeValues: {
-        ':sk': `CONNECTION#${connectionId}`
-      }
-    }));
+    // Find and remove connection info - need to scan since we don't know the gameId.
+    // The table has no index on SK, so the Scan is followed page by page until
+    // the row turns up: a Scan reads 1 MB and filters afterwards, and one page
+    // missed most connection rows on dev. tests/websocket-disconnect-paged.js.
+    let connection;
+    let ExclusiveStartKey;
+    do {
+      const page = await db.send(new ScanCommand({
+        TableName: process.env.TABLE_NAME,
+        FilterExpression: 'SK = :sk',
+        ExpressionAttributeValues: {
+          ':sk': `CONNECTION#${connectionId}`
+        },
+        ExclusiveStartKey,
+      }));
+      connection = (page.Items || [])[0];
+      ExclusiveStartKey = page.LastEvaluatedKey;
+    } while (!connection && ExclusiveStartKey);
 
-    if (scanResult.Items && scanResult.Items.length > 0) {
-      const connection = scanResult.Items[0];
+    if (connection) {
       await db.send(new DeleteCommand({
         TableName: process.env.TABLE_NAME,
         Key: {
