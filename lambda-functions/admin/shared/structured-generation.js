@@ -64,7 +64,45 @@ const PER_ITEM_TOKENS = {
   wavelength: 260,
   survey: 200,
   poll: 260,
-  trivia: 380,
+  /*
+    CALL & ANSWER AND TRIVIA ARE PRICED FROM THEIR WORST-CASE ITEM, because the
+    question-background work made `background` a REQUIRED field in both schemas
+    and neither budget moved: call-and-answer had no entry at all (it fell to
+    `default: 420`, sized before Apply/Improve could carry a 900-character
+    detail) and trivia sat at 380. A worst-case item then overran its budget,
+    and the halved truncation retry — maxTokensFor() with the same per-item
+    figure — overran again.
+
+    The arithmetic, from the limits each prompt states (tokens = chars / 3.5,
+    rounded up — conservative for English prose, where ~4 is typical — plus
+    5 tokens per JSON key and 2 for the braces):
+
+      call-and-answer (Apply/Improve, the widest round kind)
+        title 10 words ≈ 80 ch ........ 23    customInstructions 200 ch .. 58
+        category ≈ 40 ch .............. 12    background 600 ch ......... 172
+        detail 900 ch ................ 258    6 tags × ≈20 ch + quotes ... 54
+        6 keys + braces ............... 32                         total  609
+
+      trivia (six options, all six correct)
+        title ≈ 80 ch ................. 23    answerDetails 300 ch ....... 86
+        questionDetail 200 ch ......... 58    school ≈ 40 ch ............. 12
+        category ≈ 40 ch .............. 12    difficulty .................. 2
+        6 options × 60 ch ............ 108    6 tags ..................... 54
+        correctAnswer, 6 ids .......... 30    background 400 ch ......... 115
+        15 keys + braces .............. 77                         total  577
+
+    × 1.2 for a model overshooting a stated maximum (clampBackground trims only
+    after the tokens are paid for): 731 and 693, rounded up to the next ten.
+    tests/question-background-token-budget.js re-derives both figures from the
+    live prompt text, so raising a limit there without raising this fails.
+
+    What it costs: fewer items per pass — 10 for each, from 17 and 19 — so a
+    15-question trivia default now takes two passes. The second is told what
+    the first wrote, so duplicate avoidance holds; and total output time is set
+    by the tokens actually written, which the budget does not change.
+  */
+  'call-and-answer': 740,
+  trivia: 700,
   question: 420,
   // A question SET's own metadata, drafted as one object: a title, a
   // description, a participant instruction and an AI context instruction. Four
