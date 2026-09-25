@@ -120,12 +120,16 @@ async function countRows(pk, skPrefix) {
   return total;
 }
 
-/** The ORGS index, as [{ orgId, type }] — the name it carries is dropped here. */
+/**
+ * The ORGS index, as [{ orgId, type }] — the name it carries is dropped here.
+ * ORG# rows only: the CODE#, INVOICE# and PLANREQ# rows sharing the partition
+ * would each count as a team. tests/orgs-index-readers.js.
+ */
 async function listOrganisations() {
   const orgs = [];
   await queryAll({
-    KeyConditionExpression: 'PK = :pk',
-    ExpressionAttributeValues: { ':pk': tenant.ORGS_INDEX_PK },
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': tenant.ORGS_INDEX_PK, ':sk': 'ORG#' },
   }, (page) => {
     for (const row of page.Items || []) {
       const orgId = G.clean(row.orgId) || G.clean(row.SK).replace(/^ORG#/, '');
