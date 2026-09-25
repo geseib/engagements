@@ -23,7 +23,23 @@ const ITEMS = [
 export default function WorkieContextHint({ contextUsed }) {
   if (!contextUsed || typeof contextUsed !== 'object') return null;
   const text = ITEMS.map(([key, label]) => `${label} ${contextUsed[key] ? '✓' : '—'}`).join(' · ');
+  /*
+    READ ALOUD AS WORDS. A screen reader says "✓" as "check mark" at best and
+    "—" as "em dash" or nothing, so the ticks carry no meaning aloud. The line is
+    one image-like unit named in words — the star-rating pattern (role="img"
+    with a label, children presentational) — which leaves the visible text
+    exactly as it is. An aria-label on a bare <p> would not do: a paragraph may
+    not be named, and screen readers read its text instead.
+  */
+  const spoken = ITEMS.map(([key, label]) => `${label}: ${contextUsed[key] ? 'yes' : 'no'}`).join('; ');
   return (
-    <p className="workie-context-hint" data-testid="workie-context-hint">{`Workie had: ${text}`}</p>
+    <p
+      className="workie-context-hint"
+      data-testid="workie-context-hint"
+      role="img"
+      aria-label={`Workie had — ${spoken}`}
+    >
+      {`Workie had: ${text}`}
+    </p>
   );
 }

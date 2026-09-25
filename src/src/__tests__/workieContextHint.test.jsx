@@ -14,6 +14,23 @@ test('lists the five kinds of context in the spec\'s order, ticked or dashed', (
     'Workie had: question notes ✓ · set note ✓ · event details — · host instructions — · briefing —');
 });
 
+/*
+ * A SCREEN READER GETS WORDS, NOT GLYPHS. "✓" reads as "check mark" at best and
+ * "—" as "em dash" or nothing, so the ticks and dashes carry no meaning aloud.
+ * The line is exposed as one image-like unit named in words — the star-rating
+ * pattern — and the visible text the tests above pin is left exactly as it is.
+ */
+test('reads aloud as words, not as ticks and dashes', () => {
+  render(<WorkieContextHint contextUsed={ALL} />);
+  const hint = screen.getByRole('img', {
+    name: 'Workie had — question notes: yes; set note: yes; event details: no; '
+      + 'host instructions: no; briefing: no',
+  });
+  expect(hint).toBe(screen.getByTestId('workie-context-hint'));
+  expect(hint.textContent).toBe(
+    'Workie had: question notes ✓ · set note ✓ · event details — · host instructions — · briefing —');
+});
+
 test('renders nothing for a summary written before the flags existed', () => {
   const { container } = render(<WorkieContextHint contextUsed={null} />);
   expect(container).toBeEmptyDOMElement();
