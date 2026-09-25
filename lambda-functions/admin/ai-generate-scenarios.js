@@ -47,7 +47,7 @@ const {
 } = require('./shared/structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
-  openJob, isCallersJob,
+  openJob, isCallersJob, workerCaller,
 } = require('./shared/generation-jobs');
 const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
@@ -318,18 +318,14 @@ async function runWorker(event, context) {
   // context at all, so identity had to be captured on the POST; the row is the
   // carrier because only the authorised POST can write it. See
   // shared/generated-set.js, note 3.
-  let caller = {};
-  try {
-    const record = await getJob(dynamodb, tableName, jobId);
-    caller = {
-      userId: record?.callerUserId,
-      username: record?.callerUsername,
-      orgId: record?.callerOrgId,
-      orgRole: record?.callerOrgRole,
-    };
-  } catch (error) {
-    console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
-  }
+  //
+  // FAIL CLOSED. With no caller there is nothing to seal under and nobody to
+  // file a set for, and carrying on as `{}` wrote the org's content in
+  // plaintext and put its set in the platform library. A read that throws is
+  // left to throw, so Lambda's retry re-reads before anything is paid for; see
+  // shared/generation-jobs.js's workerCaller for the other two ways.
+  const caller = await workerCaller(dynamodb, tableName, jobId);
+  if (!caller) return;
   // Everything this worker writes back is sealed under the organisation that
   // asked (shared/generation-jobs.js). Absent for Engage's own library.
   const sealFor = caller.orgId || '';

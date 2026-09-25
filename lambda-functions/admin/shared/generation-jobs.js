@@ -279,6 +279,58 @@ async function getJob(dynamodb, tableName, jobId) {
   return res.Item || null;
 }
 
+/** What a job that recorded nobody is failed with. Our words, never content. */
+const UNOWNED_JOB_MESSAGE = 'This job recorded no signed-in user, so nothing was generated. '
+  + 'Sign in again and start it from the builder.';
+
+/**
+ * WHO ASKED, as a generation worker must establish it before it spends or
+ * writes anything — or `null`, and the worker stops.
+ *
+ * The worker is invoked with `InvocationType: 'Event'` and has no authorizer
+ * context, so the caller exists only on this row (createJob). An empty caller
+ * is not a neutral default: `sealFor` becomes '' and the org's content is
+ * written to the row in plaintext, and createSetForJob's synthetic event reads
+ * as an INTERNAL invocation, which files the set in Engage's shared platform
+ * library. So there are three ways to have no caller, and none of them runs:
+ *
+ *   - THE READ THROWS. Propagated, so the invocation fails and Lambda's async
+ *     retry re-reads. Nothing has been spent or written yet, which is what
+ *     makes the retry safe: Bedrock is paid for once, by whichever attempt
+ *     could read its row. Failing the job instead would write to the very row
+ *     that could not be read, and turn a blip into a lost run.
+ *   - THE ROW IS ABSENT. `null`, with nothing written: an update would upsert
+ *     an ownerless row with no ttl, and a retry would find it just as absent.
+ *     The read is STRONGLY CONSISTENT so this is the truth — the POST put the
+ *     row moments ago, and a replica that has not applied it yet answers "no
+ *     item" to an eventually consistent read.
+ *   - THE ROW NAMES NO USER. `null`, and the job is failed with a sentence:
+ *     it can never be read back (isCallersJob), so there is no one to generate
+ *     for. POSTs with no user have been refused with 401 since the ownership
+ *     fix; this is the refusal for any row that predates it.
+ */
+async function workerCaller(dynamodb, tableName, jobId) {
+  const res = await dynamodb.send(new GetCommand({
+    TableName: tableName, Key: jobKey(jobId), ConsistentRead: true,
+  }));
+  const row = res.Item;
+  if (!row) {
+    console.error(`❌ Job ${jobId}: no job row, so no caller; generating nothing`);
+    return null;
+  }
+  if (!row.callerUserId) {
+    console.error(`❌ Job ${jobId}: the row names no user; generating nothing`);
+    await failJob(dynamodb, tableName, jobId, UNOWNED_JOB_MESSAGE);
+    return null;
+  }
+  return {
+    userId: row.callerUserId,
+    username: row.callerUsername,
+    orgId: row.callerOrgId,
+    orgRole: row.callerOrgRole,
+  };
+}
+
 /**
  * Poll payload. Deliberately omits `request` — the client already has it — and
  * the caller identity, which is nobody's business but the worker's.
@@ -328,6 +380,7 @@ module.exports = {
   completeJob,
   failJob,
   getJob,
+  workerCaller,
   jobToResponse,
   sealJobFields,
   openJob,

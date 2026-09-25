@@ -220,8 +220,10 @@ async function recordSetCreationError(dynamodb, tableName, jobId, message, limit
  *
  * An org WITH no role is worse than neither, so both travel or neither does:
  * tenant.canManageScope requires a role of at least `member`, so an orgId alone
- * resolves to no writable scope at all and the importer refuses the set — a set
- * that vanishes instead of a set in the wrong place.
+ * resolves to no writable scope at all. But "neither" is the internal shape,
+ * which files in the platform library — so createSetForJob refuses a caller
+ * with an org and no role before this is ever built: a set that is not made
+ * instead of a set in the wrong place.
  *
  * Both are read off the JOB ROW, like the identity above and for the same
  * reason: the worker's invocation path has no authorizer, so anything not
@@ -279,6 +281,23 @@ async function createSetForJob({
   const sealFor = caller?.orgId || '';
 
   try {
+    /*
+      NOBODY, OR AN ORGANISATION WITH NO ROLE, IS FILED NOWHERE. Either one
+      reaches the importer as no groups AND no org — syntheticUploadEvent passes
+      an org only with its role — and createSetRef files that shape in Engage's
+      shared platform library as an internal write. The workers already refuse a
+      caller they could not establish (generation-jobs.js, workerCaller); this
+      is the same rule at the one place that files the set, so no future caller
+      of this function can reach the platform library by passing `{}`.
+    */
+    if (!caller?.userId || (caller.orgId && !caller.orgRole)) {
+      console.error(`❌ Job ${jobId}: no caller to file the set for; creating none`);
+      await recordSetCreationError(dynamodb, tableName, jobId,
+        'Who asked for this set could not be established, so it was not created. '
+        + 'Review these and load them by hand.', null, sealFor);
+      return null;
+    }
+
     const metadata = readSetMetadata(payload);
     if (!metadata.title) {
       await recordSetCreationError(dynamodb, tableName, jobId,

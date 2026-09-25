@@ -28,7 +28,7 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { itemsPerCall, maxTokensFor, perItemTokens, invokeStructured } = require('./structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
-  openJob, isCallersJob,
+  openJob, isCallersJob, workerCaller,
 } = require('./generation-jobs');
 const { createSetForJob } = require('./generated-set');
 const { callerUsername } = require('./require-admin');
@@ -111,18 +111,14 @@ function makeGenerationHandler(config) {
     // request and can only be written by it, whereas `__workerMode` is a path
     // anything able to invoke this function can take. See generation-jobs.js's
     // createJob and shared/generated-set.js, note 3.
-    let caller = {};
-    try {
-      const record = await getJob(dynamodb, tableName, jobId);
-      caller = {
-        userId: record?.callerUserId,
-        username: record?.callerUsername,
-        orgId: record?.callerOrgId,
-        orgRole: record?.callerOrgRole,
-      };
-    } catch (error) {
-      console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
-    }
+    //
+    // FAIL CLOSED. With no caller there is nothing to seal under and nobody to
+    // file a set for, and carrying on as `{}` wrote the org's content in
+    // plaintext and put its set in the platform library. A read that throws is
+    // left to throw, so Lambda's retry re-reads before anything is paid for;
+    // see workerCaller for the other two ways there is no caller.
+    const caller = await workerCaller(dynamodb, tableName, jobId);
+    if (!caller) return;
     // Everything this worker writes back is sealed under the organisation that
     // asked (generation-jobs.js). Absent for Engage's own library.
     const sealFor = caller.orgId || '';
