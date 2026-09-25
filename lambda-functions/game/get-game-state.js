@@ -7,6 +7,7 @@ const { normalizeNames } = require('./survey-names');
 
 const { isPresent } = require('./player-presence');
 const { BEATS } = require('./stage-beats');
+const { normaliseScoreboard } = require('./scoreboard-state');
 
 /**
  * WHOSE SESSION IS THIS? — read off the row, never off the caller.
@@ -326,6 +327,14 @@ exports.handler = async (event) => {
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
       stageFocus: stageFocus,
+      /*
+        THE SCOREBOARD — a session fact on STATE (scoreboard.js). Here for the
+        same two readers stageFocus has: a reloading host page reopens the board
+        the room was looking at, and the phone remote, which holds no socket,
+        draws its Scoreboard button from this poll. Always an object, never
+        undefined; an unknown stored look reads as the default.
+      */
+      scoreboard: normaliseScoreboard(stateItem && stateItem.Scoreboard),
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       gameMetadata: {
         title: sessionMeta.Title,

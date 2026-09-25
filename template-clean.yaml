@@ -614,6 +614,44 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  ScoreboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-scoreboard'
+      CodeUri: lambda-functions/game/
+      Handler: scoreboard.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        ScoreboardEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/scoreboard
+            Method: post
+            # HOST ONLY, exactly like /stage-focus above. It puts every name in
+            # the room, with its total, full-screen on the wall — on a public
+            # route that is a button any phone holding the four-digit game id
+            # could press. The handler also asks callerMayDriveSession.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Crud, NOT Write, for /stage-focus's reason: the broadcast reaps dead
+        # CONNECTION# rows with DeleteItem, which DynamoDBWritePolicy does not
+        # grant. Reads: METADATA (org, type) and STATE; writes: STATE.Scoreboard.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # The other host surface has to hear it: open the board from the phone,
+        # watch the projector follow, and the other way round.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   QuestionQueueFunction:
     Type: AWS::Serverless::Function
     Properties:

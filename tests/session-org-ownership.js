@@ -193,6 +193,8 @@ for (const rel of [
   'lambda-functions/game/toggle-category.js',
   'lambda-functions/game/grant-handover.js',
   'lambda-functions/game/remove-player.js',
+  // The scoreboard: puts the whole room's totals on the wall. Born asking.
+  'lambda-functions/game/scoreboard.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')

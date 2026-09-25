@@ -119,6 +119,9 @@ const MUST_BE_CLOSED = [
   // socket HOST, and a HOST socket receives the host-only frames — names as
   // they join, vote and survey progress (tests/websocket-host-ticket.js).
   ['POST', '/games/{gameId}/host-ticket'],
+  // THE SCOREBOARD (game/scoreboard.js): every name in the room, with its
+  // total, full-screen on the wall. Born closed, like /stage-focus.
+  ['POST', '/games/{gameId}/scoreboard'],
 ];
 
 // The participant journey. None of these carries a token, ever.

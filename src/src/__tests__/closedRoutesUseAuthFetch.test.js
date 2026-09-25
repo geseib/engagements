@@ -59,7 +59,7 @@ describe('the closed routes are never called with bare fetch', () => {
   */
   const CLOSED = [
     'next-question', 'start-question', 'start-vote', 'toggle-category',
-    'question-sets', 'close-round', 'save-report',
+    'question-sets', 'close-round', 'save-report', 'scoreboard',
   ];
 
   // rejects: a closed route called through the bare global, which is a 401 in
