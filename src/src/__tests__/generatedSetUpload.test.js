@@ -53,10 +53,10 @@ describe('the CSV each kind writes', () => {
       { title: 'CAPITAL', questionDetail: 'Capital of France?', optionA: 'Paris', correctAnswer: 'OptionA', difficulty: 'easy' },
     ]);
     expect(csv.split('\n')).toEqual([
-      'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags',
-      '"Space","1","RED PLANET","Which is red?","Iron.","General","Mars","Venus","","","","","OptionA","easy","space"',
-      '"Space","2","RINGS","Which have rings?","","Astronomy","Saturn","Uranus","","","","","OptionA,OptionB","hard",""',
-      '"General","1","CAPITAL","Capital of France?","","General","Paris","","","","","","OptionA","easy",""',
+      'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags,Background',
+      '"Space","1","RED PLANET","Which is red?","Iron.","General","Mars","Venus","","","","","OptionA","easy","space",""',
+      '"Space","2","RINGS","Which have rings?","","Astronomy","Saturn","Uranus","","","","","OptionA,OptionB","hard","",""',
+      '"General","1","CAPITAL","Capital of France?","","General","Paris","","","","","","OptionA","easy","",""',
     ]);
   });
 
@@ -80,9 +80,9 @@ describe('the CSV each kind writes', () => {
       { title: 'THE "RIGHT" CALL', detail: 'Quotes survive.', customInstructions: 'Be brief' },
     ]);
     expect(csv.split('\n')).toEqual([
-      'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags',
-      '"Ops","1","THE LATE DELIVERY","A supplier slips.","Professional Development","","supply"',
-      '"AI Generated","1","THE ""RIGHT"" CALL","Quotes survive.","Professional Development","Be brief",""',
+      'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background',
+      '"Ops","1","THE LATE DELIVERY","A supplier slips.","Professional Development","","supply",""',
+      '"AI Generated","1","THE ""RIGHT"" CALL","Quotes survive.","Professional Development","Be brief","",""',
     ]);
   });
 

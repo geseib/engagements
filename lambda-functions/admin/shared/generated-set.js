@@ -403,7 +403,7 @@ function byCategory(items, fallbackCategory) {
 
 /** call-and-answer / wavelength. Mirrors AdminPage.generateScenariosCSV. */
 function scenariosToCsv(items) {
-  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
+  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background';
   const groups = byCategory(items, 'AI Generated');
   const rows = [];
   for (const category of Object.keys(groups)) {
@@ -416,6 +416,7 @@ function scenariosToCsv(items) {
         scenario.school || 'Professional Development',
         scenario.customInstructions || '',
         tagsToCsvCell(scenario.tags),
+        scenario.background || '',
       ]));
     });
   }
@@ -425,7 +426,7 @@ function scenariosToCsv(items) {
 /** trivia. Mirrors AdminPage.generateTriviaCSV. */
 function triviaToCsv(items) {
   const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,'
-    + 'OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
+    + 'OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags,Background';
   const groups = byCategory(items, 'General');
   const rows = [];
   for (const category of Object.keys(groups)) {
@@ -452,6 +453,7 @@ function triviaToCsv(items) {
         correctAnswer,
         trivia.difficulty,
         tagsToCsvCell(trivia.tags),
+        trivia.background || '',
       ]));
     });
   }

@@ -27,6 +27,7 @@
 const { retryWithBackoff } = require('./bedrock-utils');
 const { MIN_SUGGESTED_TAGS, MAX_TAGS } = require('./tags');
 const { roundKindDetailCeiling } = require('./round-kinds');
+const { BACKGROUND_TRUTH_RULE } = require('./question-background');
 
 const SONNET = () => `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-sonnet-4-6`;
 const HAIKU = () => `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
@@ -144,6 +145,14 @@ function lengthGuidance(engagementType, roundKind) {
     '- title: 3-10 words. Do not use a colon to bolt a subtitle onto the title.',
     `- detail: ${sentences}, ${detailMax} characters maximum.`,
     '- customInstructions: 1-2 sentences, 200 characters maximum.',
+    // Only call-and-answer reaches this return with a background — wavelength
+    // takes the early return above and no other engagement type calls this
+    // function. Gated anyway so a future caller that shares this return does
+    // not silently inherit a background instruction meant for one type.
+    ...(engagementType === 'call-and-answer' ? [
+      '- background: 2-4 sentences, 600 characters maximum, never shown to players.',
+      `  ${BACKGROUND_TRUTH_RULE}`,
+    ] : []),
     'Write only what the content needs; do not pad to reach a limit. A short,',
     'sharp scenario is better than a thorough one nobody reads aloud.',
   ].join('\n');
@@ -168,6 +177,11 @@ function tagGuidance() {
  */
 function buildItemsTool(engagementType, roundKind) {
   const isWavelength = engagementType === 'wavelength';
+  // ONLY call-and-answer, never wavelength (the players supply the meaning —
+  // see lengthGuidance's wavelength branch) and never any other type, since
+  // this function is only ever called for those two. See structured-generation
+  // tests and ai-generate-scenarios.js's SET_CREATION comment.
+  const withBackground = engagementType === 'call-and-answer';
   // The schema description is a SECOND statement of the length limit, and a
   // model reads both. Leaving it hardcoded at 350 while lengthGuidance() says
   // 900 would put the two halves of the same instruction in disagreement, which
@@ -211,8 +225,16 @@ function buildItemsTool(engagementType, roundKind) {
                 items: { type: 'string' },
                 description: `${MIN_SUGGESTED_TAGS}-${MAX_TAGS} lowercase kebab-case tags for filtering and search.`,
               },
+              ...(withBackground ? {
+                background: {
+                  type: 'string',
+                  description: '2-4 sentences, 600 characters maximum. Material the summariser may draw on '
+                    + 'when reading the room\'s answers: context, one well-established fact, a useful angle, '
+                    + 'or a follow-up that pushes the room further. Never shown to players.',
+                },
+              } : {}),
             },
-            required: ['title', 'category', 'detail', 'customInstructions', 'tags'],
+            required: ['title', 'category', 'detail', 'customInstructions', 'tags', ...(withBackground ? ['background'] : [])],
           },
         },
       },

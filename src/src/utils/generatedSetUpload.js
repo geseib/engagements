@@ -39,7 +39,7 @@ function byCategory(items, fallback) {
 }
 
 function scenariosToCsv(scenarios) {
-  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
+  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background';
   const rows = [];
   const groups = byCategory(scenarios, 'AI Generated');
   Object.keys(groups).forEach((category) => {
@@ -52,6 +52,7 @@ function scenariosToCsv(scenarios) {
         scenario.school || 'Professional Development',
         scenario.customInstructions || '',
         tagsToCsvCell(scenario.tags),
+        scenario.background || '',
       ]));
     });
   });
@@ -59,7 +60,7 @@ function scenariosToCsv(scenarios) {
 }
 
 function triviaToCsv(questions) {
-  const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
+  const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags,Background';
   const rows = [];
   const groups = byCategory(questions, 'General');
   Object.keys(groups).forEach((category) => {
@@ -82,6 +83,7 @@ function triviaToCsv(questions) {
         correctAnswer,
         trivia.difficulty,
         tagsToCsvCell(trivia.tags),
+        trivia.background || '',
       ]));
     });
   });

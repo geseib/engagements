@@ -854,7 +854,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   };
 
   const generateCSVContent = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background';
 
     // First, group scenarios by category. Excluded rows are excluded
     // everywhere — exporting one the operator just dropped would make the CSV
@@ -880,7 +880,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           scenario.detail,
           scenario.school || 'Professional Development',
           scenario.customInstructions || '',
-          tagsToCsvCell(scenario.tags)
+          tagsToCsvCell(scenario.tags),
+          scenario.background || ''
         ]));
       });
     });

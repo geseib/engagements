@@ -41,6 +41,7 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 
 const { normalizeGameType, gameTypeSpellings } = require('./shared/game-types');
 const { normalizeTags } = require('./shared/tags');
+const { clampBackground } = require('./shared/question-background');
 const {
   itemsPerCall, maxTokensFor, perItemTokens,
   lengthGuidance, tagGuidance, buildItemsTool, invokeStructured,
@@ -281,6 +282,11 @@ function normalizeItem(raw, engagementType) {
     customInstructions: String(raw?.customInstructions || '').trim(),
     // Normalised on write; readers tolerate legacy casing. See shared/tags.js.
     tags: normalizeTags(raw?.tags),
+    // ONLY call-and-answer, for the same reason wavelength carries no detail:
+    // the tool schema never asked wavelength for one (structured-generation.js
+    // buildItemsTool), so this is a guarantee, not a filter, for whatever a
+    // model volunteers anyway.
+    background: engagementType === 'call-and-answer' ? clampBackground(raw?.background) : '',
   };
 }
 
@@ -632,3 +638,7 @@ exports.handler = async (event, context) => {
     return json(500, { error: `Failed to generate scenarios: ${error.message || 'unexpected error'}` });
   }
 };
+
+// Exported for tests/question-background-generators.js: normalizeItem is the
+// only place that gates a generated scenario's background on engagement type.
+module.exports.normalizeItem = normalizeItem;

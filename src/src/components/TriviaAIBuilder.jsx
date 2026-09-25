@@ -308,7 +308,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   };
 
   const generateTriviaCSV = () => {
-    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
+    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags,Background';
     // Excluded rows are excluded everywhere. Exporting what the operator just
     // said to leave out would make the CSV and the set disagree.
     const rows = keptTrivia.map((trivia, index) => {
@@ -329,7 +329,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         trivia.optionF || '',
         correctAnswer,
         trivia.difficulty,
-        tagsToCsvCell(trivia.tags)
+        tagsToCsvCell(trivia.tags),
+        trivia.background || ''
       ]);
     });
     return buildCsv(headers, rows);

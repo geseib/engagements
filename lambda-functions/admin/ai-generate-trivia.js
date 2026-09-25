@@ -24,6 +24,7 @@ const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const { triviaToCsv } = require('./shared/generated-set');
 const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
+const { clampBackground, BACKGROUND_TRUTH_RULE } = require('./shared/question-background');
 
 const MAX_COUNT = 100;
 const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
@@ -90,8 +91,11 @@ function buildTool(config) {
               school: { type: 'string', description: 'Broader subject area, e.g. "General Knowledge".' },
               difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'], description: 'Difficulty of this question.' },
               tags: { type: 'array', items: { type: 'string' }, description: '3-6 lowercase kebab-case tags for filtering and search.' },
+              background: { type: 'string', description: 'The story around the answer that makes good '
+                + 'commentary, 1-3 sentences, 400 characters maximum. Not why it is correct — that is '
+                + 'answerDetails. Never shown to players.' },
             },
-            required: ['title', 'questionDetail', 'category', ...optionKeys, 'correctAnswer', 'answerDetails', 'difficulty', 'tags'],
+            required: ['title', 'questionDetail', 'category', ...optionKeys, 'correctAnswer', 'answerDetails', 'difficulty', 'tags', 'background'],
           },
         },
       },
@@ -131,6 +135,7 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     '- title: 3-10 words, a label for the question, not the question itself.',
     '- questionDetail: the question as asked, 200 characters maximum.',
     '- answerDetails: 1-3 sentences, 300 characters maximum.',
+    '- background: 1-3 sentences, 400 characters maximum. ' + BACKGROUND_TRUTH_RULE,
     '- each option: 60 characters maximum.',
     'Write only what the content needs; do not pad to reach a limit.',
     '',
@@ -179,6 +184,7 @@ function normalizeItem(raw, config) {
     correctAnswer,
     difficulty: String(raw?.difficulty || config.difficulty || 'medium').trim(),
     tags: normalizeTags(raw?.tags),
+    background: clampBackground(raw?.background),
   };
   // Always emit all six keys — generateTriviaCSV writes a fixed-width row.
   for (const key of OPTION_KEYS) {
@@ -212,3 +218,10 @@ exports.handler = makeGenerationHandler({
     toCsv: (items) => triviaToCsv(items),
   },
 });
+
+// Exported for tests/question-background-generators.js, which drives the tool
+// schema, the prompt and the normaliser directly rather than through a Bedrock
+// stub — makeGenerationHandler has no seam for reaching them otherwise.
+// buildPrompt is already exported above, for tests/question-guidance.js.
+module.exports.buildTool = buildTool;
+module.exports.normalizeItem = normalizeItem;

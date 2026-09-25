@@ -688,6 +688,18 @@ const scenarioBody = (overrides = {}) => ({
     assert.strictEqual(job.setCreationError, null);
   });
 
+  await test('a generated question keeps its background on the stored row', async () => {
+    // rejects: any hop between the model's tool call and the stored row dropping it.
+    reset();
+    const items = scenarioItems(2, 'bg').map((it, i) => ({ ...it, background: `zqbg-${i} Git records every change.` }));
+    bedrockHandler = () => toolResponse(items);
+    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.ok(job.createdSet, `no set was created: ${job.setCreationError}`);
+    const questionRows = [...ddb.values()].filter((r) => String(r.SK).startsWith('QUESTION#'));
+    assert.ok(questionRows.length === 2, `expected 2 question rows, saw ${questionRows.length}`);
+    for (const r of questionRows) assert.ok(r.Background, `a row has no Background: ${r.SK}`);
+  });
+
   await test('a set that could not be created is reported, not hidden', async () => {
     // rejects: swallowing the importer's refusal. Without `setCreationError`
     // the client would see no set and no reason, and its fallback would look

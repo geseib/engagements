@@ -167,8 +167,8 @@ const BUILDERS = [
       roundKind: 'apply',
       roundKindBrief: 'Use it on Monday',
     },
-    header: 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags',
-    firstRow: '"Ops","1","THE LATE DELIVERY","A supplier slips a week.","Professional Development","","supply"',
+    header: 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background',
+    firstRow: '"Ops","1","THE LATE DELIVERY","A supplier slips a week.","Professional Development","","supply",""',
     expectBody: {
       customTitle: 'Supply Retro', customDescription: 'What we learned',
       customInstructions: 'Share one thing', aiContextInstructions: 'Summarise the lessons',
@@ -193,8 +193,8 @@ const BUILDERS = [
         aiContextInstructions: 'Say who knew',
       },
     },
-    header: 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags',
-    firstRow: '"Space","1","RED PLANET","Which planet is red?","Iron oxide.","General","Mars","Venus","","","","","OptionA","easy","space"',
+    header: 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags,Background',
+    firstRow: '"Space","1","RED PLANET","Which planet is red?","Iron oxide.","General","Mars","Venus","","","","","OptionA","easy","space",""',
     expectBody: {
       customTitle: 'Space Quiz', customDescription: 'Planets', customInstructions: 'Pick one',
       aiContextInstructions: 'Say who knew', engagementType: 'trivia', isAIGenerated: true,
