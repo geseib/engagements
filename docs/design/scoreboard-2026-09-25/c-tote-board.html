@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en" class="d-room">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Standings — C. Tote board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================================
+   STANDINGS, C — THE TOTE BOARD (infield board at a racecourse).
+
+   A full-screen stage moment the host opens between rounds. Trivia and
+   Call & Answer only; totals as of the last fully scored round; each row
+   carries its place change since the previous round. Pages auto-flip and end
+   back on the top page, holding.
+
+   What makes it a tote board: a black infield board whose figures are LAMPS —
+   5x7 bulb matrices, warm white for the position and amber for the points —
+   under painted column heads, with a finish post standing before the points.
+   And the field MOVES. The first time a page comes up it shows the running
+   order as it stood after the previous round (the rail says "After round 5"),
+   holds a beat, then the rail turns to "After round 6", the lamps relight to
+   the new figures and every row rides to its new place at once: climbers pass
+   over fallers, anyone leaving the page rides off its top or bottom edge and
+   anyone arriving rides in, new players from below. The ▲ / ▼ / NEW markers
+   light only once the field has settled. Later visits to a page (the return
+   to the top page, a host's ← →) skip the replay and show the result.
+
+   Adapted, not pasted: the board is the stage's dusk at its darkest, the
+   lamps are Warm Summit ink (--text and --primary), names are the display
+   face, and the chrome above is the stage's rail. A long name wraps inside
+   its row; nothing is ever ellipsised.
+
+   MOTION CONTRACT (src/src/__tests__/stageMotion.test.js, applied here):
+   keyframes touch only transform, opacity, border-color and visibility; every
+   animated selector is listed again with `animation:none` under
+   prefers-reduced-motion AND under :root.rm (the ?reduced=1 switch), where
+   the page swap is an instant change straight to the result.
+
+   CONTRAST, measured (flat / after the stage's projector black-lift model,
+   host-redesign/audit.js A9). Row bands are --surface at .55 over the board, flattened:
+     names         #F4EDE4 on row #131E33   14.34 / 9.87
+     pts lamps     #F6A94C on row #131E33    8.48 / 5.84  (lit bulb core)
+     pos lamps     #F4EDE4 on row #131E33   14.34 / 9.87
+     ▲ climbed     #6FD0A4 on row #131E33    8.91 / 6.13
+     ▼ / –         #B6C2D4 on row #131E33    9.24 / 6.36
+     NEW           #A7C3EF on row #131E33    9.27 / 6.38 (--secondary would be 6.76 / 4.65)
+     heads         #B6C2D4 on plate #1B2942  8.08 / 5.38
+   A lamp figure is dots, not strokes, so it reads lighter than its ratio;
+   that is why the dots are 84% of their pitch and the figures sit at the
+   profile's primary tier, never below it.
+   =========================================================================== */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+[hidden]{display:none !important}
+
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#B6C2D4;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --success-text:#6FD0A4;
+  --rule:rgba(155,168,190,.22); --hair:1px; --radius:16px;
+  --font-display:"Archivo Expanded","Archivo",system-ui,sans-serif;
+  --font-ui:"Inter",system-ui,sans-serif;
+  /* this board's own */
+  --secondary-text:#A7C3EF;
+  --tote-board:#0A1120;
+  --tote-row:#131E33;   /* --surface at .55 over the board, flattened: riders pass OVER each other */
+  --tote-bulb-amber:radial-gradient(circle at 50% 45%, #FFE6BF 0 22%, var(--primary) 46%, #D98A2E 72%, rgba(217,138,46,0) 74%);
+  --tote-bulb-white:radial-gradient(circle at 50% 45%, #FFFFFF 0 22%, var(--text) 46%, #CFC6BA 72%, rgba(207,198,186,0) 74%);
+  --sb-letterbox:#070C16;
+}
+:root, :root.d-room{
+  --L-hero:clamp(56px,8.4cqh,104px); --L-primary:clamp(40px,5.6cqh,68px);
+  --L-secondary:clamp(28px,3.7cqh,44px); --L-body:clamp(22px,2.8cqh,34px);
+  --L-meta:clamp(20px,1.9cqh,24px); --floor:20px;
+}
+:root.d-tv{
+  --L-hero:clamp(72px,11cqh,132px); --L-primary:clamp(52px,7.4cqh,88px);
+  --L-secondary:clamp(36px,4.8cqh,56px); --L-body:clamp(28px,3.5cqh,42px);
+  --L-meta:clamp(26px,2.4cqh,31px); --floor:26px;
+}
+
+body{background:var(--sb-letterbox);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+  display:grid;place-items:center}
+.sb-frame{position:relative;width:min(100vw,177.78vh);height:min(56.25vw,100vh);
+  container-type:size;overflow:hidden;background:var(--bg)}
+.stage{position:absolute;inset:0;display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
+.field{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%)}
+.field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:44%;
+  background:linear-gradient(180deg,#17253C 0%, #0E1828 100%);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.85}
+
+.rail{position:relative;z-index:2;min-width:0;display:flex;align-items:center;
+  gap:calc(1.2cqw + 8px);padding:calc(1.1cqh + 6px) calc(2.4cqw + 10px)}
+.chip{flex:none;display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-stretch:125%;font-weight:800;
+  font-size:var(--L-meta);letter-spacing:.13em;text-transform:uppercase;
+  padding:.34em .8em;border-radius:999px;border:2px solid currentColor;color:var(--primary)}
+.chip .dot{width:.6em;height:.6em;border-radius:50%;background:currentColor}
+.rail-title{flex:0 1 auto;min-width:0;font-size:var(--L-meta);font-weight:700;letter-spacing:.02em}
+.rail-ctx{flex:none;font-size:var(--L-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.rail-ctx b{color:var(--text);font-weight:700}
+.rail-ctx b.was{color:var(--muted)}
+.rail-page{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+  font-size:var(--L-meta);color:var(--muted);font-weight:600}
+.rail-page b{font-family:var(--font-display);font-stretch:125%;font-weight:800;color:var(--text);
+  font-size:calc(var(--L-meta) * 1.3);letter-spacing:.02em;
+  display:inline-block;min-width:5.4ch;text-align:right}
+
+/* ------------------------------------------------------------ THE BOARD */
+.tote{position:relative;z-index:2;min-height:0;display:flex;flex-direction:column;
+  margin:0 calc(2.4cqw + 10px) calc(.4cqh + 2px);
+  background:var(--tote-board);border:3px solid var(--surface-2);border-radius:10px;
+  box-shadow:0 18px 48px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.6);
+  padding:0 calc(1.2cqw + 6px) calc(1cqh + 4px);--fit:1;
+  --pitch:calc(var(--L-primary) * .16 * var(--fit));
+  --dot:calc(var(--pitch) * .84); --dg:calc(var(--pitch) * .16);
+  --glyph-w:calc(var(--pitch) * 5 - var(--dg)); --glyph-gap:var(--pitch);
+  --nm-fs:max(var(--floor),calc(var(--L-primary) * .8 * var(--fit)));
+  --mv-fs:max(var(--floor),calc(var(--L-secondary) * .95 * var(--fit)));
+  --c-lamp2:calc(var(--glyph-w) * 2 + var(--glyph-gap));
+  --c-mv:calc(var(--mv-fs) * 3.3)}
+.tote-cols{display:grid;align-items:center;column-gap:calc(1.4cqw + 8px);
+  grid-template-columns:var(--c-lamp2) minmax(0,1fr) var(--c-mv) var(--c-lamp2)}
+/* painted heads on a header plate */
+.tote-heads{margin:0 calc(-1.2cqw - 6px) calc(.8cqh + 3px);padding:calc(.7cqh + 3px) calc(1.2cqw + 6px);
+  background:var(--surface);border-bottom:3px solid var(--surface-2);border-radius:7px 7px 0 0}
+.tote-heads span{font-family:var(--font-display);font-stretch:125%;font-size:var(--L-meta);font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.tote-heads .h-pos,.tote-heads .h-pts{text-align:right}
+.tote-win{position:relative;flex:1;min-height:0;overflow:hidden}
+.tote-rows{position:relative;margin:0;padding:0;list-style:none;display:flex;flex-direction:column;
+  gap:calc(var(--pitch) * .9)}
+/* the finish post, standing just before the points */
+.tote-win::after{content:"";position:absolute;top:0;bottom:0;z-index:3;pointer-events:none;
+  right:calc(var(--c-lamp2) + (1.4cqw + 8px) / 2 + 2px);width:calc(var(--pitch) * .9);
+  background:repeating-linear-gradient(180deg,var(--text) 0 calc(var(--pitch) * .9),#0A1120 calc(var(--pitch) * .9) calc(var(--pitch) * 1.8));
+  opacity:.16}
+
+/* ONE ROW */
+.trow{position:relative;flex:none;min-height:calc(var(--pitch) * 8.4);
+  padding:calc(var(--pitch) * .7) 0;background:var(--tote-row);border-radius:4px;z-index:1}
+.trow.climb{z-index:2}
+.trow.ghost{position:absolute;left:0;right:0}
+.nm{font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--nm-fs);
+  line-height:1.08;text-transform:uppercase;overflow-wrap:anywhere;padding-left:calc(var(--pitch) * .5)}
+.mvk{font-weight:800;font-size:var(--mv-fs);white-space:nowrap;justify-self:start}
+.mvk.up{color:var(--success-text)}
+.mvk.dn,.mvk.eq{color:var(--muted)}
+.mvk.new{color:var(--secondary-text);font-size:calc(var(--mv-fs) * .72);letter-spacing:.1em;
+  border:2px solid var(--secondary);border-radius:999px;padding:.12em .55em}
+.trow.pre .mvk{visibility:hidden}
+
+/* LAMPS: a figure is a row of 5x7 bulb matrices. */
+.lamps{display:flex;gap:var(--glyph-gap);justify-content:flex-end}
+.lg{display:grid;grid-template-columns:repeat(5,var(--dot));grid-auto-rows:var(--dot);gap:var(--dg)}
+.lg i{display:block;border-radius:50%;background:var(--tote-bulb-amber);opacity:.08}
+.lamps.wht .lg i{background:var(--tote-bulb-white)}
+.lg i.on{opacity:1}
+
+/* ------------------------------------------------------------- MOTION */
+.trow.enter{animation:rise .52s cubic-bezier(.16,1,.3,1) var(--rd) both}
+.trow.leave{animation:exit .34s cubic-bezier(.5,0,.9,.4) var(--rd) both}
+.trow.ride{animation:ride var(--dur) cubic-bezier(.55,0,.2,1) var(--rd) both}
+.trow.ghost.ride{animation:rideout var(--dur) cubic-bezier(.55,0,.2,1) var(--rd) both}
+.trow.lit .mvk{animation:light .34s cubic-bezier(.16,1,.3,1) var(--md) both}
+.lg i.up{animation:lampon .36s linear var(--ld) both}
+.lg i.dn{animation:lampoff .3s ease-in var(--ld) both}
+@keyframes rise{from{transform:translateY(110%);opacity:0}to{transform:none;opacity:1}}
+@keyframes exit{from{transform:none;opacity:1}to{transform:translateY(-70%);opacity:0}}
+@keyframes ride{from{transform:translateY(var(--dy))}to{transform:none}}
+@keyframes rideout{from{transform:none}to{transform:translateY(var(--dy))}}
+@keyframes light{from{transform:scale(.5);opacity:0}to{transform:none;opacity:1}}
+@keyframes lampon{0%{opacity:.08}35%{opacity:1}50%{opacity:.45}100%{opacity:1}}
+@keyframes lampoff{from{opacity:1}to{opacity:.08}}
+
+/* --------------------------------------------- the host strip (mockup only) */
+.strip{position:relative;z-index:3;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px calc(2.4cqw + 10px) 10px;font-size:15px;color:var(--muted)}
+.strip .st{font-weight:600;color:var(--text)}
+.strip .st small{font-weight:500;color:var(--muted);font-size:15px}
+.strip kbd{font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--text);
+  border:var(--hair) solid var(--rule);border-radius:6px;padding:2px 7px;background:rgba(27,41,66,.8)}
+.strip .ctl{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:inline-flex;border:var(--hair) solid var(--rule);border-radius:999px;overflow:hidden;
+  background:rgba(10,19,34,.85)}
+.seg button,.strip .btn{font:inherit;font-size:14px;font-weight:600;color:var(--muted);background:transparent;
+  border:0;padding:6px 14px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--primary);color:var(--bg)}
+.strip .btn{border:var(--hair) solid var(--rule);border-radius:999px;background:rgba(10,19,34,.85);color:var(--text)}
+.strip .btn[aria-pressed="true"]{border-color:var(--secondary);color:var(--secondary-text)}
+.seg button:focus-visible,.strip .btn:focus-visible{outline:2px solid var(--secondary);outline-offset:2px}
+
+/* ------------------------------------------------------- REDUCED MOTION
+   The final state, immediately: the JS paints the result with no replay of
+   the previous round, and nothing here animates. Written twice. */
+@media (prefers-reduced-motion: reduce){
+  .trow.enter,.trow.leave,.trow.ride,.trow.ghost.ride,.trow.lit .mvk,
+  .lg i.up,.lg i.dn{animation:none;transition:none}
+}
+:root.rm .trow.enter,:root.rm .trow.leave,:root.rm .trow.ride,:root.rm .trow.ghost.ride,:root.rm .trow.lit .mvk,
+:root.rm .lg i.up,:root.rm .lg i.dn{animation:none;transition:none}
+</style>
+</head>
+<body>
+<div class="sb-frame">
+  <div class="stage">
+    <div class="field" aria-hidden="true"></div>
+    <header class="rail">
+      <span class="chip"><span class="dot"></span>Standings</span>
+      <span class="rail-title">Q3 Leadership Offsite</span>
+      <span class="rail-ctx"><b id="ctx">After round 6</b></span>
+      <span class="rail-page"><b id="range">1–10</b><span id="of">of 14</span></span>
+    </header>
+    <main class="tote" id="board" aria-label="Standings after round 6">
+      <div class="tote-cols tote-heads" aria-hidden="true">
+        <span class="h-pos">Pos</span><span class="h-nm">Player</span><span class="h-mv">Move</span><span class="h-pts">Pts</span>
+      </div>
+      <div class="tote-win" id="win">
+        <ol class="tote-rows" id="rows" role="list"></ol>
+      </div>
+    </main>
+    <footer class="strip" aria-label="Host strip — mockup controls">
+      <span class="st" id="status">Auto-flipping</span>
+      <span><kbd>←</kbd> <kbd>→</kbd> step pages</span>
+      <span class="ctl">
+        <span class="seg" role="group" aria-label="Display profile">
+          <button type="button" data-size="5">TV: 5 per page</button>
+          <button type="button" data-size="10">Room: 10 per page</button>
+        </span>
+        <button type="button" class="btn" id="rm">Reduced motion</button>
+        <button type="button" class="btn" id="replay">Replay</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+/* ------------------------------------------------------------------ DATA
+   14 players as they typed their names. prev = total after round 5 (null:
+   joined during round 6); r6 = round 6 points (a question is worth <=15). */
+const RAW = [
+  ['Priya', 66, 15], ['Marcus', 70, 8], ['Oluwaseun Adebayo-Richardson', 60, 12],
+  ['Hannah', 52, 14], ['Tomás', 58, 8], ['Keiko', 59, 4], ['Dev', 47, 12],
+  ['Sofia', 50, 5], ['Liam', 48, 4], ['Aisha', 41, 10], ['Grace', 44, 0],
+  ['Ben', 30, 9], ['Inès', null, 14], ['Kofi', null, 11],
+];
+const all = RAW.map(([name, prev, r6], id) => ({ id, name, prev, r6, total: (prev || 0) + r6 }));
+const cur = [...all].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+cur.forEach((p) => {
+  p.rank = 1 + all.filter((q) => q.total > p.total).length;
+  p.tied = all.filter((q) => q.total === p.total).length > 1;
+});
+const had = all.filter((p) => p.prev != null);
+const prevOrder = [...had].sort((a, b) => b.prev - a.prev);
+had.forEach((p) => {
+  p.prevRank = 1 + had.filter((q) => q.prev > p.prev).length;
+  p.prevTied = had.filter((q) => q.prev === p.prev).length > 1;
+});
+cur.forEach((p) => { p.move = p.prev == null ? 'new' : p.prevRank - p.rank; });
+cur.forEach((p, i) => { p.ci = i; });
+prevOrder.forEach((p, i) => { p.pi = i; });
+const place = (p) => (p.tied ? '=' : '') + p.rank;
+const prevPlace = (p) => (p.prevTied ? '=' : '') + p.prevRank;
+const moveOf = (p) => p.move === 'new' ? ['NEW', 'new'] : p.move > 0 ? ['▲' + p.move, 'up']
+  : p.move < 0 ? ['▼' + (-p.move), 'dn'] : ['–', 'eq'];
+
+/* 5x7 lamp font: digits and '=' */
+const FONT = {
+  '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
+  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
+  '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'],
+  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
+  '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
+  '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'],
+  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
+  '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
+  '=': ['00000', '00000', '11111', '00000', '11111', '00000', '00000'],
+  ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000'],
+};
+const bits = (ch) => (FONT[ch] || FONT[' ']).join('');
+
+/* ------------------------------------------------------------- SETTINGS */
+const root = document.documentElement;
+const qs = new URLSearchParams(location.search);
+if (qs.get('reduced') === '1') root.classList.add('rm');
+const mq = matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = () => root.classList.contains('rm') || mq.matches;
+const SPEED = qs.get('fast') === '1' ? 0.35 : 1;
+let size = qs.get('size') === '5' ? 5 : 10;
+
+/* -------------------------------------------------------------- BOARD */
+const $ = (id) => document.getElementById(id);
+const rowsEl = $('rows'), win = $('win'), board = $('board');
+const pagesOf = () => Math.ceil(cur.length / size);
+const rowsOf = (pi) => cur.slice(pi * size, pi * size + size);
+let gen = 0, pending = [], visited = new Set();
+const later = (fn, ms, my) => pending.push(setTimeout(() => { if (my === gen) fn(); }, ms));
+
+function lamps(text, white) {
+  const box = document.createElement('span');
+  box.className = 'lamps' + (white ? ' wht' : '');
+  for (let g = 0; g < 2; g++) {
+    const lg = document.createElement('span'); lg.className = 'lg';
+    for (let k = 0; k < 35; k++) lg.appendChild(document.createElement('i'));
+    box.appendChild(lg);
+  }
+  setLamps(box, text, false);
+  return box;
+}
+function setLamps(box, text, animate) {
+  const t = String(text).padStart(2, ' ').slice(-2);
+  [...box.children].forEach((lg, g) => {
+    const b = bits(t[g]);
+    [...lg.children].forEach((dot, k) => {
+      const on = b[k] === '1', was = dot.classList.contains('on');
+      dot.classList.remove('up', 'dn');
+      if (animate && on !== was) {
+        dot.style.setProperty('--ld', (Math.random() * 0.22 * SPEED).toFixed(3) + 's');
+        dot.classList.add(on ? 'up' : 'dn');
+      }
+      dot.classList.toggle('on', on);
+    });
+  });
+}
+function row(p, { was = false } = {}) {
+  const li = document.createElement('li');
+  li.className = 'trow tote-cols';
+  li.dataset.id = p.id;
+  const [mv, mk] = moveOf(p);
+  const showPrev = was && p.prev != null;
+  li.appendChild(lamps(showPrev ? prevPlace(p) : place(p), true));
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name; li.appendChild(nm);
+  const m = document.createElement('span'); m.className = 'mvk ' + mk; m.textContent = mv; li.appendChild(m);
+  li.appendChild(lamps(showPrev ? p.prev : p.total, false));
+  li.setAttribute('aria-label', `${place(p)} ${p.name}, ${p.total} points, ${mk === 'new' ? 'new' : mv}`);
+  return li;
+}
+function paint(list, opts = {}) {
+  rowsEl.textContent = '';
+  list.forEach((p, i) => {
+    const li = row(p, opts);
+    if (opts.pre) li.classList.add('pre');
+    if (opts.enter) { li.style.setProperty('--rd', (i * 0.06 * SPEED) + 's'); li.classList.add('enter'); }
+    rowsEl.appendChild(li);
+  });
+}
+/* The fitter: page 1 carries the wrapped name, so fit it once per page size. */
+function fit() {
+  board.style.setProperty('--fit', 1);
+  paint(rowsOf(0));
+  let f = 1;
+  while (f > 0.5 && rowsEl.scrollHeight > win.clientHeight + 1) {
+    f -= 0.02; board.style.setProperty('--fit', f.toFixed(2));
+  }
+}
+function ctx(round) {
+  const b = $('ctx');
+  b.textContent = `After round ${round}`;
+  b.classList.toggle('was', round !== 6);
+}
+const tops = () => {
+  const m = new Map();
+  [...rowsEl.children].forEach((li) => m.set(Number(li.dataset.id), { top: li.offsetTop, h: li.offsetHeight, el: li }));
+  return m;
+};
+
+/* Show a page. `race` replays the move from the previous round's order. */
+function show(pi, race) {
+  const my = ++gen;
+  pending.forEach(clearTimeout); pending = [];
+  const final = rowsOf(pi);
+  if (reduced()) { ctx(6); paint(final); return 0; }
+  const old = [...rowsEl.children];
+  let t = 0;
+  if (old.length) {
+    old.forEach((li, i) => { li.className = 'trow tote-cols leave'; li.style.setProperty('--rd', (i * 0.03 * SPEED) + 's'); });
+    t = (340 + old.length * 30) * SPEED;
+  }
+  if (!race || visited.has(pi)) {
+    later(() => { ctx(6); paint(final, { enter: true }); }, t, my);
+    return t + ((final.length - 1) * 60 + 520) * SPEED;
+  }
+  visited.add(pi);
+  const a = pi * size, b = a + size - 1;
+  const before = prevOrder.slice(a, b + 1);
+  // 1. the running order as it stood
+  later(() => { ctx(5); paint(before, { was: true, pre: true, enter: true }); }, t, my);
+  t += ((Math.max(before.length, 1) - 1) * 60 + 520 + 1100) * SPEED;
+  // 2. the field moves
+  later(() => {
+    const pre = tops();
+    const winH = win.clientHeight;
+    ctx(6);
+    paint(final, { was: true, pre: true });
+    const post = tops();
+    const gap = parseFloat(getComputedStyle(rowsEl).rowGap) || 8;
+    const dur = 1.05 * SPEED;
+    // Arrivals and departures travel as a block, so riders keep their order
+    // and never start stacked on one another at the edge.
+    const fromAbove = [...post].filter(([id]) => !pre.has(id) && all[id].pi != null && all[id].pi < a);
+    const fromBelow = [...post].filter(([id]) => !pre.has(id) && !(all[id].pi != null && all[id].pi < a));
+    const upDy = -(Math.max(0, ...fromAbove.map(([, r]) => r.top + r.h)) + gap);
+    const downDy = winH + gap - Math.min(winH, ...fromBelow.map(([, r]) => r.top));
+    post.forEach(({ top, h, el }, id) => {
+      const p = all[id];
+      let dy;
+      if (pre.has(id)) dy = pre.get(id).top - top;
+      else if (p.pi != null && p.pi < a) dy = upDy;
+      else dy = downDy;
+      el.style.setProperty('--dy', dy + 'px');
+      el.style.setProperty('--dur', dur + 's');
+      el.style.setProperty('--rd', '0s');
+      if (dy > 0) el.classList.add('climb');
+      el.classList.add('ride');
+      // relight: position and points go from the old figures to the new
+      const [posBox, , , ptsBox] = [el.children[0], null, null, el.children[3]];
+      setLamps(posBox, place(p), true);
+      setLamps(ptsBox, p.total, true);
+    });
+    const leaving = [...pre].filter(([id]) => !post.has(id));
+    const offTop = leaving.filter(([id]) => all[id].ci < a);
+    const offBottom = leaving.filter(([id]) => all[id].ci >= a);
+    const outUp = -(Math.max(0, ...offTop.map(([, r]) => r.top + r.h)) + gap);
+    const outDown = winH + gap - Math.min(winH, ...offBottom.map(([, r]) => r.top));
+    pre.forEach(({ top, h, el }, id) => {           // riders leaving this page
+      if (post.has(id)) return;
+      const p = all[id];
+      const g = el.cloneNode(true);
+      g.classList.remove('enter');
+      g.classList.add('ghost');
+      g.style.top = top + 'px';
+      g.style.setProperty('--dy', (p.ci < a ? outUp : outDown) + 'px');
+      g.style.setProperty('--dur', dur + 's');
+      g.style.setProperty('--rd', '0s');
+      g.classList.add('ride');
+      rowsEl.appendChild(g);
+    });
+  }, t, my);
+  t += 1050 * SPEED + 120;
+  // 3. settled: the markers light, top to bottom
+  later(() => {
+    rowsEl.querySelectorAll('.ghost').forEach((g) => g.remove());
+    [...rowsEl.children].forEach((li, i) => {
+      li.style.setProperty('--md', (i * 0.07 * SPEED) + 's');
+      li.classList.remove('pre', 'ride', 'climb');
+      li.classList.add('lit');
+    });
+  }, t, my);
+  return t + (final.length * 70 + 340) * SPEED;
+}
+
+/* ------------------------------------------------------------ SEQUENCER */
+let page = 0, auto = true, timer = null;
+const dwell = (pi) => (3600 + rowsOf(pi).length * 280) * SPEED;
+function indicator() {
+  const rows = rowsOf(page);
+  $('range').textContent = `${page * size + 1}–${page * size + rows.length}`;
+  $('of').textContent = `of ${cur.length}`;
+}
+function status(msg) { $('status').innerHTML = msg; }
+function go(pi, race) {
+  page = (pi + pagesOf()) % pagesOf(); indicator();
+  (window.sbLog = window.sbLog || []).push([Math.round(performance.now()), page + 1, auto ? 'auto' : 'held']);
+  return show(page, race);
+}
+function next() {
+  if (!auto) return;
+  if (page < pagesOf() - 1) {
+    const t = go(page + 1, true);
+    status(`Auto-flipping <small>· page ${page + 1} of ${pagesOf()}</small>`);
+    clearTimeout(timer); timer = setTimeout(next, t + dwell(page));
+  } else {
+    go(0, false); auto = false;
+    status('Holding on the top page');
+  }
+}
+function run() {
+  clearTimeout(timer); auto = true; visited = new Set();
+  rowsEl.textContent = '';
+  const t = go(0, true);
+  status(`Auto-flipping <small>· page 1 of ${pagesOf()}</small>`);
+  timer = setTimeout(next, t + dwell(0));
+}
+function step(d) {
+  clearTimeout(timer); auto = false;
+  go(page + d, false);
+  status(`Stepped by the host <small>· page ${page + 1} of ${pagesOf()}</small>`);
+}
+function setSize(n) {
+  size = n;
+  root.classList.toggle('d-tv', n === 5); root.classList.toggle('d-room', n !== 5);
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.size) === n)));
+  fit(); run();
+}
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setSize(Number(b.dataset.size))));
+$('replay').addEventListener('click', run);
+$('rm').addEventListener('click', () => { root.classList.toggle('rm'); syncRm(); run(); });
+function syncRm() { $('rm').setAttribute('aria-pressed', String(root.classList.contains('rm'))); }
+addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+});
+let rz = null;
+addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { gen++; fit(); ctx(6); paint(rowsOf(page)); }, 150); });
+syncRm();
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => setSize(size));
+})();
+</script>
+</body>
+</html>

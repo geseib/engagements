@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en" class="d-room">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Standings — B. Olympic board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================================
+   STANDINGS, B — THE RESULTS BOARD (Olympic / athletics).
+
+   A full-screen stage moment the host opens between rounds. Trivia and
+   Call & Answer only; totals as of the last fully scored round; each row
+   carries its place change since the previous round. Pages auto-flip and end
+   back on the top page, holding.
+
+   What makes it a stadium results board: every row is a LANE — a full-width
+   band with a hard-edged rank block at its left, a three-letter code where
+   the nation would sit (the first three letters of the name as typed, the way
+   a timing screen abbreviates a surname), the name in heavy expanded capitals
+   and the mark right-aligned in big tabular figures. Places 1-3 are medal
+   blocks (--gold, --silver, --bronze are already Warm Summit tokens); the
+   leader's lane is taller, carries a gold keyline and gets one light sweep
+   when it posts. Results POST: the old list clears to the right, then each
+   lane wipes in from the left, one after another, its rank block dropping in
+   first and its mark landing last.
+
+   Adapted, not pasted: lanes are the stage's --surface / --surface-2 over the
+   dusk field, ink is Warm Summit, and the chrome above is the stage's rail.
+   A long name wraps inside its lane; nothing is ever ellipsised.
+
+   MOTION CONTRACT (src/src/__tests__/stageMotion.test.js, applied here):
+   keyframes touch only transform, opacity, border-color and visibility; every
+   animated selector is listed again with `animation:none` under
+   prefers-reduced-motion AND under :root.rm (the ?reduced=1 switch), where
+   the page swap is an instant change.
+
+   CONTRAST, measured (flat / after the stage's projector black-lift model,
+   host-redesign/audit.js A9). Lanes composite over the field at #12203A:
+     name, points  #F4EDE4 on lane A #1A2841   12.70 / 8.47
+                   #F4EDE4 on lane B #1C2C4A   11.99 / 7.93
+     leader's pts  #F6A94C on lane A #1A2841    7.51 / 5.01
+     ▲ climbed     #6FD0A4 on lane B (worse)    7.45 / 4.93
+     ▼ / –         #B6C2D4 on lane B            7.73 / 5.11
+     NEW           #A7C3EF on lane B            7.75 / 5.13
+     column heads  #B6C2D4 on the field #12203A 9.01 / 6.16
+     rank ink #0F1A2E on the medal blocks: gold 8.86 / 6.21, silver
+     10.13 / 7.10, BRONZE 4.78 / 3.35 (the projector lifts the dark ink, not
+     the paint). Bronze under 4.5 lifted: it carries only the "3", at >=35px
+     800, so it clears the 3:1 large-text bar; lightening the block would mean
+     overriding the --bronze token. #F4EDE4 on a plain #25375A block 10.20 / 6.66
+   =========================================================================== */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+[hidden]{display:none !important}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#B6C2D4;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --success-text:#6FD0A4;
+  --gold:#F6A94C; --silver:#C0C6D0; --bronze:#B4794A;
+  --rule:rgba(155,168,190,.22); --hair:1px; --radius:16px;
+  --font-display:"Archivo Expanded","Archivo",system-ui,sans-serif;
+  --font-ui:"Inter",system-ui,sans-serif;
+  /* this board's own */
+  --secondary-text:#A7C3EF;
+  --olb-lane-a:rgba(27,41,66,.9);       /* --surface at .9 */
+  --olb-lane-b:rgba(37,55,90,.5);       /* --surface-2 at .5 */
+  --olb-tag:rgba(155,168,190,.14);
+  --sb-letterbox:#070C16;
+}
+:root, :root.d-room{
+  --L-hero:clamp(56px,8.4cqh,104px); --L-primary:clamp(40px,5.6cqh,68px);
+  --L-secondary:clamp(28px,3.7cqh,44px); --L-body:clamp(22px,2.8cqh,34px);
+  --L-meta:clamp(20px,1.9cqh,24px); --floor:20px;
+}
+:root.d-tv{
+  --L-hero:clamp(72px,11cqh,132px); --L-primary:clamp(52px,7.4cqh,88px);
+  --L-secondary:clamp(36px,4.8cqh,56px); --L-body:clamp(28px,3.5cqh,42px);
+  --L-meta:clamp(26px,2.4cqh,31px); --floor:26px;
+}
+
+body{background:var(--sb-letterbox);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+  display:grid;place-items:center}
+.sb-frame{position:relative;width:min(100vw,177.78vh);height:min(56.25vw,100vh);
+  container-type:size;overflow:hidden;background:var(--bg)}
+.stage{position:absolute;inset:0;display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
+.field{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%)}
+.field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:44%;
+  background:linear-gradient(180deg,#17253C 0%, #0E1828 100%);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.85}
+
+.rail{position:relative;z-index:2;min-width:0;display:flex;align-items:center;
+  gap:calc(1.2cqw + 8px);padding:calc(1.1cqh + 6px) calc(2.4cqw + 10px)}
+.chip{flex:none;display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-stretch:125%;font-weight:800;
+  font-size:var(--L-meta);letter-spacing:.13em;text-transform:uppercase;
+  padding:.34em .8em;border-radius:999px;border:2px solid currentColor;color:var(--primary)}
+.chip .dot{width:.6em;height:.6em;border-radius:50%;background:currentColor}
+.rail-title{flex:0 1 auto;min-width:0;font-size:var(--L-meta);font-weight:700;letter-spacing:.02em}
+.rail-ctx{flex:none;font-size:var(--L-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.rail-ctx b{color:var(--text);font-weight:700}
+.rail-page{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+  font-size:var(--L-meta);color:var(--muted);font-weight:600}
+.rail-page b{font-family:var(--font-display);font-stretch:125%;font-weight:800;color:var(--text);
+  font-size:calc(var(--L-meta) * 1.3);letter-spacing:.02em;
+  display:inline-block;min-width:5.4ch;text-align:right}
+
+/* ---------------------------------------------------------------- THE BOARD */
+.olb{position:relative;z-index:2;min-height:0;display:flex;flex-direction:column;
+  padding:0 calc(2.4cqw + 10px) calc(.6cqh + 2px);gap:calc(.6cqh + 3px);--fit:1}
+.olb-cols{display:grid;align-items:center;column-gap:calc(1.1cqw + 6px);
+  grid-template-columns:var(--c-rk) var(--c-tg) minmax(0,1fr) var(--c-mv) var(--c-pt)}
+/* column widths in ems of the type each column carries, so they track --fit */
+.olb{--rk-fs:max(var(--floor),calc(var(--L-primary) * var(--fit)));
+  --nm-fs:max(var(--floor),calc(var(--L-primary) * .92 * var(--fit)));
+  --pt-fs:max(var(--floor),calc(var(--L-hero) * .78 * var(--fit)));
+  --mv-fs:max(var(--floor),calc(var(--L-secondary) * var(--fit)));
+  --tg-fs:var(--L-body);                 /* a code, not a label: body tier, never scaled below it by --fit */
+  --c-rk:calc(var(--rk-fs) * 2.7); --c-tg:calc(var(--tg-fs) * 4.1);
+  --c-mv:calc(var(--mv-fs) * 3.3); --c-pt:calc(var(--pt-fs) * 2.1)}
+.olb-heads span{font-size:var(--L-meta);font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap}
+.olb-heads .h-rk{text-align:center}
+.olb-heads .h-pt{text-align:right}
+.olb-heads .h-nm{grid-column:3}
+.olb-rows{flex:1;min-height:0;display:flex;flex-direction:column;gap:calc(.55cqh + 2px);overflow:hidden;
+  margin:0;padding:0;list-style:none}
+
+/* ONE LANE. The band is a pseudo-element so it can wipe in by scaleX without
+   touching the text on top of it. */
+.orow{position:relative;flex:none;min-height:calc(var(--nm-fs) * 1.42);padding-right:calc(1.1cqw + 6px)}
+.orow::before{content:"";position:absolute;inset:0;z-index:0;background:var(--olb-lane-a);
+  border:2px solid transparent;border-radius:4px;transform-origin:0 50%}
+.orow:nth-child(even)::before{background:var(--olb-lane-b)}
+.orow > *{position:relative;z-index:1}
+.rk{align-self:stretch;display:grid;place-items:center;
+  font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--rk-fs);line-height:1;
+  background:var(--surface-2);color:var(--text);
+  clip-path:polygon(0 0, 100% 0, 84% 100%, 0 100%);border-radius:4px 0 0 4px;padding-right:8%}
+.rk.m1{background:var(--gold);color:var(--bg)}
+.rk.m2{background:var(--silver);color:var(--bg)}
+.rk.m3{background:var(--bronze);color:var(--bg)}
+.tg{justify-self:start;font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--tg-fs);
+  letter-spacing:.08em;background:var(--olb-tag);border:var(--hair) solid var(--rule);border-radius:4px;
+  padding:.18em .42em;line-height:1.1}
+.nm{font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--nm-fs);
+  line-height:1.08;text-transform:uppercase;letter-spacing:.01em;padding:calc(.35cqh + 2px) 0;
+  overflow-wrap:anywhere;hyphens:manual}
+.mv{font-weight:800;font-size:var(--mv-fs);white-space:nowrap}
+.mv.up{color:var(--success-text)}
+.mv.dn,.mv.eq{color:var(--muted)}
+.mv.new{color:var(--secondary-text);font-size:calc(var(--mv-fs) * .72);letter-spacing:.1em;
+  border:2px solid var(--secondary);border-radius:999px;padding:.12em .55em}
+.pt{justify-self:end;font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--pt-fs);
+  line-height:1;letter-spacing:.01em}
+
+/* THE LEADER'S LANE: taller, a gold keyline, the mark in gold. */
+.orow.lead{min-height:calc(var(--nm-fs) * 1.8)}
+.orow.lead::before{border-color:var(--gold)}
+.orow.lead .nm{font-size:max(var(--floor),calc(var(--L-primary) * 1.06 * var(--fit)))}
+.orow.lead .pt{color:var(--primary)}
+.orow.lead .sweep{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;border-radius:4px}
+.orow.lead .sweep::after{content:"";position:absolute;top:0;bottom:0;left:0;width:22%;
+  background:linear-gradient(90deg,transparent,rgba(246,169,76,.28),transparent);opacity:0;transform:translateX(-120%)}
+
+/* ------------------------------------------------------------- POSTING */
+.orow.post::before{animation:lane .34s cubic-bezier(.16,1,.3,1) var(--d) both}
+.orow.post .rk{animation:drop .32s cubic-bezier(.16,1,.3,1) calc(var(--d) + .08s) both}
+.orow.post .tg,.orow.post .nm,.orow.post .mv{animation:slide .3s cubic-bezier(.16,1,.3,1) calc(var(--d) + .16s) both}
+.orow.post .pt{animation:mark .36s cubic-bezier(.16,1,.3,1) calc(var(--d) + .3s) both}
+.orow.lead.post::before{animation:lane .34s cubic-bezier(.16,1,.3,1) var(--d) both, key .6s ease-out calc(var(--d) + .3s) both}
+.orow.lead.post .sweep::after{animation:sweep .9s cubic-bezier(.45,0,.2,1) calc(var(--d) + .7s) both}
+.orow.clear{animation:clear .22s cubic-bezier(.4,0,1,1) var(--d) both}
+@keyframes lane{from{transform:scaleX(0)}to{transform:none}}
+@keyframes drop{from{transform:translateY(-35%);opacity:0}to{transform:none;opacity:1}}
+@keyframes slide{from{transform:translateX(-.6em);opacity:0}to{transform:none;opacity:1}}
+@keyframes mark{from{transform:scale(1.18);opacity:0}to{transform:none;opacity:1}}
+@keyframes key{from{border-color:transparent}to{border-color:var(--gold)}}
+@keyframes sweep{0%{transform:translateX(-120%);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateX(480%);opacity:0}}
+@keyframes clear{from{transform:none;opacity:1}to{transform:translateX(2.5%);opacity:0}}
+
+/* --------------------------------------------- the host strip (mockup only) */
+.strip{position:relative;z-index:3;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px calc(2.4cqw + 10px) 10px;font-size:15px;color:var(--muted)}
+.strip .st{font-weight:600;color:var(--text)}
+.strip .st small{font-weight:500;color:var(--muted);font-size:15px}
+.strip kbd{font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--text);
+  border:var(--hair) solid var(--rule);border-radius:6px;padding:2px 7px;background:rgba(27,41,66,.8)}
+.strip .ctl{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:inline-flex;border:var(--hair) solid var(--rule);border-radius:999px;overflow:hidden;
+  background:rgba(10,19,34,.85)}
+.seg button,.strip .btn{font:inherit;font-size:14px;font-weight:600;color:var(--muted);background:transparent;
+  border:0;padding:6px 14px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--primary);color:var(--bg)}
+.strip .btn{border:var(--hair) solid var(--rule);border-radius:999px;background:rgba(10,19,34,.85);color:var(--text)}
+.strip .btn[aria-pressed="true"]{border-color:var(--secondary);color:var(--secondary-text)}
+.seg button:focus-visible,.strip .btn:focus-visible{outline:2px solid var(--secondary);outline-offset:2px}
+
+/* ------------------------------------------------------- REDUCED MOTION
+   The final state, immediately. The JS also skips the clear-out and swaps the
+   lanes in one step. Written twice with identical selectors. */
+@media (prefers-reduced-motion: reduce){
+  .orow.post::before,.orow.post .rk,.orow.post .tg,.orow.post .nm,.orow.post .mv,.orow.post .pt,
+  .orow.lead.post::before,.orow.lead.post .sweep::after,.orow.clear{animation:none;transition:none}
+}
+:root.rm .orow.post::before,:root.rm .orow.post .rk,:root.rm .orow.post .tg,:root.rm .orow.post .nm,
+:root.rm .orow.post .mv,:root.rm .orow.post .pt,
+:root.rm .orow.lead.post::before,:root.rm .orow.lead.post .sweep::after,:root.rm .orow.clear{animation:none;transition:none}
+</style>
+</head>
+<body>
+<div class="sb-frame">
+  <div class="stage">
+    <div class="field" aria-hidden="true"></div>
+    <header class="rail">
+      <span class="chip"><span class="dot"></span>Standings</span>
+      <span class="rail-title">Q3 Leadership Offsite</span>
+      <span class="rail-ctx"><b>After round 6</b></span>
+      <span class="rail-page"><b id="range">1–10</b><span id="of">of 14</span></span>
+    </header>
+    <main class="olb" id="board" aria-label="Standings after round 6">
+      <div class="olb-cols olb-heads" aria-hidden="true">
+        <span class="h-rk">Rank</span><span class="h-nm">Player</span><span class="h-mv">Move</span><span class="h-pt">Pts</span>
+      </div>
+      <ol class="olb-rows" id="rows" role="list"></ol>
+    </main>
+    <footer class="strip" aria-label="Host strip — mockup controls">
+      <span class="st" id="status">Auto-flipping</span>
+      <span><kbd>←</kbd> <kbd>→</kbd> step pages</span>
+      <span class="ctl">
+        <span class="seg" role="group" aria-label="Display profile">
+          <button type="button" data-size="5">TV: 5 per page</button>
+          <button type="button" data-size="10">Room: 10 per page</button>
+        </span>
+        <button type="button" class="btn" id="rm">Reduced motion</button>
+        <button type="button" class="btn" id="replay">Replay</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+/* ------------------------------------------------------------------ DATA
+   14 players as they typed their names. prev = total after round 5 (null:
+   joined during round 6); r6 = round 6 points (a question is worth <=15). */
+const RAW = [
+  ['Priya', 66, 15], ['Marcus', 70, 8], ['Oluwaseun Adebayo-Richardson', 60, 12],
+  ['Hannah', 52, 14], ['Tomás', 58, 8], ['Keiko', 59, 4], ['Dev', 47, 12],
+  ['Sofia', 50, 5], ['Liam', 48, 4], ['Aisha', 41, 10], ['Grace', 44, 0],
+  ['Ben', 30, 9], ['Inès', null, 14], ['Kofi', null, 11],
+];
+const all = RAW.map(([name, prev, r6], id) => ({ id, name, prev, r6, total: (prev || 0) + r6 }));
+const cur = [...all].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+cur.forEach((p) => {
+  p.rank = 1 + all.filter((q) => q.total > p.total).length;
+  p.tied = all.filter((q) => q.total === p.total).length > 1;
+});
+const had = all.filter((p) => p.prev != null);
+had.forEach((p) => { p.prevRank = 1 + had.filter((q) => q.prev > p.prev).length; });
+cur.forEach((p) => { p.move = p.prev == null ? 'new' : p.prevRank - p.rank; });
+const place = (p) => (p.tied ? '=' : '') + p.rank;
+const moveOf = (p) => p.move === 'new' ? ['NEW', 'new'] : p.move > 0 ? ['▲' + p.move, 'up']
+  : p.move < 0 ? ['▼' + (-p.move), 'dn'] : ['–', 'eq'];
+const code = (p) => p.name.normalize('NFD').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+
+/* ------------------------------------------------------------- SETTINGS */
+const root = document.documentElement;
+const qs = new URLSearchParams(location.search);
+if (qs.get('reduced') === '1') root.classList.add('rm');
+const mq = matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = () => root.classList.contains('rm') || mq.matches;
+const SPEED = qs.get('fast') === '1' ? 0.35 : 1;
+let size = qs.get('size') === '5' ? 5 : 10;
+
+/* -------------------------------------------------------------- BOARD */
+const $ = (id) => document.getElementById(id);
+const rowsEl = $('rows'), board = $('board');
+const pagesOf = () => Math.ceil(cur.length / size);
+const rowsOf = (pi) => cur.slice(pi * size, pi * size + size);
+let gen = 0, pending = [];
+
+function lane(p, i) {
+  const li = document.createElement('li');
+  li.className = 'orow olb-cols' + (p.rank === 1 ? ' lead' : '');
+  li.style.setProperty('--d', (i * 0.11 * SPEED) + 's');
+  const [mv, mk] = moveOf(p);
+  const medal = p.rank <= 3 ? ' m' + p.rank : '';
+  li.innerHTML = `<span class="rk${medal}">${place(p)}</span><span class="tg">${code(p)}</span>`
+    + `<span class="nm"></span><span class="mv ${mk}">${mv}</span><span class="pt">${p.total}</span>`
+    + (p.rank === 1 ? '<span class="sweep" aria-hidden="true"></span>' : '');
+  li.querySelector('.nm').textContent = p.name;
+  li.setAttribute('aria-label', `${place(p)} ${p.name}, ${p.total} points, ${mk === 'new' ? 'new' : mv}`);
+  return li;
+}
+function paint(pi, animate) {
+  rowsEl.textContent = '';
+  rowsOf(pi).forEach((p, i) => { const li = lane(p, i); if (animate) li.classList.add('post'); rowsEl.appendChild(li); });
+}
+/* The fitter: page 1 carries both the tall leader's lane and the wrapped name,
+   so fit it once and hold that scale for every page of this page size. */
+function fit() {
+  board.style.setProperty('--fit', 1);
+  paint(0, false);
+  let f = 1;
+  while (f > 0.5 && rowsEl.scrollHeight > rowsEl.clientHeight + 1) {
+    f -= 0.02; board.style.setProperty('--fit', f.toFixed(2));
+  }
+  return f;
+}
+function show(pi) {
+  const my = ++gen;
+  pending.forEach(clearTimeout); pending = [];
+  if (reduced()) { paint(pi, false); return 0; }
+  const old = [...rowsEl.children];
+  let wait = 0;
+  if (old.length) {
+    old.forEach((li, i) => { li.classList.remove('post'); li.style.setProperty('--d', (i * 0.03 * SPEED) + 's'); li.classList.add('clear'); });
+    wait = (220 + old.length * 30) * SPEED;
+  }
+  pending.push(setTimeout(() => { if (my === gen) paint(pi, true); }, wait));
+  const n = rowsOf(pi).length;
+  return wait + ((n - 1) * 110 + 700) * SPEED + (pi === 0 ? 900 * SPEED : 0);
+}
+
+/* ------------------------------------------------------------ SEQUENCER */
+let page = 0, auto = true, timer = null;
+const dwell = (pi) => (3600 + rowsOf(pi).length * 280) * SPEED;
+function indicator() {
+  const rows = rowsOf(page);
+  $('range').textContent = `${page * size + 1}–${page * size + rows.length}`;
+  $('of').textContent = `of ${cur.length}`;
+}
+function status(msg) { $('status').innerHTML = msg; }
+function go(pi) {
+  page = (pi + pagesOf()) % pagesOf(); indicator();
+  (window.sbLog = window.sbLog || []).push([Math.round(performance.now()), page + 1, auto ? 'auto' : 'held']);
+  return show(page);
+}
+function next() {
+  if (!auto) return;
+  if (page < pagesOf() - 1) {
+    const t = go(page + 1);
+    status(`Auto-flipping <small>· page ${page + 1} of ${pagesOf()}</small>`);
+    clearTimeout(timer); timer = setTimeout(next, t + dwell(page));
+  } else {
+    go(0); auto = false;
+    status('Holding on the top page');
+  }
+}
+function run() {
+  clearTimeout(timer); auto = true;
+  rowsEl.textContent = '';
+  const t = go(0);
+  status(`Auto-flipping <small>· page 1 of ${pagesOf()}</small>`);
+  timer = setTimeout(next, t + dwell(0));
+}
+function step(d) {
+  clearTimeout(timer); auto = false;
+  go(page + d);
+  status(`Stepped by the host <small>· page ${page + 1} of ${pagesOf()}</small>`);
+}
+function setSize(n) {
+  size = n;
+  root.classList.toggle('d-tv', n === 5); root.classList.toggle('d-room', n !== 5);
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.size) === n)));
+  fit(); run();
+}
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setSize(Number(b.dataset.size))));
+$('replay').addEventListener('click', run);
+$('rm').addEventListener('click', () => { root.classList.toggle('rm'); syncRm(); run(); });
+function syncRm() { $('rm').setAttribute('aria-pressed', String(root.classList.contains('rm'))); }
+addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+});
+let rz = null;
+addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { gen++; fit(); paint(page, false); }, 150); });
+syncRm();
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => setSize(size));
+})();
+</script>
+</body>
+</html>
