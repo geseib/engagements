@@ -659,6 +659,30 @@ const withholdBriefing = (prompt) => {
 };
 
 /**
+ * The one label Background travels under, in the injected block and in {contextSections}.
+ *
+ * HERE, not beside buildContextBlock: tests/briefing.js reads everything from
+ * `const resolvePersona` to `const buildContextBlock` as the persona chain and
+ * holds it free of the word "briefing", which HONESTY_RULE's note must use.
+ */
+const BACKGROUND_LABEL = 'BACKGROUND ON THIS QUESTION (from the set\'s author, not something the room said): ';
+const backgroundLine = (text) => {
+  const t = typeof text === 'string' ? text.trim() : '';
+  return t ? `${BACKGROUND_LABEL}${t}` : '';
+};
+
+/**
+ * ONE HONESTY RULE, ON EVERY PROMPT (question-background spec §3). Appended by
+ * get-ai-summary.js after the host's additions and before the briefing, so it is
+ * among the last words the model reads whatever the template says — and
+ * withholdBriefing above, which cuts from the briefing's heading to the end,
+ * never takes it with it.
+ */
+const HONESTY_RULE = 'Facts come from the material above, from what the room said, or from general knowledge '
+  + 'you are certain of. Never invent numbers, names, quotations, or anything about this organisation or event. '
+  + 'When something you would like is missing, work with what you have and do not mention that it is missing.';
+
+/**
  * Resolve which voice to use.
  *
  * Precedence (first hit wins), per the approved design:
@@ -788,8 +812,12 @@ const resolvePersona = async ({
  *   eventDetails        what this session IS (the "extra info about the event")
  *   hostInstructions    what the host wants from the AI, in their words
  *   questionSetContext  what the set's author wanted every session to know
+ *   questionBackground  this question's Background: facts and angles its author
+ *                       wrote for Workie (question-background spec §3). The
+ *                       caller passes '' when the template places {background}
+ *                       itself, so the material is never said twice.
  */
-const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext } = {}) => {
+const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext, questionBackground } = {}) => {
   const lines = [];
   if (eventDetails && String(eventDetails).trim()) {
     lines.push(`ABOUT THIS SESSION: ${String(eventDetails).trim()}`);
@@ -800,6 +828,8 @@ const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext 
   if (questionSetContext && String(questionSetContext).trim()) {
     lines.push(`FROM THE QUESTION SET'S AUTHOR: ${String(questionSetContext).trim()}`);
   }
+  const bg = backgroundLine(questionBackground);
+  if (bg) lines.push(bg);
   if (!lines.length) return '';
   return `SESSION CONTEXT — weave this into your reading of the room:\n${lines.join('\n')}`;
 };
@@ -815,6 +845,8 @@ module.exports = {
   SEED_PERSONAS,
   INFERRED_VOICE,
   buildContextBlock,
+  backgroundLine,
+  HONESTY_RULE,
   DEFAULT_OUTPUT_SECTIONS,
   normalizeOutputSections,
   resolveOutputSections,

@@ -8,6 +8,7 @@ const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = requir
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
   buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
+  backgroundLine, HONESTY_RULE,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isCallAndAnswer } = require('./briefing');
@@ -832,6 +833,8 @@ exports.handler = async (event) => {
           markdownResponse: existingSummary.Item.MarkdownResponse || null,
           personaName: existingSummary.Item.PersonaName || null,
           personaSource: existingSummary.Item.PersonaSource || null,
+          // null for a row written before ContextUsed existed, or by the fallback.
+          contextUsed: existingSummary.Item.ContextUsed || null,
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
@@ -1001,7 +1004,8 @@ exports.handler = async (event) => {
       // lines up, and correctAnswer is often the right option's own text.
       console.log(`🔍 RAW QUESTION DATA: correctAnswer ${shapeForLog(question.correctAnswer || question.CorrectAnswer)}, `
         + `optionA ${shapeForLog(question.optionA || question.OptionA)}, `
-        + `answerDetails ${shapeForLog(question.answerDetails || question.AnswerDetails)}`);
+        + `answerDetails ${shapeForLog(question.answerDetails || question.AnswerDetails)}, `
+        + `background ${shapeForLog(question.background || question.Background)}`);
     }
 
     // If question not found in set, create a fallback question object
@@ -1039,7 +1043,11 @@ exports.handler = async (event) => {
       question.optionE = question.optionE || question.OptionE;
       question.optionF = question.optionF || question.OptionF;
       question.answerDetails = question.answerDetails || question.AnswerDetails;
-      
+      // BACKGROUND (question-background spec §3). Either spelling; a string only —
+      // an envelope that failed to open is not material, it is nothing.
+      const rawBackground = question.background ?? question.Background;
+      question.background = typeof rawBackground === 'string' ? rawBackground.trim() : '';
+
       console.log(`🔧 AFTER NORMALIZATION: title ${shapeForLog(question.title)}, `
         + `correctAnswer ${shapeForLog(question.correctAnswer)}, optionA ${shapeForLog(question.optionA)}, `
         + `optionB ${shapeForLog(question.optionB)}`);
@@ -1494,6 +1502,9 @@ exports.handler = async (event) => {
       // Written with the briefing? Only the model path can say yes; the
       // data-driven fallback never read it.
       ...(summaryData.briefingUsed ? { BriefingUsed: true } : {}),
+      // Which context the model had: five booleans, plaintext like
+      // PersonaSource — never the content, so never in ENCRYPTED_FIELDS.
+      ...(summaryData.contextUsed ? { ContextUsed: summaryData.contextUsed } : {}),
       // Which angle this round was read from (round-angles.js). Plaintext, like
       // PersonaSource: a word from a fixed list, never the room's content.
       ...(summaryData.angle ? { Angle: summaryData.angle } : {}),
@@ -1541,6 +1552,7 @@ exports.handler = async (event) => {
       markdownResponse: summaryData.markdownResponse,
       personaName: summaryData.personaName || null,
       personaSource: summaryData.personaSource || null,
+      contextUsed: summaryData.contextUsed || null,
       generatedAt: now,
       fromCache: false
     };
@@ -2650,7 +2662,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       a confident wrong sentence is not.
     */
     reveal: question.answerDetails || '',
-    
+    // The question's Background, for a prompt that wants to place it itself
+    // (question-background spec §3). Any other prompt gets it in the context
+    // block or in {contextSections} — never both (see templateNamesBackground).
+    background: (question && question.background) || '',
+
     // ANSWERS
     playerAnswers: playerAnswers,
     playerResponses: playerAnswers, // Trivia template uses playerResponses
@@ -2728,6 +2744,24 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     throw new Error('Prompt must have either template OR both instructions and outputFormat');
   }
 
+  /*
+    THE QUESTION'S BACKGROUND, SAID ONCE (question-background spec §3). Three
+    doors, and exactly one opens:
+      - the template names {background}: it goes where the author put it, and
+        nowhere else;
+      - the template places {contextSections}: it rides inside that block,
+        under the same label the injected block uses;
+      - neither: the injected context block below carries it.
+    contextSections is rebuilt here rather than above because only now is it
+    known whether the template names {background}.
+  */
+  const background = (question && question.background) || '';
+  const templateNamesBackground = templateBody.includes('{background}');
+  if (background && !templateNamesBackground) {
+    templateVars.contextSections = '\nCONTEXT INFORMATION:\n'
+      + contextSections.concat(backgroundLine(background)).join('\n') + '\n';
+  }
+
   console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`
     + `${persona.requiredAddition ? ', with its required addition' : ''}`);
 
@@ -2761,6 +2795,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // become the voice travels.
     hostInstructions: persona.source === 'game_context' ? '' : gameAiContext,
     questionSetContext: persona.source === 'question_set_context' ? '' : questionSetAiContext,
+    // Left out when the template places {background} itself — see above.
+    questionBackground: templateNamesBackground ? '' : background,
   });
   const templateCarriesContext = templateBody.includes('{contextSections}');
   const contextLayer = (!templateCarriesContext && contextBlock)
@@ -2884,6 +2920,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       unresolvedVariables.map((n) => `{${n}}`).join(', '));
   }
 
+  // ONE HONESTY RULE, ON EVERY PROMPT (personas.js HONESTY_RULE). After the
+  // template, the contract and the host's additions, so it is among the last
+  // words the model reads whatever the template says; BEFORE the briefing, so
+  // withholdBriefing — which cuts from the briefing's heading to the end —
+  // never takes it with it.
+  prompt += `\n\n${HONESTY_RULE}`;
+
   /*
     THE BRIEFING LAYER, LAST — after the host's required additions, the
     position games 1935 and 4567 showed the model obeys (personas.js
@@ -2894,6 +2937,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   */
   const briefingLayer = buildBriefingLayer({ briefing });
   if (briefingLayer) prompt += `\n\n${briefingLayer}`;
+
+  // WHAT CONTEXT THIS SUMMARY WAS WRITTEN WITH — yes/no flags, never the
+  // content (question-background spec §4; generalises briefingUsed). Stored
+  // plaintext on the summary row like PersonaSource, and shown to the host.
+  const contextUsed = {
+    background: Boolean(background),
+    setNote: Boolean(String(questionSetAiContext || '').trim()),
+    eventDetails: Boolean(String(eventDetails || '').trim()),
+    hostInstructions: Boolean(String(gameAiContext || '').trim()),
+    briefing: Boolean(briefingLayer),
+  };
 
   // THE PROMPT IS NEVER LOGGED. It embeds every answer verbatim, the question
   // and the host's brief — all ciphertext at rest on an org's session. To see
@@ -3009,6 +3063,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // Whether THIS summary was written with the briefing. A flag, never the
       // text: the report says which rounds were briefed (RATIONALE §f Q1).
       briefingUsed: Boolean(briefingLayer),
+      // Which context the model had — flags only. The data-driven fallback
+      // below carries none: it never read the context.
+      contextUsed,
       // The round's angle: vocabulary, stored plaintext like PersonaSource, and
       // read back by the next round so race/event/fact never run twice in a row.
       ...(angle ? { angle } : {}),

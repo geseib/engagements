@@ -41,9 +41,10 @@ const ASSEMBLY_LAYERS = Object.freeze([
   Object.freeze({
     source: 'contextLayer',
     name: 'The session',
-    text: 'What the host wrote about the session and any instructions they gave for the AI, and the '
-      + 'question set author\'s own context, as a "SESSION CONTEXT" block — unless this prompt places '
-      + '{contextSections} itself.',
+    text: 'What the host wrote about the session and any instructions they gave for the AI, the '
+      + 'question set author\'s own context, and the question\'s Background (its author\'s notes for '
+      + 'Workie), as a "SESSION CONTEXT" block — unless this prompt places {contextSections} itself. '
+      + 'The Background is left out of the block when this prompt places {background}.',
   }),
   Object.freeze({
     source: 'templateBody',
@@ -75,6 +76,13 @@ const ASSEMBLY_LAYERS = Object.freeze([
     name: 'The host\'s instructions',
     text: 'The host\'s own instructions for the AI, restated after the contract so they win over the '
       + 'prompt\'s rules — but never over the headings.',
+  }),
+  Object.freeze({
+    source: 'HONESTY_RULE',
+    name: 'The honesty rule',
+    text: 'On every prompt: facts come only from the material, from what the room said, or from general '
+      + 'knowledge the model is certain of — never an invented number, name or quotation, nothing invented '
+      + 'about the organisation or event — and a missing piece is worked around, never mentioned.',
   }),
   Object.freeze({
     source: 'briefingLayer',
