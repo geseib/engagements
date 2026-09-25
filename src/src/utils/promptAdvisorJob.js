@@ -16,6 +16,9 @@
  * THE POLL WIRE, exactly: `{ jobId, status, phase, error, result, createdAt,
  * updatedAt }`, `status` ∈ queued | running | complete | error, and `result`
  * is `{ analysisType, promptId, gameType, analysis, metadata }` when complete.
+ * `analysis` is the checklist for review and improve —
+ * `{ overallScore, summary, issues: [{ id, severity, half, issue, fix }] }` —
+ * and the rewrite for apply — `{ instructions, outputFormat, applied }`.
  */
 import { authFetch } from '../auth/authFetch';
 import { pollGenerationJob } from './aiBatchClient';
@@ -80,7 +83,8 @@ export function describeAdviceProgress(job, elapsedMs) {
   const phase = (job && job.status === 'queued') || !job?.phase
     ? 'Waiting to start'
     : job.phase;
-  return `${phase} — ${seconds}s so far. An analysis usually takes one to two minutes; keep this window open…`;
+  // "This", not "an analysis": the same line reports the apply job's rewrite.
+  return `${phase} — ${seconds}s so far. This usually takes one to two minutes; keep this window open…`;
 }
 
 /**

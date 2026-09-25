@@ -1,6 +1,6 @@
 /**
- * THE PROMPT ADVISOR STARTS A JOB AND WAITS FOR IT — components/AIPromptManager.jsx
- * (`AIPromptAdvisor`) and utils/promptAdvisorJob.js.
+ * THE PROMPT ADVISOR STARTS A JOB AND WAITS FOR IT — components/AIPromptAdvisor.jsx
+ * (re-exported from AIPromptManager.jsx) and utils/promptAdvisorJob.js.
  *
  * The advisor used to POST and wait for the analysis in the same request. The
  * analysis takes 35-60 seconds and the API's gateway gives up at 30, so every
@@ -47,11 +47,11 @@ const reply = (status, body) => ({
   },
 });
 
+/** The checklist both lenses return — promptAdvisorChecklist.test.jsx owns what the dialog does with it. */
 const ANALYSIS = {
   overallScore: 7.5,
-  strengths: ['Clear sections'],
-  improvements: [{ category: 'Clarity', priority: 'high', issue: 'Vague ask', suggestion: 'Name the audience' }],
-  improvedPrompt: 'Summarise {responsesText} for the team.',
+  summary: 'Clear sections, vague audience.',
+  issues: [{ id: 'r1', severity: 'high', half: 'both', issue: 'Vague ask', fix: 'Name the audience' }],
 };
 
 /**
@@ -72,7 +72,7 @@ function serve({ start = reply(202, { jobId: 'job-1', status: 'queued' }), polls
 const running = (phase = 'Analysing the prompt') => reply(200, { jobId: 'job-1', status: 'running', phase, error: null, result: null });
 const done = (analysis = ANALYSIS) => reply(200, {
   jobId: 'job-1', status: 'complete', phase: 'Analysis ready', error: null,
-  result: { analysisType: 'improve', analysis, metadata: { modelUsed: 'claude-sonnet-4-6' } },
+  result: { analysisType: 'review', analysis, metadata: { modelUsed: 'claude-sonnet-4-6' } },
 });
 const failed = (error) => reply(200, { jobId: 'job-1', status: 'error', phase: 'Failed', error, result: null });
 
@@ -89,7 +89,7 @@ function renderAdvisor(props = {}) {
   );
 }
 
-const run = () => fireEvent.click(screen.getByRole('button', { name: /Run Analysis/i }));
+const run = () => fireEvent.click(screen.getByRole('button', { name: /Run analysis/i }));
 const notice = () => screen.getByTestId('pmgr-advisor-notice');
 
 beforeEach(() => {
@@ -102,13 +102,13 @@ describe('the advisor runs as a job', () => {
     renderAdvisor();
     run();
 
-    expect(await screen.findByText('Clear sections')).toBeInTheDocument();
-    expect(screen.getByText('Summarise {responsesText} for the team.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Apply to Prompt/i })).toBeInTheDocument();
+    expect(await screen.findByText('Clear sections, vague audience.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Vague ask/ })).toBeChecked();
+    expect(screen.getByTestId('pmgr-advice-apply')).toBeInTheDocument();
 
     const post = authFetch.mock.calls.find(([, init]) => init && init.method === 'POST');
     expect(post[0]).toMatch(/admin\/ai-prompt-advisor$/);
-    expect(JSON.parse(post[1].body)).toMatchObject({ analysisType: 'improve', existingPromptId: 'p1' });
+    expect(JSON.parse(post[1].body)).toMatchObject({ analysisType: 'review', existingPromptId: 'p1' });
     // rejects: reading the answer off the POST — the analysis only ever comes from the poll.
     expect(gets.length).toBeGreaterThanOrEqual(3);
     expect(gets.every((u) => /admin\/ai-prompt-advisor\/job-1$/.test(u))).toBe(true);
@@ -121,7 +121,7 @@ describe('the advisor runs as a job', () => {
 
     const progress = await screen.findByTestId('pmgr-advisor-progress');
     await waitFor(() => expect(progress).toHaveTextContent(/Analysing the prompt/));
-    expect(screen.getByRole('button', { name: /Analyzing/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Analysing/i })).toBeDisabled();
     unmount();
   });
 
@@ -142,7 +142,7 @@ describe('a failure says what the server said', () => {
     await waitFor(() => expect(notice()).toHaveTextContent(/cut off at its 16,000-token limit/));
     expect(notice()).not.toHaveTextContent(/Failed to analyze prompt/);
     expect(notice()).toHaveTextContent(/untouched/);
-    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Run analysis/i })).toBeEnabled();
   });
 
   test('a refused start shows the body the server sent', async () => {

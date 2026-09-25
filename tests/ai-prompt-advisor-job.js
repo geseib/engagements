@@ -231,14 +231,15 @@ const reply = (text, stopReason = 'end_turn') => ({
 });
 const jsonReply = (obj, stopReason) => reply(`Here is the analysis.\n\`\`\`json\n${JSON.stringify(obj, null, 2)}\n\`\`\``, stopReason);
 
+/**
+ * The checklist both lenses return (tests/ai-prompt-advisor-checklist.js owns
+ * its shape). `half: 'both'` because every prompt in this suite is one piece of
+ * pasted or template text, and a one-piece prompt has no halves to name.
+ */
 const IMPROVE = {
   overallScore: 7.5,
-  adminIntent: 'Summarise a retro',
-  strengths: ['Clear sections'],
-  improvements: [{ category: 'Clarity', priority: 'high', issue: 'Vague ask', suggestion: 'Name the audience' }],
-  improvedPrompt: 'Summarise {responsesText} for the team.',
-  templateVariableSuggestions: ['{responsesText}'],
-  preservationNotes: 'Keep the three sections',
+  summary: 'Summarises a retro clearly; the audience is never named.',
+  issues: [{ id: 'i1', severity: 'high', half: 'both', issue: 'Vague ask', fix: 'Name the audience' }],
 };
 
 function reset() {
@@ -357,7 +358,7 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
     reset();
     const res = await quietly(() => handler(postEvent({ promptText: 'x', analysisType: 'rewrite-it-all' }), ctx()));
     assert.strictEqual(res.statusCode, 400);
-    assert.match(body(res).error, /improve, validate or optimize/);
+    assert.match(body(res).error, /review, improve or apply/);
     assert.strictEqual(dispatched.length, 0);
   });
 
@@ -384,7 +385,7 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
     reset();
     bedrockHandler = (n) => {
       if (n === 1) { const e = new Error('ThrottlingException: too many requests'); e.name = 'ThrottlingException'; throw e; }
-      return jsonReply({ isValid: true, overallScore: 8, issues: [], recommendations: ['Fine'] });
+      return jsonReply({ overallScore: 8, summary: 'Fine', issues: [] });
     };
     const { job } = await runJob({ promptText: 'x', analysisType: 'validate' });
     assert.strictEqual(job.status, 'complete', JSON.stringify(job));
@@ -392,7 +393,8 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
     assert.match(bedrockCalls[0].modelId, /claude-sonnet-4-6/);
     assert.match(bedrockCalls[1].modelId, /claude-haiku-4-5/);
     assert.strictEqual(job.result.metadata.modelUsed, 'claude-haiku-4-5');
-    assert.deepStrictEqual(job.result.analysis.recommendations, ['Fine']);
+    assert.strictEqual(job.result.analysis.summary, 'Fine');
+    assert.deepStrictEqual(job.result.analysis.issues, []);
   });
 
   await check('both models failing fails the job and says why, in words', async () => {
@@ -442,14 +444,16 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
       `max_tokens is ${bedrockCalls[0].body.max_tokens}; the improve reply was cut off at 4000`);
   });
 
-  await check('the improve format names each change once instead of quoting every passage twice', async () => {
+  await check('the improve format names each change once, and writes no rewrite at all', async () => {
+    // The rewrite moved to the apply job, which writes only what was ticked —
+    // so the reply that was cut off at max_tokens no longer exists.
     reset();
     await runJob({ promptText: 'x', analysisType: 'improve' });
     const prompt = bedrockCalls[0].prompt;
     assert.ok(!/"currentText"/.test(prompt) && !/"enhancedText"/.test(prompt),
       'the before/after passage pair is what ran the reply past max_tokens');
-    assert.match(prompt, /"improvedPrompt"/, 'the full rewrite must be asked for, once, under the key the screen reads');
-    assert.strictEqual((prompt.match(/"improvedPrompt"/g) || []).length, 1);
+    assert.ok(!/"improvedPrompt"/.test(prompt), 'a lens asked for a whole rewrite again');
+    assert.strictEqual((prompt.match(/"issues"/g) || []).length, 1, 'the checklist must be asked for once');
   });
 
   await check('a second delivery of the same Event does not run Bedrock again', async () => {
@@ -503,7 +507,11 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
   };
   const analysisSecret = marker('analysis');
   await seedOrgWorkie(ORG, 'acme-debrief', secrets);
-  bedrockHandler = () => jsonReply({ ...IMPROVE, adminIntent: analysisSecret, improvedPrompt: `${secrets.template} (tightened)` });
+  bedrockHandler = () => jsonReply({
+    ...IMPROVE,
+    summary: analysisSecret,
+    issues: [{ ...IMPROVE.issues[0], fix: `${secrets.template} (tightened)` }],
+  });
   const orgRun = await captureLogs(() => runJob({
     promptText: 'undefined\n\nundefined', gameType: 'call-and-answer', analysisType: 'improve', existingPromptId: 'acme-debrief',
   }, ORG_ADMIN));
@@ -529,8 +537,8 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
   });
   await check('…and it opens under that org for the caller who asked', () => {
     const plain = kmsStub.plainRow(ORG, jobRow(orgJob.jobId));
-    assert.strictEqual(plain.result.analysis.adminIntent, analysisSecret);
-    assert.strictEqual(orgJob.job.result.analysis.adminIntent, analysisSecret);
+    assert.strictEqual(plain.result.analysis.summary, analysisSecret);
+    assert.strictEqual(orgJob.job.result.analysis.summary, analysisSecret);
   });
   await check('neither the Workie nor its analysis reaches the logs', () => {
     assert.strictEqual(orgJob.job.status, 'complete', 'the run did not complete, so this proves nothing');
@@ -572,7 +580,11 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
     }));
     const { job } = await runJob({ analysisType: 'validate', existingPromptId: 'house' });
     assert.strictEqual(job.status, 'complete', JSON.stringify(job));
-    assert.ok(bedrockCalls[0].prompt.includes('HOUSE INSTRUCTIONS\n\n## Summary'));
+    // Both halves, each in its own labelled block — never glued into one
+    // string, which is what stopped the advice saying which half was which.
+    assert.ok(bedrockCalls[0].prompt.includes('HOUSE INSTRUCTIONS'));
+    assert.ok(bedrockCalls[0].prompt.includes('## Summary'));
+    assert.ok(!bedrockCalls[0].prompt.includes('HOUSE INSTRUCTIONS\n\n## Summary'));
   });
 
   say('\n6. the prompt text never reaches the logs');
