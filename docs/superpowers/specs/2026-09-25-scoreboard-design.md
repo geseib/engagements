@@ -85,6 +85,7 @@ the fix.
   - route: `POST /games/{gameId}/scoreboard` with `{ open?, style?, step?: 'next' | 'prev' }`
   - authorised by `callerMayDriveSession`, as `stage-focus.js` is
   - broadcast `{ type: 'scoreboardChanged', open, style, page, openedAt }`
+- **It closes itself when a new question starts** (owner, 2026-09-25: "yes, auto close"). The server persists the close when the round opens, so the stage, the remote and a reload agree; the host can reopen it at any time, and during ASK/VOTE it still shows the last scored totals.
 - **Restore:**
   - `get-game-state.js` returns `scoreboard` so a refreshed host page restores it.
   - The remote reads it from the same `/state` poll it already makes.

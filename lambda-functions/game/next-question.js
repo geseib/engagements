@@ -6,6 +6,7 @@ const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
 const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
+const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1301,6 +1302,29 @@ exports.handler = async (event) => {
     // Decrement category count when question is asked (not when results are calculated)
     console.log(`🔢 Calling decrementCategoryCount for asked question ${questionNumber} in game ${gameId}`);
     await decrementCategoryCount(gameId, questionNumber, nextQuestion.categoryId, setPk);
+
+    /*
+      THE SCOREBOARD STEPS ASIDE FOR THE QUESTION. Owner, 2026-09-25: "yes,
+      auto close" (docs/superpowers/specs/2026-09-25-scoreboard-design.md §3).
+      Here, in the one writer that opens a round, so the dock, the remote,
+      auto mode, "Choose next question" and skip all agree — and so a reload
+      and the phone's /state poll see it closed too. Only an OPEN board is
+      written: the look is kept, and the revision counts up like any other
+      write (scoreboard-state.js). Told before questionStarted, so the board
+      is down when the question lands. A failure here must not cost the room
+      its question: the host can still press S.
+    */
+    const boardWas = gameState.Item && gameState.Item.Scoreboard;
+    if (boardWas && boardWas.open === true) {
+      try {
+        const board = { ...normaliseScoreboard(boardWas), open: false };
+        const written = await db.send(new UpdateCommand(scoreboardWrite(process.env.TABLE_NAME, gameId, board)));
+        board.rev = revAfter(written);
+        await broadcastToGame(gameId, scoreboardFrame(gameId, board));
+      } catch (error) {
+        console.error(`❌ Could not put the scoreboard away for ${gameId}:`, error?.message);
+      }
+    }
 
     // Send simplified WebSocket notification to all connected players
     await broadcastToGame(gameId, {
