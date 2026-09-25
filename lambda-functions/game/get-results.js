@@ -7,6 +7,7 @@ const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wave
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
+const { scoreRowAfterRound } = require('./standings');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -634,16 +635,16 @@ exports.handler = async (event) => {
           const newScore = currentScore + tally.totalScore;
           console.log(`🧮 Score update for ${tally.playerName}: ${currentScore} + ${tally.totalScore} = ${newScore} (round ${paddedQuestionId})`);
 
-          // Update consolidated score record
+          // Update consolidated score record. `prevScore` / `prevScoredAt`
+          // ride along so the scoreboard can say who moved (standings.js);
+          // the trivia path below builds its row from the same helper.
           await db.send(new PutCommand({
             TableName: process.env.TABLE_NAME,
             Item: {
               PK: `GAME#${gameId}`,
               SK: scoreKey,
               PlayerName: tally.playerName,
-              score: newScore,
-              afterRound: paddedQuestionId,
-              updatedAt: new Date().toISOString(),
+              ...scoreRowAfterRound(currentScoreRecord.Item, tally.totalScore, paddedQuestionId, new Date().toISOString()),
               ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
             }
           }));
@@ -895,16 +896,15 @@ async function handleTriviaResults(event, gameId, questionId) {
         const newScore = currentScore + answer.PointsEarned;
         console.log(`🧮 Score update for ${answer.PlayerName}: ${currentScore} + ${answer.PointsEarned} = ${newScore} (round ${paddedQuestionId})`);
 
-        // Update consolidated score record
+        // Update consolidated score record — the same helper as the
+        // call-and-answer path, so both carry `prevScore` (standings.js).
         await db.send(new PutCommand({
           TableName: process.env.TABLE_NAME,
           Item: {
             PK: `GAME#${gameId}`,
             SK: scoreKey,
             PlayerName: answer.PlayerName,
-            score: newScore,
-            afterRound: paddedQuestionId,
-            updatedAt: new Date().toISOString(),
+            ...scoreRowAfterRound(currentScoreRecord.Item, answer.PointsEarned, paddedQuestionId, new Date().toISOString()),
             ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
           }
         }));
