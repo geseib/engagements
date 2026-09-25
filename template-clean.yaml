@@ -2830,12 +2830,29 @@ Resources:
               Action: execute-api:ManageConnections
               Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
+        # PUBLIC: every phone and the host's remote read the round's summary
+        # here, and a participant holds no token. It refuses generateNew,
+        # debug and promptDebug (get-ai-summary.js) — those are the host's.
         GetAISummaryEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/ai-summary
             Method: GET
+        # THE HOST'S DOOR to the same handler: generation, and the prompt and
+        # template variables behind a summary — which carry the question's
+        # reveal, a trivia round's correct answer and every participant's
+        # answer. Cognito here, authorizer.js names it for hosts|admins, and
+        # get-ai-summary.js asks callerMayDriveSession.
+        # tests/ai-summary-host-only-params.js.
+        GetAISummaryHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/ai-summary/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

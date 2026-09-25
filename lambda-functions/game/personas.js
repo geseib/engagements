@@ -642,12 +642,14 @@ const buildBriefingLayer = ({ briefing } = {}) => {
 
 /**
  * A prompt with its briefing layer taken out, for anything that RETURNS a
- * prompt on a route participants can call. GET /games/{id}/ai-summary has no
- * authorizer — every phone reads it — and ?debug=true hands back the prompt
- * Workie was given. The briefing is the host's private summary of a customer's
- * document ("participants never see it", RATIONALE §c), so it is withheld
- * there. The layer is always last (buildBriefingLayer), so everything from its
- * heading to the end goes; the prompt before it is untouched.
+ * prompt. ?debug=true hands back the prompt Workie was given — since
+ * 2026-09-25 only on GET /games/{id}/ai-summary/host, to the session's own
+ * host; the public route refuses it (get-ai-summary.js refuseUnlessHost). The
+ * briefing is the host's private summary of a customer's document
+ * ("participants never see it", RATIONALE §c), so it stays withheld from the
+ * echo as a second line. The layer is always last (buildBriefingLayer), so
+ * everything from its heading to the end goes; the prompt before it is
+ * untouched.
  */
 const withholdBriefing = (prompt) => {
   const s = String(prompt ?? '');

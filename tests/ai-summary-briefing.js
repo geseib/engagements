@@ -272,27 +272,45 @@ async function runWorker(gameId) {
 
   /*
     THE PUBLIC ROUTE NEVER HANDS IT BACK. GET /games/{id}/ai-summary carries no
-    authorizer — every phone in the room reads it — and ?debug=true returns the
-    prompt Workie was given. The briefing is in that prompt now, and a
-    participant can make it be stored (generateNew=true&debug=true) and then
-    read it (debug=true). "Participants never see it" (RATIONALE §c) has to
-    hold on this route too: the layer is withheld from every prompt it returns.
+    authorizer — every phone in the room reads it. Since 2026-09-25 it refuses
+    ?debug=true outright (tests/ai-summary-host-only-params.js): the prompt is
+    served only on GET /games/{id}/ai-summary/host, to the session's own host.
+    "Participants never see it" (RATIONALE §c) holds on the public route
+    because nothing of the prompt crosses it at all.
   */
   say('\n1b. the public read of the same round, as a phone makes it, with ?debug=true');
-  const readPublic = async (query) => {
-    const res = await getAiSummary({ pathParameters: { gameId: '5101' }, queryStringParameters: { questionId: '001', ...query } });
+  const readRoute = async (routeKey, query, authorizer) => {
+    const res = await getAiSummary({
+      routeKey,
+      pathParameters: { gameId: '5101' },
+      queryStringParameters: { questionId: '001', ...query },
+      requestContext: { routeKey, ...(authorizer ? { authorizer } : {}) },
+    });
     return { status: res.statusCode, body: JSON.parse(res.body) };
   };
-  const pub = await readPublic({ debug: 'true' });
-  await check('the cached summary is served', () => assert.strictEqual(pub.status, 200, JSON.stringify(pub.body)));
-  await check('its debug prompt says the briefing was withheld', () =>
-    assert.match(pub.body.debugPrompt || '', /THE BRIEFING — withheld/));
-  await check('and carries none of the briefing text', () => {
-    assert.ok(!(pub.body.debugPrompt || '').includes('Open issues are up 15%'), 'a participant can read the briefing');
-    assert.ok(!JSON.stringify(pub.body).includes('Open issues are up 15%'), 'the briefing is somewhere in the public reply');
+  const pub = await readRoute('GET /games/{gameId}/ai-summary', { debug: 'true' });
+  await check('the public route refuses the prompt echo', () => {
+    assert.strictEqual(pub.status, 403, JSON.stringify(pub.body));
+    assert.ok(!('debugPrompt' in pub.body), 'a participant can read the prompt');
   });
+  await check('and carries none of the briefing text', () =>
+    assert.ok(!JSON.stringify(pub.body).includes('Open issues are up 15%'), 'the briefing is somewhere in the public reply'));
+
+  /*
+    The host's own door still withholds the layer: the briefing is a
+    customer's document, and a debug echo is not where it should be read back.
+  */
+  say("\n1c. the same read on the host's own route, by the owning team's host");
+  const own = await readRoute('GET /games/{gameId}/ai-summary/host', { debug: 'true' },
+    { lambda: { userId: 'u-host', groups: 'hosts', orgId: ORG, orgIds: ORG } });
+  await check('the cached summary is served, with its prompt', () =>
+    assert.strictEqual(own.status, 200, JSON.stringify(own.body)));
+  await check('its debug prompt says the briefing was withheld', () =>
+    assert.match(own.body.debugPrompt || '', /THE BRIEFING — withheld/));
+  await check('and carries none of the briefing text', () =>
+    assert.ok(!JSON.stringify(own.body).includes('Open issues are up 15%'), 'the briefing is somewhere in the reply'));
   await check('everything before the layer is still there for the host debugging', () =>
-    assert.ok((pub.body.debugPrompt || '').includes("THE HOST'S REQUIRED ADDITIONS")));
+    assert.ok((own.body.debugPrompt || '').includes("THE HOST'S REQUIRED ADDITIONS")));
 
   say('\n2. the same session with no briefing');
   await seedRound('5102', { orgId: ORG });

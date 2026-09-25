@@ -1388,9 +1388,13 @@ function GameHostPage() {
     if (!gameId || !questionId) return null;
     
     try {
-      const debugParam = gameDebugMode ? '?debug=true' : '';
-      const response = await fetch(`${API_BASE}games/${gameId}/ai-summary${debugParam}`);
-      
+      // The prompt echo (?debug=true) is served only on the host's route,
+      // which carries the Cognito authorizer; the public route refuses it
+      // (get-ai-summary.js). The plain read stays public, as the phones make it.
+      const response = gameDebugMode
+        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true`)
+        : await fetch(`${API_BASE}games/${gameId}/ai-summary`);
+
       if (response.ok) {
         const summaryData = await response.json();
         // Update local state with fetched data
@@ -1479,8 +1483,10 @@ function GameHostPage() {
     const debugParam = gameDebugMode ? '&debug=true' : '';
     try {
       // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
-      const response = await fetch(
-        `${API_BASE}games/${gameId}/ai-summary?questionId=${questionId}&generateNew=true${debugParam}`,
+      // authFetch, on the host's route: the public one refuses generateNew
+      // (get-ai-summary.js), and this one carries the Cognito authorizer.
+      const response = await authFetch(
+        `${API_BASE}games/${gameId}/ai-summary/host?questionId=${questionId}&generateNew=true${debugParam}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       );
       if (!response.ok && response.status !== 202) {

@@ -60,6 +60,9 @@ describe('the closed routes are never called with bare fetch', () => {
   const CLOSED = [
     'next-question', 'start-question', 'start-vote', 'toggle-category',
     'question-sets', 'close-round', 'save-report', 'scoreboard',
+    // Generation and the prompt echo (get-ai-summary.js). The plain public
+    // read, `ai-summary` with no `/host`, is a participant route and stays fetch.
+    'ai-summary/host',
   ];
 
   // rejects: a closed route called through the bare global, which is a 401 in

@@ -78,6 +78,45 @@ describe('the AI summary trigger', () => {
   });
 });
 
+/*
+  GENERATION AND THE PROMPT ECHO ARE THE HOST'S. `GET /games/{id}/ai-summary`
+  is public and, since 2026-09-25, refuses generateNew, debug and promptDebug
+  (get-ai-summary.js; tests/ai-summary-host-only-params.js): the prompt carries
+  the reveal, a trivia answer and every participant's words. The host's page
+  asks for them on `/ai-summary/host`, which carries the Cognito authorizer —
+  so with authFetch, or the host's own Generate button is a 401.
+*/
+describe("the host's door to the summary", () => {
+  // rejects: the trigger left on the public route (a 403 now), or sent there
+  // with bare fetch (a 401 — no Authorization header).
+  it('fires the trigger on the host route with authFetch', () => {
+    const body = functionBody('triggerAISummary');
+    expect(body).not.toBeNull();
+    expect(body).toMatch(
+      /authFetch\(\s*`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?questionId=\$\{questionId\}&generateNew=true\$\{debugParam\}`/
+    );
+  });
+
+  // rejects: the debug read going back to the public route, where it is now
+  // refused and the stage would show no summary at all in debug mode.
+  it('reads the debug prompt on the host route with authFetch, and the plain read stays public', () => {
+    const body = functionBody('fetchAISummary');
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?debug=true`\)/);
+    expect(body).toMatch(/(?<![\w.])fetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary`\)/);
+  });
+
+  // rejects: any other route to the public URL with a host-only parameter on
+  // it — a new call site, or `debugParam` glued back onto the public path.
+  it('never puts a host-only parameter on the public route', () => {
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '');
+    const publicWithParams = code.match(/\/ai-summary(?!\/host)(\?|\$\{debugParam\})/g) || [];
+    expect(publicWithParams).toEqual([]);
+  });
+});
+
 describe('the wait for the WebSocket notification', () => {
   // rejects: reverting the watchdog to its single silent re-fetch, which ended
   // in `.finally(() => setLoadingAIInsights(false))` — no polling, and no way

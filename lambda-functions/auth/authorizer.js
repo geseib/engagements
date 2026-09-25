@@ -645,6 +645,19 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && (path === 'games/{gameId}/report' || /^games\/[^/]+\/report$/.test(path))) {
     return ['hosts', 'admins'];
   }
+  // THE AI SUMMARY'S HOST DOOR, `GET /games/{gameId}/ai-summary/host`. The only
+  // route that starts a round's generation or returns the prompt and template
+  // variables behind it — the question's reveal, a trivia round's correct
+  // answer, every participant's words. Its public sibling
+  // `GET /games/{gameId}/ai-summary` refuses those parameters
+  // (game/get-ai-summary.js) and must stay `[]`. Named for the report's reason:
+  // "GET + games is public" would otherwise pass any account, `pending`
+  // included, and callerMayDriveSession reads an account in no group as a
+  // participant. Anchored; the class matches the template and a concrete id.
+  // tests/ai-summary-host-only-params.js.
+  if (method === 'GET' && /^games\/[^/]+\/ai-summary\/host$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // Game creation/management requires host or admin group
   if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
     return ['hosts', 'admins'];

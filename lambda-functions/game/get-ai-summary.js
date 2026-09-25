@@ -24,7 +24,7 @@ const { consensusLabel } = require('./consensus');
 // or the preflight reads the sliced text's interpolations as unknown
 // brace-tokens and goes red.
 const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
-const { ORG, promptsMetadataPk } = require('./tenant');
+const { ORG, promptsMetadataPk, callerMayDriveSession } = require('./tenant');
 const { setMetadataKey } = require('./set-version');
 const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tenant-crypto');
 // Every log line below that is ABOUT the room's words — the answers, the
@@ -108,13 +108,77 @@ function sessionSetOrgId(metadata) {
   return metadata && metadata.QuestionSetScope === ORG ? (metadata.orgId || '') : '';
 }
 
-async function sessionOrgId(gameId) {
+/** The session's METADATA row, projected to its owning org — null when there is none. */
+async function sessionOwnerRow(gameId) {
   const res = await db.send(new GetCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: 'GAME#' + gameId, SK: 'METADATA' },
     ProjectionExpression: 'orgId'
   }));
-  return orgOf(res && res.Item);
+  return (res && res.Item) || null;
+}
+
+async function sessionOrgId(gameId) {
+  return orgOf(await sessionOwnerRow(gameId));
+}
+
+/**
+ * WHO MAY GENERATE A SUMMARY, AND WHO MAY READ THE PROMPT BEHIND ONE.
+ *
+ * GET /games/{gameId}/ai-summary is PUBLIC: every phone and the host's remote
+ * read the round's summary there, and a participant holds no token. Three of
+ * its parameters were never a participant's business:
+ *
+ *   generateNew   starts a generation (Bedrock, and an overwrite of the stored
+ *                 summary). Read for truthiness below, so ANY value generates.
+ *   debug         returns the full prompt Workie was given.
+ *   promptDebug   returns every template variable.
+ *
+ * The prompt and the variables carry the question's reveal (answerDetails), a
+ * trivia round's correctAnswer and every participant's answer text. The
+ * question's REF row exists from ASK and generation has no round-state gate,
+ * so anyone with the four-digit code could generate with debug after the first
+ * answer and read the answer mid-round (review, 2026-09-25).
+ *
+ * So they are served only on GET /games/{gameId}/ai-summary/host — Cognito in
+ * front (template-clean.yaml), hosts|admins in authorizer.js, and
+ * callerMayDriveSession here. The public route refuses them before it reads
+ * anything; its plain read is unchanged. On the host route every refusal is
+ * the same "Game not found" as a code that names nothing: a different answer
+ * for "it is somebody else's" is an existence oracle over 9,000 codes. No
+ * identity is refused outright, as get-report.js does — callerMayDriveSession
+ * alone passes a caller with no groups.
+ *
+ * Returns the response to send, or null to carry on.
+ * tests/ai-summary-host-only-params.js.
+ */
+const HOST_ROUTE = /\/ai-summary\/host$/;
+
+async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug }) {
+  const rc = event.requestContext || {};
+  const route = rc.routeKey || event.routeKey || event.rawPath || '';
+  if (!HOST_ROUTE.test(route)) {
+    const hostOnly = Boolean(generateNew) || debug === 'true' || promptDebug === 'true';
+    if (!hostOnly) return null;
+    return {
+      statusCode: 403,
+      body: JSON.stringify({
+        error: 'Generating a summary and reading its prompt are for the session host, on GET /games/{gameId}/ai-summary/host.'
+      }),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+  }
+  const authorizer = rc.authorizer || {};
+  const identity = (authorizer.jwt && authorizer.jwt.claims) || authorizer.lambda;
+  if (identity) {
+    const owner = await sessionOwnerRow(gameId);
+    if (owner && callerMayDriveSession(event, owner)) return null;
+  }
+  return {
+    statusCode: 404,
+    body: JSON.stringify({ error: 'Game not found' }),
+    headers: { 'Access-Control-Allow-Origin': '*' }
+  };
 }
 const s3 = new S3Client({ region: 'us-east-1' });
 const lambda = new LambdaClient({});
@@ -674,6 +738,13 @@ exports.handler = async (event) => {
       };
     }
 
+    // generateNew, debug and promptDebug are the host's (refuseUnlessHost).
+    // The worker was started by a request that already passed this.
+    if (!workerMode) {
+      const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug });
+      if (refusal) return refusal;
+    }
+
     console.log(`🤖 Getting AI summary for game ${gameId}, questionId: ${questionId || 'current'}`);
 
     // Get game state first
@@ -767,8 +838,8 @@ exports.handler = async (event) => {
         
         // Add debug information if debug mode is enabled
         if (debug === 'true' && existingSummary.Item.DebugInfo) {
-          // This route is public: the briefing is withheld from any prompt it
-          // returns (personas.js withholdBriefing).
+          // Only the host route gets this far with debug (refuseUnlessHost).
+          // The briefing is withheld all the same (personas.js withholdBriefing).
           responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt
             ? withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt)
             : 'Debug info not available';

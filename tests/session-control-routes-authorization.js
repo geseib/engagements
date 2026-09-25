@@ -122,6 +122,11 @@ const MUST_BE_CLOSED = [
   // THE SCOREBOARD (game/scoreboard.js): every name in the room, with its
   // total, full-screen on the wall. Born closed, like /stage-focus.
   ['POST', '/games/{gameId}/scoreboard'],
+  // THE AI SUMMARY'S HOST DOOR (game/get-ai-summary.js): the only route that
+  // generates a round's summary or returns its prompt and template variables —
+  // the reveal, a trivia answer, every participant's words. The public read
+  // below refuses those parameters (tests/ai-summary-host-only-params.js).
+  ['GET', '/games/{gameId}/ai-summary/host'],
 ];
 
 // The participant journey. None of these carries a token, ever.
