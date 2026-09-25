@@ -176,7 +176,8 @@ const { ORG: ORG_SCOPE, PLATFORM, promptsMetadataPk } = require(path.join(REPO, 
 const { setMetadataKey, setPartition } = require(path.join(REPO, 'lambda-functions/game/set-version.js'));
 const { handler: getAiSummary } = require(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'));
 const personas = require(path.join(REPO, 'lambda-functions/game/personas.js'));
-const { HONESTY_RULE, backgroundLine, withholdBriefing } = personas;
+const { HONESTY_RULE, backgroundLine, withholdBriefing, withholdBackground } = personas;
+const fs = require('fs');
 
 if (!process.env.DEBUG) { console.log = () => {}; console.warn = () => {}; console.error = () => {}; }
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -352,7 +353,34 @@ const getSummary = async (gameId, extra = {}) => {
   const res = await getAiSummary({
     pathParameters: { gameId }, queryStringParameters: { questionId: '001', ...extra },
   });
-  return { statusCode: res.statusCode, body: JSON.parse(res.body) };
+  return { statusCode: res.statusCode, raw: res.body, body: JSON.parse(res.body) };
+};
+
+/*
+  THE DEBUG ECHO IS THE HOST'S. Since dev e76850b0 the public GET refuses
+  ?debug / ?promptDebug / ?generateNew with a 403 (get-ai-summary.js
+  refuseUnlessHost); they are served only on GET /games/{id}/ai-summary/host,
+  to the session's own host (tests/ai-summary-host-only-params.js). The
+  Background is withheld from that echo as well — a second line behind the
+  gate — so the debug reads below go through the host's door, as the owning
+  team's host. An orgless (platform) session passes callerMayDriveSession for
+  any signed-in host.
+*/
+const HOST_ROUTE = 'GET /games/{gameId}/ai-summary/host';
+const OWNING_HOST = { lambda: { userId: 'u-host', groups: 'hosts', orgId: ORG, orgIds: ORG } };
+const getHostSummary = async (gameId, extra = {}) => {
+  const res = await getAiSummary({
+    routeKey: HOST_ROUTE,
+    pathParameters: { gameId }, queryStringParameters: { questionId: '001', ...extra },
+    requestContext: { routeKey: HOST_ROUTE, authorizer: OWNING_HOST },
+  });
+  return { statusCode: res.statusCode, raw: res.body, body: JSON.parse(res.body) };
+};
+
+/** The ~120 characters around the first `needle` in `raw`, or '' — for a leak message. */
+const around = (raw, needle) => {
+  const at = raw.indexOf(needle);
+  return at < 0 ? '' : raw.slice(Math.max(0, at - 60), at + 60);
 };
 
 (async () => {
@@ -384,6 +412,25 @@ const getSummary = async (gameId, extra = {}) => {
     const three = { eventDetails: 'a', hostInstructions: 'b', questionSetContext: 'c' };
     assert.strictEqual(personas.buildContextBlock({ ...three, questionBackground: '  ' }),
       personas.buildContextBlock(three));
+  });
+
+  await check('withholdBackground takes the value out wherever it is, and says it did', () => {
+    assert.strictEqual(typeof withholdBackground, 'function');
+    const text = `VOICE\n${backgroundLine(BG)}\nQ: x\nBackground: ${BG} (again)\nend`;
+    const out = withholdBackground(text, BG);
+    assert.ok(!out.includes('zqbg'), out);
+    assert.ok(out.includes(LABEL) && out.includes('withheld'), out);
+    assert.ok(out.startsWith('VOICE\n') && out.includes('\nQ: x\n') && out.endsWith(' (again)\nend'), out);
+  });
+  await check('withholdBackground: a labelled line whose value changed after placing still goes', () => {
+    const out = withholdBackground(`a\n${LABEL}zqbg Version control, then {x} was filled\nb`, BG);
+    assert.ok(!out.includes('zqbg'), out);
+    assert.ok(out.startsWith('a\n') && out.endsWith('\nb'), out);
+  });
+  await check('withholdBackground: no Background, nothing touched; a "$&" in the value is literal', () => {
+    assert.strictEqual(withholdBackground('same text', ''), 'same text');
+    assert.strictEqual(withholdBackground('same text', undefined), 'same text');
+    assert.ok(!withholdBackground('costs $& and $1 today', 'costs $& and $1').includes('$&'));
   });
 
   say('\n1. an org round whose question has a Background');
@@ -444,10 +491,16 @@ const getSummary = async (gameId, extra = {}) => {
     assert.ok(noBg.prompt.indexOf(HONESTY_RULE) < at);
     assert.ok(withholdBriefing(noBg.prompt).includes(HONESTY_RULE));
   });
-  await check('?debug=true on the public GET returns a prompt with the rule and without the briefing', async () => {
-    const { body } = await getSummary('7102', { debug: 'true' });
+  await check('?debug=true on the public GET is refused outright (dev e76850b0)', async () => {
+    const { statusCode, raw } = await getSummary('7102', { debug: 'true' });
+    assert.strictEqual(statusCode, 403, raw);
+    assert.ok(!raw.includes(BRIEFING), 'the briefing reached a public route');
+  });
+  await check("?debug=true on the host's route returns a prompt with the rule and without the briefing", async () => {
+    const { statusCode, body } = await getHostSummary('7102', { debug: 'true' });
+    assert.strictEqual(statusCode, 200, JSON.stringify(body));
     assert.ok(body.debugPrompt.includes(HONESTY_RULE), body.debugPrompt);
-    assert.ok(!body.debugPrompt.includes(BRIEFING), 'the briefing reached a public route');
+    assert.ok(!body.debugPrompt.includes(BRIEFING), 'the briefing reached the debug echo');
   });
 
   say('\n3. a lowercase `background` on a hand-built platform row');
@@ -533,6 +586,67 @@ const getSummary = async (gameId, extra = {}) => {
     const line = withBgLogs.split('\n').find((l) => l.includes('RAW QUESTION DATA:'));
     assert.ok(line, 'no RAW QUESTION DATA line');
     assert.ok(line.includes(`background ${BG.length} chars`), line);
+  });
+
+  say('\n9. the debug reads never return the Background');
+  // ?debug=true / ?promptDebug=true hand back the prompt and its variables.
+  // The public GET refuses them (dev e76850b0), and the host's own route —
+  // the only one that serves them — withholds the Background by value, the
+  // way the briefing is, as a second line: the REF row exists from ASK, and
+  // the Background is "never shown to players". The MODEL still gets it.
+  const DEBUG_CASES = [
+    ['7101', 'the injected block', withBg, BG],
+    ['7103', 'a platform row, lowercase attribute', lower, 'zqbg-lower'],
+    ['7104', 'a template that places {background}', placed, BG],
+    ['7105', 'a template that places {contextSections}', sections, BG],
+  ];
+  for (const [gameId, what, run, value] of DEBUG_CASES) {
+    await check(`${gameId} (${what}): the model was given the Background`, () =>
+      assert.ok(run.prompt.includes(value), run.prompt));
+    await check(`${gameId}: the public GET refuses ?debug=true and ?promptDebug=true, and returns no Background`, async () => {
+      for (const q of [{ debug: 'true' }, { promptDebug: 'true' }, { debug: 'true', promptDebug: 'true' }]) {
+        const { statusCode, raw } = await getSummary(gameId, q);
+        assert.strictEqual(statusCode, 403, `${JSON.stringify(q)}: ${raw}`);
+        assert.ok(!raw.includes('zqbg'), `the Background is in the response: …${around(raw, 'zqbg')}…`);
+      }
+    });
+    await check(`${gameId}: ?debug=true on the host route returns the prompt, without the Background`, async () => {
+      const { statusCode, raw, body } = await getHostSummary(gameId, { debug: 'true' });
+      assert.strictEqual(statusCode, 200);
+      assert.ok(String(body.debugPrompt).includes('Which handoff hurt most this quarter?'), 'no prompt was returned');
+      assert.ok(body.debugPrompt.includes(HONESTY_RULE), 'the rest of the prompt was cut too');
+      assert.ok(body.debugPrompt.includes('withheld'), 'nothing says the Background was withheld');
+      assert.ok(!raw.includes('zqbg'), `the Background is in the response: …${around(raw, 'zqbg')}…`);
+    });
+    await check(`${gameId}: ?debug=true&promptDebug=true on the host route returns the variables, without the Background`, async () => {
+      const { raw, body } = await getHostSummary(gameId, { debug: 'true', promptDebug: 'true' });
+      assert.ok(body.templateVariables && typeof body.templateVariables === 'object', 'no templateVariables');
+      assert.ok(!('background' in body.templateVariables), 'the background variable was returned');
+      assert.strictEqual(typeof body.templateVariables.responsesText, 'string', 'the other variables went too');
+      assert.ok(!raw.includes('zqbg'), `the Background is in the response: …${around(raw, 'zqbg')}…`);
+    });
+  }
+  await check('7101: the returned contextSections keeps its other lines and marks the Background withheld', async () => {
+    const { body } = await getHostSummary('7101', { promptDebug: 'true' });
+    const cs = body.templateVariables.contextSections;
+    assert.ok(cs.includes(`ABOUT THIS SESSION: ${BRIEF.Details}`), cs);
+    assert.ok(cs.includes(`${LABEL}[withheld`), cs);
+  });
+  await check('the stored summary still keeps the full prompt, sealed — only the route withholds', async () => {
+    const opened = await crypto.decryptItem(ORG, 'aiSummary', store.get(key('GAME#7101', 'QUESTION#001#AISummary')));
+    assert.ok(opened.DebugInfo.fullPrompt.includes(LABEL + BG));
+    assert.strictEqual(opened.DebugInfo.templateVariables.background, BG);
+  });
+  await check('both response branches, cached and fresh, withhold it (source: the fresh one is unreachable here)', () => {
+    // The fresh branch builds its response after a generation the HTTP path
+    // never runs inline (the worker returns first), so it is read, not driven.
+    const src = fs.readFileSync(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'), 'utf8');
+    const prompts = src.match(/responseData\.debugPrompt = [^;]*;/g) || [];
+    assert.strictEqual(prompts.length, 2, `expected two debugPrompt assignments, found ${prompts.length}`);
+    for (const p of prompts) assert.ok(/withholdBackground\(/.test(p) && /withholdBriefing\(/.test(p), p);
+    const vars = src.match(/responseData\.templateVariables = [^;]*;/g) || [];
+    assert.strictEqual(vars.length, 2, `expected two templateVariables assignments, found ${vars.length}`);
+    for (const v of vars) assert.ok(/publicTemplateVariables\(/.test(v), v);
   });
 
   say(`\n${pass} passed, ${fail} failed`);

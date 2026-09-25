@@ -43,8 +43,9 @@ const ASSEMBLY_LAYERS = Object.freeze([
     name: 'The session',
     text: 'What the host wrote about the session and any instructions they gave for the AI, the '
       + 'question set author\'s own context, and the question\'s Background (its author\'s notes for '
-      + 'Workie), as a "SESSION CONTEXT" block — unless this prompt places {contextSections} itself. '
-      + 'The Background is left out of the block when this prompt places {background}.',
+      + 'Workie), as a "SESSION CONTEXT" block — unless this prompt places {contextSections} itself, '
+      + 'in which case all of it, the Background included, travels inside {contextSections} instead. '
+      + 'When this prompt places {background}, the Background goes only there.',
   }),
   Object.freeze({
     source: 'templateBody',

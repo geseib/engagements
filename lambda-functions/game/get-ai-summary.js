@@ -8,7 +8,7 @@ const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = requir
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
   buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
-  backgroundLine, HONESTY_RULE,
+  backgroundLine, withholdBackground, HONESTY_RULE,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isCallAndAnswer } = require('./briefing');
@@ -713,6 +713,31 @@ exports.sessionPromptId = sessionPromptId;
 exports.isUsableSummaryPrompt = isUsableSummaryPrompt;
 exports.summaryPromptDefect = summaryPromptDefect;
 
+/**
+ * WHAT THE DEBUG READS MAY RETURN OF A SUMMARY'S DebugInfo.
+ *
+ * ?debug=true / ?promptDebug=true hand back the prompt and its variables —
+ * since 2026-09-25 only on GET /games/{id}/ai-summary/host, to the session's
+ * own host (refuseUnlessHost above); the public route refuses them. The
+ * question's Background is "never shown to players" (question-background spec
+ * §1), so it is withheld from the echo as well, a second line behind that
+ * gate, by VALUE — it has no fixed place in the prompt — the way personas.js
+ * withholdBriefing withholds the briefing. The value is the one the summary
+ * stored in its own templateVariables. The model's prompt, and the stored
+ * DebugInfo, are untouched: this is only what the route returns.
+ */
+const debugBackground = (debugInfo) => {
+  const vars = debugInfo && debugInfo.templateVariables;
+  return vars && typeof vars.background === 'string' ? vars.background : '';
+};
+const publicTemplateVariables = (debugInfo) => {
+  const { background, ...rest } = (debugInfo && debugInfo.templateVariables) || {};
+  if (typeof rest.contextSections === 'string') {
+    rest.contextSections = withholdBackground(rest.contextSections, background);
+  }
+  return rest;
+};
+
 exports.handler = async (event) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
   // with __workerMode set, so the full generation runs off the API Gateway 30s
@@ -842,16 +867,18 @@ exports.handler = async (event) => {
         // Add debug information if debug mode is enabled
         if (debug === 'true' && existingSummary.Item.DebugInfo) {
           // Only the host route gets this far with debug (refuseUnlessHost).
-          // The briefing is withheld all the same (personas.js withholdBriefing).
+          // The briefing and the question's Background are withheld all the
+          // same (personas.js withholdBriefing, withholdBackground).
           responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt
-            ? withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt)
+            ? withholdBackground(withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt),
+              debugBackground(existingSummary.Item.DebugInfo))
             : 'Debug info not available';
           responseData.debugProvenance = existingSummary.Item.DebugInfo.promptProvenance || null;
         }
         
         // Add prompt debug information if prompt debug mode is enabled
         if (promptDebug === 'true' && existingSummary.Item.DebugInfo) {
-          responseData.templateVariables = existingSummary.Item.DebugInfo.templateVariables || {};
+          responseData.templateVariables = publicTemplateVariables(existingSummary.Item.DebugInfo);
           responseData.promptTemplate = existingSummary.Item.DebugInfo.promptTemplate || '';
           responseData.promptName = existingSummary.Item.DebugInfo.promptName || '';
           responseData.promptSource = existingSummary.Item.DebugInfo.promptSource || '';
@@ -1559,13 +1586,14 @@ exports.handler = async (event) => {
     
     // Add debug information if debug mode is enabled
     if (debug === 'true' && summaryData.debugInfo) {
-      responseData.debugPrompt = withholdBriefing(summaryData.debugInfo.fullPrompt);
+      responseData.debugPrompt = withholdBackground(withholdBriefing(summaryData.debugInfo.fullPrompt),
+        debugBackground(summaryData.debugInfo));
       responseData.debugProvenance = summaryData.debugInfo.promptProvenance;
     }
     
     // Add prompt debug information if prompt debug mode is enabled
     if (promptDebug === 'true' && summaryData.debugInfo) {
-      responseData.templateVariables = summaryData.debugInfo.templateVariables || {};
+      responseData.templateVariables = publicTemplateVariables(summaryData.debugInfo);
       responseData.promptTemplate = summaryData.debugInfo.promptTemplate || '';
       responseData.promptName = summaryData.debugInfo.promptName || '';
       responseData.promptSource = summaryData.debugInfo.promptSource || '';

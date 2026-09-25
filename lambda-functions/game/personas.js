@@ -672,6 +672,33 @@ const backgroundLine = (text) => {
 };
 
 /**
+ * A prompt (or one template variable) with the question's Background taken
+ * out, for anything that RETURNS it — the same job withholdBriefing does for
+ * the briefing. ?debug=true and ?promptDebug=true hand back the prompt Workie
+ * was given and its variables; since 2026-09-25 only on GET
+ * /games/{id}/ai-summary/host, to the session's own host (get-ai-summary.js
+ * refuseUnlessHost). The Background is "never shown to players"
+ * (question-background spec §1), and the question's REF row exists from ASK,
+ * so it stays withheld from the echo as a second line behind that gate.
+ *
+ * BY VALUE, because the Background has no fixed position: it rides the
+ * injected block, {contextSections}, or wherever a template put {background}.
+ * Every occurrence of the value goes, then — as a fallback for a value the
+ * variable substitution changed after it was placed — the rest of any
+ * labelled line. The model's own prompt is never passed through this.
+ */
+const BACKGROUND_WITHHELD = "[withheld — the question's Background is part of Workie's prompt, but this route never returns it]";
+const BACKGROUND_LABELLED_LINE = new RegExp(
+  `^(${BACKGROUND_LABEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}).*$`, 'gm');
+const withholdBackground = (text, background) => {
+  const s = String(text ?? '');
+  const value = typeof background === 'string' ? background.trim() : '';
+  if (!value) return s;
+  return s.split(value).join(BACKGROUND_WITHHELD)
+    .replace(BACKGROUND_LABELLED_LINE, (line, label) => `${label}${BACKGROUND_WITHHELD}`);
+};
+
+/**
  * ONE HONESTY RULE, ON EVERY PROMPT (question-background spec §3). Appended by
  * get-ai-summary.js after the host's additions and before the briefing, so it is
  * among the last words the model reads whatever the template says — and
@@ -846,6 +873,7 @@ module.exports = {
   INFERRED_VOICE,
   buildContextBlock,
   backgroundLine,
+  withholdBackground,
   HONESTY_RULE,
   DEFAULT_OUTPUT_SECTIONS,
   normalizeOutputSections,
