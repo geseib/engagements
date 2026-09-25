@@ -8,6 +8,7 @@ import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirem
 import BatchGuidanceField from './BatchGuidanceField';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
+import { buildWorkieSetNote } from '../utils/workieSetNote';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
@@ -351,7 +352,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     title: `${triviaConfig.topic} Trivia${triviaConfig.audience ? ` for ${triviaConfig.audience}` : ''}`,
     description: `AI-generated trivia questions about ${triviaConfig.topic}. Difficulty: ${triviaConfig.difficulty}. ${triviaConfig.numChoices} choices per question.`,
     customInstructions: `Select the best answer for each question. ${triviaConfig.numCorrect > 1 ? `Some questions may have ${triviaConfig.numCorrect} correct answers.` : ''}`,
-    aiContextInstructions: `These are ${triviaConfig.difficulty}-level trivia questions about ${triviaConfig.topic}. Provide explanations for correct answers and encourage learning.`
+    aiContextInstructions: buildWorkieSetNote({
+      subject: `${triviaConfig.topic} trivia`,
+      audience: triviaConfig.audience,
+      difficulty: triviaConfig.difficulty,
+      brief: triviaConfig.customPrompt,
+    })
   });
 
   /**

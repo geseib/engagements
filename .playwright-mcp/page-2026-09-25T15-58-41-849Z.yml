@@ -1,0 +1,27 @@
+- main [ref=f2e3]:
+  - generic [ref=f2e4]: Ask
+  - generic [ref=f2e9]: dock stays here · S to close
+  - region "Standings after round 6" [ref=f2e10]:
+    - generic [ref=f2e11]:
+      - generic [ref=f2e12]: Standings
+      - generic [ref=f2e14]: Q3 Leadership Offsite
+      - generic [ref=f2e15]: After round 6
+      - generic [ref=f2e16]:
+        - generic [ref=f2e17]: 1–10
+        - generic [ref=f2e18]: of 14
+    - generic [aria-hidden] [ref=f2e23]:
+      - generic [ref=f2e24]: Pos
+      - generic [ref=f2e25]: Player
+      - generic [ref=f2e26]: Pts
+      - generic [ref=f2e27]: Move
+    - list [ref=f2e1789]:
+      - listitem [ref=f2e1790]: 1 Priya, 81 points, up 1
+      - listitem [ref=f2e1791]: 2 Marcus, 78 points, down 1
+      - listitem [ref=f2e1792]: 3 Oluwaseun Adebayo-Richardson, 72 points, no change
+      - listitem [ref=f2e1793]: =4 Hannah, 66 points, up 2
+      - listitem [ref=f2e1794]: =4 Tomás, 66 points, up 1
+      - listitem [ref=f2e1795]: 6 Keiko, 63 points, down 2
+      - listitem [ref=f2e1796]: 7 Dev, 59 points, up 2
+      - listitem [ref=f2e1797]: 8 Sofia, 55 points, down 1
+      - listitem [ref=f2e1798]: 9 Liam, 52 points, down 1
+      - listitem [ref=f2e1799]: 10 Aisha, 51 points, up 1

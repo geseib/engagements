@@ -3,6 +3,7 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
+import { buildWorkieSetNote } from '../utils/workieSetNote';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
@@ -1010,17 +1011,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   // Generate AI context instructions
   const generateAIContextInstructions = () => {
-    const audienceContext = scenarioConfig.audience ? ` The target audience is ${scenarioConfig.audience}.` : '';
-    const difficultyContext = ` These are ${scenarioConfig.difficulty}-level scenarios.`;
-    
-    // Check if it's Amazon Leadership Principles for special context
     const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
-    const actualScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
-      ? selectedType.dbPrompt.scenarioType 
-      : scenarioConfig.type;
-    const typeContext = actualScenarioType === 'amazon-principles' ? ' Focus on Amazon Leadership Principles and STAR format responses.' : '';
-
-    return `These scenarios are designed for professional development and learning.${audienceContext}${difficultyContext}${typeContext} Provide constructive feedback and encourage specific, detailed responses.`;
+    return buildWorkieSetNote({
+      subject: selectedType?.title || '',
+      audience: scenarioConfig.audience,
+      difficulty: scenarioConfig.difficulty,
+      brief: scenarioConfig.context,
+    });
   };
 
   const navigateScenario = (direction) => {
