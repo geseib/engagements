@@ -67,10 +67,10 @@
 /* --------------------------------------------------------------------------- */
 
 /* Second rule, deliberately separate so the block above stays byte-identical
-   to the one in mk.css. System stack only — no font is fetched from anywhere,
-   so the named faces are a preference, not a dependency. */
+   to the one in mk.css. index.html fetches Archivo (at 125% width only) and
+   Inter; the system stack behind each is what renders until they arrive. */
 .mk-root {
-  --mk-font-display: "Archivo Expanded", "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mk-font-display: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mk-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 

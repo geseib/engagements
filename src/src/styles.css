@@ -1,6 +1,6 @@
 /* ============================================================
    WARM SUMMIT — design token layer
-   Fonts (Archivo Expanded + Inter) are loaded via <link> in index.html.
+   Fonts (Archivo at 125% width + Inter) are loaded via <link> in index.html.
    :root = DUSK STAGE (big-screen / projector states, the default).
    [data-theme="light"] = PAPER (authoring / admin / host-editing UI).
    [data-theme="dark"] mirrors :root so big-screen containers can opt back
@@ -50,7 +50,10 @@
   --space: 8px; /* 8px base grid */
 
   /* typography */
-  --font-display: "Archivo Expanded", system-ui, sans-serif; /* wide+heavy, recreates PP Neue Corp Wide */
+  /* wide+heavy, recreates PP Neue Corp Wide. index.html loads Archivo at
+     wdth 125 only, so the name alone selects the expanded face — no rule
+     needs a font-stretch of its own. */
+  --font-display: "Archivo", system-ui, sans-serif;
   --font-ui:      "Inter", system-ui, sans-serif;
 }
 

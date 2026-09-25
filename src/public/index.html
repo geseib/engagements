@@ -31,10 +31,14 @@
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content="https://engage.seibtribe.us/assets/marketing/share.png" />
-  <!-- Warm Summit fonts: Archivo Expanded (display) + Inter (UI) -->
+  <!-- Warm Summit fonts: Archivo at 125% width (display) + Inter (UI).
+       Google has no family called "Archivo Expanded"; asking for one returns
+       nothing for it. The expanded face is Archivo on its wdth axis, and this
+       loads ONLY that width, so every rule naming "Archivo" gets it.
+       Pinned by src/src/__tests__/displayFontFamily.test.js. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="root"></div>
