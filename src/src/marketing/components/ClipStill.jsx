@@ -46,32 +46,36 @@ const TRIVIA_PLAYER = (
   </>
 );
 
+/* The results of a call-and-answer round (2026-09-25). It used to be
+ * labelled VOTE with vote counts on the bars; the numbers the stage shows
+ * are the RESULTS points of a ranked top three, scored 3/2/1
+ * (game/get-results.js). The numbers match the home tally. */
 const POLL_HOST = (
   <>
     <div className="mk-ss-top">
       <span className="mk-ss-dot" />
-      <span className="mk-ss-chip">Call and answer · Vote</span>
+      <span className="mk-ss-chip">Results</span>
       <span className="mk-ss-code">4821</span>
     </div>
     <p className="mk-ss-q">What should we stop doing in the next quarter?</p>
     <div className="mk-ss-bars">
       <div className="mk-ss-bar">
-        <span>Parallel discovery on three products</span><em>9</em>
+        <span>Parallel discovery on three products</span><em>52</em>
         <span className="mk-ss-track"><i style={{ width: '82%' }} /></span>
       </div>
       <div className="mk-ss-bar">
-        <span>Weekly status meeting nobody reads</span><em>7</em>
-        <span className="mk-ss-track"><i style={{ width: '64%' }} /></span>
+        <span>Weekly status meeting nobody reads</span><em>44</em>
+        <span className="mk-ss-track"><i style={{ width: '69%' }} /></span>
       </div>
       <div className="mk-ss-bar">
-        <span>Hand-built release notes</span><em>4</em>
-        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '36%' }} /></span>
+        <span>Hand-built release notes</span><em>24</em>
+        <span className="mk-ss-track mk-ss-cool"><i style={{ width: '38%' }} /></span>
       </div>
     </div>
     <div className="mk-ss-foot">
-      <span className="mk-ss-chip">20 votes cast</span>
+      <span className="mk-ss-chip">20 of 20 voted</span>
       <span className="mk-ss-grow" />
-      <span className="mk-ss-chip">Results</span>
+      <span className="mk-ss-chip">Next question</span>
     </div>
   </>
 );
@@ -237,6 +241,8 @@ const HERO_RESULTS = (
   </>
 );
 
+/* "+14 pts", not "+120": a right answer scores 10 plus up to 5 for speed
+ * (websocket/message.js), so 15 is the most one question can pay. */
 const HERO_PHONE = (
   <>
     <div className="mk-ss-top"><span className="mk-ss-dot" /><span className="mk-ss-chip">Priya</span></div>
@@ -244,7 +250,7 @@ const HERO_PHONE = (
     <div className="mk-ss-opts">
       <div className="mk-ss-opt mk-ss-right"><b>C</b> Never written</div>
     </div>
-    <div className="mk-ss-cta">+120 pts</div>
+    <div className="mk-ss-cta">+14 pts</div>
   </>
 );
 

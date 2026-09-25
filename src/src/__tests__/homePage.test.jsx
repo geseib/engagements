@@ -51,8 +51,11 @@ test('the hero register CTA asks for the register form and returns the host to /
 test('both modes show the room and the phone', () => {
   render(<HomePage />);
   const modes = document.getElementById('modes');
-  expect(within(modes).getByRole('heading', { name: /trivia/i })).toBeInTheDocument();
-  expect(within(modes).getByRole('heading', { name: /call and answer/i })).toBeInTheDocument();
+  // level 3: since 2026-09-25 the section's own h2 names both modes too
+  // ("Trivia to check what people know. Call and answer to hear what they
+  // think."), so the query is pinned to the mode headings themselves.
+  expect(within(modes).getByRole('heading', { level: 3, name: /trivia/i })).toBeInTheDocument();
+  expect(within(modes).getByRole('heading', { level: 3, name: /call and answer/i })).toBeInTheDocument();
   expect(within(modes).getAllByRole('img')).toHaveLength(4);
 });
 
@@ -78,14 +81,14 @@ test("the home sheet's own headings stay h3/h4 — SampleReport's default `headi
   for (const h of blockHeadings) expect(h.tagName).toBe('H4');
 });
 
-// Adapted from the brief: the mockup's own link text for these two links is
-// "See how it works" (closing CTA -> /how-it-works) and "See a full report,
-// annotated" (below the report -> /reports), not the brief's placeholder
-// names. Hrefs are unchanged.
+// Adapted from the brief: the link text for these two links is "See how it
+// works" (closing CTA -> /how-it-works) and, since the 2026-09-25 copy pass,
+// "See a full sample report, with notes" (below the report -> /reports; it
+// was "See a full report, annotated"). Hrefs are unchanged.
 test('the tour and the report page are one click away', () => {
   render(<HomePage />);
   expect(screen.getByRole('link', { name: /see how it works/i })).toHaveAttribute('href', '/how-it-works');
-  expect(screen.getByRole('link', { name: /see a full report, annotated/i })).toHaveAttribute('href', '/reports');
+  expect(screen.getByRole('link', { name: /see a full sample report/i })).toHaveAttribute('href', '/reports');
 });
 
 // Fix round 1 (ruling 1): the home page must show exactly the sheet approved
@@ -119,38 +122,57 @@ test('the home report does not show content that belongs only to the fuller /rep
   expect(within(paper).queryByText(fullOnlyQuestion)).not.toBeInTheDocument();
 });
 
-test('the two report views share identical rows by reference, and neither uses "favorite"', () => {
-  // Rows that are character-for-character the same in both mockups are
-  // defined once in content/sampleReport.js and referenced from both views,
-  // so they cannot drift apart independently.
-  expect(SAMPLE_REPORT_HOME.round.answers[0]).toBe(SAMPLE_REPORT.round.answers[0]);
-  expect(SAMPLE_REPORT_HOME.round.answers[2]).toBe(SAMPLE_REPORT.round.answers[2]);
-  expect(SAMPLE_REPORT_HOME.round.answers[3]).toBe(SAMPLE_REPORT.round.answers[3]);
-  expect(SAMPLE_REPORT_HOME.standings[0]).toBe(SAMPLE_REPORT.standings[0]);
-  expect(SAMPLE_REPORT_HOME.standings[1]).toBe(SAMPLE_REPORT.standings[1]);
-  expect(SAMPLE_REPORT_HOME.standings[2]).toBe(SAMPLE_REPORT.standings[2]);
+test('the two report views are one invented session, and neither uses "favorite"', () => {
+  // The answers and bylines are defined once in content/sampleReport.js and
+  // spread into both views, so the two sheets cannot drift into different
+  // sessions. Since 2026-09-25 the home view carries its own COUNTS (points,
+  // what the real report prints) and its own standings (no Correct column),
+  // so the rows are no longer the same objects; their words still are.
+  const words = (view) => view.round.answers.map((a) => [a.text, a.by.split(' · ')[0]]);
+  expect(words(SAMPLE_REPORT_HOME)).toEqual(words(SAMPLE_REPORT));
+  expect(SAMPLE_REPORT_HOME.standings.map((s) => s.name))
+    .toEqual(SAMPLE_REPORT.standings.slice(0, 3).map((s) => s.name));
 
   const everything = JSON.stringify(SAMPLE_REPORT_HOME) + JSON.stringify(SAMPLE_REPORT);
   expect(everything.toLowerCase()).not.toMatch(/favou?rite/);
 });
 
+test('the home sheet counts what the real report counts: points from ranked ballots, and no Correct column', () => {
+  // Each player ranks a top three, scored 3/2/1 (game/get-results.js), and
+  // GameReport.jsx prints "N points". Twenty ballots hand out 120 points.
+  const answers = SAMPLE_REPORT_HOME.round.answers;
+  for (const a of answers) expect(a.votesText).toBe(`${a.votes} points`);
+  expect(answers.reduce((sum, a) => sum + a.votes, 0)).toBe(20 * (3 + 2 + 1));
+  render(<HomePage />);
+  const paper = document.querySelector('[data-theme="light"]');
+  expect(within(paper).queryByText(/\bvotes\b/)).toBeNull();
+  // rejects: a "Correct" column the real report's Final Scores do not have.
+  expect(within(paper).queryByRole('columnheader', { name: /correct/i })).toBeNull();
+  expect(within(paper).getAllByRole('columnheader')).toHaveLength(3);
+  // A trivia question pays at most 15 (10 + up to 5 for speed; websocket/
+  // message.js), and the session has six questions, so no total can pass 90.
+  for (const s of SAMPLE_REPORT_HOME.standings) expect(Number(s.points)).toBeLessThanOrEqual(6 * 15);
+});
+
 /* ------------------------------------------------------- fix round 2: the
- * sheet's "Export PDF" / "Copy shareable link" looked like live buttons but
- * did nothing — SampleReport now renders them as inert, aria-hidden spans,
- * and its `footerLinks` prop is gone entirely. */
+ * sheet's footer buttons looked like live buttons but did nothing —
+ * SampleReport renders them as inert, aria-hidden spans, and its
+ * `footerLinks` prop is gone entirely. Since 2026-09-25 the home sheet draws
+ * the real report toolbar's two buttons, Print and Save report, instead of
+ * "Export PDF" / "Copy shareable link". */
 test('the sample sheet on home has no live links or buttons of its own', () => {
   render(<HomePage />);
   const article = screen.getByRole('article', { name: /sample session report/i });
   expect(within(article).queryAllByRole('link')).toHaveLength(0);
   expect(within(article).queryAllByRole('button')).toHaveLength(0);
-  expect(within(article).getByText('Export PDF')).toHaveAttribute('aria-hidden', 'true');
-  expect(within(article).getByText('Copy shareable link')).toHaveAttribute('aria-hidden', 'true');
+  expect(within(article).getByText('Print')).toHaveAttribute('aria-hidden', 'true');
+  expect(within(article).getByText('Save report')).toHaveAttribute('aria-hidden', 'true');
 });
 
 test('the home page still has its own, real link to /reports outside the sheet', () => {
   render(<HomePage />);
   const article = screen.getByRole('article', { name: /sample session report/i });
-  const reportsLink = screen.getByRole('link', { name: /see a full report, annotated/i });
+  const reportsLink = screen.getByRole('link', { name: /see a full sample report/i });
   expect(reportsLink).toHaveAttribute('href', '/reports');
   expect(article).not.toContainElement(reportsLink);
 });
@@ -175,7 +197,9 @@ describe('the front page, refreshed (2026-09-22)', () => {
     // correct row carrying the headline, shares beside every option.
     expect(stage.querySelector('.mk-ss-bar.mk-ss-right')).not.toBeNull();
     expect(stage.querySelectorAll('.mk-ss-bar')).toHaveLength(4);
-    expect(within(stage).getByText('+120 pts')).toBeInTheDocument();
+    // A right answer pays 10 plus up to 5 for speed (websocket/message.js):
+    // the drawing shows a number one question can actually pay.
+    expect(within(stage).getByText('+14 pts')).toBeInTheDocument();
     // No caption under either device: the headline is the caption.
     expect(stage.querySelector('.mk-device-cap')).toBeNull();
   });
@@ -187,7 +211,8 @@ describe('the front page, refreshed (2026-09-22)', () => {
     const lines = [...h1.querySelectorAll(':scope > span')].map((s) => s.textContent);
     expect(lines).toEqual(HOME.hero.headlineLines);
     expect(lines).toHaveLength(4);
-    expect(lines.join(' ')).toBe('Your team’s own material, turned into decisions everyone climbed toward.');
+    // Approved 2026-09-25 (docs/design/front-page-copy-2026-09-25/COPY.md).
+    expect(lines.join(' ')).toBe('Bring your team a new idea. Hear what everyone makes of it.');
   });
 
   test('one filled amber control above the fold: exactly one mk-btn-primary inside .mk-hero', () => {
@@ -202,12 +227,13 @@ describe('the front page, refreshed (2026-09-22)', () => {
     expect(document.querySelector('.mk-root')).toHaveClass('mk-home');
   });
 
-  test('kickers survive only where they carry the climb: #top and #summit', () => {
+  test('kickers survive only at the two ends of the climb: #top and #summit', () => {
     render(<HomePage />);
     const kickers = [...document.querySelectorAll('.mk-kicker')];
     expect(kickers).toHaveLength(2);
     expect(kickers.map((k) => k.closest('section').id)).toEqual(['top', 'summit']);
-    expect(kickers.map((k) => k.textContent)).toEqual(['Base camp', 'The summit']);
+    // Plain labels since 2026-09-25; the ridge scene still draws the climb.
+    expect(kickers.map((k) => k.textContent)).toEqual(['For offsites, workshops and retros', 'The report']);
   });
 
   test('the scaffold tells are gone: no 01/02/03 numerals, no problem cards, no flow cards', () => {
@@ -242,11 +268,11 @@ describe('the front page, refreshed (2026-09-22)', () => {
       expect(mode.text).toBeUndefined();
       expect(mode.list).toHaveLength(3);
     }
-    // The honesty line is still on the page.
-    expect(within(modes).getByText(/trivia has no vote phase/i)).toBeInTheDocument();
+    // The honesty line is still on the page: trivia has no vote.
+    expect(within(modes).getByText(/no vote here: people answer, then you show the results/i)).toBeInTheDocument();
   });
 
-  test('the tally is a performing block: bars declared at zero with the real value in --w, counts that land on the content’s votes', async () => {
+  test('the tally is a performing block: bars declared at zero with the real value in --w, counts that land on the content’s points', async () => {
     render(<HomePage />);
     const tally = document.querySelector('.mk-tally');
     // jsdom has no IntersectionObserver, so the hook falls back to "in view"
@@ -257,17 +283,27 @@ describe('the front page, refreshed (2026-09-22)', () => {
     // No inline width: the CSS owns the growth from 0 to --w.
     for (const bar of bars) expect(bar.style.width).toBe('');
     const counts = [...tally.querySelectorAll('[data-count]')];
-    expect(counts.map((c) => Number(c.dataset.count))).toEqual(HOME.room.tally.rows.map((r) => r.votes));
+    expect(counts.map((c) => Number(c.dataset.count))).toEqual(HOME.room.tally.rows.map((r) => r.points));
     await waitFor(() => {
-      expect(counts.map((c) => c.textContent)).toEqual(HOME.room.tally.rows.map((r) => String(r.votes)));
+      expect(counts.map((c) => c.textContent)).toEqual(HOME.room.tally.rows.map((r) => String(r.points)));
     });
-    // The zero-vote answer is still kept, and still says so.
-    expect(within(tally).getByText(/no votes is kept too/i)).toBeInTheDocument();
+    // Points, not votes: each player ranks a top three, scored 3/2/1
+    // (game/get-results.js). Twenty ballots hand out 120, and the rows add up.
+    expect(HOME.room.tally.unit).toBe('points');
+    expect(HOME.room.tally.rows.reduce((sum, r) => sum + r.points, 0)).toBe(20 * (3 + 2 + 1));
+    for (const n of tally.querySelectorAll('.mk-tally-n')) expect(n).toHaveTextContent(/ points$/);
+    // The answer nobody picked is still kept, and still says so.
+    expect(within(tally).getByText(/nobody picked stays in the report/i)).toBeInTheDocument();
   });
 
-  test('the room’s list is left as it is (open question 1): arrivals on the front screen are still promised', () => {
+  test('the room’s list says when answers reach the front screen: at the vote, not as they arrive', () => {
+    // It used to promise arrivals on the front screen "as they are
+    // submitted". During ASK the stage shows the question and a count; the
+    // answers go up when the vote opens (GameHostPage.jsx).
     render(<HomePage />);
-    expect(within(document.getElementById('room')).getByText(/answers appear on the front screen/i)).toBeInTheDocument();
+    const room = document.getElementById('room');
+    expect(within(room).getByText(/when you move to the vote, every answer goes up on the front screen/i)).toBeInTheDocument();
+    expect(room.textContent).not.toMatch(/as they are submitted|arrive live/i);
   });
 
   test('the two photographs sit where §4 places them, captioned in the wash band, served from our own origin', () => {

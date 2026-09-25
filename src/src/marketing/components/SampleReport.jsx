@@ -30,6 +30,11 @@ import './SampleReport.css';
  * (the old prop that toggled this) is gone — the footer always renders this
  * way, and `/reports` no longer needs to opt out of it.
  *
+ * The standings table draws its "Correct" column only when the view's
+ * `standingsCols.correct` is set. The real report has no such column (its
+ * Final Scores are rank, player and score), so the home view drops it; the
+ * /reports view still carries it until that page's copy is corrected.
+ *
  * `headingLevel` (default 3, clamped to 2..5) sets the sheet's own title-level
  * tag; its block headings (the question, summary and standings headings) are
  * always one level below it. The home page renders under a section h2 and
@@ -50,6 +55,7 @@ export default function SampleReport({
   const r = report;
   const answers = r.round.answers || [];
   const hasDiscussion = Boolean(r.round.discussionQuestions && r.round.discussionQuestions.length);
+  const hasCorrect = Boolean(r.standingsCols.correct);
   // A non-numeric headingLevel (e.g. a typo'd prop) must not reach the tag
   // name — `h${NaN}` renders `<hnan>`, an element no browser or test can
   // reason about. Fall back to the documented default (3) instead of
@@ -110,7 +116,7 @@ export default function SampleReport({
               <tr>
                 <th style={{ width: '56px' }}>{r.standingsCols.rank}</th>
                 <th>{r.standingsCols.player}</th>
-                <th style={{ width: '96px' }}>{r.standingsCols.correct}</th>
+                {hasCorrect && <th style={{ width: '96px' }}>{r.standingsCols.correct}</th>}
                 <th style={{ width: '88px' }}>{r.standingsCols.points}</th>
               </tr>
             </thead>
@@ -119,7 +125,7 @@ export default function SampleReport({
                 <tr key={s.name}>
                   <td>{s.rank}</td>
                   <td>{s.name}</td>
-                  <td>{s.correct}</td>
+                  {hasCorrect && <td>{s.correct}</td>}
                   <td>{s.points}</td>
                 </tr>
               ))}

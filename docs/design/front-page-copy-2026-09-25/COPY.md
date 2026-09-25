@@ -32,7 +32,7 @@ the owner's three follow-up points: devices, purpose, and where the ideas come f
 | Footer: Engagements, Privacy, Terms, Help, Join with a code | — | unchanged | already plain |
 | Join: label / button / aria | Have a code? / Join / Session code, 4 digits | unchanged | already plain |
 | Join: hint | No account and no app. The code is on the screen at the front of the room. | unchanged | already plain and true |
-| Join: code not found (shown after a failed lookup) | Nothing is running under {code}. Check the screen at the front of the room. | No session is using {code}. Check the screen at the front of the room. | R5 ("running under" is system talk) |
+| Join: code not found (shown after a failed lookup) | Nothing is running under {code}. Check the screen at the front of the room. | unchanged (see §4: /join's RootPage says the same thing, and both should change together) | — |
 
 ### Hero
 
@@ -86,7 +86,7 @@ the owner's three follow-up points: devices, purpose, and where the ideas come f
 | Lead | Hand the builder the strategy document, the retro notes, the deck you are about to present. It drafts a set. You decide what runs. | Start from our library, with lessons from books such as The Design of Everyday Things and from leaders such as Lincoln, each turned into a question about your own work. Or upload your own documents and let the AI draft a set. You decide which questions run. | Owner (sources), True (slide decks are refused), R5 ("the builder") |
 | Step 1 | Supply the material / Documents and topics you already have. Or write the questions yourself — the builder is a convenience, not a requirement. | Add your material / Upload a PDF, Word or text file, or describe the subject. Or skip the AI and write every question yourself. | R2 ("supply"), R3, True (file types) |
 | Step 2 | A set is drafted / The AI builders turn it into trivia questions or call-and-answer prompts, each with its category and its detail. | The AI drafts a set / Trivia questions with answers and explanations, or open questions for call and answer, each with a category. | R4, R5 |
-| Step 3 | You review and edit / Preview the set as a player will see it, change anything, drop anything. Nothing runs until you start a session with it. | You check and edit / Preview each question as the room will see it, then change or delete anything. Nothing runs until you start a session. | True (the preview shows the front screen, not the phone), R3 |
+| Step 3 | You review and edit / Preview the set as a player will see it, change anything, drop anything. Nothing runs until you start a session with it. | You review and edit (title kept: `marketingCopy.test.js` pins a human-review statement in this section) / Preview each question as the room will see it, then change or delete anything. Nothing runs until you start a session. | True (the preview shows the front screen, not the phone), R3 |
 | Step 4 | It is stored where it belongs / In your organisation’s private library, encrypted. Or take a starting point from the moderated public library. | It stays in your library / Your library is private and encrypted. You can also copy a set another team has shared and make it your own. | R4, R3; "public library" explained in plain words |
 | Caption / alt, laptop | Drafting a set from your material / The set builder takes a topic… | unchanged (see §3) | — |
 | Note, bold | Private stays private. | unchanged | — |
@@ -218,15 +218,23 @@ copy says "a lesson from a hard book", not the dev-only set's name.
   page does the same), and the hero lead sits flush under the headline because `.mk-root p { margin: 0 }`
   beats `.mk-hero-sub`'s margin. Both are the same on the live page.
 
-## 4. When this is applied
+## 4. Applied, 2026-09-25
 
-The strings live in `src/src/marketing/content/home.js`, `content/clips.js`, `content/sampleReport.js`
-(shared with `/reports`), `components/ClipStill.jsx`, `src/src/components/JoinCodeEntry.jsx` and
-`src/public/index.html`. Dropping the Correct column needs a small change to `SampleReport.jsx`, which renders
-four columns from `standingsCols`.
+The owner approved the direction ("fix the text that is easily changed and most impactful"), and the Proposed column is live in code on `working/front-page-copy`, with two exceptions noted in the tables above: the step 3 title stays "You review and edit", and the join field's not-found message is unchanged. The mockup's Proposed set was updated to match.
 
-These tests pin current strings and will need updating: `src/src/__tests__/homePage.test.jsx` (the exact
-h1 text, the kickers `['Base camp', 'The summit']`, `/trivia has no vote phase/`, `/no votes is kept too/`,
-`/answers appear on the front screen/`, `'Export PDF'`, `'Copy shareable link'`, `'+120 pts'`,
-`/see a full report, annotated/`). Also check `brandHome.test.jsx`, `rootPage.test.jsx` and the
-marketing palette and contract suites.
+Not changed, and why:
+
+- **The summit photograph** prints "votes" in its baked-in text. It is a raster image.
+- **The laptop still versus its caption.** The drawing shows the list of sets, while the caption and alt text describe drafting. This needs a new drawing or a recording, not a one-line fix.
+- **The two layout quirks in §3.** These are existing CSS, not wording.
+- **/reports and /how-it-works.** They share `content/sampleReport.js`, `content/clips.js` and `ClipStill.jsx`. The clip captions and alt text are shared, so those corrections reach /how-it-works too. The /reports sheet keeps its vote counts, its Correct column and its Export PDF / Copy shareable link, because its callouts (`content/reports.js`) describe "a vote count … not a score" and "a session that starts anonymous stays anonymous". Both are untrue, but they belong to that page's own copy pass. The how-it-works tour stills (`TOUR_VOTE`, `TOUR_RESULTS`) still show vote counts.
+- **The join not-found message** appears on both the home hero (`JoinCodeEntry.jsx`) and /join (`RootPage.jsx`). Changing one would split them.
+
+### Where the strings live
+
+The strings are in `src/src/marketing/content/home.js`, `content/clips.js`, `content/sampleReport.js`,
+`components/ClipStill.jsx` and `src/public/index.html`. The tally's unit is in `content/home.js`, and
+`HomePage.jsx` renders it. `SampleReport.jsx` now draws the Correct column only for a view that carries
+one. The tests that pinned the old strings are updated in `src/src/__tests__/homePage.test.jsx`. Wherever
+a pin held an untrue claim, it now pins the true one: points add up to 20 ranked ballots, no Correct
+column, answers go up at the vote, and "+14 pts".
