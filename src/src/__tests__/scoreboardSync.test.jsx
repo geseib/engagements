@@ -10,12 +10,14 @@
  *
  * The rule (spec §3, the revision in scoreboard-state.js): every server write
  * counts `rev` up; the page applies a server copy only when its rev is at
- * least the one it holds, and ignores server copies entirely while its own
- * write is in flight — that write's reply is the answer. Two quick V presses
- * resolve in revision order however their replies come back.
+ * least the one it holds. While its own write is in flight it holds server
+ * copies back, and when the write settles it applies the newest of its
+ * replies and those copies. Two quick V presses resolve in revision order
+ * however their replies come back, and a write that hangs gives up after
+ * SCOREBOARD_WRITE_TIMEOUT_MS rather than holding copies back for good.
  */
 import { renderHook, act } from '@testing-library/react';
-import useScoreboardSync from '../components/stage/scoreboard/useScoreboardSync';
+import useScoreboardSync, { SCOREBOARD_WRITE_TIMEOUT_MS } from '../components/stage/scoreboard/useScoreboardSync';
 
 function deferred() {
   let resolve;
@@ -151,5 +153,108 @@ describe('the race the host can actually hit', () => {
     act(() => { hook.result.current.publishScoreboard({ step: 'next' }); });
     expect(calls[0].url).toBe('https://api.test/games/6060/scoreboard');
     expect(calls[0].body).toEqual({ step: 'next' });
+  });
+});
+
+/*
+  A NEWER COPY THAT LANDS WHILE THE HOST'S OWN WRITE IS OUT is not stale — it
+  is the server moving on without the host. The page used to drop every server
+  copy during a write and never look at it again, then apply its own reply: so
+  a V pressed just as auto mode's next question put the board away (next-
+  question.js closes it, rev N+2) showed the board OPEN at N+1 for as long as
+  nothing else arrived, while the server and the phone had it closed.
+*/
+describe('a server copy that lands while this page\'s write is out', () => {
+  test('V as the next question auto-closes the board: the close is newer, so the board ends closed', async () => {
+    const { hook, now, reply } = setup();
+    act(() => hook.result.current.applyServerBoard(board({ open: true, style: 'departure', rev: 10 })));
+
+    // The host presses V. The server counts it at 11...
+    act(() => { hook.result.current.publishScoreboard({ style: 'olympic' }); });
+    // ...and the next question starting closes the board at 12; its frame
+    // beats V's reply to this page.
+    act(() => hook.result.current.applyServerBoard(board({ open: false, style: 'olympic', rev: 12 })));
+
+    await reply(0, board({ open: true, style: 'olympic', rev: 11 }));
+    expect(now()).toMatchObject({ open: false, style: 'olympic', rev: 12 });
+  });
+
+  test('the newest of several copies seen in flight is the one kept', async () => {
+    const { hook, now, reply } = setup();
+    act(() => hook.result.current.applyServerBoard(board({ open: true, rev: 10 })));
+    act(() => { hook.result.current.publishScoreboard({ step: 'next' }); });
+    act(() => hook.result.current.applyServerBoard(board({ open: true, page: 1, rev: 13 })));
+    act(() => hook.result.current.applyServerBoard(board({ open: true, page: 2, rev: 12 })));
+    await reply(0, board({ open: true, page: 1, rev: 11 }));
+    expect(now()).toMatchObject({ page: 1, rev: 13 });
+  });
+
+  test('a write that failed still lands on the newer copy, not on the board from before it', async () => {
+    const { hook, now, refuse } = setup();
+    act(() => hook.result.current.applyServerBoard(board({ open: true, rev: 4 })));
+    act(() => { hook.result.current.publishScoreboard({ style: 'tote' }); });
+    act(() => hook.result.current.applyServerBoard(board({ open: false, rev: 5 })));
+    await refuse(0);
+    expect(now()).toMatchObject({ open: false, rev: 5 });
+  });
+
+  test('a copy OLDER than the board before the write is still no answer', async () => {
+    const { hook, now, refuse } = setup();
+    act(() => hook.result.current.applyServerBoard(board({ open: true, rev: 4 })));
+    act(() => { hook.result.current.publishScoreboard({ open: false }); });
+    act(() => hook.result.current.applyServerBoard(board({ open: false, rev: 3 })));
+    await refuse(0);
+    expect(now()).toMatchObject({ open: true, rev: 4 });
+  });
+});
+
+/*
+  A WRITE THAT NEVER ANSWERS used to hold the page deaf. While a write is out,
+  server copies wait for its reply — and a POST that hangs (a dropped
+  connection the browser has not noticed) is a reply that never comes, so the
+  close when a question started, the phone's page turns, every refresh were
+  all held back until the browser gave up on its own, which can be minutes.
+*/
+describe('a write that never answers', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  test('is given up after SCOREBOARD_WRITE_TIMEOUT_MS, and the copy that waited for it applies', async () => {
+    const { hook, now } = setup();   // manualFetch ignores the abort signal: the worst case
+    act(() => hook.result.current.applyServerBoard(board({ open: true, rev: 6 })));
+    act(() => { hook.result.current.publishScoreboard({ open: false }); });
+    act(() => hook.result.current.applyServerBoard(board({ open: true, page: 3, rev: 8 })));
+    expect(now().open).toBe(false);   // still waiting on its own write
+
+    await act(async () => { jest.advanceTimersByTime(SCOREBOARD_WRITE_TIMEOUT_MS); });
+    expect(now()).toMatchObject({ open: true, page: 3, rev: 8 });
+  });
+
+  test('and after it, server copies apply the moment they arrive', async () => {
+    const { hook, now } = setup();
+    act(() => hook.result.current.applyServerBoard(board({ open: false, rev: 2 })));
+    act(() => { hook.result.current.publishScoreboard({ open: true }); });
+    await act(async () => { jest.advanceTimersByTime(SCOREBOARD_WRITE_TIMEOUT_MS); });
+    act(() => hook.result.current.applyServerBoard(board({ open: true, style: 'tote', rev: 3 })));
+    expect(now()).toMatchObject({ open: true, style: 'tote', rev: 3 });
+  });
+
+  test('the request itself is aborted, not left open', async () => {
+    const { hook, fetchFn } = setup();
+    act(() => { hook.result.current.publishScoreboard({ open: true }); });
+    const { signal } = fetchFn.mock.calls[0][1];
+    expect(signal).toBeDefined();
+    expect(signal.aborted).toBe(false);
+    await act(async () => { jest.advanceTimersByTime(SCOREBOARD_WRITE_TIMEOUT_MS); });
+    expect(signal.aborted).toBe(true);
+  });
+
+  test('a write that answers in time is not aborted afterwards', async () => {
+    const { hook, fetchFn, reply, now } = setup();
+    act(() => { hook.result.current.publishScoreboard({ open: true }); });
+    await reply(0, board({ open: true, rev: 1 }));
+    await act(async () => { jest.advanceTimersByTime(SCOREBOARD_WRITE_TIMEOUT_MS * 2); });
+    expect(fetchFn.mock.calls[0][1].signal.aborted).toBe(false);
+    expect(now()).toMatchObject({ open: true, rev: 1 });
   });
 });

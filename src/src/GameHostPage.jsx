@@ -260,7 +260,9 @@ function GameHostPage() {
     own POST, the frame, and every /state refresh — and a refresh already on
     its way when the host pressed S must not land afterwards and shut the
     board again. Each copy carries the server's revision; the hook applies
-    only a newer one, and none while this page's own write is in flight.
+    only a newer one. While this page's own write is in flight it holds
+    copies back and settles on the newest of them and the reply, and a
+    write that hangs gives up rather than holding them back for good.
   */
   const {
     scoreboard, applyServerBoard, publishScoreboard, resetScoreboard,
