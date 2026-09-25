@@ -359,6 +359,39 @@ const place = (s) => s.rank;
     assert.strictEqual(wrongBy.get('Cy').movement, 'new');
   });
 
+  // The public read PlayerPage makes once the room says RESULTS#nnn.
+  const readRound = (questionNumber) => getResults({
+    routeKey: 'POST /games/get-results',
+    requestContext: { routeKey: 'POST /games/get-results', http: { method: 'POST' } },
+    body: JSON.stringify({ gameId: GAME, questionNumber }),
+  });
+
+  console.log('\n3b2. a trivia round NOBODY answered still closes');
+  // The zero-answer exit counted the round and returned without ever writing
+  // RESULTS#nnn, so the session sat on ASK#002: the host page (which sets
+  // RESULTS locally) moved on, while the phones, the remote and a refresh
+  // read the round as still open — and every phone's results read was
+  // refused, because the public route only reads a round already in RESULTS.
+  seedRoom('trivia');
+  const silent = await closeRound(2);
+  const silentBody = JSON.parse(silent.body);
+  await check('200, with an empty result', () => {
+    assert.strictEqual(silent.statusCode, 200, silent.body);
+    assert.strictEqual(silentBody.gameType, 'trivia');
+    assert.strictEqual(silentBody.totalAnswers, 0);
+    assert.deepStrictEqual(silentBody.leaderboard, []);
+  });
+  await check('the room moves to RESULTS#002 like any other close', () => {
+    const st = table.get(PK, 'STATE');
+    assert.strictEqual(st.State, 'RESULTS#002');
+    assert.strictEqual(st.CurrentQuestionId, '002');
+  });
+  await check('and it is still a counted round', () =>
+    assert.strictEqual(table.get(PK, 'STATE').ScoresAfterRound, 2));
+  const silentRead = await readRound(2);
+  await check('a phone can read the empty result afterwards', () =>
+    assert.strictEqual(silentRead.statusCode, 200, silentRead.body));
+
   console.log('\n3c. re-closing an OLDER round never moves the count backwards');
   // The host goes back and closes round 2 again after round 3 was counted.
   // The guard used to ask only "is this the round already recorded?", so
@@ -408,6 +441,11 @@ const place = (s) => s.rank;
     assert.strictEqual(noVotes.statusCode, 200, noVotes.body);
     assert.strictEqual(table.get(PK, 'STATE').ScoresAfterRound, 2);
   });
+  await check('...and moves to RESULTS#002, the same as the trivia round nobody answered', () =>
+    assert.strictEqual(table.get(PK, 'STATE').State, 'RESULTS#002'));
+  const noVotesRead = await readRound(2);
+  await check('a phone can read its empty result afterwards', () =>
+    assert.strictEqual(noVotesRead.statusCode, 200, noVotesRead.body));
 
   // ---- §4 get-players -------------------------------------------------------
   console.log('\n5. get-players carries the board');

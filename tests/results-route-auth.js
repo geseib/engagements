@@ -225,6 +225,14 @@ const EXITS = [
     }],
   },
   {
+    // Nobody answered. This exit once returned without writing the state at
+    // all (tests/scoreboard-standings.js §3b2), so it is driven here too.
+    label: 'trivia with zero answers',
+    gameType: 'trivia',
+    phase: 'ASK#001',
+    items: () => [],
+  },
+  {
     label: 'wavelength',
     gameType: 'wavelength',
     phase: 'ASK#001',
@@ -245,8 +253,8 @@ const withoutTimestamps = (body) => {
 (async () => {
   // ------------------------------------------------------------------------
   console.log('\n1. an unauthenticated caller cannot close a round — on ANY exit');
-  // enterResultsState is shared by all four exits and its own comment records
-  // that the state write was once missing from two of them. Every exit is
+  // enterResultsState is shared by every exit and its own comment records
+  // that the state write was once missing from three of them. Every exit is
   // driven here so the gate cannot be added to some and forgotten on others.
 
   for (const exit of EXITS) {

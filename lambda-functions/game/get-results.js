@@ -195,6 +195,8 @@ const isHostTransitionRoute = (event) =>
  *     ASK#nnn for the rest of the round.
  *   - call-and-answer with zero votes: returned "No votes found" early, also
  *     without writing the state.
+ *   - trivia with zero answers: the same early return, found later
+ *     (tests/scoreboard-standings.js §3b2).
  *
  * Neither was visible from the host page, because GameHostPage.handleShowResults
  * sets `RESULTS#nnn` in its OWN React state regardless of what the server did —
@@ -206,8 +208,8 @@ const isHostTransitionRoute = (event) =>
  * also proof the game is underway.
  *
  * WHO IS ALLOWED TO DO THIS is decided HERE, not at the call sites, for the
- * same reason the write itself lives here: there are four exits, two of them
- * once forgot the write entirely, and a permission check pasted into some of
+ * same reason the write itself lives here: there are several exits, three of
+ * them once forgot the write entirely, and a permission check pasted into some of
  * them would grow the identical hole. `event` is threaded in so this function
  * can answer the question itself; a public read reaches this point only when
  * the round it asked about is ALREADY in RESULTS (the handler refuses
@@ -870,8 +872,14 @@ async function handleTriviaResults(event, gameId, questionId) {
   }
 
   if (answers.length === 0) {
-    // Nobody answered: a counted round with no points (recordScoresCounted).
+    // Nobody answered: a counted round with no points (recordScoresCounted),
+    // and a resolved one. This exit used to return without writing the state,
+    // the hole enterResultsState's comment records for the call-and-answer
+    // zero-vote exit: the session sat on ASK#nnn while the host page moved on,
+    // and every phone's read of the round was refused as not yet in RESULTS.
+    // Same order as that exit: counted, then the room is told.
     await recordScoresCounted(event, gameId, paddedQuestionId);
+    await enterResultsState(event, gameId, paddedQuestionId);
     return {
       statusCode: 200,
       body: JSON.stringify({
