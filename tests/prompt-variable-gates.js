@@ -318,8 +318,15 @@ const putUpdate = async (promptId, body) => {
     const { prompt } = await advise({
       promptText: 'x', gameType: 'wavelength', analysisType: 'validate',
     });
-    assert(prompt.includes('{commonWords}'), 'wavelength variables missing');
-    assert(!prompt.includes('{voteTally}'), 'wavelength never votes');
+    // The LIST, not the whole prompt: since 2026-09-24 every advisor prompt
+    // also carries describeAuthoringRules(), whose misleading-variables rule
+    // names {voteTally} for every game type, exactly as the wand's does.
+    const start = prompt.indexOf('Template Variables that exist');
+    const end = prompt.indexOf('Rules the save gate enforces');
+    assert(start >= 0 && end > start, 'the variable block could not be found in the advisor prompt');
+    const list = prompt.slice(start, end);
+    assert(list.includes('{commonWords}'), 'wavelength variables missing');
+    assert(!list.includes('{voteTally}'), 'wavelength never votes');
   });
 
   await acheck('an unknown game type still gets the full list, never an empty one', async () => {

@@ -810,7 +810,7 @@
 
 .pmgr .analysis-types {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -852,6 +852,15 @@
   font-weight: 500;
 }
 
+/* What the lens looks at, in a sentence — body size, not a caption. */
+.pmgr .type-desc {
+  margin-top: 6px;
+  font-size: var(--pc-t-body);
+  line-height: 1.45;
+  color: var(--pc-muted);
+  text-align: center;
+}
+
 .pmgr .analyze-btn {
   width: 100%;
   padding: 12px;
@@ -872,63 +881,6 @@
 .pmgr .result-section h4 {
   margin: 0 0 12px 0;
   font-size: var(--pc-t-head);
-}
-
-.pmgr .improved-prompt {
-  position: relative;
-}
-
-.pmgr .improved-prompt pre {
-  background: var(--pc-card);
-  border: 1px solid var(--pc-rule);
-  padding: 16px;
-  border-radius: 4px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 12px 0;
-}
-
-.pmgr .improved-prompt-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--pc-rule);
-}
-
-.pmgr .apply-btn {
-  background: var(--pc-go);
-  color: var(--bg);
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: var(--pc-t-label);
-  transition: background-color 0.2s ease;
-}
-
-.pmgr .apply-btn:hover {
-  background: var(--success);
-  color: var(--text);
-}
-
-.pmgr .copy-btn {
-  background: transparent;
-  color: var(--pc-ink);
-  border: 1px solid var(--pc-rule-strong);
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: var(--pc-t-label);
-  transition: background-color 0.2s ease;
-  width: 100%;
-}
-
-.pmgr .copy-btn:hover {
-  background: var(--pc-hover);
 }
 
 .pmgr .score-display {
@@ -957,148 +909,171 @@
   transition: width 0.5s ease;
 }
 
-.pmgr .analysis-list {
+/* ---------------------------------------------- the advisor's checklist -- */
+
+/*
+  TICK THE ADVICE, APPLY THE TICKED (AIPromptAdvisor.jsx). What replaced the
+  improved-prompt block, the improvements list and the alternative approaches:
+  one checklist, grouped by the half each fix changes, and a before-and-after
+  of the rewrite.
+
+  EVERY SENTENCE HERE IS BODY SIZE. The owner does not like small type, and the
+  old list set its priority as a 12px uppercase tag. Severity is now a word at
+  the start of the sentence, coloured by tier, and the issue and its fix read
+  as the prose they are. Only the prompt text itself — monospace, dense, read
+  as a document — sits a step down, at the label size the editor's own
+  textarea uses.
+
+  Every pairing is an existing one: --pc-ink, --pc-muted, --pc-stop and
+  --pc-silent on --pc-card, and --pc-ink on --pc-paper over --pc-card — the
+  lowest of those is --pc-muted on --pc-card at 6.06:1 (header table).
+*/
+
+.pmgr .pmgr-advice-summary {
+  margin: 12px 0 0;
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
+  color: var(--pc-ink);
+}
+
+.pmgr .pmgr-advice-lede,
+.pmgr .pmgr-rewrite-note {
+  margin: 0 0 16px;
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
+  color: var(--pc-muted);
+}
+
+.pmgr .pmgr-rewrite-note:last-child {
+  margin-bottom: 0;
+}
+
+.pmgr .pmgr-advice-group-note {
+  font-weight: normal;
+  font-size: var(--pc-t-body);
+  color: var(--pc-muted);
+}
+
+.pmgr .pmgr-advice-list {
   list-style: none;
-  padding: 0;
   margin: 0;
-}
-
-.pmgr .analysis-list li {
-  padding: 8px 0;
-  padding-left: 24px;
-  position: relative;
-}
-
-.pmgr .analysis-list li:before {
-  content: '✓';
-  position: absolute;
-  left: 0;
-  color: var(--pc-go);
-}
-
-.pmgr .improvements-list {
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.pmgr .improvement-item {
-  padding: 16px;
+.pmgr .pmgr-advice-item {
   background: var(--pc-card);
   border: 1px solid var(--pc-rule);
-  border-radius: 4px;
   border-left: 4px solid var(--pc-rule-strong);
+  border-radius: 6px;
 }
 
-.pmgr .improvement-item.priority-high {
+.pmgr .pmgr-advice-item--high {
   border-left-color: var(--pc-stop);
 }
 
-.pmgr .improvement-item.priority-medium {
+.pmgr .pmgr-advice-item--medium {
   border-left-color: var(--pc-silent);
 }
 
-.pmgr .improvement-item.priority-low {
-  border-left-color: var(--pc-go);
+.pmgr .pmgr-advice-item--low {
+  border-left-color: var(--pc-link);
 }
 
-.pmgr .improvement-header {
+/* The whole item is the checkbox's label, so the sentence is the target. */
+.pmgr .pmgr-advice-label {
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
 }
 
-.pmgr .improvement-category {
-  font-weight: 500;
-  color: var(--pc-link);
+.pmgr .pmgr-advice-label input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 3px 0 0;
+  accent-color: var(--pc-link);
+  cursor: pointer;
 }
 
-.pmgr .improvement-priority {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  text-transform: uppercase;
+.pmgr .pmgr-advice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
-.pmgr .priority-high .improvement-priority {
-  background: var(--pc-tint-stop);
+.pmgr .pmgr-advice-issue {
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
+  color: var(--pc-ink);
+}
+
+.pmgr .pmgr-advice-severity {
+  font-weight: 600;
+}
+
+.pmgr .pmgr-advice-item--high .pmgr-advice-severity {
   color: var(--pc-stop);
 }
 
-.pmgr .priority-medium .improvement-priority {
-  background: var(--pc-tint-silent);
+.pmgr .pmgr-advice-item--medium .pmgr-advice-severity {
   color: var(--pc-silent);
 }
 
-.pmgr .priority-low .improvement-priority {
-  background: var(--pc-tint-go);
-  color: var(--pc-go);
-}
-
-.pmgr .improvement-issue {
-  margin: 0 0 8px 0;
+.pmgr .pmgr-advice-item--low .pmgr-advice-severity {
   color: var(--pc-muted);
 }
 
-.pmgr .improvement-suggestion {
-  margin: 0 0 8px 0;
-  font-weight: 500;
+.pmgr .pmgr-advice-fix {
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
+  color: var(--pc-muted);
 }
 
-.pmgr .improvement-example {
-  background: var(--pc-paper);
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 12px;
+/* ------------------------------------------------ the rewrite, both halves -- */
+
+.pmgr .pmgr-rewrite-missed {
   margin: 0;
-}
-
-.pmgr .alternative-approach {
-  padding: 16px;
-  background: var(--pc-card);
-  border: 1px solid var(--pc-rule);
-  border-radius: 4px;
-  margin-bottom: 12px;
-}
-
-.pmgr .alternative-approach h5 {
-  margin: 0 0 8px 0;
-  color: var(--pc-link);
-}
-
-.pmgr .alternative-approach p {
-  margin: 0 0 12px 0;
+  padding-left: 20px;
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
   color: var(--pc-muted);
 }
 
-.pmgr .approach-details {
+.pmgr .pmgr-rewrite-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.pmgr .pros,
-.pmgr .cons {
+.pmgr .pmgr-rewrite-side {
+  min-width: 0;
+}
+
+.pmgr .pmgr-rewrite-side h5 {
+  margin: 0 0 8px;
   font-size: var(--pc-t-body);
-}
-
-.pmgr .pros strong,
-.pmgr .cons strong {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--pc-ink);
-}
-
-.pmgr .pros ul,
-.pmgr .cons ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.pmgr .pros li,
-.pmgr .cons li {
+  font-weight: 600;
   color: var(--pc-muted);
-  margin-bottom: 4px;
+}
+
+.pmgr .pmgr-rewrite-side pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--pc-card);
+  border: 1px solid var(--pc-rule);
+  border-radius: 4px;
+  font-family: var(--pc-mono);
+  font-size: var(--pc-t-label);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--pc-ink);
 }
 
 /* -------------------------------------------------- the template textarea -- */
@@ -2253,7 +2228,7 @@ button.plib-chip:disabled { cursor: progress; }
     grid-template-columns: 1fr;
   }
 
-  .pmgr .approach-details {
+  .pmgr .pmgr-rewrite-pair {
     grid-template-columns: 1fr;
   }
 }

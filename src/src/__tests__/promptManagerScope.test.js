@@ -39,6 +39,9 @@ const GLOBAL_CSS = read('styles.css');
  */
 const CONSUMERS = [
   ['components/AIPromptManager.jsx', read('components', 'AIPromptManager.jsx')],
+  // The advisor dialog, lifted out of AIPromptManager.jsx (2026-09-24). It
+  // still renders inside `.pmgr` — Modal does not portal — so `.pmgr` paints it.
+  ['components/AIPromptAdvisor.jsx', read('components', 'AIPromptAdvisor.jsx')],
   ['components/PromptLibraryPanel.jsx', read('components', 'PromptLibraryPanel.jsx')],
   ['components/PromptVariableInspector.jsx', read('components', 'PromptVariableInspector.jsx')],
   ['components/PromptPreflightPanel.jsx', read('components', 'PromptPreflightPanel.jsx')],
@@ -95,7 +98,7 @@ const rootOf = (selector) => {
  */
 const SCOPES = {
   padm: 'AdminPage.jsx — the prompts section: the chooser and the back control',
-  pmgr: 'AIPromptManager.jsx — the analysis library, both dialogs, the editor form',
+  pmgr: 'AIPromptManager.jsx — the analysis library, both dialogs (the advisor in AIPromptAdvisor.jsx), the editor form',
   pgen: 'AIGenerationPromptEditor.jsx — the generation library and its editor form',
   plib: 'PromptLibraryPanel.jsx — the table, its controls and its empty states',
   pvi: 'PromptVariableInspector.jsx',
@@ -217,7 +220,8 @@ describe('nothing was orphaned by the rename', () => {
     // rejects: `reachable` degenerating into "anything starting with a dash",
     // which would excuse every orphan in the sheet.
     expect(STEMS.length).toBeGreaterThan(0);
-    expect(STEMS).toContain('priority-');
+    // The advisor's checklist colours each item by its severity.
+    expect(STEMS).toContain('pmgr-advice-item--');
   });
 
   test('each scope root appears in the file that is supposed to render it', () => {
@@ -324,6 +328,14 @@ describe('the prompt admin has no blocking browser dialogs left', () => {
     expect(JSX).toMatch(/import Modal from '\.\/Modal'/);
     expect(JSX).not.toMatch(/className="prompt-(editor|advisor)-overlay"/);
     expect((JSX.match(/<Modal\b/g) || []).length).toBeGreaterThanOrEqual(4);
+    // The advisor lives in its own file now, and is held to the same rule.
+    const ADVISOR = read('components', 'AIPromptAdvisor.jsx')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(ADVISOR).toMatch(/import Modal from '\.\/Modal'/);
+    expect(ADVISOR).toMatch(/<Modal\b/);
+    expect(ADVISOR).not.toMatch(/(^|[^.\w])alert\s*\(/m);
+    expect(ADVISOR).not.toMatch(/window\.confirm\s*\(/);
   });
 
   test('Escape is gated on unsaved work rather than disabled', () => {

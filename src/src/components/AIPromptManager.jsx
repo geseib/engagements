@@ -16,10 +16,7 @@ import PromptAssembledPreview from './PromptAssembledPreview';
 import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
 import PromptLibraryPanel from './PromptLibraryPanel';
 import PromptReadOnlyView, { PROMPTS_READ_ONLY_NOTE } from './PromptReadOnlyView';
-import {
-  ADVISOR_GIVE_UP_MS, ADVISOR_POLL_INTERVAL_MS,
-  asSentence, describeAdviceProgress, startPromptAdvice, waitForPromptAdvice,
-} from '../utils/promptAdvisorJob';
+import AIPromptAdvisor from './AIPromptAdvisor';
 
 const API_BASE = window.API_BASE;
 
@@ -151,9 +148,9 @@ const HALVES = {
   },
 };
 
-// AI Prompt Editor Modal Component
-function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
-  const [formData, setFormData] = useState({
+/** The editor's working copy of a prompt. One function, because unsaved work is
+ *  measured by comparing two of these (see `openedWith`). */
+const formFor = (prompt) => ({
     name: prompt?.name || '',
     description: prompt?.description || '',
     // This manager only ever authors ANALYSIS (summary) prompts. It used not to
@@ -179,7 +176,17 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
     // `null` is only ever set by "Use the house mix" — it clears the override.
     angleWeights: prompt?.angleWeights && Object.keys(prompt.angleWeights).length
       ? { ...prompt.angleWeights } : undefined,
-  });
+});
+
+// AI Prompt Editor Modal Component
+/**
+ * `savedPrompt` — the prompt as it is STORED, when `prompt` is not: the
+ * advisor's "Use this" opens the editor on a rewrite, and measuring unsaved
+ * work against the rewrite made it look saved, so Cancel threw the applied
+ * fixes away without asking.
+ */
+function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onCancel }) {
+  const [formData, setFormData] = useState(() => formFor(prompt));
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -209,7 +216,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
    * that writes, and `handleGenerateWithAI` and `insertVariable` both write.
    */
   const openedWith = useRef(null);
-  if (openedWith.current === null) openedWith.current = JSON.stringify(formData);
+  if (openedWith.current === null) openedWith.current = JSON.stringify(savedPrompt ? formFor(savedPrompt) : formData);
   const isDirty = JSON.stringify(formData) !== openedWith.current;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
@@ -1034,305 +1041,11 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
 }
 
 /*
-  AI PROMPT ADVISOR — A JOB, NOT A REQUEST.
-
-  The analysis takes Sonnet 35-60 seconds and the API gateway gives up at 30,
-  so the old single POST came back as a 503 every time and this dialog said
-  "Failed to analyze prompt" without reading why. The POST now starts a job
-  (202 + jobId) and the dialog polls it (utils/promptAdvisorJob.js), showing
-  where it has got to and, if it fails, the server's own sentence.
-
-  `pollIntervalMs` and `giveUpMs` are props only so the tests need not wait on
-  real seconds; the screen always uses the defaults.
+  THE WORKIE ADVISOR lives in its own file, AIPromptAdvisor.jsx, since it became
+  "tick the advice, apply the ticked" (2026-09-24). Re-exported here so every
+  import of it from this module keeps working.
 */
-export function AIPromptAdvisor({
-  prompt, onClose, onApplyImprovedPrompt,
-  pollIntervalMs = ADVISOR_POLL_INTERVAL_MS,
-  giveUpMs = ADVISOR_GIVE_UP_MS,
-}) {
-  const [analysisType, setAnalysisType] = useState('improve');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState(null);
-  const [notice, setNotice] = useState('');
-  const [progress, setProgress] = useState('');
-  /*
-    Closing the dialog mid-run must stop the polling and every state update
-    after it. Set in the effect body, not just its cleanup, because StrictMode
-    mounts, unmounts and remounts once in development — a flag set only by the
-    cleanup would read "closed" for the whole life of the real mount.
-  */
-  const closedRef = useRef(false);
-  useEffect(() => {
-    closedRef.current = false;
-    return () => { closedRef.current = true; };
-  }, []);
-
-  const analysisTypes = [
-    { value: 'improve', label: 'Improve Prompt', icon: 'Sparkle' },
-    { value: 'validate', label: 'Validate Quality', icon: 'MagnifyingGlass' },
-    { value: 'optimize', label: 'Optimize Performance', icon: 'Lightning' }
-  ];
-
-  const runAnalysis = async () => {
-    const url = `${API_BASE}admin/ai-prompt-advisor`;
-    const startedAt = Date.now();
-    setIsAnalyzing(true);
-    setAnalysis(null);
-    setNotice('');
-    setProgress(describeAdviceProgress(null, 0));
-
-    try {
-      const { jobId } = await startPromptAdvice(url, {
-        promptText: prompt.template || (prompt.instructions + '\n\n' + prompt.outputFormat),
-        gameType: prompt.gameType,
-        scenario: prompt.scenario,
-        analysisType,
-        existingPromptId: prompt.promptId
-      });
-      if (closedRef.current) return;
-
-      const result = await waitForPromptAdvice(url, jobId, {
-        intervalMs: pollIntervalMs,
-        giveUpMs,
-        isCancelled: () => closedRef.current,
-        onProgress: (job) => {
-          if (!closedRef.current) setProgress(describeAdviceProgress(job, Date.now() - startedAt));
-        },
-      });
-      if (closedRef.current) return;
-      setAnalysis(result.analysis);
-    } catch (error) {
-      if (closedRef.current) return;
-      console.error('Error analyzing prompt:', error);
-      // Nothing was changed and nothing was stored: the prompt is exactly as it
-      // was, and this reading simply did not happen. The sentence is the
-      // server's own when it gave one (utils/promptAdvisorJob.js).
-      setNotice(`No analysis was produced. ${asSentence(error.message)} The prompt itself is untouched — nothing here writes to it.`);
-    } finally {
-      if (!closedRef.current) {
-        setIsAnalyzing(false);
-        setProgress('');
-      }
-    }
-  };
-
-  return (
-    /*
-      THROUGH THE PRIMITIVE, for the same five reasons as the editor. The
-      backdrop is inert because an analysis takes a model call and several
-      seconds, and a stray click on the darkened page behind it threw the
-      result away with no way to get it back except paying for it again.
-    */
-    <Modal
-      overlayClassName="pmgr-scrim"
-      contentClassName="pmgr-modal"
-      onClose={onClose}
-      closeOnBackdrop={false}
-      labelledBy="pmgr-advisor-title"
-    >
-        <div className="pmgr-modal-head">
-          <h2 id="pmgr-advisor-title">
-            <Icon name="MagicWand" weight="duotone" size={16} color="var(--primary)" /> AI Prompt Advisor
-          </h2>
-          <button
-            type="button"
-            className="pmgr-x"
-            onClick={onClose}
-            aria-label="Close the prompt advisor"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="pmgr-advisor-body" data-testid="pmgr-advisor-body">
-          <div className="prompt-info">
-            <h3>{prompt.name}</h3>
-            <div className="prompt-meta">
-              <span className="badge">{prompt.gameType}</span>
-              {prompt.category && <span className="badge">{prompt.category}</span>}
-            </div>
-          </div>
-
-          <div className="analysis-types">
-            {analysisTypes.map(type => (
-              <label key={type.value} className={`analysis-type-option ${analysisType === type.value ? 'selected' : ''}`}>
-                <input
-                  type="radio"
-                  value={type.value}
-                  checked={analysisType === type.value}
-                  onChange={(e) => setAnalysisType(e.target.value)}
-                />
-                <span className="type-icon"><Icon name={type.icon} weight="duotone" size={18} color="var(--primary)" /></span>
-                <span className="type-label">{type.label}</span>
-              </label>
-            ))}
-          </div>
-
-          <button
-            className="btn-primary analyze-btn"
-            onClick={runAnalysis}
-            disabled={isAnalyzing}
-          >
-            {isAnalyzing ? 'Analyzing...' : 'Run Analysis'}
-          </button>
-
-          {isAnalyzing && progress && (
-            <div className="pmgr-notice" data-testid="pmgr-advisor-progress">
-              <StatusMessage message={progress} tone="pending" />
-            </div>
-          )}
-
-          {notice && (
-            <div className="pmgr-notice" data-testid="pmgr-advisor-notice">
-              <StatusMessage message={notice} tone="error" />
-            </div>
-          )}
-
-          {analysis && (
-            <div className="analysis-results">
-              {analysisType === 'improve' && analysis.improvedPrompt && (
-                <div className="result-section">
-                  <h4><Icon name="Sparkle" weight="fill" size={16} color="var(--primary)" /> Improved Prompt</h4>
-                  <div className="improved-prompt">
-                    <pre>{analysis.improvedPrompt}</pre>
-                    <div className="improved-prompt-actions">
-                      <button 
-                        className="btn-secondary copy-btn"
-                        onClick={() => navigator.clipboard.writeText(analysis.improvedPrompt)}
-                      >
-                        <Icon name="ClipboardText" weight="bold" size={16} color="currentColor" /> Copy to Clipboard
-                      </button>
-                      <button 
-                        className="btn-primary apply-btn"
-                        onClick={() => {
-                          onApplyImprovedPrompt(analysis.improvedPrompt);
-                          onClose();
-                        }}
-                      >
-                        <Icon name="Sparkle" weight="fill" size={16} color="var(--primary)" /> Apply to Prompt
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {analysis.overallScore && (
-                <div className="result-section">
-                  <h4><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> Overall Score</h4>
-                  <div className="score-display">
-                    <div className="score-value">{analysis.overallScore}/10</div>
-                    <div className="score-bar">
-                      <div 
-                        className="score-fill"
-                        style={{ width: `${analysis.overallScore * 10}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {analysis.strengths && (
-                <div className="result-section">
-                  <h4>Strengths</h4>
-                  <ul className="analysis-list">
-                    {analysis.strengths.map((strength, idx) => (
-                      <li key={idx}>{strength}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {analysis.improvements && (
-                <div className="result-section">
-                  <h4><Icon name="NotePencil" weight="bold" size={16} color="currentColor" /> Improvements</h4>
-                  <div className="improvements-list">
-                    {analysis.improvements.map((improvement, idx) => (
-                      <div key={idx} className={`improvement-item priority-${improvement.priority}`}>
-                        <div className="improvement-header">
-                          <span className="improvement-category">{improvement.category}</span>
-                          <span className="improvement-priority">{improvement.priority}</span>
-                        </div>
-                        <p className="improvement-issue">{improvement.issue}</p>
-                        <p className="improvement-suggestion">{improvement.suggestion}</p>
-                        {improvement.example && (
-                          <pre className="improvement-example">{improvement.example}</pre>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {analysis.alternativeApproaches && (
-                <div className="result-section">
-                  <h4><Icon name="ArrowsClockwise" weight="bold" size={16} color="currentColor" /> Alternative Approaches</h4>
-                  {analysis.alternativeApproaches.map((approach, idx) => (
-                    <div key={idx} className="alternative-approach">
-                      <h5>{approach.approach}</h5>
-                      <p>{approach.description}</p>
-                      <div className="approach-details">
-                        <div className="pros">
-                          <strong>Pros:</strong>
-                          <ul>
-                            {approach.pros.map((pro, i) => (
-                              <li key={i}>{pro}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div className="cons">
-                          <strong>Cons:</strong>
-                          <ul>
-                            {approach.cons.map((con, i) => (
-                              <li key={i}>{con}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {analysis.recommendations && (
-                <div className="result-section">
-                  <h4><Icon name="Lightbulb" weight="duotone" size={16} color="var(--primary)" /> Recommendations</h4>
-                  <ul className="analysis-list">
-                    {analysis.recommendations.map((rec, idx) => (
-                      <li key={idx}>{rec}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/*
-          THE BOTTOM EXIT THE ADVISOR NEVER HAD.
-
-          It had an × in the header and nothing else. An `improve` analysis
-          renders an improved prompt, a score, strengths, improvements,
-          alternative approaches and recommendations — several screens of it —
-          and the only way out was above all of them. Commit `4fd425d6` is the
-          same report about the set editor: a person who has finished reading
-          DOWN should not have to scroll back UP to leave.
-
-          It sits OUTSIDE the scrolling body, so it is on screen at every scroll
-          position rather than only at the end.
-        */}
-        <div className="form-actions">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={onClose}
-            data-testid="pmgr-advisor-close"
-          >
-            Close
-          </button>
-        </div>
-    </Modal>
-  );
-}
+export { AIPromptAdvisor };
 
 // Main AI Prompt Manager Component
 /**
@@ -1380,6 +1093,7 @@ function AIPromptManager({ readOnly = false }) {
   const [isCreating, setIsCreating] = useState(false);
   const [advisorPrompt, setAdvisorPrompt] = useState(null);
   const [viewingPrompt, setViewingPrompt] = useState(null);
+  const [editingSavedPrompt, setEditingSavedPrompt] = useState(null);
 
   /*
     THE FIVE `alert()`s AND TWO `window.confirm()`s THIS SCREEN USED TO RUN.
@@ -1625,12 +1339,17 @@ function AIPromptManager({ readOnly = false }) {
     await fetchPrompts();
   };
 
-  const handleApplyImprovedPrompt = (improvedTemplate) => {
+  /*
+    THE ADVISOR HANDS BACK BOTH HALVES, and both are filled. This used to take
+    one rewritten string and put it in Output Format, leaving the old
+    Instructions in place — so the "applied" prompt said everything twice.
+    The editor opens on the rewrite; the admin reads it and saves as usual.
+  */
+  const handleApplyImprovedPrompt = ({ instructions, outputFormat }) => {
     if (advisorPrompt) {
-      // Update the prompt in the state and open it for editing
-      // For now, put the improved template in the outputFormat field
-      const updatedPrompt = { ...advisorPrompt, outputFormat: improvedTemplate };
-      setEditingPrompt(updatedPrompt);
+      setEditingPrompt({ ...advisorPrompt, instructions, outputFormat });
+      // The stored version, so the editor counts the rewrite as unsaved work.
+      setEditingSavedPrompt(advisorPrompt);
       setAdvisorPrompt(null);
     }
   };
@@ -1766,10 +1485,12 @@ function AIPromptManager({ readOnly = false }) {
       {(editingPrompt || isCreating) && (
         <AIPromptEditor
           prompt={editingPrompt}
+          savedPrompt={editingSavedPrompt}
           isNew={isCreating}
-          onSave={handleSavePrompt}
+          onSave={(result) => { setEditingSavedPrompt(null); return handleSavePrompt(result); }}
           onCancel={() => {
             setEditingPrompt(null);
+            setEditingSavedPrompt(null);
             setIsCreating(false);
           }}
         />
