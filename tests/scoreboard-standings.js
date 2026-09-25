@@ -359,6 +359,23 @@ const place = (s) => s.rank;
     assert.strictEqual(wrongBy.get('Cy').movement, 'new');
   });
 
+  console.log('\n3c. re-closing an OLDER round never moves the count backwards');
+  // The host goes back and closes round 2 again after round 3 was counted.
+  // The guard used to ask only "is this the round already recorded?", so
+  // round 2 passed it and the board went back to "after round 2", with round
+  // 3's count shifted into PrevScoresAt.
+  seedRoom('trivia');
+  table.put({ PK, SK: 'QUESTION#002#ANSWER#Ada', PlayerName: 'Ada', Answer: 'OptionA', IsCorrect: true, PointsEarned: 10 });
+  Object.assign(table.get(PK, 'STATE'), { ScoresAfterRound: 3, ScoresAt: T6, PrevScoresAt: T5 });
+  const olderRound = await closeRound(2);
+  await check('200', () => assert.strictEqual(olderRound.statusCode, 200, olderRound.body));
+  await check('the session still says round 3, counted when it was', () => {
+    const st = table.get(PK, 'STATE');
+    assert.strictEqual(st.ScoresAfterRound, 3);
+    assert.strictEqual(st.ScoresAt, T6);
+    assert.strictEqual(st.PrevScoresAt, T5);
+  });
+
   console.log('\n4. get-results writes prevScore on the call-and-answer path');
   seedRoom('call-and-answer');
   table.put({ PK, SK: 'QUESTION#002#ANSWER#Ada', PlayerName: 'Ada', Answer: 'a thought' });

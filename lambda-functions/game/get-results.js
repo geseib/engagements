@@ -292,7 +292,10 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
  * transition only (like enterResultsState — a public read reports, it does not
  * count). The already-counted guard is the score rows' own, one level up: a
  * second close of the same round finds its round already recorded and writes
- * nothing, so it cannot shift the previous count onto itself.
+ * nothing, so it cannot shift the previous count onto itself. It is `>=`, not
+ * `===`: a host who goes back and closes an OLDER round again must not move
+ * the board back to "after round 2" with round 3 over — the record only ever
+ * moves forward.
  *
  * Plain SETs from a fresh read rather than a conditional copy: two closes of
  * ONE round racing both write the same previous count, which is harmless, and
@@ -310,7 +313,7 @@ const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
       ExpressionAttributeNames: { '#r': 'ScoresAfterRound', '#at': 'ScoresAt' }
     }));
     const was = current.Item || {};
-    if (Number(was.ScoresAfterRound) === round) return;
+    if (Number(was.ScoresAfterRound) >= round) return;
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
