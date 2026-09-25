@@ -117,8 +117,12 @@ describe('1. the engines', () => {
       expect(fox.slice(2, 7)).toEqual(['🦊', ' ', 'F', 'O', 'X']);
       const ana = cells.find((line) => line.includes('A'));
       expect(ana.slice(2, 7)).toEqual(['A', 'N', 'A', ' ', '🇬🇧']);
-      // Nothing half a character anywhere on the board.
-      for (const line of cells) for (const ch of line) expect(ch.isWellFormed()).toBe(true);
+      // Nothing half a character anywhere on the board: no lone surrogate in any
+      // flap. Spelled as a regex, not `String.prototype.isWellFormed()`, which
+      // only exists from Node 20 — the pipeline's CodeBuild runs `npm test` on
+      // Node 18, where that call threw and failed the dev deploy of d36fbdc1.
+      const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      for (const line of cells) for (const ch of line) expect(LONE_SURROGATE.test(ch)).toBe(false);
     });
 
     test('names are text, never markup', () => {
