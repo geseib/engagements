@@ -25,6 +25,7 @@ import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
+import FeedbackWall from './components/stage/FeedbackWall';
 import Podium from './components/stage/Podium';
 import WavelengthSessionVocabulary from './components/stage/WavelengthSessionVocabulary';
 import Dock from './components/stage/Dock';
@@ -6743,43 +6744,17 @@ Focus on actionable business strategy insights.`;
                 its responses ranked. The second is practical — comments arrive
                 during the round, so a wall of them would reflow under the
                 room's eyes every few seconds. Everyone holds the full text on
-                their own device, which is where reading belongs. */}
+                their own device, which is where reading belongs.
+
+                REVERSED by the owner on 2026-09-22 for the TEXT the host
+                chooses: the arrivals in the meter are unattributed, and the one
+                the host puts up carries its author, who was told on their phone
+                that their name would be shown with it (FeedbackWall.jsx). */}
             {hostPhase === 'FEEDBACK' && (
-              <>
-                <div className="kicker">Your thoughts</div>
-                <h1 className="hero">What do you make of it?</h1>
-                <p className="lede">
-                  The round is on your device. Tap a section — the summary, the results,
-                  or any single response — and say what you think.
-                </p>
-
-                {/* A count, not a list. See above. `roundComments` is empty
-                    until the first one lands, and an empty state that said
-                    "no comments yet" would be a wall telling forty people they
-                    have not done the thing they are being asked to do. */}
-                {roundComments.length > 0 && (
-                  <p className="lede">
-                    {roundComments.length === 1
-                      ? '1 comment so far.'
-                      : `${roundComments.length} comments so far.`}
-                  </p>
-                )}
-
-                {/* THE ONE THE HOST PUT UP. The ruling above is reversed by
-                    the owner on 2026-09-22 for the text the host CHOOSES: the
-                    arrivals in the meter are unattributed; this one carries
-                    its author, who was told on their phone that their name
-                    would be shown with the comment. */}
-                {featuredComment && (
-                  <blockquote className="featured" data-drop="4" data-drop-note="The featured comment">
-                    <p className="say">{featuredComment.text}</p>
-                    <footer>
-                      {featuredComment.playerName && <span className="who">{featuredComment.playerName}</span>}
-                      {featuredComment.anchorLabel && <span className="on">{`on ${featuredComment.anchorLabel}`}</span>}
-                    </footer>
-                  </blockquote>
-                )}
-              </>
+              // The wall is its own component: the question, one instruction line,
+              // and the comment the host put up as a pull quote (FeedbackWall.jsx).
+              // The count is the meter's; the arrivals are the meter's list.
+              <FeedbackWall featured={featuredComment} onTakeDown={handleFeatureComment} />
             )}
 
             {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.

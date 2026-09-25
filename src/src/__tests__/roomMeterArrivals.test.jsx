@@ -5,9 +5,15 @@
  * them").
  *
  * The meter gains an `arrivals` slot: the last few comments as they land,
- * newest brightest, each saying what it is about and NEVER who wrote it —
- * the mockup's "Response 31" is a position, not a person. A click is the
- * host featuring one; the featured one is marked.
+ * newest brightest, and NEVER who wrote it. A click is the host featuring one.
+ *
+ * THE CARDS ARE THE COMMENTS AND NOTHING ELSE (the owner, 2026-09-24: "the
+ * small type is not needed and it doesnt seem like a designer put this part
+ * together"). The "Arriving" label and each card's small uppercase "On …"
+ * line are gone; what a comment is about is said once, at a readable size,
+ * on the featured quote (FeedbackWall.jsx). And the featured one leaves the
+ * list — it is on the wall, and the same words twice in one viewport is the
+ * stage's own rule broken.
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
@@ -25,16 +31,18 @@ describe('the arrivals list', () => {
     const four = [...three, C('c4', 'Fourth.', 'Results')];
     const { container } = render(<RoomMeter phase="FEEDBACK" heading="Comments" body="4" arrivals={{ items: four, onPick: () => {} }} />);
     expect(container.querySelector('.meter').classList.contains('arrivals')).toBe(true);
-    expect(container.querySelector('.meter h5').textContent).toBe('Arriving');
+    expect(container.querySelector('.meter h5')).toBeNull();
     const arr = [...container.querySelectorAll('.arr')];
     expect(arr.map((a) => a.querySelector('.ans').textContent)).toEqual(['Fourth.', 'Two of these are the same move.', 'Only this one touches the customer.']);
     expect(arr.map((a) => a.className)).toEqual(['arr', 'arr older', 'arr oldest']);
   });
 
-  test('says what each is about and never who wrote it', () => {
+  test('each card is the comment alone: no "On …" line, and never who wrote it', () => {
     const { container } = render(<RoomMeter phase="FEEDBACK" heading="Comments" body="3" arrivals={{ items: three, onPick: () => {} }} />);
-    expect([...container.querySelectorAll('.arr .n')].map((n) => n.textContent)).toEqual(['On Results', 'On Response 2 — Sam', 'On the summary']);
-    expect(container.textContent).not.toMatch(/Ada Lovelace/);
+    expect(container.querySelector('.arr .n')).toBeNull();
+    expect([...container.querySelectorAll('.arr')].map((a) => a.textContent))
+      .toEqual(['Two of these are the same move.', 'Only this one touches the customer.', 'Sharp.']);
+    expect(container.textContent).not.toMatch(/Ada Lovelace|Response 2|summary/);
   });
 
   test('a click features that comment, by id', () => {
@@ -46,12 +54,18 @@ describe('the arrivals list', () => {
     expect(container.querySelectorAll('.arr')[1].tagName).toBe('BUTTON');
   });
 
-  test('the featured one is marked, and the mark says so in words', () => {
+  test('the featured one leaves the list: it is on the wall, and is never shown twice', () => {
     const { container } = render(<RoomMeter phase="FEEDBACK" heading="Comments" body="3" arrivals={{ items: three, onPick: () => {}, featuredId: 'c2' }} />);
-    const featured = container.querySelector('.arr[data-featured]');
-    expect(featured.querySelector('.ans').textContent).toBe('Only this one touches the customer.');
-    expect(featured.getAttribute('aria-pressed')).toBe('true');
-    expect(container.querySelectorAll('.arr[aria-pressed="true"]')).toHaveLength(1);
+    const texts = [...container.querySelectorAll('.arr .ans')].map((a) => a.textContent);
+    expect(texts).toEqual(['Two of these are the same move.', 'Sharp.']);
+    expect(container.querySelector('.arr[data-featured]')).toBeNull();
+  });
+
+  test('with one featured, the list still shows the latest three of the rest', () => {
+    const four = [...three, C('c4', 'Fourth.', 'Results')];
+    const { container } = render(<RoomMeter phase="FEEDBACK" heading="Comments" body="4" arrivals={{ items: four, onPick: () => {}, featuredId: 'c4' }} />);
+    expect([...container.querySelectorAll('.arr .ans')].map((a) => a.textContent))
+      .toEqual(['Two of these are the same move.', 'Only this one touches the customer.', 'Sharp.']);
   });
 
   test('no arrivals, no list: the count stands alone', () => {
