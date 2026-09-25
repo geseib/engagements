@@ -89,20 +89,23 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 /** Open the builder and run one generation to its review step. */
-async function generate(job) {
+async function generate(job, { engagementType = 'call-and-answer', card = 'Lessons Learned Scenarios' } = {}) {
   const posted = mockApi(job);
   const onScenariosGenerated = jest.fn();
   render(
     <AIScenarioBuilder
       onClose={() => {}}
       onScenariosGenerated={onScenariosGenerated}
-      engagementType="call-and-answer"
+      engagementType={engagementType}
     />
   );
   await waitFor(() => expect(authFetch).toHaveBeenCalled());
-  // The saved-template deck is folded behind one line where the samples lead.
-  fireEvent.click(screen.getByTestId('template-disclosure'));
-  fireEvent.click(screen.getByText('Lessons Learned Scenarios'));
+  // The saved-template deck is folded behind one line where the samples lead —
+  // and permanently open where it is primary (wavelength), so no line to press.
+  const disclosure = screen.queryByTestId('template-disclosure');
+  if (disclosure) fireEvent.click(disclosure);
+  // findBy: an open deck shows a loading spinner until the prompt list settles.
+  fireEvent.click(await screen.findByText(card));
   fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
   await waitFor(() => expect(posted).toHaveLength(1));
   return { posted, onScenariosGenerated };
@@ -223,6 +226,25 @@ describe('the worker is given what it needs to name the set', () => {
     expect(posted[0].setMetadata).toBeTruthy();
     expect(posted[0].setMetadata.title).toBe('Lessons Learned Scenarios');
     expect(posted[0].setMetadata.customInstructions).toBeTruthy();
+  });
+
+  // rejects: telling Workie a wavelength set's questions carry Background notes.
+  //          The worker writes `background` for call-and-answer only
+  //          (structured-generation.js), so the set note's fixed line is true
+  //          for one and a false statement to the model for the other.
+  const BACKGROUND_LINE = /Each question carries Background notes/;
+
+  test('a call-and-answer set note says its questions carry Background notes', async () => {
+    const { posted } = await generate(jobPayload({ createdSet: CREATED }));
+    expect(posted[0].setMetadata.aiContextInstructions).toMatch(BACKGROUND_LINE);
+  });
+
+  test('a wavelength set note does not, and still carries what the admin chose', async () => {
+    const { posted } = await generate(jobPayload({ createdSet: CREATED }),
+      { engagementType: 'wavelength', card: 'Technology Terms' });
+    expect(posted[0].engagementType).toBe('wavelength');
+    expect(posted[0].setMetadata.aiContextInstructions).toMatch(/Technology Terms/);
+    expect(posted[0].setMetadata.aiContextInstructions).not.toMatch(BACKGROUND_LINE);
   });
 
   test('the description does not open with a count it cannot know yet', async () => {

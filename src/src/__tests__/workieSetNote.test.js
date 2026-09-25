@@ -59,3 +59,56 @@ describe('buildWorkieSetNote — the set note is the admin\'s brief, never inven
     expect(note.endsWith(SET_NOTE_FIXED_LINE)).toBe(true);
   });
 });
+
+/*
+ * A SET WHOSE QUESTIONS CARRY NO BACKGROUND MUST NOT SAY THEY DO.
+ *
+ * The fixed line tells Workie "Each question carries Background notes from the
+ * set's author". Wavelength items never carry one (the players supply the
+ * meaning; structured-generation.js writes `background` for call-and-answer
+ * only), so for a wavelength set that line is a false statement to the model —
+ * exactly the invented text this note exists to keep out. The builder asks for
+ * the note without it.
+ */
+describe('buildWorkieSetNote — without the Background line', () => {
+  test('leaves the fixed line out and keeps every word the admin typed', () => {
+    const note = buildWorkieSetNote({
+      subject: 'Remote work', audience: 'the platform team', difficulty: 'medium',
+      brief: 'We moved to four office days in March.',
+    }, { backgroundLine: false });
+    expect(note).not.toContain(SET_NOTE_FIXED_LINE);
+    expect(note).not.toMatch(/Background notes/i);
+    expect(note).toContain('Remote work');
+    expect(note).toContain('the platform team');
+    expect(note).toContain('medium');
+    expect(note).toContain('We moved to four office days in March.');
+    expect(note).not.toMatch(/\n$/);
+  });
+
+  test('the default still carries it', () => {
+    const note = buildWorkieSetNote({ subject: 'S', audience: '', difficulty: '', brief: '' });
+    expect(note.endsWith(SET_NOTE_FIXED_LINE)).toBe(true);
+  });
+
+  test('a long brief still fits the limit', () => {
+    const note = buildWorkieSetNote(
+      { subject: 'S'.repeat(500), audience: 'A'.repeat(500), difficulty: 'easy', brief: 'x'.repeat(5000) },
+      { backgroundLine: false },
+    );
+    expect(note.length).toBeLessThanOrEqual(SET_NOTE_MAX);
+    expect(note).not.toContain(SET_NOTE_FIXED_LINE);
+    expect(note).toMatch(/The author's brief: x/);
+  });
+
+  test('a long subject with no brief still fits the limit', () => {
+    const note = buildWorkieSetNote({ subject: 'S'.repeat(2000), audience: '', difficulty: '', brief: '' },
+      { backgroundLine: false });
+    expect(note.length).toBeLessThanOrEqual(SET_NOTE_MAX);
+    expect(note).not.toContain(SET_NOTE_FIXED_LINE);
+  });
+
+  test('nothing typed is an empty note, never a line the admin did not write', () => {
+    expect(buildWorkieSetNote({ subject: '', audience: '', difficulty: '', brief: '' },
+      { backgroundLine: false })).toBe('');
+  });
+});

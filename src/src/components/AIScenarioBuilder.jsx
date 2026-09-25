@@ -1017,6 +1017,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
       audience: scenarioConfig.audience,
       difficulty: scenarioConfig.difficulty,
       brief: scenarioConfig.context,
+    }, {
+      // The note may say "each question carries Background notes" only where
+      // the generator writes them — call-and-answer, the same literal gate
+      // structured-generation.js and ai-generate-scenarios.js use. A wavelength
+      // subject never has one, and saying otherwise tells Workie something false.
+      backgroundLine: engagementType === 'call-and-answer',
     });
   };
 
