@@ -31,14 +31,30 @@ const DIGITS = '0123456789';
 const NAME_MAX = 24;                        // a 24-flap name module at most
 const NAME_MIN = 12;
 
+/*
+  ONE FLAP PER CHARACTER AS A READER SEES IT. A string's `length` and
+  `split('')` count UTF-16 units, so an emoji (two units) or a flag (four, two
+  code points) was cut in half across two flaps, each showing a broken glyph.
+  Graphemes where the runtime can segment them, code points otherwise.
+*/
+const segmenter = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  : null;
+export function graphemes(text) {
+  const str = String(text ?? '');
+  return segmenter ? Array.from(segmenter.segment(str), (s) => s.segment) : Array.from(str);
+}
+const width = (text) => graphemes(text).length;
+
 /** Break a name into lines of at most `n` characters: at spaces, then at hyphens, then hard. */
 export function wrapName(name, n) {
   const words = String(name || '').toUpperCase().split(/\s+/).filter(Boolean);
   const tokens = [];
   for (const w of words) {
-    if (w.length <= n) { tokens.push(w); continue; }
+    if (width(w) <= n) { tokens.push(w); continue; }
     for (const part of w.split(/(?<=-)/)) {
-      for (let i = 0; i < part.length; i += n) tokens.push(part.slice(i, i + n));
+      const chars = graphemes(part);
+      for (let i = 0; i < chars.length; i += n) tokens.push(chars.slice(i, i + n).join(''));
     }
   }
   const lines = [];
@@ -46,7 +62,7 @@ export function wrapName(name, n) {
   for (const t of tokens) {
     const glue = line && !line.endsWith('-') ? ' ' : '';
     if (!line) line = t;
-    else if ((line + glue + t).length <= n) line += glue + t;
+    else if (width(line + glue + t) <= n) line += glue + t;
     else { lines.push(line); line = t; }
   }
   if (line) lines.push(line);
@@ -57,9 +73,9 @@ export function wrapName(name, n) {
 export function columnsFor(allRows) {
   const rows = allRows || [];
   return {
-    pos: Math.max(2, ...rows.map((r) => String(r.place).length)),
-    pts: Math.max(2, ...rows.map((r) => String(r.total).length)),
-    mv: Math.max(3, ...rows.map((r) => movementLabel(r.movement).text.length)),
+    pos: Math.max(2, ...rows.map((r) => width(r.place))),
+    pts: Math.max(2, ...rows.map((r) => width(r.total))),
+    mv: Math.max(3, ...rows.map((r) => width(movementLabel(r.movement).text))),
   };
 }
 
@@ -205,7 +221,11 @@ export function createDepartureEngine(container, {
     const out = [];
     for (let l = 0; l < geom.L; l += 1) {
       const s = specs[l] || { pos: '', nm: '', pts: '', mv: '', mk: 'eq' };
-      const seg = (txt, n, right) => (right ? txt.padStart(n, ' ') : txt.padEnd(n, ' ')).slice(0, n).split('');
+      const seg = (txt, n, right) => {
+        const chars = graphemes(txt).slice(0, n);
+        const pad = Array(n - chars.length).fill(' ');
+        return right ? [...pad, ...chars] : [...chars, ...pad];
+      };
       const chars = [...seg(s.pos, cols.pos, true), ...seg(s.nm, geom.n), ...seg(s.pts, cols.pts, true), ...seg(s.mv, cols.mv)];
       const kinds = [
         ...Array(cols.pos).fill('sb-k-pos'), ...Array(geom.n).fill('sb-k-nm'),
@@ -286,6 +306,10 @@ export function createDepartureEngine(container, {
     /** What each line of flaps says now, for tests and the curious. */
     text() {
       return cells.map((row) => row.map((c) => c.ch).join(''));
+    },
+    /** ...and flap by flap. */
+    cells() {
+      return cells.map((row) => row.map((c) => c.ch));
     },
     destroy() {
       gen += 1;

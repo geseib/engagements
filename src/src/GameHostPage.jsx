@@ -33,9 +33,8 @@ import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
-import {
-  CLOSED_SCOREBOARD, normaliseScoreboard, nextStyle, scoreboardAvailability, scoreboardRequest,
-} from './config/scoreboard';
+import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
+import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
@@ -48,7 +47,7 @@ import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
-import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
+import { shortcutsSuppressed, scoreboardKeysLive, qrOverlayInstructions } from './utils/hostOverlays';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -256,8 +255,16 @@ function GameHostPage() {
     `scoreboardChanged`. `scoresAfterRound` is the roster's last fully scored
     round (get-players), which is what decides whether the board may open:
     "Scores appear after the first round".
+
+    useScoreboardSync holds it, because four sources report it — this page's
+    own POST, the frame, and every /state refresh — and a refresh already on
+    its way when the host pressed S must not land afterwards and shut the
+    board again. Each copy carries the server's revision; the hook applies
+    only a newer one, and none while this page's own write is in flight.
   */
-  const [scoreboard, setScoreboard] = useState(CLOSED_SCOREBOARD);
+  const {
+    scoreboard, applyServerBoard, publishScoreboard, resetScoreboard,
+  } = useScoreboardSync({ gameId, apiBase: API_BASE, fetchFn: authFetch });
   const [scoresAfterRound, setScoresAfterRound] = useState(null);
 
 
@@ -1137,7 +1144,7 @@ function GameHostPage() {
     gameDebugMode: setGameDebugMode,
     surveyNames: setSurveyNames,
     surveyWarnedAt: setSurveyWarnedAt,
-    scoreboard: setScoreboard,
+    scoreboard: resetScoreboard,
     scoresAfterRound: setScoresAfterRound,
   };
 
@@ -2034,7 +2041,7 @@ Focus on actionable business strategy insights.`;
     */
     webSocketClient.onMessage('scoreboardChanged', (data) => {
       if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
-      setScoreboard(normaliseScoreboard(data));
+      applyServerBoard(data);
     });
 
     webSocketClient.onMessage('stageFocusChanged', (data) => {
@@ -2385,7 +2392,7 @@ Focus on actionable business strategy insights.`;
 
         // THE SCOREBOARD, as the room last saw it: a reload over an open board
         // comes back up on it rather than dropping the room to the stage.
-        setScoreboard(normaliseScoreboard(gameStateData.scoreboard));
+        applyServerBoard(gameStateData.scoreboard);
 
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
@@ -5121,66 +5128,34 @@ Focus on actionable business strategy insights.`;
   /*
     THE SCOREBOARD — opening, closing and the look, from every surface that can.
 
-    `publishScoreboard` is the one way this page changes the board: the key
-    below, the Players tab's button and the Settings tab's look all come
-    through it. OPTIMISTIC, because the room should see the press at once;
-    the reply (and the `scoreboardChanged` frame) then carry the server's
-    truth, and a refusal puts the board back where it was. An optimistic open
-    carries `openedAt: null`, so the server's real opening time arriving a
-    moment later is not mistaken for a SECOND opening (Scoreboard.jsx restarts
-    its auto-flip only when one known opening replaces another).
-
-    ABOVE THE EARLY RETURNS, both of them, and that is forced: a hook below a
-    conditional return breaks the order React calls hooks in.
+    `publishScoreboard` (useScoreboardSync) is the one way this page changes
+    the board: the keys below, the Players tab's button and the Settings tab's
+    look all come through it. ABOVE THE EARLY RETURNS, both of them, and that
+    is forced: a hook below a conditional return breaks the order React calls
+    hooks in.
   */
-  const scoreboardRef = useRef(scoreboard);
-  scoreboardRef.current = scoreboard;
-  const publishScoreboard = useCallback(async (change) => {
-    const body = scoreboardRequest(change);
-    if (!body || !gameId) return;
-    const before = scoreboardRef.current;
-    setScoreboard((b) => ({
-      ...b,
-      ...(body.style ? { style: body.style } : {}),
-      ...(body.open === true && !b.open ? { open: true, openedAt: null, page: 0 } : {}),
-      ...(body.open === false ? { open: false } : {}),
-    }));
-    try {
-      const res = await authFetch(`${API_BASE}games/${gameId}/scoreboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      const data = await res.json();
-      if (activeGameIdRef.current !== gameId) return;
-      if (data && data.scoreboard) setScoreboard(normaliseScoreboard(data.scoreboard));
-    } catch (error) {
-      console.warn('⚠️ SCOREBOARD: the change did not reach the server:', error?.message);
-      if (activeGameIdRef.current === gameId) setScoreboard(before);
-    }
-  }, [gameId]);
-
   const scoreboardAvail = scoreboardAvailability({ gameType: currentGameType, afterRound: scoresAfterRound });
-  // S opens the board only over a clear stage: not over a spotlight, a
-  // pinned QR or a dialog (the gate below WITHOUT the board's own term, which
-  // would otherwise stop S from ever opening it).
-  const scoreboardBlocked = shortcutsSuppressed({
+  // The board's keys — S, V, Esc, Space here and ← / → on the board itself —
+  // are live only over a clear stage: not with the session menu open, not
+  // under a spotlight, a past round, a pinned QR or a dialog
+  // (utils/hostOverlays.js scoreboardKeysLive says why each one matters).
+  const scoreboardKeysOn = scoreboardKeysLive({
+    setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
     lessonExpanded, isLoadingData, qrMode,
     spotlightOpen: spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
   useScoreboardKeys({
-    // Never while the session menu is open, and never over a surface that
-    // replaced the stage — there is no stage for the board to cover.
-    enabled: !setupPanelOpen && !showQuickstartMenu && !showWelcomeScreen
+    // ...and never over a surface that replaced the stage — there is no stage
+    // for the board to cover.
+    enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !editTarget && Boolean(gameId),
     open: scoreboard.open,
-    canOpen: scoreboardAvail.enabled && !scoreboardBlocked,
+    canOpen: scoreboardAvail.enabled,
     onOpen: () => publishScoreboard({ open: true }),
     onClose: () => publishScoreboard({ open: false }),
-    onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboardRef.current.style) }),
+    onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboard.style) }),
   });
 
   // Render the quickstart menu if it's being shown
@@ -6279,7 +6254,10 @@ Focus on actionable business strategy insights.`;
            main, with the dock still live beneath it. Mounted only while the
            server's board is open; the rows, pages and motion are its own
            (components/stage/scoreboard/Scoreboard.jsx). `refreshKey` is the
-           room's state, so a round scored under an open board lands on it. */
+           room's state AND the last counted round, so a round scored under an
+           open board lands on it — including when the roster learns of the
+           count after the phase frame did. Its keys are off under any
+           overlay (scoreboardKeysOn). */
         overlay={scoreboard.open && scoreboardAvail.show ? (
           <Scoreboard
             gameId={gameId}
@@ -6287,8 +6265,8 @@ Focus on actionable business strategy insights.`;
             title={eventTitle}
             profile={profile}
             board={scoreboard}
-            refreshKey={gameState}
-            keysEnabled={!setupPanelOpen}
+            refreshKey={`${gameState}|${scoresAfterRound}`}
+            keysEnabled={scoreboardKeysOn}
           />
         ) : null}
       >

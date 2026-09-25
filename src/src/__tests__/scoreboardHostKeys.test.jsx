@@ -18,10 +18,13 @@
 import React, { useState } from 'react';
 import fs from 'fs';
 import path from 'path';
-import { render, act, fireEvent } from '@testing-library/react';
+import { render, act, fireEvent, screen } from '@testing-library/react';
 import useScoreboardKeys from '../components/stage/scoreboard/useScoreboardKeys';
 import HostActionBar from '../components/HostActionBar';
-import { shortcutsSuppressed } from '../utils/hostOverlays';
+import { shortcutsSuppressed, scoreboardKeysLive } from '../utils/hostOverlays';
+import Scoreboard from '../components/stage/scoreboard/Scoreboard';
+import AnswerSpotlight from '../components/AnswerSpotlight';
+import Stage from '../components/stage/Stage';
 import { nextStyle } from '../config/scoreboard';
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
 import { HOST_ROLE } from '../config/help/host';
@@ -148,13 +151,112 @@ describe('the keys are written down where the host looks for them', () => {
   });
 });
 
+describe('under an overlay the board\'s keys are not the board\'s', () => {
+  test('scoreboardKeysLive: off with the session menu or any overlay that blocks S', () => {
+    expect(scoreboardKeysLive({})).toBe(true);
+    expect(scoreboardKeysLive({ setupPanelOpen: true })).toBe(false);
+    for (const flag of ['showConfirmModal', 'showExpandedQR', 'showReportsModal', 'lessonExpanded',
+      'isLoadingData', 'spotlightOpen', 'pastRoundOpen']) {
+      expect(scoreboardKeysLive({ [flag]: true })).toBe(false);
+    }
+    expect(scoreboardKeysLive({ qrMode: 'pinned' })).toBe(false);
+    expect(scoreboardKeysLive({ qrMode: 'preview' })).toBe(true);
+    // The board's own term is not a reason to switch off the board's keys.
+    expect(scoreboardKeysLive({ scoreboardOpen: true })).toBe(true);
+  });
+
+  const PLAYERS = Array.from({ length: 14 }, (_, i) => ({
+    playerId: `p${i}`, playerName: `Player ${i + 1}`, totalScore: 100 - i, rank: i + 1, movement: 0, previousScore: 90 - i,
+  }));
+  const ANSWERS = [
+    { id: 'a1', playerName: 'Ada', answer: 'First thought', points: 3 },
+    { id: 'a2', playerName: 'Bo', answer: 'Second thought', points: 2 },
+  ];
+
+  /** The page's arrangement: a spotlight opened (from the phone) over the open board. */
+  function Room({ onIndex, onSpotClose }) {
+    const [board, setBoard] = useState({ open: true, style: 'olympic', page: 0, openedAt: 't' });
+    const [spot, setSpot] = useState(0);
+    const live = scoreboardKeysLive({ spotlightOpen: spot !== null });
+    useScoreboardKeys({
+      enabled: live,
+      open: board.open,
+      canOpen: true,
+      onOpen: () => setBoard((b) => ({ ...b, open: true })),
+      onClose: () => setBoard((b) => ({ ...b, open: false })),
+      onCycleStyle: () => setBoard((b) => ({ ...b, style: nextStyle(b.style) })),
+    });
+    return (
+      <div className="stage">
+        <output data-testid="board">{board.open ? 'open' : 'closed'}</output>
+        {board.open && <Scoreboard gameId="6060" apiBase="https://api.test/" profile="room" board={board} keysEnabled={live} />}
+        {spot !== null && (
+          <AnswerSpotlight
+            answers={ANSWERS}
+            index={spot}
+            onIndex={(i) => { onIndex(i); setSpot(i); }}
+            onClose={() => { onSpotClose(); setSpot(null); }}
+            labelFor={(a) => a.playerName}
+          />
+        )}
+      </div>
+    );
+  }
+
+  beforeEach(() => {
+    window.matchMedia = jest.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ players: PLAYERS, afterRound: 3 }) }));
+  });
+  afterEach(() => { delete global.fetch; });
+
+  test('→ steps the spotlight and not the hidden board; Esc closes the spotlight, not the board', async () => {
+    const onIndex = jest.fn();
+    const onSpotClose = jest.fn();
+    await act(async () => { render(<Room onIndex={onIndex} onSpotClose={onSpotClose} />); });
+    await act(async () => { await Promise.resolve(); });
+    const boardEl = document.querySelector('[data-scoreboard]');
+    expect(boardEl.dataset.page).toBe('0');
+
+    await act(async () => { fireEvent.keyDown(document.activeElement || document.body, { key: 'ArrowRight' }); });
+    expect(onIndex).toHaveBeenCalledWith(1);
+    expect(boardEl.dataset.page).toBe('0');
+    expect(boardEl.dataset.auto).toBe('on');
+
+    await act(async () => { fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' }); });
+    expect(onSpotClose).toHaveBeenCalled();
+    expect(screen.getByTestId('board').textContent).toBe('open');
+
+    // With the spotlight gone the board's keys are its own again.
+    await act(async () => { fireEvent.keyDown(window, { key: 'ArrowRight' }); });
+    expect(document.querySelector('[data-scoreboard]').dataset.page).toBe('1');
+  });
+});
+
+describe('the Stage draws its overlay inside the stage', () => {
+  test('an overlay is a child of main.stage, after the dock', () => {
+    const { container } = render(
+      <Stage profile="room" phase="results" dock={<footer className="dock" data-testid="dock" />}
+        overlay={<section data-testid="overlay" />}>
+        <div className="content" />
+      </Stage>,
+    );
+    const overlay = container.querySelector('main.stage > [data-testid="overlay"]');
+    expect(overlay).not.toBeNull();
+    expect(overlay.previousElementSibling).toBe(container.querySelector('[data-testid="dock"]'));
+  });
+
+  test('no overlay, no element', () => {
+    const { container } = render(<Stage profile="room" phase="results"><div className="content" /></Stage>);
+    expect(container.querySelector('main.stage').lastElementChild.className).toMatch(/dock/);
+  });
+});
+
 /* ---------------------------------------------------------------- source */
 
 const code = (src) => src
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
   .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 const PAGE = code(fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8'));
-const STAGE = code(fs.readFileSync(path.join(__dirname, '..', 'components', 'stage', 'Stage.jsx'), 'utf8'));
 
 describe('GameHostPage wires it', () => {
   test('both shortcut gates carry the scoreboard term', () => {
@@ -166,10 +268,16 @@ describe('GameHostPage wires it', () => {
     expect(auto && auto[1]).toMatch(/scoreboardOpen:\s*scoreboard\.open/);
   });
 
-  test('the keys are off while the session menu is open', () => {
-    const m = /useScoreboardKeys\(\{([\s\S]*?)\}\);/.exec(PAGE);
-    expect(m).not.toBeNull();
-    expect(m[1]).toMatch(/enabled:[^,]*!setupPanelOpen/);
+  test('the keys are off while the session menu or any overlay is open — both sets of them', () => {
+    const live = /const scoreboardKeysOn = scoreboardKeysLive\(\{([\s\S]*?)\}\);/.exec(PAGE);
+    expect(live).not.toBeNull();
+    for (const term of ['setupPanelOpen', 'showConfirmModal', 'qrMode', 'spotlightOpen', 'pastRoundOpen', 'lessonExpanded']) {
+      expect(live[1]).toMatch(new RegExp(`\\b${term}\\b`));
+    }
+    const hook = /useScoreboardKeys\(\{([\s\S]*?)\}\);/.exec(PAGE);
+    expect(hook && hook[1]).toMatch(/enabled:\s*scoreboardKeysOn\b/);
+    const board = PAGE.slice(PAGE.indexOf('<Scoreboard'), PAGE.indexOf('/>', PAGE.indexOf('<Scoreboard')));
+    expect(board).toMatch(/keysEnabled=\{scoreboardKeysOn\}/);
   });
 
   test('scoreboardChanged is registered and removed', () => {
@@ -177,18 +285,27 @@ describe('GameHostPage wires it', () => {
     expect(PAGE).toMatch(/offMessage\('scoreboardChanged'\)/);
   });
 
-  test('a refresh restores the board from get-game-state', () => {
-    expect(PAGE).toMatch(/normaliseScoreboard\(gameStateData\.scoreboard\)/);
+  test('every server copy goes through the revision check — the restore and the frame', () => {
+    expect(PAGE).toMatch(/applyServerBoard\(gameStateData\.scoreboard\)/);
+    const frame = /onMessage\('scoreboardChanged',[\s\S]*?\}\);/.exec(PAGE);
+    expect(frame && frame[0]).toMatch(/applyServerBoard\(data\)/);
+    // Nothing else writes the board around it.
+    expect(PAGE).not.toMatch(/setScoreboard\(/);
   });
 
-  test('the board is drawn in the stage\'s own layer, not beside it', () => {
-    expect(STAGE).toMatch(/overlay/);
-    const stageEl = PAGE.slice(PAGE.indexOf('<Stage'), PAGE.indexOf('</Stage>'));
-    expect(stageEl).toMatch(/overlay=\{/);
-    expect(stageEl).toMatch(/<Scoreboard\b/);
+  test('the board is the Stage element\'s overlay, and mounted nowhere else', () => {
+    const at = PAGE.indexOf('<Stage\n');
+    const stageEl = PAGE.slice(at, PAGE.indexOf('>\n', PAGE.indexOf('overlay=', at)));
+    expect(stageEl).toMatch(/overlay=\{scoreboard\.open && scoreboardAvail\.show \? \(\s*<Scoreboard\b/);
+    expect(PAGE.match(/<Scoreboard\b/g)).toHaveLength(1);
   });
 
   test('changes go through authFetch to the closed route', () => {
-    expect(PAGE).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/scoreboard`/);
+    expect(PAGE).toMatch(/useScoreboardSync\(\{\s*gameId,\s*apiBase:\s*API_BASE,\s*fetchFn:\s*authFetch\s*\}\)/);
+  });
+
+  test('the board reloads once the round\'s points are counted, not only when the phase moves', () => {
+    const board = PAGE.slice(PAGE.indexOf('<Scoreboard'), PAGE.indexOf('/>', PAGE.indexOf('<Scoreboard')));
+    expect(board).toMatch(/refreshKey=\{`\$\{gameState\}\|\$\{scoresAfterRound\}`\}/);
   });
 });

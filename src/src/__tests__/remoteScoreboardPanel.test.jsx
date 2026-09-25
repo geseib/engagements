@@ -41,12 +41,12 @@ describe('scoreboardControl — what the phone offers', () => {
       roster: { afterRound: 2 },
     });
     expect(c.enabled).toBe(true);
-    expect(c.board).toEqual({ open: true, style: 'tote', page: 2, openedAt: 't' });
+    expect(c.board).toEqual({ open: true, style: 'tote', page: 2, openedAt: 't', rev: 0 });
   });
 
   test('a snapshot without a board reads closed, in the default look', () => {
     const c = scoreboardControl({ snapshot: { gameType: 'trivia' }, roster: { afterRound: 1 } });
-    expect(c.board).toEqual({ open: false, style: 'departure', page: 0, openedAt: null });
+    expect(c.board).toEqual({ open: false, style: 'departure', page: 0, openedAt: null, rev: 0 });
   });
 });
 
@@ -64,6 +64,18 @@ function renderPanel(props = {}) {
   );
   return handlers;
 }
+
+test('the phone follows the server putting the board away when a question starts', () => {
+  // next-question.js closes an open board; the phone's /state poll carries it.
+  const c = scoreboardControl({
+    snapshot: { gameType: 'trivia', state: 'ASK#004', scoreboard: { open: false, style: 'tote', rev: 9 } },
+    roster: { afterRound: 3 },
+  });
+  expect(c.board.open).toBe(false);
+  render(<RemoteScoreboardPanel board={c.board} availability={c} />);
+  expect(screen.getByRole('button', { name: /show the scoreboard/i })).toBeEnabled();
+  expect(screen.getByRole('button', { name: /next page/i })).toBeDisabled();
+});
 
 describe('RemoteScoreboardPanel', () => {
   test('says it changes the ROOM\'s screen', () => {

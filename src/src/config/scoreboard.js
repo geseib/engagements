@@ -37,9 +37,13 @@ export const STYLE_LABELS = {
 const STEPS = ['next', 'prev'];
 
 /** A board nobody has opened. A value, never an absence. */
-export const CLOSED_SCOREBOARD = Object.freeze({ open: false, style: DEFAULT_STYLE, page: 0, openedAt: null });
+export const CLOSED_SCOREBOARD = Object.freeze({ open: false, style: DEFAULT_STYLE, page: 0, openedAt: null, rev: 0 });
 
-/** Whatever a payload says, as a board this build can act on. */
+/**
+ * Whatever a payload says, as a board this build can act on. `rev` is the
+ * server's revision of it (STATE.ScoreboardRev); a copy without one reads as 0,
+ * which can never undo a counted change (components/stage/scoreboard/useScoreboardSync.js).
+ */
 export function normaliseScoreboard(value) {
   const v = value && typeof value === 'object' ? value : {};
   return {
@@ -47,6 +51,7 @@ export function normaliseScoreboard(value) {
     style: SCOREBOARD_STYLES.includes(v.style) ? v.style : DEFAULT_STYLE,
     page: Number.isInteger(v.page) ? v.page : 0,
     openedAt: typeof v.openedAt === 'string' && v.openedAt ? v.openedAt : null,
+    rev: Number.isInteger(v.rev) && v.rev > 0 ? v.rev : 0,
   };
 }
 

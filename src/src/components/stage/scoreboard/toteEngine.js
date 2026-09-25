@@ -18,6 +18,7 @@
  * row positions, which is DOM work, not render work. NAMES ARE TEXT.
  */
 import { movementLabel, previousOrder } from '../../../config/scoreboard';
+import { fitScale, pagesOf } from './fitScale';
 
 /** 5x7 lamp font: digits and '='. */
 const FONT = {
@@ -142,14 +143,16 @@ export function createToteEngine(container, {
     });
   }
 
-  function fit(firstPage) {
-    container.style.setProperty('--fit', '1');
-    paint(firstPage);
-    let f = 1;
-    while (f > 0.5 && list.scrollHeight > win.clientHeight + 1) {
-      f -= 0.02;
-      container.style.setProperty('--fit', f.toFixed(2));
-    }
+  /* One scale for every page, found on the tallest (fitScale.js): the row
+     list clips, so a page fitted to page 1 alone lost the last row of a later
+     page whose name wrapped. The replay's "before" order is a page of its own
+     rows too, so it is measured with them. */
+  function fit() {
+    fitScale([...pagesOf(field, size), ...(prev.length ? pagesOf(prev, size) : [])], {
+      setFit: (f) => container.style.setProperty('--fit', f.toFixed(2)),
+      paint: (page) => paint(page),
+      overflows: () => list.scrollHeight > win.clientHeight + 1,
+    });
     list.textContent = '';
   }
 
@@ -265,7 +268,7 @@ export function createToteEngine(container, {
       ptsN = Math.max(2, ...field.map((r) => String(r.total).length));
       container.style.setProperty('--lamp-pos-n', String(posN));
       container.style.setProperty('--lamp-pts-n', String(ptsN));
-      fit(field.slice(0, size));
+      fit();
     },
     /** Is there a previous round to replay from? */
     hasHistory() { return prev.length > 0; },
@@ -273,7 +276,7 @@ export function createToteEngine(container, {
     snap(rows) { gen += 1; clearPending(); current = rows; paint(rows); },
     /* A resize mid-replay abandons the replay for the result: the rail must
        follow, or it would go on saying "After round 5" over round 6. */
-    relayout() { gen += 1; clearPending(); fit(field.slice(0, size)); onRound(currentRound); paint(current); },
+    relayout() { gen += 1; clearPending(); fit(); onRound(currentRound); paint(current); },
     destroy() { gen += 1; clearPending(); heads.remove(); win.remove(); },
   };
 }

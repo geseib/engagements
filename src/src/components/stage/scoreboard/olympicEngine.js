@@ -14,11 +14,13 @@
  * mockup's line for line. NAMES ARE TEXT, NEVER MARKUP.
  *
  * A long name wraps inside its lane; nothing is ever ellipsised. The board's
- * scale (--fit) is found once per page size on the first page — which carries
- * both the tall leader's lane and, usually, the longest name — and held for
- * every page, so the type does not jump between pages.
+ * scale (--fit) is found once per page size, on the TALLEST page (fitScale.js)
+ * — the first carries the leader's taller lane, but a later one may carry the
+ * name that wraps — and held for every page, so the type does not jump when
+ * the page turns and no page clips its last lane.
  */
 import { movementLabel } from '../../../config/scoreboard';
+import { fitScale, pagesOf } from './fitScale';
 
 /** The three-letter code: the first three letters of the name as typed. */
 export function laneCode(name) {
@@ -49,7 +51,7 @@ export function createOlympicEngine(container, {
   let gen = 0;
   let pending = [];
   let current = [];
-  let firstPage = [];
+  let pages = [[]];
   const clearPending = () => { pending.forEach(cancel); pending = []; };
 
   const span = (cls, text) => {
@@ -87,14 +89,12 @@ export function createOlympicEngine(container, {
     });
   }
 
-  function fit(firstPage) {
-    container.style.setProperty('--fit', '1');
-    paint(firstPage, false);
-    let f = 1;
-    while (f > 0.5 && list.scrollHeight > list.clientHeight + 1) {
-      f -= 0.02;
-      container.style.setProperty('--fit', f.toFixed(2));
-    }
+  function fit() {
+    fitScale(pages, {
+      setFit: (f) => container.style.setProperty('--fit', f.toFixed(2)),
+      paint: (page) => paint(page, false),
+      overflows: () => list.scrollHeight > list.clientHeight + 1,
+    });
     list.textContent = '';
   }
 
@@ -123,12 +123,12 @@ export function createOlympicEngine(container, {
     loadField(allRows, pageSize) {
       gen += 1;
       clearPending();
-      firstPage = (allRows || []).slice(0, pageSize || 10);
-      fit(firstPage);
+      pages = pagesOf(allRows || [], pageSize || 10);
+      fit();
     },
     show,
     snap(rows) { gen += 1; clearPending(); current = rows; paint(rows, false); },
-    relayout() { gen += 1; clearPending(); fit(firstPage); paint(current, false); },
+    relayout() { gen += 1; clearPending(); fit(); paint(current, false); },
     destroy() { gen += 1; clearPending(); heads.remove(); list.remove(); },
   };
 }

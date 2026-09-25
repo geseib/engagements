@@ -91,6 +91,25 @@ export function shortcutsSuppressed({
 }
 
 /**
+ * May the SCOREBOARD's own keys fire? (S, V, Esc, Space, and the board's
+ * ← / →.)
+ *
+ * Not while the session menu is open — it owns Escape — and not while any of
+ * the overlays that take SPACE away is up: an answer spotlight opened over the
+ * board (from the phone) steps its answers with ← / → and closes on Escape, a
+ * past round likewise, and a confirm dialog's focused button takes Space. If
+ * the board's keys stayed live under them, → would step the spotlight AND the
+ * hidden board, Escape would close both, and Space on the dialog's button
+ * would close the board instead.
+ *
+ * The same terms as `shortcutsSuppressed`, minus the board's own: an open
+ * board is exactly when its keys should work.
+ */
+export function scoreboardKeysLive({ setupPanelOpen = false, ...overlays } = {}) {
+  return !setupPanelOpen && !shortcutsSuppressed({ ...overlays, scoreboardOpen: false });
+}
+
+/**
  * What the expanded-QR overlay tells the host to do to get rid of it.
  *
  * A PREVIEW MUST NOT SAY "CLICK". The preview overlay is

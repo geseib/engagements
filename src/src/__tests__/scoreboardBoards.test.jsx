@@ -23,6 +23,7 @@ import { createDepartureEngine, wrapName } from '../components/stage/scoreboard/
 import { createOlympicEngine, laneCode } from '../components/stage/scoreboard/olympicEngine';
 import { createToteEngine, lampBits } from '../components/stage/scoreboard/toteEngine';
 import { boardRows } from '../config/scoreboard';
+import { fitScale } from '../components/stage/scoreboard/fitScale';
 
 /* The mockups' fourteen, after round 6 (standings.js computes these). */
 const PLAYERS = [
@@ -99,6 +100,25 @@ describe('1. the engines', () => {
         act(() => { jest.advanceTimersByTime(ms + 10); });
         expect(engine.text()[0]).toMatch(/PRIYA/);
       } finally { jest.useRealTimers(); }
+    });
+
+    test('one flap per character as a reader sees it — emoji and flags included', () => {
+      // `split('')` cut an astral symbol into two broken halves, one per flap.
+      expect(wrapName('🦊 Fox', 12)).toEqual(['🦊 FOX']);
+      const engine = createDepartureEngine(host, { reduced: () => true });
+      const rows = boardRows([
+        { playerName: '🦊 Fox', totalScore: 9, rank: 1, movement: 0 },
+        { playerName: 'Ana 🇬🇧', totalScore: 8, rank: 2, movement: 0 },
+      ]);
+      engine.loadField(rows, 10);
+      engine.show(rows);
+      const cells = engine.cells();
+      const fox = cells.find((line) => line.includes('F'));
+      expect(fox.slice(2, 7)).toEqual(['🦊', ' ', 'F', 'O', 'X']);
+      const ana = cells.find((line) => line.includes('A'));
+      expect(ana.slice(2, 7)).toEqual(['A', 'N', 'A', ' ', '🇬🇧']);
+      // Nothing half a character anywhere on the board.
+      for (const line of cells) for (const ch of line) expect(ch.isWellFormed()).toBe(true);
     });
 
     test('names are text, never markup', () => {
@@ -198,6 +218,72 @@ describe('1. the engines', () => {
       expect(rounds).toEqual([6]);
       expect(host.querySelector('.sb-tnm').textContent).toBe('Priya');
     });
+  });
+});
+
+describe('1b. the type fits the TALLEST page, not the first', () => {
+  test('fitScale takes the smallest scale any page needs', () => {
+    // Each page fits at or below its own scale; page 2 carries the long name.
+    const needs = { a: 1, b: 0.84, c: 0.96 };
+    let current = null;
+    let f = 1;
+    const out = fitScale(['a', 'b', 'c'], {
+      setFit: (v) => { f = v; },
+      paint: (page) => { current = page; },
+      overflows: () => f > needs[current] + 1e-9,
+    });
+    expect(out).toBeCloseTo(0.84, 2);
+  });
+
+  test('...and never below its floor', () => {
+    const out = fitScale(['a'], { setFit() {}, paint() {}, overflows: () => true });
+    expect(out).toBeCloseTo(0.5, 2);
+  });
+
+  /*
+    jsdom has no layout, so the lists are given one: 16px a line times the
+    scale, a long name taking three lines, in a 100px window. Page 1 (five
+    short names) fits at full size; page 2 (four short, one long) needs about
+    0.9. Fitted to page 1 alone, page 2 would clip its last row.
+  */
+  const LONG = 'Oluwaseun Adebayo-Richardson the Third';
+  const rowsFor = (names) => boardRows(names.map((n, i) => ({
+    playerId: n, playerName: n, totalScore: 50 - i, rank: i + 1, movement: 0, previousScore: 40,
+  })));
+  const FIELD = rowsFor(['Ann', 'Bea', 'Cal', 'Dee', 'Eve', 'Fay', 'Gus', LONG, 'Hal', 'Ivy']);
+
+  function giveLayout(host, list, win, nameSel) {
+    const fit = () => Number(host.style.getPropertyValue('--fit') || 1);
+    const lines = () => [...list.querySelectorAll(nameSel)]
+      .reduce((n, el) => n + (el.textContent.length > 20 ? 3 : 1), 0);
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, get: () => lines() * 16 * fit() });
+    Object.defineProperty(win, 'clientHeight', { configurable: true, get: () => 100 });
+    return () => list.scrollHeight <= win.clientHeight + 1;
+  }
+
+  let host;
+  beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); });
+  afterEach(() => { host.remove(); });
+
+  test('B · olympic: page 2 with the long name keeps every row', () => {
+    const engine = createOlympicEngine(host, { reduced: () => true });
+    const list = host.querySelector('.sb-olb-rows');
+    const fits = giveLayout(host, list, list, '.sb-onm');
+    engine.loadField(FIELD, 5);
+    expect(Number(host.style.getPropertyValue('--fit'))).toBeLessThan(1);
+    engine.show(FIELD.slice(5, 10));
+    expect(host.querySelectorAll('.sb-orow')).toHaveLength(5);
+    expect(fits()).toBe(true);
+  });
+
+  test('C · tote: page 2 with the long name keeps every row', () => {
+    const engine = createToteEngine(host, { reduced: () => true });
+    const fits = giveLayout(host, host.querySelector('.sb-tote-rows'), host.querySelector('.sb-tote-win'), '.sb-tnm');
+    engine.loadField(FIELD, 5);
+    expect(Number(host.style.getPropertyValue('--fit'))).toBeLessThan(1);
+    engine.show(FIELD.slice(5, 10), { afterRound: 3 });
+    expect(host.querySelectorAll('.sb-trow')).toHaveLength(5);
+    expect(fits()).toBe(true);
   });
 });
 

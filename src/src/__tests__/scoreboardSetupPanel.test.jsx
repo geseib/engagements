@@ -46,6 +46,7 @@ describe('scoreboardButton', () => {
 function renderPanel(props = {}) {
   const onToggleScoreboard = jest.fn();
   const onScoreboardStyle = jest.fn();
+  const onClose = jest.fn();
   const utils = render(
     <SessionSetupPanel
       gameType="trivia"
@@ -54,10 +55,11 @@ function renderPanel(props = {}) {
       scoreboardAvailability={ready}
       onToggleScoreboard={onToggleScoreboard}
       onScoreboardStyle={onScoreboardStyle}
+      onClose={onClose}
       {...props}
     />,
   );
-  return { ...utils, onToggleScoreboard, onScoreboardStyle };
+  return { ...utils, onToggleScoreboard, onScoreboardStyle, onClose };
 }
 
 describe('the Players tab', () => {
@@ -71,10 +73,19 @@ describe('the Players tab', () => {
     expect(onToggleScoreboard).toHaveBeenCalledWith(true);
   });
 
-  test('with the board up it reads Hide scoreboard and closes it', () => {
-    const { onToggleScoreboard } = renderPanel({ scoreboard: { ...closed, open: true } });
+  test('opening the board from here puts the session menu away, so the room sees the board', () => {
+    // The menu is a fixed panel with a dark scrim over the stage; left open,
+    // it would stand over the very board the host just put up.
+    const { onClose } = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Show scoreboard on screen' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('with the board up it reads Hide scoreboard and closes it — and the menu stays', () => {
+    const { onToggleScoreboard, onClose } = renderPanel({ scoreboard: { ...closed, open: true } });
     fireEvent.click(screen.getByRole('button', { name: 'Hide scoreboard' }));
     expect(onToggleScoreboard).toHaveBeenCalledWith(false);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   test('disabled, with the reason, before a round is scored', () => {

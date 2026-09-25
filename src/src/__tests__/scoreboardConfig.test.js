@@ -34,12 +34,18 @@ describe('the looks', () => {
 describe('normaliseScoreboard', () => {
   test('nothing stored is a closed board in the default look', () => {
     expect(normaliseScoreboard(undefined)).toEqual(CLOSED_SCOREBOARD);
-    expect(CLOSED_SCOREBOARD).toEqual({ open: false, style: 'departure', page: 0, openedAt: null });
+    expect(CLOSED_SCOREBOARD).toEqual({ open: false, style: 'departure', page: 0, openedAt: null, rev: 0 });
   });
 
   test('an unknown look reads as the default, a junk page as 0', () => {
     expect(normaliseScoreboard({ open: true, style: 'neon', page: 'x', openedAt: 't' }))
-      .toEqual({ open: true, style: 'departure', page: 0, openedAt: 't' });
+      .toEqual({ open: true, style: 'departure', page: 0, openedAt: 't', rev: 0 });
+  });
+
+  test('the revision travels, and junk reads as 0', () => {
+    expect(normaliseScoreboard({ rev: 7 }).rev).toBe(7);
+    expect(normaliseScoreboard({ rev: -1 }).rev).toBe(0);
+    expect(normaliseScoreboard({ rev: '7' }).rev).toBe(0);
   });
 
   test('open must be literally true', () => {

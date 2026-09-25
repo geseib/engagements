@@ -457,7 +457,13 @@ export default function SessionSetupPanel({
                     data-testid="scoreboard-toggle"
                     aria-pressed={Boolean(scoreboard.open)}
                     disabled={sbButton.disabled}
-                    onClick={() => onToggleScoreboard(!scoreboard.open)}
+                    onClick={() => {
+                      const opening = !scoreboard.open;
+                      onToggleScoreboard(opening);
+                      // The menu stands over the stage with a scrim; put it
+                      // away so the room sees the board it just asked for.
+                      if (opening) onClose();
+                    }}
                   >
                     {sbButton.label}
                   </button>
