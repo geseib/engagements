@@ -21,7 +21,8 @@
  * bundle and cannot be resolved from the repo root at all.
  *
  * THE TABLE STUB ENFORCES ConditionExpression, and that is load-bearing rather
- * than decorative: `attribute_not_exists(setCreationClaimedAt)` is the whole
+ * than decorative: the worker's `#status = :queued` job claim and
+ * `attribute_not_exists(setCreationClaimedAt)` behind it are the whole
  * idempotency guard, and a stub that ignored conditions would let a broken
  * guard pass.
  */
@@ -87,11 +88,22 @@ function applyUpdate(item, input) {
   }
 }
 
-/** Only the one condition this code writes. Anything else is a test bug. */
-function conditionHolds(condition, item) {
-  const match = String(condition).match(/^attribute_not_exists\((\w+)\)$/);
-  if (!match) throw new Error(`stub cannot evaluate ConditionExpression: ${condition}`);
-  return item[match[1]] === undefined;
+/**
+ * Only the two conditions this code writes: createSetForJob's
+ * `attribute_not_exists(setCreationClaimedAt)` and the worker's
+ * `#status = :queued` claim (generation-jobs.js, claimJob). Anything else is a
+ * test bug.
+ */
+function conditionHolds(input, item) {
+  const condition = String(input.ConditionExpression);
+  const notExists = condition.match(/^attribute_not_exists\((\w+)\)$/);
+  if (notExists) return item[notExists[1]] === undefined;
+  const equals = condition.match(/^\s*(#?\w+)\s*=\s*(:\w+)\s*$/);
+  if (equals) {
+    const attr = (input.ExpressionAttributeNames || {})[equals[1]] || equals[1];
+    return item[attr] !== undefined && item[attr] === (input.ExpressionAttributeValues || {})[equals[2]];
+  }
+  throw new Error(`stub cannot evaluate ConditionExpression: ${condition}`);
 }
 
 const docClient = {
@@ -107,7 +119,7 @@ const docClient = {
     if (cmd.kind === 'update') {
       const k = rowKey(Key.PK, Key.SK);
       const existing = ddb.get(k) || { ...Key };
-      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input.ConditionExpression, existing)) {
+      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input, existing)) {
         throw new ConditionalCheckFailedException();
       }
       applyUpdate(existing, cmd.input);
@@ -603,11 +615,10 @@ const scenarioBody = (overrides = {}) => ({
   say('\nno double creation, ever');
 
   await test('a worker retry creates no second set', async () => {
-    // rejects: removing the conditional `attribute_not_exists` claim on the job
-    // row. Lambda retries an Event invoke by itself, so a second run of the
-    // same worker is not hypothetical — and without the claim the second one
-    // reaches the importer, is refused for a name already taken, and replaces a
-    // job that had a set with a job that reports a failure.
+    // rejects: a retry that reaches the importer at all. Lambda retries an
+    // Event invoke by itself, so a second run of the same worker is not
+    // hypothetical. The job claim (generation-jobs.js, claimJob) stops it
+    // before Bedrock; the set-creation claim below is the guard behind that.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(3, 'retry'));
     const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }));
@@ -618,6 +629,32 @@ const scenarioBody = (overrides = {}) => ({
     const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
     assert.strictEqual(row.setCreationError, undefined,
       `the retry reported "${row.setCreationError}" over a set that already existed`);
+    assert.strictEqual(row.createdSetId, 'worldleaders');
+  });
+
+  await test('createSetForJob run twice for one job creates one set', async () => {
+    // rejects: removing the conditional `attribute_not_exists` claim on the job
+    // row. The worker's job claim keeps a second delivery from getting this
+    // far, so this drives createSetForJob directly: without its own claim the
+    // second call reaches the importer, is refused for a name already taken,
+    // and replaces a job that had a set with a job that reports a failure.
+    reset();
+    const items = scenarioItems(3, 'twice');
+    bedrockHandler = () => toolResponse(items);
+    const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }));
+    const { createSetForJob, scenariosToCsv } = require(path.join(REPO, 'lambda-functions/admin/shared/generated-set.js'));
+
+    const again = await createSetForJob({
+      dynamodb: docClient, tableName: 'engage-test', jobId,
+      spec: { engagementType: () => 'call-and-answer', toCsv: scenariosToCsv },
+      payload: dispatch.payload, items, caller: { userId: 'sub-ada', username: 'ada' },
+    });
+
+    assert.strictEqual(again, null, `the second call created a set: ${JSON.stringify(again)}`);
+    assert.strictEqual(setRows().length, 1, 'a second call minted a second set');
+    const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
+    assert.strictEqual(row.setCreationError, undefined,
+      `the second call reported "${row.setCreationError}" over a set that already existed`);
     assert.strictEqual(row.createdSetId, 'worldleaders');
   });
 

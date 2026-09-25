@@ -28,7 +28,7 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { itemsPerCall, maxTokensFor, perItemTokens, invokeStructured } = require('./structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
-  openJob, isCallersJob, workerCaller,
+  openJob, isCallersJob, workerCaller, claimJob,
 } = require('./generation-jobs');
 const { createSetForJob } = require('./generated-set');
 const { callerUsername } = require('./require-admin');
@@ -119,6 +119,10 @@ function makeGenerationHandler(config) {
     // see workerCaller for the other two ways there is no caller.
     const caller = await workerCaller(dynamodb, tableName, jobId);
     if (!caller) return;
+    // ONE DELIVERY GENERATES. An Event invoke arrives at least once and a
+    // failed one is retried, so a job already taken — running, finished, or
+    // failed after Bedrock was paid for — is left alone. See claimJob.
+    if (!(await claimJob(dynamodb, tableName, jobId))) return;
     // Everything this worker writes back is sealed under the organisation that
     // asked (generation-jobs.js). Absent for Engage's own library.
     const sealFor = caller.orgId || '';

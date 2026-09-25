@@ -332,6 +332,57 @@ async function workerCaller(dynamodb, tableName, jobId) {
 }
 
 /**
+ * TAKE THE JOB, ONCE — `true` for the one delivery that moved it from
+ * 'queued' to 'running', `false` for every other, which then does nothing.
+ * Called after workerCaller and before anything is paid for.
+ *
+ * The worker is an Event invoke, so it is delivered AT LEAST once, and a
+ * failed one is retried twice (template-clean.yaml sets no EventInvokeConfig).
+ * workerCaller alone cannot tell a first delivery from a second, because the
+ * row names the same user either way, and everything after Bedrock can throw:
+ * the final completeJob or failJob (DynamoDB, or KMS sealing the items), or a
+ * progress write. The retry of such a run used to generate the whole thing
+ * again. A duplicate dispatch did the same without any failure at all.
+ *
+ * So the one delivery that finds the row 'queued' generates, and the check is
+ * the WRITE rather than a read of the status: two deliveries that both read
+ * 'queued' would both go ahead.
+ *
+ *   - A FAILED CONDITION is the answer "someone else has it", or had it: a
+ *     job running, finished, failed, or failed at dispatch. `false`.
+ *   - ANYTHING ELSE is thrown, as workerCaller throws a failed read. Nothing
+ *     has been spent, and the write almost always did not land, so Lambda's
+ *     retry claims the job. If it did land and only the answer was lost, the
+ *     retry finds it taken and does nothing — late, as below, never twice.
+ *
+ * The cost of that rule is the run that fails AFTER it claimed: its retry does
+ * nothing, and a job whose terminal write never landed stays 'running' until
+ * the client's poll gives up (aiBatchClient.js, POLL_TIMEOUT_MS). That is the
+ * trade: a result that is late to say so, never a generation paid for twice.
+ */
+async function claimJob(dynamodb, tableName, jobId) {
+  try {
+    await dynamodb.send(new UpdateCommand({
+      TableName: tableName,
+      Key: jobKey(jobId),
+      UpdateExpression: 'SET #status = :running, updatedAt = :now',
+      ConditionExpression: '#status = :queued',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: {
+        ':running': STATUS.RUNNING,
+        ':queued': STATUS.QUEUED,
+        ':now': new Date().toISOString(),
+      },
+    }));
+    return true;
+  } catch (error) {
+    if (error.name !== 'ConditionalCheckFailedException') throw error;
+    console.warn(`⚠️ Job ${jobId}: already taken by another delivery; generating nothing`);
+    return false;
+  }
+}
+
+/**
  * Poll payload. Deliberately omits `request` — the client already has it — and
  * the caller identity, which is nobody's business but the worker's.
  *
@@ -381,6 +432,7 @@ module.exports = {
   failJob,
   getJob,
   workerCaller,
+  claimJob,
   jobToResponse,
   sealJobFields,
   openJob,

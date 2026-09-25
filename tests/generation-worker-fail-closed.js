@@ -33,6 +33,15 @@
  *     a job nobody owns can never be read back (isCallersJob), and its set
  *     would be filed as an internal write.
  *
+ * AND A WORKER GENERATES ONLY FOR A JOB IT TOOK. The caller read cannot tell a
+ * first delivery from a second — the row names the same user either way — and
+ * everything after Bedrock can throw: completeJob or failJob (DynamoDB, or KMS
+ * sealing the items), or a progress write. That escaped runWorker, Lambda
+ * retried the invoke, and the retry paid for the whole generation again; a
+ * duplicate dispatch did the same with no failure at all. So after the caller
+ * read, the worker moves its job 'queued' → 'running' with a conditional write
+ * (generation-jobs.js, claimJob), and a delivery that loses does nothing.
+ *
  * Both workers are driven for real — the factory through ai-generate-trivia and
  * the inline copy through ai-generate-scenarios — with the REAL upload-questions
  * importer behind them, so "no platform set" is asserted against the code that
@@ -45,8 +54,10 @@
  * a caller it could not establish; one that recreates a job row that is gone;
  * one that generates for a row naming no user; one that loses a job to a stale
  * read of the row its own POST just wrote; a retry that pays for Bedrock twice;
- * createSetForJob filing a set for an empty caller, or for an organisation it
- * holds no role in.
+ * a second delivery, or two at once, generating a job already taken; the retry
+ * of a run whose completeJob or failJob threw generating again; a claim that
+ * swallows an unreachable table; createSetForJob filing a set for an empty
+ * caller, or for an organisation it holds no role in.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -87,8 +98,25 @@ let jobReads = [];
   replica that has not yet applied the POST's put answers, and the worker's read
   happens moments after it. A `ConsistentRead: true` read always sees the row,
   which is DynamoDB's documented guarantee and the only one this models.
+
+  And on WRITES to a PK=AIJOBS row, the faults that strike after Bedrock has
+  been paid for:
+
+  `terminalWriteThrows` — the next N writes that take the job to that status
+  throw: `complete` is completeJob, `error` is failJob. That is DynamoDB
+  refusing the write, or KMS failing to seal the items it carries.
+
+  `claimWriteThrows` — the next N CONDITIONAL writes to a job row throw with
+  something other than a failed condition: the table unreachable at the moment
+  the worker takes the job.
 */
-const faults = { jobReadThrows: 0, staleJobRead: false };
+const faults = {
+  jobReadThrows: 0,
+  staleJobRead: false,
+  terminalWriteThrows: { complete: 0, error: 0 },
+  claimWriteThrows: 0,
+};
+const serviceUnavailable = () => Object.assign(new Error('Service unavailable'), { name: 'ServiceUnavailable' });
 
 class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
 class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
@@ -123,11 +151,21 @@ function applyUpdate(item, input) {
   }
 }
 
-/** Only the one condition this code writes. Anything else is a test bug. */
-function conditionHolds(condition, item) {
-  const match = String(condition).match(/^attribute_not_exists\((\w+)\)$/);
-  if (!match) throw new Error(`stub cannot evaluate ConditionExpression: ${condition}`);
-  return item[match[1]] === undefined;
+/**
+ * Only the two conditions this code writes: createSetForJob's
+ * `attribute_not_exists(x)` and the worker's `#status = :queued` claim.
+ * Anything else is a test bug.
+ */
+function conditionHolds(input, item) {
+  const condition = String(input.ConditionExpression);
+  const notExists = condition.match(/^attribute_not_exists\((\w+)\)$/);
+  if (notExists) return item[notExists[1]] === undefined;
+  const equals = condition.match(/^\s*(#?\w+)\s*=\s*(:\w+)\s*$/);
+  if (equals) {
+    const attr = (input.ExpressionAttributeNames || {})[equals[1]] || equals[1];
+    return item[attr] !== undefined && item[attr] === (input.ExpressionAttributeValues || {})[equals[2]];
+  }
+  throw new Error(`stub cannot evaluate ConditionExpression: ${condition}`);
 }
 
 const docClient = {
@@ -139,9 +177,7 @@ const docClient = {
         jobReads.push({ ...cmd.input });
         if (faults.jobReadThrows > 0) {
           faults.jobReadThrows -= 1;
-          const error = new Error('Service unavailable');
-          error.name = 'ServiceUnavailable';
-          throw error;
+          throw serviceUnavailable();
         }
         if (faults.staleJobRead && cmd.input.ConsistentRead !== true) return { Item: undefined };
       }
@@ -153,9 +189,20 @@ const docClient = {
       return {};
     }
     if (cmd.kind === 'update') {
+      if (Key.PK === 'AIJOBS') {
+        const status = (cmd.input.ExpressionAttributeValues || {})[':status'];
+        if (faults.terminalWriteThrows[status] > 0) {
+          faults.terminalWriteThrows[status] -= 1;
+          throw serviceUnavailable();
+        }
+        if (cmd.input.ConditionExpression && faults.claimWriteThrows > 0) {
+          faults.claimWriteThrows -= 1;
+          throw serviceUnavailable();
+        }
+      }
       const k = rowKey(Key.PK, Key.SK);
       const existing = ddb.get(k) || { ...Key };
-      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input.ConditionExpression, existing)) {
+      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input, existing)) {
         throw new ConditionalCheckFailedException();
       }
       applyUpdate(existing, cmd.input);
@@ -199,10 +246,16 @@ stub('@aws-sdk/lib-dynamodb', {
 // ---- Bedrock --------------------------------------------------------------
 let bedrockCalls = 0;
 let bedrockItems = [];
+/** The next N calls fail as the model would, after they have been paid for. */
+let bedrockThrows = 0;
 class InvokeModelCommand { constructor(input) { this.input = input; } }
 class BedrockRuntimeClient {
   async send() {
     bedrockCalls += 1;
+    if (bedrockThrows > 0) {
+      bedrockThrows -= 1;
+      throw Object.assign(new Error('ModelErrorException: the model failed'), { name: 'ModelErrorException' });
+    }
     return {
       body: new TextEncoder().encode(JSON.stringify({
         stop_reason: 'tool_use',
@@ -252,8 +305,11 @@ function reset() {
   dispatched = [];
   bedrockCalls = 0;
   bedrockItems = [];
+  bedrockThrows = 0;
   faults.jobReadThrows = 0;
   faults.staleJobRead = false;
+  faults.terminalWriteThrows = { complete: 0, error: 0 };
+  faults.claimWriteThrows = 0;
   forgetAllOrgs();
 }
 
@@ -465,6 +521,121 @@ async function invokeWorker(worker, dispatch) {
       assertSealedAtRest(jobRow(jobId), 'after a stale-replica start');
       assert.strictEqual(orgSets().length, 1);
       assert.deepStrictEqual(platformSets(), []);
+    });
+
+    // ---- A JOB IS GENERATED ONCE, however often its worker is delivered ----
+    //
+    // Lambda delivers an Event invoke at least once and retries a failed one
+    // twice, and the caller read above is not the only thing that can fail:
+    // everything after Bedrock can throw too. Each of these rejects a worker
+    // that generates for a job it did not take from 'queued' itself.
+
+    await test('a SECOND DELIVERY of a finished job pays for nothing and writes nothing', async () => {
+      // rejects: a worker that re-reads its caller and generates again. The
+      // row names the same user either way, so the caller read alone cannot
+      // tell a first delivery from a second.
+      reset();
+      await mint();
+      bedrockItems = worker.items();
+      const { jobId, dispatch } = await start(worker);
+      assert.strictEqual(await invokeWorker(worker, dispatch), 'ok', 'the first delivery failed');
+      const finished = { ...jobRow(jobId) };
+      const before = writeLog.length;
+
+      const again = await invokeWorker(worker, dispatch);
+
+      assert.strictEqual(again, 'ok', `a job already taken is not a fault to retry: ${again && again.message}`);
+      assert.strictEqual(bedrockCalls, 1, `Bedrock was called ${bedrockCalls} times for one job`);
+      assert.deepStrictEqual(jobWritesSince(jobId, before), [], 'the second delivery wrote to a finished job');
+      assert.deepStrictEqual(jobRow(jobId), finished, 'the second delivery changed a finished job');
+      assert.strictEqual(orgSets().length, 1);
+    });
+
+    await test('two deliveries AT ONCE generate once between them', async () => {
+      // rejects: checking the status with a read and then generating. Both
+      // deliveries read 'queued' before either writes 'running'; only a
+      // conditional write lets exactly one of them through.
+      reset();
+      await mint();
+      bedrockItems = worker.items();
+      const { jobId, dispatch } = await start(worker);
+
+      const outcomes = await Promise.all([invokeWorker(worker, dispatch), invokeWorker(worker, dispatch)]);
+
+      assert.deepStrictEqual(outcomes, ['ok', 'ok'], `a delivery failed: ${outcomes.map((o) => o && o.message)}`);
+      assert.strictEqual(bedrockCalls, 1, `Bedrock was called ${bedrockCalls} times for one job`);
+      assert.strictEqual(jobRow(jobId).status, 'complete');
+      assertSealedAtRest(jobRow(jobId), 'after two deliveries');
+      assert.strictEqual(orgSets().length, 1);
+      assert.deepStrictEqual(platformSets(), []);
+    });
+
+    await test('a completeJob that THROWS, then Lambda\'s retry, pays for Bedrock once', async () => {
+      // rejects: letting the retry of a run that failed only while sealing its
+      // result generate the whole thing again. The first attempt paid for
+      // Bedrock and created the set; the retry finds the job already taken.
+      reset();
+      await mint();
+      bedrockItems = worker.items();
+      const { jobId, dispatch } = await start(worker);
+
+      faults.terminalWriteThrows.complete = 1;
+      const first = await invokeWorker(worker, dispatch);
+      assert.notStrictEqual(first, 'ok', 'the fixture\'s completeJob did not throw, so Lambda would not retry');
+      const retried = await invokeWorker(worker, dispatch);
+
+      assert.strictEqual(retried, 'ok', `the retry failed: ${retried && retried.message}`);
+      assert.strictEqual(bedrockCalls, 1, `Bedrock was called ${bedrockCalls} times across the retry`);
+      assertSealedAtRest(jobRow(jobId), 'after the retry');
+      assert.strictEqual(orgSets().length, 1, 'the set the first attempt created is gone, or doubled');
+      assert.deepStrictEqual(platformSets(), []);
+    });
+
+    await test('a failJob that THROWS, then Lambda\'s retry, pays for Bedrock once', async () => {
+      // rejects: the same on the failure path. Bedrock was called and failed —
+      // still paid for — and the write recording that failure threw.
+      reset();
+      await mint();
+      bedrockItems = worker.items();
+      const { jobId, dispatch } = await start(worker);
+
+      // Two: invokeStructured falls back from Sonnet to Haiku before a pass fails.
+      bedrockThrows = 2;
+      faults.terminalWriteThrows.error = 1;
+      const first = await invokeWorker(worker, dispatch);
+      assert.notStrictEqual(first, 'ok', 'the fixture\'s failJob did not throw, so Lambda would not retry');
+      const paid = bedrockCalls;
+      const retried = await invokeWorker(worker, dispatch);
+
+      assert.strictEqual(retried, 'ok', `the retry failed: ${retried && retried.message}`);
+      assert.strictEqual(bedrockCalls - paid, 0, `the retry called Bedrock ${bedrockCalls - paid} more times`);
+      assertSealedAtRest(jobRow(jobId), 'after the retry');
+      assert.deepStrictEqual(orgSets(), [], 'the retry generated a set the first attempt never had');
+      assert.deepStrictEqual(platformSets(), []);
+    });
+
+    await test('a claim that THROWS spends nothing and rethrows, and the retry generates once', async () => {
+      // rejects: treating any failed claim as "somebody else has it". Only a
+      // failed CONDITION means that; an unreachable table means nobody has
+      // it yet, and swallowing that would strand the job at 'queued'.
+      reset();
+      await mint();
+      bedrockItems = worker.items();
+      const { jobId, dispatch } = await start(worker);
+
+      faults.claimWriteThrows = 1;
+      const first = await invokeWorker(worker, dispatch);
+
+      assert.notStrictEqual(first, 'ok', 'the worker swallowed a failed claim, so Lambda will never retry it');
+      assert.strictEqual(bedrockCalls, 0, 'Bedrock was paid for a job the worker never took');
+      assert.strictEqual(jobRow(jobId).status, 'queued');
+
+      const retried = await invokeWorker(worker, dispatch);
+      assert.strictEqual(retried, 'ok', `the retry failed: ${retried && retried.message}`);
+      assert.strictEqual(bedrockCalls, 1);
+      assert.strictEqual(jobRow(jobId).status, 'complete');
+      assertSealedAtRest(jobRow(jobId), 'after the retry');
+      assert.strictEqual(orgSets().length, 1);
     });
   }
 

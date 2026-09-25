@@ -47,7 +47,7 @@ const {
 } = require('./shared/structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
-  openJob, isCallersJob, workerCaller,
+  openJob, isCallersJob, workerCaller, claimJob,
 } = require('./shared/generation-jobs');
 const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
@@ -326,6 +326,11 @@ async function runWorker(event, context) {
   // shared/generation-jobs.js's workerCaller for the other two ways.
   const caller = await workerCaller(dynamodb, tableName, jobId);
   if (!caller) return;
+  // ONE DELIVERY GENERATES. An Event invoke arrives at least once and a failed
+  // one is retried, so a job already taken — running, finished, or failed after
+  // Bedrock was paid for — is left alone. See shared/generation-jobs.js's
+  // claimJob.
+  if (!(await claimJob(dynamodb, tableName, jobId))) return;
   // Everything this worker writes back is sealed under the organisation that
   // asked (shared/generation-jobs.js). Absent for Engage's own library.
   const sealFor = caller.orgId || '';

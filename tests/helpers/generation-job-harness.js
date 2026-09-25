@@ -46,6 +46,25 @@ function applyUpdate(item, input) {
   }
 }
 
+/**
+ * The conditions these handlers write, ENFORCED: the worker's `#status =
+ * :queued` job claim (generation-jobs.js, claimJob) and createSetForJob's
+ * `attribute_not_exists(setCreationClaimedAt)`. A stub that ignored them would
+ * let every worker here generate for a job it never took. Anything else is a
+ * test bug, and says so rather than passing.
+ */
+function conditionHolds(input, item) {
+  const condition = String(input.ConditionExpression);
+  const notExists = condition.match(/^attribute_not_exists\((\w+)\)$/);
+  if (notExists) return item[notExists[1]] === undefined;
+  const equals = condition.match(/^\s*(#?\w+)\s*=\s*(:\w+)\s*$/);
+  if (equals) {
+    const attr = (input.ExpressionAttributeNames || {})[equals[1]] || equals[1];
+    return item[attr] !== undefined && item[attr] === (input.ExpressionAttributeValues || {})[equals[2]];
+  }
+  throw new Error(`harness cannot evaluate ConditionExpression: ${condition}`);
+}
+
 const docClient = {
   send: async (cmd) => {
     const { Key, Item } = cmd.input;
@@ -54,6 +73,9 @@ const docClient = {
     if (cmd.kind === 'update') {
       const k = rowKey(Key.PK, Key.SK);
       const existing = state.ddb.get(k) || { ...Key };
+      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input, existing)) {
+        throw Object.assign(new Error('The conditional request failed'), { name: 'ConditionalCheckFailedException' });
+      }
       applyUpdate(existing, cmd.input);
       state.ddb.set(k, existing);
       return {};

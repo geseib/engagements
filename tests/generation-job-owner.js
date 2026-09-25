@@ -79,8 +79,18 @@ const fakeDoc = {
       case 'get': return { Item: clone(store.get(rowKey(inp.Key.PK, inp.Key.SK))) };
       case 'put': store.set(rowKey(inp.Item.PK, inp.Item.SK), clone(inp.Item)); return {};
       case 'update': {
-        if (inp.ConditionExpression) throw new Error(`stub cannot evaluate ${inp.ConditionExpression}`);
         const k = rowKey(inp.Key.PK, inp.Key.SK);
+        // The one condition these workers write: the `#status = :queued` job
+        // claim (generation-jobs.js, claimJob). Anything else is a test bug.
+        if (inp.ConditionExpression) {
+          const m = /^\s*(#?\w+)\s*=\s*(:\w+)\s*$/.exec(inp.ConditionExpression);
+          if (!m) throw new Error(`stub cannot evaluate ${inp.ConditionExpression}`);
+          const current = store.get(k);
+          const attr = (inp.ExpressionAttributeNames || {})[m[1]] || m[1];
+          if (!current || current[attr] !== inp.ExpressionAttributeValues[m[2]]) {
+            throw Object.assign(new Error('The conditional request failed'), { name: 'ConditionalCheckFailedException' });
+          }
+        }
         const item = store.get(k) || { ...inp.Key };
         applySet(item, inp);
         store.set(k, clone(item));
