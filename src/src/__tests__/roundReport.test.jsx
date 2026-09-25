@@ -87,6 +87,21 @@ describe('a briefed round', () => {
   });
 });
 
+// WorkieContextHint — what Workie had, host-only fact, never the content.
+describe('what Workie had', () => {
+  test('a round shows what Workie had', () => {
+    const contextUsed = { background: true, setNote: false, eventDetails: true, hostInstructions: false, briefing: false };
+    render(<RoundReport round={aRound({ aiSummary: { ...aRound().aiSummary, contextUsed } })} />);
+    expect(screen.getByTestId('workie-context-hint').textContent)
+      .toBe('Workie had: question notes ✓ · set note — · event details ✓ · host instructions — · briefing —');
+  });
+
+  test('a round summarised before the flags existed shows no hint', () => {
+    render(<RoundReport round={aRound()} />);
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+  });
+});
+
 describe('the three sections', () => {
   test('renders the question, the responses and the AI summary', () => {
     render(<RoundReport round={aRound()} />);

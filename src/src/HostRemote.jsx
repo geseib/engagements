@@ -6,6 +6,7 @@ import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
 import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
+import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
 import { categoryRows } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
@@ -968,6 +969,7 @@ function HostRemote() {
                     <p className="hr-notes-foot">
                       Full notes, next steps and every response are in the session report.
                     </p>
+                    <WorkieContextHint contextUsed={aiSummary?.contextUsed || null} />
                   </>
                 )}
               </section>

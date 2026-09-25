@@ -328,6 +328,16 @@
 
 .hr-notes-foot { margin-top: 14px; }
 
+/* Same pairing as `.hr-notes-foot` just above it — --muted on --surface,
+   already the report's own quiet-line treatment. Host-only fact, never the
+   content: WorkieContextHint.jsx returns null when there is nothing to say. */
+.hr-notes .workie-context-hint {
+  margin: 8px 0 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 /* --------------------------------------------------------------- flash */
 
 .hr-flash {

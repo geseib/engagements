@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 import AnswerSpotlight from './AnswerSpotlight';
 import MarkdownRenderer from './MarkdownRenderer';
+import WorkieContextHint from './WorkieContextHint';
 import {
   hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
@@ -381,6 +382,7 @@ export default function RoundReport({
             {summary.briefingUsed && (
               <p className="past-round__voice">Workie had the host&rsquo;s briefing for this round</p>
             )}
+            <WorkieContextHint contextUsed={summary.contextUsed || null} />
           </>
         ) : (
           <p className="past-round__empty">No summary was generated for this round.</p>
