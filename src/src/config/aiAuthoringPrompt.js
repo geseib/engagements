@@ -70,6 +70,7 @@ WHAT GOES IN EACH COLUMN:
 - Detail_lesson: the lesson itself — the passage the room reads. This is where the length setting above applies. Make it concrete: a real practice, decision or idea, not an abstraction.
 - School: where the lesson comes from — a discipline, era, thinker or institution (e.g. "School of Management", "Toyota Production System").
 - CustomInstruction: the prompt the room answers about the lesson. THIS MUST BE FORWARD-LOOKING AND THROUGH THE TEAM'S LENS — "What could our team do with this?", "Where would this land in our organisation?" — never a personal retrospective like "Recall a time you…". It is a question, ending in a question mark.
+- Background (optional, every type): 2-4 sentences Workie may draw on — context, a well-established fact, an angle. Never shown to players. Only what you are certain of; no statistics, names or quotations you cannot stand behind.
 - Tags: one to three lowercase keywords separated by | (e.g. leadership|trust).
 
 ${OUTPUT_RULES(CALL_AND_ANSWER_HEADER)}`;
@@ -93,6 +94,7 @@ WHAT GOES IN EACH COLUMN:
 - optionA through optionD: four answer choices, always filled. optionE and optionF are optional — leave them empty unless the question genuinely needs more choices.
 - correctAnswer: exactly one of OptionA, OptionB, OptionC, OptionD, OptionE or OptionF (capital O, no space), naming the column that holds the right answer. Vary which letter is correct across the set.
 - answerDetails: the explanation read to the room at the reveal — why the answer is right, plus the interesting part. A live host AI riffs on this text, so a wrong "fact" here gets said out loud to people who may know better: include only things you are certain of.
+- Background (optional, every type): 2-4 sentences Workie may draw on — context, a well-established fact, an angle. Never shown to players. Only what you are certain of; no statistics, names or quotations you cannot stand behind.
 - difficulty: easy, medium or hard, matching the mix above.
 - Tags: one to three lowercase keywords separated by | (e.g. strategy|planning).
 

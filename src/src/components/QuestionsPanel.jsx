@@ -2113,6 +2113,27 @@ function QuestionForm({
         </div>
       </div>
 
+      {/* BACKGROUND — the author's material for Workie (question-background spec §1).
+          Full width: it runs to 600 characters. Never shown to players. Hint reuses
+          `.qs-panel-note`, the panel's own field-help ink (--muted on the question
+          dialog's --surface card, 6.06:1 — questionSetEditorPalette.test.js), the same
+          class the AI-draft note and the "Writing alongside these" note already use. */}
+      <div className="form-group">
+        <label htmlFor={id('background')}>Background for Workie</label>
+        <textarea
+          id={id('background')}
+          className="form-textarea"
+          rows="3"
+          maxLength={600}
+          value={draft.background || ''}
+          onChange={set('background')}
+          aria-describedby={id('background-hint')}
+        />
+        <p id={id('background-hint')} className="qs-panel-note">
+          Facts and context Workie may use. Never shown to players.
+        </p>
+      </div>
+
       {footer}
     </div>
   );
