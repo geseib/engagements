@@ -332,9 +332,11 @@ exports.handler = async (event) => {
         same two readers stageFocus has: a reloading host page reopens the board
         the room was looking at, and the phone remote, which holds no socket,
         draws its Scoreboard button from this poll. Always an object, never
-        undefined; an unknown stored look reads as the default.
+        undefined; an unknown stored look reads as the default. `rev` is the
+        board's revision (scoreboard-state.js), so a reply that was already
+        on its way when the host pressed S cannot shut the board again.
       */
-      scoreboard: normaliseScoreboard(stateItem && stateItem.Scoreboard),
+      scoreboard: normaliseScoreboard(stateItem && stateItem.Scoreboard, stateItem && stateItem.ScoreboardRev),
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       gameMetadata: {
         title: sessionMeta.Title,

@@ -43,6 +43,17 @@
  * scored in, and the whole board is NEW — the spec's "treat the board's first
  * scored round as all new".
  *
+ * ── THE SESSION'S OWN COUNT COMES FIRST (`marker`) ─────────────────────────
+ *
+ * A round in which nobody scored — an all-wrong trivia question, a round with
+ * no votes — stamps no score row, so the rows alone would leave the board on
+ * "After round 5" with round 6 long over. get-results.js therefore records on
+ * STATE the round it counted and when (`ScoresAfterRound`, `ScoresAt`), and
+ * the one before it (`PrevScoresAt`), on every counted round, zero points
+ * included. `marker` is that record: the latest round is the higher of it and
+ * the rows, and when it is current its `prevAt` is the NEW cutoff. Sessions
+ * counted before the record existed have none, and fall back to the rows.
+ *
  * A ROW WRITTEN BEFORE `prevScore` EXISTED, at the latest round, has an
  * unknowable previous total. It reads as unchanged (movement 0, no previous
  * score) — never as NEW, which would be a claim about the person rather than
@@ -89,25 +100,33 @@ function competitionRanks(values) {
 }
 
 /**
- * @param {{ players: {name: string, joinedAt?: string}[], rows: Object<string, object> }} input
+ * @param {{ players: {name: string, joinedAt?: string}[], rows: Object<string, object>,
+ *            marker?: {round: number|string|null, at: string|null, prevAt: string|null} }} input
  *   players  who is in the room now (removed players excluded)
  *   rows     the PLAYER#<name>#SCORE rows, by name — everyone's, removed included
+ *   marker   STATE's record of the last round counted (get-results.js)
  * @returns {{ afterRound: number|null,
  *             standings: Map<string, { rank: number, movement: number|'new', previousScore: number|null }> }}
  */
-function computeStandings({ players = [], rows = {} } = {}) {
+function computeStandings({ players = [], rows = {}, marker = null } = {}) {
   const rowOf = (name) => (rows && Object.prototype.hasOwnProperty.call(rows, name) ? rows[name] : null);
   const totalOf = (name) => Number(rowOf(name)?.score) || 0;
 
   const allRows = Object.values(rows || {}).filter(Boolean);
-  const latest = allRows.reduce((max, row) => Math.max(max, roundNumber(row.afterRound)), 0);
+  const rowLatest = allRows.reduce((max, row) => Math.max(max, roundNumber(row.afterRound)), 0);
+  const markerRound = roundNumber(marker && marker.round);
+  const latest = Math.max(rowLatest, markerRound);
 
-  // The moment the previous standings were fixed.
-  let fixedAt = null;
-  for (const row of allRows) {
-    const r = roundNumber(row.afterRound);
-    const stamp = r > 0 && r < latest ? row.updatedAt : (r === latest ? row.prevScoredAt : null);
-    if (typeof stamp === 'string' && stamp && (fixedAt === null || stamp > fixedAt)) fixedAt = stamp;
+  // The moment the previous standings were fixed: the session's own record
+  // when it is current, else what the rows can date.
+  const isStamp = (v) => typeof v === 'string' && v !== '';
+  let fixedAt = markerRound === latest && marker && isStamp(marker.prevAt) ? marker.prevAt : null;
+  if (fixedAt === null) {
+    for (const row of allRows) {
+      const r = roundNumber(row.afterRound);
+      const stamp = r > 0 && r < latest ? row.updatedAt : (r === latest ? row.prevScoredAt : null);
+      if (isStamp(stamp) && (fixedAt === null || stamp > fixedAt)) fixedAt = stamp;
+    }
   }
 
   const now = new Map(players.map((p) => [p.name, totalOf(p.name)]));

@@ -31,7 +31,15 @@
  *   open:true on an open board    a no-op that still answers 200 (double-tap)
  *   style                         applies live; the opening and page are kept
  *   step                          the remote's page turn; refused (409) with
- *                                 the board closed, where there is no page
+ *                                 the board closed, where there is no page.
+ *                                 With an open, it counts from the new
+ *                                 opening's first page
+ *
+ * Opening is refused (409, "Scores appear after the first round") until a
+ * round has been counted — the clients already say so; this is the same rule
+ * where it cannot be skipped. Every write counts a revision
+ * (`STATE.ScoreboardRev`, scoreboard-state.js) that rides on the frame, the
+ * reply and get-game-state.
  *
  * ── WHO MAY ────────────────────────────────────────────────────────────────
  *
@@ -53,7 +61,27 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { callerMayDriveSession } = require('./tenant');
 const {
   SCOREBOARD_STYLES, STEPS, hasScoreboard, normaliseScoreboard,
+  scoreboardWrite, revAfter, scoreboardFrame,
 } = require('./scoreboard-state');
+const { roundNumber } = require('./standings');
+
+/** The client's own words (config/scoreboard.js NOT_SCORED_YET). */
+const NOT_SCORED_YET = 'Scores appear after the first round';
+
+/**
+ * Has any round of this session been counted? get-results.js records it on
+ * STATE (`ScoresAfterRound`); a session counted before that record existed is
+ * judged by its score rows instead — any row past the "000" join-game writes.
+ */
+const anyRoundCounted = async (gameId, stateItem) => {
+  if (roundNumber(stateItem && stateItem.ScoresAfterRound) > 0) return true;
+  const rows = await db.send(new QueryCommand({
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'PLAYER#' }
+  }));
+  return (rows.Items || []).some((row) => String(row.SK).endsWith('#SCORE') && roundNumber(row.afterRound) > 0);
+};
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -166,10 +194,14 @@ exports.handler = async (event) => {
     const stateRead = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      ProjectionExpression: '#sb',
-      ExpressionAttributeNames: { '#sb': 'Scoreboard' }
+      ProjectionExpression: '#sb, #r',
+      ExpressionAttributeNames: { '#sb': 'Scoreboard', '#r': 'ScoresAfterRound' }
     }));
     const was = normaliseScoreboard(stateRead.Item && stateRead.Item.Scoreboard);
+
+    if (open === true && !was.open && !(await anyRoundCounted(gameId, stateRead.Item))) {
+      return respond(409, { error: NOT_SCORED_YET, message: NOT_SCORED_YET });
+    }
 
     const next = { ...was };
     if (hasStyle) next.style = style;
@@ -186,7 +218,9 @@ exports.handler = async (event) => {
       if (!next.open) {
         return respond(409, { error: 'The scoreboard is not open' });
       }
-      next.page = was.page + (step === 'next' ? 1 : -1);
+      // From `next`, not `was`: an open in the same request has already put
+      // the page back to the new opening's first.
+      next.page += step === 'next' ? 1 : -1;
     }
 
     /*
@@ -194,26 +228,13 @@ exports.handler = async (event) => {
       number, the survey's warning — a PUT here would throw the session back
       to CREATED because the host opened a scoreboard.
     */
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #sb = :sb',
-      ExpressionAttributeNames: { '#sb': 'Scoreboard' },
-      ExpressionAttributeValues: { ':sb': next }
-    }));
+    const written = await db.send(new UpdateCommand(scoreboardWrite(process.env.TABLE_NAME, gameId, next)));
+    next.rev = revAfter(written);
 
     // The transition only — never a name, never a score.
-    console.log(`✅ SCOREBOARD ${gameId}: ${next.open ? 'open' : 'closed'}, ${next.style}, page ${next.page}`);
+    console.log(`✅ SCOREBOARD ${gameId}: ${next.open ? 'open' : 'closed'}, ${next.style}, page ${next.page}, rev ${next.rev}`);
 
-    await broadcastToGame(gameId, {
-      type: 'scoreboardChanged',
-      gameId,
-      open: next.open,
-      style: next.style,
-      page: next.page,
-      openedAt: next.openedAt,
-      timestamp: new Date().toISOString()
-    });
+    await broadcastToGame(gameId, scoreboardFrame(gameId, next));
 
     return respond(200, { status: 'OK', gameId, scoreboard: next });
   } catch (error) {

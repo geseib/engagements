@@ -279,6 +279,55 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
   await broadcastResultsReady(gameId, paddedQuestionId);
 };
 
+/**
+ * THE SESSION'S RECORD OF THE ROUND IT COUNTED — `STATE.ScoresAfterRound`,
+ * `ScoresAt`, and the count before it, `PrevScoresAt`.
+ *
+ * The scoreboard (standings.js) reads the latest round and its NEW cutoff from
+ * here. The score rows cannot say it on their own: a round in which nobody
+ * scores — every trivia answer wrong, nobody voting — writes no score row at
+ * all, and the board would go on saying "After round 5" with round 6 over.
+ *
+ * Written on every COUNTED round, zero points included, on the host's
+ * transition only (like enterResultsState — a public read reports, it does not
+ * count). The already-counted guard is the score rows' own, one level up: a
+ * second close of the same round finds its round already recorded and writes
+ * nothing, so it cannot shift the previous count onto itself.
+ *
+ * Plain SETs from a fresh read rather than a conditional copy: two closes of
+ * ONE round racing both write the same previous count, which is harmless, and
+ * rounds are sequential, so no other race exists.
+ */
+const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
+  if (!isHostTransitionRoute(event)) return;
+  const round = parseInt(paddedQuestionId, 10);
+  if (!Number.isInteger(round) || round < 1) return;
+  try {
+    const current = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+      ProjectionExpression: '#r, #at',
+      ExpressionAttributeNames: { '#r': 'ScoresAfterRound', '#at': 'ScoresAt' }
+    }));
+    const was = current.Item || {};
+    if (Number(was.ScoresAfterRound) === round) return;
+    await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+      UpdateExpression: 'SET #r = :r, #at = :at, #prev = :prev',
+      ExpressionAttributeNames: { '#r': 'ScoresAfterRound', '#at': 'ScoresAt', '#prev': 'PrevScoresAt' },
+      ExpressionAttributeValues: {
+        ':r': round,
+        ':at': new Date().toISOString(),
+        ':prev': typeof was.ScoresAt === 'string' ? was.ScoresAt : null
+      }
+    }));
+  } catch (error) {
+    // The points are written; only the board's "after round N" is at stake.
+    console.error(`❌ Could not record round ${paddedQuestionId} as counted for ${gameId}:`, error?.message);
+  }
+};
+
 exports.handler = async (event) => {
   // Wavelength clustering worker: the round-close path fires an
   // InvocationType:'Event' self-invoke (the get-ai-summary pattern) so the
@@ -501,6 +550,9 @@ exports.handler = async (event) => {
       // A round nobody voted on is still a resolved round. This used to return
       // without touching the state, so the game sat on VOTE#nnn while the host
       // screen (which sets RESULTS# locally regardless) showed results.
+      // It is also a COUNTED round — nobody scored in it — so the scoreboard
+      // moves on to it (recordScoresCounted).
+      await recordScoresCounted(event, gameId, paddedQuestionId);
       await enterResultsState(event, gameId, paddedQuestionId);
 
       return {
@@ -595,9 +647,6 @@ exports.handler = async (event) => {
       }
     });
 
-    // Update game state to results (preserve LessonNumber!)
-    await enterResultsState(event, gameId, paddedQuestionId);
-
     // Update player scores using simplified PLAYER#{playerName}#SCORE architecture
     console.log(`🏆 Updating player scores for ${gameId} using simplified score records`);
     const playerUpdatePromises = Object.entries(voteTallies).map(async ([index, tally]) => {
@@ -660,6 +709,17 @@ exports.handler = async (event) => {
     });
 
     await Promise.all(playerUpdatePromises);
+
+    /*
+      THE ROOM IS TOLD ONLY ONCE THE POINTS ARE COUNTED. enterResultsState
+      used to run before the score writes above, so its RESULTS frame reached
+      the stage while last round's totals were still on the rows: anything that
+      reacted to it — the scoreboard's refetch, the roster — read stale points
+      and nothing ever told it to look again. Trivia already counted first.
+      Update game state to results (preserve LessonNumber!).
+    */
+    await recordScoresCounted(event, gameId, paddedQuestionId);
+    await enterResultsState(event, gameId, paddedQuestionId);
 
     const result = {
       gameId: gameId,
@@ -807,6 +867,8 @@ async function handleTriviaResults(event, gameId, questionId) {
   }
 
   if (answers.length === 0) {
+    // Nobody answered: a counted round with no points (recordScoresCounted).
+    await recordScoresCounted(event, gameId, paddedQuestionId);
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -917,6 +979,8 @@ async function handleTriviaResults(event, gameId, questionId) {
   });
 
   await Promise.all(playerUpdatePromises);
+  // Counted, zero points included — the scoreboard moves on to this round.
+  await recordScoresCounted(event, gameId, paddedQuestionId);
 
   // Decrement category counts after trivia results are calculated (prevent duplicates)
   console.log(`🔢 Calling decrementCategoryCount for trivia ${gameId}, question ${paddedQuestionId}`);

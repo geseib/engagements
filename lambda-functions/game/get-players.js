@@ -184,6 +184,13 @@ exports.handler = async (event) => {
         joinedAt: player.JoinedAt || player.joinedAt,
       })),
       rows: Object.fromEntries(scoreRows),
+      // get-results.js's record of the round it last counted — the only thing
+      // that knows about a round in which nobody scored.
+      marker: {
+        round: gameState.Item?.ScoresAfterRound ?? null,
+        at: gameState.Item?.ScoresAt ?? null,
+        prevAt: gameState.Item?.PrevScoresAt ?? null,
+      },
     });
 
     // Format player data with enhanced information

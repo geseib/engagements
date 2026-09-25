@@ -55,7 +55,7 @@ const ORG_B = 'org_Tb2VnQ8sLxK4WmC7gRdYpF';   // a rival holding only the code
 const GAME = '6060';
 const PK = `GAME#${GAME}`;
 
-function seed({ gameType = 'trivia', orgId = ORG_A, state = 'RESULTS#003', scoreboardRow } = {}) {
+function seed({ gameType = 'trivia', orgId = ORG_A, state = 'RESULTS#003', scoreboardRow, scored = true } = {}) {
   table.clear();
   sent.length = 0;
   frames.length = 0;
@@ -63,6 +63,8 @@ function seed({ gameType = 'trivia', orgId = ORG_A, state = 'RESULTS#003', score
   table.put({ PK, SK: 'METADATA', Title: 'Room', GameType: gameType, ...(orgId ? { orgId } : {}) });
   table.put({
     PK, SK: 'STATE', State: state, LessonNumber: 3, CurrentQuestionId: '003',
+    // get-results.js's record of the last counted round (recordScoresCounted).
+    ...(scored ? { ScoresAfterRound: 3, ScoresAt: '2026-09-25T18:00:00.000Z' } : {}),
     ...(scoreboardRow ? { Scoreboard: scoreboardRow } : {}),
   });
   table.put({ PK, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
@@ -81,6 +83,7 @@ const post = (body, { orgId = ORG_A, raw } = {}) => scoreboard({
 });
 
 const stored = () => table.get(PK, 'STATE').Scoreboard;
+const revOf = () => table.get(PK, 'STATE').ScoreboardRev;
 const readState = async () => JSON.parse(
   (await getState({ pathParameters: { gameId: GAME }, queryStringParameters: { role: 'host' } })).body
 );
@@ -115,6 +118,12 @@ const readState = async () => JSON.parse(
     assert.strictEqual(m.page, 0);
     assert.strictEqual(m.openedAt, stored().openedAt);
   });
+  await check('the write counts a revision: STATE.ScoreboardRev is 1', () =>
+    assert.strictEqual(revOf(), 1));
+  await check('the frame and the reply carry the revision', () => {
+    assert.strictEqual(frames[0].message.rev, 1);
+    assert.strictEqual(JSON.parse(opened.body).scoreboard.rev, 1);
+  });
   await check('the frame names nobody', () =>
     // The board's rows are fetched from /players by the stage; the frame is
     // only the board's own state.
@@ -130,7 +139,13 @@ const readState = async () => JSON.parse(
     assert.strictEqual(stored().openedAt, firstOpenedAt);
   });
 
+  await check('every write counts, a no-op double-tap included (1 → 2)', () =>
+    assert.strictEqual(revOf(), 2));
   const closed = await post({ open: false });
+  await check('...and the close is 3, on the wire too', () => {
+    assert.strictEqual(revOf(), 3);
+    assert.strictEqual(frames[frames.length - 1].message.rev, 3);
+  });
   await check('closing persists open:false and is announced', () => {
     assert.strictEqual(closed.statusCode, 200, closed.body);
     assert.strictEqual(stored().open, false);
@@ -167,6 +182,13 @@ const readState = async () => JSON.parse(
     assert.strictEqual(frames[frames.length - 1].message.style, 'tote');
   });
 
+  seed({ scoreboardRow: { open: false, style: 'departure', page: 3, openedAt: '2026-09-25T17:00:00.000Z' } });
+  await post({ open: true, step: 'next' });
+  await check('opening with a step counts the step from the NEW opening\'s first page', () =>
+    // A fresh opening is page 0; the step must not count from the last
+    // opening's page 3.
+    assert.strictEqual(stored().page, 1));
+
   seed();
   const settingOnly = await post({ style: 'olympic' });
   await check('the look can be set with the board closed (the Settings tab)', () => {
@@ -194,6 +216,23 @@ const readState = async () => JSON.parse(
       assert.strictEqual(frames.length, 0);
     });
   }
+
+  seed({ scored: false });
+  const early = await post({ open: true });
+  await check('opening before any round is counted is refused, with the client\'s own reason', () => {
+    assert.strictEqual(early.statusCode, 409, `got ${early.statusCode}: ${early.body}`);
+    assert.strictEqual(JSON.parse(early.body).error, 'Scores appear after the first round');
+    assert.strictEqual(stored(), undefined);
+    assert.strictEqual(frames.length, 0);
+  });
+  const earlyStyle = await post({ style: 'tote' });
+  await check('...but the look can still be chosen in advance', () =>
+    assert.strictEqual(earlyStyle.statusCode, 200, earlyStyle.body));
+  seed({ scored: false });
+  table.put({ PK, SK: 'PLAYER#Ada#SCORE', PlayerName: 'Ada', score: 5, afterRound: '002', updatedAt: '2026-09-25T17:00:00.000Z' });
+  const legacyScored = await post({ open: true });
+  await check('a session counted before the record existed is judged by its score rows', () =>
+    assert.strictEqual(legacyScored.statusCode, 200, legacyScored.body));
 
   seed();
   const stepClosed = await post({ step: 'next' });
@@ -267,13 +306,14 @@ const readState = async () => JSON.parse(
     assert.strictEqual(back.scoreboard.style, 'tote');
     assert.strictEqual(back.scoreboard.page, 0);
     assert.strictEqual(back.scoreboard.openedAt, stored().openedAt);
+    assert.strictEqual(back.scoreboard.rev, 2);
   });
   seed();
   const none = await readState();
   await check('a session nobody has opened a board in reads closed, in the default look', () =>
     // Never undefined: a client inventing its own default is how two
     // surfaces come to disagree.
-    assert.deepStrictEqual(none.scoreboard, { open: false, style: 'departure', page: 0, openedAt: null }));
+    assert.deepStrictEqual(none.scoreboard, { open: false, style: 'departure', page: 0, openedAt: null, rev: 0 }));
   seed({ scoreboardRow: { open: true, style: 'hologram', page: 'two', openedAt: '2026-09-25T18:00:00.000Z' } });
   const odd = await readState();
   await check('a stored look this build does not know reads as the default; a junk page as 0', () => {

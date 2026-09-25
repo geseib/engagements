@@ -206,6 +206,56 @@ const place = (s) => s.rank;
     assert.strictEqual(b.standings.get('Ada').movement, 0);
   });
 
+  console.log('\n   the counted round comes from the session, not only from the rows');
+  await check('a round in which nobody scored still moves the board on', () => {
+    // Round 6 was counted and every player got 0: no score row says 006. The
+    // session's own record of the round it counted is what says "after 6".
+    const T5b = '2026-09-25T18:41:00.000Z';
+    const b = computeStandings({
+      players: [
+        { name: 'Ada', joinedAt: T_JOIN }, { name: 'Bo', joinedAt: T_JOIN },
+        { name: 'Late', joinedAt: T_LATE },
+      ],
+      rows: {
+        Ada: { score: 12, prevScore: 5, afterRound: '005', updatedAt: T5 },
+        Bo: { score: 9, afterRound: '004', updatedAt: '2026-09-25T18:30:00.000Z' },
+        Late: { score: 0, afterRound: '000', updatedAt: T_LATE },
+      },
+      marker: { round: 6, at: T6, prevAt: T5b },
+    });
+    assert.strictEqual(b.afterRound, 6);
+    assert.strictEqual(b.standings.get('Ada').movement, 0);
+    assert.strictEqual(b.standings.get('Bo').movement, 0);
+    // Joined after round 5 was counted: no place in the previous standings.
+    assert.strictEqual(b.standings.get('Late').movement, 'new');
+  });
+
+  await check('the session\'s previous count dates NEW, even when nobody scored in it', () => {
+    // Round 5 was counted at T5b with nobody scoring; nothing on the rows
+    // records it. A player who joined before it is not NEW at round 6.
+    const T5b = '2026-09-25T18:41:00.000Z';
+    const joinedBetween = '2026-09-25T18:40:30.000Z';
+    const b = computeStandings({
+      players: [{ name: 'Ada', joinedAt: T_JOIN }, { name: 'Mid', joinedAt: joinedBetween }],
+      rows: {
+        Ada: { score: 7, prevScore: 4, prevScoredAt: T5, afterRound: '006', updatedAt: T6 },
+        Mid: { score: 0, afterRound: '000', updatedAt: joinedBetween },
+      },
+      marker: { round: 6, at: T6, prevAt: T5b },
+    });
+    assert.strictEqual(b.standings.get('Mid').movement, 0);
+  });
+
+  await check('a session counted before the marker existed falls back to the rows', () => {
+    const b = computeStandings({
+      players: [{ name: 'Ada', joinedAt: T_JOIN }],
+      rows: { Ada: { score: 7, prevScore: 4, prevScoredAt: T5, afterRound: '006', updatedAt: T6 } },
+      marker: { round: null, at: null, prevAt: null },
+    });
+    assert.strictEqual(b.afterRound, 6);
+    assert.strictEqual(b.standings.get('Ada').movement, 0);
+  });
+
   console.log('\n   scoreRowAfterRound');
   await check('carries the total before the round and when it was set', () => {
     const next = scoreRowAfterRound({ score: 20, afterRound: '004', updatedAt: T5 }, 7, '005', T6);
@@ -263,12 +313,50 @@ const place = (s) => s.rank;
     assert.strictEqual(row.prevScore, 0);
     assert.strictEqual(row.prevScoredAt, undefined);
   });
+  await check('the session records the round it counted, and when', () => {
+    const st = table.get(PK, 'STATE');
+    assert.strictEqual(st.ScoresAfterRound, 2);
+    assert.ok(typeof st.ScoresAt === 'string' && st.ScoresAt, 'ScoresAt is a timestamp');
+  });
+  const firstCountedAt = table.get(PK, 'STATE').ScoresAt;
   const again = await closeRound(2);
   await check('a second close of the same round changes nothing', () => {
     assert.strictEqual(again.statusCode, 200, again.body);
     const row = table.get(PK, 'PLAYER#Ada#SCORE');
     assert.strictEqual(row.score, 15);
     assert.strictEqual(row.prevScore, 5, 'the second close must not overwrite prevScore with the new total');
+  });
+  await check('...and does not count the round again on the session', () => {
+    const st = table.get(PK, 'STATE');
+    assert.strictEqual(st.ScoresAt, firstCountedAt);
+    assert.notStrictEqual(st.PrevScoresAt, firstCountedAt, 'a re-close must not shift the previous count onto itself');
+  });
+
+  console.log('\n3b. an all-wrong trivia round is still a counted round');
+  seedRoom('trivia');
+  table.put({ PK, SK: 'PLAYER#Ada', PlayerName: 'Ada', playerId: 'Ada', JoinedAt: T_JOIN });
+  table.put({ PK, SK: 'PLAYER#Bo', PlayerName: 'Bo', playerId: 'Bo', JoinedAt: T_JOIN });
+  table.put({ PK, SK: 'PLAYER#Cy', PlayerName: 'Cy', playerId: 'Cy', JoinedAt: T_LATE });
+  table.put({ PK, SK: 'PLAYER#Cy#SCORE', PlayerName: 'Cy', score: 0, afterRound: '000', updatedAt: T_LATE });
+  // Round 1 was counted at T5, before Cy arrived.
+  Object.assign(table.get(PK, 'STATE'), { ScoresAfterRound: 1, ScoresAt: T5 });
+  for (const who of ['Ada', 'Bo', 'Cy']) {
+    table.put({ PK, SK: `QUESTION#002#ANSWER#${who}`, PlayerName: who, Answer: 'OptionB', IsCorrect: false, PointsEarned: 0 });
+  }
+  const allWrong = await closeRound(2);
+  await check('200', () => assert.strictEqual(allWrong.statusCode, 200, allWrong.body));
+  await check('the session says round 2 was counted, and when round 1 was', () => {
+    const st = table.get(PK, 'STATE');
+    assert.strictEqual(st.ScoresAfterRound, 2);
+    assert.strictEqual(st.PrevScoresAt, T5);
+  });
+  const wrongBoard = JSON.parse((await getPlayers({ pathParameters: { gameId: GAME } })).body);
+  const wrongBy = new Map(wrongBoard.players.map((p) => [p.playerName, p]));
+  await check('the board says "after round 2", not round 1', () => assert.strictEqual(wrongBoard.afterRound, 2));
+  await check('nobody moved; the one who arrived after round 1 is NEW', () => {
+    assert.strictEqual(wrongBy.get('Ada').movement, 0);
+    assert.strictEqual(wrongBy.get('Bo').movement, 0);
+    assert.strictEqual(wrongBy.get('Cy').movement, 'new');
   });
 
   console.log('\n4. get-results writes prevScore on the call-and-answer path');
@@ -283,6 +371,25 @@ const place = (s) => s.rank;
     assert.strictEqual(row.prevScore, 5);
     assert.strictEqual(row.prevScoredAt, T5);
     assert.strictEqual(row.afterRound, '002');
+  });
+  await check('the session records the counted round on this path too', () =>
+    assert.strictEqual(table.get(PK, 'STATE').ScoresAfterRound, 2));
+  await check('the points are written BEFORE the room is told the round is over', () => {
+    // Otherwise a stage reacting to RESULTS reads last round's totals and
+    // nothing ever tells it to look again.
+    const at = (pred) => table.log.findIndex(pred);
+    const scoreWrite = at((c) => c.type === 'put' && c.input.Item && c.input.Item.SK === 'PLAYER#Ada#SCORE');
+    const resultsState = at((c) => c.type === 'update' && c.input.Key.SK === 'STATE'
+      && Object.values(c.input.ExpressionAttributeValues || {}).includes('RESULTS#002'));
+    assert.ok(scoreWrite !== -1 && resultsState !== -1, 'both writes happened');
+    assert.ok(scoreWrite < resultsState, `score write #${scoreWrite} came after the RESULTS write #${resultsState}`);
+  });
+
+  seedRoom('call-and-answer');
+  const noVotes = await closeRound(2);
+  await check('a round nobody voted on is counted too', () => {
+    assert.strictEqual(noVotes.statusCode, 200, noVotes.body);
+    assert.strictEqual(table.get(PK, 'STATE').ScoresAfterRound, 2);
   });
 
   // ---- §4 get-players -------------------------------------------------------
