@@ -96,9 +96,16 @@ export default function Scoreboard({
   const styleRef = useRef(style);
   styleRef.current = style;
 
-  // A new opening starts on page 1 with the auto-flip armed.
+  // A new opening starts on page 1 with the auto-flip armed. The mount IS an
+  // opening; after that, only one KNOWN opening replacing another restarts —
+  // the host page opens optimistically with `openedAt: null`, and the server's
+  // real time arriving a moment later is the same opening, not a second one.
   const lastRemote = useRef(remotePage);
+  const lastOpenedAt = useRef(openedAt);
   useEffect(() => {
+    const prev = lastOpenedAt.current;
+    lastOpenedAt.current = openedAt;
+    if (prev === openedAt || prev === null || openedAt === null) return;
     lastRemote.current = remotePage;
     setView((v) => ({ ...newView(styleRef.current), seq: v.seq + 1 }));
   // Only a new opening resets; the remote page is read, not tracked, here.

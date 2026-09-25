@@ -31,6 +31,11 @@ import WavelengthSessionVocabulary from './components/stage/WavelengthSessionVoc
 import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
+import Scoreboard from './components/stage/scoreboard/Scoreboard';
+import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
+import {
+  CLOSED_SCOREBOARD, normaliseScoreboard, nextStyle, scoreboardAvailability, scoreboardRequest,
+} from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
@@ -244,6 +249,16 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  /*
+    THE SCOREBOARD (docs/superpowers/specs/2026-09-25-scoreboard-design.md):
+    a session fact on the server's STATE row — { open, style, openedAt, page }
+    — that this page mirrors, restores on a reload and follows over
+    `scoreboardChanged`. `scoresAfterRound` is the roster's last fully scored
+    round (get-players), which is what decides whether the board may open:
+    "Scores appear after the first round".
+  */
+  const [scoreboard, setScoreboard] = useState(CLOSED_SCOREBOARD);
+  const [scoresAfterRound, setScoresAfterRound] = useState(null);
 
 
 
@@ -1122,6 +1137,8 @@ function GameHostPage() {
     gameDebugMode: setGameDebugMode,
     surveyNames: setSurveyNames,
     surveyWarnedAt: setSurveyWarnedAt,
+    scoreboard: setScoreboard,
+    scoresAfterRound: setScoresAfterRound,
   };
 
   // The game every in-flight async write is allowed to touch. Bumped
@@ -2003,6 +2020,17 @@ Focus on actionable business strategy insights.`;
       `focusToStage` would compare every index against 0 and open nothing. Same
       trap `gameStateRef` exists for.
     */
+    /*
+      THE SCOREBOARD MOVED — opened, closed, restyled or paged, from the phone
+      or from this page. The frame carries the whole board, so it is applied
+      verbatim. NO restoreGameState, for stage-beat's reason. A frame for
+      another session (a slow socket across a switch) is dropped.
+    */
+    webSocketClient.onMessage('scoreboardChanged', (data) => {
+      if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
+      setScoreboard(normaliseScoreboard(data));
+    });
+
     webSocketClient.onMessage('stageFocusChanged', (data) => {
       console.log('🔌 Stage focus notification:', data);
       const focus = focusFromFrame(data, gameStateRef.current);
@@ -2190,6 +2218,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('authorsRevealed');
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
+      webSocketClient.offMessage('scoreboardChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
@@ -2347,6 +2376,10 @@ Focus on actionable business strategy insights.`;
           this once the rows are in and the count is real.
         */
         pendingFocusRef.current = gameStateData.stageFocus || null;
+
+        // THE SCOREBOARD, as the room last saw it: a reload over an open board
+        // comes back up on it rather than dropping the room to the stage.
+        setScoreboard(normaliseScoreboard(gameStateData.scoreboard));
 
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
@@ -2836,6 +2869,9 @@ Focus on actionable business strategy insights.`;
       
       console.log('Transformed players:', transformedPlayers);
       setPlayers(transformedPlayers);
+      // The last fully scored round, or null before any (standings.js) — the
+      // scoreboard may open only once there is one.
+      setScoresAfterRound(Number.isInteger(json.afterRound) ? json.afterRound : null);
 
       // WHO LEFT, kept apart. `players` above is the room, and every count in
       // this file is drawn from it; these are for the Players tab, which is the
@@ -5015,6 +5051,7 @@ Focus on actionable business strategy insights.`;
       lessonExpanded, isLoadingData, qrMode,
       spotlightOpen: spotlightIndex !== null,
       pastRoundOpen: pastRoundIndex !== null,
+      scoreboardOpen: scoreboard.open,
     })) return undefined;
 
     const roundPhase = phaseOfGameState(gameState);
@@ -5073,7 +5110,72 @@ Focus on actionable business strategy insights.`;
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
     showNewGameDialog, showReport, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
-    spotlightIndex, pastRoundIndex]);
+    spotlightIndex, pastRoundIndex, scoreboard.open]);
+
+  /*
+    THE SCOREBOARD — opening, closing and the look, from every surface that can.
+
+    `publishScoreboard` is the one way this page changes the board: the key
+    below, the Players tab's button and the Settings tab's look all come
+    through it. OPTIMISTIC, because the room should see the press at once;
+    the reply (and the `scoreboardChanged` frame) then carry the server's
+    truth, and a refusal puts the board back where it was. An optimistic open
+    carries `openedAt: null`, so the server's real opening time arriving a
+    moment later is not mistaken for a SECOND opening (Scoreboard.jsx restarts
+    its auto-flip only when one known opening replaces another).
+
+    ABOVE THE EARLY RETURNS, both of them, and that is forced: a hook below a
+    conditional return breaks the order React calls hooks in.
+  */
+  const scoreboardRef = useRef(scoreboard);
+  scoreboardRef.current = scoreboard;
+  const publishScoreboard = useCallback(async (change) => {
+    const body = scoreboardRequest(change);
+    if (!body || !gameId) return;
+    const before = scoreboardRef.current;
+    setScoreboard((b) => ({
+      ...b,
+      ...(body.style ? { style: body.style } : {}),
+      ...(body.open === true && !b.open ? { open: true, openedAt: null, page: 0 } : {}),
+      ...(body.open === false ? { open: false } : {}),
+    }));
+    try {
+      const res = await authFetch(`${API_BASE}games/${gameId}/scoreboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      if (activeGameIdRef.current !== gameId) return;
+      if (data && data.scoreboard) setScoreboard(normaliseScoreboard(data.scoreboard));
+    } catch (error) {
+      console.warn('⚠️ SCOREBOARD: the change did not reach the server:', error?.message);
+      if (activeGameIdRef.current === gameId) setScoreboard(before);
+    }
+  }, [gameId]);
+
+  const scoreboardAvail = scoreboardAvailability({ gameType: currentGameType, afterRound: scoresAfterRound });
+  // S opens the board only over a clear stage: not over a spotlight, a
+  // pinned QR or a dialog (the gate below WITHOUT the board's own term, which
+  // would otherwise stop S from ever opening it).
+  const scoreboardBlocked = shortcutsSuppressed({
+    showConfirmModal, showExpandedQR, showReportsModal,
+    lessonExpanded, isLoadingData, qrMode,
+    spotlightOpen: spotlightIndex !== null,
+    pastRoundOpen: pastRoundIndex !== null,
+  });
+  useScoreboardKeys({
+    // Never while the session menu is open, and never over a surface that
+    // replaced the stage — there is no stage for the board to cover.
+    enabled: !setupPanelOpen && !showQuickstartMenu && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !editTarget && Boolean(gameId),
+    open: scoreboard.open,
+    canOpen: scoreboardAvail.enabled && !scoreboardBlocked,
+    onOpen: () => publishScoreboard({ open: true }),
+    onClose: () => publishScoreboard({ open: false }),
+    onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboardRef.current.style) }),
+  });
 
   // Render the quickstart menu if it's being shown
   if (showQuickstartMenu) {
@@ -5395,6 +5497,7 @@ Focus on actionable business strategy insights.`;
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
     spotlightOpen: spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
+    scoreboardOpen: scoreboard.open,
   });
 
   /*
@@ -5627,9 +5730,13 @@ Focus on actionable business strategy insights.`;
       };
     }
     // RESULTS, FIELD_NOTES and ENDED run solo. The mockup's standings column
-    // is a list of names WITH A SCORE BESIDE EACH, which is the half of the
-    // old rule that did not get retired — see RoomMeter.jsx's doc-block and
-    // standingsVisible().
+    // was a list of names WITH A SCORE BESIDE EACH, and it stays out of the
+    // meter. That is no longer because a scored roster may never go on the
+    // wall — the owner reversed that on 2026-09-25 ("I don't think it matters
+    // as long as scores are not tallied until all votes are in") — but because
+    // the standings now have their own full-screen home, the scoreboard the
+    // host opens on demand (docs/superpowers/specs/2026-09-25-scoreboard-design.md,
+    // components/stage/scoreboard/).
     return null;
   })();
 
@@ -6162,6 +6269,22 @@ Focus on actionable business strategy insights.`;
             />
           </Dock>
         )}
+        /* THE SCOREBOARD, in the stage's own layer: over the rail, bar and
+           main, with the dock still live beneath it. Mounted only while the
+           server's board is open; the rows, pages and motion are its own
+           (components/stage/scoreboard/Scoreboard.jsx). `refreshKey` is the
+           room's state, so a round scored under an open board lands on it. */
+        overlay={scoreboard.open && scoreboardAvail.show ? (
+          <Scoreboard
+            gameId={gameId}
+            apiBase={API_BASE}
+            title={eventTitle}
+            profile={profile}
+            board={scoreboard}
+            refreshKey={gameState}
+            keysEnabled={!setupPanelOpen}
+          />
+        ) : null}
       >
         {/* data-grow is the fitter's CEILING for this state, from the mockups.
             The ladder is a legibility floor, not a ceiling: a state carrying
@@ -6376,16 +6499,17 @@ Focus on actionable business strategy insights.`;
                     neither is coming back in this shape: each is a list of
                     names WITH A SCORE BESIDE EACH, and a score beside a name
                     is attribution by arithmetic (standingsVisible, §5.6.4).
-                    THE CONSTRAINT HAS NARROWED AND THIS HALF OF IT HAS NOT.
-                    The meter now names who is still waiting (RoomMeter.jsx's
-                    doc-block carries the owner's ruling) — a waiting list is
-                    who has not acted, which is not authorship; a standings
-                    roster is a scoreboard, which is. What replaces these is
-                    still not decided here — 07-results-trivia's own answer is
-                    a Standings roster in the meter, which RoomMeter still has
-                    no slot for. That conflict is real and it is
-                    plan 4/5's to settle; until it does, trivia's room-facing
-                    payoff is the correct row and its share of the vote below.
+                    THE STANDINGS HALF OF THAT IS SETTLED, AND NOT HERE. The
+                    owner ruled on 2026-09-25 that names with totals may go on
+                    the wall "as long as scores are not tallied until all
+                    votes are in" — which get-results guarantees, since a
+                    round is only scored at RESULTS — and asked for them as
+                    their own moment: the scoreboard, opened on demand from
+                    the remote, S, or the Players tab
+                    (docs/superpowers/specs/2026-09-25-scoreboard-design.md).
+                    So this state keeps trivia's room-facing payoff to the
+                    correct row and its share of the vote below, and the
+                    running totals live on the board.
                     The old empty-state is not restored either: it printed
                     JSON.stringify(answers) at a room. */}
                 {/* Blank until this round's results are the ones in hand, so

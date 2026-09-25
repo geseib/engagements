@@ -10,6 +10,7 @@ import {
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { queuePosition } from '../../config/questionQueue';
+import { hasScoreboard } from '../../config/scoreboard';
 import QueueList from './QueueList';
 import HelpButton from '../HelpButton';
 import BrandMark from '../BrandMark';
@@ -1110,6 +1111,12 @@ export default function SessionSetupPanel({
               <ul className="setup-keys">
                 <li><kbd>Space</kbd> or <kbd>→</kbd> advance</li>
                 <li><kbd>←</kbd> step back a beat</li>
+                {hasScoreboard(gameType) && (
+                  <>
+                    <li><kbd>S</kbd> show or hide the scoreboard</li>
+                    <li><kbd>V</kbd> change the scoreboard&apos;s look, while it is up</li>
+                  </>
+                )}
                 <li><kbd>\</kbd> open and close this panel</li>
                 <li><kbd>Esc</kbd> close</li>
               </ul>

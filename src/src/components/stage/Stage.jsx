@@ -32,13 +32,20 @@ import PhaseBar from './PhaseBar';
  * `.main`, not a grid area of `.stage`, and `.main.solo` collapses that column
  * when there is nothing to put in it.
  *
+ * `overlay` is the stage's own top layer — the scoreboard
+ * (components/stage/scoreboard/Scoreboard.jsx), which covers the rail, bar and
+ * main rows and leaves the dock live. It is a grid item of `.stage` rather
+ * than a fixed element beside it, so it is part of what the room sees and
+ * inherits the stage's dusk tokens, and it sits outside `.content`, so the
+ * fitter never measures it.
+ *
  * `fitKey` exists because the fitter's deps live here but the content that
  * changes lives in the caller. Without it a question arriving, an answer list
  * growing or a reveal flipping would re-render the stage and never re-measure
  * it, because `profile` and `phase` are unchanged.
  */
 export default function Stage({
-  profile, phase, rail = null, meter = null, dock = null, fitKey = '', children,
+  profile, phase, rail = null, meter = null, dock = null, overlay = null, fitKey = '', children,
 }) {
   const stageRef = useRef(null);
 
@@ -97,6 +104,7 @@ export default function Stage({
         {meter}
       </div>
       {dock || <div className="dock" />}
+      {overlay}
     </main>
   );
 }

@@ -319,6 +319,36 @@ describe('2. Scoreboard', () => {
     expect(board().dataset.auto).toBe('held');
   });
 
+  test('the server confirming an optimistic open is the same opening, not a restart', async () => {
+    const utils = await mount({ board: { open: true, style: 'olympic', page: 0, openedAt: null } });
+    await act(async () => { fireEvent.keyDown(window, { key: 'ArrowRight' }); });
+    await act(async () => {
+      utils.rerender(
+        <div className="stage">
+          <Scoreboard gameId="6060" apiBase="https://api.test/" profile="room"
+            board={{ open: true, style: 'olympic', page: 0, openedAt: '2026-09-25T18:50:00.000Z' }} />
+        </div>,
+      );
+    });
+    expect(board().dataset.page).toBe('1');
+  });
+
+  test('a new opening starts again on page 1 with the auto-flip armed', async () => {
+    const utils = await mount();
+    await act(async () => { fireEvent.keyDown(window, { key: 'ArrowRight' }); });
+    expect(board().dataset.auto).toBe('held');
+    await act(async () => {
+      utils.rerender(
+        <div className="stage">
+          <Scoreboard gameId="6060" apiBase="https://api.test/" profile="room"
+            board={{ open: true, style: 'olympic', page: 0, openedAt: '2026-09-25T19:10:00.000Z' }} />
+        </div>,
+      );
+    });
+    expect(board().dataset.page).toBe('0');
+    expect(board().dataset.auto).toBe('on');
+  });
+
   test('a look switch applies live, on the same page', async () => {
     const utils = await mount();
     await act(async () => { fireEvent.keyDown(window, { key: 'ArrowRight' }); });

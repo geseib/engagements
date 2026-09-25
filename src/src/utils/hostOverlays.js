@@ -62,6 +62,15 @@
  * later change: touching the modal primitive while several dialogs are being
  * edited would put a shared-state refactor underneath work in flight. Recorded
  * so the next reader knows the narrow fix was a sequencing decision.
+ *
+ * ── THE SCOREBOARD ─────────────────────────────────────────────────────────
+ *
+ * `scoreboardOpen` joined for the same reason as the two dialogs, decided in
+ * advance rather than after an incident: while the board is up, → and ← turn
+ * ITS pages and Space CLOSES it without advancing the game
+ * (docs/superpowers/specs/2026-09-25-scoreboard-design.md §3). Without this
+ * term HostActionBar's window listener would hear the same → and Space and
+ * move the live room behind the board.
  */
 export function shortcutsSuppressed({
   showConfirmModal = false,
@@ -72,11 +81,12 @@ export function shortcutsSuppressed({
   qrMode = null,
   spotlightOpen = false,
   pastRoundOpen = false,
+  scoreboardOpen = false,
 } = {}) {
   return Boolean(
     showConfirmModal || showExpandedQR ||
     showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned' ||
-    spotlightOpen || pastRoundOpen
+    spotlightOpen || pastRoundOpen || scoreboardOpen
   );
 }
 

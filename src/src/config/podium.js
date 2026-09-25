@@ -28,11 +28,19 @@
  *
  * NONE OF IT REACHES THE PODIUM, which is the only reason this paragraph is
  * short. The podium's limits are its own: three names, ordered, earned, and
- * only where a result exists. What the pair still guarantees between them is
- * the thing that matters here — a full roster WITH SCORES never goes on the
- * wall. The meter's lists carry no score at all (that is `standingsVisible`'s
- * job, and it is unmoved), and the podium's three carry one but are never the
- * roster.
+ * only where a result exists. The meter's lists carry no score at all (that is
+ * `standingsVisible`'s job, and it is unmoved), and the podium's three carry
+ * one but are never the roster.
+ *
+ * "A FULL ROSTER WITH SCORES NEVER GOES ON THE WALL" WAS THE RULE HERE, AND IT
+ * IS RETIRED. The owner, 2026-09-25, asking for a scoreboard: "I don't think it
+ * matters as long as scores are not tallied until all votes are in." A round
+ * is scored only when its results are counted (get-results.js, at RESULTS), so
+ * a total never moves while a vote is open. The full standings now go on the
+ * wall — but as the SCOREBOARD, a moment the host opens on demand
+ * (docs/superpowers/specs/2026-09-25-scoreboard-design.md,
+ * components/stage/scoreboard/), never as this podium. The podium keeps its
+ * three, at RESULTS and ENDED, unchanged.
  */
 import { standingsVisible } from './anonymity';
 import { hostRunsVotePhase } from './hostControls';
