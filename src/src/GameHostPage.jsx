@@ -6973,6 +6973,10 @@ Focus on actionable business strategy insights.`;
           onRemovePlayer={(name) => setPlayerRemoved(name, true)}
           onRestorePlayer={(name) => setPlayerRemoved(name, false)}
           onGrantHandover={grantNameHandover}
+          scoreboard={scoreboard}
+          scoreboardAvailability={scoreboardAvail}
+          onToggleScoreboard={(open) => publishScoreboard({ open })}
+          onScoreboardStyle={(style) => publishScoreboard({ style })}
           gameState={gameState}
           playersWhoAnswered={playersWhoAnswered}
           playersWhoVoted={playersWhoVoted}

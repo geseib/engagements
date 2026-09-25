@@ -4,13 +4,14 @@ import Icon from '../Icon';
 import {
   setupPanelTabs, categoryRows, questionsRemaining,
   browserRow, filterBrowserRows, rosterRows, departedRows, questionKey,
+  scoreboardButton,
 } from '../../config/setupPanel';
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { queuePosition } from '../../config/questionQueue';
-import { hasScoreboard } from '../../config/scoreboard';
+import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
 import QueueList from './QueueList';
 import HelpButton from '../HelpButton';
 import BrandMark from '../BrandMark';
@@ -83,6 +84,14 @@ export default function SessionSetupPanel({
   onRemovePlayer = () => {},
   onRestorePlayer = () => {},
   onGrantHandover = () => {},
+  /* THE SCOREBOARD (docs/superpowers/specs/2026-09-25-scoreboard-design.md):
+     the server's board as the page mirrors it, whether it may open
+     (config/scoreboard.js scoreboardAvailability), and the two ways this panel
+     changes it — the Players tab's button and the Settings tab's look. */
+  scoreboard = { open: false, style: 'departure' },
+  scoreboardAvailability = { show: false, enabled: false, reason: '' },
+  onToggleScoreboard = () => {},
+  onScoreboardStyle = () => {},
 
   // Questions — categories
   categories = [],
@@ -267,6 +276,7 @@ export default function SessionSetupPanel({
   };
 
   const roster = rosterRows({ players, gameState, playersWhoAnswered, playersWhoVoted });
+  const sbButton = scoreboardButton({ board: scoreboard, availability: scoreboardAvailability });
   const departed = departedRows(removedPlayers);
 
   const catRows = useMemo(
@@ -436,6 +446,24 @@ export default function SessionSetupPanel({
                   AuthorsRevealed unconditionally on entering RESULTS, so there
                   is no state in which a cumulative total attributes an
                   unrevealed answer. */}
+              {/* THE SCOREBOARD — the full standings on the room's screen,
+                  above the list it would put there. Owner, 2026-09-25: open
+                  it "from the remote, a keyboard shortcut, or a button on the
+                  Players tab". */}
+              {sbButton.show && (
+                <div className="setup-row setup-scoreboard">
+                  <button
+                    type="button"
+                    data-testid="scoreboard-toggle"
+                    aria-pressed={Boolean(scoreboard.open)}
+                    disabled={sbButton.disabled}
+                    onClick={() => onToggleScoreboard(!scoreboard.open)}
+                  >
+                    {sbButton.label}
+                  </button>
+                  {sbButton.reason && <p className="setup-note">{sbButton.reason}</p>}
+                </div>
+              )}
               {roster.length === 0 ? (
                 <p className="setup-empty">Nobody has joined yet.</p>
               ) : (
@@ -1003,6 +1031,30 @@ export default function SessionSetupPanel({
                 Opening anything (a response, the QR, a dialog) pauses it, and your own
                 controls always work.
               </p>
+
+              {/* THE SCOREBOARD'S LOOK. Owner: "for now the setting sits under
+                  'Scoreboard' and nothing else" — a later overall theme may
+                  take it over. Applied live if the board is up. */}
+              {scoreboardAvailability.show && (
+                <>
+                  <h3 className="setup-h">Scoreboard</h3>
+                  <label className="setup-field">
+                    <span>Scoreboard style</span>
+                    <select
+                      value={scoreboard.style || 'departure'}
+                      onChange={(e) => onScoreboardStyle(e.target.value)}
+                    >
+                      {SCOREBOARD_STYLES.map((style) => (
+                        <option key={style} value={style}>{STYLE_LABELS[style]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="setup-note">
+                    How the standings look on the room&apos;s screen. Press V to change it
+                    while the board is up.
+                  </p>
+                </>
+              )}
 
               <h3 className="setup-h">Display</h3>
               <label className="setup-field">

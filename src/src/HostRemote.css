@@ -758,6 +758,7 @@
    equal buttons under the open/next pair; the one on the room's screen is
    marked by aria-pressed, in --primary on the card's --surface (7.42:1),
    plus a doubled border — never colour alone. */
+.hr-sb-controls { margin-top: 10px; }
 .hr-sb-reason { margin-top: 10px; }
 .hr-sb-looks {
   display: grid;
