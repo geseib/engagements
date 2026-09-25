@@ -122,9 +122,12 @@ It contains:
   generalises the existing `BriefingUsed`.
 - The host sees one quiet line: **Workie had:** question notes ✓ · event details — ·
   set note ✓ · briefing —.
-- It is shown in two places: the host page's **session sidebar**, beside the Workie
-  controls, and the **phone remote**. It is never shown on the stage (`.content` /
-  `.fitbox`), which may be projected.
+- It is shown in two places: the **phone remote**, under "What we heard", and the
+  **session report**'s round view (after the fact). It is never shown on the host
+  page. That includes the session sidebar, because `SessionSetupPanel.jsx` is an
+  overlay on the page the room may be watching (its own header: "this panel is a
+  surface the room can watch"). *Corrected 2026-09-25, while planning. The first
+  draft said "session sidebar".*
 - Wording and placement follow the `engage-design` skill.
 
 ### 5. Proof on dev (acceptance)
@@ -155,9 +158,11 @@ get-ai-summary ──► buildContextBlock(eventDetails, hostInstructions, setNo
 
 - **Missing Background** (legacy, manual builder, CSV without the column): the line is
   omitted and the flag reads "—".
-- **Over-long Background**: generator output over 600 characters is trimmed at a
-  sentence boundary. A CSV upload over 600 characters is rejected by the same row
-  validation the other text fields use.
+- **Over-long Background**: one shared `clampBackground()` trims it to 600 characters
+  at the last sentence end that fits, or else the last word. It runs wherever
+  Background comes in, generator output and CSV import alike. The editor field stops
+  at 600. *Corrected while planning: `upload-questions.js` has no per-row length
+  check to reuse.*
 - **A decryption failure** for Background is treated like one for `AnswerDetails`:
   it is logged without content and the question reads as having no background.
 - **Logging**: Background content is never logged. Lengths only, via `shapeForLog`.
