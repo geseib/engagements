@@ -34,4 +34,28 @@ describe('buildWorkieSetNote — the set note is the admin\'s brief, never inven
     const note = buildWorkieSetNote({ subject: 'S', audience: '', difficulty: '', brief: '' });
     expect(note).not.toMatch(/professional development|encourage learning|constructive feedback/i);
   });
+
+  test('900-char subject with empty brief stays under limit, no brief line, ends with fixed line', () => {
+    const note = buildWorkieSetNote({ subject: 'S'.repeat(900), audience: '', difficulty: '', brief: '' });
+    expect(note.length).toBeLessThanOrEqual(SET_NOTE_MAX);
+    expect(note).not.toMatch(/The author's brief/i);
+    expect(note.endsWith(SET_NOTE_FIXED_LINE)).toBe(true);
+  });
+
+  test('500-char subject + 500-char audience + 500-char brief stays under limit', () => {
+    const note = buildWorkieSetNote({
+      subject: 'S'.repeat(500),
+      audience: 'A'.repeat(500),
+      difficulty: 'D'.repeat(500),
+      brief: 'B'.repeat(500),
+    });
+    expect(note.length).toBeLessThanOrEqual(SET_NOTE_MAX);
+    expect(note.endsWith(SET_NOTE_FIXED_LINE)).toBe(true);
+  });
+
+  test('empty brief never yields "The author\'s brief" line', () => {
+    const note = buildWorkieSetNote({ subject: 'Test', audience: 'Users', difficulty: 'easy', brief: '' });
+    expect(note).not.toMatch(/The author's brief/i);
+    expect(note.endsWith(SET_NOTE_FIXED_LINE)).toBe(true);
+  });
 });
