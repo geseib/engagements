@@ -108,3 +108,36 @@ describe('§3 the rules that keep the returned CSV importable', () => {
     expect(text).toMatch(/24 is the hard maximum/);
   });
 });
+
+describe('§4 the optional Background column is not caught by "no extra columns"', () => {
+  // Fix round 1: the column guide names Background as an optional column
+  // (question-background Task 7), but OUTPUT_RULES used to say "The first
+  // line must be exactly this header, unchanged" and "No extra columns" right
+  // underneath it — two irreconcilable rules an outside AI would have to
+  // guess between. Assert the carve-out sits WITH each rule it qualifies,
+  // not just that the word "Background" appears somewhere in the prompt.
+  // Robust to wording: matches structure, not a pinned phrase.
+  test.each(AUTHORING_PROMPT_TYPES)('%s: the header-unchanged rule names the Background exception', (type) => {
+    const text = authoringPrompt(type);
+    const headerRule = text.match(/The first line must be exactly this header[^\n]*\n/i);
+    expect(headerRule).not.toBeNull();
+    expect(headerRule[0]).toMatch(/Background/);
+  });
+
+  test.each(AUTHORING_PROMPT_TYPES)('%s: "no extra columns" is qualified, not an unqualified ban', (type) => {
+    const text = authoringPrompt(type);
+    const noExtraColumnsSentence = text.match(/No extra columns[^.\n]*\.?/i);
+    expect(noExtraColumnsSentence).not.toBeNull();
+    expect(noExtraColumnsSentence[0]).toMatch(/Background/i);
+  });
+
+  test.each(AUTHORING_PROMPT_TYPES)('%s: the pinned header const itself is untouched by the carve-out', (type) => {
+    // The exception lives in the surrounding rule text, never in the header
+    // line an AI is told to reproduce verbatim — that line stays pinned to
+    // download-template.js (§1) regardless of whether a Background column
+    // guide was added.
+    const header = type === 'call-and-answer' ? CALL_AND_ANSWER_HEADER : TRIVIA_HEADER;
+    expect(header).not.toMatch(/Background/);
+    expect(authoringPrompt(type)).toContain(header);
+  });
+});

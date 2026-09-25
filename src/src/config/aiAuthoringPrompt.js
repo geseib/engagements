@@ -46,9 +46,9 @@ const FILL_IN_COMMON = [
 
 const OUTPUT_RULES = (header) => `OUTPUT RULES — follow all of them:
 - Reply with ONLY the CSV, nothing before or after it (a fenced code block is fine).
-- The first line must be exactly this header, unchanged:
+- The first line must be exactly this header, unchanged — except that if any row carries a Background, add one trailing \`,Background\` column to this header line:
   ${header}
-- One row per question. No extra columns, no blank rows, no title line above the header.
+- One row per question. No extra columns beyond the optional Background column described above; no blank rows, no title line above the header.
 - Wrap any field that contains a comma, a double quote or a line break in double quotes, and double any quote inside it ("like ""this""").
 - If any [BRACKET] above is still unfilled, ask me for it before writing anything — do not guess.`;
 
