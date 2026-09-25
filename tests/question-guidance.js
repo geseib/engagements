@@ -15,10 +15,14 @@
  *     ai-generate-scenarios.js buildPrompt). Trivia: straight after the opening
  *     "Create N trivia questions about …" line. Scenarios: after the round
  *     direction, if there is one, and before `TOPIC:`.
- *   - NO GUIDANCE, NO CHANGE. Absent or blank, the prompt is byte-identical to
- *     the one these generators wrote before the field existed. Pinned by exact
- *     opening lines below, and by cutting the block back out of a prompt that
- *     has it and comparing with the prompt that does not.
+ *   - NO GUIDANCE, NO CHANGE. Absent or blank, guidance changes nothing: the
+ *     opening is pinned to the exact lines these generators wrote before the
+ *     field existed, and cutting the block back out of a prompt that has it
+ *     gives the prompt that does not, byte for byte. That comparison is within
+ *     one build ON PURPOSE, not against a whole-prompt snapshot: the rest of
+ *     the prompt moves for other reasons (the question-background work added a
+ *     `background` line to LENGTH LIMITS), and guidance must change nothing
+ *     ELSE, whatever the rest currently says.
  *   - THE LIMIT. Trimmed, capped at 500 characters, dropped when empty.
  *   - EVERY CHUNK. Generation runs in passes; a later pass carries the guidance
  *     as well as the ALREADY GENERATED list.
