@@ -181,6 +181,10 @@ export default function PastRound({
         onRegenerate={onRegenerate}
         regenerating={busy}
         comments={round.comments || []}
+        // The host's own review dialog — the one surface allowed to see what
+        // Workie had. FeedbackRoundPanel (the participant's inline copy of
+        // this same renderer) never passes this.
+        showWorkieContext
       />
 
       <div className="past-round__nav">

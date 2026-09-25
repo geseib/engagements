@@ -346,6 +346,28 @@ describe('reopening one round', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  // PastRound is the host's own review dialog — the one surface allowed to see
+  // what Workie had (question-background spec §4). It passes RoundReport's
+  // `showWorkieContext` prop; feedbackRoundPanel.test.jsx asserts the opposite
+  // for the participant's copy of the same renderer.
+  test('shows what Workie had, host-only', () => {
+    const roundsWithContext = roundsFrom(report([
+      q('1', {
+        questionData: { title: 'First question', detail: 'Some context' },
+        aiSummary: {
+          summaryText: 'The room agreed.',
+          contextUsed: {
+            background: true, setNote: false, eventDetails: false,
+            hostInstructions: false, briefing: false,
+          },
+        },
+      }),
+    ]));
+    mount({ rounds: roundsWithContext });
+    expect(screen.getByTestId('workie-context-hint').textContent).toBe(
+      'Workie had: question notes ✓ · set note — · event details — · host instructions — · briefing —');
+  });
+
   // rejects: an empty round rendering as a blank panel, which reads as a failed
   //          load and sends the host hunting for a bug that is not there.
   test('a round nobody answered says so', () => {

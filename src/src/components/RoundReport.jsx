@@ -166,6 +166,16 @@ export default function RoundReport({
    * finished round rather than taking part in a feedback round.
    */
   onComment,
+  /**
+   * Show the "Workie had: …" hint (question-background spec §4). HOST-ONLY —
+   * off by default because this one renderer is shared: `PastRound` mounts it
+   * for the host, and `FeedbackRoundPanel` mounts the SAME component, inline,
+   * on a participant's own phone. `WorkieContextHint` reveals only booleans,
+   * never content, but the spec is explicit that even the fact of what Workie
+   * read is the host's alone to see — so the caller must opt in rather than
+   * this component guessing from context which surface it is on.
+   */
+  showWorkieContext = false,
 }) {
   if (!round) return null;
 
@@ -382,7 +392,9 @@ export default function RoundReport({
             {summary.briefingUsed && (
               <p className="past-round__voice">Workie had the host&rsquo;s briefing for this round</p>
             )}
-            <WorkieContextHint contextUsed={summary.contextUsed || null} />
+            {showWorkieContext && (
+              <WorkieContextHint contextUsed={summary.contextUsed || null} />
+            )}
           </>
         ) : (
           <p className="past-round__empty">No summary was generated for this round.</p>

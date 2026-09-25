@@ -88,16 +88,29 @@ describe('a briefed round', () => {
 });
 
 // WorkieContextHint — what Workie had, host-only fact, never the content.
+// `RoundReport` is shared: PastRound (the host's dialog) AND FeedbackRoundPanel
+// (a participant's own phone, via PlayerPage) both mount it. So the hint is
+// opt-in via `showWorkieContext` — off by default, which is the participant's
+// case — and only PastRound passes it (see sessionHistory.test.jsx). A
+// participant must never see it, even though it carries no content.
 describe('what Workie had', () => {
-  test('a round shows what Workie had', () => {
+  test('with showWorkieContext, a round shows what Workie had', () => {
     const contextUsed = { background: true, setNote: false, eventDetails: true, hostInstructions: false, briefing: false };
-    render(<RoundReport round={aRound({ aiSummary: { ...aRound().aiSummary, contextUsed } })} />);
+    render(<RoundReport showWorkieContext round={aRound({ aiSummary: { ...aRound().aiSummary, contextUsed } })} />);
     expect(screen.getByTestId('workie-context-hint').textContent)
       .toBe('Workie had: question notes ✓ · set note — · event details ✓ · host instructions — · briefing —');
   });
 
-  test('a round summarised before the flags existed shows no hint', () => {
-    render(<RoundReport round={aRound()} />);
+  test('with showWorkieContext, a round summarised before the flags existed shows no hint', () => {
+    render(<RoundReport showWorkieContext round={aRound()} />);
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+  });
+
+  test('without showWorkieContext (the default), no hint renders even when contextUsed is set', () => {
+    // This is the participant's case: FeedbackRoundPanel never passes the prop,
+    // so even a round whose aiSummary carries contextUsed must render nothing.
+    const contextUsed = { background: true, setNote: true, eventDetails: true, hostInstructions: true, briefing: true };
+    render(<RoundReport round={aRound({ aiSummary: { ...aRound().aiSummary, contextUsed } })} />);
     expect(screen.queryByTestId('workie-context-hint')).toBeNull();
   });
 });
