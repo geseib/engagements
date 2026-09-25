@@ -14,9 +14,10 @@
  */
 const crypto = require('crypto');
 
-/** Question fields a room can see. Case is the row's case. */
+/** Question fields a room can see, plus Background, which only Workie reads but
+ *  which is published and checked like the rest. Case is the row's case. */
 const QUESTION_FIELDS = Object.freeze([
-  'Title', 'Detail', 'AnswerDetails', 'CustomInstructions',
+  'Title', 'Detail', 'AnswerDetails', 'Background', 'CustomInstructions',
   'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF', 'options',
   // A survey question's own words (surveys phase 1): the ends of a scale, the
   // yes/no labels, the follow-up question and the answer box's placeholder.

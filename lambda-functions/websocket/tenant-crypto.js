@@ -245,6 +245,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'Detail',
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF',
     'AnswerDetails',
+    'Background',
     'CustomInstructions',
     'options',
     'lowLabel', 'highLabel',
