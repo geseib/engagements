@@ -100,12 +100,18 @@ function serve(questions, setName = 'Strategic Pricing Plays') {
   }));
 }
 
+// CodeBuild runs this suite on Node 18 on a slower, shared machine than a
+// laptop; Testing Library's default 1000ms timeout has been seen to trip
+// there on a mocked fetch that does resolve, just not inside that window.
+// Every find below that waits on one gets the same margin.
+const ASYNC_TIMEOUT = { timeout: 5000 };
+
 async function mount(questions, props = {}) {
   serve(questions);
   const view = render(
     <RemoteQuestionBrowser setId="pricing" gameType="trivia" onAsk={jest.fn()} {...props} />,
   );
-  await screen.findByText(questions[0].title);
+  await screen.findByText(questions[0].title, {}, ASYNC_TIMEOUT);
   return view;
 }
 
@@ -604,7 +610,7 @@ describe('paging without leaving the card', () => {
       <RemoteQuestionBrowser setId="art" gameType="call-and-answer" onAsk={jest.fn()} />,
     );
 
-    await screen.findByText(ART.title);
+    await screen.findByText(ART.title, {}, ASYNC_TIMEOUT);
     expect(screen.queryByTestId('hrq-preview')).not.toBeInTheDocument();
   });
 
@@ -617,11 +623,11 @@ describe('paging without leaving the card', () => {
 
     serve([ART], 'Masterpieces');
     view.rerender(<RemoteQuestionBrowser setId="art" gameType="call-and-answer" onAsk={jest.fn()} />);
-    await screen.findByText(ART.title);
+    await screen.findByText(ART.title, {}, ASYNC_TIMEOUT);
 
     serve([TRIVIA_A, TRIVIA_B]);
     view.rerender(<RemoteQuestionBrowser setId="pricing" gameType="trivia" onAsk={jest.fn()} />);
-    await screen.findByText(TRIVIA_A.title);
+    await screen.findByText(TRIVIA_A.title, {}, ASYNC_TIMEOUT);
 
     expect(screen.queryByTestId('hrq-preview')).not.toBeInTheDocument();
   });
@@ -710,7 +716,7 @@ describe('the session panel hands the browser the game\'s own type', () => {
       />,
     );
 
-    await screen.findByText(TRIVIA_A.title);
+    await screen.findByText(TRIVIA_A.title, {}, ASYNC_TIMEOUT);
     openPreview(TRIVIA_A.title);
 
     expect(screenPane().querySelectorAll('.opt')).toHaveLength(4);

@@ -60,6 +60,15 @@ const CATEGORIES = [
   { name: 'Pricing Power', questionCount: 9 },
 ];
 
+// CodeBuild runs this suite on Node 18 on a slower, shared machine than a
+// laptop, and every query below waits on a mocked fetch resolving and a
+// re-render, not on a fixed clock — Testing Library's default 1000ms timeout
+// has been seen to trip on that machine even though the state it is waiting
+// for does arrive (d36fbdc1 passed, 616c0bd1 failed on CI alone). Every
+// find/waitFor in this file shares that cause, so they all get the same
+// margin.
+const ASYNC_TIMEOUT = { timeout: 5000 };
+
 /**
  * Route every request the remote makes. Shapes are the real handlers':
  * get-game-state.js (state, incl. `categoryCounts` / `categoryState` /
@@ -115,7 +124,7 @@ async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument(), ASYNC_TIMEOUT);
 }
 
 beforeEach(() => {
@@ -274,9 +283,9 @@ describe('the phone question browser', () => {
     serve();
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
 
-    expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
+    expect(await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
   });
 
@@ -298,8 +307,8 @@ describe('the phone question browser', () => {
   it('names the session it is driving when it reads the set', async () => {
     serve();
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
-    await screen.findByText(TRIVIA.title);
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
+    await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT);
 
     const urls = global.fetch.mock.calls.map(([url]) => String(url));
     const questions = urls.find((u) => u.includes('/questions'));
@@ -315,8 +324,8 @@ describe('the phone question browser', () => {
   it('shows the options AND which one is correct', async () => {
     serve();
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
-    await screen.findByText(TRIVIA.title);
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
+    await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT);
 
     expect(screen.getByText(TRIVIA.optionB)).toBeInTheDocument();
 
@@ -329,12 +338,12 @@ describe('the phone question browser', () => {
   it('posts the tapped question id, with the mid-round skip', async () => {
     const posts = serve({ state: 'ASK#003' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
-    await screen.findByText(TRIVIA.title);
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
+    await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT);
 
     fireEvent.click(screen.getByRole('button', { name: /ask this next/i }));
 
-    await waitFor(() => expect(posts).toHaveLength(1));
+    await waitFor(() => expect(posts).toHaveLength(1), ASYNC_TIMEOUT);
     expect(posts[0].url).toBe('https://api.test/games/4821/next-question');
     expect(posts[0].body).toEqual({ questionId: '004', action: 'skip_to_specific' });
   });
@@ -348,8 +357,8 @@ describe('the phone question browser', () => {
   it('previews the question as the room would see it, from the live remote', async () => {
     serve();
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
-    await screen.findByText(TRIVIA.title);
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
+    await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT);
 
     fireEvent.click(screen.getByRole('button', { name: /^preview/i }));
 
@@ -366,13 +375,13 @@ describe('the phone question browser', () => {
   it('returns to the round once the question is asked', async () => {
     serve({ state: 'ASK#003' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
-    await screen.findByText(TRIVIA.title);
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
+    await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT);
 
     fireEvent.click(screen.getByRole('button', { name: /ask this next/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /choose next question/i })).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /choose next question/i })).toBeInTheDocument(), ASYNC_TIMEOUT);
   });
 });
 
@@ -384,10 +393,10 @@ describe('categories on the phone', () => {
     const posts = serve({ live: true });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /^categories$/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Pricing Mechanics/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^categories$/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /Pricing Mechanics/ }, ASYNC_TIMEOUT));
 
-    await waitFor(() => expect(posts).toHaveLength(1));
+    await waitFor(() => expect(posts).toHaveLength(1), ASYNC_TIMEOUT);
     expect(posts[0].url).toBe('https://api.test/games/4821/toggle-category');
     // Mask '10000000' has position 1 on, so the tap turns it off.
     expect(posts[0].body).toEqual({
@@ -402,9 +411,9 @@ describe('categories on the phone', () => {
     serve({ live: false, state: 'STARTED' });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /^categories$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^categories$/i }, ASYNC_TIMEOUT));
 
-    const row = await screen.findByRole('button', { name: /Pricing Mechanics/ });
+    const row = await screen.findByRole('button', { name: /Pricing Mechanics/ }, ASYNC_TIMEOUT);
     expect(row).toBeDisabled();
     expect(screen.getByText(/become adjustable once the session/i)).toBeInTheDocument();
   });
