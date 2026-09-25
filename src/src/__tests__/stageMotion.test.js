@@ -11,6 +11,12 @@
  *      the fitter's measured layout mid-round.
  *   3. Everything that animates has a reduced-motion rule, and the wipe on
  *      Call is a solid plate — no blur under a video codec.
+ *
+ * Rules 2 and 3 also hold for the scoreboard's own sheet
+ * (components/stage/scoreboard/Scoreboard.css): it is a stage surface, and
+ * the spec (docs/superpowers/specs/2026-09-25-scoreboard-design.md §1) puts
+ * its page changes under the same contract, where reduced motion makes a
+ * page change an instant swap.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -104,5 +110,45 @@ describe('reduced motion', () => {
     expect(call).toBeDefined();
     expect(call.body).toMatch(/background:\s*var\(--bg\)/);
     for (const r of rules.filter((x) => /\.wipe/.test(x.sel))) expect(r.body).not.toMatch(/backdrop-filter/);
+  });
+});
+
+describe('the scoreboard\'s sheet keeps the same contract', () => {
+  const SB = readFileSync(join(__dirname, '..', 'components', 'stage', 'scoreboard', 'Scoreboard.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const sbRules = [];
+  const sbKeyframes = {};
+  walk(SB, {
+    onRule: (sel, body, media) => sbRules.push({ sel, body, media }),
+    onKeyframes: (name, body) => { sbKeyframes[name] = body; },
+  });
+
+  test('the three looks\' keyframes exist, and are namespaced', () => {
+    for (const name of ['sb-ft0', 'sb-fb0', 'sb-lane', 'sb-sweep', 'sb-clear', 'sb-ride', 'sb-lampon']) {
+      expect(sbKeyframes[name]).toBeDefined();
+    }
+    // Keyframe names are global: an unprefixed one could silently replace the stage's.
+    for (const name of Object.keys(sbKeyframes)) expect(name).toMatch(/^sb-/);
+  });
+
+  test('every keyframe touches only transform, opacity, border-color and visibility', () => {
+    const allowed = new Set(['transform', 'opacity', 'border-color', 'visibility']);
+    for (const [name, body] of Object.entries(sbKeyframes)) {
+      const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+      expect({ name, props: props.filter((p) => !allowed.has(p)) }).toEqual({ name, props: [] });
+    }
+  });
+
+  test('every animated selector is stilled under prefers-reduced-motion', () => {
+    const animated = sbRules
+      .filter((r) => !r.media && /(^|;)\s*animation\s*:\s*(?!none)/.test(r.body))
+      .map((r) => r.sel);
+    expect(animated.length).toBeGreaterThan(15);
+    const stilled = sbRules
+      .filter((r) => r.media && /prefers-reduced-motion/.test(r.media) && /animation\s*:\s*none/.test(r.body))
+      .map((r) => r.sel.split(',').map((x) => x.trim())).flat();
+    for (const sel of animated) {
+      expect({ sel, stilled: stilled.includes(sel) }).toEqual({ sel, stilled: true });
+    }
   });
 });
