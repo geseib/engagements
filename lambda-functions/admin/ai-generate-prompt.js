@@ -1,6 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
 const { canAuthorPrompts, promptRefusalMessage } = require('./shared/prompt-access');
+const { callerUserId } = require('./shared/question-set-access');
 const {
   describeVariablesForPrompt,
   describeAuthoringRules,
@@ -152,7 +153,17 @@ function bracketViolation(generated) {
 }
 
 exports.handler = async (event) => {
-  console.log('🪄 AI Generate Prompt - Event:', JSON.stringify(event, null, 2));
+  /*
+    THIS USED TO PRINT THE WHOLE EVENT — every header, the bearer JWT in
+    Authorization among them, and the body, which here is the prompt name,
+    description and instructions being drafted. Trace the request, not quote
+    it (tests/lambda-event-not-logged.js).
+  */
+  console.log('🪄 AI Generate Prompt', JSON.stringify({
+    method: event.requestContext?.http?.method,
+    path: event.requestContext?.http?.path,
+    sub: callerUserId(event) || null,
+  }));
 
   try {
     // Handle CORS preflight

@@ -59,6 +59,7 @@ const { normalizeGameType } = require('./shared/game-types');
 const { normalizeOutputSections } = require('./shared/prompt-shape');
 const tenant = require('./shared/tenant');
 const { promptRefusalMessage, isInternalCall } = require('./shared/prompt-access');
+const { callerUserId } = require('./shared/question-set-access');
 const defaultPrompts = require('./default-ai-prompts.json');
 
 // Generate unique ID for prompts (same as other admin functions)
@@ -80,7 +81,18 @@ const s3Client = new S3Client({});
 
 
 exports.handler = async (event) => {
-  console.log('🚀 Populate Default AI Prompts - Event:', JSON.stringify(event, null, 2));
+  /*
+    THIS USED TO PRINT THE WHOLE EVENT — every header, the bearer JWT in
+    Authorization among them — and then the body twice more, raw and parsed.
+    The one thing the body says that matters, the overwrite flag, is logged
+    below on its own. Trace the request, not quote it
+    (tests/lambda-event-not-logged.js).
+  */
+  console.log('🚀 Populate Default AI Prompts', JSON.stringify({
+    method: event.requestContext?.http?.method,
+    path: event.requestContext?.http?.path,
+    sub: callerUserId(event) || null,
+  }));
 
   try {
     // Handle CORS preflight
@@ -116,10 +128,8 @@ exports.handler = async (event) => {
     console.log('🔄 Starting default AI prompts population...');
     
     // Check for overwrite parameter
-    console.log('📋 Raw event body:', event.body);
     const body = event.body ? JSON.parse(event.body) : {};
     const overwrite = body.overwrite || false;
-    console.log(`📋 Parsed body:`, body);
     console.log(`🔄 Overwrite mode: ${overwrite}`);
     
     const results = {
