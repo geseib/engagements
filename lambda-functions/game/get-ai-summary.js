@@ -1442,6 +1442,10 @@ exports.handler = async (event) => {
       orgId: summaryOrgId,
       eventTitle: metadata.EventTitle || metadata.Title || 'Engagement Event',
       gameType: metadata.GameType || 'call-and-answer',
+      // {sessionDuration} counts from here. generateAISummary() has no session
+      // row in scope; it read `metadata.CreatedAt` there and threw a
+      // ReferenceError every round (tests/ai-summary-session-duration.js).
+      sessionCreatedAt: metadata.CreatedAt || '',
       /*
         TWO FIELDS, TWO SLOTS. This read was `AIContext || EngagementInfo` —
         one slot, so a host who filled in the AI instructions ERASED their own
@@ -1814,7 +1818,7 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -2332,11 +2336,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Current round/question number
   const currentRound = `Question ${parseInt(paddedQuestionNumber)}`;
   
-  // Session duration - calculate from game metadata if available
+  // Session duration - from METADATA.CreatedAt, passed in by the handler
   let sessionDuration = 'Current session';
   try {
-    if (metadata.CreatedAt) {
-      const gameStart = new Date(metadata.CreatedAt);
+    if (sessionCreatedAt) {
+      const gameStart = new Date(sessionCreatedAt);
       const now = new Date();
       const durationMs = now - gameStart;
       const minutes = Math.floor(durationMs / 60000);
