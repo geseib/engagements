@@ -177,6 +177,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     const stored = recallGenerationJob(ENDPOINT);
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
+    // Remembered with the job, so the review still quotes it after a reload.
+    setGuidanceSent(stored.batchGuidance || '');
     watchJob(stored.jobId);
   }, [watchJob]);
 
@@ -219,7 +221,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      rememberGenerationJob(ENDPOINT, jobId, { topic: triviaConfig.topic });
+      rememberGenerationJob(ENDPOINT, jobId, {
+        topic: triviaConfig.topic,
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
+      });
       await watchJob(jobId);
     } catch (error) {
       console.error('AI trivia generation error:', error);

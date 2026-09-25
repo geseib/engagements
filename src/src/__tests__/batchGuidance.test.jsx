@@ -211,9 +211,10 @@ describe('the call-and-answer builder', () => {
   });
 });
 
+const fs = require('fs');
+const path = require('path');
+
 describe('the two stylesheets, measured on the white builder modal', () => {
-  const fs = require('fs');
-  const path = require('path');
   const read = (file) => fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8');
   const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
   const lum = (hex) => {
@@ -236,6 +237,57 @@ describe('the two stylesheets, measured on the white builder modal', () => {
     const css = read('GeneratedItemsTable.css');
     expect(ratio(token(css, '--git-text'), token(css, '--git-chip-bg'))).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/^\.git \.git-guidance \{[^}]*color: var\(--git-text\)/m);
+  });
+
+  test('in the Add questions dialog the hint follows the theme, and clears AA on its surface in both', () => {
+    // The dialog is a `.qsets-modal` on var(--surface), dusk in the console
+    // and paper wherever it inherits the page's light theme. #5b6b7c, measured
+    // for the white builder, is 2.9:1 on dusk — so the console tone re-points
+    // the hint at var(--muted), and --muted is measured on --surface for each.
+    const css = read('BatchGuidanceField.css');
+    expect(css).toMatch(/^\.bgf\.bgf--console \{[^}]*--bgf-muted: var\(--muted\)/m);
+    const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+    const block = (selector) => styles.slice(styles.indexOf(`${selector} {`), styles.indexOf('}', styles.indexOf(`${selector} {`)));
+    for (const selector of [':root', '[data-theme="light"]', '[data-theme="dark"]']) {
+      const tokens = block(selector);
+      expect(ratio(token(tokens, '--muted'), token(tokens, '--surface'))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
+describe('a resumed job still says what guidance it was made with', () => {
+  const { rememberGenerationJob, recallGenerationJob } = require('../utils/generationJob');
+
+  test('starting a job remembers its guidance with the job, and a resume quotes it', async () => {
+    const TRIVIA = `${window.API_BASE}admin/ai-generate-trivia`;
+    mockApi('admin/ai-generate-trivia', triviaItems(2));
+    const first = render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
+    fireEvent.change(screen.getByLabelText(LABEL), { target: { value: GW } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    await screen.findByTestId('git-guidance');
+    expect(recallGenerationJob(TRIVIA)).toMatchObject({ jobId: 'job-g', batchGuidance: GW });
+    first.unmount();
+
+    // A fresh builder — a reload, a closed tab — picks the stored job back up.
+    render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} />);
+    expect(await screen.findByTestId('git-guidance')).toHaveTextContent(`Your guidance: “${GW}”`);
+  });
+
+  test('the call-and-answer builder does the same', async () => {
+    const SCENARIOS = `${window.API_BASE}admin/ai-generate-scenarios`;
+    mockApi('admin/ai-generate-scenarios', scenarioItems(2));
+    rememberGenerationJob(SCENARIOS, 'job-g', { scenarioType: 'custom', batchGuidance: GW });
+    render(<AIScenarioBuilder onClose={() => {}} onScenariosGenerated={() => {}} engagementType="call-and-answer" />);
+    expect(await screen.findByTestId('git-guidance')).toHaveTextContent(`Your guidance: “${GW}”`);
+  });
+
+  test('a job started with no guidance remembers none', async () => {
+    const TRIVIA = `${window.API_BASE}admin/ai-generate-trivia`;
+    mockApi('admin/ai-generate-trivia', triviaItems(2));
+    render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    await screen.findByRole('table');
+    expect(recallGenerationJob(TRIVIA)).not.toHaveProperty('batchGuidance');
   });
 });
 

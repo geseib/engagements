@@ -38,6 +38,14 @@ export function appendRequirement(appendTo) {
  * '' means send nothing.
  */
 export const BATCH_GUIDANCE_MAX = 500;
+
+/**
+ * Whether the builder "Write N more" opens for this type sends guidance.
+ * Mirrors QuestionsPanel's routing: trivia → TriviaAIBuilder and everything
+ * else → AIScenarioBuilder (call-and-answer, wavelength) do; poll →
+ * PollAIBuilder does not, and survey is not written by Workie at all.
+ */
+export const takesBatchGuidance = (engagementType) => !['poll', 'survey'].includes(engagementType);
 export function batchGuidanceFor(appendTo, text) {
   if (!isAppend(appendTo)) return '';
   return String(text ?? '').trim().slice(0, BATCH_GUIDANCE_MAX).trim();

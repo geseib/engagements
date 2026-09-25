@@ -4,6 +4,8 @@ import Icon from './Icon';
 import { ADD_MODES, MAX_CATEGORIES, rowsFromCsv, holdToMode } from '../utils/addQuestions';
 import { PER_CATEGORY_PRESETS } from './CountField';
 import { gameTypeLabel } from '../config/gameTypes';
+import { takesBatchGuidance } from '../utils/appendMode';
+import BatchGuidanceField from './BatchGuidanceField';
 
 /**
  * "ADD QUESTIONS" — the set is the hero, and the whole job is one sentence.
@@ -23,6 +25,13 @@ import { gameTypeLabel } from '../config/gameTypes';
  *
  * The CSV and by-hand routes survive as two quiet links at the foot: real,
  * reachable, and not in the way.
+ *
+ * ONE OPTIONAL BOX, with the button: guidance for this batch ("include George
+ * Washington in at least one question"). It lives HERE because the button
+ * opens the builder already generating — a box only in the builder's form
+ * would be reached after the first batch had been written without it. It is
+ * handed over in the plan as `batchGuidance`; the builder sends it and shows
+ * it in its own box for a regenerate. Only for the builders that send it.
  *
  * NOTHING IS WRITTEN HERE. Rows join the editor's working copy and are saved,
  * as a new version, by the editor's own Save.
@@ -46,6 +55,8 @@ export default function AddQuestionsDialog({
   const [newCats, setNewCats] = useState(Math.min(2, Math.max(1, room)));
   const [csvOpen, setCsvOpen] = useState(false);
   const [csv, setCsv] = useState(null);
+  const [guidance, setGuidance] = useState('');
+  const guided = aiAvailable && takesBatchGuidance(engagementType);
 
   const existing = mode === ADD_MODES.EXISTING;
   const catCount = existing ? categories.length : newCats;
@@ -148,12 +159,20 @@ export default function AddQuestionsDialog({
           </p>
         </div>
 
+        {guided && <BatchGuidanceField tone="console" value={guidance} onChange={setGuidance} />}
+
         {aiAvailable ? (
           <button
             type="button"
             className="addq-go"
             data-testid="addq-go"
-            onClick={() => onOpenBuilder && onOpenBuilder(mode, { per, numberOfCategories: catCount, count: total, autoStart: true })}
+            onClick={() => onOpenBuilder && onOpenBuilder(mode, {
+              per,
+              numberOfCategories: catCount,
+              count: total,
+              autoStart: true,
+              ...(guided && guidance.trim() ? { batchGuidance: guidance.trim() } : {}),
+            })}
           >
             <Icon name="Sparkle" weight="duotone" size={18} color="currentColor" />
             Write {total} more

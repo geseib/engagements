@@ -15,11 +15,28 @@
 
    `.bgf .bgf-hint`, two classes, because styles.css's `.modal-content p`
    (#666) outranks a single class and was painting over it.
+
+   THE CONSOLE TONE (`.bgf--console`) is the Add questions dialog, a
+   `.qsets-modal` on var(--surface) that follows its theme — dusk in the
+   console. #5b6b7c is 2.66:1 there, so the hint is re-pointed at the theme's
+   own --muted, measured on --surface:
+
+     dusk   --muted #9BA8BE on --surface #1B2942   6.06:1
+     paper  --muted #5E6167 on --surface #FFFFFF   6.21:1
+
+   Its label and textarea are the dialog's `.qsets-field` / `.qsets-input`.
    ========================================================================== */
 
 .bgf {
   --bgf-muted: #5b6b7c;
   --bgf-t-label: 13px;
+}
+
+/* The dialog's body spaces its children with a flex gap; `.qsets-field`'s own
+   12px bottom margin would add to it. */
+.bgf.bgf--console {
+  --bgf-muted: var(--muted);
+  margin: 0;
 }
 
 .bgf .bgf-hint {

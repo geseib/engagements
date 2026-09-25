@@ -551,6 +551,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     const stored = recallGenerationJob(ENDPOINT);
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
+    // Remembered with the job, so the review still quotes it after a reload.
+    setGuidanceSent(stored.batchGuidance || '');
     watchJob(stored.jobId);
   }, [watchJob]);
 
@@ -815,7 +817,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         }
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      rememberGenerationJob(ENDPOINT, jobId, { scenarioType: backendScenarioType });
+      rememberGenerationJob(ENDPOINT, jobId, {
+        scenarioType: backendScenarioType,
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
+      });
       await watchJob(jobId);
     } catch (error) {
       console.error('AI generation error:', error);
