@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give every generated Call & Answer and Trivia question a hidden `Background` note, and give its set an honest Workie note built from the admin's brief. The Workie reads both, plus the host's event details, and never invents facts. The host sees on the phone remote which context the Workie had.
+**Goal:** Give every generated Call & Answer and Trivia question a hidden `Background` note, and give its set an honest Workie note built from the admin's brief. The Workie reads both, plus the host's event details, and never invents facts. The host sees on the host remote which context the Workie had.
 
 **Architecture:**
 - **A new question attribute, `Background`.** It is stored, encrypted, published and passed through CSV exactly like the Reveal (`AnswerDetails`), and it never reaches a player or live payload.
@@ -12,7 +12,7 @@
   - Both use one shared truth rule.
 - **The builders write the set's `aiContextInstruction` deterministically** from the admin's brief (`workieSetNote.js`).
 - **`get-ai-summary.js`** adds Background to the context block that every prompt already receives. It appends one honesty rule and records yes/no `ContextUsed` flags.
-- **The flags are shown** on the phone remote and in the session report, never on the host page.
+- **The flags are shown** on the host remote and in the session report, never on the host page.
 
 **Tech Stack:** Node 18 Lambdas (CommonJS), DynamoDB single table, Bedrock Claude via tool use, React (CRA/webpack) frontend, plain `node tests/<file>.js` backend tests, Jest + Testing Library frontend tests.
 
@@ -950,7 +950,7 @@ git commit -m "Workie reads each question's Background, obeys one honesty rule, 
 
 ---
 
-### Task 6: The host sees what Workie had, on the phone remote and in the session report, never on the host page
+### Task 6: The host sees what Workie had, on the host remote and in the session report, never on the host page
 
 **Files:**
 - Create: `src/src/components/WorkieContextHint.jsx` (+ a few rules in `src/src/HostRemote.css` and the report's stylesheet; use existing tokens only, per the `engage-design` skill)
@@ -992,7 +992,7 @@ test('never mounted on the host page or its sidebar — both are surfaces the ro
   }
 });
 
-test('mounted on the phone remote', () => {
+test('mounted on the host remote', () => {
   const src = fs.readFileSync(path.join(__dirname, '../HostRemote.jsx'), 'utf8');
   expect(src).toMatch(/<WorkieContextHint\s+contextUsed=\{aiSummary\?\.contextUsed/);
 });
@@ -1009,7 +1009,7 @@ Expected: FAIL, "Cannot find module '../components/WorkieContextHint'".
 /**
  * WHAT WORKIE HAD — a quiet line for the host alone (question-background spec §4).
  *
- * Flags only, never the content. Mounted on the phone remote and in the session
+ * Flags only, never the content. Mounted on the host remote and in the session
  * report; NEVER on the host page or its sidebar, which the room may be watching.
  * A summary written before the flags existed carries none, and gets no line rather
  * than a row of dashes that would read as "Workie had nothing".
@@ -1216,7 +1216,7 @@ Wait for `Succeeded`, which takes about 26 minutes.
 
 - [ ] **Step 4: Acceptance on dev** (spec §5, at https://engage.dev.seibtribe.us, signed in as an Engage admin in the browser pane; the owner signs in, never Claude). Checks 1–2 need the owner, since they ask a person to set up or play a live session.
   1. Generate one Call & Answer set, with a brief in the context box, and one Trivia set. Open each in the set editor. Every question has a Background, and the set's Workie note contains the brief and the fixed line.
-  2. Host a session of each with Event details filled in. Play one round with at least two responses (a second browser tab joins as a player). The summary reflects the notes and event details. The phone remote shows `Workie had: question notes ✓ · set note ✓ · event details ✓ …`.
+  2. Host a session of each with Event details filled in. Play one round with at least two responses (a second browser tab joins as a player). The summary reflects the notes and event details. The host remote shows `Workie had: question notes ✓ · set note ✓ · event details ✓ …`.
   3. Host once more with no Event details. The stage says nothing about missing details, and the remote shows `event details —`.
   4. Read every generated Background. Report anything that looks invented: a statistic, a name or a quotation. If any are found, tighten `BACKGROUND_TRUTH_RULE` in a follow-up. Do not hand-edit the notes.
 

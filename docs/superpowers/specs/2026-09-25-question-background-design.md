@@ -122,7 +122,7 @@ It contains:
   generalises the existing `BriefingUsed`.
 - The host sees one quiet line: **Workie had:** question notes ✓ · event details — ·
   set note ✓ · briefing —.
-- It is shown in two places: the **phone remote**, under "What we heard", and the
+- It is shown in two places: the **host remote** (a phone, tablet or laptop), under "What we heard", and the
   **session report**'s round view (after the fact). It is never shown on the host
   page. That includes the session sidebar, because `SessionSetupPanel.jsx` is an
   overlay on the page the room may be watching (its own header: "this panel is a
@@ -151,7 +151,7 @@ host setup ──► METADATA Details / AIContext / Briefing ───┤
 get-ai-summary ──► buildContextBlock(eventDetails, hostInstructions, setNote, questionBackground)
                ──► honesty rule ──► model ──► summary row { …, ContextUsed }
                                                           │
-                                         host sidebar + phone remote hint
+                                         host sidebar + host remote hint
 ```
 
 ## Error handling and edge cases
