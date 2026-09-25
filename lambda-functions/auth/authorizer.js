@@ -331,21 +331,16 @@ const HOST_ADMIN_ROUTES = new Set([
   // would reach one. `tests/parse-document-host-route.js` pins all of that; if
   // the handler ever reads tenant data, this entry needs revisiting with it.
   'POST admin/parse-document',
-  // THIS WAS "READ ONLY" UNTIL NOW: an org may now CREATE its own prompt too.
-  // The reason POST was excluded was that a prompt write "shapes what the AI
-  // does for everybody" — true of the one partition that existed when that
-  // line was written. An organisation's prompt now lands in
-  // `ORG#<org>#AIPROMPTS`, is invisible to every other tenant, and can never
-  // become a default — so it shapes what the AI does for THAT organisation
-  // and nobody else. The same expiry the job routes above went through, for
-  // the same reason. Approved by the owner.
-  //
-  // STILL AN EXACT PAIR: PUT/DELETE admin/ai-prompts/{promptId} are
-  // deliberately still absent. Editing a Workie you do not own needs
-  // copy-on-write, which is not built — a host may author one and read the
-  // library, not yet change or retire one.
+  // READ ONLY AGAIN (owner, 2026-09-24): "the workie advisor and ai prompts
+  // should be only in the engage mode for now. team admins could view them.
+  // perhaps later we let them copy and create them." POST was opened when org
+  // libraries arrived (an org's Workie lands in `ORG#<org>#AIPROMPTS` and
+  // shapes nobody else's AI); it is closed until team copy/create is designed.
+  // The handler refuses a non-Engage author too (admin/shared/prompt-access.js
+  // `canAuthorPrompts`, behind the TEAM_WORKIE_AUTHORING switch) — this is the
+  // outer door, that is the authority. Existing team Workies keep running,
+  // frozen. PUT/DELETE admin/ai-prompts/{promptId} were never a host's.
   'GET admin/ai-prompts',
-  'POST admin/ai-prompts',
   'POST admin/question-sets/{setId}/media/uploads',
   'GET admin/question-sets/{setId}/media',
   // Put a set on the quickstart shelf, or take it off. Ownership-guarded by

@@ -33,6 +33,12 @@
  *          prompt text reaching the logs.
  */
 const suiteFinished = require('./helpers/finish-guard');
+// TEAM AUTHORING ON for this file. Prompts are Engage-mode only by default
+// (prompt-access.js TEAM_WORKIE_AUTHORING, spec 2026-09-24-prompt-admin-engage-mode-design.md);
+// this suite pins how team authoring works, which the owner may turn back on later.
+// tests/prompt-writes-engage-only.js pins the default.
+process.env.TEAM_WORKIE_AUTHORING = 'on';
+
 const path = require('path');
 const util = require('util');
 const assert = require('assert');

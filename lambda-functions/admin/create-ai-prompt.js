@@ -7,7 +7,7 @@ const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
 const {
-  createPromptRef, promptKey, promptBodyKey, promptOwnerStamp,
+  createPromptRef, teamWorkieAuthoringOn, promptRefusalMessage, promptKey, promptBodyKey, promptOwnerStamp,
 } = require('./shared/prompt-access');
 const { requestedScope, callerUserId } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
@@ -221,9 +221,14 @@ exports.handler = async (event) => {
         a step they already completed; following it cannot help, because
         having an org is exactly why they were refused.
       */
-      const message = tenant.callerOrgId(event)
-        ? "Engage's library can only be changed while you are not acting for an organisation."
-        : 'Choose an organisation before creating a Workie.';
+      // Team authoring off (the default): every refusal is the Engage-mode
+      // rule, said the one way (prompt-access.js promptRefusalMessage). With it
+      // on, the two older reasons below still apply.
+      const message = !teamWorkieAuthoringOn()
+        ? promptRefusalMessage(event, null)
+        : (tenant.callerOrgId(event)
+          ? "Engage's library can only be changed while you are not acting for an organisation."
+          : 'Choose an organisation before creating a Workie.');
       return {
         statusCode: 403,
         headers: {

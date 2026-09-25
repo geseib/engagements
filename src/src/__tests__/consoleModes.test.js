@@ -22,7 +22,7 @@
  * explicitly in the switcher, not two nav groups stacked on one screen.
  */
 import {
-  sectionsFor, sectionIdsFor, defaultSectionIdFor, PLATFORM_MODE,
+  sectionsFor, sectionIdsFor, defaultSectionIdFor, promptsReadOnlyFor, PLATFORM_MODE,
 } from '../config/consoleSections';
 
 const ids = (nav) => nav.flatMap((g) => g.items.map((s) => s.id));
@@ -48,6 +48,52 @@ describe('an Engage admin standing in their own space', () => {
   });
 });
 
+/*
+  PROMPTS ARE AUTHORED IN ENGAGE MODE, AND ONLY THERE (owner, 2026-09-24).
+
+  "when you switch to engage mode you cant even see the prompts from the admin
+  page. so it seems that the workie advisor and ai prompts should be only in
+  the engage mode for now. team admins could view them."
+
+  Before this, the only Prompts section was inside an organisation, where every
+  save of an Engage prompt was refused (a platform prompt is changed only by
+  staff acting for no organisation) — so no screen could change one at all.
+  The section now lives in Engage mode; inside an organisation it is a
+  read-only view for the people who run it. `promptsReadOnlyFor` is what
+  AdminPage hands the prompt screens.
+*/
+describe('where prompts can be changed', () => {
+  const staffOnPlatform = { groups: ['admins'], mode: PLATFORM_MODE };
+  const teamOwner = { groups: ['hosts'], orgRole: 'owner', orgType: 'team', orgName: 'Northwind' };
+  const teamMember = { ...teamOwner, orgRole: 'member' };
+  const staffAtHome = { groups: ['admins', 'hosts'], orgRole: 'owner', orgType: 'personal' };
+
+  // rejects: Engage mode with no way to reach Engage's prompt library.
+  it('Engage mode has Prompts, and it is where they are changed', () => {
+    expect(ids(sectionsFor(staffOnPlatform))).toContain('prompts');
+    expect(promptsReadOnlyFor(staffOnPlatform)).toBe(false);
+  });
+
+  // rejects: an editor that offers Save inside an organisation, where the
+  // server refuses every prompt write.
+  it('inside an organisation Prompts is read-only, even for Engage staff', () => {
+    expect(promptsReadOnlyFor(teamOwner)).toBe(true);
+    expect(promptsReadOnlyFor(staffAtHome)).toBe(true);
+  });
+
+  // rejects: a team member seeing the section; owners and admins view it.
+  it('a team owner or admin views the library; a member does not get it', () => {
+    expect(ids(sectionsFor(teamOwner))).toContain('prompts');
+    expect(ids(sectionsFor({ ...teamOwner, orgRole: 'admin' }))).toContain('prompts');
+    expect(ids(sectionsFor(teamMember))).not.toContain('prompts');
+  });
+
+  // rejects: a host asking for platform mode and getting an editable library.
+  it('asking for Engage mode without being staff changes nothing', () => {
+    expect(promptsReadOnlyFor({ groups: ['hosts'], mode: PLATFORM_MODE })).toBe(true);
+  });
+});
+
 describe('the platform mode', () => {
   const staffOnPlatform = { groups: ['admins'], mode: PLATFORM_MODE };
 
@@ -57,7 +103,7 @@ describe('the platform mode', () => {
   // is why it was bolted on additively in the first place.
   it('is reachable by an explicit choice, not by having no organisation', () => {
     expect(ids(sectionsFor(staffOnPlatform)))
-      .toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'publiclibrary', 'moderation', 'users', 'archive']);
+      .toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive']);
   });
 
   /*

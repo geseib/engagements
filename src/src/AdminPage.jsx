@@ -40,7 +40,7 @@ import BillingPanel from './components/BillingPanel';
 import PrivacyPanel from './components/PrivacyPanel';
 import {
   sectionsFor, sectionIdsFor, defaultSectionIdFor, sectionById, FOOT_SECTIONS,
-  PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS,
+  PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS, promptsReadOnlyFor,
 } from './config/consoleSections';
 import { getActiveOrgId, setActiveOrgId } from './auth/authFetch';
 import { adminApiUrl } from './utils/adminApi';
@@ -1716,8 +1716,14 @@ function AdminPage() {
                     Prompts
                   </button>
 
-                  {promptLibrary === 'generation' && <AIGenerationPromptEditor />}
-                  {promptLibrary === 'analysis' && <AIPromptManager />}
+                  {/* Read-only everywhere but Engage mode (owner, 2026-09-24):
+                      the server refuses every prompt write outside it. */}
+                  {promptLibrary === 'generation' && (
+                    <AIGenerationPromptEditor readOnly={promptsReadOnlyFor(consoleIdentity)} />
+                  )}
+                  {promptLibrary === 'analysis' && (
+                    <AIPromptManager readOnly={promptsReadOnlyFor(consoleIdentity)} />
+                  )}
                 </>
               )}
             </div>

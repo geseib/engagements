@@ -7,7 +7,7 @@ const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
 const {
-  findPromptForCaller, canManagePrompt, promptKey, promptBodyKey,
+  findPromptForCaller, canManagePrompt, promptRefusalMessage, promptKey, promptBodyKey,
 } = require('./shared/prompt-access');
 const { requestedScope, callerUserId } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
@@ -179,9 +179,9 @@ exports.handler = async (event) => {
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Allow-Methods': 'PUT, OPTIONS'
         },
-        body: JSON.stringify({
-          error: 'This Workie belongs to someone else. You can only change Workies you created.'
-        })
+        // Which rule refused, and what to do — the owner's own save came back
+        // "belongs to someone else", which named neither (prompt-access.js).
+        body: JSON.stringify({ error: promptRefusalMessage(event, found.item) })
       };
     }
 

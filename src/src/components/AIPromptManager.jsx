@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import './AIPromptManager.css';
 import RoundAnglesField from './RoundAnglesField';
 import { authFetch } from '../auth/authFetch';
-import { normalizeGameType } from '../config/gameTypes';
+import { normalizeGameType, gameTypeLabel } from '../config/gameTypes';
 import {
   unknownVariableTokens,
   extractVariableTokens,
@@ -15,6 +15,7 @@ import PromptVariableInspector, { DEFAULT_ROOM_SIZE } from './PromptVariableInsp
 import PromptAssembledPreview from './PromptAssembledPreview';
 import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
 import PromptLibraryPanel from './PromptLibraryPanel';
+import PromptReadOnlyView, { PROMPTS_READ_ONLY_NOTE } from './PromptReadOnlyView';
 import {
   ADVISOR_GIVE_UP_MS, ADVISOR_POLL_INTERVAL_MS,
   asSentence, describeAdviceProgress, startPromptAdvice, waitForPromptAdvice,
@@ -414,7 +415,11 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to ${isNew ? 'create' : 'update'} prompt`);
+        /* THE SERVER'S OWN REASON. This threw "Failed to update prompt" and
+           dropped the body, which is where the server says which rule refused
+           and what to do — the owner's save in User mode came back "Prompts
+           are changed in Engage mode…" and the screen never said so. */
+        throw new Error(await refusalReason(response));
       }
 
       const result = await response.json();
@@ -424,7 +429,7 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
       // The consequence, not the severity: nothing was written, and the words
       // on screen are the only copy of them.
       setNotice(
-        `Nothing was saved — the ${isNew ? 'create' : 'update'} was refused (${error.message}). `
+        `Nothing was saved — the ${isNew ? 'create' : 'update'} was refused: ${error.message} `
         + 'Your text is still in this form and nowhere else; leave the dialog open and try again.'
       );
     } finally {
@@ -668,7 +673,8 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                     <span>
                       <strong>are prose.</strong> Nothing replaces them. The model reads the words
                       inside as an instruction, so <em>[Summary of the responses]</em> tells it to
-                      write a summary &mdash; it does not hand it the responses.
+                      write a summary &mdash; it does not hand it the responses. Saving refuses
+                      them; write the direction as a sentence instead.
                     </span>
                   </li>
                 </ul>
@@ -768,9 +774,10 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
           >
             <label htmlFor="prompt-output-half">2. What the AI writes</label>
             <p className="prompt-half-lede">
-              The shape of the reply, in Markdown. Use <code>[square brackets]</code> to say what
-              each section should contain &mdash; they are directions the model reads, so describe
-              the writing you want, and leave the data to the half above.
+              The shape of the reply, in Markdown. Under each heading, say in a plain sentence what
+              that section should contain &mdash; the model reads it as a direction. Leave the data
+              to the half above. Square brackets are refused on save: the model reads one as a blank
+              it was meant to be handed.
             </p>
             <div className="template-editor-container">
               <div className="template-textarea-container">
@@ -783,9 +790,9 @@ function AIPromptEditor({ prompt, isNew = false, onSave, onCancel }) {
                   onChange={(e) => setFormData({ ...formData, outputFormat: e.target.value })}
                   placeholder={'**RADIO SHOW REVIEW**\n\n'
                     + '## Summary\n'
-                    + '[What was asked, and what the room said, in three sentences]\n\n'
+                    + 'What was asked, and what the room said, in three sentences.\n\n'
                     + '## Discussion\n'
-                    + '[Two questions worth asking this room next]\n\n'
+                    + 'Two questions worth asking this room next.\n\n'
                     + 'Bold, italic, `code`, lists, tables and quotes all render. '
                     + 'Images, HTML and nested lists do not.'}
                   rows="12"
@@ -1328,7 +1335,30 @@ export function AIPromptAdvisor({
 }
 
 // Main AI Prompt Manager Component
-function AIPromptManager() {
+/**
+ * What a refused write says, in the server's words. The routes answer
+ * `{ error }` or `{ error, message }`; with no readable body, the status.
+ */
+async function refusalReason(response) {
+  let body = null;
+  try { body = await response.json(); } catch (e) { body = null; }
+  const parts = [body && body.error, body && body.message]
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
+  const said = [...new Set(parts)].join(' — ');
+  const text = said || `HTTP ${response.status}`;
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/**
+ * `readOnly` — outside Engage mode (config/consoleSections.js
+ * `promptsReadOnlyFor`). The owner, 2026-09-24: "the workie advisor and ai
+ * prompts should be only in the engage mode for now. team admins could view
+ * them." No action handler reaches the panel, so it draws no Create, Edit,
+ * Advisor, Retire, Copy to archive, defaults installer or status toggle
+ * (its "no handler, no button" rule); a row opens in PromptReadOnlyView.
+ */
+function AIPromptManager({ readOnly = false }) {
   const [prompts, setPrompts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   /*
@@ -1349,6 +1379,7 @@ function AIPromptManager() {
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [advisorPrompt, setAdvisorPrompt] = useState(null);
+  const [viewingPrompt, setViewingPrompt] = useState(null);
 
   /*
     THE FIVE `alert()`s AND TWO `window.confirm()`s THIS SCREEN USED TO RUN.
@@ -1671,6 +1702,11 @@ function AIPromptManager() {
           A summary prompt is what Workie says after a round. Each engagement type has one default;
           a question set can pin its own.
         </p>
+        {readOnly && (
+          <p className="pmgr-readonly-note" data-testid="pmgr-readonly-note">
+            {PROMPTS_READ_ONLY_NOTE}
+          </p>
+        )}
       </div>
 
       {notice && (
@@ -1697,16 +1733,35 @@ function AIPromptManager() {
             ? ALL_PROMPT_CATEGORIES
             : (PROMPT_CATEGORIES[normalizeGameType(filters.gameType)] || [])
         }
-        onEdit={setEditingPrompt}
-        onAdvise={setAdvisorPrompt}
-        onDelete={handleDeletePrompt}
-        onCreate={() => setIsCreating(true)}
-        onPopulateDefaults={handlePopulateDefaults}
-        onToggleStatus={handleToggleStatus}
+        onView={readOnly ? setViewingPrompt : undefined}
+        showOwner={readOnly}
+        onEdit={readOnly ? undefined : setEditingPrompt}
+        onAdvise={readOnly ? undefined : setAdvisorPrompt}
+        onDelete={readOnly ? undefined : handleDeletePrompt}
+        onCreate={readOnly ? undefined : () => setIsCreating(true)}
+        onPopulateDefaults={readOnly ? undefined : handlePopulateDefaults}
+        onToggleStatus={readOnly ? undefined : handleToggleStatus}
         busyPromptId={togglingId}
-        onCopyToArchive={copyPromptToArchive}
+        onCopyToArchive={readOnly ? undefined : copyPromptToArchive}
         copyingPromptId={copyingToArchiveId}
       />
+
+      {viewingPrompt && (
+        <PromptReadOnlyView
+          prompt={viewingPrompt}
+          facts={[
+            { label: 'Engagement type', value: gameTypeLabel(viewingPrompt.gameType) },
+            { label: 'State', value: viewingPrompt.status },
+            { label: 'Default', value: viewingPrompt.isDefault ? 'Yes — runs for sets with no prompt of their own' : '' },
+          ]}
+          parts={[
+            { label: '1. What the AI is given', text: viewingPrompt.instructions },
+            { label: '2. What the AI writes', text: viewingPrompt.outputFormat },
+            { label: 'Template', text: viewingPrompt.template },
+          ]}
+          onClose={() => setViewingPrompt(null)}
+        />
+      )}
 
       {(editingPrompt || isCreating) && (
         <AIPromptEditor

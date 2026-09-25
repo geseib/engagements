@@ -1,5 +1,6 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
+const { canAuthorPrompts, promptRefusalMessage } = require('./shared/prompt-access');
 const {
   describeVariablesForPrompt,
   describeAuthoringRules,
@@ -164,6 +165,23 @@ exports.handler = async (event) => {
           'Access-Control-Allow-Methods': 'POST, OPTIONS'
         },
         body: ''
+      };
+    }
+
+    /*
+      ENGAGE MODE ONLY — docs/superpowers/specs/2026-09-24-prompt-admin-engage-mode-design.md.
+      The authorizer checks the group, not the mode, so this handler checks
+      the mode itself. Drafting a prompt is authoring one, which only Engage staff do for now.
+    */
+    if (!canAuthorPrompts(event)) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({ error: promptRefusalMessage(event, null) })
       };
     }
 

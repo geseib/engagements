@@ -57,7 +57,7 @@ const {
 const { requireAdmin, callerUsername } = require('./shared/require-admin');
 const { callerUserId } = require('./shared/question-set-access');
 const { ORG, callerOrgId, callerOrgRole } = require('./shared/tenant');
-const { findPromptForCaller } = require('./shared/prompt-access');
+const { findPromptForCaller, canAuthorPrompts, promptRefusalMessage } = require('./shared/prompt-access');
 const { encryptItem, decryptItem, decryptValue } = require('./shared/tenant-crypto');
 
 const tableName = process.env.TABLE_NAME;
@@ -699,6 +699,10 @@ exports.handler = async (event, context) => {
   try {
     const jobId = event?.pathParameters?.jobId;
     if (method === 'GET' || jobId) return await readJob(event, jobId);
+    // Engage mode only (docs/superpowers/specs/2026-09-24-prompt-admin-engage-mode-design.md):
+    // the advisor rewrites prompts, and only Engage staff acting as Engage
+    // change prompts for now. Reading back a job already started stays open.
+    if (!canAuthorPrompts(event)) return json(403, { error: promptRefusalMessage(event, null) });
     return await startJob(event, context);
   } catch (error) {
     console.error(`❌ AI Prompt Advisor: ${error.name}: ${error.message}`);

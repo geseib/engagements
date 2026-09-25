@@ -42,9 +42,11 @@ describe('platform staff (mockups 10 and 11)', () => {
     // 'planrequests' joined 2026-09-22 (billing step 2): the one thing staff DO for a customer.
     // 'observability' joined 2026-09-23: platform-wide TOTALS, and no customer content — see
     // observabilityPanel.test.jsx and tests/platform-observability.js.
-    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'publiclibrary', 'moderation', 'users', 'archive']);
+    // 'prompts' joined 2026-09-24: Engage's prompt library is Engage's own content, like the
+    // Shared library, and Engage mode is now the ONE place prompts are authored (the owner:
+    // "the workie advisor and ai prompts should be only in the engage mode for now").
+    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive']);
     expect(ids(PLATFORM)).not.toContain('games');
-    expect(ids(PLATFORM)).not.toContain('prompts');
     expect(ids(PLATFORM)).not.toContain('library');
   });
 
@@ -148,8 +150,10 @@ describe('a team', () => {
   });
 
   // rejects: showing a member the invoice and the export they cannot act on
-  test('a member sees Members and neither Plan & usage nor Data & privacy', () => {
-    expect(ids(TEAM_MEMBER)).toEqual(['questionsets', 'games', 'library', 'prompts', 'members']);
+  // rejects: a member getting Prompts — the owner, 2026-09-24: "team admins could view
+  // them". Owners and admins read the library (read-only); members do not get the section.
+  test('a member sees Members and neither Plan & usage nor Data & privacy, nor Prompts', () => {
+    expect(ids(TEAM_MEMBER)).toEqual(['questionsets', 'games', 'library', 'members']);
   });
 
   // rejects: an owner losing billing because only 'admin' was checked

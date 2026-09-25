@@ -44,6 +44,8 @@ const CONSUMERS = [
   ['components/PromptPreflightPanel.jsx', read('components', 'PromptPreflightPanel.jsx')],
   ['components/PromptAssembledPreview.jsx', read('components', 'PromptAssembledPreview.jsx')],
   ['components/AIGenerationPromptEditor.jsx', read('components', 'AIGenerationPromptEditor.jsx')],
+  // The read-only view both libraries open outside Engage mode (2026-09-24).
+  ['components/PromptReadOnlyView.jsx', read('components', 'PromptReadOnlyView.jsx')],
   ['AdminPage.jsx', read('AdminPage.jsx')],
 ];
 const MARKUP = CONSUMERS.map(([, src]) => src).join('\n');

@@ -321,6 +321,21 @@
   color: var(--pc-muted);
 }
 
+/* Read-only outside Engage mode (owner, 2026-09-24). Body size and ink, not
+   the lede's muted label size: it is the one sentence that explains why
+   nothing on this screen can be changed, so it must read, not recede. */
+.pmgr-readonly-note,
+.pgen-readonly-note {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--pc-link);
+  background: var(--pc-tint-link);
+  border-radius: 4px;
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
+  color: var(--pc-ink);
+}
+
 /* ---------------------------------------------------------- status strip -- */
 
 /* Failures used to arrive as `alert()`. An alert states the severity, blocks
@@ -584,6 +599,66 @@
   overflow-y: auto;
   min-height: 0;
   flex: 1;
+}
+
+/* THE READ-ONLY VIEW (PromptReadOnlyView.jsx). Its own classes rather than
+   `.pmgr .form-*`, because it is mounted inside `.pgen` as well as `.pmgr`;
+   the tokens it reads are declared on both. */
+.pmgr-view-body {
+  padding: 20px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+.pmgr-view-note {
+  margin: 0 0 16px;
+  font-size: var(--pc-t-body);
+  color: var(--pc-muted);
+}
+.pmgr-view-desc {
+  margin: 0 0 16px;
+  font-size: var(--pc-t-body);
+  line-height: 1.5;
+  color: var(--pc-ink);
+}
+.pmgr-view-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0 0 20px;
+}
+.pmgr-view-fact dt {
+  font-size: var(--pc-t-label);
+  color: var(--pc-muted);
+}
+.pmgr-view-fact dd {
+  margin: 2px 0 0;
+  font-size: var(--pc-t-body);
+  color: var(--pc-ink);
+}
+.pmgr-view-part { margin: 0 0 20px; }
+.pmgr-view-part h3 {
+  margin: 0 0 8px;
+  font-size: var(--pc-t-body);
+  color: var(--pc-ink);
+}
+.pmgr-view-text {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--pc-field);
+  border: 1px solid var(--pc-rule);
+  border-radius: 6px;
+  font: 400 var(--pc-t-label)/1.55 var(--pc-mono);
+  color: var(--pc-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pmgr-view-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  border-top: 1px solid var(--pc-rule);
+  flex: none;
 }
 
 /* The footer, in BOTH dialogs. The advisor had an X and nothing else below

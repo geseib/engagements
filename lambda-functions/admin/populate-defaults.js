@@ -57,6 +57,8 @@ const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/l
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const { normalizeOutputSections } = require('./shared/prompt-shape');
+const tenant = require('./shared/tenant');
+const { promptRefusalMessage, isInternalCall } = require('./shared/prompt-access');
 const defaultPrompts = require('./default-ai-prompts.json');
 
 // Generate unique ID for prompts (same as other admin functions)
@@ -91,6 +93,23 @@ exports.handler = async (event) => {
           'Access-Control-Allow-Methods': 'POST, OPTIONS'
         },
         body: ''
+      };
+    }
+
+    /*
+      ENGAGE MODE ONLY — docs/superpowers/specs/2026-09-24-prompt-admin-engage-mode-design.md.
+      The authorizer checks the group, not the mode, so this handler checks
+      the mode itself. This writes Engage's own library — with overwrite, over every default — and it had no check at all: any admin, acting for any team, could run it. Engage mode, never team authoring.
+    */
+    if (!isInternalCall(event) && !tenant.canManageScope(event, tenant.PLATFORM, '')) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({ error: promptRefusalMessage(event, null) })
       };
     }
 
