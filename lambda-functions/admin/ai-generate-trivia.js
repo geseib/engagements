@@ -23,6 +23,7 @@ const { makeGenerationHandler } = require('./shared/generation-handler');
 const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const { triviaToCsv } = require('./shared/generated-set');
+const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
 
 const MAX_COUNT = 100;
 const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
@@ -44,6 +45,8 @@ function parseRequest(payload) {
       customPrompt: payload.customPrompt || '',
       numChoices, numCorrect, categories,
       mustHaveCategories: payload.mustHaveCategories || '',
+      // ONE RUN'S INSTRUCTION, not the set's brief — see shared/batch-guidance.js.
+      batchGuidance: readBatchGuidance(payload.batchGuidance),
     },
   };
 }
@@ -99,6 +102,13 @@ function buildTool(config) {
 
 function buildPrompt({ config, count, alreadyUsedTitles }) {
   let p = `You are an expert trivia question creator. Create ${count} trivia questions about ${config.topic}.`;
+  // THE AUTHOR'S GUIDANCE FOR THIS BATCH, straight after the opening line and
+  // ahead of the brief, because first is what a model follows (the DIRECTION
+  // BEFORE TOPIC note in ai-generate-scenarios.js). Its own paragraph, closed by
+  // a blank line so the brief's next line is not read as more of it. With
+  // none, nothing changes.
+  const guidance = batchGuidanceBlock(config.batchGuidance);
+  if (guidance) p += `\n\n${guidance}\n`;
   if (config.category) p += `\nCategory: ${config.category}.`;
   if (config.audience) p += `\nTarget audience: ${config.audience}.`;
   p += `\nDifficulty level: ${config.difficulty}.`;
@@ -176,6 +186,10 @@ function normalizeItem(raw, config) {
   }
   return item;
 }
+
+// The prompt's own tests (tests/question-guidance.js) read these directly.
+exports.parseRequest = parseRequest;
+exports.buildPrompt = buildPrompt;
 
 exports.handler = makeGenerationHandler({
   kind: 'trivia',

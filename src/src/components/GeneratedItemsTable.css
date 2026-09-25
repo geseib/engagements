@@ -88,6 +88,23 @@
 
 .git-shortfall > span { min-width: 0; }
 
+/* The author's guidance for this batch, when adding to a set — quoted back
+   above the list so each row can be checked against it. Ink is --git-text on
+   --git-chip-bg: #2c3e50 on #eef2f7, 9.77:1. Two classes, because the
+   builder modal's `.modal-content p` (styles.css: #666, 25px margin) outranks
+   one. */
+.git .git-guidance {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--git-chip-fg);
+  border-radius: 6px;
+  background: var(--git-chip-bg);
+  color: var(--git-text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
 /* --------------------------------------------------------------- filters -- */
 
 .git-filters {

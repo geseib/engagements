@@ -51,6 +51,7 @@ const {
 } = require('./shared/generation-jobs');
 const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
+const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
 const { callerUsername } = require('./shared/require-admin');
 const { callerUserId } = require('./shared/question-set-access');
 const { callerOrgId, callerOrgRole } = require('./shared/tenant');
@@ -170,6 +171,7 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt, pro
 function buildPrompt({
   template, engagementType, count, difficulty, context, audience, customPrompt,
   categories, mustHaveCategories, alreadyUsedTitles, roundKind, roundKindBrief,
+  batchGuidance,
 }) {
   const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
 
@@ -189,14 +191,26 @@ function buildPrompt({
   // direction written for discussion rounds must not reach them.
   const direction = roundKindDirection(engagementType, roundKind, roundKindBrief);
 
+  // THE AUTHOR'S GUIDANCE FOR THIS BATCH — "include George Washington in at
+  // least one" — goes after the direction and before the topic, for the same
+  // reason the direction goes first. See shared/batch-guidance.js.
+  const guidance = batchGuidanceBlock(batchGuidance);
+
   // With no direction the opening line stays byte-identical to what it has
   // always been. Trivia and wavelength take no direction, and their prompts
-  // should not drift as a side effect of a call-and-answer fix.
-  let p = direction
-    ? `Create ${count} ${itemNoun}.\n\n${direction}\n\n`
+  // should not drift as a side effect of a call-and-answer fix. Guidance is
+  // the one thing that restructures it, and only when there is some.
+  let p;
+  if (direction) {
+    p = `Create ${count} ${itemNoun}.\n\n${direction}\n\n`
       + `Where the direction above and the topic below disagree, follow the direction.\n\n`
-      + `TOPIC: ${template.basePrompt}`
-    : `Create ${count} ${itemNoun}. ${template.basePrompt}`;
+      + (guidance ? `${guidance}\n\n` : '')
+      + `TOPIC: ${template.basePrompt}`;
+  } else if (guidance) {
+    p = `Create ${count} ${itemNoun}.\n\n${guidance}\n\nTOPIC: ${template.basePrompt}`;
+  } else {
+    p = `Create ${count} ${itemNoun}. ${template.basePrompt}`;
+  }
 
   if (context && template.contextTemplate) p += template.contextTemplate.replace('{context}', context);
   if (audience && template.audienceTemplate) p += template.audienceTemplate.replace('{audience}', audience);
@@ -358,6 +372,10 @@ async function runWorker(event, context) {
 
     const total = Math.min(Math.max(parseInt(count, 10) || 1, 1), MAX_COUNT);
 
+    // ONE RUN'S INSTRUCTION, trimmed and capped, '' when blank. Every pass
+    // gets it. Never logged — see shared/batch-guidance.js.
+    const batchGuidance = readBatchGuidance(payload.batchGuidance);
+
     // The category clamp used to be Math.min(n, 24, chunkCount). With one item
     // per chunk that evaluated to 1 EVERY time — the logs read "Limited category
     // count from 5 to 1" — so each of the twenty calls invented its own single
@@ -418,6 +436,7 @@ async function runWorker(event, context) {
         alreadyUsedTitles: produced.map((s) => s.title),
         roundKind,
         roundKindBrief,
+        batchGuidance,
       });
 
       let result;
@@ -438,7 +457,7 @@ async function runWorker(event, context) {
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
               alreadyUsedTitles: produced.map((s) => s.title),
-              roundKind, roundKindBrief,
+              roundKind, roundKindBrief, batchGuidance,
             }),
             tool,
             maxTokens: maxTokensFor(engagementType, halved),
@@ -510,6 +529,9 @@ async function runWorker(event, context) {
 }
 
 // ------------------------------------------------------------------ handler
+
+// The prompt's own tests (tests/question-guidance.js) read this directly.
+exports.buildPrompt = buildPrompt;
 
 exports.handler = async (event, context) => {
   // Async worker: invoked with InvocationType 'Event', so it runs against the

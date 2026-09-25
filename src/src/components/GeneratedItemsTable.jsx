@@ -44,6 +44,10 @@ const NO_EXCLUSIONS = new Set();
  *                    into a draft set, or null. See below.
  *   kinds            survey only — { options: [{ id, label, icon }], of(item),
  *                    label(item), onChange?(index, kindId) }. See below.
+ *   guidance         the author's guidance this batch was made with, when
+ *                    ADDING to a set ("include George Washington in at least
+ *                    one"), or ''. Stated above the list, so the author can
+ *                    check it was followed before anything is added.
  *
  * THE KIND COLUMN (docs/design/survey-redesign/03-review.html). A survey's
  * questions come in five kinds, so its table carries a Kind column BETWEEN the
@@ -78,6 +82,7 @@ export default function GeneratedItemsTable({
   columns = [],
   actions = null,
   kinds = null,
+  guidance = '',
 }) {
   const [query, setQuery] = useState('');
   const [facet, setFacet] = useState('');
@@ -145,6 +150,12 @@ export default function GeneratedItemsTable({
         </div>
         {actions && <div className="git-actions">{actions}</div>}
       </div>
+
+      {guidance && (
+        <p className="git-guidance" data-testid="git-guidance">
+          <b>Your guidance:</b> &ldquo;{guidance}&rdquo;
+        </p>
+      )}
 
       {/* The shortfall, named. Near-duplicate suppression happens on the server
           and is only console.warn-ed (generation-handler.js:172), so asking for

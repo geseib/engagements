@@ -29,6 +29,20 @@ export function appendRequirement(appendTo) {
     : '';
 }
 
+/**
+ * GUIDANCE FOR THIS BATCH — "include George Washington in at least one
+ * question". Adding only; making a new set has no such box. It travels as its
+ * own `batchGuidance` field, never inside `customPrompt` (the set's standing
+ * brief), and it is not stored on the set. The server trims and caps it again
+ * (lambda-functions/admin/shared/batch-guidance.js); this is what is SENT, and
+ * '' means send nothing.
+ */
+export const BATCH_GUIDANCE_MAX = 500;
+export function batchGuidanceFor(appendTo, text) {
+  if (!isAppend(appendTo)) return '';
+  return String(text ?? '').trim().slice(0, BATCH_GUIDANCE_MAX).trim();
+}
+
 /** `customPrompt` with the requirement appended, for the job payload. */
 export function withAppendRequirement(customPrompt, appendTo) {
   const extra = appendRequirement(appendTo);

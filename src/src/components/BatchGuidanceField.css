@@ -1,0 +1,36 @@
+/* ============================================================================
+   GUIDANCE FOR THESE QUESTIONS — components/BatchGuidanceField.jsx
+
+   Scoped under `.bgf`. The label and the textarea are the builder form's own
+   (`.form-group`, styles.css), so the box reads as one of that form's fields;
+   this file styles only the hint line under it.
+
+   The AI builders are white modals (`.modal-content { background: white }`)
+   whatever theme they are mounted under, so the hint's ink is measured on
+   white and declared here rather than borrowed from `--muted`, which is
+   #9BA8BE under dusk — 2.3:1 on white. Same value GeneratedItemsTable.css
+   measured for its own muted line:
+
+     --bgf-muted #5b6b7c on #ffffff   5.47:1   on #f8f9fa   5.19:1
+
+   `.bgf .bgf-hint`, two classes, because styles.css's `.modal-content p`
+   (#666) outranks a single class and was painting over it.
+   ========================================================================== */
+
+.bgf {
+  --bgf-muted: #5b6b7c;
+  --bgf-t-label: 13px;
+}
+
+.bgf .bgf-hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--bgf-muted);
+  font-size: var(--bgf-t-label);
+  line-height: 1.45;
+}
+
+.bgf .bgf-count { font-variant-numeric: tabular-nums; }

@@ -4,7 +4,8 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor } from '../utils/appendMode';
+import BatchGuidanceField from './BatchGuidanceField';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
 import GenerationJobPanel from './GenerationJobPanel';
@@ -57,6 +58,13 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
       return { ...prev, ...next, count: Math.min(100, next.numberOfCategories * per) };
     });
   }, [appendMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // GUIDANCE FOR THIS BATCH, adding only — BatchGuidanceField. Its own state,
+  // not a triviaConfig key: it is not the set's brief and is not kept. It may
+  // arrive from the Add questions dialog, so the auto-start sends it.
+  // `guidanceSent` is what the running batch was made with, for the review.
+  const [batchGuidance, setBatchGuidance] = useState(appendTo?.batchGuidance || '');
+  const [guidanceSent, setGuidanceSent] = useState('');
 
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
   const [currentTriviaIndex, setCurrentTriviaIndex] = useState(0);
@@ -182,6 +190,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     setEditingItem(false);
     setReviewingPartial(false);
     setStep(2);
+    const sentGuidance = batchGuidanceFor(appendTo, batchGuidance);
+    setGuidanceSent(sentGuidance);
 
     // Generation runs as a background job. It cannot run inside the request:
     // API Gateway's 30s integration timeout is a hard ceiling and a full set
@@ -197,6 +207,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         numberOfCategories: appendTo?.numberOfCategories || triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
         customPrompt: withAppendRequirement(triviaConfig.customPrompt, appendTo),
+        // Its own field, never folded into customPrompt; absent when blank.
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
         // question set itself now — that is the fix for "Close — this keeps
         // running", which was true about the job and false about the outcome —
@@ -433,6 +445,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
               />
 
               <div className="config-form">
+                {/* ADDING ONLY, and first: this batch's instruction. */}
+                {isAppend(appendTo) && <BatchGuidanceField value={batchGuidance} onChange={setBatchGuidance} />}
+
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
@@ -594,6 +609,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
                   items={generatedTrivia}
                   requested={interpreted.requested}
                   noun="questions"
+                  guidance={guidanceSent}
                   excluded={excluded}
                   savedAs={interpreted.createdSet}
                   onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}

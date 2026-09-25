@@ -7,7 +7,8 @@ import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor } from '../utils/appendMode';
+import BatchGuidanceField from './BatchGuidanceField';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
 import {
@@ -77,6 +78,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     roundKindBrief: '',
     roundKindInstruction: ''
   });
+  // GUIDANCE FOR THIS BATCH, adding only — BatchGuidanceField. Kept out of
+  // scenarioConfig on purpose: it is not the set's brief, it is not kept, and
+  // handleConfigSubmit logs scenarioConfig to the browser console. It may
+  // arrive from the Add questions dialog, so the auto-start sends it.
+  // `guidanceSent` is what the running batch was made with, for the review.
+  const [batchGuidance, setBatchGuidance] = useState(appendTo?.batchGuidance || '');
+  const [guidanceSent, setGuidanceSent] = useState('');
   const [generatedScenarios, setGeneratedScenarios] = useState([]);
   const [generatedMetadata, setGeneratedMetadata] = useState(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
@@ -647,6 +655,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setEditingItem(false);
     setReviewingPartial(false);
     setStep(3);
+    const sentGuidance = batchGuidanceFor(appendTo, batchGuidance);
+    setGuidanceSent(sentGuidance);
 
     try {
       const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
@@ -775,6 +785,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         // choosing a topic card resets both fields from the prompt's defaults.
         ...appendCategoryDefaults(appendTo),
         ...(isAppend(appendTo) ? { appendOnly: true } : {}),
+        // THIS BATCH'S GUIDANCE, its own field and never inside customPrompt;
+        // the backend places it after the direction and before the topic.
+        // Absent when blank.
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
         // DIRECTION. The backend puts this IN FRONT OF the topic's basePrompt,
         // because basePrompt used to be the first thing the model read and
         // first is what a model follows — which is why typing an Apply brief
@@ -1328,6 +1342,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               />
 
               <div className="config-form">
+                {/* ADDING ONLY, and first: this batch's instruction. */}
+                {isAppend(appendTo) && <BatchGuidanceField value={batchGuidance} onChange={setBatchGuidance} />}
+
                 {/* NO TITLE WHEN ADDING. The set already has one, and these
                     questions join it — the owner: "you shouldnt get to set the
                     question set title when adding questions." Hidden, not just
@@ -1498,6 +1515,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   items={generatedScenarios}
                   requested={interpreted.requested}
                   noun="scenarios"
+                  guidance={guidanceSent}
                   excluded={excluded}
                   savedAs={interpreted.createdSet}
                   onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
