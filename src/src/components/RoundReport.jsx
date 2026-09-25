@@ -167,13 +167,22 @@ export default function RoundReport({
    */
   onComment,
   /**
-   * Show the "Workie had: …" hint (question-background spec §4). HOST-ONLY —
-   * off by default because this one renderer is shared: `PastRound` mounts it
-   * for the host, and `FeedbackRoundPanel` mounts the SAME component, inline,
-   * on a participant's own phone. `WorkieContextHint` reveals only booleans,
-   * never content, but the spec is explicit that even the fact of what Workie
-   * read is the host's alone to see — so the caller must opt in rather than
-   * this component guessing from context which surface it is on.
+   * Show the "Workie had: …" hint (question-background spec §4). Off by
+   * default, and NO CALLER PASSES IT TODAY, because both surfaces this renderer
+   * is mounted on are ones the spec keeps the hint off:
+   *   - `PastRound`, a modal over the host page — the projected stage;
+   *   - `FeedbackRoundPanel`, inline on a participant's own phone.
+   * The host reads the hint on the remote instead (`RemoteSessionPanel`'s round
+   * view and HostRemote's "What we heard"), which do not use this renderer. A
+   * future host-only surface that does — one nobody but the host can see —
+   * opts in here rather than this component guessing where it is.
+   *
+   * WHAT THIS GATES IS THE RENDERING, NOT THE DATA. The `contextUsed` flags are
+   * five booleans, never content, and they are not the host's alone in
+   * transit: the public `GET /games/{id}/ai-summary` returns them, and the
+   * feedback round's report slice (comments.js) hands the whole round, flags
+   * included, to participants' phones. Nothing there renders them. So this
+   * prop keeps them off a screen; it does not keep them off the wire.
    */
   showWorkieContext = false,
 }) {

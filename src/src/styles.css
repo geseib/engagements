@@ -11662,7 +11662,9 @@ body {
 
 /* WorkieContextHint, beside .past-round__voice: same surface (--surface, or
    --bg inline in the player's dusk shell — see FeedbackRoundPanel.css), so the
-   same quiet-line treatment applies rather than a new one. Host-only fact. */
+   same quiet-line treatment applies rather than a new one. Host-only fact, and
+   rendered only when a caller opts in with RoundReport's `showWorkieContext` —
+   which neither PastRound (over the stage) nor FeedbackRoundPanel does. */
 .past-round__summary .workie-context-hint {
   margin: 6px 0 0;
   font-size: 0.85rem;

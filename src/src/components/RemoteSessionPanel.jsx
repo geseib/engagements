@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './RemoteSessionPanel.css';
 import Icon from './Icon';
 import RemoteQuestionBrowser from './RemoteQuestionBrowser';
+import WorkieContextHint from './WorkieContextHint';
 import { remotePanelTabs, rosterListing } from '../config/hostRemote';
 import { roundsFrom, roundSubtitle, hasSummary } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
@@ -238,6 +239,13 @@ export default function RemoteSessionPanel({
                         {hasSummary(entry) && entry.aiSummary?.summaryText && (
                           <p className="hrs-round-summary">{entry.aiSummary.summaryText}</p>
                         )}
+                        {/* WHAT WORKIE HAD, for the host alone (question-
+                            background spec §4). HERE and not in the desktop's
+                            PastRound, because that one is a modal over the
+                            projected stage and this phone is nobody's but the
+                            host's. Flags only; the component returns null for
+                            a round summarised before the flags existed. */}
+                        <WorkieContextHint contextUsed={entry.aiSummary?.contextUsed || null} />
                         {entry.answers.length === 0 ? (
                           <p className="hr-hint">No responses were recorded for this round.</p>
                         ) : (

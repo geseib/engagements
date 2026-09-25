@@ -88,11 +88,12 @@ describe('a briefed round', () => {
 });
 
 // WorkieContextHint — what Workie had, host-only fact, never the content.
-// `RoundReport` is shared: PastRound (the host's dialog) AND FeedbackRoundPanel
-// (a participant's own phone, via PlayerPage) both mount it. So the hint is
-// opt-in via `showWorkieContext` — off by default, which is the participant's
-// case — and only PastRound passes it (see sessionHistory.test.jsx). A
-// participant must never see it, even though it carries no content.
+// `RoundReport` is shared: PastRound (a modal over the projected host page) AND
+// FeedbackRoundPanel (a participant's own phone, via PlayerPage) both mount it,
+// and the spec keeps the hint off both. So it is opt-in via `showWorkieContext`
+// — off by default — and neither passes it (sessionHistory.test.jsx,
+// feedbackRoundPanel.test.jsx, workieContextHint.test.jsx). These pin what the
+// opt-in does for a future host-only surface that uses this renderer.
 describe('what Workie had', () => {
   test('with showWorkieContext, a round shows what Workie had', () => {
     const contextUsed = { background: true, setNote: false, eventDetails: true, hostInstructions: false, briefing: false };

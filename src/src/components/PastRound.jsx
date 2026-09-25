@@ -181,10 +181,13 @@ export default function PastRound({
         onRegenerate={onRegenerate}
         regenerating={busy}
         comments={round.comments || []}
-        // The host's own review dialog — the one surface allowed to see what
-        // Workie had. FeedbackRoundPanel (the participant's inline copy of
-        // this same renderer) never passes this.
-        showWorkieContext
+        /*
+          NO "Workie had" HINT HERE. This dialog only ever opens as a modal
+          over the host page, which is the surface the room may be watching —
+          question-background spec §4 keeps the hint off it. The host reads it
+          on the remote instead (RemoteSessionPanel's round view, and the live
+          "What we heard" block in HostRemote).
+        */
       />
 
       <div className="past-round__nav">

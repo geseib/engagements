@@ -346,26 +346,32 @@ describe('reopening one round', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  // PastRound is the host's own review dialog — the one surface allowed to see
-  // what Workie had (question-background spec §4). It passes RoundReport's
-  // `showWorkieContext` prop; feedbackRoundPanel.test.jsx asserts the opposite
-  // for the participant's copy of the same renderer.
-  test('shows what Workie had, host-only', () => {
+  // rejects: the "Workie had" hint over the projected stage. PastRound is only
+  //          ever mounted as a modal over the host page (GameHostPage.jsx, from
+  //          the session sidebar's rounds list), and question-background spec
+  //          §4 says the hint is never shown on the host page — the room may be
+  //          watching it. The host reads the hint on the remote instead
+  //          (hostRemoteSession.test.jsx); feedbackRoundPanel.test.jsx holds the
+  //          same line for the participant's copy of this renderer.
+  test('never shows what Workie had, even when the round carries the flags', () => {
     const roundsWithContext = roundsFrom(report([
       q('1', {
         questionData: { title: 'First question', detail: 'Some context' },
         aiSummary: {
           summaryText: 'The room agreed.',
           contextUsed: {
-            background: true, setNote: false, eventDetails: false,
-            hostInstructions: false, briefing: false,
+            background: true, setNote: true, eventDetails: true,
+            hostInstructions: true, briefing: true,
           },
         },
       }),
     ]));
     mount({ rounds: roundsWithContext });
-    expect(screen.getByTestId('workie-context-hint').textContent).toBe(
-      'Workie had: question notes ✓ · set note — · event details — · host instructions — · briefing —');
+    // The summary itself IS there, so the absence below is the hint's alone and
+    // not a round that failed to render.
+    expect(screen.getByText('The room agreed.')).toBeInTheDocument();
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+    expect(screen.queryByText(/Workie had:/)).toBeNull();
   });
 
   // rejects: an empty round rendering as a blank panel, which reads as a failed

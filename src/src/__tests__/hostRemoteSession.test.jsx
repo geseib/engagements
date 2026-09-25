@@ -285,6 +285,57 @@ describe('the rounds list', () => {
       .toBeInTheDocument();
   });
 
+  // THE HOST'S AFTER-THE-FACT VIEW OF WHAT WORKIE HAD (question-background spec
+  // §4). The desktop's round review is a modal over the projected stage and must
+  // not carry it (workieContextHint.test.jsx); this phone is the host's alone,
+  // so the round opened here is where it lives. Flags only, never content.
+  it('shows what Workie had inside an opened round', async () => {
+    const withFlags = {
+      ...REPORT,
+      report: {
+        detailedQuestions: REPORT.report.detailedQuestions.map((dq) => (
+          dq.questionNumber === 2
+            ? {
+              ...dq,
+              aiSummary: {
+                ...dq.aiSummary,
+                contextUsed: {
+                  background: true, setNote: false, eventDetails: true,
+                  hostInstructions: false, briefing: false,
+                },
+              },
+            }
+            : dq
+        )),
+      },
+    };
+    serve({ state: 'RESULTS#002', report: withFlags });
+    await connect();
+    await openPanel();
+    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+
+    const pane = screen.getByRole('tabpanel', { name: /rounds/i });
+    // Closed, the round says nothing about it.
+    await within(pane).findByRole('button', { name: /what would you stop doing/i });
+    expect(within(pane).queryByTestId('workie-context-hint')).toBeNull();
+
+    fireEvent.click(within(pane).getByRole('button', { name: /what would you stop doing/i }));
+    expect(within(pane).getByTestId('workie-context-hint').textContent).toBe(
+      'Workie had: question notes ✓ · set note — · event details ✓ · host instructions — · briefing —');
+  });
+
+  // Rejects: a row of dashes under a round summarised before the flags existed,
+  // which would read as "Workie had nothing".
+  it('says nothing about it for a round summarised before the flags existed', async () => {
+    serve({ state: 'RESULTS#002' });
+    await connect();
+    await openPanel();
+    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /what would you stop doing/i }));
+    expect(screen.getByText(/the room wants fewer meetings/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+  });
+
   // A session with no completed round has no report. That is the normal state
   // for the first minutes of every game, not an error worth a red flash.
   it('says why the list is empty rather than showing nothing', async () => {
