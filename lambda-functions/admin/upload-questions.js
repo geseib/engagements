@@ -32,6 +32,7 @@ const { dispatchHouseCheck } = require('./shared/house-check');
 const {
   SURVEY_CATEGORY, SURVEY_CSV_COLUMNS, surveyFieldsFromCells, validateSurvey, itemFields, legacySurveyJsonToCsv,
 } = require('./shared/survey-kinds');
+const { clampBackground } = require('./shared/question-background');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -436,6 +437,7 @@ exports.handler = async (event) => {
     let titleIndex = getColumnIndex('Title');
     let questionDetailIndex = getColumnIndex('QuestionDetail');
     let answerDetailsIndex = getColumnIndex('AnswerDetails');
+    let backgroundIndex = getColumnIndex('Background');
     let detailIndex = getColumnIndex('Detail_lesson'); // Legacy support
     let schoolIndex = getColumnIndex('School');
     let customInstructionIndex = getColumnIndex('CustomInstruction');
@@ -656,6 +658,7 @@ exports.handler = async (event) => {
         const title = cell(values, titleIndex);
         const questionDetail = cell(values, questionDetailIndex);
         const answerDetails = cell(values, answerDetailsIndex);
+        const background = clampBackground(cell(values, backgroundIndex));
         const legacyDetail = cell(values, detailIndex);
         const school = cell(values, schoolIndex);
         const questionCustomInstruction = cell(values, customInstructionIndex);
@@ -759,6 +762,13 @@ exports.handler = async (event) => {
           // property the reveal needs, so the gate is lifted for every type.
           if (finalAnswerDetails) {
             baseQuestion.AnswerDetails = finalAnswerDetails;
+          }
+
+          // BACKGROUND — the author's material for Workie (question-background spec
+          // §1). Same property as the reveal: no player or host payload carries it.
+          // Clamped here, on the way in, by the one rule every door uses.
+          if (background) {
+            baseQuestion.Background = background;
           }
 
           // Add engagement-type specific fields
@@ -1129,6 +1139,7 @@ exports.handler = async (event) => {
         // parsed at line ~297, assembled onto baseQuestion, then silently lost
         // here. Written only when non-empty so ordinary sets are unchanged.
         ...(question.AnswerDetails ? { AnswerDetails: question.AnswerDetails } : {}),
+        ...(question.Background ? { Background: question.Background } : {}),
         CustomInstructions: question.CustomInstructions || '',
         Tags: question.Tags || [],
         // Per-question OVERRIDE of the set's direction, and the Apply round's

@@ -80,6 +80,7 @@ const HEADER_TO_FIELD = {
   custominstructions: 'CustomInstructions',
   custominstruction: 'CustomInstructions',
   answerdetails: 'AnswerDetails',
+  background: 'Background',
   image: 'Image',
   tags: 'Tags',
   roundkind: 'RoundKind',

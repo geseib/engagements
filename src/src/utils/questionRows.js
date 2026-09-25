@@ -193,6 +193,7 @@ function toRow(question, extra = {}) {
     school: text(pick(q, 'School', 'school')),
     customInstruction: text(pick(q, 'CustomInstructions', 'customInstructions', 'CustomInstruction')),
     answerDetails: text(pick(q, 'AnswerDetails', 'answerDetails')),
+    background: text(pick(q, 'Background', 'background')),
     image: text(pick(q, 'Image', 'image')),
     roundKind: text(pick(q, 'RoundKind', 'roundKind')),
     sourceAttribution: text(pick(q, 'SourceAttribution', 'sourceAttribution')),
@@ -498,6 +499,7 @@ function rowsToCsv(rows, engagementType, options = {}) {
 
   const carries = (key) => live.some((r) => text(r[key]) !== '');
   const carriesAnswerDetails = carries('answerDetails');
+  const carriesBackground = carries('background');
   const carriesImages = carries('image');
   const carriesRoundKind = carries('roundKind');
   const carriesAttribution = carries('sourceAttribution');
@@ -505,6 +507,7 @@ function rowsToCsv(rows, engagementType, options = {}) {
   const carriesSourceSk = carries('sourceQuestionSk');
 
   const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '')
+    + (carriesBackground ? ',Background' : '')
     + (carriesImages ? ',Image' : '')
     + (carriesRoundKind ? ',RoundKind' : '')
     + (carriesAttribution ? ',SourceAttribution' : '')
@@ -513,6 +516,7 @@ function rowsToCsv(rows, engagementType, options = {}) {
 
   const optionalCells = (r) =>
     (carriesAnswerDetails ? `,${quoted(r.answerDetails)}` : '')
+    + (carriesBackground ? `,${quoted(r.background)}` : '')
     + (carriesImages ? `,${quoted(r.image)}` : '')
     + (carriesRoundKind ? `,${quoted(r.roundKind)}` : '')
     + (carriesAttribution ? `,${quoted(r.sourceAttribution)}` : '')

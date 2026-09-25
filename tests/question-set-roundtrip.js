@@ -357,6 +357,20 @@ const ART_CSV = [
 ].join('\n');
 
 /**
+ * Call-and-answer carrying Background (question-background spec §1). The second row's
+ * note holds a comma, a double quote and a line break — the three things a CSV writer
+ * gets wrong — and the third row has none, so the column is optional per row.
+ */
+const BACKGROUND_CSV = [
+  'Category,Question#,Title,Detail_lesson,School,CustomInstruction,AnswerDetails,Background,Tags',
+  '"Delivery",1,"WHAT SLOWS A RELEASE","","Engineering","Name one thing.","",'
+    + '"Version control records every change so a team can see who changed what.","release"',
+  '"Delivery",2,"WHEN DO WE BRANCH","","Engineering","Name one thing.","",'
+    + '"Trunk-based teams merge daily; others keep ""release"" branches.\nBoth work.","branching"',
+  '"Delivery",3,"WHO REVIEWS CODE","","Engineering","Name one thing.","","","review"',
+].join('\n');
+
+/**
  * Call-and-answer carrying the two columns Slice 2 added: the per-question
  * RoundKind override and, for Apply rounds, whose material the question holds.
  *
@@ -500,6 +514,48 @@ const WAVELENGTH_CSV = [
         ['sets/roundtripart/smile.jpg', 'sets/roundtripart/night.jpg', 'sets/roundtripart/wave.jpg']));
     check('category-relative Question# numbering is not rewritten', () =>
       assert.deepStrictEqual(t.after.map((r) => r.QuestionNumber), [1, 2, 1]));
+  }
+
+  // ==== call-and-answer, carrying Background =================================
+  say('\n  -- call-and-answer (Background) --');
+  resetDb();
+  {
+    const t = await roundTrip('Roundtrip Background', 'call-and-answer', BACKGROUND_CSV);
+    // rejects: an importer that never writes Background (the vacuous pass).
+    check('the seeded set carries Background on the rows that have one', () =>
+      assert.deepStrictEqual(t.before.map((r) => r.Background || ''), [
+        'Version control records every change so a team can see who changed what.',
+        'Trunk-based teams merge daily; others keep "release" branches.\nBoth work.',
+        '',
+      ]));
+    // rejects: the exporter dropping the column — the WrongAnswer* defect on a new column.
+    check('the exported header names Background after AnswerDetails', () => {
+      const cols = t.header.split(',');
+      assert.ok(cols.includes('Background'), t.header);
+    });
+    check('every question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+    // rejects: the console editor serialising differently from the exporter.
+    const res = await getQuestions({ ...adminContext(), pathParameters: { setId: t.setId }, queryStringParameters: {} });
+    const rows = editableRows(JSON.parse(res.body));
+    check('the console serialises Background byte-identically to download-question-set.js', () =>
+      assert.strictEqual(rowsToCsv(rows, 'call-and-answer'), t.csv));
+  }
+
+  // ==== an over-long Background is clamped on import ========================
+  say('\n  -- Background longer than 600 characters --');
+  resetDb();
+  {
+    const long = 'Sentence one is here. '.repeat(40).trim();   // ~880 characters
+    const csv = [
+      'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Background,Tags',
+      `"Delivery",1,"A LONG NOTE","","Engineering","Name one thing.","${long}","long"`,
+    ].join('\n');
+    const t = await roundTrip('Roundtrip Long Background', 'call-and-answer', csv);
+    check('it is stored at 600 characters or fewer, ending on a sentence', () => {
+      const bg = t.before[0].Background;
+      assert.ok(bg.length <= 600 && bg.endsWith('here.'), `${bg.length}: …${bg.slice(-15)}`);
+    });
   }
 
   // ==== call-and-answer, carrying the round-kind columns ===================
