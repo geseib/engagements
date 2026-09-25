@@ -1,11 +1,13 @@
 /**
  * ANYONE WHO KNOWS A FOUR-DIGIT CODE CAN DRIVE SOMEBODY ELSE'S LIVE SESSION.
  *
- * Eight routes carry no authorizer in template-clean.yaml:
+ * Eight routes carried no authorizer in template-clean.yaml:
  *
  *   POST /games                              create a session
  *   POST /games/{gameId}/start               open it for joining
- *   POST /games/{gameId}/start-question      -- no frontend caller
+ *   POST /games/{gameId}/start-question      -- no frontend caller; since
+ *                                               deleted with its handler
+ *                                               (tests/state-row-never-replaced.js)
  *   POST /games/{gameId}/start-vote          move the room to voting
  *   POST /games/{gameId}/next-question       advance the round
  *   POST /games/{gameId}/toggle-category     change what gets asked
@@ -84,7 +86,6 @@ function check(label, fn) {
 const MUST_BE_CLOSED = [
   ['POST', '/games'],
   ['POST', '/games/{gameId}/start'],
-  ['POST', '/games/{gameId}/start-question'],
   ['POST', '/games/{gameId}/start-vote'],
   ['POST', '/games/{gameId}/next-question'],
   ['POST', '/games/{gameId}/toggle-category'],

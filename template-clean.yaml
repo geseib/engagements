@@ -320,56 +320,6 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
-  StartQuestionFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub '${StackName}-start-question'
-      CodeUri: lambda-functions/websocket/
-      Handler: start-question.handler
-      Events:
-        StartQuestion:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RestApi
-            Path: /games/{gameId}/start-question
-            Method: post
-            # HOST/ADMIN ONLY. This route was PUBLIC.
-            #
-            # A four-digit join code is not a secret — it is on the projector and
-            # typed by everyone in the room. Unauthenticated, every participant, and
-            # anyone they forward the code to, could drive somebody else's live
-            # session: advance the round out from under the host, push the room into
-            # voting before people had answered, or change which categories get
-            # asked. POST /games is the other kind of problem — an unauthenticated
-            # creator leaves a session with no owner to attribute and no org to bill.
-            #
-            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
-            # a signed-in host surface, but they all used plain `fetch`, which sends
-            # no Authorization header. Attaching this first would have 401'd the
-            # host's own advance button and frozen the room mid-round. GameHostPage,
-            # HostRemote and QuickstartMenu moved to authFetch together — including
-            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
-            # are built in config/hostRemote.js and so name no route here.
-            #
-            # The GROUP check is NOT here. requiredGroupsForRoute answers
-            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
-            # ABOVE the generic public rule — so start-vote is not handed to
-            # path.includes('vote'). tests/session-control-routes-authorization.js
-            # pins both halves.
-            Auth:
-              Authorizer: CognitoAuthorizer
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref GameTable
-        - Statement:
-          - Effect: Allow
-            Action:
-              - execute-api:ManageConnections
-            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
-      Tags:
-        Environment: !Ref Environment
-        StackName: !Ref StackName
-
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -2650,7 +2600,7 @@ Resources:
             # the guard is in the handler now that it can mean something.
             #
             # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO, for the
-            # reason recorded on StartQuestionFunction above. Every caller is a
+            # reason recorded on StartVoteFunction above. Every caller is a
             # signed-in host surface — GameHostPage and HostRemote are both
             # behind ProtectedRoute — but three of the four used plain `fetch`.
             # `loadRounds` is the sharp one: it fires from a useEffect when the

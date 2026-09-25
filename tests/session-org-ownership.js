@@ -172,7 +172,6 @@ for (const rel of [
   'lambda-functions/game/stage-focus.js',
   'lambda-functions/game/question-queue.js',
   'lambda-functions/game/question-exclusions.js',
-  'lambda-functions/websocket/start-question.js',
   'lambda-functions/websocket/start-vote.js',
   // The SECOND writer of PersonaId. update-game.js has asked since 2026-08-27;
   // this route writes the same attribute through PUT /games/{gameId}/persona and
