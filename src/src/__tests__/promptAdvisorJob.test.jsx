@@ -29,12 +29,16 @@ import {
   ADVISOR_GIVE_UP_MS, ADVISOR_POLL_INTERVAL_MS, describeAdviceProgress, describeAdviceStartFailure,
 } from '../utils/promptAdvisorJob';
 
-const PROMPT = {
-  promptId: 'p1',
+/**
+ * The editor's draft, which is what the workbench works on (2026-09-25) —
+ * two halves, so the AI's items can be ticked and applied.
+ */
+const DRAFT = {
   name: 'Lessons Learned',
   gameType: 'call-and-answer',
   category: 'lessons-learned',
-  template: 'Summarise {responsesText}',
+  instructions: 'You are Workie.\n\n**The Responses:**\n{responsesText}',
+  outputFormat: '## Summary\nTwo sentences.',
 };
 
 /** A fetch Response. `body === undefined` is a gateway page: .json() throws. */
@@ -79,9 +83,11 @@ const failed = (error) => reply(200, { jobId: 'job-1', status: 'error', phase: '
 function renderAdvisor(props = {}) {
   return render(
     <AIPromptAdvisor
-      prompt={PROMPT}
+      draft={DRAFT}
+      report={null}
+      onApply={jest.fn()}
+      onBack={jest.fn()}
       onClose={jest.fn()}
-      onApplyImprovedPrompt={jest.fn()}
       pollIntervalMs={5}
       giveUpMs={5000}
       {...props}
@@ -89,7 +95,8 @@ function renderAdvisor(props = {}) {
   );
 }
 
-const run = () => fireEvent.click(screen.getByRole('button', { name: /Run analysis/i }));
+const runButton = () => screen.getByTestId('pmgr-wb-run');
+const run = () => fireEvent.click(runButton());
 const notice = () => screen.getByTestId('pmgr-advisor-notice');
 
 beforeEach(() => {
@@ -108,7 +115,9 @@ describe('the advisor runs as a job', () => {
 
     const post = authFetch.mock.calls.find(([, init]) => init && init.method === 'POST');
     expect(post[0]).toMatch(/admin\/ai-prompt-advisor$/);
-    expect(JSON.parse(post[1].body)).toMatchObject({ analysisType: 'review', existingPromptId: 'p1' });
+    // The DRAFT, never the saved copy's id — that made the server review the saved text instead.
+    expect(JSON.parse(post[1].body)).toMatchObject({ analysisType: 'review', instructions: DRAFT.instructions });
+    expect(JSON.parse(post[1].body)).not.toHaveProperty('existingPromptId');
     // rejects: reading the answer off the POST — the analysis only ever comes from the poll.
     expect(gets.length).toBeGreaterThanOrEqual(3);
     expect(gets.every((u) => /admin\/ai-prompt-advisor\/job-1$/.test(u))).toBe(true);
@@ -121,7 +130,8 @@ describe('the advisor runs as a job', () => {
 
     const progress = await screen.findByTestId('pmgr-advisor-progress');
     await waitFor(() => expect(progress).toHaveTextContent(/Analysing the prompt/));
-    expect(screen.getByRole('button', { name: /Analysing/i })).toBeDisabled();
+    expect(runButton()).toHaveTextContent(/Working/);
+    expect(runButton()).toBeDisabled();
     unmount();
   });
 
@@ -142,7 +152,7 @@ describe('a failure says what the server said', () => {
     await waitFor(() => expect(notice()).toHaveTextContent(/cut off at its 16,000-token limit/));
     expect(notice()).not.toHaveTextContent(/Failed to analyze prompt/);
     expect(notice()).toHaveTextContent(/untouched/);
-    expect(screen.getByRole('button', { name: /Run analysis/i })).toBeEnabled();
+    expect(runButton()).toBeEnabled();
   });
 
   test('a refused start shows the body the server sent', async () => {

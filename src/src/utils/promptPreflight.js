@@ -218,23 +218,37 @@ const CHARS_PER_WORD = 6;
 
 /**
  * `max_tokens` is the only output constraint that is actually enforced, and it
- * is enforced by the API rather than by the prompt. Confirmed in the code as it
- * stands: get-ai-summary.js:2267-2276 — Haiku 4.5
- * (`us.anthropic.claude-haiku-4-5-20251001-v1:0`), `max_tokens: 1024`,
- * `temperature: 0.5`. There is no second model in the chain; a failure goes
- * straight to the static fallback (:2334).
+ * is enforced by the API rather than by the prompt. The figures are the ones
+ * `invokeHaiku` in get-ai-summary.js sends — Haiku 4.5, `max_tokens: 2048`,
+ * `temperature: 0.7` — and __tests__/promptEngineFactsPinned.test.js reads
+ * that source and fails when they differ. They had: this said 1024 and 0.5
+ * after the engine moved to 2048 (a five-section Workie lost its Next Steps at
+ * 1024) and 0.7, so every "under 900 words" cap was reported as enforced by the
+ * token limit when it was not. There is no second model in the chain; a
+ * failure goes straight to the static fallback.
  *
- * ~750 words for 1024 tokens is the hypothesis's own figure (§6 item 4:
- * *"max_tokens: 1024 is roughly 750 words, so the cap is not enforced by the
- * token limit — the model has to enforce it"*).
+ * Words per token is the hypothesis's own ratio (§6 item 4: *"max_tokens: 1024
+ * is roughly 750 words"*), applied to the budget that is actually sent.
+ *
+ * Exported as SUMMARY_MODEL because the workbench's export (utils/
+ * workieBundle.js) tells an outside agent the same facts.
  */
 const MODELS = {
-  'haiku-4.5': { label: 'Claude Haiku 4.5', maxTokens: 1024, approxWords: 750 },
+  'haiku-4.5': {
+    label: 'Claude Haiku 4.5',
+    bedrockId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    maxTokens: 2048,
+    temperature: 0.7,
+    approxWords: 1500,
+  },
 };
 const PRODUCTION_MODEL = 'haiku-4.5';
+export const SUMMARY_MODEL = Object.freeze({ ...MODELS[PRODUCTION_MODEL] });
 
 const modelFor = (targetModel) => {
-  const key = String(targetModel || '').toLowerCase();
+  // Model ids spell the version with a dash (`claude-haiku-4-5-20251001`) and
+  // the table with a dot; read both, or every id the editor passes is "assumed".
+  const key = String(targetModel || '').toLowerCase().replace(/(\d)-(\d)/g, '$1.$2');
   const hit = Object.keys(MODELS).find((k) => key === k || key.includes(k));
   return { ...MODELS[hit || PRODUCTION_MODEL], assumed: !hit };
 };
@@ -710,14 +724,20 @@ function outputSectionDefects(raw) {
 }
 
 /**
- * The headings parseAIResponse recognises, copied from get-ai-summary.js:95-99.
+ * The headings parseAIResponse recognises — a copy of SECTION_SYNONYMS in
+ * get-ai-summary.js, which this bundle cannot import. Cited by NAME, never by
+ * line: the line numbers this used to carry (":95-99, :162-163") had gone
+ * stale, and __tests__/promptEngineFactsPinned.test.js now reads the engine's
+ * table and fails when this copy differs.
+ *
  * A declared shape is free to use none of them — that is what `customShape`
  * exists for, and the whole reply becomes `summaryText`. But `discussionQuestions`
- * and `nextSteps` are filled ONLY by a synonym match (:162-163), and those two
- * fields drive the host remote (config/hostRemote.js:536) and the panel list at
- * GameHostPage.jsx:4792. A shape that matches neither leaves both empty.
+ * and `nextSteps` are filled ONLY by a synonym match, and those two fields drive
+ * the host's phone remote (config/hostRemote.js, fieldNotesFrom), the stage's
+ * structured read-back (AISummaryStatus) and the round and session reports. A
+ * shape that matches neither leaves both empty.
  */
-const SECTION_SYNONYMS = {
+export const SECTION_SYNONYMS = {
   summary: /^(summary|results?|overview|insights?|analysis|key\s*lessons?|key\s*takeaways?|takeaways?|themes?|common\s*themes?|dive\s*deep|game\s*status|challenge)\b/i,
   discussion: /^(discussion\s*(questions?|topics?|prompts?)|questions?\s*(to\s*discuss)?|talking\s*points?|prompts?)\b/i,
   nextSteps: /^(next\s*steps?|actions?|action\s*items?|recommendations?|strategic\s*recommendations?|implementation(\s*priority)?)\b/i,
@@ -1147,11 +1167,11 @@ export function preflightPrompt(input = {}) {
         'structured-fields-empty',
         `${emptied.map((k) => labels[k]).join(' and ')} will come back empty on every round.`,
         'The declared headings are honoured and the markdown renders exactly as written — that part '
-          + 'is fine. But parseAIResponse fills discussionQuestions and nextSteps only from a '
-          + 'heading that matches SECTION_SYNONYMS (get-ai-summary.js:95-99, :162-163), and none of '
-          + 'these headings does. Those two fields drive the phone remote '
-          + '(config/hostRemote.js:536) and the list at GameHostPage.jsx:4792, so both go quiet '
-          + 'while the projector looks correct.',
+          + 'is fine. But parseAIResponse (get-ai-summary.js) fills discussionQuestions and nextSteps '
+          + 'only from a heading that matches its SECTION_SYNONYMS table, and none of these headings '
+          + 'does. Those two fields drive the host\'s phone remote (its topics and next steps) and '
+          + 'the lists in the round and session reports, so all of them go quiet while the projector '
+          + 'looks correct.',
         headings.join(' · '),
         'If those surfaces matter, name a section so it matches — "Discussion topics" and "Next '
           + 'steps" both do. If they do not, this costs nothing and can be ignored.'
@@ -1220,10 +1240,10 @@ export function preflightPrompt(input = {}) {
       'word-cap-not-enforced',
       `The ${n(cap.words)}-word cap is a request, not a limit — the model can write about `
         + `${n(model.approxWords)} words before anything stops it.`,
-      `${model.label} runs with max_tokens: ${n(model.maxTokens)} (get-ai-summary.js:2271-2276), `
+      `${model.label} runs with max_tokens: ${n(model.maxTokens)} (invokeHaiku, get-ai-summary.js), `
         + `which is roughly ${n(model.approxWords)} words. Nothing truncates below that, so the `
         + `${n(cap.words)}-word cap is enforced only by the model\'s own compliance, at `
-        + 'temperature 0.5. The measured session needed three explicit trimming passes to land '
+        + `temperature ${model.temperature}. The measured session needed three explicit trimming passes to land `
         + 'under 400 on Opus; §6 of the simulated-session document ranks the cap fourth most '
         + `likely to break on Haiku.${model.assumed ? ' No targetModel was given, so production\'s is assumed.' : ''}`,
       cap.quote,

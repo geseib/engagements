@@ -555,6 +555,8 @@
 
 .pmgr-modal-head {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   align-items: center;
   padding: 20px;
@@ -786,31 +788,14 @@
 
 /* ------------------------------------------------------------- the advisor -- */
 
-.pmgr .prompt-info {
-  margin-bottom: 24px;
-}
+/* (Its `.prompt-info` / `.prompt-meta` header went when the advisor became the
+   editor's Improve view: the dialog's own title names the prompt now.) */
 
-.pmgr .prompt-info h3 {
-  margin: 0 0 8px 0;
-}
-
-.pmgr .prompt-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.pmgr .prompt-meta .badge {
-  padding: 4px 8px;
-  background: var(--pc-paper);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--pc-muted);
-}
-
+/* Three choices since Simplify joined (2026-09-25): one row while the dialog is
+   wide enough, wrapping rather than squeezing when it is not. */
 .pmgr .analysis-types {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -1074,6 +1059,146 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--pc-ink);
+}
+
+/* ------------------------------------------------------------ the workbench --
+   docs/superpowers/specs/2026-09-25-prompt-workbench-design.md. The editor's
+   dialog has three views — the form, Improve, and an uploaded file's review —
+   and each non-form view is the dialog's column: a scrolling body and a footer
+   that cannot scroll away, exactly as the advisor's own dialog was.
+
+   Every colour is an existing pairing on --pc-card (header table): the lowest
+   is --pc-muted at 6.06:1; --pc-link 5.91:1 and --pc-silent 7.42:1 (measured) carry the
+   "where it gets fixed" line.
+*/
+
+.pmgr-wb-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* `display: flex` above outranks the browser's own [hidden] rule, so a hidden
+   view would still draw. Restated, and pinned by promptManagerScope's CSS read. */
+.pmgr-wb-view[hidden] {
+  display: none;
+}
+
+/* The three doors, in the editor's head beside its title. `margin-left: auto`
+   on the group rather than the head's own spacing, and wrapping, so on a narrow
+   dialog the group drops under the title instead of pushing the × off the edge
+   (the hard rule on row action groups, QuestionSetsPanel.css). */
+.pmgr .pmgr-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* A click in the head is answered just under it, outside the scrolling form. */
+.pmgr .pmgr-tools-notice {
+  flex: none;
+  padding: 12px 20px 0;
+}
+
+.pmgr .pmgr-tools .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* WHERE AN ITEM GETS FIXED — the line whose absence was the owner's confusion.
+   Coloured by route so a glance sorts the list: blue for what Improve can do,
+   amber for what only the editor can. */
+.pmgr .pmgr-wb-where {
+  font-size: var(--pc-t-label);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--pc-muted);
+}
+
+.pmgr .pmgr-wb-where--improve {
+  color: var(--pc-link);
+}
+
+.pmgr .pmgr-wb-where--editor {
+  color: var(--pc-silent);
+}
+
+/* An item no rewrite can fix has no tick box. It keeps the box's indent, so
+   the list still reads as one column, and it is not a click target. */
+.pmgr .pmgr-advice-label--fixed {
+  padding-left: 46px;
+  cursor: default;
+}
+
+/* The rewrite's verdict: fixed, still there, new — and where the last two get fixed. */
+.pmgr .pmgr-wb-where-inline {
+  font-weight: 600;
+  color: var(--pc-silent);
+}
+
+.pmgr .pmgr-rewrite-verdict-group {
+  margin: 8px 0 0;
+}
+
+.pmgr .pmgr-rewrite-verdict-group h5 {
+  margin: 0 0 4px;
+  font-size: var(--pc-t-label);
+  font-weight: 600;
+  color: var(--pc-muted);
+}
+
+/* OUTPUT SECTIONS (PromptOutputSectionsField.jsx): heading, guidance, remove. */
+.pmgr .pmgr-sections-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pmgr .pmgr-section-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.pmgr .pmgr-section-remove {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--pc-rule-strong);
+  border-radius: 4px;
+  color: var(--pc-muted);
+  font-size: var(--pc-t-head);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pmgr .pmgr-section-remove:hover {
+  color: var(--pc-ink);
+  border-color: var(--pc-silent);
+}
+
+.pmgr .pmgr-section-remove:focus-visible {
+  outline: 2px solid var(--pc-silent);
+  outline-offset: 2px;
+}
+
+.pmgr .pmgr-sections-default {
+  margin: 0 0 8px;
+  font-size: var(--pc-t-body);
+  color: var(--pc-muted);
+}
+
+.pmgr .pmgr-sections-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* -------------------------------------------------- the template textarea -- */

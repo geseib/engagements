@@ -379,8 +379,8 @@ describe('tier two — saves, runs, says nothing', () => {
 
   test('a custom shape matching no discussion or next-steps heading empties two host surfaces', () => {
     // parseAIResponse fills discussionQuestions and nextSteps only from a
-    // SECTION_SYNONYMS match (get-ai-summary.js:95-99, :162-163); those feed
-    // config/hostRemote.js:536 and GameHostPage.jsx:4792. rejects: treating a
+    // SECTION_SYNONYMS match (get-ai-summary.js); those feed the host remote
+    // and the reports (promptEngineFactsPinned.test.js pins the table). rejects: treating a
     // valid declared shape as automatically fine — it parses, it renders, and
     // the phone goes blank.
     const report = preflightPrompt(ok({
@@ -407,7 +407,8 @@ describe('tier two — saves, runs, says nothing', () => {
 
 describe('tier three — worth knowing before you commit to it', () => {
   test('a 400-word cap is measured against what max_tokens actually allows', () => {
-    // get-ai-summary.js:2267-2276 — Haiku 4.5, max_tokens 1024, ~750 words.
+    // invokeHaiku in get-ai-summary.js — Haiku 4.5, max_tokens 2048, ~1,500 words
+    // (promptEngineFactsPinned.test.js reads the engine for the figures).
     // Nothing truncates below that, so the cap is enforced only by the model.
     // rejects: quoting a model or a token budget that is not the one in the hot
     // path — the figure is the whole content of the finding.
@@ -415,14 +416,14 @@ describe('tier three — worth knowing before you commit to it', () => {
     const cap = byCode(report.advisory, 'word-cap-not-enforced');
     expect(cap).toHaveLength(1);
     expect(cap[0].title).toContain('400-word cap');
-    expect(cap[0].detail).toContain('1,024');
+    expect(cap[0].detail).toContain('2,048');
     expect(cap[0].detail).toContain('Claude Haiku 4.5');
   });
 
   test('a cap above what the model can produce is not worth mentioning', () => {
-    // rejects: firing on every stated cap. A 900-word cap IS enforced — by
-    // max_tokens, at about 750 — so there is nothing to warn about.
-    const report = preflightPrompt(ok({ outputFormat: 'Keep it under 900 words.' }));
+    // rejects: firing on every stated cap. A 1,600-word cap IS enforced — by
+    // max_tokens, at about 1,500 — so there is nothing to warn about.
+    const report = preflightPrompt(ok({ outputFormat: 'Keep it under 1600 words.' }));
     expect(codes(report.advisory)).not.toContain('word-cap-not-enforced');
   });
 

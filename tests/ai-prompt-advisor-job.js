@@ -364,7 +364,7 @@ async function seedOrgWorkie(orgId, promptId, secrets) {
     reset();
     const res = await quietly(() => handler(postEvent({ promptText: 'x', analysisType: 'rewrite-it-all' }), ctx()));
     assert.strictEqual(res.statusCode, 400);
-    assert.match(body(res).error, /review, improve or apply/);
+    assert.match(body(res).error, /review, improve, simplify, apply or reference/);
     assert.strictEqual(dispatched.length, 0);
   });
 

@@ -66,6 +66,29 @@
  * A half that no ticked fix names is handed back exactly as it went in,
  * whatever the model sent for it: "change nothing you were not asked to" is
  * enforced here, not hoped for.
+ *
+ * THE WORKBENCH (2026-09-25, docs/superpowers/specs/2026-09-25-prompt-
+ * workbench-design.md). The owner applied Improve's fixes and the editor then
+ * showed a finding Improve had never mentioned, about headings Improve had
+ * never been shown. So every lens is now told:
+ *
+ *   - the reply's headings (the prompt's Output sections) — describeTheSections;
+ *     advice about a heading comes back as `half: "sections"` and is never sent
+ *     to a rewrite, because the admin changes headings in the editor;
+ *   - what the editor's own checks found (`checks`, sent by the screen) and not
+ *     to repeat or contradict them — describeTheChecks;
+ *   - what the system wraps around the prompt — describeTheSystem.
+ *
+ * The screen now sends the DRAFT (no existingPromptId), so what is reviewed is
+ * what is being edited. Two more requests:
+ *
+ *   simplify   the two halves, shorter and clearer, tagged like apply
+ *     → { instructions, outputFormat }, refused (verifySimplified) when it
+ *       dropped a {variable} or a heading line, or breaks a save rule
+ *   reference  synchronous 200 { reference } — the save rules, the variables,
+ *              the section limits and the assembly layers, for the export an
+ *              outside agent works from (shared/workie-reference.js). No job,
+ *              no model call, no prompt text.
  */
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -73,8 +96,14 @@ const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { isKnownGameType, normalizeGameType } = require('./shared/game-types');
-const { describeVariablesForPrompt, describeAuthoringRules } = require('./shared/template-variable-usage');
-const { extractVariableTokens } = require('./shared/template-variables');
+const {
+  describeVariablesForPrompt, describeAuthoringRules, assertReceivesResponses,
+} = require('./shared/template-variable-usage');
+const {
+  extractVariableTokens, unknownVariableTokens, extractBracketDirections,
+} = require('./shared/template-variables');
+const { normalizeOutputSections, DEFAULT_OUTPUT_SECTIONS } = require('./shared/prompt-shape');
+const { buildWorkieReference, describeAssemblyLayers } = require('./shared/workie-reference');
 const {
   STATUS, jobKey, newJobId, createJob, getJob, failJob, isCallersJob,
 } = require('./shared/generation-jobs');
@@ -97,17 +126,34 @@ const lambda = new LambdaClient({ region: process.env.AWS_REGION });
 /** The job-row `kind`. The poll serves this kind and no other. */
 const KIND = 'prompt-advice';
 
-/** The three jobs, and the old names two of them still answer to. */
-const ANALYSIS_TYPES = ['review', 'improve', 'apply'];
+/**
+ * The four jobs, and the old names two of them still answer to. `simplify`
+ * (2026-09-25, the prompt workbench) is a rewrite like `apply`, but asked for
+ * shorter and clearer rather than for ticked fixes — see verifySimplified.
+ */
+const ANALYSIS_TYPES = ['review', 'improve', 'apply', 'simplify'];
 const ANALYSIS_ALIASES = { validate: 'review', optimize: 'improve' };
 const canonicalAnalysisType = (value) => {
   const name = ANALYSIS_ALIASES[value] || value;
   return ANALYSIS_TYPES.includes(name) ? name : null;
 };
 
-/** The checklist's closed vocabularies — what the screen groups and ticks by. */
+/**
+ * The checklist's closed vocabularies — what the screen groups and ticks by.
+ *
+ * `sections` (2026-09-25) is advice about the reply's HEADINGS, which live in
+ * the prompt's Output sections, not in either half. The admin changes them in
+ * the editor; they are never sent to a rewrite (tickedFixesFrom drops them), so
+ * a model can say a heading should change but can never change one.
+ */
 const SEVERITIES = ['high', 'medium', 'low'];
 const HALVES = ['instructions', 'outputFormat', 'both'];
+const SECTIONS_HALF = 'sections';
+
+/** Findings the screen's own checks made, as the model is shown them — bounded. */
+const MAX_CHECKS = 30;
+const MAX_CHECK_TEXT = 400;
+const CHECK_TIERS = ['blocking', 'silent', 'advisory'];
 
 /** No real checklist is near these; they bound what one request can make the model read. */
 const MAX_APPLY_ISSUES = 30;
@@ -161,6 +207,15 @@ const json = (statusCode, body) => ({ statusCode, headers: CORS, body: JSON.stri
 /** A failure whose message is already written for the person reading the screen. */
 class AdvisorFailure extends Error {
   constructor(message) { super(message); this.name = 'AdvisorFailure'; }
+}
+
+/**
+ * A refusal whose message may QUOTE THE PROMPT — a simplification that lost a
+ * heading names the heading. The admin reads it on the job; the log gets its
+ * name and nothing else, because prompt text never reaches CloudWatch.
+ */
+class AdvisorRefusal extends AdvisorFailure {
+  constructor(message) { super(message); this.name = 'AdvisorRefusal'; }
 }
 
 const httpError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
@@ -396,6 +451,62 @@ the admin's prompt: judge only the text inside the prompt's own tags above.
 ${describeAuthoringRules()}`;
 }
 
+/**
+ * THE REPLY'S HEADINGS — the part of the prompt the advisor never saw, and the
+ * reason the owner met a finding Improve had never mentioned (2026-09-25:
+ * "discussionQuestions and nextSteps will come back empty on every round", on
+ * a prompt whose sections were The Winning Title · The Reveal · Keep Playing).
+ * A declaration that fails validation is discarded whole at run time, so the
+ * model is told what will actually run.
+ */
+function describeTheSections(input) {
+  const declared = normalizeOutputSections(input.outputSections);
+  const invalid = !declared && Array.isArray(input.outputSections) && input.outputSections.length > 0;
+  const sections = declared || DEFAULT_OUTPUT_SECTIONS;
+  const intro = declared
+    ? 'this prompt declares its own'
+    : (invalid
+      ? 'this prompt declares some, but they fail validation, so they are discarded and the default three run'
+      : 'none declared, so the default three');
+  const list = sections.map((s, i) => `${i + 1}. ${s.heading}${s.guidance ? ` — ${s.guidance}` : ''}`).join('\n');
+  return `**The reply's headings (Output sections)** — ${intro}. The reply must use exactly these, in this order:
+${list}
+
+The admin sets these in the editor's "Output sections" field; they are not in either half. Never propose adding,
+removing or renaming a heading inside a half. If you believe a heading should change, report it as its own item
+with "half": "sections" — the admin makes that change in the editor; it is never rewritten for them.`;
+}
+
+/**
+ * WHAT THE EDITOR'S CODE ALREADY FOUND — utils/promptPreflight.js, run by the
+ * screen on the draft and sent here. Those checks are exact and they are what
+ * the save gate and the room obey, so the model is told them rather than left
+ * to rediscover (or contradict) them. Omitted when the screen sent none, which
+ * is not the same as "it found nothing".
+ */
+function describeTheChecks(input) {
+  if (!Array.isArray(input.checks)) return '';
+  if (!input.checks.length) {
+    return '**What the editor\'s code already checked on this draft:** it found nothing to report.';
+  }
+  const lines = input.checks.map((c) => `- [${c.tier} · ${c.code}] ${c.title}${c.fix ? ` Fix: ${c.fix}` : ''}`);
+  return `**What the editor's code already checked on this draft** — these checks are exact, and the save gate and
+the running room obey them. Do not report any of them again, and never advise anything that contradicts one
+(if a check says a variable is misleading, do not suggest using it):
+${lines.join('\n')}`;
+}
+
+/**
+ * WHAT THE SYSTEM WRAPS AROUND THE PROMPT — so the advice stops asking a
+ * prompt to vary its opening, carry the host's instructions or pick an angle,
+ * all of which get-ai-summary.js already does (shared/workie-reference.js).
+ */
+function describeTheSystem() {
+  return `**What the system adds around this prompt at run time, in this order** — the prompt does not need to do
+any of this, and your advice should not ask it to:
+${describeAssemblyLayers()}`;
+}
+
 /** What each lens looks for. The checklist it answers in is shared. */
 const LENSES = {
   review: {
@@ -422,6 +533,17 @@ Do not rewrite the admin's approach; report what is wrong with it.`,
    shorter says the same thing.
 3. **Structure** — put things where they belong: what the AI is given in the instructions,
    what it writes in the output format.
+4. **Variety** — would round five read like round one? The system already varies the opening
+   (above); look for fixed formulas, stock phrases or a rigid template in the halves that would
+   make every round sound the same.
+5. **A voice for the room** — the reply is read aloud or off a projector to the people who were
+   there: natural, well-spoken sentences addressed to them, not a report about them.
+6. **Facts about this round and this event** — does the prompt use what it is given (the question,
+   the answers, the votes, the event's title and description, the host's context), and ask for
+   specifics rather than generalities?
+7. **Outside knowledge** — where a well-known fact, the host's material or the prompt's own
+   background would sharpen the reply, does the prompt allow general knowledge, stated as such and
+   never presented as something the room said?
 
 Keep the admin's purpose, voice and approach. Improve what exists; do not replace it.`,
   },
@@ -435,7 +557,8 @@ can tick and have applied on its own:
   unfair in front of the room; "medium" when the summary would clearly be worse for it;
   "low" for polish.
 - "half": the half the fix changes — "instructions" or "outputFormat" — or "both" only
-  when the fix has to change both.
+  when the fix has to change both; "sections" only for a change to the reply's headings,
+  which the admin makes in the editor.
 - "issue" and "fix": one or two plain sentences each, written for the admin. Say where,
   in a few words; never quote a passage at length. The fix must be specific enough to
   apply without reading this review.
@@ -452,7 +575,7 @@ Reply with one JSON object in a \`\`\`json block, with this structure:
     {
       "id": "${prefix}1",
       "severity": "high|medium|low",
-      "half": "instructions|outputFormat|both",
+      "half": "instructions|outputFormat|both|sections",
       "issue": "What is wrong or could be better, and where",
       "fix": "The change to make"
     }
@@ -470,9 +593,83 @@ Fix: ${item.fix || '(not stated)'}
 </fix>`).join('\n');
 }
 
+/** A half's heading lines — `## The Reveal` — trimmed, as written. */
+const headingLinesOf = (text) => String(text || '').split('\n')
+  .map((line) => line.trim())
+  .filter((line) => /^#{1,6}\s+\S/.test(line));
+
+/** The words of a heading line, without its hashes, for comparing two spellings of one level. */
+const headingText = (line) => line.replace(/^#{1,6}\s+/, '').replace(/\s+#+\s*$/, '').trim();
+
+/**
+ * WHAT A SIMPLIFICATION MUST KEEP — every variable (once is enough: a second
+ * mention of the same one is exactly what a simplification should cut) and
+ * every heading line of the output format. Stated to the model, then checked
+ * on its reply by verifySimplified, because "keep every variable" is a rule a
+ * model can be told and not trusted with.
+ */
+function mustSurvive(input) {
+  return {
+    variables: extractVariableTokens(`${input.instructions || ''}\n${input.outputFormat || ''}`),
+    headings: headingLinesOf(input.outputFormat),
+  };
+}
+
+/**
+ * SIMPLIFY (2026-09-25): shorter and clearer in one pass, the owner's "having
+ * the ability to simplify the prompt is a good ask as well". A rewrite like
+ * apply — tagged halves, a low temperature — but with no ticked fixes: the
+ * brief is the whole prompt.
+ */
+function buildSimplifyPrompt(input) {
+  const keep = mustSurvive(input);
+  const variables = keep.variables.length ? keep.variables.map((n) => `{${n}}`).join(', ') : '(none)';
+  const headings = keep.headings.length ? keep.headings.map((h) => `"${h}"`).join(', ') : '(none)';
+  return `
+You are editing an AI prompt for Engage, a live engagement platform. The admin asked for it to be
+SIMPLIFIED: shorter and clearer, saying the same things, in the admin's own voice.
+${describeThePrompt(input)}
+${describeTheContext(input)}
+
+${describeTheSections(input)}
+
+${describeTheSystem()}
+
+${describeTheVariables(input)}
+
+${describeTheRules()}
+
+**What must survive — the server checks your reply and refuses it if any of these is missing:**
+- Every one of these variables, at least once (a second mention of the same one may go): ${variables}
+- Every one of these heading lines in the output format, spelled exactly as here: ${headings}
+- Every rule above.
+
+**How to simplify:**
+- Cut repetition, rules that restate other rules, instructions the system already applies (listed
+  above), and words that do nothing. Prefer one clear sentence to three.
+- Keep every instruction that changes what the reply says. Do not add new ones.
+- Keep each half's job: what the AI is given stays in the instructions, what it writes stays in the
+  output format.
+- Keep typographic quotes and apostrophes (’ “ ”) as they are.
+
+**How to reply.** Not JSON. Write each half in full between its tags, exactly as it should be
+saved — plain text, nothing escaped, no code fence around it. Nothing before the first tag and
+nothing after the last:
+
+<instructions>
+The complete simplified instructions half
+</instructions>
+<outputFormat>
+The complete simplified output-format half
+</outputFormat>
+`;
+}
+
 /** Build the request for one job from what the POST resolved. */
 function buildAnalysisPrompt(input) {
   const analysisType = canonicalAnalysisType(input.analysisType) || 'improve';
+
+  if (analysisType === 'simplify') return buildSimplifyPrompt(input);
 
   if (analysisType === 'apply') {
     return `
@@ -480,6 +677,8 @@ You are editing an AI prompt for Engage, a live engagement platform. The admin r
 about this prompt and ticked the fixes below. Apply EVERY ticked fix, and change nothing else.
 ${describeThePrompt(input)}
 ${describeTheContext(input)}
+
+${describeTheSections(input)}
 
 ${describeTheVariables(input)}
 
@@ -517,11 +716,17 @@ ${lens.role}
 ${describeThePrompt(input)}
 ${describeTheContext(input)}
 
+${describeTheSections(input)}
+
+${describeTheSystem()}
+
 ${describeTheVariables(input)}
 
 ${describeVariableUse(input)}
 
 ${describeTheRules()}
+
+${describeTheChecks(input)}
 
 ${lens.ask}
 
@@ -532,10 +737,15 @@ ${describeTheChecklist(lens.idPrefix)}`;
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '');
 
-/** "Output format", "output_format", "OutputFormat" — the model's spellings of a half. */
+/**
+ * "Output format", "output_format", "OutputFormat" — the model's spellings of a
+ * half. "sections" / "Output sections" / "headings" is advice about the
+ * reply's headings, which exist whether or not the prompt has two halves.
+ */
 function normaliseHalf(value, withHalves) {
-  if (!withHalves) return 'both';
   const squashed = asText(value).toLowerCase().replace(/[^a-z]/g, '');
+  if (['sections', 'section', 'outputsections', 'headings'].includes(squashed)) return SECTIONS_HALF;
+  if (!withHalves) return 'both';
   if (squashed === 'instructions') return 'instructions';
   if (squashed === 'outputformat') return 'outputFormat';
   return 'both';
@@ -599,6 +809,80 @@ function restoreTypography(original, rewritten) {
   return rewritten.split('\n').map((line) => byShape.get(straightened(line)) ?? line).join('\n');
 }
 
+/**
+ * A SIMPLIFICATION, NORMALISED — both halves as text, the typography nobody
+ * asked to change put back. Whether it kept what it had to is verifySimplified's
+ * question, not this one's.
+ */
+function normaliseSimplified(analysis, input) {
+  if (typeof analysis.instructions !== 'string' || typeof analysis.outputFormat !== 'string') return null;
+  return {
+    instructions: restoreTypography(input.instructions || '', analysis.instructions),
+    outputFormat: restoreTypography(input.outputFormat || '', analysis.outputFormat),
+  };
+}
+
+/**
+ * THE GUARANTEE SIMPLIFY MAKES, CHECKED HERE. Returns the sentence saying what
+ * the simplification lost or broke, or null when it kept everything: every
+ * variable, every heading line, and the rules the save gate enforces (the same
+ * primitives template-variable-usage.js's gates use), so a result this passes
+ * is one Save will accept.
+ *
+ * `quote` is false for an organisation's draft: its text is sealed at rest and
+ * the job's errorMessage is not, so a lost heading is named by its position and
+ * a bracket by its count. Variable names are identifiers from the catalogue (or
+ * the model's invention), never the admin's prose, and are always named.
+ */
+function verifySimplified(input, rewrite, { quote = true } = {}) {
+  const keep = mustSurvive(input);
+  const halves = { instructions: rewrite.instructions, outputFormat: rewrite.outputFormat };
+  const joined = `${halves.instructions}\n${halves.outputFormat}`;
+  const plural = (n, one, many) => (n === 1 ? one : many);
+
+  const after = new Set(extractVariableTokens(joined));
+  const lost = keep.variables.filter((name) => !after.has(name));
+  if (lost.length) {
+    return `it dropped ${lost.map((n) => `{${n}}`).join(', ')}, which the prompt needs.`;
+  }
+
+  const kept = new Set(headingLinesOf(halves.outputFormat).map(headingText));
+  const lostHeadings = keep.headings
+    .map((line, i) => ({ text: headingText(line), at: i + 1 }))
+    .filter((h) => !kept.has(h.text));
+  if (lostHeadings.length) {
+    if (quote) {
+      return `it dropped ${plural(lostHeadings.length, 'the heading', 'the headings')} `
+        + `${lostHeadings.map((h) => `"${h.text}"`).join(', ')}.`;
+    }
+    return `it dropped ${plural(lostHeadings.length, 'heading', 'headings')} `
+      + `${lostHeadings.map((h) => `${h.at} of ${keep.headings.length}`).join(', ')} of the output format.`;
+  }
+
+  const invented = unknownVariableTokens(joined);
+  if (invented.length) {
+    return `it names ${invented.map((n) => `{${n}}`).join(', ')}, which ${plural(invented.length, 'is not a variable', 'are not variables')} `
+      + '— nothing would fill it, and Save refuses it.';
+  }
+
+  const brackets = extractBracketDirections(joined);
+  if (brackets.length) {
+    return quote
+      ? `it writes square brackets (${brackets.slice(0, 3).map((b) => `[${b}]`).join(', ')}), which Save refuses.`
+      : `it writes ${brackets.length} square-bracket ${plural(brackets.length, 'direction', 'directions')}, which Save refuses.`;
+  }
+
+  const guidance = {};
+  (normalizeOutputSections(input.outputSections) || []).forEach((s, i) => { guidance[`section${i}`] = s.guidance; });
+  try {
+    assertReceivesResponses({ ...halves, ...guidance });
+  } catch (error) {
+    // A fixed sentence about the rule, quoting nothing of the prompt.
+    return error.message;
+  }
+  return null;
+}
+
 function normaliseRewrite(analysis, input) {
   if (typeof analysis.instructions !== 'string' || typeof analysis.outputFormat !== 'string') return null;
   const ticked = input.issues || [];
@@ -630,6 +914,8 @@ function tickedFixesFrom(value) {
   const out = [];
   for (const raw of value) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    // A heading is the admin's to change, in the editor — never a rewrite's.
+    if (isSectionsItem(raw)) continue;
     const id = asText(raw.id === undefined || raw.id === null ? '' : String(raw.id)).slice(0, 64);
     const issue = asText(raw.issue).slice(0, MAX_ISSUE_TEXT);
     const fix = asText(raw.fix).slice(0, MAX_ISSUE_TEXT);
@@ -645,6 +931,55 @@ function tickedFixesFrom(value) {
     });
   }
   return out.length ? out : null;
+}
+
+/** Is this ticked item advice about the reply's headings? */
+const isSectionsItem = (raw) => !!raw && typeof raw === 'object'
+  && normaliseHalf(raw.half, true) === SECTIONS_HALF;
+
+/**
+ * The findings the screen's own checks made (utils/promptPreflight.js), as the
+ * model is shown them: at most MAX_CHECKS, each field cut to MAX_CHECK_TEXT.
+ * Undefined when the screen sent none — the library row and older clients
+ * send none, and "not sent" must not read as "nothing found".
+ */
+function checksFrom(value) {
+  if (!Array.isArray(value)) return undefined;
+  const out = [];
+  for (const raw of value) {
+    if (out.length >= MAX_CHECKS) break;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const title = asText(raw.title).slice(0, MAX_CHECK_TEXT);
+    if (!title) continue;
+    const tier = asText(raw.tier).toLowerCase();
+    out.push({
+      code: asText(raw.code === undefined || raw.code === null ? '' : String(raw.code)).slice(0, 64) || 'check',
+      tier: CHECK_TIERS.includes(tier) ? tier : 'advisory',
+      title,
+      fix: asText(raw.fix).slice(0, MAX_CHECK_TEXT),
+    });
+  }
+  return out;
+}
+
+/**
+ * THE REFERENCE — what an outside agent needs about the system, for the
+ * workbench's export (shared/workie-reference.js). Synchronous, no model call,
+ * no job, and no prompt text in or out. It sits behind the same gate as every
+ * other POST here (requireAdmin + canAuthorPrompts, in the handler), which is
+ * what makes the export Engage-admins-only on the server and not just on the
+ * screen.
+ */
+function referenceFor(body) {
+  if (!isKnownGameType(body.gameType)) {
+    return json(400, {
+      error: `The reference is built for one game type — the prompt's — and ${JSON.stringify(body.gameType ?? null)} `
+        + 'is not one Engage plays. Nothing was built.',
+    });
+  }
+  const gameType = normalizeGameType(body.gameType);
+  console.log(`📚 ${KIND}: reference for ${gameType}`);
+  return json(200, { reference: buildWorkieReference(gameType) });
 }
 
 // ── The request: resolve, record, dispatch ─────────────────────────────────
@@ -686,10 +1021,13 @@ async function readPromptDocument({ ref, item }) {
 async function resolveInput(event, body) {
   const {
     promptText, instructions, outputFormat, gameType, scenario, targetAudience, context, goals,
-    analysisType, existingPromptId = null,
+    analysisType, existingPromptId = null, outputSections, checks,
   } = body;
   const text = (value) => (typeof value === 'string' ? value : '');
 
+  // THE DECLARED HEADINGS travel with the draft (the editor sends its own), or
+  // are read off the saved document below. Validated where they are described.
+  let sections = Array.isArray(outputSections) ? outputSections : undefined;
   let halves = { instructions: text(instructions), outputFormat: text(outputFormat) };
   let single = text(promptText);
   let currentContext = context && typeof context === 'object' ? context : {};
@@ -710,6 +1048,7 @@ async function resolveInput(event, body) {
       halves = { instructions: text(promptData.instructions), outputFormat: text(promptData.outputFormat) };
       single = text(promptData.basePrompt);
     }
+    sections = Array.isArray(promptData.outputSections) ? promptData.outputSections : undefined;
     currentContext = {
       name: promptData.name,
       description: promptData.description,
@@ -728,6 +1067,8 @@ async function resolveInput(event, body) {
     instructions: withHalves ? halves.instructions : '',
     outputFormat: withHalves ? halves.outputFormat : '',
     promptText: withHalves ? '' : single,
+    outputSections: sections,
+    checks: checksFrom(checks),
     context: currentContext,
     gameType: gameType || null,
     scenario: scenario || null,
@@ -741,11 +1082,16 @@ async function startJob(event, context) {
   if (!event.body) return json(400, { error: 'Request body is required' });
   let body;
   try { body = JSON.parse(event.body); } catch { return json(400, { error: 'The request body is not valid JSON.' }); }
+  if (!body || typeof body !== 'object') return json(400, { error: 'The request body must be a JSON object.' });
+
+  if (body.analysisType === 'reference') return referenceFor(body);
 
   const requested = body.analysisType ?? 'improve';
   const analysisType = canonicalAnalysisType(requested);
   if (!analysisType) {
-    return json(400, { error: `analysisType must be review, improve or apply (got ${JSON.stringify(requested)}).` });
+    return json(400, {
+      error: `analysisType must be review, improve, simplify, apply or reference (got ${JSON.stringify(requested)}).`,
+    });
   }
   if (!body.promptText && !body.instructions && !body.outputFormat && !body.existingPromptId) {
     return json(400, { error: 'Either the prompt (its instructions and output format) or existingPromptId is required' });
@@ -757,6 +1103,10 @@ async function startJob(event, context) {
   let issues = null;
   if (analysisType === 'apply') {
     issues = tickedFixesFrom(body.issues);
+    if (!issues && Array.isArray(body.issues) && body.issues.some(isSectionsItem)) {
+      return json(400, { error: 'Every fix ticked here is about the reply\'s headings, and headings are changed in the '
+        + 'editor\'s Output sections field, not by a rewrite. Nothing was changed.' });
+    }
     if (!issues) {
       return json(400, { error: 'Tick at least one fix to apply. This request carried none that could be applied — '
         + 'each needs its id and its text. Nothing was changed.' });
@@ -786,6 +1136,10 @@ async function startJob(event, context) {
         + 'in the editor instead.' });
     }
     input.issues = issues;
+  }
+  if (analysisType === 'simplify' && !hasHalves(input)) {
+    return json(400, { error: 'This prompt is one piece of text (an older single-template prompt), not two halves, '
+      + 'so there are no two halves to simplify. Nothing was changed — move it into the two halves in the editor first.' });
   }
 
   const jobId = newJobId();
@@ -905,7 +1259,10 @@ async function runWorker(event) {
   }
   const analysisType = canonicalAnalysisType(input && input.analysisType) || 'improve';
   const applying = analysisType === 'apply';
-  if (!(await claimJob(jobId, applying ? 'Applying the ticked fixes' : 'Analysing the prompt'))) {
+  const simplifying = analysisType === 'simplify';
+  const rewriting = applying || simplifying;
+  const phase = applying ? 'Applying the ticked fixes' : (simplifying ? 'Simplifying the prompt' : 'Analysing the prompt');
+  if (!(await claimJob(jobId, phase))) {
     console.warn(`⚠️ ${KIND} ${jobId}: already taken (status ${job.status}) — a repeat delivery of the same Event, ignored`);
     return;
   }
@@ -919,36 +1276,49 @@ async function runWorker(event) {
       throw new AdvisorFailure('There were no ticked fixes and two halves to apply them to, so nothing was rewritten. '
         + 'Nothing was changed.');
     }
+    if (simplifying && !hasHalves(input)) {
+      throw new AdvisorFailure('There were no two halves to simplify, so nothing was rewritten. Nothing was changed.');
+    }
     console.log(`🪄 ${KIND} ${jobId}: ${analysisType}, ${promptLength(input)} chars, `
       + `${applying ? `${input.issues.length} ticked fixes, ` : ''}`
       + `${orgId ? 'org-scoped (result sealed)' : 'platform'}`);
 
     const reply = await invokeClaude(buildAnalysisPrompt({ ...input, analysisType }), {
-      temperature: applying ? APPLY_TEMPERATURE : ANALYSIS_TEMPERATURE,
+      temperature: rewriting ? APPLY_TEMPERATURE : ANALYSIS_TEMPERATURE,
     });
 
     if (reply.stopReason === 'max_tokens') {
       throw new AdvisorFailure(`The advisor's reply was cut off at its ${MAX_TOKENS.toLocaleString('en-US')}-token `
-        + `limit before it finished, so there is no complete ${applying ? 'rewrite' : 'analysis'} to show. `
+        + `limit before it finished, so there is no complete ${rewriting ? 'rewrite' : 'analysis'} to show. `
         + 'Nothing was changed. Try again; if it happens again, the prompt may be too long to analyse in one pass.');
     }
 
-    const analysis = applying ? parseRewrite(reply.text) : parseAnalysis(reply.text);
+    const analysis = rewriting ? parseRewrite(reply.text) : parseAnalysis(reply.text);
     if (!analysis) {
       console.warn(`⚠️ ${KIND} ${jobId}: ${reply.model} replied with ${reply.text.length} chars that hold `
-        + `${applying ? 'neither the tagged halves nor a JSON object' : 'no JSON object'}`);
+        + `${rewriting ? 'neither the tagged halves nor a JSON object' : 'no JSON object'}`);
       throw new AdvisorFailure('The advisor replied, but not in the format it was asked for, so there is nothing to show. '
         + 'Nothing was changed — run it again.');
     }
 
     // THE SHAPE THE SCREEN READS, or a sentence saying the reply had none.
-    const shaped = applying ? normaliseRewrite(analysis, input) : normaliseChecklist(analysis, input);
+    let shaped;
+    if (applying) shaped = normaliseRewrite(analysis, input);
+    else if (simplifying) shaped = normaliseSimplified(analysis, input);
+    else shaped = normaliseChecklist(analysis, input);
     if (!shaped) {
       console.warn(`⚠️ ${KIND} ${jobId}: ${reply.model} replied without `
-        + `${applying ? 'both halves as text' : 'an issues array'}`);
-      throw new AdvisorFailure(`The advisor replied, but not in the format it was asked for — ${applying
+        + `${rewriting ? 'both halves as text' : 'an issues array'}`);
+      throw new AdvisorFailure(`The advisor replied, but not in the format it was asked for — ${rewriting
         ? 'the two rewritten halves were not in it'
         : 'there was no list of issues in it'} — so there is nothing to show. Nothing was changed — run it again.`);
+    }
+    if (simplifying) {
+      const broken = verifySimplified(input, shaped, { quote: !orgId });
+      if (broken) {
+        throw new AdvisorRefusal(`The simplified version was refused: ${broken} Nothing was changed — run Simplify `
+          + 'again, or edit the halves by hand.');
+      }
     }
 
     await completeAdviceJob(jobId, {
@@ -962,13 +1332,16 @@ async function runWorker(event) {
         stopReason: reply.stopReason,
         promptLength: promptLength(input),
       },
-    }, orgId, applying ? 'Rewrite ready' : 'Analysis ready');
+    }, orgId, rewriting ? 'Rewrite ready' : 'Analysis ready');
     console.log(`✅ ${KIND} ${jobId}: complete (${reply.model})`);
   } catch (error) {
     const message = error instanceof AdvisorFailure
       ? error.message
       : `The analysis failed: ${error.message}`;
-    console.error(`❌ ${KIND} ${jobId}: ${error.name}: ${error.message}`);
+    // A refusal's sentence may quote the prompt; it goes on the job for the
+    // admin, and the log gets only that there was one.
+    console.error(`❌ ${KIND} ${jobId}: ${error.name}: `
+      + `${error instanceof AdvisorRefusal ? 'refused — the reason is on the job, not in the log' : error.message}`);
     await failJob(dynamodb, tableName, jobId, message);
   }
 }

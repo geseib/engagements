@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import './AIPromptManager.css';
 import RoundAnglesField from './RoundAnglesField';
+import PromptOutputSectionsField from './PromptOutputSectionsField';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType, gameTypeLabel } from '../config/gameTypes';
 import {
@@ -17,6 +18,10 @@ import PromptPreflightPanel, { blocksSave } from './PromptPreflightPanel';
 import PromptLibraryPanel from './PromptLibraryPanel';
 import PromptReadOnlyView, { PROMPTS_READ_ONLY_NOTE } from './PromptReadOnlyView';
 import AIPromptAdvisor from './AIPromptAdvisor';
+import PromptImportReview from './PromptImportReview';
+import {
+  buildWorkieBundle, bundleFileName, parseWorkieBundle, checkBundleFits, takeFromBundle,
+} from '../utils/workieBundle';
 
 const API_BASE = window.API_BASE;
 
@@ -37,11 +42,13 @@ const API_BASE = window.API_BASE;
  */
 /**
  * The model a summary prompt is actually read by, and it is not the model that
- * helped write it. `get-ai-summary.js:2267` invokes
- * `us.anthropic.claude-haiku-4-5-20251001-v1:0` with `max_tokens: 1024` and
- * `temperature: 0.5`. The dry run's §D.1 is binding: a prompt that behaves on a
- * large model may ramble or manufacture consensus here, so the preflight is
- * told which model it is grading for rather than assuming.
+ * helped write it: Haiku 4.5, with the budget and temperature in
+ * promptPreflight.js's SUMMARY_MODEL (pinned to get-ai-summary.js's
+ * `invokeHaiku` by __tests__/promptEngineFactsPinned.test.js — this comment
+ * used to quote 1024 and 0.5, long after the engine had moved on). The dry
+ * run's §D.1 is binding: a prompt that behaves on a large model may ramble or
+ * manufacture consensus here, so the preflight is told which model it is
+ * grading for rather than assuming.
  */
 const SUMMARY_MODEL_ID = 'claude-haiku-4-5-20251001';
 
@@ -176,17 +183,44 @@ const formFor = (prompt) => ({
     // `null` is only ever set by "Use the house mix" — it clears the override.
     angleWeights: prompt?.angleWeights && Object.keys(prompt.angleWeights).length
       ? { ...prompt.angleWeights } : undefined,
+    // The reply's headings (PromptOutputSectionsField), same convention as the
+    // angles: loaded as they are, `undefined` when there are none so an
+    // untouched save sends nothing and leaves them alone, `null` only when
+    // "Use the default headings" clears them.
+    outputSections: Array.isArray(prompt?.outputSections) && prompt.outputSections.length
+      ? prompt.outputSections.map((s) => ({ ...s })) : undefined,
 });
 
 // AI Prompt Editor Modal Component
 /**
- * `savedPrompt` — the prompt as it is STORED, when `prompt` is not: the
- * advisor's "Use this" opens the editor on a rewrite, and measuring unsaved
- * work against the rewrite made it look saved, so Cancel threw the applied
- * fixes away without asking.
+ * `initialView` — 'improve' opens the dialog on the workbench rather than the
+ * form: the library row's Improve button lands here (2026-09-25).
+ *
+ * (A `savedPrompt` prop used to exist because the advisor opened the editor ON
+ * a rewrite, and unsaved work had to be measured against the stored prompt.
+ * The workbench now lives inside the editor and a rewrite lands in a draft
+ * that opened as the stored prompt, so the measure is simply what it opened
+ * with.)
  */
-function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onCancel }) {
+function AIPromptEditor({ prompt, isNew = false, initialView = 'edit', onSave, onCancel }) {
   const [formData, setFormData] = useState(() => formFor(prompt));
+
+  /*
+    THREE VIEWS OF ONE DIALOG — the form, the workbench (Improve) and an
+    uploaded file's review — rather than a modal opened from a modal. They
+    share the × and requestClose, so there is one way out that asks about
+    unsaved work, and switching views never touches the draft: only "Use this"
+    and "Put it in the editor" change it, and only Save writes it. The
+    workbench stays mounted (hidden) once opened, so going back to the form to
+    fix a heading does not throw away advice that cost a model call.
+  */
+  const [view, setView] = useState(initialView === 'improve' ? 'improve' : 'edit');
+  const [improveMounted, setImproveMounted] = useState(initialView === 'improve');
+  const [improveKey, setImproveKey] = useState(0);
+  const [incoming, setIncoming] = useState(null);
+  const [toolNotice, setToolNotice] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const uploadRef = useRef(null);
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -216,7 +250,7 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
    * that writes, and `handleGenerateWithAI` and `insertVariable` both write.
    */
   const openedWith = useRef(null);
-  if (openedWith.current === null) openedWith.current = JSON.stringify(savedPrompt ? formFor(savedPrompt) : formData);
+  if (openedWith.current === null) openedWith.current = JSON.stringify(formData);
   const isDirty = JSON.stringify(formData) !== openedWith.current;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
@@ -277,7 +311,10 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
       return preflightPrompt({
         instructions: formData.instructions,
         outputFormat: formData.outputFormat,
-        outputSections: prompt?.outputSections,
+        // THE SECTIONS ON SCREEN, not the saved ones: this read
+        // `prompt?.outputSections` when there was no field to change them, so
+        // the finding about them could never be fixed from here.
+        outputSections: formData.outputSections,
         template: formData.template,
         gameType: normalizeGameType(formData.gameType),
         isDefault: formData.isDefault,
@@ -318,10 +355,128 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
     formData.gameType,
     formData.isDefault,
     formData.promptType,
-    prompt,
+    formData.outputSections,
   ]);
 
   const saveBlocked = blocksSave(report);
+
+  /* ---- the workbench: Improve, Download, Upload ---------------------------- */
+
+  const openImprove = () => {
+    setToolNotice('');
+    setImproveMounted(true);
+    setView('improve');
+  };
+
+  /** A rewrite the admin chose to use: both halves, into the draft, unsaved. */
+  const takeRewrite = ({ instructions, outputFormat }) => {
+    setFormData((prev) => ({ ...prev, instructions, outputFormat }));
+    // The advice was about the text it replaced; the next Improve starts fresh.
+    setImproveKey((k) => k + 1);
+    setImproveMounted(false);
+    setView('edit');
+  };
+
+  /**
+   * DOWNLOAD FOR AN AGENT — one Markdown file an outside agent can work from
+   * (utils/workieBundle.js). The system facts come from the server's
+   * reference call, which sits behind the prompt-authoring gate: the file
+   * cannot be built for anyone who may not author prompts. The draft is what
+   * is exported, unsaved text included — the file says so by carrying the
+   * checks run on exactly this text.
+   */
+  const downloadForAgent = async () => {
+    setToolNotice('');
+    setIsDownloading(true);
+    try {
+      const response = await authFetch(`${API_BASE}admin/ai-prompt-advisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysisType: 'reference', gameType: normalizeGameType(formData.gameType) }),
+      });
+      if (!response.ok) throw new Error(await refusalReason(response));
+      const { reference } = await response.json();
+      if (!reference) throw new Error('The server sent no reference.');
+      const fileName = bundleFileName(formData.name);
+      saveTextFile(fileName, buildWorkieBundle({
+        promptId: prompt?.promptId || null, draft: formData, reference, report,
+      }));
+      setToolNotice(`Downloaded ${fileName}. Hand it to an agent; when it comes back, Upload a revised file.`);
+    } catch (error) {
+      setToolNotice(`Nothing was downloaded — ${error.message}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  /**
+   * UPLOAD A REVISED FILE — parsed and checked against THIS prompt and game
+   * type before anything is shown; a file that fits opens the review view,
+   * and one that does not says why and changes nothing.
+   */
+  const uploadRevised = async (event) => {
+    const file = event.target.files && event.target.files[0];
+    // Cleared so choosing the same file again (after a fix) fires again.
+    event.target.value = '';
+    if (!file) return;
+    setToolNotice('');
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setToolNotice('That file is too large to be a Workie (over 1 MB). Nothing was changed.');
+      return;
+    }
+    let text;
+    try {
+      text = await readFileText(file);
+    } catch (error) {
+      setToolNotice(`That file could not be read (${error.message}). Nothing was changed.`);
+      return;
+    }
+    const parsed = parseWorkieBundle(text);
+    if (!parsed.ok) {
+      setToolNotice(parsed.error);
+      return;
+    }
+    const refusal = checkBundleFits(parsed, { promptId: prompt?.promptId || null, gameType: formData.gameType });
+    if (refusal) {
+      setToolNotice(refusal);
+      return;
+    }
+    const taken = takeFromBundle(formData, parsed.prompt);
+    if (!taken.changes.length) {
+      setToolNotice(`${file.name} matches the draft — nothing in it differs. Nothing was changed.`);
+      return;
+    }
+    setIncoming({ ...taken, fileName: file.name });
+    setView('import');
+  };
+
+  /** The editor's checks, on the draft the file would leave behind. */
+  const incomingReport = useMemo(() => {
+    if (!incoming || !preflightPrompt) return null;
+    try {
+      return preflightPrompt({
+        ...incoming.next,
+        gameType: normalizeGameType(incoming.next.gameType),
+        promptType: incoming.next.promptType,
+        targetModel: SUMMARY_MODEL_ID,
+      });
+    } catch (err) {
+      console.error('promptPreflight threw on the uploaded file; treating the checks as not run', err);
+      return null;
+    }
+  }, [incoming, preflightPrompt]);
+
+  const takeIncoming = () => {
+    setFormData(incoming.next);
+    setIncoming(null);
+    setImproveKey((k) => k + 1);
+    setImproveMounted(false);
+    setView('edit');
+  };
+
+  const dialogTitle = view === 'improve'
+    ? `Improve “${formData.name || 'this prompt'}”`
+    : (view === 'import' ? 'Upload a revised prompt' : (isNew ? 'Create New AI Prompt' : 'Edit AI Prompt'));
 
   // Every token the author has written, for the "In your prompt" mark in the
   // inspector. Unknown ones are included deliberately — a token you invented is
@@ -557,7 +712,50 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
       labelledBy="pmgr-editor-title"
     >
         <div className="pmgr-modal-head">
-          <h2 id="pmgr-editor-title">{isNew ? 'Create New AI Prompt' : 'Edit AI Prompt'}</h2>
+          <h2 id="pmgr-editor-title">{dialogTitle}</h2>
+          {/*
+            THE WORKBENCH'S THREE DOORS, in the head where the mockup puts "Ask
+            AI to improve it" (docs/design/admin-redesign/19-prompt-editor.html)
+            — reachable from anywhere in the tallest form in the product, not
+            only from its foot. All three work on the draft as it stands,
+            unsaved text included; none of them saves. They exist only in this
+            editor, which read-only mode never mounts, and the download is
+            built from a server call behind the prompt-authoring gate.
+          */}
+          {view === 'edit' && (
+            <div className="pmgr-tools" data-testid="pmgr-tools">
+              <button type="button" className="btn-secondary" onClick={openImprove} data-testid="pmgr-open-improve">
+                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Improve or simplify…
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={downloadForAgent}
+                disabled={isDownloading}
+                data-testid="pmgr-download"
+              >
+                <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" />{' '}
+                {isDownloading ? 'Preparing…' : 'Download for an agent'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => uploadRef.current && uploadRef.current.click()}
+                data-testid="pmgr-upload"
+              >
+                <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" /> Upload a revised file
+              </button>
+              <input
+                ref={uploadRef}
+                type="file"
+                accept=".md,.markdown,.txt,.json,text/markdown,text/plain,application/json"
+                onChange={uploadRevised}
+                hidden
+                aria-label="A revised Workie file"
+                data-testid="pmgr-upload-input"
+              />
+            </div>
+          )}
           <button
             type="button"
             className="pmgr-x"
@@ -568,7 +766,15 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="prompt-editor-form">
+        {/* Outside the scrolling form, so the answer to a click in the head is
+            in view wherever the form is scrolled to. */}
+        {view === 'edit' && toolNotice && (
+          <div className="pmgr-tools-notice" data-testid="pmgr-tools-notice">
+            <StatusMessage message={toolNotice} />
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="prompt-editor-form" hidden={view !== 'edit'}>
           <div className="form-group">
             <label>Prompt Name *</label>
             <input
@@ -873,6 +1079,11 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
             </aside>
           </div>
 
+          <PromptOutputSectionsField
+            value={formData.outputSections}
+            onChange={(outputSections) => setFormData({ ...formData, outputSections })}
+          />
+
           {/*
             3. WHAT THIS PROMPT WILL DO. Everything above is what you typed;
             everything here is what the model gets. The two are not the same
@@ -885,7 +1096,7 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
               instructions={formData.instructions}
               outputFormat={formData.outputFormat}
               template={formData.template}
-              outputSections={prompt?.outputSections}
+              outputSections={formData.outputSections}
               gameType={normalizeGameType(formData.gameType)}
               roomSize={roomSize}
               onRoomSizeChange={setRoomSize}
@@ -992,6 +1203,33 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
           </div>
         </form>
 
+        {improveMounted && (
+          <div className="pmgr-wb-view" hidden={view !== 'improve'} data-testid="pmgr-improve-view">
+            <AIPromptAdvisor
+              key={improveKey}
+              draft={formData}
+              report={report}
+              onApply={takeRewrite}
+              onBack={() => setView('edit')}
+              onClose={requestClose}
+            />
+          </div>
+        )}
+
+        {view === 'import' && incoming && (
+          <div className="pmgr-wb-view" data-testid="pmgr-import-view">
+            <PromptImportReview
+              fileName={incoming.fileName}
+              changes={incoming.changes}
+              ignored={incoming.ignored}
+              report={incomingReport}
+              onConfirm={takeIncoming}
+              onBack={() => { setIncoming(null); setView('edit'); }}
+              onClose={requestClose}
+            />
+          </div>
+        )}
+
         {/*
           CLOSING WITH AN UNSAVED WORKING COPY.
 
@@ -1047,6 +1285,32 @@ function AIPromptEditor({ prompt, savedPrompt = null, isNew = false, onSave, onC
 */
 export { AIPromptAdvisor };
 
+/** No Workie file is near this; it bounds what an upload makes the browser read. */
+const MAX_UPLOAD_BYTES = 1024 * 1024;
+
+/** A chosen file's text. FileReader rather than Blob.text(): the test DOM has only the first. */
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('the browser could not read it'));
+    reader.readAsText(file);
+  });
+}
+
+/** Hand the browser a text file to save — the pattern QuestionsPanel's CSV export uses. */
+function saveTextFile(fileName, text) {
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  if (typeof window.URL.revokeObjectURL === 'function') window.URL.revokeObjectURL(url);
+}
+
 // Main AI Prompt Manager Component
 /**
  * What a refused write says, in the server's words. The routes answer
@@ -1091,9 +1355,9 @@ function AIPromptManager({ readOnly = false }) {
 
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [advisorPrompt, setAdvisorPrompt] = useState(null);
+  /** 'improve' when the row's Improve opened the editor, so it lands on the workbench. */
+  const [editorView, setEditorView] = useState('edit');
   const [viewingPrompt, setViewingPrompt] = useState(null);
-  const [editingSavedPrompt, setEditingSavedPrompt] = useState(null);
 
   /*
     THE FIVE `alert()`s AND TWO `window.confirm()`s THIS SCREEN USED TO RUN.
@@ -1156,6 +1420,7 @@ function AIPromptManager({ readOnly = false }) {
         tags: prompt.promptContent?.tags || prompt.tags || [],
         // The S3 body is what the summary worker reads; the row is its mirror.
         angleWeights: prompt.promptContent?.angleWeights || prompt.angleWeights || undefined,
+        outputSections: prompt.promptContent?.outputSections || prompt.outputSections || undefined,
       }));
       
       setPrompts(transformedPrompts);
@@ -1340,18 +1605,15 @@ function AIPromptManager({ readOnly = false }) {
   };
 
   /*
-    THE ADVISOR HANDS BACK BOTH HALVES, and both are filled. This used to take
-    one rewritten string and put it in Output Format, leaving the old
-    Instructions in place — so the "applied" prompt said everything twice.
-    The editor opens on the rewrite; the admin reads it and saves as usual.
+    IMPROVE FROM THE ROW OPENS THE EDITOR, ON ITS WORKBENCH (2026-09-25). It
+    used to open a separate advisor dialog on the SAVED prompt, whose "Use
+    this" then opened the editor on saved-prompt-plus-rewrite — the path on
+    which the owner met a finding the advisor had never been shown. Now there
+    is one place Improve runs: the editor, on the draft in front of you.
   */
-  const handleApplyImprovedPrompt = ({ instructions, outputFormat }) => {
-    if (advisorPrompt) {
-      setEditingPrompt({ ...advisorPrompt, instructions, outputFormat });
-      // The stored version, so the editor counts the rewrite as unsaved work.
-      setEditingSavedPrompt(advisorPrompt);
-      setAdvisorPrompt(null);
-    }
+  const openEditor = (target, view = 'edit') => {
+    setEditorView(view);
+    setEditingPrompt(target);
   };
 
   const handlePopulateDefaults = () => setConfirmPopulate(true);
@@ -1454,8 +1716,8 @@ function AIPromptManager({ readOnly = false }) {
         }
         onView={readOnly ? setViewingPrompt : undefined}
         showOwner={readOnly}
-        onEdit={readOnly ? undefined : setEditingPrompt}
-        onAdvise={readOnly ? undefined : setAdvisorPrompt}
+        onEdit={readOnly ? undefined : (target) => openEditor(target, 'edit')}
+        onAdvise={readOnly ? undefined : (target) => openEditor(target, 'improve')}
         onDelete={readOnly ? undefined : handleDeletePrompt}
         onCreate={readOnly ? undefined : () => setIsCreating(true)}
         onPopulateDefaults={readOnly ? undefined : handlePopulateDefaults}
@@ -1485,24 +1747,16 @@ function AIPromptManager({ readOnly = false }) {
       {(editingPrompt || isCreating) && (
         <AIPromptEditor
           prompt={editingPrompt}
-          savedPrompt={editingSavedPrompt}
           isNew={isCreating}
-          onSave={(result) => { setEditingSavedPrompt(null); return handleSavePrompt(result); }}
+          initialView={isCreating ? 'edit' : editorView}
+          onSave={handleSavePrompt}
           onCancel={() => {
             setEditingPrompt(null);
-            setEditingSavedPrompt(null);
             setIsCreating(false);
           }}
         />
       )}
 
-      {advisorPrompt && (
-        <AIPromptAdvisor
-          prompt={advisorPrompt}
-          onClose={() => setAdvisorPrompt(null)}
-          onApplyImprovedPrompt={handleApplyImprovedPrompt}
-        />
-      )}
 
       {/*
         RETIRE A PROMPT.
@@ -1589,7 +1843,7 @@ function AIPromptManager({ readOnly = false }) {
               onClick={() => {
                 const target = archiveTarget;
                 setPendingArchive(null);
-                setEditingPrompt(target);
+                openEditor(target, 'edit');
               }}
               data-testid="pmgr-archive-draft"
             >

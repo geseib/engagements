@@ -22,6 +22,14 @@
  *
  * One mocked module — `../auth/authFetch` — as promptAdvisorJob.test.jsx. The
  * poll interval is a prop, so nothing waits on the real three seconds.
+ *
+ * SINCE 2026-09-25 the advisor is the editor's Improve view (the workbench,
+ * docs/superpowers/specs/2026-09-25-prompt-workbench-design.md): it works on
+ * the DRAFT it is handed rather than the saved prompt, its items are keyed
+ * `ai:<id>` beside the editor's own checks (`check:<code>…`), and "Use this"
+ * hands the halves to the editor, which switches back to its form.
+ * promptWorkbenchFlow.test.jsx pins the parts that are new; this file keeps
+ * pinning the checklist it always did.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -31,6 +39,7 @@ jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const { authFetch } = require('../auth/authFetch');
 
 import AIPromptManager, { AIPromptAdvisor } from '../components/AIPromptManager';
+import { preflightPrompt } from '../utils/promptPreflight';
 
 const INSTRUCTIONS = 'You are Workie. Read what the room said.\n\n**The Responses:**\n{responsesText}';
 const OUTPUT_FORMAT = '## What we heard\nTwo or three sentences.';
@@ -61,7 +70,7 @@ const CHECKLIST = {
 const REWRITE = {
   instructions: `${INSTRUCTIONS}\n\nIf only one person answered, say so and quote them.`,
   outputFormat: '## What we heard\nTwo or three warm sentences, under 150 words.',
-  applied: ['r1', 'r4'],
+  applied: ['ai:r1', 'ai:r4'],
 };
 
 const reply = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -94,23 +103,26 @@ function serve(jobs, { list = [PROMPT] } = {}) {
 }
 
 function renderAdvisor(props = {}) {
-  const onApplyImprovedPrompt = jest.fn();
+  const onApply = jest.fn();
   const onClose = jest.fn();
+  const onBack = jest.fn();
   render(
     <AIPromptAdvisor
-      prompt={PROMPT}
+      draft={PROMPT}
+      report={preflightPrompt({ ...PROMPT, promptType: 'analysis' })}
+      onApply={onApply}
+      onBack={onBack}
       onClose={onClose}
-      onApplyImprovedPrompt={onApplyImprovedPrompt}
       pollIntervalMs={5}
       giveUpMs={5000}
       {...props}
     />,
   );
-  return { onApplyImprovedPrompt, onClose };
+  return { onApply, onClose, onBack };
 }
 
-const run = () => fireEvent.click(screen.getByRole('button', { name: /Run analysis/i }));
-const tick = (id) => screen.getByTestId(`pmgr-advice-tick-${id}`);
+const run = () => fireEvent.click(screen.getByTestId('pmgr-wb-run'));
+const tick = (id) => screen.getByTestId(`pmgr-advice-tick-ai:${id}`);
 const applyButton = () => screen.getByTestId('pmgr-advice-apply');
 
 async function reviewed(props) {
@@ -126,19 +138,22 @@ beforeEach(() => {
 });
 
 describe('two lenses, one checklist', () => {
-  test('Review and Improve are offered; Optimize is gone', () => {
+  test('Review, Improve and Simplify are offered; Optimize is gone', () => {
     serve({});
     renderAdvisor();
     expect(screen.getByRole('radio', { name: /Review/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Improve/ })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: /Simplify/ })).not.toBeChecked();
     expect(screen.queryByRole('radio', { name: /Optimi[sz]e|Validate/ })).not.toBeInTheDocument();
   });
 
   test('the analysis request sends the two halves separately', async () => {
     const { posts } = await reviewed();
     expect(posts[0]).toMatchObject({
-      analysisType: 'review', existingPromptId: 'p1', instructions: INSTRUCTIONS, outputFormat: OUTPUT_FORMAT,
+      analysisType: 'review', instructions: INSTRUCTIONS, outputFormat: OUTPUT_FORMAT,
     });
+    // The draft is reviewed as sent — the saved copy's id made the server read the saved text.
+    expect(posts[0]).not.toHaveProperty('existingPromptId');
     expect(JSON.stringify(posts[0])).not.toContain(`${INSTRUCTIONS}\n\n${OUTPUT_FORMAT}`);
   });
 
@@ -222,9 +237,10 @@ describe('apply selected', () => {
     await screen.findByTestId('pmgr-rewrite');
 
     const apply = posts.find((p) => p.analysisType === 'apply');
-    expect(apply.issues.map((i) => i.id)).toEqual(['r1', 'r3']);
-    expect(apply.issues[0]).toEqual(CHECKLIST.issues[0]);
-    expect(apply).toMatchObject({ existingPromptId: 'p1', instructions: INSTRUCTIONS, outputFormat: OUTPUT_FORMAT });
+    expect(apply.issues.map((i) => i.id)).toEqual(['ai:r1', 'ai:r3']);
+    expect(apply.issues[0]).toEqual({ ...CHECKLIST.issues[0], id: 'ai:r1' });
+    expect(apply).toMatchObject({ instructions: INSTRUCTIONS, outputFormat: OUTPUT_FORMAT });
+    expect(apply).not.toHaveProperty('existingPromptId');
   });
 
   test('shows each half before and after', async () => {
@@ -240,7 +256,7 @@ describe('apply selected', () => {
   });
 
   test('says which ticked fixes the advisor did not apply', async () => {
-    const posts = serve({ review: done('review', CHECKLIST), apply: done('apply', { ...REWRITE, applied: ['r1'] }) });
+    const posts = serve({ review: done('review', CHECKLIST), apply: done('apply', { ...REWRITE, applied: ['ai:r1'] }) });
     renderAdvisor();
     run();
     await screen.findByTestId('pmgr-advice');
@@ -265,15 +281,15 @@ describe('apply selected', () => {
     expect(blocking).toHaveTextContent(/Summary of the response/);
   });
 
-  test('"Use this" hands back BOTH halves and closes', async () => {
-    const { onApplyImprovedPrompt, onClose } = await reviewed();
+  test('"Use this" hands back BOTH halves, and does not close the editor', async () => {
+    const { onApply, onClose } = await reviewed();
     fireEvent.click(applyButton());
     await screen.findByTestId('pmgr-rewrite');
     fireEvent.click(screen.getByRole('button', { name: 'Use this' }));
-    expect(onApplyImprovedPrompt).toHaveBeenCalledWith({
+    expect(onApply).toHaveBeenCalledWith({
       instructions: REWRITE.instructions, outputFormat: REWRITE.outputFormat,
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   test('"Choose different fixes" goes back to the checklist with the ticks kept', async () => {
@@ -321,7 +337,7 @@ describe('the editor receives both halves', () => {
   test('"Use this" opens the editor with the instructions AND the output format rewritten', async () => {
     serve({ review: done('review', CHECKLIST), apply: done('apply', REWRITE) });
     render(<AIPromptManager />);
-    fireEvent.click(await screen.findByTitle('Ask the AI advisor about this prompt'));
+    fireEvent.click(await screen.findByTitle('Improve this prompt'));
     run();
     await screen.findByTestId('pmgr-advice', {}, { timeout: 8000 });
     fireEvent.click(applyButton());
@@ -330,6 +346,7 @@ describe('the editor receives both halves', () => {
 
     expect(await screen.findByTestId('prompt-input-textarea')).toHaveValue(REWRITE.instructions);
     expect(screen.getByTestId('prompt-output-textarea')).toHaveValue(REWRITE.outputFormat);
+    expect(screen.getByTestId('prompt-input-textarea')).toBeVisible();
     expect(screen.queryByTestId('pmgr-advisor-body')).not.toBeInTheDocument();
   }, 20000);
 
@@ -339,7 +356,7 @@ describe('the editor receives both halves', () => {
   test('the rewrite counts as unsaved: Cancel asks before throwing it away', async () => {
     serve({ review: done('review', CHECKLIST), apply: done('apply', REWRITE) });
     render(<AIPromptManager />);
-    fireEvent.click(await screen.findByTitle('Ask the AI advisor about this prompt'));
+    fireEvent.click(await screen.findByTitle('Improve this prompt'));
     run();
     await screen.findByTestId('pmgr-advice', {}, { timeout: 8000 });
     fireEvent.click(applyButton());

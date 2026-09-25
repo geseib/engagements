@@ -684,9 +684,9 @@ export default function PromptLibraryPanel({
                         type="button"
                         className="plib-btn"
                         onClick={() => onAdvise(prompt)}
-                        title="Ask the AI advisor about this prompt"
+                        title="Improve this prompt"
                       >
-                        Advisor
+                        Improve
                       </button>
                     )}
                     {/*

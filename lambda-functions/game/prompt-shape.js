@@ -219,4 +219,8 @@ module.exports = {
   isUsableSummaryPrompt, summaryPromptDefect, inferPromptType,
   DEFAULT_OUTPUT_SECTIONS, normalizeOutputSections, resolveOutputSections,
   hasCustomOutputShape, describeOutputShape, normalizeAngleWeights,
+  // The limits themselves, so a surface that DESCRIBES the rules (the
+  // workbench's export, admin/shared/workie-reference.js) quotes these numbers
+  // rather than retyping them.
+  MAX_SECTIONS, MAX_HEADING_CHARS, MAX_GUIDANCE_CHARS,
 };

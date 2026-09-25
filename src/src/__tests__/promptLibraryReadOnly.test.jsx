@@ -60,7 +60,7 @@ describe('the Workie library, read-only', () => {
     expect(screen.queryByText('Create New Prompt')).toBeNull();
     expect(screen.queryByText(/Populate Default Prompts/)).toBeNull();
     expect(screen.queryByTitle('Edit this prompt')).toBeNull();
-    expect(screen.queryByTitle('Ask the AI advisor about this prompt')).toBeNull();
+    expect(screen.queryByTitle('Improve this prompt')).toBeNull();
     expect(screen.queryByText('Retire')).toBeNull();
     expect(screen.queryByText('Copy to archive')).toBeNull();
     // The status chip is a label, not a toggle.
