@@ -397,6 +397,11 @@ function GameHostPage() {
     for it.
   */
   const [showSurveyWalkthrough, setShowSurveyWalkthrough] = useState(false);
+  // Fix round 1, M2 — see loadSurveyResults's own header for the full
+  // argument: a fresh object identity per fetch, so a response that lands
+  // after a NEWER call has already started is recognised as stale and
+  // discarded rather than overwriting what the host is now looking at.
+  const surveyResultsRequestRef = useRef(null);
 
   /**
    * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
@@ -4955,77 +4960,69 @@ Focus on actionable business strategy insights.`;
    * shows its loading state first, since the route is a fetch with real
    * latency, not a navigation.
    *
-   * ONE FUNCTION, TWO CALLERS (Task 3 fix round 1): the live session's CLOSED/
-   * ENDED "See the results" control (runHostAction), and the Sessions list's
-   * "Results" row for any closed survey — SessionHistoryPanel's `onResults`,
-   * mirroring `onReport={generateReportForGame}` beside it. `setShowReportsModal
-   * (false)` is a no-op from the live-session caller (the modal is already
-   * closed) and closes the history list from the other, exactly as
-   * generateReportForGame does for Report.
+   * ONE FUNCTION, THREE CALLERS (fix round 1, M2, folding what Task 8 first
+   * shipped as two near-identical copies): the live session's CLOSED/ENDED
+   * "See the results" AND "Walk through" controls (runHostAction), and the
+   * Sessions list's "Results" row for any closed survey —
+   * SessionHistoryPanel's `onResults`, mirroring `onReport=
+   * {generateReportForGame}` beside it. `setShowReportsModal(false)` is a
+   * no-op from the live-session caller (the modal is already closed) and
+   * closes the history list from the other, exactly as generateReportForGame
+   * does for Report.
+   *
+   * `{ present }` decides which of the two survey-results SURFACES the fetch
+   * is for — the cut sheet (`showSurveyResults`, the default) or the
+   * full-stage presenter (`showSurveyWalkthrough`, Task 8). Both read the
+   * exact same three states below; only the flag that decides which
+   * component is on top differs, which is also why `showSurveyWalkthrough`'s
+   * own declaration explains that a `present` fetch clears `showSurveyResults`
+   * rather than leaving it — that is what makes leaving the presenter land
+   * back on the stage instead of the cut sheet.
    *
    * RECORDS ITS OWN ARGUMENTS AS THE TARGET (fix round 2) — never the page's
-   * `gameId`/`eventTitle`. Both callers already have the right session to
-   * hand it: runHostAction has the stage's own; the history row already
-   * carries the id and title of whichever survey the host clicked. Reading
-   * past `targetGameId` for the page's `gameId` here is exactly the bug this
+   * `gameId`/`eventTitle`. Every caller already has the right session to hand
+   * it: runHostAction has the stage's own; the history row already carries
+   * the id and title of whichever survey the host clicked. Reading past
+   * `targetGameId` for the page's `gameId` here is exactly the bug this
    * fixes — Retry (below) closes over THIS state, not the stage.
+   *
+   * THE STALE-RESPONSE GUARD (fix round 1, M2). Two fetches for the same or
+   * different sessions can be in flight at once — a slow first request, a
+   * host who clicks Retry before it lands, or (present) a host who opens the
+   * cut sheet and then Walk-through in quick succession. `surveyResultsRequestRef`
+   * holds a fresh object identity per call; a response is only committed to
+   * state when the ref STILL points at the identity this call minted, so a
+   * response that lands after a NEWER call has already started is discarded
+   * rather than overwriting what the host is now looking at with stale data
+   * (or, worse, an old error landing on top of a fresh "loading").
    */
-  const loadSurveyResults = async (targetGameId, targetTitle = '') => {
+  const loadSurveyResults = async (targetGameId, targetTitle = '', { present = false } = {}) => {
     setShowReportsModal(false);
+    const requestRef = {};
+    surveyResultsRequestRef.current = requestRef;
     setSurveyResultsTarget({ gameId: targetGameId, title: targetTitle });
     setSurveyResultsData(null);
     setSurveyResultsError(null);
     setSurveyResultsStatus('loading');
-    setShowSurveyResults(true);
-    try {
-      const res = await authFetch(`${API_BASE}games/${targetGameId}/survey-results`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || `The survey results could not be loaded (${res.status}).`);
-      }
-      setSurveyResultsData(data);
-      setSurveyResultsStatus('ready');
-    } catch (error) {
-      console.error('Error loading survey results:', error);
-      setSurveyResultsError(error.message || 'The survey results could not be loaded.');
-      setSurveyResultsStatus('error');
+    if (present) {
+      setShowSurveyResults(false);
+      setShowSurveyWalkthrough(true);
+    } else {
+      setShowSurveyResults(true);
     }
-  };
-
-  /**
-   * THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep. Same fetch as
-   * `loadSurveyResults` just above, into the SAME three states — "the same
-   * surveyResultsTarget / fetched payload as the cut sheet, with no new
-   * route" is the brief's own requirement — and it exists as its own
-   * function rather than a flag on that one only because the two set
-   * DIFFERENT flags: this sets `showSurveyWalkthrough` and leaves
-   * `showSurveyResults` false, so the render below goes straight to the
-   * full-stage presenter instead of the cut sheet, and leaving it (the
-   * presenter's `onLeave`) returns to the STAGE rather than the cut sheet —
-   * see `showSurveyWalkthrough`'s own declaration for why that distinction is
-   * what makes "leaving returns to where the host came from" work with no
-   * third piece of state. The cut sheet's OWN "Walk through" button does not
-   * call this at all: its data is already loaded, so it only has to flip the
-   * flag (see the `onPresent` prop below).
-   */
-  const presentSurveyResults = async (targetGameId, targetTitle = '') => {
-    setShowReportsModal(false);
-    setSurveyResultsTarget({ gameId: targetGameId, title: targetTitle });
-    setSurveyResultsData(null);
-    setSurveyResultsError(null);
-    setSurveyResultsStatus('loading');
-    setShowSurveyResults(false);
-    setShowSurveyWalkthrough(true);
     try {
       const res = await authFetch(`${API_BASE}games/${targetGameId}/survey-results`);
       const data = await res.json().catch(() => ({}));
+      // A newer call already owns the screen — this response is stale.
+      if (surveyResultsRequestRef.current !== requestRef) return;
       if (!res.ok) {
         throw new Error(data.error || `The survey results could not be loaded (${res.status}).`);
       }
       setSurveyResultsData(data);
       setSurveyResultsStatus('ready');
     } catch (error) {
-      console.error('Error loading survey results to present:', error);
+      if (surveyResultsRequestRef.current !== requestRef) return;
+      console.error('Error loading survey results:', error);
       setSurveyResultsError(error.message || 'The survey results could not be loaded.');
       setSurveyResultsStatus('error');
     }
@@ -5520,9 +5517,9 @@ Focus on actionable business strategy insights.`;
     branch winning here — and `onLeave` clearing only `showSurveyWalkthrough`
     — is what sends the host back to the cut sheet once they leave, with no
     extra state recording which surface asked for it. Opened directly from
-    the live stage's dock, `showSurveyResults` is false throughout (
-    `presentSurveyResults` sets it so), so leaving falls through everything
-    here and lands back on the stage itself.
+    the live stage's dock, `showSurveyResults` is false throughout
+    (`loadSurveyResults(..., { present: true })` sets it so), so leaving
+    falls through everything here and lands back on the stage itself.
 
     Loading or a failed fetch reuses the cut sheet's OWN shell rather than
     growing a second one: there is no stage to draw before the numbers land,
@@ -5549,7 +5546,7 @@ Focus on actionable business strategy insights.`;
         title={surveyResultsTarget ? surveyResultsTarget.title : ''}
         onClose={() => { setShowSurveyWalkthrough(false); setSurveyResultsStatus('idle'); }}
         onRetry={surveyResultsTarget
-          ? () => presentSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title)
+          ? () => loadSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title, { present: true })
           : null}
       />
     );
@@ -5975,7 +5972,7 @@ Focus on actionable business strategy insights.`;
         loadSurveyResults(gameId, eventTitle);
         break;
       case HOST_INTENTS.SURVEY_PRESENT:
-        presentSurveyResults(gameId, eventTitle);
+        loadSurveyResults(gameId, eventTitle, { present: true });
         break;
       case HOST_INTENTS.LEAVE:
         /*

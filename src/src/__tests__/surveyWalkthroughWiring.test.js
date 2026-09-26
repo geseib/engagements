@@ -34,11 +34,40 @@ describe('the walk-through is checked before the cut sheet', () => {
     expect(cutSheetBlock).toMatch(/onPresent=\{\(\)\s*=>\s*setShowSurveyWalkthrough\(true\)\}/);
   });
 
-  test('opened from the dock, presentSurveyResults clears showSurveyResults so leaving lands on the stage', () => {
-    const fn = /const presentSurveyResults = async[\s\S]*?\n {2}\};/.exec(PAGE);
+  /*
+    FIX ROUND 1, M2: presentSurveyResults and loadSurveyResults were two
+    near-identical copies of the same fetch; folded into ONE function taking
+    a `{ present }` option. `loadSurveyResults` is the only function name left
+    in the source — these tests read ITS body for both the plain-fetch and
+    the present-flag halves rather than a function that no longer exists.
+  */
+  test('presentSurveyResults no longer exists as a separate function (folded, M2)', () => {
+    expect(PAGE).not.toMatch(/const presentSurveyResults = /);
+  });
+
+  test('the folded loadSurveyResults sets showSurveyResults or showSurveyWalkthrough depending on `present`', () => {
+    const fn = /const loadSurveyResults = async[\s\S]*?\n {2}\};/.exec(PAGE);
     expect(fn).not.toBeNull();
-    expect(fn[0]).toMatch(/setShowSurveyResults\(false\)/);
-    expect(fn[0]).toMatch(/setShowSurveyWalkthrough\(true\)/);
+    expect(fn[0]).toMatch(/present/);
+    expect(fn[0]).toMatch(/setShowSurveyResults\(/);
+    expect(fn[0]).toMatch(/setShowSurveyWalkthrough\(/);
+  });
+
+  test('opened from the dock (present:true), showSurveyResults is cleared so leaving lands on the stage', () => {
+    expect(PAGE).toMatch(
+      /case HOST_INTENTS\.SURVEY_PRESENT:\s*\n\s*loadSurveyResults\(gameId, eventTitle, \{ ?present: ?true ?\}\);/,
+    );
+  });
+
+  test('a stale response is ignored — a request-id guard, not just a gameId comparison', () => {
+    // gameId alone would not catch a Retry of the SAME session racing its own
+    // earlier attempt; a fresh id/ref per call is what tells the two apart.
+    const fn = /const loadSurveyResults = async[\s\S]*?\n {2}\};/.exec(PAGE)[0];
+    expect(fn).toMatch(/Ref\.current/);
+    // Checked before committing the response to state, both on the success
+    // path and the error path.
+    const checks = (fn.match(/Ref\.current\s*!==/g) || []).length;
+    expect(checks).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -55,8 +84,10 @@ describe('the page\'s own listeners go quiet while the presenter is open', () =>
     expect(hook[1]).toMatch(/enabled:[\s\S]*?!showSurveyWalkthrough\b/);
   });
 
-  test('the dispatch case exists and calls presentSurveyResults', () => {
-    expect(PAGE).toMatch(/case HOST_INTENTS\.SURVEY_PRESENT:\s*\n\s*presentSurveyResults\(gameId, eventTitle\);/);
+  test('the dispatch case exists and calls the folded loadSurveyResults with present:true', () => {
+    expect(PAGE).toMatch(
+      /case HOST_INTENTS\.SURVEY_PRESENT:\s*\n\s*loadSurveyResults\(gameId, eventTitle, \{ ?present: ?true ?\}\);/,
+    );
   });
 });
 

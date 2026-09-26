@@ -254,10 +254,11 @@ describe('the survey results panel retries the SESSION IT IS SHOWING, not the st
     text — Task 8, 2026-09-26 feature sweep, gave the walk-through's own
     loading/error fallback a SECOND `<SurveyResultsPanel>` mount (inside
     `if (showSurveyWalkthrough) {`, textually earlier in the file), which is
-    correct on its own terms (its retry is `presentSurveyResults`, closing
-    over the same `surveyResultsTarget`) but would otherwise make a bare
-    `indexOf('<SurveyResultsPanel')` find THAT one first and read this test's
-    assertions against the wrong mount.
+    correct on its own terms (its retry is `loadSurveyResults(..., { present:
+    true })` — fix round 1 folded the walk-through's own presentSurveyResults
+    into this same function — closing over the same `surveyResultsTarget`)
+    but would otherwise make a bare `indexOf('<SurveyResultsPanel')` find
+    THAT one first and read this test's assertions against the wrong mount.
   */
   it('the retry reads surveyResultsTarget, never the bare page gameId', () => {
     const cutSheetAt = source.indexOf('if (showSurveyResults) {');
