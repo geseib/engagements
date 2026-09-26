@@ -1240,6 +1240,35 @@ function GameHostPage() {
     }
   };
 
+  /**
+   * Apply the set's instruction and round noun the moment a QUESTION response
+   * carries them (GitHub #18).
+   *
+   * `fetchQuestionSetInstruction` above finds the set by fetching the WHOLE
+   * catalogue (`GET /question-sets`) and searching it — the same list
+   * get-question-sets.js drops a deactivated set from, and any fetch error
+   * leaves it null. A deactivated set is exactly the case that matters here:
+   * the session still plays it (the round pins a partition, not a catalogue
+   * membership), so every phone kept showing its instruction — PlayerPage
+   * reads `setCustomInstruction`/`setRoundNoun` straight off get-question.js's
+   * response (PlayerPage.jsx `applyQuestionSetInstruction`), which resolves
+   * the set by the PINNED PARTITION and never searches a list — while the
+   * stage, whose only source was the catalogue search, went blank and stayed
+   * that way for the rest of the session.
+   *
+   * `games/{gameId}/question?role=host` already projects both fields; this
+   * mirrors PlayerPage's reader exactly, guarded the same way: on `setId`,
+   * not called unconditionally, because a RESULTS payload built elsewhere in
+   * this file carries no set fields and must not blank an instruction the
+   * room is still looking at.
+   */
+  const applyQuestionSetInstruction = (questionData) => {
+    const setId = questionData?.setId || questionData?.questionSetId;
+    if (!setId) return;
+    setCustomInstruction(questionData.setCustomInstruction ?? null);
+    setSetRoundNoun(questionData.setRoundNoun ?? null);
+  };
+
   // Instruction hierarchy lives in config/instructions.js so the host and the
   // player screen cannot drift apart (they had, on Art Title rounds).
   const getHostInstructionText = (currentQuestion, gameType = currentGameType) =>
@@ -2496,6 +2525,7 @@ Focus on actionable business strategy insights.`;
                 const questionData = await questionRes.json();
                 setQuestions([questionData]);
                 setCurrentQuestionId(questionData.id);
+                applyQuestionSetInstruction(questionData);
                 console.log(`📝 HOST: Loaded question ${questionNumber}:`, questionData.title);
                 console.log('🔍 HOST: Question data keys:', Object.keys(questionData));
                 console.log('🔍 HOST: Updated questions array:', [questionData]);
@@ -3611,6 +3641,7 @@ Focus on actionable business strategy insights.`;
       setManualStateChange(true);
       setGameState(newState);
       setQuestions([questionData]);
+      applyQuestionSetInstruction(questionData);
       setLessonNumber(lessonNumber);
       setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
 
@@ -3826,10 +3857,11 @@ Focus on actionable business strategy insights.`;
       // the outer catch told the host "the round moved on, but this screen could
       // not refresh". Which was true, and was this line.
       setCurrentQuestionId(questionId);
-      
+
       // Set the questions array
       setQuestions([questionData]);
-      
+      applyQuestionSetInstruction(questionData);
+
       // WebSocket notification is handled automatically by the backend
       console.log(`✅ HOST: Question ${lessonNumber} started successfully`);
       

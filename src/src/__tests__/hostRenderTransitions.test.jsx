@@ -307,6 +307,90 @@ describe('Continue on an unstarted session', () => {
   });
 });
 
+/**
+ * A SET-LEVEL INSTRUCTION, ON THE STAGE, WHEN THE CATALOGUE HAS NOTHING TO
+ * SAY ABOUT IT (GitHub #18).
+ *
+ * The stage found its instruction by fetching `GET /question-sets` — the
+ * WHOLE catalogue — and searching it for the id/scope pair the session pinned
+ * (`fetchQuestionSetInstruction`, GameHostPage.jsx). That list drops a
+ * deactivated set (get-question-sets.js), and any fetch error sets the
+ * instruction to null — so a session on a set that later got deactivated (or
+ * a slow/failed catalogue read) went instruction-less on the projector for
+ * the rest of its life, even while every phone kept showing it correctly.
+ *
+ * PlayerPage never had this problem: get-question.js resolves the set by the
+ * PINNED PARTITION, not by searching a list, and projects
+ * `setCustomInstruction`/`setRoundNoun` straight onto the question payload it
+ * already serves. The fix makes the host read the same two fields off that
+ * same payload — the one `games/{id}/question?role=host` already returns
+ * every time a round loads — instead of trusting the catalogue search alone.
+ *
+ * So this test makes the catalogue search come back EMPTY (the exact
+ * deactivated-set shape) and asserts the instruction still reaches the stage,
+ * because it rode in on the question.
+ */
+describe('the stage takes a set instruction from the question, not only the catalogue', () => {
+  test('an empty question-sets list does not blank the instruction on ASK', async () => {
+    const LIVE = '5678';
+    const INSTRUCTION = 'Answer honestly, in your own words.';
+
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      // Most specific patterns first — every one of these contains `games/`.
+      if (u.includes(`games/${LIVE}/question?role=host`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            id: 1, questionNumber: 1, setId: 'setA', setScope: 'platform',
+            title: 'Q1', questionDetail: 'D1', detail: 'D1',
+            // No `customInstructions` of its own — this is the SET's voice,
+            // not the question's, so resolveInstruction only reaches it when
+            // the set-level value is actually populated from here.
+            setCustomInstruction: INSTRUCTION,
+            setRoundNoun: 'Prompt',
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}/state`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            state: 'ASK#001',
+            currentQuestion: 1,
+            gameMetadata: {
+              title: 'Live game', gameType: 'call-and-answer',
+              questionSetId: 'setA', questionSetScope: 'platform',
+            },
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}?role=host`)) {
+        return { ok: true, status: 200, json: async () => ({ gameId: LIVE, started: true }), text: async () => '{}' };
+      }
+      // THE BUG SCENARIO: the catalogue search finds nothing — a deactivated
+      // set, or any other reason `GET /question-sets` came back empty.
+      if (u.includes('question-sets')) {
+        return { ok: true, status: 200, json: async () => ({ sets: [] }), text: async () => '{}' };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    window.history.pushState({}, '', `/host?gameId=${LIVE}`);
+    render(<GameHostPage />);
+
+    // THE REGRESSION: with the old lookup alone, this stays blank forever —
+    // the catalogue search found no set to read from, and nothing else ever
+    // corrected it.
+    await waitFor(
+      () => expect(screen.getByText(INSTRUCTION)).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+  });
+});
+
 /*
  * THE ROUNDS TAB, AGAINST THE PAYLOAD THE SERVER ACTUALLY SENDS.
  *
