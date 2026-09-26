@@ -398,6 +398,27 @@ describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 
     expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
   }, 8000);
 
+  // M-1 (2026-09-26 final review): `/host-state` sits behind the Lambda
+  // authorizer (bug-sweep Task 7). That authorizer answers a
+  // present-but-rejected token (group removed, custom:status disabled,
+  // verification failure) with `isAuthorized:false`, which the HTTP API
+  // returns as 403 — not 401. `checkAccess` already treats 403 as 'expired'
+  // (see the 401 describe block above); this poll must re-ask the door on
+  // 403 exactly as it already does on 401/404, or a revoked host sits on
+  // "Offline" instead of ever seeing the banner.
+  it('a /host-state poll that starts 403ing (a rejected token, not a missing session) re-runs the access check too', async () => {
+    serve({
+      hostDetails: (call) => (call === 1 ? 200 : 403),
+      stateStatus: (call) => (call === 1 ? 200 : 403),
+    });
+    await connect();
+    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+
+    // The next 2s poll tick hits the now-403 /host-state and re-asks the door.
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument(), { timeout: 4000 });
+    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+  }, 8000);
+
   it('a /players poll that comes back 404 re-runs the access check and the gate replaces the session', async () => {
     // 404 from the very first roster call — this poll fires immediately once
     // access is OK, so this does not need to wait out a real timer.

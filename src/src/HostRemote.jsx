@@ -383,17 +383,23 @@ function HostRemote() {
       if (activeGameRef.current !== id) return;
       if (!res.ok) {
         setConnected(false);
-        // Authenticated as of Task 7, so this DOES fire now: a 401/404
+        // Authenticated as of Task 7, so this DOES fire now: a 401/403/404
         // mid-session means exactly what the up-front check means — this
         // account can no longer drive the session (removed from the team, or
-        // a token that expired while the phone sat untouched). The gate only
-        // asks at open and on a team switch, so without this a revoked host
-        // would sit on a frozen "Waiting for the session…" instead of ever
-        // seeing the banner. Anything else (500, no response) is a hiccup the
-        // "Offline" indicator already covers, and `/players` below is not
-        // authenticated yet — its own 401/404 branch is the one still ahead
-        // of that route actually being able to answer either.
-        if (res.status === 401 || res.status === 404) checkAccess(id);
+        // a token that expired while the phone sat untouched). 403, not just
+        // 401, because the Lambda authorizer answers a PRESENT but rejected
+        // token (group removed, custom:status disabled, verification
+        // failure) with `isAuthorized:false`, which the HTTP API returns as
+        // 403 — `checkAccess` already treats 403 as 'expired' (M-1, 2026-09-26
+        // final review); this poll must classify it the same way. The gate
+        // only asks at open and on a team switch, so without this a revoked
+        // host would sit on a frozen "Waiting for the session…" (or, before
+        // this fix, "Offline") instead of ever seeing the banner. Anything
+        // else (500, no response) is a hiccup the "Offline" indicator already
+        // covers, and `/players` below is not authenticated yet — its own
+        // 401/403/404 branch is the one still ahead of that route actually
+        // being able to answer any of them.
+        if (res.status === 401 || res.status === 403 || res.status === 404) checkAccess(id);
         return;
       }
       setSnapshot(await res.json());
@@ -414,14 +420,15 @@ function HostRemote() {
     try {
       // Still a plain, unauthenticated `fetch` — unlike `/host-state` above,
       // bug-sweep Task 7 has not moved this route behind an authorizer, so
-      // the 401 branch below is not reachable from here today, only the 404
-      // one (a session that no longer exists). Kept for the day this route
-      // moves too, at which point it starts meaning the same thing it already
-      // means in `pollState`.
+      // the 401/403 branch below is not reachable from here today, only the
+      // 404 one (a session that no longer exists). Kept for the day this
+      // route moves too, at which point it starts meaning the same thing it
+      // already means in `pollState` (M-1, 2026-09-26 final review: 403 is
+      // the authorizer's answer to a present-but-rejected token, same as 401).
       const res = await fetch(`${apiBase()}games/${id}/players`);
       if (activeGameRef.current !== id) return;
       if (!res.ok) {
-        if (res.status === 401 || res.status === 404) checkAccess(id);
+        if (res.status === 401 || res.status === 403 || res.status === 404) checkAccess(id);
         return;
       }
       setRoster(await res.json());
