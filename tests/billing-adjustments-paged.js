@@ -1,14 +1,17 @@
 /**
  * THE ADJUSTMENTS LEDGER, READ PAST ITS FIRST PAGE.
  *
- * `get-usage.js`'s usage route and `invoices.js`'s `buildInvoice` each ran ONE
- * Query for `ORG#<org>` / `ADJ#…`, took `.Items` as the whole ledger, and never
- * looked at `LastEvaluatedKey`. A Query stops at 1 MB and hands back what it
- * read; an org old enough to have collected a page of revoked or expired
- * adjustment rows ahead of a live one has that live credit or rate override
- * silently invisible to both the usage screen and every invoice closed after
- * it — the exact shape usage.js's OWN `readAdjustments` (used by the session
- * gate) already guards against by following `ExclusiveStartKey` to the end.
+ * `get-usage.js`'s usage route, `invoices.js`'s `buildInvoice`, and
+ * `admin/orgs/adjustments.js`'s `listAdjustments` (the staff and org-admin
+ * ledger screen) each ran ONE Query for `ORG#<org>` / `ADJ#…`, took `.Items`
+ * as the whole ledger, and never looked at `LastEvaluatedKey`. A Query stops
+ * at 1 MB and hands back what it read; an org old enough to have collected a
+ * page of revoked or expired adjustment rows ahead of a live one has that
+ * live credit or rate override silently invisible to the usage screen, every
+ * invoice closed after it, AND the ledger screen staff use to grant and
+ * revoke — the exact shape usage.js's OWN `readAdjustments` (used by the
+ * session gate) already guards against by following `ExclusiveStartKey` to
+ * the end.
  *
  * tests/helpers/paged-table.js cuts pages of 3 BEFORE any filtering, exactly
  * as DynamoDB does, so a fixture with one real adjustment sitting behind nine
@@ -39,6 +42,7 @@ process.env.TABLE_NAME = 'test-table';
 
 const getUsage = require(path.join(LF, 'admin', 'get-usage.js'));
 const { buildInvoice } = require(path.join(LF, 'admin', 'shared', 'invoices.js'));
+const { listAdjustments } = require(path.join(LF, 'admin', 'orgs', 'adjustments.js'));
 
 const ORG = 'org_billpage';
 const PERIOD = '2026-08';
@@ -130,6 +134,20 @@ const adjQueries = () => table.log.filter((e) => e.kind === 'query'
   });
 
   await check('invoices.js also followed LastEvaluatedKey across all ten rows', () => {
+    const queries = adjQueries();
+    assert(queries.length >= 4, `only ${queries.length} ADJ# page(s) read`);
+    assert.strictEqual(queries[queries.length - 1].more, false, 'stopped with pages still unread');
+  });
+
+  // ── admin/orgs/adjustments.js: listAdjustments (the staff/org-admin ledger) ─
+  seedLedger();
+  const rows = await listAdjustments(ORG);
+
+  await check('listAdjustments returns all ten adjustment rows, not the first page\'s three', () => {
+    assert.strictEqual(rows.length, 10, `got ${rows.length}`);
+  });
+
+  await check('listAdjustments also followed LastEvaluatedKey across all ten rows', () => {
     const queries = adjQueries();
     assert(queries.length >= 4, `only ${queries.length} ADJ# page(s) read`);
     assert.strictEqual(queries[queries.length - 1].more, false, 'stopped with pages still unread');
