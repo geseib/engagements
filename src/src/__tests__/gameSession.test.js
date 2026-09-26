@@ -59,6 +59,19 @@ describe('initialGameSession', () => {
     expect(s.reportData).toBeNull();
   });
 
+  // Task 3 fix round 1, 2026-09-26 feature sweep: the survey results panel
+  // (GameHostPage.jsx ~372-375) was declared beside showReport/reportData but
+  // never joined this list, so switching sessions from a survey's results
+  // screen left the NEXT session's overlay showing the PREVIOUS one's data —
+  // the exact "one stale panel" failure this module exists to stop.
+  it('clears the survey results panel the same way it clears the report', () => {
+    const s = initialGameSession();
+    expect(s.showSurveyResults).toBe(false);
+    expect(s.surveyResultsData).toBeNull();
+    expect(s.surveyResultsStatus).toBe('idle');
+    expect(s.surveyResultsError).toBeNull();
+  });
+
   it('drops the previous set\'s instruction and round noun', () => {
     // The host resolves both from the question set. Carrying them into a new
     // game is how a trivia session inherits "Lesson" and an art set's prompt.

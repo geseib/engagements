@@ -179,6 +179,18 @@ export function initialGameSession() {
     showReport: false,
     reportData: null,
 
+    // --- the survey results panel (Phase 3, 2026-09-26 feature sweep) ----
+    // Same shape as reports just above, and reset for the same reason: left
+    // alone, switching sessions from a survey's results screen carried the
+    // PREVIOUS session's fetched data and status into the next one's overlay
+    // — the "one stale panel" bug this whole module exists to stop. Fixed in
+    // the Task 3 review's fix round 1 (was declared in GameHostPage.jsx but
+    // never joined this list).
+    showSurveyResults: false,
+    surveyResultsData: null,
+    surveyResultsStatus: 'idle',
+    surveyResultsError: null,
+
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',
     /*

@@ -579,9 +579,16 @@ const READERS = new Map([
   // GET /games/{id}/survey-results (survey-host.js `results()`), which itself
   // only relays what THIS module already computed onto SURVEY#RESULTS. Both
   // files only format a value that is already sitting in `question.result` —
-  // `avgPlace[i].toFixed(1)`, `topTwo`% — never a division of their own; the
-  // third check below (no survey file works out a mean of its own) still runs
-  // against them.
+  // `avgPlace[i].toFixed(1)`, `topTwo`% — never a division of their own.
+  //
+  // CORRECTED, review fix round 1: this comment used to claim the check below
+  // ("no survey file works out a mean of its own") still ran against a
+  // registered reader. It does not — that check's own filter is
+  // `!READERS.has(f)`, the identical exclusion this one uses, so registering a
+  // file here is silence on BOTH checks, not one. What actually holds these
+  // two safe is narrower and true: neither line divides anything — read the
+  // two files before adding a third entry here on the strength of this
+  // comment alone.
   ['src/src/components/survey/results/RankResult.jsx', 'displays avgPlace and placeHist, computes neither'],
   ['src/src/components/survey/results/RatingResult.jsx', 'displays topTwo, computes nothing'],
 ]);
