@@ -91,6 +91,25 @@ describe('every finding the editor can raise has a place it gets fixed', () => {
     expect(item.tickable).toBe(false);
   });
 
+  test('a heading typed into the text with no outputSections declared is fixed in Output sections, not by Improve', () => {
+    // BUGSWEEP 5c's finding: a "## Heading" line in instructions/outputFormat
+    // is thrown away by the FORMAT block unless outputSections is declared.
+    // Improve rewrites only the two text halves — it cannot declare a section
+    // — so like output-shape-discarded and structured-fields-empty, the fix
+    // is in the editor's Output sections field.
+    const report = preflightPrompt({
+      instructions: 'Read the answers and say what the room decided.\n\n- The answers: {responsesText}',
+      outputFormat: '## Room Verdict\nSay what happened.',
+      gameType: 'call-and-answer',
+    });
+    const item = checkItems(report).find((i) => i.code === 'prose-heading-overridden');
+    expect(item).toBeTruthy();
+    expect(item.route).toBe('editor');
+    expect(item.where).toBe('Output sections');
+    expect(item.tickable).toBe(false);
+    expect(whereLabel(item)).toBe('Fix in the editor: Output sections');
+  });
+
   test('a finding whose evidence sits only in a section\'s guidance is fixed in Output sections, not by Improve', () => {
     const report = preflightPrompt({
       ...ART,

@@ -42,6 +42,12 @@ export const FINDING_ROUTES = Object.freeze({
   'duplicated-variable': { route: 'improve' },
   'unsafe-variable': { route: 'improve' },
   'structured-fields-empty': { route: 'editor', where: 'Output sections' },
+  // A "## Heading" typed into instructions/outputFormat, with no
+  // outputSections declared to hold it — same fix as output-shape-discarded
+  // and structured-fields-empty, and for the same reason: Improve rewrites
+  // only the two text halves, and cannot declare a section. The fix is to
+  // add one in the editor's Output sections field, not to reword the prose.
+  'prose-heading-overridden': { route: 'editor', where: 'Output sections' },
   'default-blast-radius': { route: 'editor', where: 'the default box' },
   'word-cap-not-enforced': { route: 'improve' },
   // A trade about airtime (raise the cap, drop a section, quote less) — the
