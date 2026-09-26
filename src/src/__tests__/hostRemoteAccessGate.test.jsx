@@ -72,8 +72,12 @@ const TRIVIA = {
  * (or a function of the call count, for the retry test); everything else is
  * seeded with the distinctive fixtures above so a leak has something to catch.
  */
-function serve({ hostDetails = 200, orgs = [] } = {}) {
+function serve({
+  hostDetails = 200, orgs = [], stateStatus = 200, playersStatus = 200,
+} = {}) {
   let hostDetailsCalls = 0;
+  let stateCalls = 0;
+  let playersCalls = 0;
   global.fetch = jest.fn((url, init) => {
     const href = String(url);
 
@@ -89,6 +93,9 @@ function serve({ hostDetails = 200, orgs = [] } = {}) {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ orgs }) });
     }
     if (href.includes('/state')) {
+      stateCalls += 1;
+      const status = typeof stateStatus === 'function' ? stateStatus(stateCalls) : stateStatus;
+      if (status !== 200) return Promise.resolve({ ok: false, status, json: async () => ({}) });
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -101,6 +108,9 @@ function serve({ hostDetails = 200, orgs = [] } = {}) {
       });
     }
     if (href.includes('/players')) {
+      playersCalls += 1;
+      const status = typeof playersStatus === 'function' ? playersStatus(playersCalls) : playersStatus;
+      if (status !== 200) return Promise.resolve({ ok: false, status, json: async () => ({}) });
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -314,4 +324,67 @@ describe('a status this surface cannot explain', () => {
     expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+});
+
+/* --------------------------------------------- revoked mid-session (Task 6 fix round 1 item 3) */
+
+/**
+ * The up-front check and the team-switch recheck are not the only moments
+ * this can happen. Once bug-sweep Task 7 lands `/state?includeHostData=true`
+ * and `/players` behind their own authorizer, a member removed from the
+ * team — or a token that expires — mid-session will make those POLLS start
+ * answering 401/404 too, not just the up-front `/host-details` call. Without
+ * this, the gate would never notice: it only asks the door at open and on a
+ * team switch, so the phone would sit on a frozen "Waiting for the
+ * session…"/stale roster instead of showing the same banner it would have
+ * shown had the account been wrong from the start.
+ *
+ * `stateStatus`/`playersStatus` do not reflect anything this route actually
+ * does TODAY — both are still plain, unauthenticated `fetch`, unchanged by
+ * this fix — this only proves the client-side reaction is wired for the day
+ * they do.
+ */
+describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 item 3)', () => {
+  it('a /state poll that starts 404ing re-runs the access check and the gate replaces the session', async () => {
+    serve({
+      hostDetails: (call) => (call === 1 ? 200 : 404),
+      stateStatus: (call) => (call === 1 ? 200 : 404),
+    });
+    await connect();
+    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+
+    // The next 2s poll tick hits the now-404 /state and re-asks the door.
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument(), { timeout: 4000 });
+    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+  }, 8000);
+
+  it('a /players poll that comes back 404 re-runs the access check and the gate replaces the session', async () => {
+    // 404 from the very first roster call — this poll fires immediately once
+    // access is OK, so this does not need to wait out a real timer.
+    serve({
+      hostDetails: (call) => (call === 1 ? 200 : 404),
+      playersStatus: 404,
+    });
+    await connect();
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+  });
+
+  it('does not re-check on an ordinary 500 or a dropped connection', async () => {
+    // Only 401/404 carry the "this account is not welcome" signal; anything
+    // else is a hiccup the existing "Offline" state already covers, and
+    // re-checking on every transient error would needlessly hit the door.
+    serve({
+      hostDetails: 200,
+      stateStatus: (call) => (call === 1 ? 200 : 500),
+    });
+    await connect();
+    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText('Offline')).toBeInTheDocument(), { timeout: 4000 });
+    // Still showing the session — no re-check, no gate.
+    expect(screen.getByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  }, 8000);
 });

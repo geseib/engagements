@@ -358,7 +358,20 @@ function HostRemote() {
       // the room is finished.
       const res = await fetch(`${apiBase()}games/${id}/state?includeHostData=true`);
       if (activeGameRef.current !== id) return;
-      if (!res.ok) { setConnected(false); return; }
+      if (!res.ok) {
+        setConnected(false);
+        // Still a plain, unauthenticated fetch today, so this never fires yet
+        // — but bug-sweep Task 7 puts this route behind its own authorizer,
+        // and once it does, a 401/404 here mid-session means exactly what the
+        // up-front check means: this account can no longer drive the session
+        // (removed from the team, or a token that expired while the phone sat
+        // untouched). The gate only asks at open and on a team switch, so
+        // without this a revoked host would sit on a frozen "Waiting for the
+        // session…" instead of ever seeing the banner. Anything else (500,
+        // no response) is a hiccup the "Offline" indicator already covers.
+        if (res.status === 401 || res.status === 404) checkAccess(id);
+        return;
+      }
       setSnapshot(await res.json());
       setConnected(true);
     } catch {
@@ -366,7 +379,7 @@ function HostRemote() {
     } finally {
       inFlightRef.current = false;
     }
-  }, []);
+  }, [checkAccess]);
 
   // KEEP THE ARRAY. This used to reduce the whole roster to
   // `data.stats.totalPlayers` and throw away every name — while the one thing a
@@ -376,12 +389,17 @@ function HostRemote() {
   const pollRoster = useCallback(async (id) => {
     try {
       const res = await fetch(`${apiBase()}games/${id}/players`);
-      if (!res.ok || activeGameRef.current !== id) return;
+      if (activeGameRef.current !== id) return;
+      if (!res.ok) {
+        // Same reasoning as pollState above, for the same future route change.
+        if (res.status === 401 || res.status === 404) checkAccess(id);
+        return;
+      }
       setRoster(await res.json());
     } catch {
       /* roster is a nicety; the status card does not depend on it */
     }
-  }, []);
+  }, [checkAccess]);
 
   // GATED ON `access.status === ACCESS.OK` — the whole point of the access
   // gate above. `/state?includeHostData=true` and `/players` are unauthenticated
