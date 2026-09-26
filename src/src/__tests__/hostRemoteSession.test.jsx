@@ -108,6 +108,12 @@ function serve({ state = 'STARTED', players = [], report = REPORT, progress = {}
       }
       return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
     }
+    // The access gate (Task 6): asked before anything else about the session.
+    // This file is about the session tab downstream of it, so it always
+    // answers 200.
+    if (href.includes('/host-details')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    }
     if (href.includes('/host-state')) {
       return Promise.resolve({
         ok: true,
