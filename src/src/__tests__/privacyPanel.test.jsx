@@ -133,6 +133,24 @@ describe('the access log', () => {
     expect(screen.getByText(/Loading the access log/i)).toBeInTheDocument();
     expect(screen.queryByText(/Nobody at Engage has read anything/i)).not.toBeInTheDocument();
   });
+
+  /*
+   * NO ACCESS LOG AT ALL — the state AdminPage.jsx actually mounts this panel
+   * in (`<PrivacyPanel org={...} />`, no `accessLog`), because nothing writes
+   * one yet: moderation-get.js's own Stage 5 comment marks the write as not
+   * there. That is a different situation from a log that was fetched and came
+   * back empty, and it gets different copy: "Nobody at Engage has read
+   * anything" and "Every read … appears here" are both false when nothing is
+   * ever recorded and staff CAN open a set's real content — moderation-get.js
+   * ~157-159 reads the S3 snapshot the automated check judged whenever a
+   * shared set is queued for a person to decide.
+   */
+  test('with no access log, the old claim is absent and the true statement is present', () => {
+    mount({ accessLog: undefined });
+    expect(screen.queryByText(/Nobody at Engage has read anything/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Every read.*appears here/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/an Engage reviewer opens exactly what the check saw/i)).toBeInTheDocument();
+  });
 });
 
 describe('leaving', () => {

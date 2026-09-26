@@ -1974,11 +1974,14 @@ function AdminPage() {
           {resolvedTab === 'privacy' && activeOrg && (
             /*
               The access log, export and delete endpoints do not exist yet, so
-              the panel is mounted against its defaults. Its empty state says
-              "nobody at Engage has read anything", which is TRUE today and is
-              the honest thing to show — and it distinguishes that from a load
-              FAILURE, because an error rendered as an empty log would claim
-              nobody looked when the truth is that we do not know.
+              the panel is mounted with no `accessLog` at all. It used to fill
+              that gap with "nobody at Engage has read anything" and "every
+              read appears here" — both false: nothing has ever written that
+              log, and staff CAN open a set's real content once, when a shared
+              set is queued for a human decision (moderation-get.js reads the
+              S3 snapshot the check judged). With no `accessLog`,
+              PrivacyPanel now says only that: nothing is recorded yet, and
+              names the one case where a read can happen.
             */
             <PrivacyPanel org={{ id: activeOrg.orgId, name: activeOrg.name }} />
           )}
