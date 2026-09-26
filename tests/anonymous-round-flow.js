@@ -259,7 +259,7 @@ seedAnonymousRound('3005');
 // seedAnonymousRound doesn't seed connections (it's built for get-answers, which
 // doesn't broadcast). start-vote's votingStarted frame only reaches `sent` if
 // broadcastToGame finds at least one CONNECTION# record, so seed one here.
-put({ PK: 'GAME#3005', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST', IsHost: true });
+put({ PK: 'GAME#3005', SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
 const voteRes = await startVote({ pathParameters: { gameId: '3005' }, body: JSON.stringify({ questionNumber: 1 }) });
 const votePayload = JSON.parse(voteRes.body);
 
