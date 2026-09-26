@@ -114,7 +114,10 @@ export default function EventItemDialog({
         await addItem(code, {
           type,
           ...checked.value,
-          position,
+          // The default "goes after the last item" is not sent at all — the
+          // server appends when `position` is absent (carried note: never
+          // null, never items.length).
+          ...(position === items.length ? {} : { position }),
           ...(chosen ? {
             setRef: {
               scope: chosen.scope || 'platform', orgId: chosen.orgId || '', setId: chosen.id,

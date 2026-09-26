@@ -52,7 +52,7 @@ const DAY = [
 ];
 const times = () => screen.getAllByTestId('agenda-at').map((c) => c.textContent);
 const titles = () => screen.getAllByTestId('agenda-row').map((r) => r.querySelector('.evb-nm').textContent);
-const serve = (items = DAY) => api.getEvent.mockResolvedValue({ event: EVENT, items });
+const serve = (items = DAY, event = EVENT) => api.getEvent.mockResolvedValue({ event, items });
 const mount = async (props = {}) => {
   render(<EventBuilder code="5307" sets={[]} {...props} />);
   await waitFor(() => expect(screen.getAllByTestId('agenda-row').length).toBeGreaterThan(0));
@@ -126,10 +126,13 @@ describe('reordering', () => {
     await waitFor(() => expect(api.reorderItems).toHaveBeenCalledTimes(1));
   });
 
-  it('a row can be dragged to a new place', async () => {
+  it('a row can be dragged to a new place, and starts the drag with a dataTransfer payload (Firefox needs it)', async () => {
     await mount();
     const rows = screen.getAllByTestId('agenda-row');
-    fireEvent.dragStart(rows[0]);
+    const dataTransfer = { setData: jest.fn(), effectAllowed: '' };
+    fireEvent.dragStart(rows[0], { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'it_00000001');
+    expect(dataTransfer.effectAllowed).toBe('move');
     fireEvent.dragOver(rows[2]);
     fireEvent.drop(rows[2]);
     expect(titles().slice(0, 3)).toEqual(['FY26 in one word', 'How well do you know our customers?', 'Before we start']);
@@ -142,6 +145,30 @@ describe('reordering', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Move FY26 in one word up' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The event changed while you were saving');
     expect(titles()[0]).toBe('Before we start');
+  });
+
+  it('a 409 agenda_changed reloads from the server (not just a local revert) and shows the plain sentence', async () => {
+    api.reorderItems.mockRejectedValue(Object.assign(
+      new Error('The event changed while you were saving. Nothing was saved; reload it and try again.'),
+      { body: { code: 'agenda_changed' } },
+    ));
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Move FY26 in one word up' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The event changed while you were saving');
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+    expect(titles()[0]).toBe('Before we start');
+  });
+
+  it('a second move attempted while a save is pending sends only one request', async () => {
+    let resolveReorder;
+    api.reorderItems.mockImplementation(() => new Promise((resolve) => { resolveReorder = resolve; }));
+    await mount();
+    const up = screen.getByRole('button', { name: 'Move How well do you know our customers? up' });
+    fireEvent.click(up);
+    fireEvent.click(up);
+    expect(api.reorderItems).toHaveBeenCalledTimes(1);
+    resolveReorder({ order: [] });
+    await waitFor(() => expect(api.reorderItems).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -162,23 +189,53 @@ describe('the pinned version', () => {
     await mount();
     expect(screen.getByText('This question set is no longer available')).toHaveClass('evb-sub--bad');
   });
+
+  it('a failed "Use vN" reloads the agenda and says why (a stale row should not linger)', async () => {
+    api.updateItem.mockRejectedValue(new Error('That item has already started.'));
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Use v3' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That item has already started.');
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+  });
+
+  it('"Use vN" disables while its own request is out, so a slow network cannot fire it twice', async () => {
+    let resolveUpdate;
+    api.updateItem.mockImplementation(() => new Promise((resolve) => { resolveUpdate = resolve; }));
+    await mount();
+    const useV3 = screen.getByRole('button', { name: 'Use v3' });
+    fireEvent.click(useV3);
+    expect(useV3).toBeDisabled();
+    resolveUpdate({ item: {} });
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe('the add menu (02, 02b)', () => {
   const openMenu = () => fireEvent.click(screen.getByRole('button', { name: /add item/i }));
   const item = (name) => screen.getByRole('menuitem', { name: new RegExp(`^${name}`) });
 
-  it('at 8 engagements the kinds are disabled with the reason above them; Break stays open', async () => {
+  it('at 8 engagements the kinds are aria-disabled (still focusable) with the reason above them; Break stays open', async () => {
     await mount();
     openMenu();
     const reason = document.getElementById('evb-capwhy');
     expect(reason).toHaveTextContent(rules.CAP_SENTENCES.engagements);
     expect(reason).toHaveTextContent('Breaks can still be added.');
     for (const name of ['Trivia', 'Call & Answer', 'Poll', 'Wavelength']) {
-      expect(item(name)).toBeDisabled();
-      expect(item(name)).toHaveAttribute('aria-describedby', 'evb-capwhy');
+      const btn = item(name);
+      expect(btn).toHaveAttribute('aria-disabled', 'true');
+      expect(btn).not.toBeDisabled(); // native disabled would drop it from the tab order
+      expect(btn).toHaveAttribute('aria-describedby', 'evb-capwhy');
     }
     expect(item('Break')).toBeEnabled();
+    expect(item('Break')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('activating an aria-disabled kind does nothing, and the menu stays open', async () => {
+    await mount();
+    openMenu();
+    fireEvent.click(item('Trivia'));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Add Trivia' })).toBeNull();
   });
 
   it('below the cap an engagement kind opens its dialog, and the menu closes', async () => {
@@ -191,21 +248,24 @@ describe('the add menu (02, 02b)', () => {
     expect(screen.getByRole('heading', { name: 'Add Trivia' })).toBeInTheDocument();
   });
 
-  it('Presentation and Survey are listed, disabled, and say they are coming', async () => {
+  it('Presentation and Survey are listed, aria-disabled, and say they are coming', async () => {
     serve(DAY.slice(0, 3));
     await mount();
     openMenu();
-    expect(item('Presentation')).toBeDisabled();
+    expect(item('Presentation')).toHaveAttribute('aria-disabled', 'true');
+    expect(item('Presentation')).not.toBeDisabled();
     expect(item('Presentation')).toHaveTextContent('Coming soon.');
-    expect(item('Survey')).toBeDisabled();
+    expect(item('Survey')).toHaveAttribute('aria-disabled', 'true');
+    expect(item('Survey')).not.toBeDisabled();
     expect(item('Survey')).toHaveTextContent('Coming soon.');
   });
 
-  it('Escape closes the menu', async () => {
+  it('Escape closes the menu and sends focus back to Add item (never the page)', async () => {
     await mount();
     openMenu();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /add item/i }));
   });
 
   it('Edit opens the item\'s own dialog', async () => {
@@ -214,10 +274,64 @@ describe('the add menu (02, 02b)', () => {
     expect(screen.getByRole('heading', { name: 'Edit Trivia' })).toBeInTheDocument();
   });
 
+  it('closing an add dialog opened from the menu returns focus to Add item (never the page)', async () => {
+    await mount();
+    openMenu();
+    fireEvent.click(item('Break'));
+    expect(screen.getByRole('heading', { name: 'Add a break' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /add item/i }));
+  });
+
+  it('saving an item added from the menu returns focus to Add item', async () => {
+    api.addItem.mockResolvedValue({ item: {} });
+    await mount();
+    openMenu();
+    fireEvent.click(item('Break'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /add item/i })));
+  });
+
+  it('removing an item focuses the row that now sits in its place', async () => {
+    api.removeItem.mockResolvedValue({ removed: 'it_00000003' });
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit How well do you know our customers?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from agenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit Trivia' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByTestId('agenda-row')[3]));
+  });
+
+  it('removing the last item falls back to focusing Add item', async () => {
+    api.removeItem.mockResolvedValue({ removed: 'it_00000009' });
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit How did today go?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from agenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /add item/i })));
+  });
+
   it('an empty agenda says what to do, and the foot still adds up', async () => {
     serve([]);
     render(<EventBuilder code="5307" sets={[]} />);
     expect(await screen.findByTestId('agenda-empty')).toHaveTextContent('Nothing on the agenda yet.');
     expect(screen.getByTestId('agenda-foot')).toHaveTextContent('Ends 9:00 · 0 min planned · 0 of 16 items');
+  });
+});
+
+describe('crossing midnight', () => {
+  it('a time that wraps past midnight carries a next-day mark, matching the builder\'s clock format', async () => {
+    serve([eng(1, 'poll', 'Late night pulse', 45, 'Late pulse', 1, 1)], { ...EVENT, startsAt: '2026-10-09T23:30' });
+    await mount();
+    expect(times()[0]).toBe('23:30');
+    expect(screen.getByTestId('agenda-foot')).toHaveTextContent('Ends 0:15 (+1 day)');
+  });
+});
+
+describe('who can join', () => {
+  it('reads event.access when present, and falls back to "Anyone with the code"', async () => {
+    serve(DAY, { ...EVENT, access: undefined });
+    await mount();
+    expect(screen.getByTestId('event-facts')).toHaveTextContent('Anyone with the code');
   });
 });

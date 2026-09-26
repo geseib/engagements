@@ -76,6 +76,19 @@ describe('adding an engagement', () => {
     });
   });
 
+  it('appending after the last item (the default) omits position entirely', async () => {
+    api.addItem.mockResolvedValue({ item: {} });
+    const p = base();
+    render(<EventItemDialog {...p} />);
+    fireEvent.click(screen.getByLabelText('Customer knowledge — Q4'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
+    expect(api.addItem).toHaveBeenCalledWith('5307', {
+      type: 'trivia', title: 'Customer knowledge — Q4', description: '', minutes: 15,
+      setRef: { scope: 'org', orgId: 'org_nw', setId: 'custq4', version: 3 },
+    });
+  });
+
   it('asks for a set before sending anything', () => {
     render(<EventItemDialog {...base()} />);
     fireEvent.change(screen.getByLabelText('Title on the agenda'), { target: { value: 'Quiz' } });

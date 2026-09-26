@@ -114,12 +114,18 @@ describe('the contract', () => {
     selectors.forEach((sel) => sel.split(',').forEach((s) => expect(s.trim()).toMatch(/^\.evb(\b|-|\.|\s|:)/)));
     expect(stripped(GLOBAL_CSS)).not.toMatch(/\.evb\b/);
   });
-  test('no hex outside the token block, and --danger never carries text', () => {
+  test('no hex or raw rgba(...) outside the token block, and --danger never carries text', () => {
     const css = stripped(MY_CSS);
     const start = css.indexOf('.evb {');
     const outside = css.slice(0, start) + css.slice(css.indexOf('}', start));
     expect(outside).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(outside).not.toMatch(/rgba\(/i);
     expect(css.split('\n').filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l))).toEqual([]);
+  });
+  test('the warn chip\'s border is a token, not a raw colour, matching the mockup\'s .chip.warn', () => {
+    const css = stripped(MY_CSS);
+    expect(css).toMatch(/--evb-rule-warn:\s*rgba\(246,\s*169,\s*76,\s*\.5\)/);
+    expect(css).toMatch(/\.evb-chip--warn\s*\{[^}]*border-color:\s*var\(--evb-rule-warn\)/);
   });
   test('every custom property used is declared somewhere', () => {
     const declared = new Set();
