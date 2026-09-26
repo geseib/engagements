@@ -14,7 +14,7 @@
  * offered as if they worked; the foot counting a break.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import EventBuilder from '../components/EventBuilder';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 
@@ -353,5 +353,25 @@ describe('who can join', () => {
     serve(DAY, { ...EVENT, access: undefined });
     await mount();
     expect(screen.getByTestId('event-facts')).toHaveTextContent('Anyone with the code');
+  });
+});
+
+describe('unmount safety (Fix round 1 #1)', () => {
+  // rejects: a load already in flight when the place is left calling onTitle
+  // or touching state after this instance is gone — the caller's onTitle is
+  // AdminPage.jsx's own setEventPlace, which does not know or care whether
+  // ITS caller (this component) still exists.
+  it('a load that resolves after unmount does not call onTitle', async () => {
+    let resolveGet;
+    api.getEvent.mockImplementation(() => new Promise((resolve) => { resolveGet = resolve; }));
+    const onTitle = jest.fn();
+    const { unmount } = render(<EventBuilder code="5307" sets={[]} onTitle={onTitle} />);
+    expect(screen.getByText('Loading the event…')).toBeInTheDocument();
+
+    unmount();
+    resolveGet({ event: EVENT, items: DAY });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(onTitle).not.toHaveBeenCalled();
   });
 });

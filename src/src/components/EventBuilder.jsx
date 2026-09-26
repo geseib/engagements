@@ -129,18 +129,34 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
      on every render. */
   const titleRef = useRef(onTitle);
   titleRef.current = onTitle;
+  /* A SLOW getEvent MUST NOT LAND ON THE WRONG PLACE. Going back to the list
+     and opening a different event fully unmounts this component and mounts a
+     fresh one — but a `load()` already in flight for the OLD event keeps
+     running, and its promise can resolve after the new instance is up and
+     showing the NEW event. Two guards, checked at resolution: `mountedRef`
+     (this instance is gone) and `codeRef` (even a hypothetical future reuse
+     of one instance across a code change). Either one true means "not for
+     here any more" — neither setState nor onTitle runs (Fix round 1 #1). */
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+  const codeRef = useRef(code);
+  codeRef.current = code;
 
   const load = useCallback(async () => {
+    const forCode = code;
+    const stillCurrent = () => mountedRef.current && codeRef.current === forCode;
     try {
       const body = await getEvent(code);
+      if (!stillCurrent()) return;
       setEvent(body.event);
       setItems(Array.isArray(body.items) ? body.items : []);
       setError('');
       if (titleRef.current && body.event) titleRef.current(body.event.title);
     } catch (err) {
+      if (!stillCurrent()) return;
       setError(err.message || 'Could not load the event.');
     } finally {
-      setLoading(false);
+      if (stillCurrent()) setLoading(false);
     }
   }, [code]);
 
