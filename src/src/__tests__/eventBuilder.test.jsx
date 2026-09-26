@@ -208,6 +208,26 @@ describe('the pinned version', () => {
     resolveUpdate({ item: {} });
     await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
   });
+
+  // rejects: only the pinning row's button looking disabled while a pin is out
+  // — a SECOND row's "Use vN", clicked in that window, silently does nothing
+  // because savingRef/pinningRef never sees it (Task 14 re-review carry-over).
+  it('every row\'s "Use vN" is disabled while any pin request is out, not only the pinning row\'s', async () => {
+    let resolveUpdate;
+    api.updateItem.mockImplementation(() => new Promise((resolve) => { resolveUpdate = resolve; }));
+    serve([
+      eng(1, 'poll', 'Before we start', 8, 'Kickoff pulse', 1, 2),
+      DAY[2],
+    ]);
+    await mount();
+    const offers = screen.getAllByRole('button', { name: /^Use v\d+$/ });
+    expect(offers.map((b) => b.textContent)).toEqual(['Use v2', 'Use v3']);
+    fireEvent.click(offers[0]);
+    expect(offers[0]).toBeDisabled();
+    expect(offers[1]).toBeDisabled();
+    resolveUpdate({ item: {} });
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe('the add menu (02, 02b)', () => {

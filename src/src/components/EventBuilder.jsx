@@ -439,7 +439,7 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
                     <td>
                       <div className="evb-rowact">
                         {newer && (
-                          <button type="button" className="evb-btn evb-btn--sm" disabled={pinningId === item.itemId} onClick={() => pinLatest(item)}>
+                          <button type="button" className="evb-btn evb-btn--sm" disabled={pinningId !== null} onClick={() => pinLatest(item)}>
                             Use v{item.set.latestVersion}
                           </button>
                         )}
