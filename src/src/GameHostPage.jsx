@@ -4894,8 +4894,17 @@ Focus on actionable business strategy insights.`;
    * 2026-09-26 feature sweep). Mirrors generateReportForGame below: the shell
    * shows its loading state first, since the route is a fetch with real
    * latency, not a navigation.
+   *
+   * ONE FUNCTION, TWO CALLERS (Task 3 fix round 1): the live session's CLOSED/
+   * ENDED "See the results" control (runHostAction), and the Sessions list's
+   * "Results" row for any closed survey — SessionHistoryPanel's `onResults`,
+   * mirroring `onReport={generateReportForGame}` beside it. `setShowReportsModal
+   * (false)` is a no-op from the live-session caller (the modal is already
+   * closed) and closes the history list from the other, exactly as
+   * generateReportForGame does for Report.
    */
   const loadSurveyResults = async (targetGameId) => {
+    setShowReportsModal(false);
     setSurveyResultsData(null);
     setSurveyResultsError(null);
     setSurveyResultsStatus('loading');
@@ -5467,6 +5476,7 @@ Focus on actionable business strategy insights.`;
               createdAt: session.createdAt,
             })}
             onReport={generateReportForGame}
+            onResults={loadSurveyResults}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
