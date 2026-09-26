@@ -222,14 +222,21 @@ describe('404 — this account cannot drive the session', () => {
     expectNoSessionContent();
   });
 
-  it('"Sign in as someone else" signs out and sends the browser to /auth', async () => {
+  // Fix round 1: `navigateTo('/auth')` navigated to the STANDALONE /auth
+  // ROUTE, whose own `onAuthSuccess` goes to '/' (App.jsx) — stranding the
+  // host on the host page instead of back on their remote. `/remote` is
+  // already wrapped in `ProtectedRoute` (App.jsx), which renders the sign-in
+  // form IN PLACE the moment `currentUser` goes null and reloads the SAME
+  // URL on success — so signing out is enough on its own, and navigating
+  // anywhere is the bug, not the fix.
+  it('"Sign in as someone else" signs out WITHOUT navigating away, so ProtectedRoute reloads this URL', async () => {
     serve({ hostDetails: 404 });
     enterCode();
 
     fireEvent.click(await screen.findByRole('button', { name: /sign in as someone else/i }));
 
     expect(mockSignOut).toHaveBeenCalled();
-    expect(navigateTo).toHaveBeenCalledWith('/auth');
+    expect(navigateTo).not.toHaveBeenCalled();
   });
 
   it('still offers the team switcher, so a fix does not require signing out', async () => {
@@ -269,14 +276,16 @@ describe('401 — the sign-in itself has run out', () => {
     expectNoSessionFetches();
   });
 
-  it('"Sign in again" signs out and sends the browser to /auth', async () => {
+  // Fix round 1: see the matching 404 test above for why navigating anywhere
+  // (rather than letting `ProtectedRoute` show sign-in in place) is the bug.
+  it('"Sign in again" signs out WITHOUT navigating away, so ProtectedRoute reloads this URL', async () => {
     serve({ hostDetails: 403 });
     enterCode();
 
     fireEvent.click(await screen.findByRole('button', { name: /^sign in again$/i }));
 
     expect(mockSignOut).toHaveBeenCalled();
-    expect(navigateTo).toHaveBeenCalledWith('/auth');
+    expect(navigateTo).not.toHaveBeenCalled();
   });
 });
 

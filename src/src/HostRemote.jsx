@@ -9,7 +9,6 @@ import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
 import { useOptionalAuth } from './auth/AuthContext';
-import { navigateTo } from './auth/navigate';
 import { categoryRows } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
 import { fetchComments } from './utils/commentsClient';
@@ -315,15 +314,35 @@ function HostRemote() {
     if (gameId) checkAccess(gameId);
   }, [gameId, checkAccess]);
 
-  // "Sign in as someone else" / "Sign in again" — the app's own path
-  // (GameHostPage.jsx and AdminPage.jsx's handleSignOut): clear the Cognito
-  // session, then send the browser to the sign-in screen. No confirmation
-  // dialog here, unlike those: the button's own label already is the decision,
-  // and it exists on screen for exactly the account this device is signed in
-  // as to be replaced.
+  /**
+   * "Sign in as someone else" / "Sign in again".
+   *
+   * FIX ROUND 1: this used to also call `navigateTo('/auth')`, which strands
+   * the host on the HOST PAGE rather than back on their remote —
+   * `/auth` is its own route (App.jsx), and that route's `AuthPage` sends a
+   * successful sign-in to `/` (`onAuthSuccess={() => window.location.href =
+   * '/'}`), not back to `/remote?gameId=…`.
+   *
+   * `/remote` is already wrapped in `ProtectedRoute` (App.jsx), which reads
+   * `currentUser` on every render: the moment `signOut()` clears it,
+   * `ProtectedRoute` swaps to rendering the sign-in form IN PLACE, at
+   * whatever URL the browser already has — the address bar never changes —
+   * and its `onAuthSuccess` is `() => window.location.reload()`, a reload of
+   * that SAME URL. So the fix is simply not navigating: sign out, and let
+   * `ProtectedRoute` do the rest.
+   *
+   * Google sign-in from that in-place form needs no extra wiring either.
+   * `auth/googleSignIn.js:startGoogleSignIn` already calls
+   * `rememberReturnPath()` at the moment the button is pressed — see its own
+   * header comment, which names this exact in-place-vs-`/auth` distinction —
+   * and since the URL was never changed, that call records
+   * `/remote?gameId=…` correctly. It was only the navigation added here that
+   * defeated it, by moving the browser to `/auth` BEFORE any of that could
+   * run, where `rememberReturnPath` refuses to record an auth surface as a
+   * destination.
+   */
   const handleSignInAgain = useCallback(() => {
     auth?.signOut?.();
-    navigateTo('/auth');
   }, [auth]);
 
   /* ------------------------------------------------------------ polling */
