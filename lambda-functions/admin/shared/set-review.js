@@ -110,6 +110,11 @@ async function readReview(db, tableName, ref, version) {
  * reads findings sees a near-miss. A row without a tally was checked before
  * measuring existed; nothing back-fills one.
  *
+ * `observedTruncated` says whether `writeReview` had to cut `observed` down to
+ * `OBSERVED_CAP` (below) to keep the row inside DynamoDB's 400 KB item limit —
+ * see the cap's own comment for why a large set can reach it. Absent, never
+ * `false`, on a row whose list needed no cutting.
+ *
  * `topicSuggestion` is the shelf the check would have filed the set on
  * (shared/topic-suggestion.js) — a RECOMMENDATION, on the row so a surface can
  * offer it. It decides nothing here either: the status above is computed
@@ -118,9 +123,28 @@ async function readReview(db, tableName, ref, version) {
 const REVIEW_FIELDS = Object.freeze([
   'jobId', 'note', 'findings', 'contentHash', 'snapshotKey', 'reasons', 'checkedBy', 'promptDropped', 'declaredNotice',
   'reviewer', 'decidedAt', 'notice',
-  'tally', 'observed',
+  'tally', 'observed', 'observedTruncated',
   'topicSuggestion',
 ]);
+
+/**
+ * THE CEILING ON HOW MANY OBSERVATIONS A REVIEW ROW STORES.
+ *
+ * Every request to the guardrail asks for `outputScope: 'FULL'`
+ * (content-guardrail.js), so a check returns a band for every judged category
+ * on every question, and `finding-explanations.js` adds up to a
+ * 240-character explanation to each one it can reach. A few hundred questions
+ * is enough for `observed` alone to pass DynamoDB's 400 KB item limit before
+ * `findings`, `tally`, the snapshot key or anything else on the row is even
+ * counted.
+ *
+ * The TALLY is computed from the FULL list, before this cap ever runs
+ * (content-guardrail.js `tallyOf`, called in set-check-worker.js on the
+ * un-truncated `observed` array) — so a row capped here still tells the truth
+ * about what every category saw; only the per-item detail underneath it is
+ * cut, and `observedTruncated` says so.
+ */
+const OBSERVED_CAP = 300;
 
 /**
  * WHAT A PERSON DECIDED, as opposed to what a check measured.
@@ -170,11 +194,18 @@ async function writeReview(db, tableName, ref, version, { status, ...facts } = {
   }
   // findings keeps its old rule — written only when it actually is an array —
   // rather than the generic "present and not null" the rest of the whitelist
-  // uses. observed is a list the score card walks, so it takes the same rule.
+  // uses. observed is a list the score card walks, so it takes the same rule,
+  // and is additionally capped at OBSERVED_CAP items (see that constant's own
+  // comment): the TALLY above already measured the full list the caller
+  // passed in, so cutting the per-item detail here loses nothing a reader
+  // depends on for its counts, only the entries themselves.
+  const observedList = Array.isArray(facts.observed) ? facts.observed : undefined;
+  const observedTruncated = Boolean(observedList && observedList.length > OBSERVED_CAP);
   const bag = {
     ...facts,
     findings: Array.isArray(facts.findings) ? facts.findings : undefined,
-    observed: Array.isArray(facts.observed) ? facts.observed : undefined,
+    observed: observedList ? observedList.slice(0, OBSERVED_CAP) : undefined,
+    observedTruncated: observedTruncated || undefined,
   };
   const kept = Object.fromEntries(
     REVIEW_FIELDS.filter((f) => bag[f] !== undefined && bag[f] !== null).map((f) => [f, bag[f]]),
@@ -338,6 +369,7 @@ module.exports = {
   STATUS,
   WRITABLE,
   REVIEW_FIELDS,
+  OBSERVED_CAP,
   DECISION_FIELDS,
   decisionOf,
   declarationOf,

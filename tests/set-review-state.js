@@ -236,6 +236,43 @@ const PLAT_REF = { scope: 'platform', setId: '80strivia' };
     assert.notStrictEqual(legacy.PK, R.reviewKey(PLAT_REF, 1).PK);
   });
 
+  // -------------------------------------------------------- observed cap --
+  say('\n7. observed has a size cap (7c)');
+  /*
+    Bedrock is asked with `outputScope: 'FULL'` (content-guardrail.js), so
+    every judged category comes back for every question, and
+    finding-explanations.js adds up to a 240-character explanation to each one
+    it can. A large enough set's `observed` array alone can pass DynamoDB's
+    400 KB item limit before `findings`, `tally` or anything else on the row
+    is even counted. The TALLY is computed from the FULL list before this cap
+    ever runs (content-guardrail.js `tallyOf`, called in set-check-worker.js
+    on the un-truncated array) -- so a capped row still tells the truth about
+    every category's counts; only the per-item detail underneath it is cut.
+  */
+  const bigObserved = Array.from({ length: R.OBSERVED_CAP + 50 }, (_, i) => ({
+    questionId: `q${i}`, category: 'VIOLENCE', band: 'LOW', intervened: false,
+  }));
+  await checkAsync('a set large enough to exceed the cap stores a capped, flagged list', async () => {
+    store.clear();
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, {
+      status: R.STATUS.PASSED,
+      tally: { scope: 'full', questions: bigObserved.length, categories: {} },
+      observed: bigObserved,
+    });
+    const r = await R.readReview(fakeDoc, 'engage-test', ORG_REF, 2);
+    assert.strictEqual(r.observed.length, R.OBSERVED_CAP, 'the stored list was not capped');
+    assert.strictEqual(r.observedTruncated, true, 'nothing says the list was cut');
+    assert.strictEqual(r.tally.questions, bigObserved.length, 'the tally must stay whole even though the detail was cut');
+  });
+  await checkAsync('a list at or under the cap round-trips whole, with no truncation flag', async () => {
+    store.clear();
+    const atCap = bigObserved.slice(0, R.OBSERVED_CAP);
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, { status: R.STATUS.PASSED, observed: atCap });
+    const r = await R.readReview(fakeDoc, 'engage-test', ORG_REF, 2);
+    assert.strictEqual(r.observed.length, R.OBSERVED_CAP);
+    assert.strictEqual(r.observedTruncated, undefined, 'a whole list must not be marked truncated');
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   Module._load = realLoad;
   suiteFinished();
