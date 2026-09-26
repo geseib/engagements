@@ -60,10 +60,11 @@ const TTL_ACTIVE_PHASE = 7 * 24 * 60 * 60;    // 7 days
  * there is anything left to remove. Before Task 2 that half-built leftover
  * cost only 90 days of an id nobody could list or reach. Now that step 0
  * below treats ANY row in `GAME#<id>` as "taken", a create that fails
- * partway through can retire that code FOR GOOD — nothing yet reclaims it,
- * and nothing should be assumed to. The release deliberately does not run
- * for a ConditionalCheckFailed, because that row belongs to the session that
- * won the race.
+ * partway through can hold that code for up to ~90 days — the unstarted ttl
+ * already on METADATA and STATE (session-ttl.js), not forever. Nothing
+ * before then reclaims it, and nothing should be assumed to. The release
+ * deliberately does not run for a ConditionalCheckFailed, because that row
+ * belongs to the session that won the race.
  */
 // Create game with proper schema compliance
 const createGame = async (gameId, gameData) => {
@@ -587,9 +588,11 @@ const createGame = async (gameId, gameData) => {
     // Before Task 2, a leftover like that cost only 90 days of an id nobody
     // could list or reach. Since the "any row in this partition means taken"
     // rule this task added (step 0, above), a create that fails partway
-    // through can now retire the code FOR GOOD until the fuller fix — session
-    // stamps on every row — exists. Not attempted at all when the failure IS
-    // the lock — that row belongs to the session that won the race.
+    // through can now hold the code for up to ~90 days — the unstarted ttl
+    // already on METADATA and STATE (session-ttl.js), not forever — until
+    // the fuller fix — session stamps on every row — exists. Not attempted
+    // at all when the failure IS the lock — that row belongs to the session
+    // that won the race.
     if (reserved && error && error.name !== 'ConditionalCheckFailedException') {
       try {
         await db.send(new DeleteCommand({
