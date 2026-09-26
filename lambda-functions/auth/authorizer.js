@@ -445,6 +445,24 @@ function requiredGroupsForRoute(method, path) {
     return ['hosts', 'admins'];
   }
 
+  // ── EVENTS: THE HOST'S ROUTES (docs/design/agenda-redesign) ──────────────
+  //
+  // `events`, `events/{code}`, `events/{code}/items` and
+  // `events/{code}/items/{itemId}`. Named here, and not left to the trailing
+  // default that happens to give the same answer, for the reason the block
+  // above records: the `path.includes('join' | 'answer' | 'vote')` rule sits
+  // between here and there, and an id travels in the path. Anchored, and
+  // matching the route template (`routeKey`) and a concrete path (the
+  // `rawPath` fallback) alike. WHICH event a caller may touch is decided per
+  // row by tenant.callerMayManageEvent, which answers 404.
+  //
+  // NOT here: GET /events/{code}/agenda and GET /join/{code}. They carry no
+  // authorizer at all — an attendee has no account.
+  const EVENT_HOST_ROUTE = /^events(\/[^/]+(\/items(\/[^/]+)?)?)?$/;
+  if (EVENT_HOST_ROUTE.test(path)) {
+    return ['hosts', 'admins'];
+  }
+
   // ── THE PLATFORM CONSOLE ─────────────────────────────────────────────────
   //
   // Engage staff only, and this is the SECOND of two checks, not the only one:

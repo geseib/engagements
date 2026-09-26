@@ -61,6 +61,8 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
+  # Events (roadmap D6): switched on for dev only. See EVENTS_ENABLED in Globals.
+  IsDev: !Equals [!Ref Environment, "dev"]
   # True when the deploy passes Google credentials, fetched from
   # /<stack>/google/* SSM parameters by all three buildspecs.
   #
@@ -135,6 +137,13 @@ Globals:
         # console — and pinning it means the version a set was checked against
         # is a fact that can be recorded beside the outcome.
         CONTENT_GUARDRAIL_VERSION: !GetAtt ContentGuardrailVersion.Version
+        # EVENTS (roadmap D6, docs/superpowers/plans/2026-09-26-events-roadmap.md).
+        # On for dev only, so each milestone can land on dev as it is finished
+        # without showing half a feature on test or prod. Read at call time by
+        # websocket/events/event-http.js `eventsEnabled` (POST /events refuses
+        # while it is off) and by admin/orgs/list-my-orgs.js (the console hides
+        # Events). Turned on for test when the owner asks (roadmap M6).
+        EVENTS_ENABLED: !If [IsDev, 'on', 'off']
 
 Resources:
 
@@ -309,6 +318,45 @@ Resources:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ## Events (docs/design/agenda-redesign; roadmap M1)
+  #
+  # IN THE websocket BUNDLE ON PURPOSE. An event reserves its code with the
+  # module a session does (websocket/code-reservation.js), and CodeUri is
+  # per-directory with no layers: a lambda-functions/events/ bundle of its own
+  # would need a fourth copy of tenant.js, tenant-crypto.js, usage.js,
+  # pricing.js, pricing-adjust.js and plan-limit.js, and a second copy of the
+  # code lock. Handlers live in websocket/events/.
+  CreateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-create-event'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/create-event.handler
+      Events:
+        CreateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events
+            Method: post
+            # A host's route. requiredGroupsForRoute answers hosts|admins
+            # through its anchored EVENT_HOST_ROUTE rule; the handler adds the
+            # organisation and the Team-plan gate.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Seals the event's name and place with the org's data key.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
