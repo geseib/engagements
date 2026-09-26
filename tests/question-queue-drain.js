@@ -45,8 +45,9 @@ const { createTable, installStubs } = require('./helpers/player-table');
 const table = createTable();
 const store = table.store;
 const sent = [];
+const frames = [];
 
-installStubs({ table, sent });
+installStubs({ table, sent, frames });
 
 process.env.TABLE_NAME = 'test-table';
 process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
@@ -79,6 +80,7 @@ const queueRow = () => get('QUEUE');
 function seed({ queue = null, queueSetVersion = 2, hostMask = '11000000', activeIndex = 5 } = {}) {
   store.clear();
   sent.length = 0;
+  frames.length = 0;
 
   put({ PK, SK: 'METADATA', QuestionSetId: SET, QuestionSetVersion: 2 });
   put({ PK, SK: 'STATE', State: 'RESULTS#001', LessonNumber: 1 });
@@ -236,6 +238,26 @@ const bodyOf = (res) => JSON.parse(res.body);
     assert.deepStrictEqual(frame.queue, ['017']);
     // Never gameStateChanged — see stage-beat.js:40-43.
     assert.ok(!sent.some((m) => m.type === 'gameStateChanged'));
+  });
+
+  await check('the queue frame goes to the host\'s screens ONLY, never to a player\'s socket', async () => {
+    // The frame carries the whole remaining running order: the questions the
+    // room has not been asked yet. Anyone holding the code can open a PLAYER
+    // socket, so a frame to every connection walked round the lock on
+    // GET /queue and /host-state (tests/get-game-host-state.js). The stage is
+    // the HOST connection; the phone remote holds no socket and polls.
+    //
+    // rejects: questionQueueChanged broadcast to every CONNECTION# row.
+    seed({ queue: ['018', '017'] });
+    put({ PK, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
+    put({ PK, SK: 'CONNECTION#player-1', ConnectionId: 'player-1', ConnectionType: 'PLAYER' });
+    await ask({});
+    const to = (id) => frames.filter((f) => f.connectionId === id).map((f) => f.message.type);
+    assert.ok(to('player-1').includes('questionStarted'),
+      `the player was not told the round started — the fixture is wrong: ${JSON.stringify(to('player-1'))}`);
+    assert.ok(!to('player-1').includes('questionQueueChanged'),
+      'a PLAYER socket received the running order');
+    assert.ok(to('host-1').includes('questionQueueChanged'), 'the stage was not told the queue moved');
   });
 
   await check('a queued key spelled with the QUESTION# prefix still resolves', async () => {
