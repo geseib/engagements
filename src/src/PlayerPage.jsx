@@ -132,6 +132,63 @@ const RANK_SLOTS = ['first', 'second', 'third'];
 export const rankHolding = (votes, answerIndex) =>
   RANK_SLOTS.find((slot) => votes[slot] === String(answerIndex)) || null;
 
+/**
+ * THE ROUND'S RANKED RESPONSES, FROM THE SAME PAYLOAD THE RESULTS SCREEN
+ * ALREADY TRUSTS — never from the page's own `answers` state.
+ *
+ * Fix round 1, item 3: the player's own feedback panel used to snapshot
+ * `answers`, which for Call & Answer is the VOTE-TIME BALLOT
+ * (`loadVotingData`'s `GET /answers`, no ranks) — `loadResultsData` never
+ * repopulates it for this game type, only trivia's branch does. So a reload
+ * during RESULTS left it `[]` and the panel printed "Nobody responded to
+ * this round," which was false. This reads the SAME `POST /games/get-results`
+ * body the ordinary results screen already fetches (`loadResultsData`) and
+ * converts whichever shape it comes back in into the flat, ranked rows
+ * `RoundReport` expects:
+ *
+ *   - trivia answers `data.leaderboard` — already ranked, used as-is;
+ *   - Call & Answer answers `data.voteTallies`, an OBJECT keyed by answer
+ *     index, never an array — sorted by `totalScore` here, with the same
+ *     tie rule `create-report.js` uses (equal scores share a rank);
+ *   - anything else (wavelength, or a round with no votes yet) has no
+ *     discrete ranked rows to offer, and returns none.
+ *
+ * NAMES ARE NOT REDACTED HERE, and that is not a new disclosure: `get-results
+ * .js`'s own header states plainly that it "does not redact — the response
+ * hands back every author's name," because by the time a round's results can
+ * be read at all, `AuthorsRevealed` is already unconditionally true for it.
+ * The ordinary personal results screen simply chooses not to PRINT other
+ * players' names (a minimalism decision — "this page will not repeat them" —
+ * not a security redaction); the feedback panel is the one screen the design
+ * explicitly gives a reason to show more (RoundReport's own header), the same
+ * reason the host-triggered whole-room panel already shows full attribution
+ * for this exact data. Rows are still handed to `RoundReport` exactly as
+ * fetched, which reads each one through `displayLabelFor` (config/anonymity.js)
+ * the same way every other response list in this app does, so a row that
+ * genuinely carried no `playerName` would still fall back to a position label
+ * rather than printing nothing.
+ */
+export function rankedResultsFrom(data) {
+  if (data && Array.isArray(data.leaderboard)) {
+    return data.leaderboard.map((row) => ({
+      answer: row.answer, playerName: row.playerName, rank: row.rank,
+    }));
+  }
+  if (data && data.voteTallies && typeof data.voteTallies === 'object') {
+    const list = Object.values(data.voteTallies)
+      .map((t) => ({
+        answer: t.answerText, playerName: t.playerName, totalScore: Number(t.totalScore) || 0,
+      }))
+      .sort((a, b) => b.totalScore - a.totalScore);
+    let currentRank = 1;
+    return list.map((row, idx) => {
+      if (idx > 0 && row.totalScore !== list[idx - 1].totalScore) currentRank = idx + 1;
+      return { answer: row.answer, playerName: row.playerName, rank: currentRank };
+    });
+  }
+  return [];
+}
+
 // Which round the player is on. The payload spells this three different ways
 // depending on which endpoint answered (get-question sends lessonNumber +
 // questionNumber + id, get-game-state sends id, and the results-reconstruction
@@ -1196,9 +1253,37 @@ function PlayerPage() {
   };
 
   /**
+   * THE RESPONSES, FETCHED FRESH — see `rankedResultsFrom`'s header for why
+   * this calls the results endpoint itself rather than trusting `answers`.
+   * Merged into the snapshot already showing the question, rather than
+   * blocking on it: the panel opens on the question immediately and the
+   * responses fill in once this resolves, instead of sitting on
+   * FeedbackRoundPanel's "preparing this round" screen for a network round
+   * trip.
+   */
+  const loadMyFeedbackAnswers = async (padded) => {
+    try {
+      const res = await fetch(`${API_BASE}games/get-results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId, questionNumber: padded }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const ranked = rankedResultsFrom(data);
+      setMyFeedbackSnapshot((current) => (current ? { ...current, answers: ranked } : current));
+    } catch {
+      // Leave the snapshot's empty list as-is. RoundReport reads that as
+      // "Nobody responded to this round", which is a safer default here than
+      // guessing from stale local state.
+    }
+  };
+
+  /**
    * OPEN THE PLAYER'S OWN FEEDBACK PANEL — the "Feedback" button on the
    * ordinary results screen. See the state declarations above for why the
-   * question and the responses are snapshotted rather than read live.
+   * question is snapshotted rather than read live; `loadMyFeedbackAnswers`
+   * fills the responses in once they arrive.
    */
   const openMyFeedback = () => {
     const match = String(gameState || '').match(/^RESULTS#(\d+)$/);
@@ -1212,13 +1297,14 @@ function PlayerPage() {
       options: ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
         .map((key) => q[key]).filter(Boolean),
       answerDetails: q.answerDetails || '',
-      answers: Array.isArray(answers) ? answers : [],
+      answers: [],
     });
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
     setMyFeedbackOpen(true);
     loadMyFeedbackComments(padded);
     loadMyFeedbackSummary(padded);
+    loadMyFeedbackAnswers(padded);
   };
 
   /** Closing returns the player to the results screen. Nothing is posted for

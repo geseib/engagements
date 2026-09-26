@@ -70,18 +70,34 @@ describe('opening the player\'s own panel', () => {
     expect(fn).toMatch(/setMyFeedbackOpen\(true\)/);
   });
 
-  test('snapshots the question and the responses rather than reading them live', () => {
-    // The whole point: `currentQuestion`/`answers` get overwritten by the NEXT
-    // round's data the instant the host advances, so the panel must read a
-    // SNAPSHOT taken at open time, not those live values.
+  test('snapshots the question rather than reading it live, and fetches the responses fresh rather than trusting `answers`', () => {
+    // The whole point: `currentQuestion` gets overwritten by the NEXT round's
+    // data the instant the host advances, so the question must be a SNAPSHOT
+    // taken at open time. `answers` (fix round 1, item 3) is worse than
+    // stale for Call & Answer — it is the VOTE-TIME ballot with no ranks, and
+    // is `[]` outright after a reload during RESULTS — so the responses are
+    // not read from it at all; they are fetched fresh (loadMyFeedbackAnswers)
+    // and merged in once they arrive.
     const fn = sliceFrom(player, 'const openMyFeedback = () => {', '\n  };');
     expect(fn).toMatch(/setMyFeedbackSnapshot\(\{/);
-    expect(fn).toMatch(/answers: Array\.isArray\(answers\) \? answers : \[\]/);
+    expect(fn).toMatch(/answers:\s*\[\]/);
+    expect(fn).not.toMatch(/answers:\s*Array\.isArray\(answers\)/);
+    expect(fn).toMatch(/loadMyFeedbackAnswers\(padded\)/);
 
     const roundData = sliceFrom(player, 'const myFeedbackRoundData = myFeedbackSnapshot ? {', '} : null;');
     // Built from the snapshot, never from `currentQuestion` or `answers` directly.
     expect(roundData).toMatch(/\.\.\.myFeedbackSnapshot/);
     expect(roundData).not.toMatch(/currentQuestion/);
+  });
+
+  test('fetches the ranked responses from the same results endpoint the ordinary results screen uses', () => {
+    const fn = sliceFrom(player, 'const loadMyFeedbackAnswers = async (padded) => {', '\n  };');
+    expect(fn).toMatch(/games\/get-results/);
+    expect(fn).toMatch(/rankedResultsFrom\(data\)/);
+    // Merged into the existing snapshot, not a replacement of the whole thing —
+    // the question must not flicker once the responses arrive.
+    expect(fn).toMatch(/setMyFeedbackSnapshot\(\(current\)/);
+    expect(fn).toMatch(/\.\.\.current/);
   });
 
   test('fetches Workie\'s read from the public ai-summary endpoint, never from GET /feedback-round', () => {
