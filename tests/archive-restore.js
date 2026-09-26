@@ -124,6 +124,36 @@ const setEnvelope = (overrides = {}) => snap.buildSetEnvelope({
     assert.strictEqual(contentOf('pulse', null).length, 1, 'the legacy partition itself is left in place');
   });
 
+  console.log('\n3b. the legacy snapshot drops REVIEW/PUBLISHED, the same defect as upload-questions.js Task 8b');
+  /*
+    set-review.js resolves a legacy (unversioned) ref's REVIEW/PUBLISHED key to this SAME
+    unsuffixed partition, so a set that was checked or shared before it was ever versioned
+    carries them right beside its questions. The snapshot above must copy CONTENT to v1, not
+    a verdict that was never about v1 or a marker claiming v1 was already shared.
+  */
+  h.reset();
+  h.seedSet({
+    setId: 'pulse',
+    rows: [
+      { SK: 'QUESTION#c001#001', Title: 'Legacy row' },
+      { SK: 'REVIEW', status: 'approved' },
+      { SK: 'PUBLISHED', publicSetId: 'stray-public' },
+    ],
+    meta: { name: 'Legacy', active: true, questionCount: 1 },
+  });
+  outcome = await restoreSetSnapshot(deps, setEnvelope({ media: [] }), ctx);
+  await check('the snapshot at v1 carries the content, not the REVIEW or PUBLISHED row', () => {
+    assert.strictEqual(outcome.version, 2);
+    assert.deepStrictEqual(contentOf('pulse', 1), [{ SK: 'QUESTION#c001#001', Title: 'Legacy row' }],
+      'the legacy REVIEW/PUBLISHED row was copied onto the snapshot');
+  });
+  await check('the legacy partition keeps its REVIEW and PUBLISHED rows, untouched', () => {
+    const legacy = contentOf('pulse', null);
+    assert.strictEqual(legacy.length, 3, 'the legacy partition lost a row it should have kept');
+    assert.ok(legacy.some((r) => r.SK === 'REVIEW'), 'the legacy REVIEW row is gone');
+    assert.ok(legacy.some((r) => r.SK === 'PUBLISHED'), 'the legacy PUBLISHED row is gone');
+  });
+
   console.log('\n4. a public backup comes back as a house copy');
   h.reset();
   outcome = await restoreSetSnapshot(deps, setEnvelope({

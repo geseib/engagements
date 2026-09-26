@@ -26,7 +26,7 @@ const { GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const tenant = require('./tenant');
 const {
-  setRef, setPartition, setMetadataKey, queryPartition, batchPutItems, copyPartition,
+  setRef, setPartition, setMetadataKey, queryPartition, batchPutItems,
   knownVersions, nextVersion, toVersion, firstEmptyVersion,
 } = require('./set-version');
 const { batchDeleteKeys } = require('./ddb-delete');
@@ -94,9 +94,18 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
     } else {
       const legacyPk = setPartition(ref, null);
       const { items: legacyRows } = await queryPartition(db, tableName, legacyPk);
-      if (legacyRows.length > 0) {
+      // EXCEPT THE REVIEW AND PUBLISHED ROWS, which are not content. A set that was checked or
+      // shared before it was ever versioned carries them in this same legacy partition
+      // (set-review.js resolves a legacy ref's review/published key to the unsuffixed
+      // partition), and copying them onto the snapshot would misdescribe it: the snapshot's own
+      // REVIEW row is per-version, and a stray PUBLISHED marker would claim it was already
+      // shared. copy-question-set.js and upload-questions.js's own legacy-replace path skip
+      // them for the same reason.
+      const publishableLegacyRows = legacyRows.filter((row) => !snap.LIFECYCLE_SKS.includes(String(row.SK)));
+      if (publishableLegacyRows.length > 0) {
         const legacyVersion = await firstEmptyVersion(db, tableName, ref, 1);
-        await copyPartition(db, tableName, legacyPk, setPartition(ref, legacyVersion));
+        const legacyCopies = publishableLegacyRows.map((row) => ({ ...row, PK: setPartition(ref, legacyVersion) }));
+        await batchPutItems(db, tableName, legacyCopies);
         seed = [{
           version: legacyVersion,
           createdAt: existing.createdAt || now,
