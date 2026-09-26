@@ -29,6 +29,7 @@ import fs from 'fs';
 import path from 'path';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import HostRemote from '../HostRemote';
+import { authFetch } from '../auth/authFetch';
 
 // Delegates to the same router `serve()` installs on global.fetch.
 //
@@ -108,6 +109,12 @@ function serve({ state = 'STARTED', players = [], report = REPORT, progress = {}
       }
       return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
     }
+    // The access gate (Task 6): asked before anything else about the session.
+    // This file is about the session tab downstream of it, so it always
+    // answers 200.
+    if (href.includes('/host-details')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    }
     if (href.includes('/state')) {
       return Promise.resolve({
         ok: true,
@@ -164,6 +171,10 @@ const openPanel = async () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // CRA's jest config carries `resetMocks: true`, which strips the
+  // implementation `jest.fn(impl)` was GIVEN at mock-factory time before every
+  // test — re-armed here for the same reason hostRemoteOrgScope.test.jsx does.
+  authFetch.mockImplementation((...args) => global.fetch(...args));
   window.API_BASE = 'https://api.test/';
 });
 

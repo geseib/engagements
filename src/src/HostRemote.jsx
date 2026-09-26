@@ -8,6 +8,8 @@ import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
+import { useOptionalAuth } from './auth/AuthContext';
+import { navigateTo } from './auth/navigate';
 import { categoryRows } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
 import { fetchComments } from './utils/commentsClient';
@@ -24,6 +26,7 @@ import {
   sessionActionMessage,
   questionSetFailure,
   scoreboardControl,
+  accessDeniedMessage,
 } from './config/hostRemote';
 import { scoreboardRequest } from './config/scoreboard';
 import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
@@ -106,9 +109,56 @@ const COOLDOWN_MS = 1200;
 
 const apiBase = () => window.API_BASE || '';
 
+/**
+ * THE ACCESS GATE — reported 26 Sep 2026: *"when logging in i can see the
+ * players, the questions, but there is an error when trying to move the game
+ * forward or make any changes."*
+ *
+ * Investigated in `.superpowers/sdd/2026-09-26-bugsweep/remote-bug-rootcause.md`:
+ * every WRITE this phone makes goes through `authFetch` to a Cognito route
+ * guarded by `tenant.callerMayDriveSession`, while the READS it used to open
+ * with (`/state`, `/players`) are plain, unauthenticated `fetch` — so a phone
+ * signed in as the WRONG account (or one no longer on the session's team) saw
+ * everything and could change nothing, with no warning before the first tap
+ * failed.
+ *
+ * The fix asks ONE authenticated question up front — `GET
+ * /games/{id}/host-details` (Cognito + `callerMayDriveSession`, the same
+ * refusal shape as every write below it) — before this phone asks anything
+ * else about the session at all:
+ *
+ *   200  this account may drive it. Everything below runs exactly as before.
+ *   404  it may not — the same "Game not found" every write already answers
+ *        with. `401`/`403` (or no token reaching the door) means the sign-in
+ *        itself has run out, a different fix from a different account.
+ *
+ * NOTHING ELSE IS ASKED UNTIL THAT COMES BACK 200. The owner's ruling, on
+ * being shown the alternative of merely disabling the write buttons: *"they
+ * should not be able to see the other team's questions. what if they were
+ * private customer questions."* `/state?includeHostData=true` carries the
+ * live question text and answer tallies, `/players` the room's names — both
+ * on routes this task does not touch (bug-sweep Task 7 moves them behind
+ * their own authorizer). Never STARTING those polls while the account is
+ * refused is what this surface can do about that today: `PENDING`'s branch
+ * below renders no round, no roster, no join code, nothing but the banner and
+ * a way to fix it, and the effect that starts the state/roster timers does
+ * not fire until `status` is `OK`.
+ */
+const ACCESS = { PENDING: 'checking', OK: 'ok', DENIED: 'denied' };
+
 function HostRemote() {
   const [gameId, setGameId] = useState('');
   const [gameIdDraft, setGameIdDraft] = useState('');
+  /**
+   * Whether THIS account may drive THIS session, from `GET
+   * /games/{id}/host-details` — see the ACCESS GATE note above.
+   *
+   * `reason` is only meaningful while `status` is `DENIED`: 'account' (the
+   * door's 404 — wrong team, or a personal session signed into as someone
+   * else), 'expired' (401/403, or no token at all), or 'error' (anything this
+   * surface cannot honestly explain — never asserted as the other two).
+   */
+  const [access, setAccess] = useState({ status: ACCESS.PENDING, reason: null });
   const [snapshot, setSnapshot] = useState(null);
   const [roster, setRoster] = useState(null);
   const [aiSummary, setAiSummary] = useState(null);
@@ -195,6 +245,87 @@ function HostRemote() {
     if (fromUrl) setGameId(fromUrl.trim().toUpperCase());
   }, []);
 
+  /* --------------------------------------------------------- access gate */
+
+  // `useOptionalAuth`, not `useAuth`: this component is mounted in tests with
+  // no `<AuthProvider>` at all (see hostRemoteOrgScope.test.jsx), and `useAuth`
+  // throws outside one. `null` here means only "this render cannot name an
+  // account" — production always mounts inside ProtectedRoute's provider.
+  const auth = useOptionalAuth();
+  const email = auth?.currentUser?.attributes?.email || '';
+
+  const checkAccess = useCallback(async (id) => {
+    try {
+      const res = await authFetch(`${apiBase()}games/${id}/host-details`);
+      if (activeGameRef.current !== id) return;
+      if (res.ok) { setAccess({ status: ACCESS.OK, reason: null }); return; }
+      if (res.status === 401 || res.status === 403) {
+        setAccess({ status: ACCESS.DENIED, reason: 'expired' });
+        return;
+      }
+      if (res.status === 404) {
+        setAccess({ status: ACCESS.DENIED, reason: 'account' });
+        return;
+      }
+      // A status this surface cannot honestly explain. NOT the same as 404 —
+      // that would claim a cause ("wrong account") the response never gave —
+      // and not OK either, which would show a session this call never cleared.
+      setAccess({ status: ACCESS.DENIED, reason: 'error' });
+    } catch {
+      if (activeGameRef.current === id) setAccess({ status: ACCESS.DENIED, reason: 'error' });
+    }
+  }, []);
+
+  // The one check, the moment a session is opened — see the ACCESS GATE note
+  // above. Reset to PENDING first: switching from one session to another must
+  // not keep showing the previous session's content (or its refusal) while
+  // the new one is asked about.
+  useEffect(() => {
+    if (!gameId) return undefined;
+    setAccess({ status: ACCESS.PENDING, reason: null });
+    checkAccess(gameId);
+    return undefined;
+  }, [gameId, checkAccess]);
+
+  // Nothing this phone learned about a session survives being refused it.
+  // `ActiveOrgSwitcher`'s reload would already clear all of this in a real
+  // browser; this is what makes the SAME true the moment access.status
+  // changes, reload or not — see `onSwitch` below.
+  useEffect(() => {
+    if (access.status === ACCESS.OK) return;
+    setSnapshot(null);
+    setRoster(null);
+    setFocusAnswers([]);
+    setFocusOpen(false);
+    setAiSummary(null);
+    setFeedbackCommentCount(null);
+    setCategories([]);
+    setCategoriesFailure(null);
+    setCategoriesOpen(false);
+    setPanelTab(null);
+  }, [access.status]);
+
+  // Re-asks the door the moment the phone's active team changes, rather than
+  // waiting on `ActiveOrgSwitcher`'s page reload — which is real in a browser
+  // and a no-op under jsdom (`Location` cannot be replaced there). Passed to
+  // every mount of the switcher below, denied screen and normal one alike: a
+  // host who switches teams while ALREADY driving the session should have
+  // this asked again just as much as one trying to fix a refusal.
+  const recheckAccess = useCallback(() => {
+    if (gameId) checkAccess(gameId);
+  }, [gameId, checkAccess]);
+
+  // "Sign in as someone else" / "Sign in again" — the app's own path
+  // (GameHostPage.jsx and AdminPage.jsx's handleSignOut): clear the Cognito
+  // session, then send the browser to the sign-in screen. No confirmation
+  // dialog here, unlike those: the button's own label already is the decision,
+  // and it exists on screen for exactly the account this device is signed in
+  // as to be replaced.
+  const handleSignInAgain = useCallback(() => {
+    auth?.signOut?.();
+    navigateTo('/auth');
+  }, [auth]);
+
   /* ------------------------------------------------------------ polling */
 
   const pollState = useCallback(async (id) => {
@@ -233,8 +364,14 @@ function HostRemote() {
     }
   }, []);
 
+  // GATED ON `access.status === ACCESS.OK` — the whole point of the access
+  // gate above. `/state?includeHostData=true` and `/players` are unauthenticated
+  // reads that already carry the room's names and the live question text
+  // (bug-sweep Task 7 moves them behind their own authorizer); this phone must
+  // not ask either one for a session the up-front check has not cleared it to
+  // drive, refused account or not.
   useEffect(() => {
-    if (!gameId) return undefined;
+    if (!gameId || access.status !== ACCESS.OK) return undefined;
     setSnapshot(null);
     setRoster(null);
 
@@ -243,7 +380,7 @@ function HostRemote() {
     const stateTimer = setInterval(() => pollState(gameId), STATE_POLL_MS);
     const rosterTimer = setInterval(() => pollRoster(gameId), ROSTER_POLL_MS);
     return () => { clearInterval(stateTimer); clearInterval(rosterTimer); };
-  }, [gameId, pollState, pollRoster]);
+  }, [gameId, access.status, pollState, pollRoster]);
 
   /* ------------------------------------------------- derived, all pure */
 
@@ -459,6 +596,7 @@ function HostRemote() {
             ? payload
             : { error: 'Could not change what the room is seeing.' },
           live: !!snapshot,
+          email,
         }));
         return;
       }
@@ -472,7 +610,7 @@ function HostRemote() {
     } finally {
       setFocusBusy(false);
     }
-  }, [gameId, focusBusy, stageFocus, snapshot, pollState]);
+  }, [gameId, focusBusy, stageFocus, snapshot, pollState, email]);
 
   /* ------------------------------------------------------------ scoreboard */
 
@@ -504,6 +642,7 @@ function HostRemote() {
             ? payload
             : { error: 'Could not change the scoreboard.' },
           live: !!snapshot,
+          email,
         }));
         return;
       }
@@ -513,7 +652,7 @@ function HostRemote() {
     } finally {
       setScoreboardBusy(false);
     }
-  }, [gameId, scoreboardBusy, snapshot, pollState]);
+  }, [gameId, scoreboardBusy, snapshot, pollState, email]);
 
   /* ------------------------------------------------------------ categories */
 
@@ -617,7 +756,7 @@ function HostRemote() {
           `tenant.callerMayDriveSession` refused this device's organisation. See
           config/hostRemote.js:sessionActionMessage for the deduction.
         */
-        setError(sessionActionMessage({ status: res.status, payload, live: !!snapshot }));
+        setError(sessionActionMessage({ status: res.status, payload, live: !!snapshot, email }));
         return;
       }
 
@@ -640,7 +779,7 @@ function HostRemote() {
     } finally {
       setBusyAction(null);
     }
-  }, [gameId, round, snapshot, disarm, pollState]);
+  }, [gameId, round, snapshot, disarm, pollState, email]);
 
   const onPrimary = useCallback(() => {
     if (!action || blocked) return;
@@ -695,7 +834,7 @@ function HostRemote() {
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(sessionActionMessage({ status: res.status, payload, live: !!snapshot }));
+        setError(sessionActionMessage({ status: res.status, payload, live: !!snapshot, email }));
         return;
       }
 
@@ -714,7 +853,7 @@ function HostRemote() {
     } finally {
       setBusyAction(null);
     }
-  }, [gameId, snapshot, pollState]);
+  }, [gameId, snapshot, pollState, email]);
 
   /**
    * Turn a category on or off mid-session — the same endpoint and the same
@@ -743,6 +882,7 @@ function HostRemote() {
             ? payload
             : { error: `Could not change ${row.name}.` },
           live: !!snapshot,
+          email,
         }));
         return;
       }
@@ -755,7 +895,7 @@ function HostRemote() {
     } finally {
       setTogglingCategory(false);
     }
-  }, [gameId, togglingCategory, snapshot, pollState]);
+  }, [gameId, togglingCategory, snapshot, pollState, email]);
 
   /* -------------------------------------------- display-only, needs page */
 
@@ -866,7 +1006,47 @@ function HostRemote() {
       </header>
 
       <main className="hr-body">
-        {panelTab ? (
+        {access.status !== ACCESS.OK ? (
+          /* THE ACCESS GATE — see the note above `ACCESS`. Nothing about the
+             session is rendered here: no round, no roster, no join code, no
+             categories. Only what this phone can say for itself (the check is
+             pending, or it failed and how) and a way to fix it. */
+          access.status === ACCESS.PENDING ? (
+            <section className="hr-status" aria-live="polite">
+              <p className="hr-status-kicker">One moment</p>
+              <h1 className="hr-status-phase">Checking this device…</h1>
+            </section>
+          ) : (
+            <section className="hr-access" aria-live="polite">
+              <p className="hr-flash hr-flash--error" role="alert">
+                <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                {accessDeniedMessage({ reason: access.reason, email })}
+              </p>
+              <button
+                className="hr-btn hr-btn--primary"
+                type="button"
+                onClick={access.reason === 'error' ? () => checkAccess(gameId) : handleSignInAgain}
+              >
+                {access.reason === 'error' ? 'Try again'
+                  : access.reason === 'expired' ? 'Sign in again'
+                    : 'Sign in as someone else'}
+              </button>
+              {/* Only for the 'account' reason — the account this device is
+                  signed in as may run a DIFFERENT one of its own teams, which
+                  is a team change, not a sign-in change. Reconciles and heals a
+                  stored value exactly as it does in the normal Session card
+                  below; drawn here too so fixing this does not require signing
+                  out first. `onSwitch`: see ActiveOrgSwitcher.jsx — this is the
+                  one place its recheck cannot wait for the reload it triggers. */}
+              {access.reason === 'account' && (
+                <div className="hr-card" aria-label="Session">
+                  <h2 className="hr-card-heading">Session</h2>
+                  <ActiveOrgSwitcher onSwitch={recheckAccess} />
+                </div>
+              )}
+            </section>
+          )
+        ) : panelTab ? (
           /* THE THREE LISTS. Rendered INSIDE the body rather than instead of
              the whole screen, which is what keeps the bar above and the dock
              below on the page — see RemoteSessionPanel for the argument. */
@@ -1174,8 +1354,14 @@ function HostRemote() {
                   server resolves that case on its own — so it costs a phone
                   column nothing in the common case, and in the uncommon one it
                   is the only way to correct a wrong guess without leaving the
-                  session. */}
-              <ActiveOrgSwitcher />
+                  session.
+
+                  `onSwitch={recheckAccess}`: Task 6's access gate re-asks
+                  `GET /games/{id}/host-details` the moment this fires, rather
+                  than waiting on the reload below — see ActiveOrgSwitcher.jsx.
+                  A host already driving the session who switches teams should
+                  have that asked again just as much as one fixing a refusal. */}
+              <ActiveOrgSwitcher onSwitch={recheckAccess} />
               <div className="hr-grid">
                 {/* THE WAY IN TO THE THREE LISTS.
 
@@ -1330,41 +1516,45 @@ function HostRemote() {
         )}
       </main>
 
-      {/* The one control that matters, pinned in the thumb arc. */}
-      <div className="hr-dock">
-        {action ? (
-          <>
-            {primaryArmed && (
-              <p className="hr-dock-warn" role="status">
-                {progress.applicable && !progress.allIn
-                  ? `${progress.total - progress.received} still ${progress.kind === 'votes' ? 'voting' : 'answering'}`
-                  : 'Confirm to continue'}
-              </p>
-            )}
-            <button
-              className={`hr-primary ${primaryArmed ? 'is-armed' : ''}`}
-              type="button"
-              disabled={blocked}
-              onClick={onPrimary}
-              onBlur={disarm}
-            >
-              <Icon
-                name={primaryArmed ? 'Warning' : action.icon}
-                weight="bold"
-                size={24}
-                color="currentColor"
-              />
-              <span className="hr-primary-label">
-                {busyAction ? 'Working…' : primaryArmed ? 'Tap again to confirm' : action.label}
-              </span>
-            </button>
-          </>
-        ) : (
-          <p className="hr-dock-idle">
-            {summary.phase === 'ENDED' ? 'Session complete' : 'Waiting for the session…'}
-          </p>
-        )}
-      </div>
+      {/* The one control that matters, pinned in the thumb arc — and, per the
+          access gate above, absent entirely rather than idle while this
+          account has not been cleared to drive the session. */}
+      {access.status === ACCESS.OK && (
+        <div className="hr-dock">
+          {action ? (
+            <>
+              {primaryArmed && (
+                <p className="hr-dock-warn" role="status">
+                  {progress.applicable && !progress.allIn
+                    ? `${progress.total - progress.received} still ${progress.kind === 'votes' ? 'voting' : 'answering'}`
+                    : 'Confirm to continue'}
+                </p>
+              )}
+              <button
+                className={`hr-primary ${primaryArmed ? 'is-armed' : ''}`}
+                type="button"
+                disabled={blocked}
+                onClick={onPrimary}
+                onBlur={disarm}
+              >
+                <Icon
+                  name={primaryArmed ? 'Warning' : action.icon}
+                  weight="bold"
+                  size={24}
+                  color="currentColor"
+                />
+                <span className="hr-primary-label">
+                  {busyAction ? 'Working…' : primaryArmed ? 'Tap again to confirm' : action.label}
+                </span>
+              </button>
+            </>
+          ) : (
+            <p className="hr-dock-idle">
+              {summary.phase === 'ENDED' ? 'Session complete' : 'Waiting for the session…'}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

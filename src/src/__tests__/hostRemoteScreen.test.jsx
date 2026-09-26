@@ -112,6 +112,17 @@ async function connect() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // CRA's jest config carries `resetMocks: true`, which strips the
+  // implementation `jest.fn(impl)` was GIVEN at mock-factory time before every
+  // test — `.mock.calls` still records correctly (which is all `postsTo` ever
+  // needed), but `await authFetch(...)` resolves to `undefined` unless the
+  // implementation is re-armed here. The access gate (Task 6) is the first
+  // caller in this file to read authFetch's RESOLVED value.
+  authFetch.mockImplementation(() => Promise.resolve({
+    ok: true,
+    status: 200,
+    json: async () => ({ status: 'OK' }),
+  }));
   window.API_BASE = 'https://api.test/';
 });
 

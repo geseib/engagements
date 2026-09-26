@@ -906,14 +906,19 @@ export function questionSetFailure({ status } = {}) {
  * @param {{status?: number, payload?: object, live?: boolean}} arg
  * @returns {string}
  */
-export function sessionActionMessage({ status, payload = {}, live = false } = {}) {
+export function sessionActionMessage({ status, payload = {}, live = false, email = '' } = {}) {
   const said = String(payload.message || payload.error || '').trim();
 
   if (status === 401 || status === 403) {
     return 'Your sign-in has expired. Sign in again on this device, then reopen the session.';
   }
   if (status === 404 && live && /^game not found$/i.test(said)) {
-    return 'The session is running, but it would not take the change. This device is probably '
+    // Names the signed-in account, same as the up-front check
+    // (`accessDeniedMessage` below) — a host who was removed from the team
+    // mid-session, or who never noticed the up-front banner, gets the same
+    // fact either way: which account is in the way.
+    const who = email ? `You're signed in as ${email}. ` : '';
+    return `${who}The session is running, but it would not take the change. This device is probably `
       + 'acting as a different team from the one that owns the session — switch team under '
       + 'Session, then try again.';
   }
@@ -921,6 +926,47 @@ export function sessionActionMessage({ status, payload = {}, live = false } = {}
   return NO_STATUS(status)
     ? 'No connection. Check signal and try again.'
     : `That did not go through (${status}).`;
+}
+
+/* --------------------------------------------------------------- host access */
+
+/**
+ * WHAT THE PHONE SAYS BEFORE OFFERING A SINGLE CONTROL, when the signed-in
+ * account cannot drive this session at all.
+ *
+ * `HostRemote.jsx` calls the authenticated `GET /games/{id}/host-details`
+ * (Cognito + `callerMayDriveSession`, bug-sweep Task 1) the moment it opens a
+ * session, and asks nothing else — no state, no roster, no questions, no
+ * answers — until that call comes back 200. This is the copy for the two ways
+ * it can fail:
+ *
+ *   'account'  the door refused this account the same 404
+ *              `callerMayDriveSession` answers everywhere: not a member of the
+ *              session's team, or a different identity than the one that
+ *              created a personal session. The owner's ruling on the wording
+ *              names BOTH remedies, because the phone cannot tell which one
+ *              applies — `get-game.js` answers the identical 404 for either
+ *              reason on purpose, so a session that does not exist is not an
+ *              oracle for one that does.
+ *   'expired'  no valid token reached the door at all (401/403, or none sent).
+ *   'error'    the door did not give a clean answer (a status this surface
+ *              cannot explain, or the request never landed) — never asserted
+ *              as either of the above, which would be a claim the response
+ *              does not support.
+ *
+ * `email` is the signed-in account's own address, read from `useOptionalAuth()`
+ * — omitted (not guessed) when the app has not resolved one yet.
+ */
+export function accessDeniedMessage({ reason, email = '' } = {}) {
+  if (reason === 'expired') {
+    return 'Your sign-in has run out. Sign in again.';
+  }
+  if (reason === 'error') {
+    return 'Could not confirm this device can run the session. Check signal and try again.';
+  }
+  const who = email ? `You're signed in as ${email}. ` : '';
+  return `${who}That account can't run this session. Sign in with an account on the team that `
+    + 'runs it — or, for a personal session, with the account that created it.';
 }
 
 /* -------------------------------------------------------------- scoreboard */

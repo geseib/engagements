@@ -58,7 +58,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import HostRemote from '../HostRemote';
-import { ACTIVE_ORG_STORAGE_KEY } from '../auth/authFetch';
+import { ACTIVE_ORG_STORAGE_KEY, authFetch } from '../auth/authFetch';
 
 /* PARTIAL MOCK. Only the transport is swapped — the org accessors are the real
    ones, so what the switcher stores is observable here. */
@@ -68,10 +68,20 @@ jest.mock('../auth/authFetch', () => ({
 }));
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
 
-function serve({ orgs = [] } = {}) {
+function serve({ orgs = [], hostDetails = { status: 200 } } = {}) {
   global.fetch = jest.fn((url, init) => {
     const href = String(url);
     if (init?.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    // The access gate (Task 6): asked before anything else about the session,
+    // so every scenario in this file has to answer it — the org-resolution
+    // bug this file pins is downstream of it, not a substitute for it.
+    if (href.includes('/host-details')) {
+      return Promise.resolve({
+        ok: hostDetails.status === 200,
+        status: hostDetails.status,
+        json: async () => ({}),
+      });
+    }
     if (href.includes('/orgs')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ orgs }) });
     if (href.includes('/state')) {
       return Promise.resolve({
@@ -112,6 +122,14 @@ async function connect() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // CRA's jest config carries `resetMocks: true`, which strips the
+  // implementation `jest.fn(impl)` was GIVEN at mock-factory time before every
+  // single test — `.mock.calls` still records correctly (which is all this
+  // suite used to assert on), but `await authFetch(...)` resolves to
+  // `undefined` unless the implementation is re-armed here. The access gate
+  // (Task 6) is the first caller in this file to read authFetch's RESOLVED
+  // value rather than only whether it was called.
+  authFetch.mockImplementation((...args) => global.fetch(...args));
   window.API_BASE = 'https://api.test/';
   window.localStorage.clear();
 });
@@ -175,5 +193,54 @@ describe('the remote resolves an organisation', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/^Session$/)).toBeInTheDocument());
     expect(screen.queryByTestId('orgsw-chip')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * TASK 6's ACCESS GATE, AND THE SWITCHER'S OTHER JOB.
+ *
+ * The org-mismatch bug above is fixed by resolving AN organisation, which need
+ * not be the session's — the phone still has to be told when its guess is
+ * wrong, and given a way to fix it without leaving the session. This is that
+ * other half: the up-front `GET /games/{id}/host-details` check refuses (404),
+ * the gate offers the SAME switcher this file already exercises, and picking
+ * the session's real team has to re-ask the door rather than wait on the page
+ * reload `ActiveOrgSwitcher.choose()` triggers — jsdom cannot observe a reload
+ * (see actingAsBanner.test.jsx), so `onSwitch` is what makes this testable at
+ * all, and what makes a real browser not have to wait for one either.
+ */
+describe('the access gate re-checks after a team switch (Task 6)', () => {
+  it('a team switch triggers a re-check, which enables the controls on 200', async () => {
+    // Mutated mid-test: the fetch mock reads `.status` at CALL time, so
+    // flipping it after the first (refused) check simulates the session's
+    // owning team being the one picked from the switcher below.
+    const hostDetails = { status: 404 };
+    serve({
+      orgs: [
+        { orgId: 'org_personal', name: 'George', type: 'personal' },
+        { orgId: 'org_teamg', name: 'TeamG', type: 'team' },
+      ],
+      hostDetails,
+    });
+
+    render(<HostRemote />);
+    fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
+    fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+
+    // Refused: the banner is up, and the switcher is right there with it —
+    // no round, no roster, nothing but the way to fix it.
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+    const chip = await screen.findByTestId('orgsw-chip');
+
+    // Fix the door's answer BEFORE switching — the switch is what re-asks it,
+    // not a coincidental poll.
+    hostDetails.status = 200;
+    fireEvent.click(chip);
+    fireEvent.click(screen.getByRole('menuitem', { name: /TeamG/i }));
+
+    // The recheck lands and the session it was withholding appears.
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
   });
 });
