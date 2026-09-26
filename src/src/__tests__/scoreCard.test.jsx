@@ -335,6 +335,40 @@ test('a band seen only in the set\'s own text leaves every question clean, and i
   expect(cats.slice(1).map((c) => cells(c)[1].textContent)).toEqual(['none', 'none', 'none', 'none']);
 });
 /*
+  ROUND 1 REVIEW, IMPORTANT #2: set-review.js caps a large `observed` list but
+  never drops the `(set)`-subject row (set-check-worker.js appends it LAST, so
+  a blind cut used to lose it first), and the server now says `observedTruncated`
+  plus `observedCap` when it had to cut. The card must (a) still read the
+  set's own text as not-clean even inside a capped list and (b) tell the
+  reader the list on screen is partial, in the server's own words for the
+  number — never a second copy of 300 written into this file.
+*/
+test('a capped observed list still catches the set\'s own text, and says how many are shown', async () => {
+  const CAP = 300;
+  const perQuestion = Array.from({ length: CAP - 1 }, (_, i) => ({
+    questionId: `c001#${String(i).padStart(3, '0')}`, category: 'VIOLENCE', band: 'LOW', intervened: false,
+    text: `Question ${i}\nDetail.`,
+  }));
+  await open(withReview({
+    reasons: ['guardrail'], findings: [],
+    observed: [...perQuestion, { questionId: '(set)', category: 'VIOLENCE', band: 'MEDIUM', intervened: false, text: 'True crime\nInfamous cases, solved and not.' }],
+    tally: {
+      scope: 'full', questions: perQuestion.length, setTextChecked: true, setTextUnread: false, spotless: perQuestion.length, unread: 0,
+      categories: { VIOLENCE: { worst: 'LOW', low: perQuestion.length, medium: 0, high: 0 }, SEXUAL: NONE, HATE: NONE, INSULTS: NONE, MISCONDUCT: NONE },
+    },
+    observedTruncated: true,
+    observedCap: CAP,
+  }));
+  // Not "all clean": the set's own text is in the (capped) list, at MEDIUM.
+  expect(screen.getByTestId('scard-summary')).not.toHaveTextContent(/all clean/i);
+  expect(screen.getByTestId('scard-summary')).toHaveTextContent(/every question clean in every category/i);
+  expect(screen.getByTestId('scard-observed-truncated')).toHaveTextContent('Only the first 300 observations are listed.');
+});
+test('no truncation line when the list was not capped', async () => {
+  await open(withReview({}));
+  expect(screen.queryByTestId('scard-observed-truncated')).not.toBeInTheDocument();
+});
+/*
   The final review, 2026-09-19: the tally counts QUESTIONS (content-guardrail.js
   tallyOf skips the set's own subject), so a category seen only in the set's
   own text had a null `worst`, and the card wrote "none" for it — one line

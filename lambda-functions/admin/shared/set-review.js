@@ -49,6 +49,10 @@
  */
 const { GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { setPartition } = require('./set-version');
+// Only for the one subject name `writeReview`'s cap must never drop — see
+// OBSERVED_CAP's own comment. No cycle: content-guardrail.js requires nothing
+// from this file.
+const { SET_SUBJECT } = require('./content-guardrail');
 
 /** The state machine. `UNREVIEWED` is the absence of a row, never a stored value. */
 const STATUS = Object.freeze({
@@ -110,6 +114,11 @@ async function readReview(db, tableName, ref, version) {
  * reads findings sees a near-miss. A row without a tally was checked before
  * measuring existed; nothing back-fills one.
  *
+ * `observedTruncated` says whether `writeReview` had to cut `observed` down to
+ * `OBSERVED_CAP` (below) to keep the row inside DynamoDB's 400 KB item limit —
+ * see the cap's own comment for why a large set can reach it. Absent, never
+ * `false`, on a row whose list needed no cutting.
+ *
  * `topicSuggestion` is the shelf the check would have filed the set on
  * (shared/topic-suggestion.js) — a RECOMMENDATION, on the row so a surface can
  * offer it. It decides nothing here either: the status above is computed
@@ -118,9 +127,39 @@ async function readReview(db, tableName, ref, version) {
 const REVIEW_FIELDS = Object.freeze([
   'jobId', 'note', 'findings', 'contentHash', 'snapshotKey', 'reasons', 'checkedBy', 'promptDropped', 'declaredNotice',
   'reviewer', 'decidedAt', 'notice',
-  'tally', 'observed',
+  'tally', 'observed', 'observedTruncated',
   'topicSuggestion',
 ]);
+
+/**
+ * THE CEILING ON HOW MANY OBSERVATIONS A REVIEW ROW STORES.
+ *
+ * Every request to the guardrail asks for `outputScope: 'FULL'`
+ * (content-guardrail.js), so a check returns a band for every judged category
+ * on every question, and `finding-explanations.js` adds up to a
+ * 240-character explanation to each one it can reach. A few hundred questions
+ * is enough for `observed` alone to pass DynamoDB's 400 KB item limit before
+ * `findings`, `tally`, the snapshot key or anything else on the row is even
+ * counted.
+ *
+ * The TALLY is computed from the FULL list, before this cap ever runs
+ * (content-guardrail.js `tallyOf`, called in set-check-worker.js on the
+ * un-truncated `observed` array) — so a row capped here still tells the truth
+ * about what every category saw; only the per-item detail underneath it is
+ * cut, and `observedTruncated` says so.
+ *
+ * THE CUT NEVER TOUCHES `(set)` — set-check-worker.js appends the set's own
+ * text LAST (`observed = [...result.observed, ...setResult.observed]`), so a
+ * blind prefix cut drops it FIRST on any large set: `reviewMeasurement.js`'s
+ * `setTextClean` reads `observed` for exactly that subject, and a set whose
+ * own title or description held a LOW/MEDIUM would then read "all clean in
+ * every category" on the score card — the opposite of what the check saw.
+ * `(set)` has at most one row per judged category (five, at most) whatever the
+ * question count, so keeping every one of them and capping only the
+ * per-question entries to fill what room remains never meaningfully shrinks
+ * the cap.
+ */
+const OBSERVED_CAP = 300;
 
 /**
  * WHAT A PERSON DECIDED, as opposed to what a check measured.
@@ -170,11 +209,30 @@ async function writeReview(db, tableName, ref, version, { status, ...facts } = {
   }
   // findings keeps its old rule — written only when it actually is an array —
   // rather than the generic "present and not null" the rest of the whitelist
-  // uses. observed is a list the score card walks, so it takes the same rule.
+  // uses. observed is a list the score card walks, so it takes the same rule,
+  // and is additionally capped at OBSERVED_CAP items (see that constant's own
+  // comment): the TALLY above already measured the full list the caller
+  // passed in, so cutting the per-item detail here loses nothing a reader
+  // depends on for its counts, only the entries themselves.
+  const observedList = Array.isArray(facts.observed) ? facts.observed : undefined;
+  let observedStored = observedList;
+  let observedTruncated = false;
+  if (observedList && observedList.length > OBSERVED_CAP) {
+    // Every `(set)`-subject row survives the cut (OBSERVED_CAP's own comment
+    // says why); only the per-question rows are trimmed, to fill whatever room
+    // is left. `.filter` preserves each group's own relative order, so the
+    // stored list still reads question-order-then-set-text, same as before.
+    const setSubject = observedList.filter((o) => o && o.questionId === SET_SUBJECT);
+    const perQuestion = observedList.filter((o) => !(o && o.questionId === SET_SUBJECT));
+    const roomForQuestions = Math.max(0, OBSERVED_CAP - setSubject.length);
+    observedStored = [...perQuestion.slice(0, roomForQuestions), ...setSubject];
+    observedTruncated = true;
+  }
   const bag = {
     ...facts,
     findings: Array.isArray(facts.findings) ? facts.findings : undefined,
-    observed: Array.isArray(facts.observed) ? facts.observed : undefined,
+    observed: observedStored,
+    observedTruncated: observedTruncated || undefined,
   };
   const kept = Object.fromEntries(
     REVIEW_FIELDS.filter((f) => bag[f] !== undefined && bag[f] !== null).map((f) => [f, bag[f]]),
@@ -338,6 +396,7 @@ module.exports = {
   STATUS,
   WRITABLE,
   REVIEW_FIELDS,
+  OBSERVED_CAP,
   DECISION_FIELDS,
   decisionOf,
   declarationOf,

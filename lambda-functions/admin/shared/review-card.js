@@ -58,11 +58,18 @@ const lines = (...values) => values
  * eventually get it wrong in the reassuring direction. `observed` is every LOW+
  * band the check saw — a superset of `findings`, which keeps its own narrower
  * meaning of what actually HELD the set.
+ *
+ * `observedTruncated` says whether `set-review.js`'s `writeReview` had to cut
+ * `observed` down to fit `OBSERVED_CAP` (round 1 review, Important #2b): a
+ * flag on the row this function reads off, not something computed here, so it
+ * carries straight through to whichever caller decides what to say about it —
+ * the staff score card, today (admin/public-library-item.js).
  */
 function measurementOf(review) {
   const tally = review && review.tally && typeof review.tally === 'object' ? review.tally : null;
   const observed = Array.isArray(review && review.observed) ? review.observed : [];
-  return { tally, observed };
+  const observedTruncated = Boolean(review && review.observedTruncated === true);
+  return { tally, observed, observedTruncated };
 }
 
 /**
