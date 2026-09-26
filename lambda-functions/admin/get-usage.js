@@ -142,11 +142,22 @@ exports.handler = async (event) => {
       from, with every step named. Read straight from the ledger rows; no
       cache, so a grant made a second ago is on the next load.
     */
-    const adjRows = (await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: { ':pk': orgPk(wanted), ':sk': 'ADJ#' },
-    }))).Items || [];
+    // Every page, not the first: a Query stops at 1 MB and hands back what it
+    // read, so an org old enough to have collected a page of revoked or
+    // expired rows ahead of a live credit or rate override would have that
+    // live row silently dropped. tests/billing-adjustments-paged.js.
+    const adjRows = [];
+    let adjStartKey;
+    do {
+      const adjPage = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': orgPk(wanted), ':sk': 'ADJ#' },
+        ExclusiveStartKey: adjStartKey,
+      }));
+      adjRows.push(...(adjPage.Items || []));
+      adjStartKey = adjPage.LastEvaluatedKey;
+    } while (adjStartKey);
     const adjusted = applyAdjustments(plan, usage, adjRows, period);
     adjusted.sentence = simulationSentence(adjusted);
     const bounds = periodBounds(period, now);
