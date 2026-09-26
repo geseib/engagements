@@ -1,0 +1,204 @@
+/* components/EventsPanel.jsx, EventDetailsDialog.jsx — the Events place.
+   ==========================================================================
+   Built from docs/design/agenda-redesign/01-events.html, 01b-events-personal
+   .html and 05-new-event.html, whose styles are _src/agenda-console.css over
+   admin-redesign/_src/shell.css. Those classes are translated here under one
+   scope, `.evts`: the namespace tests hold each screen to one scope class,
+   and `styles.css` owns the bare `.btn` / `.chip` / `.modal` names.
+
+   Dusk, on AdminShell's dark work field (consoleSections.js gives `events`
+   contentTheme 'dark'). The ladder is the console's: 12 / 13 / 15 / 19 / 30.
+   Rows are 48px, not 36: each carries a name and a place line (.evts-nm +
+   .evts-sub), which the 15/13 pair does not fit in 36
+   (agenda-console.css, `.ag-agenda td{height:48px}`).
+
+   MEASURED, composited on the real stack (eventsPanelPalette.test.js):
+     --text  #F4EDE4 on --bg 14.97, on --surface 12.53
+     --muted #9BA8BE on --bg  7.61, on --surface  6.37
+     --primary #F6A94C on --bg 8.86; #0F1A2E on --primary 8.86 (a filled button)
+     --muted on the selected option (#F6A94C @10% over --surface)  5.04
+     --muted on the note box (#9BA8BE @6% over --surface)           5.46
+     --danger-text on its tint (#E5645E @9% over --surface)          5.50
+   ========================================================================== */
+.evts {
+  --evts-t-floor: 12px;
+  --evts-t-label: 13px;
+  --evts-t-body: 15px;
+  --evts-t-head: 19px;
+  --evts-t-numeral: 30px;
+  --evts-row-h: 48px;
+
+  /* The ink on a filled amber button. Invariant dusk navy, not var(--bg):
+     under a paper ancestor --bg is paper, and #FBF7F1 on amber is 1.9:1. */
+  --evts-on-accent: #0F1A2E;
+  /* Not global tokens (see UserManagement.css): an undefined custom property
+     invalidates the whole declaration it sits in. */
+  --evts-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --evts-rule: rgba(155, 168, 190, .20);
+  --evts-rule-strong: rgba(155, 168, 190, .34);
+  --evts-row-hover: rgba(155, 168, 190, .055);
+  --evts-row-sel: rgba(246, 169, 76, .10);
+  --evts-tint-note: rgba(155, 168, 190, .06);
+  --evts-tint-danger: rgba(229, 100, 94, .09);
+  --evts-scrim: rgba(6, 11, 22, .72);
+
+  color: var(--text);
+  font: 400 var(--evts-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.evts *,
+.evts *::before,
+.evts *::after { box-sizing: border-box; }
+.evts :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* The head's "New event": AdminShell's actions slot is outside the panel, so
+   the button carries the scope on a wrapper of its own. */
+.evts.evts-headact { display: inline-flex; }
+
+/* ------------------------------------------------------------- buttons --- */
+.evts-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: 6px; border: 1px solid var(--evts-rule-strong); background: transparent;
+  color: var(--text); font: 600 var(--evts-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.evts-btn:hover:not(:disabled) { background: var(--evts-row-hover); border-color: var(--muted); }
+.evts-btn:disabled { opacity: .42; cursor: not-allowed; }
+.evts-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--evts-on-accent); font-weight: 700; }
+.evts-btn--primary:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); filter: brightness(1.08); }
+.evts-btn--lg { height: 36px; padding: 0 16px; font-size: var(--evts-t-body); }
+.evts-btn--sm { height: 26px; padding: 0 9px; font-size: var(--evts-t-floor); }
+.evts-btn--ghost { border-color: transparent; color: var(--muted); }
+
+/* ------------------------------------------------------------ messages --- */
+.evts-alert {
+  display: flex; align-items: center; gap: 9px; margin: 0 0 14px; padding: 9px 12px;
+  border: 1px solid var(--evts-rule-strong); border-left: 3px solid var(--danger); border-radius: 6px;
+  background: var(--evts-tint-danger); color: var(--danger-text);
+}
+.evts-loading { color: var(--muted); }
+
+/* ------------------------------------------------------------- filters --- */
+.evts-filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 0 0 12px; }
+.evts-search { position: relative; flex: 0 1 300px; min-width: 170px; display: flex; align-items: center; }
+.evts-search > svg { position: absolute; left: 9px; pointer-events: none; color: var(--muted); }
+.evts-input {
+  font: 400 var(--evts-t-body)/1.4 var(--font-ui); color: var(--text); background: var(--bg);
+  border: 1px solid var(--evts-rule-strong); border-radius: 6px; padding: 6px 9px; min-height: 32px; width: 100%;
+}
+.evts-search .evts-input { padding-left: 29px; }
+.evts-input::placeholder { color: var(--muted); opacity: .62; }
+.evts-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.evts-seg { display: inline-flex; border: 1px solid var(--evts-rule-strong); border-radius: 6px; overflow: hidden; }
+.evts-seg button {
+  border: 0; border-right: 1px solid var(--evts-rule); background: transparent; color: var(--muted);
+  font: 600 var(--evts-t-label)/1 var(--font-ui); padding: 0 11px; height: 30px; cursor: pointer;
+}
+.evts-seg button:last-child { border-right: 0; }
+.evts-seg button[aria-pressed="true"] { background: var(--evts-row-sel); color: var(--text); }
+.evts-seg .evts-dim { margin-left: 4px; font-size: var(--evts-t-floor); }
+.evts-dim { color: var(--muted); }
+
+/* --------------------------------------------------------------- table --- */
+.evts-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.evts-tbl th {
+  text-align: left; font-size: var(--evts-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 0 10px 7px; white-space: nowrap; border-bottom: 1px solid var(--evts-rule-strong);
+}
+.evts-tbl td {
+  padding: 0 10px; height: var(--evts-row-h); border-bottom: 1px solid var(--evts-rule);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evts-tbl tbody tr:hover td { background: var(--evts-row-hover); }
+.evts-tbl .evts-num { text-align: right; }
+.evts-col-when { width: 170px; }
+.evts-col-items { width: 64px; }
+.evts-col-who { width: 190px; }
+.evts-col-code { width: 70px; }
+.evts-col-state { width: 110px; }
+.evts-col-acts { width: 84px; }
+/* A truncating name is ONE text node with min-width 0 (hard rule 8), and the
+   full string rides on title= so the clip is a reduction, not a deletion. */
+.evts-nm {
+  display: block; max-width: 100%; min-width: 0; padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--text); font: 600 var(--evts-t-body)/1.3 var(--font-ui); text-align: left;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evts-nm:hover { color: var(--primary); }
+.evts-sub {
+  display: block; min-width: 0; font-size: var(--evts-t-label); color: var(--muted);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evts-when { font-size: var(--evts-t-label); color: var(--muted); }
+.evts-mono { font-family: var(--evts-font-mono); font-size: 14px; }
+.evts-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: var(--evts-t-floor); font-weight: 600;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--evts-rule-strong); color: var(--muted); line-height: 1.5;
+}
+.evts-chip--type { color: var(--text); }
+.evts-chip--off { border-style: dashed; }
+/* Row actions: margin-left auto on the first child, never flex-end (hard rule 9). */
+.evts-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
+.evts-rowact > :first-child { margin-left: auto; }
+
+/* ------------------------------------------------------ the empty states --- */
+.evts-empty { max-width: 64ch; margin: 56px auto; text-align: center; }
+.evts-empty h3 { font-family: var(--font-display); font-size: var(--evts-t-head); font-weight: 700; margin: 12px 0 7px; }
+.evts-empty p { color: var(--muted); margin: 0 0 18px; line-height: 1.55; }
+.evts-empty p b { color: var(--text); }
+.evts-acts { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+.evts-nomatch { margin: 24px 0; color: var(--muted); }
+.evts-nomatch p { margin: 0 0 10px; }
+
+/* --------------------------------------------------------------- dialog --- */
+/* The scrim scrolls; the card centres with margin:auto (hard rule 10). */
+.evts-scrim {
+  position: fixed; inset: 0; z-index: 60; background: var(--evts-scrim);
+  display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 28px 24px;
+}
+.evts-modal {
+  margin: auto; width: min(760px, 100%); background: var(--surface); border: 1px solid var(--evts-rule-strong);
+  border-radius: 12px; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); color: var(--text); overflow-wrap: anywhere;
+}
+.evts-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.evts-modal-head h2 { margin: 0; font: 800 var(--evts-t-head)/1.2 var(--font-display); }
+.evts-modal-head p { margin: 4px 0 0; font-size: var(--evts-t-label); color: var(--muted); }
+.evts-grow { flex: 1 1 auto; min-width: 0; }
+.evts-x {
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer;
+}
+.evts-x:hover { color: var(--text); background: var(--evts-row-hover); }
+.evts-modal-body { padding: 0 18px 4px; }
+.evts-modal-foot {
+  display: flex; gap: 9px; align-items: center; padding: 14px 18px 16px; margin-top: 12px;
+  border-top: 1px solid var(--evts-rule);
+}
+.evts-foot-note { font-size: var(--evts-t-label); color: var(--muted); }
+.evts-step + .evts-step { margin-top: 16px; }
+.evts-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.evts-label { font-size: var(--evts-t-label); font-weight: 600; color: var(--muted); padding: 0; }
+.evts-hint { margin: 6px 0 0; font-size: var(--evts-t-label); color: var(--muted); line-height: 1.45; }
+.evts-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.evts-span2 { grid-column: span 2; }
+.evts-span4 { grid-column: 1 / -1; }
+.evts-opts { display: flex; gap: 8px; }
+.evts-opt {
+  flex: 1 1 0; min-width: 0; display: flex; gap: 11px; align-items: flex-start; padding: 11px 13px; cursor: pointer;
+  border: 1px solid var(--evts-rule-strong); border-radius: 9px; background: var(--bg); color: var(--text);
+}
+.evts-opt[data-checked="true"] { border-color: var(--primary); background: var(--evts-row-sel); }
+.evts-opt--off { cursor: not-allowed; }
+.evts-opt input { margin: 2px 0 0; accent-color: var(--primary); }
+.evts-opt b { display: block; font-size: var(--evts-t-body); font-weight: 700; }
+.evts-opt span { display: block; margin-top: 2px; font-size: var(--evts-t-label); color: var(--muted); line-height: 1.45; }
+.evts-note {
+  display: flex; gap: 10px; align-items: flex-start; margin: 16px 0 0; padding: 10px 13px;
+  border-left: 3px solid var(--muted); border-radius: 0 6px 6px 0; background: var(--evts-tint-note);
+  font-size: var(--evts-t-label); color: var(--muted); line-height: 1.5;
+}
+.evts-note b { color: var(--text); }
+.evts-error {
+  margin: 12px 0 0; padding: 9px 12px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
+  background: var(--evts-tint-danger); color: var(--danger-text); font-size: var(--evts-t-label);
+}

@@ -47,6 +47,8 @@ const STAGE2_SCRIMS = [
   ['ModerationPanel.css', '.modq-scrim', '.modq-card'],
   ['ScoreCard.css', '.scard-scrim', '.scard-dialog'],
   ['PublicLibraryPanel.css', '.publib-scrim', '.publib-dialog'],
+  // Events (roadmap M1): the new-event dialog.
+  ['EventsPanel.css', '.evts-scrim', '.evts-modal'],
 ].map(([file, scrim, card]) => ({
   file, scrim, card, css: fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8'),
 }));
