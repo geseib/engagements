@@ -389,6 +389,120 @@ describe('the stage takes a set instruction from the question, not only the cata
       { timeout: 2000 }
     );
   });
+
+  /**
+   * FIX-ROUND 1: the reload path raced the very lookup it was meant to
+   * supersede.
+   *
+   * `fetchQuestionSetInstruction(restoredSetId, restoredSetScope)` used to
+   * fire unconditionally and fire-and-forget while restoring gameMetadata,
+   * BEFORE the code even knows whether it is about to branch into the
+   * `currentQuestionData` case or the one that awaits `/question` and applies
+   * the fields off that response instead. Both write `customInstruction` /
+   * `setRoundNoun` with no ordering between them, so a slow catalogue
+   * response landing AFTER the question fetch had already rendered the right
+   * answer would blank it right back out — GitHub #18 again, on the very path
+   * this task fixed. The previous test's mock resolved both fetches
+   * synchronously, so it only ever proved the favourable ordering.
+   *
+   * The fix confines the catalogue lookup to the one branch that still needs
+   * it (get-game-state's `currentQuestionData` carries neither field) and
+   * removes it from the branch that reads the question's own response — so
+   * there is no second call left here to race at all. This test proves that:
+   * the ONLY call to the bare `question-sets` catalogue is `fetchQuestionSets`'s
+   * own (unrelated) call, and even a slow second response — the shape the old
+   * code would have produced — cannot overwrite the instruction once it has
+   * arrived on the question.
+   */
+  test('a slow catalogue response cannot overwrite the instruction that already arrived on the question', async () => {
+    const LIVE = '5679';
+    const INSTRUCTION = 'Answer honestly, in your own words.';
+    const STALE = 'Stale catalogue text — must never win the race.';
+
+    let resolveSecondCatalogueCall = null;
+    let catalogueCalls = 0;
+
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      if (u.includes(`games/${LIVE}/question?role=host`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            id: 1, questionNumber: 1, setId: 'setA', setScope: 'platform',
+            title: 'Q1', questionDetail: 'D1', detail: 'D1',
+            setCustomInstruction: INSTRUCTION, setRoundNoun: 'Prompt',
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}/state`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            state: 'ASK#001',
+            currentQuestion: 1,
+            gameMetadata: {
+              title: 'Live game', gameType: 'call-and-answer',
+              questionSetId: 'setA', questionSetScope: 'platform',
+            },
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}?role=host`)) {
+        return { ok: true, status: 200, json: async () => ({ gameId: LIVE, started: true }), text: async () => '{}' };
+      }
+      // THE BARE CATALOGUE ROUTE ONLY — `question-sets/{id}/categories` (fetchCategories)
+      // must not be caught by this branch, or the round-trip below never fires.
+      if (/\/question-sets(\?|$)/.test(u)) {
+        catalogueCalls += 1;
+        if (catalogueCalls === 1) {
+          // `fetchQuestionSets(true)`'s own, necessary call — resolves at once,
+          // as it always has, so the restore is not held up by it.
+          return { ok: true, status: 200, json: async () => ({ sets: [] }), text: async () => '{}' };
+        }
+        // A SECOND call to this route is exactly what the old, unconditional
+        // `fetchQuestionSetInstruction` call produced. It resolves only when
+        // this test says so — deliberately after the question's own answer
+        // has already rendered — with a WRONG instruction, so a test that
+        // still allowed this call to win the race would see the stale text.
+        return new Promise((resolve) => {
+          resolveSecondCatalogueCall = () => resolve({
+            ok: true, status: 200,
+            json: async () => ({ sets: [{ id: 'setA', scope: 'platform', customInstruction: STALE, roundNoun: 'Stale', active: true }] }),
+            text: async () => '{}',
+          });
+        });
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    window.history.pushState({}, '', `/host?gameId=${LIVE}`);
+    render(<GameHostPage />);
+
+    // The question's own answer must land first.
+    await waitFor(
+      () => expect(screen.getByText(INSTRUCTION)).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+
+    // NOW let a slow second catalogue response land, if the code ever made
+    // one. Under the fix it never did — `resolveSecondCatalogueCall` stays
+    // null — and that is itself part of what this test is proving.
+    if (resolveSecondCatalogueCall) {
+      await act(async () => { resolveSecondCatalogueCall(); await Promise.resolve(); await Promise.resolve(); });
+    }
+
+    // THE REGRESSION: the old unawaited call, once it finally resolved,
+    // overwrote customInstruction with the catalogue's answer — even a wrong
+    // one — blanking or replacing the field the question fetch had already
+    // filled in correctly.
+    expect(screen.getByText(INSTRUCTION)).toBeInTheDocument();
+    expect(screen.queryByText(STALE)).not.toBeInTheDocument();
+    // THE STRUCTURAL PROOF: no second call to the bare catalogue route was
+    // ever made on this path at all — the race is closed, not just won.
+    expect(catalogueCalls).toBe(1);
+  });
 });
 
 /*

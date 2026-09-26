@@ -2431,6 +2431,13 @@ Focus on actionable business strategy insights.`;
         if (superseded()) return false;
 
         // Restore basic game metadata
+        //
+        // `restoredSetId`/`restoredSetScope` are declared out here, not `const`
+        // inside the block below, because the currentQuestionData branch further
+        // down (where the old catalogue lookup is now called — see there for why)
+        // needs them too, and that branch is not nested inside this one.
+        let restoredSetId = '';
+        let restoredSetScope = DEFAULT_SCOPE;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
@@ -2452,16 +2459,17 @@ Focus on actionable business strategy insights.`;
           */
           setSurveyNames(namesMode(gameStateData.names ?? gameStateData.gameMetadata.names).id);
           setSurveyWarnedAt(gameStateData.warnedAt ?? gameStateData.gameMetadata.warnedAt ?? null);
-          const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
+          restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           // The scope the SESSION pinned, not a fresh search. A session plays
           // one partition for its whole life; reloading the host screen must
           // read that one.
-          const restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
+          restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
           setSelectedSetId(restoredSetId);
           setSelectedSetScope(restoredSetScope);
-          fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+          // NOT called here any more — see the currentQuestionData branch below,
+          // which is the only place left that still needs it.
           console.log(`🎮 HOST: Restored game metadata`);
-          
+
           // Restore categories from bitmask if we have a question set
           if (restoredSetId) {
             await fetchCategories(restoredSetId, true, restoredSetScope); // true = restore from game bitmask
@@ -2514,6 +2522,21 @@ Focus on actionable business strategy insights.`;
             // instruction resolver falls all the way through to the generic
             // call-and-answer default — even on an Art Title round.
             setCurrentQuestionId(gameStateData.currentQuestionData.id);
+            // THE ONE CASE THE OLD CATALOGUE LOOKUP STILL COVERS (GitHub #18,
+            // fix-round 1). get-game-state's currentQuestionData carries no
+            // setCustomInstruction/setRoundNoun — applyQuestionSetInstruction
+            // would find nothing here and null both out — so this is the only
+            // branch that still calls the whole-catalogue search.
+            //
+            // NOT called unconditionally any more (it used to fire once, above,
+            // before this if/else even ran): the `else` branch below awaits its
+            // own `/question` fetch and applies the fields straight off THAT
+            // response, and the two writes had no ordering between them — a
+            // slow catalogue response landing after the question fetch could
+            // (and in review, was shown to) blank the correct instruction right
+            // back out. Confining this call to the one branch that still needs
+            // it removes the race outright: the racing write is never made.
+            fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
             console.log(`📝 HOST: Loaded question ${questionNumber} from game state:`, gameStateData.currentQuestionData.title);
           } else {
             // Try to fetch question data with question number
