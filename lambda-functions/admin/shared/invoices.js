@@ -53,12 +53,21 @@ function settle(document) {
 }
 
 async function readAdjustments(db, tableName, orgId) {
-  const res = await db.send(new QueryCommand({
-    TableName: tableName,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': orgPk(orgId), ':sk': 'ADJ#' },
-  }));
-  return res.Items || [];
+  // Every page, not the first — see get-usage.js's own ADJ# read for the same
+  // fix and tests/billing-adjustments-paged.js for the shape of the miss.
+  const rows = [];
+  let ExclusiveStartKey;
+  do {
+    const page = await db.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': orgPk(orgId), ':sk': 'ADJ#' },
+      ExclusiveStartKey,
+    }));
+    rows.push(...(page.Items || []));
+    ExclusiveStartKey = page.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return rows;
 }
 
 /** The document, computed from the rows as they are now. Pure given its reads. */

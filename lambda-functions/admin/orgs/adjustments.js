@@ -52,13 +52,24 @@ function requirePlatformAdmin(event) {
 /* ------------------------------------------------------------- the ledger --- */
 
 async function listAdjustments(orgId) {
-  const res = await G.db.send(new QueryCommand({
-    TableName: G.tableName(),
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': tenant.orgPk(orgId), ':sk': 'ADJ#' },
-    ScanIndexForward: false,
-  }));
-  return res.Items || [];
+  // Every page, not the first — the same fix as get-usage.js's ADJ# read and
+  // invoices.js's readAdjustments (tests/billing-adjustments-paged.js): a
+  // Query stops at 1 MB, and a live row past page one would otherwise be
+  // silently missing from the staff/org-admin ledger screen this feeds.
+  const rows = [];
+  let ExclusiveStartKey;
+  do {
+    const page = await G.db.send(new QueryCommand({
+      TableName: G.tableName(),
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': tenant.orgPk(orgId), ':sk': 'ADJ#' },
+      ScanIndexForward: false,
+      ExclusiveStartKey,
+    }));
+    rows.push(...(page.Items || []));
+    ExclusiveStartKey = page.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return rows;
 }
 
 /** The row as either side sees it, plus its status for `period`. */
