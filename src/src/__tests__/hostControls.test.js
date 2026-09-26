@@ -15,6 +15,8 @@ import {
   isLobbyState,
   hostControlsFor,
   stageBeatFromFrame,
+  canEndSession,
+  endSessionConfirm,
 } from '../config/hostControls';
 import { GAME_TYPE_LIST } from '../config/gameTypes';
 
@@ -814,5 +816,137 @@ describe('a survey: the four phases, each with exactly one primary', () => {
     expect(close).not.toContain('showConfirmation(');
     // The only callers of closeSurveyNow are the dispatch itself.
     expect(source.match(/closeSurveyNow\(/g)).toHaveLength(1);
+  });
+});
+
+/*
+ * TASK 4, 2026-09-26 BUG SWEEP — "A host can end a trivia, poll, call & answer
+ * or wavelength session." Before this, a non-survey session reached ENDED
+ * only when next-question.js's pool-dry path ran out of questions; a host who
+ * wanted to stop after round 4 of 10 had no way to. The settings panel's
+ * "End session" button is that way — POST /games/{id}/end
+ * (lambda-functions/game/end-session.js) — gated by `canEndSession` and
+ * confirmed by `endSessionConfirm`.
+ */
+describe('canEndSession — the settings panel gate', () => {
+  test('refused for a survey: it has its own way out, and the backend route 400s a survey', () => {
+    expect(canEndSession('survey', 'SURVEY#OPEN')).toBe(false);
+    expect(canEndSession('survey', 'SURVEY#CLOSED')).toBe(false);
+  });
+
+  test('refused before the session has started — nothing running to stop yet', () => {
+    expect(canEndSession('trivia', 'CREATED')).toBe(false);
+  });
+
+  test('refused once the session is already ENDED — the stage has its own way on', () => {
+    expect(canEndSession('trivia', 'ENDED')).toBe(false);
+  });
+
+  test('offered for every non-survey type, once the session has started', () => {
+    for (const type of ALL_TYPES.filter((t) => t !== 'survey')) {
+      for (const state of ['ASK#001', 'VOTE#001', 'RESULTS#001']) {
+        expect(canEndSession(type, state)).toBe(true);
+      }
+    }
+  });
+});
+
+describe('endSessionConfirm — what the dialog says before it commits', () => {
+  test('names the consequence in plain words, and every kind of screen', () => {
+    const ask = endSessionConfirm();
+    expect(ask.message).toMatch(/phone, laptop or tablet/);
+    expect(ask.irreversible).toBe(true);
+    expect(ask.confirmText).toBeTruthy();
+    expect(ask.title).toBeTruthy();
+  });
+});
+
+describe('the page wires "End session" to the intent and the confirm', () => {
+  const source = fs.readFileSync(HOST_PAGE, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((line) => !/^\s*(\/\/|\*)/.test(line)).join('\n');
+  const bodyOf = (name) => {
+    const start = source.indexOf(`const ${name} = `);
+    expect(start).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf('\n  };', start));
+  };
+
+  test('HOST_INTENTS.END exists and the page dispatches it', () => {
+    expect(HOST_INTENTS.END).toBeTruthy();
+    expect(source).toContain(`case HOST_INTENTS.END:`);
+  });
+
+  test('the settings panel is given an action that carries the confirm', () => {
+    // The gate itself — whether to offer the button at all — lives INSIDE
+    // SessionSetupPanel.jsx (canEndSession(gameType, gameState), the same
+    // pattern anonymityActive() and hasScoreboard() use there from props the
+    // panel already carries), not on this prop.
+    const start = source.indexOf('onEndSession={');
+    expect(start).toBeGreaterThan(-1);
+    const prop = source.slice(start, source.indexOf('\n', source.indexOf('}}', start)) + 1);
+    // Constructed on the spot, like the dock's own controls: the intent AND
+    // its confirm travel together into runHostAction, so the generic gate
+    // above ("the dock asks before it dispatches any control that carries
+    // confirm") covers this control for free — no second ask has to be
+    // written or tested here.
+    expect(prop).toContain('runHostAction(');
+    expect(prop).toMatch(/HOST_INTENTS\.END/);
+    expect(prop).toMatch(/endSessionConfirm\(\)/);
+  });
+
+  /*
+    FIX ROUND 1, ITEM 1 — NO MODAL ON A MODAL. `runHostAction` closes every
+    side panel only AFTER `showConfirmation` resolves (it has to: the confirm
+    must be honoured before ANY control dispatches), so calling it directly
+    from a still-open panel's button left the confirm dialog open on top of
+    that panel — and because both the panel and ConfirmDialog carry a
+    document-level Escape listener, one Escape press cancelled the confirm AND
+    closed the panel behind it. `selectQuestion` (~3549) already carries the
+    fix for the same shape of bug: close synchronously, on the click, before
+    anything async runs. Pinned behaviourally (a real mount, a real click) in
+    endSessionConfirmFlow.test.jsx; pinned here as the wiring itself.
+  */
+  test('the panel closes synchronously, before runHostAction ever asks', () => {
+    const start = source.indexOf('onEndSession={');
+    const prop = source.slice(start, source.indexOf('\n', source.indexOf('}}', start)) + 1);
+    const closes = prop.indexOf('closeAllSidePanels(');
+    const dispatches = prop.indexOf('runHostAction(');
+    expect(closes).toBeGreaterThan(-1);
+    expect(dispatches).toBeGreaterThan(closes);
+  });
+
+  test('the dispatch does not ask a second time, and is the only caller of itself', () => {
+    const dispatch = bodyOf('endSessionNow');
+    expect(dispatch).not.toContain('showConfirmation(');
+    // The only caller of endSessionNow is the dispatch switch.
+    expect(source.match(/endSessionNow\(/g)).toHaveLength(1);
+  });
+
+  /*
+    FIX ROUND 1, ITEM 5 — A REFUSED HOST ACTION IS SAID IN THE DOCK, NEVER
+    alert(). The page's own rule (~491-492, beside surveyActionError): "A
+    refused survey call ... said in the dock beside the button that was
+    pressed — never alert()." endSessionNow shipped as the one exception;
+    fixed to the same shape endSurveyNow already uses.
+  */
+  test('a refused end never alerts — it lands in the dock, like every survey action', () => {
+    const dispatch = bodyOf('endSessionNow');
+    expect(dispatch).not.toContain('alert(');
+    expect(dispatch).toMatch(/setSessionActionError\(/);
+    // Cleared on the way in, the same as endSurveyNow's own success path
+    // clears surveyActionError, so a stale refusal cannot outlive a retry.
+    expect(dispatch).toMatch(/setSessionActionError\(['"]{2}\)/);
+  });
+
+  test('the dock actually reads it — dockHint falls back to it', () => {
+    const start = source.indexOf('const dockHint');
+    const line = source.slice(start, source.indexOf(';', start));
+    expect(line).toMatch(/sessionActionError/);
+  });
+
+  test('the dispatch calls the route through utils/endSession, with authFetch', () => {
+    expect(source).toMatch(/from '\.\/utils\/endSession'/);
+    const dispatch = bodyOf('endSessionNow');
+    expect(dispatch).toMatch(/requestEndSession\(\{ fetchFn: authFetch/);
   });
 });

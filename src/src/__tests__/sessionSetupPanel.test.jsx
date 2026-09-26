@@ -573,6 +573,41 @@ describe('the Settings tab', () => {
     for (const fn of Object.values(handlers)) expect(fn).toHaveBeenCalledTimes(1);
   });
 
+  /*
+    TASK 4, 2026-09-26 BUG SWEEP — "A host can end a trivia, poll, call &
+    answer or wavelength session." Before this, the only way out of a live
+    session was the pool of questions running dry. The control lives beside
+    Back to Menu, in the same Session block, because it is the same kind of
+    act — a session-level decision, not a round one.
+  */
+  describe('End session', () => {
+    test('appears for a started non-survey session, and raises onEndSession', () => {
+      const onEndSession = jest.fn();
+      renderPanel({ gameState: 'ASK#001', gameType: 'trivia', onEndSession });
+      openTab('Settings');
+      fireEvent.click(screen.getByRole('button', { name: /end session/i }));
+      expect(onEndSession).toHaveBeenCalledTimes(1);
+    });
+
+    test('absent for a survey — it has its own way out, on its own CLOSED phase', () => {
+      renderPanel({ gameState: 'SURVEY#OPEN', gameType: 'survey' });
+      openTab('Settings');
+      expect(screen.queryByRole('button', { name: /end session/i })).toBeNull();
+    });
+
+    test('absent before the session has started — Back to Menu already leaves it untouched', () => {
+      renderPanel({ gameState: 'CREATED', gameType: 'trivia' });
+      openTab('Settings');
+      expect(screen.queryByRole('button', { name: /end session/i })).toBeNull();
+    });
+
+    test('absent once the session has already ended — the stage has its own way on', () => {
+      renderPanel({ gameState: 'ENDED', gameType: 'trivia' });
+      openTab('Settings');
+      expect(screen.queryByRole('button', { name: /end session/i })).toBeNull();
+    });
+  });
+
   test('the session report lives on Rounds, above the list it summarises', () => {
     /*
       rejects: leaving it under "Display" in Settings, where it shipped —
