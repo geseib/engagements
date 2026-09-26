@@ -204,34 +204,174 @@ describe('SurveyWalkthrough: the keys do not reach the stage\'s other handlers',
    * as source to hold that placement and the `useScoreboardKeys` / auto-mode
    * gating that goes with it, since GameHostPage cannot mount in jsdom.
    *
-   * What CAN be exercised by mounting is the presenter's own belt-and-braces:
-   * its listener calls `stopImmediatePropagation()` (the same guard
-   * `useScoreboardKeys`'s own close branch takes), which stops a listener
-   * registered AFTER it on `window` from ever running for that keystroke —
-   * so even if some future surface's own listener ended up mounted at the
-   * same time, it could not also react to the same press. The presenter is
-   * mounted FIRST, deliberately, so its handler is the one dispatch reaches
-   * first; a listener registered before it is not something this component
-   * can defend against, which is exactly why the real defence is the early
-   * return, proven separately above.
+   * What CAN be exercised by mounting is the presenter's own defence in
+   * depth: its listener is registered in the CAPTURE phase (`true` as the
+   * third argument), which runs before ANY bubble-phase listener on the same
+   * target — `HostActionBar`'s own Space/→ listener is bubble-phase — plus
+   * `stopPropagation()`, so even the pathological case of both being mounted
+   * at once cannot leak a key from one to the other, in either direction.
+   *
+   * FIX ROUND 1, I3: the fixture below now supplies `answerCount: 4` (not
+   * only `answeredCount`) — `hostControlsFor`'s ASK primary is disabled when
+   * `answerCount === 0` (config/hostControls.js), and the FIRST draft of this
+   * test left it at its default of 0. A disabled primary means
+   * `HostActionBar` registers NO listener at all (its own effect returns
+   * early), so the original test's "onAction not called" passed whether or
+   * not the presenter's isolation worked — a vacuous control. The CONTROL
+   * test below proves the harness itself is capable of catching a leak
+   * before trusting the isolation test that follows it.
    */
-  it('stopImmediatePropagation keeps a later-registered listener from also firing', () => {
+  const enabledPollAsk = () => hostControlsFor({
+    gameType: 'poll', phase: 'ASK', playerCount: 4, answeredCount: 4, answerCount: 4, hasQuestionSet: true,
+  });
+
+  it('CONTROL: without the presenter, the dock\'s own listener does fire', () => {
     const onAction = jest.fn();
-    const controls = hostControlsFor({ gameType: 'poll', phase: 'ASK', playerCount: 4, answeredCount: 4, hasQuestionSet: true });
+    render(<HostActionBar controls={enabledPollAsk()} onAction={onAction} />);
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('with the presenter mounted, the same key moves it and never reaches the dock', () => {
+    const onAction = jest.fn();
     render(
       <>
         <SurveyWalkthrough results={results([ratingQ, choiceQ])} />
-        <HostActionBar controls={controls} onAction={onAction} />
+        <HostActionBar controls={enabledPollAsk()} onAction={onAction} />
       </>,
     );
     fireEvent.keyDown(window, { key: ' ' });
     expect(screen.getByText('Question 2')).toBeInTheDocument();
     expect(onAction).not.toHaveBeenCalled();
 
-    // Already the last of two questions — ArrowRight leaves rather than
-    // stepping past the end, and still never reaches the dock underneath.
+    // Already the last of two questions — I4: the keyboard's next is a no-op
+    // here (only the Done button and Esc leave), and still never reaches the
+    // dock underneath.
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(screen.getByText('Question 2')).toBeInTheDocument();
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('the isolation holds across MULTIPLE presses, not only the first', () => {
+    // The bug this guards against: re-arming the listener on every render
+    // (no dependency array) moves it to the BACK of window's dispatch queue
+    // relative to a sibling that stayed put, so a second or third press could
+    // reach the OTHER listener first. Three questions, three presses.
+    const onAction = jest.fn();
+    render(
+      <>
+        <SurveyWalkthrough results={results([ratingQ, choiceQ, yesNoQ])} />
+        <HostActionBar controls={enabledPollAsk()} onAction={onAction} />
+      </>,
+    );
+    fireEvent.keyDown(window, { key: ' ' });
+    fireEvent.keyDown(window, { key: ' ' });
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(screen.getByText('Question 3')).toBeInTheDocument();
+    expect(onAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('SurveyWalkthrough: at the last result, the keyboard\'s next is a no-op (ruling I4)', () => {
+  it('Space and ArrowRight do nothing and do not leave', () => {
+    const onLeave = jest.fn();
+    render(<SurveyWalkthrough results={results([choiceQ])} onLeave={onLeave} />);
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(onLeave).not.toHaveBeenCalled();
+    // Still showing the same (only) question — nothing moved either.
+    expect(screen.getByText('Most picked')).toBeInTheDocument();
+  });
+
+  it('the Done button leaves', () => {
+    const onLeave = jest.fn();
+    render(<SurveyWalkthrough results={results([choiceQ])} onLeave={onLeave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape leaves', () => {
+    const onLeave = jest.fn();
+    render(<SurveyWalkthrough results={results([choiceQ])} onLeave={onLeave} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SurveyWalkthrough: stepping back into a text question (ruling M3)', () => {
+  it('moving FORWARD into a text question always lands on page 1', () => {
+    // profile=room pages 3 at a time; textQ has 7 answers -> 3 pages (0,1,2).
+    render(<SurveyWalkthrough results={results([choiceQ, textQ])} profile="room" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next result' })); // -> question 2 (text), page 1 of 3
+    expect(screen.getByText('Question 2')).toBeInTheDocument();
+    expect(screen.getByText('Answer one')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' })); // back to question 1
+    expect(screen.getByText('Question 1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next result' })); // forward into question 2 again
+    expect(screen.getByText('Question 2')).toBeInTheDocument();
+    // Landed back on page 1, not page 3 — this presenter always enters a
+    // text question fresh from the front when moving FORWARD into it.
+    expect(screen.getByText('Answer one')).toBeInTheDocument();
+  });
+
+  it('moving BACKWARD into a text question lands on its LAST page', () => {
+    render(<SurveyWalkthrough results={results([choiceQ, textQ, ratingQ])} profile="room" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next result' })); // -> question 2 (text), page 1 of 3
+    fireEvent.click(screen.getByRole('button', { name: 'Next result' })); // page 2 of 3
+    fireEvent.click(screen.getByRole('button', { name: 'Next result' })); // page 3 of 3
+    fireEvent.click(screen.getByRole('button', { name: 'Next result' })); // -> question 3 (rating)
+    expect(screen.getByText('Question 3')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' })); // back into question 2
+    expect(screen.getByText('Question 2')).toBeInTheDocument();
+    // The LAST page of the 3-page text question, not the first.
+    expect(screen.getByText('Answer seven')).toBeInTheDocument();
+    expect(screen.queryByText('Answer one')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Fix round 1, ruling I2: RatingResult.jsx's own merged "N answered" line is
+ * reverted (the cut sheet and the paper report stay byte-unchanged — they
+ * already print the count once, in KindResult's header). Instead THIS
+ * presenter prints one `.rule-note` line itself, under the recap, for every
+ * kind — s-02/s-04's own "Pick one · 38 answered" / "38 answered · Not sure
+ * 8%" shape, minus the kind-specific clauses this task does not ask for.
+ */
+describe('SurveyWalkthrough prints its own "N answered" line (ruling I2)', () => {
+  it('choice', () => {
+    render(<SurveyWalkthrough results={results([choiceQ])} />);
+    expect(screen.getByText('38 answered.')).toBeInTheDocument();
+  });
+
+  it('rating', () => {
+    render(<SurveyWalkthrough results={results([ratingQ])} />);
+    expect(screen.getByText('38 answered.')).toBeInTheDocument();
+    // RatingResult's own top-two line is untouched — still just the share.
+    expect(screen.getByText(/76% said/)).toBeInTheDocument();
+  });
+
+  it('yes/no', () => {
+    render(<SurveyWalkthrough results={results([yesNoQ])} />);
+    expect(screen.getByText('38 answered.')).toBeInTheDocument();
+  });
+
+  it('rank', () => {
+    render(<SurveyWalkthrough results={results([rankQ])} />);
+    expect(screen.getByText('35 answered.')).toBeInTheDocument();
+  });
+
+  it('text', () => {
+    render(<SurveyWalkthrough results={results([textQ])} />);
+    expect(screen.getByText('7 answered.')).toBeInTheDocument();
+  });
+
+  it('is absent on an unanswered question — "No answers yet" stands alone', () => {
+    const emptyQ = { ...choiceQ, result: { ...choiceQ.result, n: 0 } };
+    render(<SurveyWalkthrough results={results([emptyQ])} />);
+    expect(screen.queryByText(/answered\./)).not.toBeInTheDocument();
   });
 });
