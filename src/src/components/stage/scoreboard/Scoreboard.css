@@ -51,6 +51,12 @@
    touch only transform, opacity, border-color and visibility, and every
    animated selector is stilled under prefers-reduced-motion, where the JS
    also paints the final state at once — a page change becomes a swap.
+
+   THE CLOSE BUTTON, `.sb-tail`/`.sb-close`, is Task 1 (2026-09-26): a click
+   on the board itself, additive to S/Esc/Space, in every one of the three
+   looks — the rail's markup (chip, title, context, page, close) is shared by
+   all three, so one rule reaches all of them. Contract in
+   __tests__/scoreboardPalette.test.js §4.
    =========================================================================== */
 
 .sb{
@@ -105,12 +111,31 @@
   letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
 .sb .sb-ctx b{color:var(--text);font-weight:700}
 .sb .sb-ctx b.sb-was{color:var(--muted)}
-.sb .sb-page{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+/* the trailing group — the page range (when there is one) and the close
+   button — pushed to the far right together, so there is exactly one gap
+   before them rather than one before each (Task 1, 2026-09-26). */
+.sb .sb-tail{flex:none;margin-left:auto;display:flex;align-items:center;gap:calc(.8vw + 8px)}
+.sb .sb-page{flex:none;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
   font-size:var(--L-meta);color:var(--muted);font-weight:600}
 /* the widest range, so the rail never reflows between pages */
 .sb .sb-page b{font-family:var(--font-display);font-stretch:125%;font-weight:800;color:var(--text);
   font-size:calc(var(--L-meta) * 1.3);letter-spacing:.02em;
   display:inline-block;min-width:5.4ch;text-align:right}
+
+/* THE CLOSE BUTTON (Task 1, 2026-09-26): "add a way to click the scoreboard
+   off back to what was showing before." Visible to the room on purpose (the
+   owner's ruling) but quiet — a plain ring, the chip's own idiom
+   (border:2px solid currentColor), carrying no colour of its own: --muted at
+   rest and --text on hover/focus are exactly what the context line already
+   uses one element over, so it reads at the same weight as what already
+   ships in this rail rather than introducing a new one. The accessible name
+   is the JSX aria-label, not CSS content, so it survives to a screen reader. */
+.sb .sb-close{flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:calc(var(--L-meta) * 1.7);height:calc(var(--L-meta) * 1.7);
+  border:2px solid currentColor;border-radius:999px;background:transparent;
+  color:var(--muted);cursor:pointer;padding:0}
+.sb .sb-close:hover,.sb .sb-close:focus-visible{color:var(--text)}
+.sb .sb-close:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
 .sb .sb-body{position:relative;z-index:2;min-height:0;display:flex;flex-direction:column}
 .sb .sb-note{margin:auto;font-size:var(--L-body);color:var(--muted);font-weight:600}

@@ -232,6 +232,80 @@ describe('under an overlay the board\'s keys are not the board\'s', () => {
   });
 });
 
+/**
+ * TASK 1: "add a way to click the scoreboard off back to what was showing
+ * before." A click on the board's own close button, wired the same way S /
+ * Esc / Space are: through the host page's `onClose` (publishScoreboard),
+ * never the dock's advance. `Room` (above) already proves the KEYS behave
+ * around an overlay; this proves the on-board CLICK is additive to them —
+ * mirrors the Space-does-not-advance case in "useScoreboardKeys" above.
+ */
+describe('the board\'s own close button (a click, not a key)', () => {
+  const PLAYERS = Array.from({ length: 5 }, (_, i) => ({
+    playerId: `p${i}`, playerName: `Player ${i + 1}`, totalScore: 50 - i, rank: i + 1, movement: 0, previousScore: 40 - i,
+  }));
+
+  beforeEach(() => {
+    window.matchMedia = jest.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ players: PLAYERS, afterRound: 2 }) }));
+  });
+  afterEach(() => { delete global.fetch; });
+
+  function RoomWithBoard({ onAction = () => {} }) {
+    const [board, setBoard] = useState({ open: true, style: 'departure', page: 0, openedAt: 't' });
+    const close = () => setBoard((b) => ({ ...b, open: false }));
+    useScoreboardKeys({
+      enabled: true,
+      open: board.open,
+      canOpen: true,
+      onOpen: () => setBoard((b) => ({ ...b, open: true })),
+      onClose: close,
+      onCycleStyle: () => setBoard((b) => ({ ...b, style: nextStyle(b.style) })),
+    });
+    return (
+      <div className="stage">
+        <output data-testid="board">{board.open ? 'open' : 'closed'}</output>
+        {board.open && (
+          <Scoreboard gameId="6060" apiBase="https://api.test/" profile="room" board={board} onClose={close} />
+        )}
+        <HostActionBar
+          controls={{ primary: { id: 'next', label: 'Next Round' } }}
+          onAction={onAction}
+          bigScreen
+          shortcutsEnabled={!shortcutsSuppressed({ scoreboardOpen: board.open })}
+        />
+      </div>
+    );
+  }
+
+  test('a click closes the board and does not advance the round', async () => {
+    const onAction = jest.fn();
+    await act(async () => { render(<RoomWithBoard onAction={onAction} />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId('board').textContent).toBe('open');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Close scoreboard' }));
+    });
+    expect(screen.getByTestId('board').textContent).toBe('closed');
+    expect(onAction).not.toHaveBeenCalled();
+
+    // ...and with the board gone, Space is the dock's advance key again —
+    // the click did not leave the shortcut gate stuck closed-for-Space.
+    await act(async () => { fireEvent.keyDown(window, { key: ' ' }); });
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  test('S still reopens the board after a click closed it — the keys keep working', async () => {
+    await act(async () => { render(<RoomWithBoard />); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close scoreboard' })); });
+    expect(screen.getByTestId('board').textContent).toBe('closed');
+    await act(async () => { fireEvent.keyDown(window, { key: 's' }); });
+    expect(screen.getByTestId('board').textContent).toBe('open');
+  });
+});
+
 describe('the Stage draws its overlay inside the stage', () => {
   test('an overlay is a child of main.stage, after the dock', () => {
     const { container } = render(

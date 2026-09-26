@@ -6403,7 +6403,9 @@ Focus on actionable business strategy insights.`;
            room's state AND the last counted round, so a round scored under an
            open board lands on it — including when the roster learns of the
            count after the phase frame did. Its keys are off under any
-           overlay (scoreboardKeysOn). */
+           overlay (scoreboardKeysOn); its own click-to-close button (Task 1,
+           2026-09-26) is not gated on that, and calls the same `onClose`
+           the S / Esc / Space keys use below. */
         overlay={scoreboard.open && scoreboardAvail.show ? (
           <Scoreboard
             gameId={gameId}
@@ -6413,6 +6415,7 @@ Focus on actionable business strategy insights.`;
             board={scoreboard}
             refreshKey={`${gameState}|${scoresAfterRound}`}
             keysEnabled={scoreboardKeysOn}
+            onClose={() => publishScoreboard({ open: false })}
           />
         ) : null}
       >
