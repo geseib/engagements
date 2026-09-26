@@ -88,11 +88,21 @@ const add = (code, body) => items(request({
   });
   await check('an item the host has started links to its session (the rule M3 relies on)', async () => {
     const started = [...table.store.values()].find((r) => r.PK === `EVENT#${code}` && r.Type === 'break');
-    table.put({ ...started, State: 'done', GameId: '8816' });
-    const again = bodyOf(await read(code));
-    assert.strictEqual(again.items[2].gameId, '8816');
-    assert.strictEqual(again.items[0].gameId, undefined);
-    table.put(started);
+    // rejects: a row that still carries a GameId but was never actually
+    // started — decision 11's gate is on STATE, not merely on the field's
+    // presence, and a stray GameId left on a still-planned row must not leak.
+    const planned = [...table.store.values()].find((r) => r.PK === `EVENT#${code}` && r.Type === 'trivia');
+    try {
+      table.put({ ...started, State: 'done', GameId: '8816' });
+      table.put({ ...planned, GameId: '9001' });
+      const again = bodyOf(await read(code));
+      assert.strictEqual(again.items[2].gameId, '8816');
+      assert.strictEqual(again.items[0].gameId, undefined);
+      assert.strictEqual(again.items[1].gameId, undefined, 'a planned item leaked its stray GameId');
+    } finally {
+      table.put(started);
+      table.put(planned);
+    }
   });
   await check('an invite-only event\'s agenda is not public (PLAN Phase 3)', async () => {
     const meta = table.get(`EVENT#${code}`, 'METADATA');
