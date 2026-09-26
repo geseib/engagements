@@ -2786,6 +2786,9 @@ Focus on actionable business strategy insights.`;
       console.log(`📡 HOST: API call: ${url}`);
       
       const res = await authFetch(url);
+      // A refusal (401 from an expired sign-in, 404 from the door) is not "no
+      // answers": keep what the stage already shows rather than blank it.
+      if (!res.ok) return;
       const json = await res.json();
       console.log(`📊 HOST: Raw answer response:`, json);
       
@@ -2919,6 +2922,8 @@ Focus on actionable business strategy insights.`;
       console.log(`📡 HOST: API call: ${url}`);
       
       const res = await authFetch(url);
+      // A refusal is not "no votes": keep the stage's list rather than blank it.
+      if (!res.ok) return;
       const json = await res.json();
       console.log(`📊 HOST: Raw votes response:`, json);
       

@@ -113,6 +113,29 @@ describe('the stage reads the host\'s doors with authFetch', () => {
   });
 });
 
+describe('a refused read keeps what the stage already shows', () => {
+  /*
+    The doors answer a refusal with a status and a JSON body: 401 from the
+    authorizer (an expired sign-in), 404 from the handler (not this team's
+    session). Read as a payload, `{"error":"Game not found"}` has no `answers`
+    and no `votes`, so `json.answers || []` blanked the round on the wall and
+    the "who has voted" list with it, mid-session, with nothing to say why.
+  */
+  // rejects: parsing the body before checking the status, in either reader.
+  test.each([
+    ['fetchAnswersForQuestion'],
+    ['fetchVotesForQuestion'],
+  ])('%s returns before reading a refused body', (name) => {
+    const body = fn(HOST, name);
+    const call = body.indexOf('await authFetch(url)');
+    const guard = body.indexOf('if (!res.ok) return;');
+    const parse = body.indexOf('await res.json()');
+    expect(call).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(call);
+    expect(parse).toBeGreaterThan(guard);
+  });
+});
+
 describe('the phone remote reads the same doors with authFetch', () => {
   test('the two-second poll is ONE authenticated read of host-state', () => {
     // rejects: polling the public /state beside it. The door carries the
