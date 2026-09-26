@@ -761,6 +761,21 @@
   margin: 0;
 }
 
+/* ---- SURVEY RESULTS (Task 4 of the 2026-09-26 feature sweep) ----
+   `.report-survey-results` is a plain `.report-question` (see SECTIONS
+   above): no card, no shadow, the same section-break rule every other block
+   in `.report-content` gets. The cards themselves are
+   components/survey/results/SurveyResults.css's `.svr-card` family, mounted
+   unchanged — that file is deliberately theme-agnostic (its own header says
+   so) and needs no rule here to read correctly under this document's
+   data-theme="light". This stylesheet only lays the cards out and marks
+   each one indivisible for print. */
+.report-paper .report-survey-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 /* ---- FINAL SCORES ----
    A ranked list, set as a table. The auto-fit grid of coloured tiles was a
    dashboard widget; on a page it produced a different number of columns at
@@ -1116,6 +1131,15 @@
     border-bottom: 0.5pt solid #bbb;
     padding-bottom: 5pt;
     margin-bottom: 10pt;
+  }
+
+  /* ---- SURVEY RESULTS — one question's card is an indivisible unit ---- */
+  .report-paper .report-survey-card {
+    break-inside: avoid;
+  }
+
+  .report-paper .report-survey-grid {
+    gap: 14pt;
   }
 
   /* ---- TRIVIA CHOICES — one option is an indivisible unit ---- */

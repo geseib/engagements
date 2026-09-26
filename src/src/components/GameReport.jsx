@@ -27,6 +27,8 @@ import { authFetch } from '../auth/authFetch';
 import ReportSavedDialog from './ReportSavedDialog';
 import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
 import { calculatePlayerRankings } from '../config/podium';
+import { namesMode } from '../config/surveyNames';
+import KindResult from './survey/results/KindResult';
 import './GameReport.css';
 
 const API_BASE = window.API_BASE;
@@ -390,6 +392,35 @@ function ReportDocument({ reportData }) {
     .filter(Boolean);
 
   /*
+   * SURVEY RESULTS (Task 4 of the 2026-09-26 feature sweep): "this should
+   * also be what the report shows, not who filled in the survey." `null`
+   * for every game type but survey, and for a survey whose close has not
+   * yet frozen anything (create-report.js's own comment on the field).
+   */
+  const isSurvey = reportData.gameType === 'survey';
+  const surveyResults = reportData.surveyResults || null;
+  // `surveyNames` travels on its own even when `surveyResults` is still
+  // null (a report requested before the survey has closed), so this reads
+  // off it first and falls back to the frozen results' own copy.
+  const surveyNamesId = isSurvey
+    ? namesMode(reportData.surveyNames ?? (surveyResults && surveyResults.names)).id
+    : null;
+
+  /*
+   * NO ROSTER BESIDE ANONYMOUS ANSWERS. "Who was here" says who JOINED —
+   * a fact from the PLAYER# rows, unrelated to a survey's Names setting —
+   * and that is exactly the problem for an Anonymous survey: with no
+   * minimum group size (the owner's ruling), a small room's anonymous
+   * open answers sitting next to a short, named roster invites guessing
+   * who wrote what, even though nothing in the data actually links them.
+   * Finished and Named surveys keep the roster, same as every other game
+   * type — Named's own promise ("the wall, the shared link and the report
+   * never show a name") is about the ANSWERS, not attendance, and a
+   * Finished survey never linked a name to an answer to begin with.
+   */
+  const showRoster = roster.length > 0 && !(isSurvey && surveyNamesId === 'anonymous');
+
+  /*
    * WHAT THIS REPORT COULD NOT RECONSTRUCT.
    *
    * The session outlives the rows it is made of. Answer and ballot rows expire
@@ -426,7 +457,13 @@ function ReportDocument({ reportData }) {
     || questions?.[0]?.questionData;
 
   const printedOn = new Date().toLocaleDateString('en-US', LONG_DATE);
-  const roundsLabel = pluralRoundNoun(reportRoundNoun(headerSampleQuestion), questions.length);
+  // A survey has no `detailedQuestions` (it writes no QUESTION# rows at
+  // all), so `questions.length` would head every survey report "0
+  // Questions". Its own count lives on `surveyResults` instead — the same
+  // noun ("Question", config/gameTypes.js) still resolves correctly with
+  // no sample question to read an image off.
+  const roundCount = isSurvey ? (surveyResults ? surveyResults.questions.length : 0) : questions.length;
+  const roundsLabel = pluralRoundNoun(reportRoundNoun(headerSampleQuestion), roundCount);
 
   return (
     <>
@@ -450,7 +487,7 @@ function ReportDocument({ reportData }) {
           </div>
           <div className="report-meta-item">
             <dt>{roundsLabel}</dt>
-            <dd>{questions.length}</dd>
+            <dd>{roundCount}</dd>
           </div>
         </dl>
       </header>
@@ -481,7 +518,7 @@ function ReportDocument({ reportData }) {
         </section>
       )}
 
-      {roster.length > 0 && (
+      {showRoster && (
         <section className="report-roster report-keep">
           <header className="report-question-header">
             <p className="report-section-index">
@@ -505,8 +542,41 @@ function ReportDocument({ reportData }) {
         </aside>
       )}
 
-      {/* ---- ROUNDS ---------------------------------------------------- */}
+      {/* ---- ROUNDS, or a survey's results ------------------------------ */}
       <div className="report-content">
+        {isSurvey ? (
+          /*
+            SURVEY RESULTS (Task 4): the same KindResult cards Task 3 built
+            for the console (SurveyResultsPanel), mounted here unchanged —
+            "props in, markup out" (KindResult's own contract) is exactly
+            what lets the identical component render correctly under this
+            document's data-theme="light" with no code of its own. No
+            `onOpenAnswers` is passed: a text question shows its preview and
+            its count with no "Read all N" link, which is the right shape
+            for a document rather than a console with a place to click
+            through to. `null` — a survey that has not closed yet — renders
+            nothing further; the front matter above is still a complete
+            document as far as it goes.
+          */
+          surveyResults && surveyResults.questions.length > 0 && (
+            <section className="report-question report-survey-results">
+              <header className="report-question-header">
+                <p className="report-section-index">
+                  <span className="report-section-number">Results</span>
+                </p>
+                <h2 className="report-lesson-heading">Survey results</h2>
+              </header>
+              <div className="report-survey-grid">
+                {surveyResults.questions.map((q) => (
+                  <div key={q.qid} className="report-keep report-survey-card">
+                    <KindResult question={q} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )
+        ) : (
+        <>
         {questions.map((question, qIdx) => {
           // Extract question data from backend format
           const questionNumber = question.questionNumber;
@@ -751,6 +821,8 @@ function ReportDocument({ reportData }) {
             })()}
           </ol>
         </section>
+        </>
+        )}
 
         {/* The document has to end somewhere, and a page that just stops is the
             tell of a screenshot. The running foot identifies the sheet; this

@@ -344,6 +344,14 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'detailedQuestions',
     'questionSummaries',
     'questionSetData',
+    // A survey's frozen tallies (Task 4 of the 2026-09-26 feature sweep):
+    // every question's title beside its aggregate counts and, for a text
+    // question, the words people actually wrote — the same class of quoted
+    // content as `detailedQuestions` above, read the same way GET
+    // /games/{gameId}/survey-results does (survey-host.js
+    // `surveyResultsPayload`, which never opens a SURVEY#RESP#/SURVEY#DONE#
+    // row, so no respondent name is ever in here to protect).
+    'surveyResults',
   ]),
 
   /** The derived tally: SK=QUESTION#<nnn>#RESULTS.

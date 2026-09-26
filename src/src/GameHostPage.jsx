@@ -5051,6 +5051,11 @@ Focus on actionable business strategy insights.`;
         // every field above — GameReport never sees a field left out here.
         eventDetails: report.eventDetails || '',
         questionSetData: report.questionSetData || null,
+        // Survey results (Task 4): null for every game type but survey, and
+        // for a survey not yet closed. Same rebuilt-from-scratch reason as
+        // every field above — GameReport never sees a field left out here.
+        surveyNames: report.surveyNames || null,
+        surveyResults: report.surveyResults || null,
         // `playerPerformance` already carries `joinedAt` per player (Task 2);
         // this is a straight passthrough, so the roster gets it for free.
         players: report.playerPerformance || [],

@@ -24,6 +24,13 @@
  * owner's ruling, 26 Sep 2026) — every chart and every open answer comes back,
  * however few.
  *
+ * `results()` is a thin wrapper over `exports.surveyResultsPayload`, the
+ * exported function that actually does this reading — create-report.js
+ * (Task 4 of the 2026-09-26 feature sweep) calls it directly to put a
+ * survey's results in the session report, rather than keeping a second copy
+ * of the paragraph above. tests/survey-report-results.js is that reuse's own
+ * suite.
+ *
  * ── NOT PUBLIC, AND NOT MERELY SIGNED IN ────────────────────────────────────
  *
  * Every route carries the Cognito authorizer (template-clean.yaml), and every
@@ -459,21 +466,24 @@ async function readTexts(gameId, orgId, textPages) {
 }
 
 /**
- * GET /games/{gameId}/survey-results — the frozen tallies, one entry per
- * question, in survey order, each carrying its question's own fields (title,
- * kind, options, scale, labels — whatever `loadSurveyQuestions` reads for that
- * kind) beside its aggregate `result` and its `texts` (the open answers, the
- * write-ins, the whys — empty where the kind has none).
+ * THE FROZEN TALLIES, one entry per question, in survey order, each carrying
+ * its question's own fields (title, kind, options, scale, labels — whatever
+ * `loadSurveyQuestions` reads for that kind) beside its aggregate `result`
+ * and its `texts` (the open answers, the write-ins, the whys — empty where
+ * the kind has none). `null` before a close has frozen anything: a survey
+ * still collecting, or one that never opened.
  *
- * 409 NOT_CLOSED before a close has frozen anything: a survey still
- * collecting, or one that never opened. Never a crash and never a stale
- * count — there is nothing to read yet.
+ * EXPORTED — not just called from `results()` below — so create-report.js
+ * (Task 4 of the 2026-09-26 feature sweep) reads a closed survey's results
+ * the SAME WAY GET /games/{gameId}/survey-results does: one function, not a
+ * second copy of "open SURVEY#RESULTS and its text pages, and never a
+ * SURVEY#RESP#/SURVEY#DONE# row" — the whole of the privacy guarantee this
+ * file's header describes. A second copy is exactly how that guarantee would
+ * drift the day someone changes one and not the other.
  */
-async function results(gameId, meta) {
+async function surveyResultsPayload(gameId, meta) {
   const stored = await storedResults(gameId, meta);
-  if (!stored) {
-    return respond(409, { error: 'Close the survey to see its results.', code: 'NOT_CLOSED' });
-  }
+  if (!stored) return null;
   const orgId = orgOf(meta);
   const plain = orgId ? await decryptItem(orgId, 'surveyResults', stored) : stored;
   const { questions } = await loadSurveyQuestions(db, TABLE(), meta);
@@ -494,7 +504,7 @@ async function results(gameId, meta) {
     };
   });
 
-  return respond(200, {
+  return {
     gameId,
     n: plain.N || 0,
     finished: plain.Finished || 0,
@@ -502,7 +512,20 @@ async function results(gameId, meta) {
     openedAt: plain.OpenedAt || null,
     closedAt: plain.ClosedAt || null,
     questions: list,
-  });
+  };
+}
+
+/**
+ * GET /games/{gameId}/survey-results — `surveyResultsPayload` above, wrapped
+ * as a response. 409 NOT_CLOSED before a close has frozen anything: never a
+ * crash and never a stale count — there is nothing to read yet.
+ */
+async function results(gameId, meta) {
+  const payload = await surveyResultsPayload(gameId, meta);
+  if (!payload) {
+    return respond(409, { error: 'Close the survey to see its results.', code: 'NOT_CLOSED' });
+  }
+  return respond(200, payload);
 }
 
 // ───────────────────────────────────────────────────────── handler ─────────
@@ -517,6 +540,8 @@ function routeOf(event) {
   const wants = { close: 'POST', warning: 'POST', end: 'POST', progress: 'GET', people: 'GET' }[m[1]];
   return method === wants ? m[1] : null;
 }
+
+exports.surveyResultsPayload = surveyResultsPayload;
 
 exports.handler = async (event) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
