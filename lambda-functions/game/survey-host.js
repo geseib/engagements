@@ -6,8 +6,30 @@
  *     POST /games/{gameId}/survey/end       SURVEY#CLOSED → ENDED
  *     GET  /games/{gameId}/survey/progress  the live counts (the surveyProgress payload)
  *     GET  /games/{gameId}/survey/people    who finished / partway / not started
+ *     GET  /games/{gameId}/survey-results   the frozen tallies, every kind, once closed
  *
- * docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2 is the contract.
+ * docs/design/survey-redesign/IMPLEMENTATION-phase-2.md §2 is the contract for
+ * the first five; PLAN.md "Phase 3" is the sixth's (the hyphen, not
+ * `/survey/results`, is PLAN.md's own naming — it matches the item's SK,
+ * SURVEY#RESULTS, not its siblings' verb shape).
+ *
+ * ── THE RESULTS ROUTE READS ONLY THE FROZEN ROW ─────────────────────────────
+ *
+ * `results()` opens SURVEY#RESULTS and the text pages it names — never a
+ * SURVEY#RESP#/SURVEY#DONE# row. survey-aggregate.js's own header is why that
+ * is the whole of the privacy guarantee: those rows are the only place a name
+ * or a respondent id could come from, and this route does not open them, in
+ * any Names mode. tests/survey-results-route.js §4 pins it by seeding a name
+ * and searching the whole response body for it. No minimum group size (the
+ * owner's ruling, 26 Sep 2026) — every chart and every open answer comes back,
+ * however few.
+ *
+ * `results()` is a thin wrapper over `exports.surveyResultsPayload`, the
+ * exported function that actually does this reading — create-report.js
+ * (Task 4 of the 2026-09-26 feature sweep) calls it directly to put a
+ * survey's results in the session report, rather than keeping a second copy
+ * of the paragraph above. tests/survey-report-results.js is that reuse's own
+ * suite.
  *
  * ── NOT PUBLIC, AND NOT MERELY SIGNED IN ────────────────────────────────────
  *
@@ -74,7 +96,9 @@ const {
   RESP_PREFIX, DONE_PREFIX, RESULTS_SK, textPageSk,
   isSurvey, sessionOf, orgOf, readSession, queryAll, progressFor, respond,
 } = require('./survey-rows');
-const { encryptItem, decryptItems } = require('./tenant-crypto');
+const {
+  encryptItem, decryptItem, decryptItems,
+} = require('./tenant-crypto');
 const { callerMayDriveSession } = require('./tenant');
 const { ttlFrom } = require('./session-ttl');
 const { recordSurveyClosed } = require('./platform-metrics');
@@ -412,17 +436,112 @@ async function people(gameId, meta) {
   return respond(200, { people: list });
 }
 
+// ────────────────────────────────────────────────────────── results ────────
+
+/**
+ * Every page a question's texts were cut into, opened in order and decrypted
+ * — `{qid: [{id, text, v?}]}`. `numberTexts()` (survey-aggregate.js) already
+ * gave each entry a content-hash id, independent of page or arrival order, so
+ * concatenating the pages is all that is needed.
+ */
+async function readTexts(gameId, orgId, textPages) {
+  const out = {};
+  for (const [qid, pages] of Object.entries(textPages || {})) {
+    const count = Number(pages) || 0;
+    const entries = [];
+    for (let i = 0; i < count; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      const page = await db.send(new GetCommand({
+        TableName: TABLE(), Key: { PK: `GAME#${gameId}`, SK: textPageSk(qid, i) }, ConsistentRead: true,
+      }));
+      const item = page && page.Item;
+      if (!item) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const plain = orgId ? await decryptItem(orgId, 'surveyResults', item) : item;
+      if (Array.isArray(plain.Texts)) entries.push(...plain.Texts);
+    }
+    if (entries.length) out[qid] = entries;
+  }
+  return out;
+}
+
+/**
+ * THE FROZEN TALLIES, one entry per question, in survey order, each carrying
+ * its question's own fields (title, kind, options, scale, labels — whatever
+ * `loadSurveyQuestions` reads for that kind) beside its aggregate `result`
+ * and its `texts` (the open answers, the write-ins, the whys — empty where
+ * the kind has none). `null` before a close has frozen anything: a survey
+ * still collecting, or one that never opened.
+ *
+ * EXPORTED — not just called from `results()` below — so create-report.js
+ * (Task 4 of the 2026-09-26 feature sweep) reads a closed survey's results
+ * the SAME WAY GET /games/{gameId}/survey-results does: one function, not a
+ * second copy of "open SURVEY#RESULTS and its text pages, and never a
+ * SURVEY#RESP#/SURVEY#DONE# row" — the whole of the privacy guarantee this
+ * file's header describes. A second copy is exactly how that guarantee would
+ * drift the day someone changes one and not the other.
+ */
+async function surveyResultsPayload(gameId, meta) {
+  const stored = await storedResults(gameId, meta);
+  if (!stored) return null;
+  const orgId = orgOf(meta);
+  const plain = orgId ? await decryptItem(orgId, 'surveyResults', stored) : stored;
+  const { questions } = await loadSurveyQuestions(db, TABLE(), meta);
+  const byQid = new Map(questions.map((q) => [q.qid, q]));
+  const texts = await readTexts(gameId, orgId, plain.TextPages);
+  const perQuestion = plain.PerQuestion || {};
+  const order = Array.isArray(plain.Order) && plain.Order.length ? plain.Order : Object.keys(perQuestion);
+
+  const list = order.map((qid, i) => {
+    const q = byQid.get(qid);
+    const { sk, qid: _qid, n: _n, ...fields } = q || {};
+    return {
+      qid,
+      n: (q && q.n) || i + 1,
+      ...fields,
+      result: perQuestion[qid] || { kind: 'other', n: 0 },
+      texts: texts[qid] || [],
+    };
+  });
+
+  return {
+    gameId,
+    n: plain.N || 0,
+    finished: plain.Finished || 0,
+    names: normalizeNames(plain.Names),
+    openedAt: plain.OpenedAt || null,
+    closedAt: plain.ClosedAt || null,
+    questions: list,
+  };
+}
+
+/**
+ * GET /games/{gameId}/survey-results — `surveyResultsPayload` above, wrapped
+ * as a response. 409 NOT_CLOSED before a close has frozen anything: never a
+ * crash and never a stale count — there is nothing to read yet.
+ */
+async function results(gameId, meta) {
+  const payload = await surveyResultsPayload(gameId, meta);
+  if (!payload) {
+    return respond(409, { error: 'Close the survey to see its results.', code: 'NOT_CLOSED' });
+  }
+  return respond(200, payload);
+}
+
 // ───────────────────────────────────────────────────────── handler ─────────
 
 function routeOf(event) {
   const method = event.requestContext?.http?.method || event.httpMethod || '';
   const key = event.requestContext?.routeKey || event.routeKey || '';
   const p = key ? key.split(' ')[1] || '' : (event.rawPath || event.path || '');
+  if (/\/survey-results$/.test(p)) return method === 'GET' ? 'results' : null;
   const m = /\/survey\/(close|warning|end|progress|people)$/.exec(p);
   if (!m) return null;
   const wants = { close: 'POST', warning: 'POST', end: 'POST', progress: 'GET', people: 'GET' }[m[1]];
   return method === wants ? m[1] : null;
 }
+
+exports.surveyResultsPayload = surveyResultsPayload;
 
 exports.handler = async (event) => {
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -443,6 +562,7 @@ exports.handler = async (event) => {
     if (route === 'warning') return await warn(gameId, state);
     if (route === 'end') return await end(gameId, meta, state);
     if (route === 'progress') return await progress(gameId, meta);
+    if (route === 'results') return await results(gameId, meta);
     return await people(gameId, meta);
   } catch (error) {
     // STATE held by the answers in flight, or the partition throttled, for

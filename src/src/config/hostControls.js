@@ -274,6 +274,10 @@ export const HOST_INTENTS = {
   CLOSE_SURVEY: 'close-survey', // SURVEY#OPEN → SURVEY#CLOSED; counts freeze
   WARN_SURVEY: 'warn-survey',   // tell every phone it closes in two minutes
   END_SURVEY: 'end-survey',     // SURVEY#CLOSED → ENDED
+  // Phase 3, 2026-09-26 feature sweep: GET /games/{id}/survey-results, once
+  // closed. Offered as CLOSED's and a survey's ENDED's secondary — the
+  // results are already frozen the instant CLOSE_SURVEY lands.
+  SURVEY_RESULTS: 'survey-results',
 };
 
 /**
@@ -674,8 +678,18 @@ export function hostControlsFor({
       hint: '',
     };
   } else if (resolvedPhase === 'CLOSED' || (isSurvey && resolvedPhase === 'ENDED')) {
-    // CLOSED's one act is ending it; a survey's ENDED primary IS the way out.
-    secondary = null;
+    /*
+      SEE THE RESULTS — Phase 3 of the survey plan. The results are frozen
+      the instant CLOSE_SURVEY lands (survey-host.js `close()` calls
+      `freeze()` synchronously), so both phases where they are the only
+      other thing on screen — CLOSED (before End) and a survey's own ENDED
+      (after) — offer the same secondary. Never the primary: CLOSED's one
+      forward act is ending it, and ENDED's is leaving, and a results screen
+      the host can return from is not a step in that sequence.
+    */
+    secondary = {
+      id: 'survey-results', label: 'See the results', icon: 'ChartBar', intent: HOST_INTENTS.SURVEY_RESULTS, disabled: false, hint: '',
+    };
   } else if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
   } else if (resolvedPhase === 'FIELD_NOTES' && primary.intent === HOST_INTENTS.PAGE) {

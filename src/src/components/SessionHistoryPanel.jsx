@@ -71,11 +71,34 @@ import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameType
  * Edit exists exactly while Start does: PUT /games/{id} refuses any session
  * whose STATE is not CREATED, so offering Edit on a started row would be a
  * button whose only outcome is a 400.
+ *
+ * A CLOSED SURVEY TAKES REPORT'S SLOT, NOT A FIFTH BUTTON — Task 3 fix round
+ * 1, 2026-09-26 feature sweep. `.shist__acts` is a fixed 2×2 grid (see the
+ * stylesheet's own header on why it can never stagger), and a survey has no
+ * session report to open at all (create-report.js reads rounds; a survey has
+ * none — hostControls.js's ENDED-survey comment says the same). So `results`
+ * REPLACES `report` in that slot once `session.surveyClosed` is true
+ * (get-games-list.js, read off the same STATE batch as roundsPlayed: true
+ * for SURVEY#CLOSED and ENDED, false otherwise, including "never opened" and
+ * "still collecting") — it never adds to the row. A survey still collecting,
+ * or one that never opened, falls through to the ordinary rule unchanged, the
+ * same as any other session of its `started` state — mirroring the mockup's
+ * own annotation (`docs/design/survey-redesign/_src/results.py:132`, "Sessions
+ * → a survey session").
  */
 export function rowActions(session) {
+  if (session.gameType === 'survey' && session.surveyClosed) {
+    return {
+      start: false, continue: true, report: false, edit: false, results: true,
+    };
+  }
   return session.started
-    ? { start: false, continue: true, report: true, edit: false }
-    : { start: true, continue: false, report: false, edit: true };
+    ? {
+      start: false, continue: true, report: true, edit: false, results: false,
+    }
+    : {
+      start: true, continue: false, report: false, edit: true, results: false,
+    };
 }
 
 /** Case-insensitive match over the fields a host would actually search by. */
@@ -106,6 +129,8 @@ export default function SessionHistoryPanel({
   onCopyPlayerUrl = () => {},
   onInvite = () => {},
   onReport = () => {},
+  /** A closed survey's "Results" button (Task 3 fix round 1) — (gameId, title). */
+  onResults = () => {},
   onOpen = () => {},
   onStart = () => {},
   onEdit = () => {},
@@ -303,6 +328,19 @@ export default function SessionHistoryPanel({
                           title={`Read the report for "${title}"`}
                         >
                           <Icon name="ChartBar" weight="bold" size={14} /> Report
+                        </button>
+                      )}
+                      {/* REPORT's slot, for a closed survey — never both on one
+                          row (rowActions). Reuses SurveyResultsPanel exactly;
+                          this button only names which session to fetch it for. */}
+                      {acts.results && (
+                        <button
+                          type="button"
+                          className="shist__btn shist__btn--sm"
+                          onClick={() => onResults(session.gameId, title)}
+                          title={`See the results for "${title}"`}
+                        >
+                          <Icon name="ChartBar" weight="bold" size={14} /> Results
                         </button>
                       )}
                       {acts.edit && (

@@ -104,6 +104,11 @@ const MUST_BE_CLOSED = [
   ['POST', '/games/{gameId}/survey/end'],
   ['GET', '/games/{gameId}/survey/progress'],
   ['GET', '/games/{gameId}/survey/people'],
+  // The frozen tallies, once closed (game/survey-host.js `results()`, Task 3
+  // of the 2026-09-26 feature sweep). Same reasoning as the two above: it
+  // carries the Cognito authorizer and would otherwise fall through to
+  // "GET + games is public".
+  ['GET', '/games/{gameId}/survey-results'],
   // The stored report. It was on the list below as a participant read; it is
   // not one — `?role=host` returned the whole room (tests/get-report-authorization.js).
   ['GET', '/games/{gameId}/report'],
@@ -226,7 +231,7 @@ for (const bare of [
 // The survey host GETs, by concrete path — the `rawPath` fallback — where the
 // generic rule would read `GET` + `games` and return PUBLIC.
 console.log('\n   and the survey host reads are not public by their concrete path');
-for (const bare of ['games/1234/survey/people', 'games/1234/survey/progress']) {
+for (const bare of ['games/1234/survey/people', 'games/1234/survey/progress', 'games/1234/survey-results']) {
   check(`GET ${bare} requires hosts or admins`, () =>
     assert.deepStrictEqual(requiredGroupsForRoute('GET', bare), ['hosts', 'admins'],
       `got ${JSON.stringify(requiredGroupsForRoute('GET', bare))} — any signed-in account could list who finished`));
