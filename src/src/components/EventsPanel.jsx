@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import EventDetailsDialog from './EventDetailsDialog';
+import { PlanRequestStrip } from './PlanRequestDialog';
 import { listEvents } from '../utils/eventsApi';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import './EventsPanel.css';
@@ -22,6 +23,12 @@ import './EventsPanel.css';
  * @param {boolean}  creating          the new-event dialog is open
  * @param {Function} onCreatingChange  (open: boolean) => void
  * @param {Function} onOpen            (code, title) => void — open the builder
+ * @param {object}   [planRequest]     the org's latest Team-plan request (Billing's
+ *                                     own state, reused here, Fix round 1 #5) — while
+ *                                     it is `status: 'requested'` the button below
+ *                                     is replaced by the same strip Billing shows,
+ *                                     so this page never offers a request that
+ *                                     would 409
  * @param {Function} [onRequestPlan]   opens "Request the Team plan"; absent for
  *                                     someone who may not ask (not the owner)
  * @param {Function} [onShowPlan]      opens Plan & usage; absent when this
@@ -48,7 +55,12 @@ export function NewEventButton({ onClick }) {
   );
 }
 
-function TeamPlanOnly({ onRequestPlan, onShowPlan }) {
+function TeamPlanOnly({ onRequestPlan, onShowPlan, planRequest }) {
+  // Reads Billing's own state (Fix round 1 #5, ruling): a request already
+  // sitting with Engage must read as pending here too, not offer a button
+  // that would 409. Same `status === 'requested'` guard AdminPage's own
+  // `?request=team` handling and BillingPanel already use.
+  const pending = Boolean(planRequest && planRequest.status === 'requested');
   return (
     <div className="evts">
       <div className="evts-empty" data-testid="events-team-only">
@@ -58,8 +70,9 @@ function TeamPlanOnly({ onRequestPlan, onShowPlan }) {
           An event puts a whole agenda behind one code — quizzes, Call &amp; Answer, polls and breaks, in the
           order you run them. This space is on the Personal plan.
         </p>
+        {pending && <PlanRequestStrip request={planRequest} />}
         <div className="evts-acts">
-          {onRequestPlan && (
+          {!pending && onRequestPlan && (
             <button type="button" className="evts-btn evts-btn--primary evts-btn--lg" onClick={onRequestPlan}>
               Request the Team plan
             </button>
@@ -68,7 +81,7 @@ function TeamPlanOnly({ onRequestPlan, onShowPlan }) {
             <button type="button" className="evts-btn evts-btn--lg" onClick={onShowPlan}>What the Team plan adds</button>
           )}
         </div>
-        {!onRequestPlan && <p className="evts-hint">Only an owner of this organisation can request the Team plan.</p>}
+        {!onRequestPlan && !pending && <p className="evts-hint">Only an owner of this organisation can request the Team plan.</p>}
         <p className="evts-hint">Until then, <b>Sessions</b> runs one engagement at a time, exactly as today.</p>
       </div>
     </div>
@@ -76,7 +89,7 @@ function TeamPlanOnly({ onRequestPlan, onShowPlan }) {
 }
 
 export default function EventsPanel({
-  teamPlan, creating = false, onCreatingChange, onOpen, onRequestPlan, onShowPlan,
+  teamPlan, creating = false, onCreatingChange, onOpen, onRequestPlan, onShowPlan, planRequest,
 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(Boolean(teamPlan));
@@ -100,7 +113,7 @@ export default function EventsPanel({
     if (teamPlan) load();
   }, [teamPlan, load]);
 
-  if (!teamPlan) return <TeamPlanOnly onRequestPlan={onRequestPlan} onShowPlan={onShowPlan} />;
+  if (!teamPlan) return <TeamPlanOnly onRequestPlan={onRequestPlan} onShowPlan={onShowPlan} planRequest={planRequest} />;
 
   const today = todayIso();
   const upcoming = events.filter((e) => isUpcoming(e, today));

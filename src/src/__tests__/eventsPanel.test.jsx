@@ -114,6 +114,25 @@ describe('a space not on the Team plan (01b)', () => {
     expect(screen.queryByRole('button', { name: 'Request the Team plan' })).toBeNull();
     expect(screen.getByTestId('events-team-only')).toHaveTextContent('Only an owner of this organisation can request the Team plan.');
   });
+
+  // Fix round 1 #5 (ruling): Billing's own plan-request state, reused here —
+  // a request already pending must read as pending, not offer a button that
+  // would 409.
+  it('no request yet: "Request the Team plan" shows as it always has', () => {
+    render(<EventsPanel {...props({ teamPlan: false, planRequest: null })} />);
+    expect(screen.getByRole('button', { name: 'Request the Team plan' })).toBeInTheDocument();
+    expect(screen.queryByTestId('preq-strip')).toBeNull();
+  });
+
+  it('a pending request reads as pending, with no button that would 409', () => {
+    const planRequest = { status: 'requested', requestedAt: '2026-09-20T10:00:00Z', reqId: 'req_1' };
+    render(<EventsPanel {...props({ teamPlan: false, planRequest })} />);
+    expect(screen.getByTestId('preq-strip')).toHaveTextContent('Team plan requested');
+    expect(screen.queryByRole('button', { name: 'Request the Team plan' })).toBeNull();
+    // Still says what the plan adds, and never wrongly tells an owner they may not ask.
+    expect(screen.getByRole('button', { name: 'What the Team plan adds' })).toBeInTheDocument();
+    expect(screen.queryByText('Only an owner of this organisation can request the Team plan.')).toBeNull();
+  });
 });
 
 describe('New event (05)', () => {
