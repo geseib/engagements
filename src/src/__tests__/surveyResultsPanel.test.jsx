@@ -69,6 +69,34 @@ describe('SurveyResultsPanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // Fix round 2: the panel is now reachable for any closed survey from the
+  // Sessions list, and GET /games/{id}/survey-results returns no title of
+  // its own — so the caller's `title` is the only way a host can tell which
+  // session this is. Shown in every status, not only once ready, so it is
+  // visible during the exact moment (a failed fetch, about to retry) the
+  // bug this fixes made confusing.
+  describe('the session title (fix round 2)', () => {
+    it('shows the given title during loading', () => {
+      render(<SurveyResultsPanel results={null} status="loading" title="Pulse check" onClose={() => {}} />);
+      expect(screen.getByText('Pulse check')).toBeInTheDocument();
+    });
+
+    it('shows the given title in the error state, right where Try again is', () => {
+      render(<SurveyResultsPanel results={null} status="error" title="Pulse check" onRetry={() => {}} onClose={() => {}} />);
+      expect(screen.getByText('Pulse check')).toBeInTheDocument();
+    });
+
+    it('shows the given title once ready', () => {
+      render(<SurveyResultsPanel results={results} status="ready" title="Pulse check" onClose={() => {}} />);
+      expect(screen.getByText('Pulse check')).toBeInTheDocument();
+    });
+
+    it('shows nothing extra when no title is given', () => {
+      const { container } = render(<SurveyResultsPanel results={results} status="ready" onClose={() => {}} />);
+      expect(container.querySelector('.svrp-toolbar-title')).toBeNull();
+    });
+  });
+
   it('renders one KindResult card per question, and the Names mode', () => {
     render(<SurveyResultsPanel results={results} status="ready" onClose={() => {}} />);
     expect(screen.getByText('How useful was today?')).toBeInTheDocument();

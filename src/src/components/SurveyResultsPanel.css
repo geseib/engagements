@@ -63,6 +63,20 @@
 .svrp-tool--primary { background: var(--primary); color: var(--svrp-on-primary); border-color: var(--primary); }
 .svrp-tool--back { background: none; border-color: transparent; padding-left: 4px; }
 
+/* The session this panel is showing (fix round 2) — visible beside Back in
+   EVERY status (loading, error, ready), so a retry from the wrong survey, or
+   one opened for the wrong session from history, cannot look like the right
+   one just because the numbers rendered. */
+.svrp-toolbar-title {
+  font-size: var(--svrp-t-body);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /* ---- loading / error states ---------------------------------------------- */
 
 .svrp-state {

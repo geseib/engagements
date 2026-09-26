@@ -190,6 +190,19 @@ export function initialGameSession() {
     surveyResultsData: null,
     surveyResultsStatus: 'idle',
     surveyResultsError: null,
+    /*
+      WHICH SESSION THE PANEL ABOVE IS ACTUALLY SHOWING — fix round 2. Not
+      `gameId`: the results panel opens for ANY closed survey from the
+      Sessions list (fix round 1), not only the one on stage, so Retry has to
+      name the session it fetched rather than reaching for the page's own
+      `gameId` — which is how the round-2 bug happened: a retry from a
+      DIFFERENT survey's results screen re-fetched the stage's session, and
+      the panel's header named no session, so the wrong data would have
+      looked right. `{ gameId, title }`, set by `loadSurveyResults` from its
+      own arguments, the same way `reportTarget` (not itself on this list —
+      a pre-existing gap this fix does not extend) tracks the report's.
+    */
+    surveyResultsTarget: null,
 
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',

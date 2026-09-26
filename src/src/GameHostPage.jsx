@@ -373,6 +373,12 @@ function GameHostPage() {
   const [surveyResultsData, setSurveyResultsData] = useState(null);
   const [surveyResultsStatus, setSurveyResultsStatus] = useState('idle');
   const [surveyResultsError, setSurveyResultsError] = useState(null);
+  /**
+   * WHICH SESSION THE PANEL ABOVE IS SHOWING — { gameId, title } — fix round
+   * 2. Not `gameId`: the panel opens for any closed survey from the Sessions
+   * list, so Retry must name the session it fetched rather than the stage's.
+   */
+  const [surveyResultsTarget, setSurveyResultsTarget] = useState(null);
 
   /**
    * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
@@ -1156,6 +1162,7 @@ function GameHostPage() {
     surveyResultsData: setSurveyResultsData,
     surveyResultsStatus: setSurveyResultsStatus,
     surveyResultsError: setSurveyResultsError,
+    surveyResultsTarget: setSurveyResultsTarget,
     eventTitle: setEventTitle,
     gameCreatedAt: setGameCreatedAt,
     lessonExpanded: setLessonExpanded,
@@ -4906,9 +4913,17 @@ Focus on actionable business strategy insights.`;
    * (false)` is a no-op from the live-session caller (the modal is already
    * closed) and closes the history list from the other, exactly as
    * generateReportForGame does for Report.
+   *
+   * RECORDS ITS OWN ARGUMENTS AS THE TARGET (fix round 2) — never the page's
+   * `gameId`/`eventTitle`. Both callers already have the right session to
+   * hand it: runHostAction has the stage's own; the history row already
+   * carries the id and title of whichever survey the host clicked. Reading
+   * past `targetGameId` for the page's `gameId` here is exactly the bug this
+   * fixes — Retry (below) closes over THIS state, not the stage.
    */
-  const loadSurveyResults = async (targetGameId) => {
+  const loadSurveyResults = async (targetGameId, targetTitle = '') => {
     setShowReportsModal(false);
+    setSurveyResultsTarget({ gameId: targetGameId, title: targetTitle });
     setSurveyResultsData(null);
     setSurveyResultsError(null);
     setSurveyResultsStatus('loading');
@@ -5405,8 +5420,11 @@ Focus on actionable business strategy insights.`;
         results={surveyResultsData}
         status={surveyResultsStatus}
         error={surveyResultsError}
+        title={surveyResultsTarget ? surveyResultsTarget.title : ''}
         onClose={() => { setShowSurveyResults(false); setSurveyResultsStatus('idle'); }}
-        onRetry={() => loadSurveyResults(gameId)}
+        onRetry={surveyResultsTarget
+          ? () => loadSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title)
+          : null}
       />
     );
   }
@@ -5808,7 +5826,7 @@ Focus on actionable business strategy insights.`;
         endSurveyNow();
         break;
       case HOST_INTENTS.SURVEY_RESULTS:
-        loadSurveyResults(gameId);
+        loadSurveyResults(gameId, eventTitle);
         break;
       case HOST_INTENTS.LEAVE:
         /*

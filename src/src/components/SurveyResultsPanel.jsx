@@ -24,11 +24,21 @@ import './SurveyResultsPanel.css';
  * for the report), `status`/`error` mirror its loading/error/ready
  * contract, and `onClose`/`onRetry` are callbacks, not routes — this panel
  * never calls the network itself.
+ *
+ * `title` (fix round 2, Task 3 review): the session's own title, if the
+ * caller has it cheaply — `GET /games/{id}/survey-results` returns no title
+ * of its own (survey-host.js `results()`'s response is counts, kind fields
+ * and texts only), and this panel is now reachable for ANY closed survey
+ * from the Sessions list, not only the one on stage. Shown in the toolbar,
+ * in every status, so a host who opened the wrong survey — or retried after
+ * a failed fetch — sees which session they are looking at rather than a
+ * silently-plausible page of someone else's numbers.
  */
 export default function SurveyResultsPanel({
   results,
   status = 'ready',
   error = null,
+  title = '',
   onClose,
   onRetry = null,
 }) {
@@ -53,6 +63,7 @@ export default function SurveyResultsPanel({
         <button type="button" className="svrp-tool svrp-tool--back" onClick={onClose}>
           <Icon name="ArrowLeft" weight="bold" size={16} /> Back to session
         </button>
+        {title ? <span className="svrp-toolbar-title">{title}</span> : null}
       </div>
 
       {status === 'loading' && (

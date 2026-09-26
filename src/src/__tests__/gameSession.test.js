@@ -212,6 +212,68 @@ describe('GameHostPage wiring', () => {
   });
 });
 
+/*
+  THE SURVEY RESULTS RETRY TARGET — Task 3 fix round 2, 2026-09-26 feature
+  sweep. The Sessions-list "Results" button (fix round 1) made
+  `loadSurveyResults` reachable for ANY closed survey, not only the one on
+  stage — but its retry closed over the PAGE's `gameId`, the stage's current
+  session. Opened from history for a different survey, a failed fetch's "Try
+  again" re-fetched the wrong session (or `games//survey-results` when
+  nothing was loaded at all), and the panel's header named no session, so the
+  wrong data would have looked right.
+
+  GameHostPage.jsx cannot be mounted in jsdom (dies on the auth provider), so
+  this reads the source the way "GameHostPage wiring" above does — `bodyOf`
+  is `hostControls.test.js`'s own technique, lifted here for the same reason.
+*/
+describe('the survey results panel retries the SESSION IT IS SHOWING, not the stage — fix round 2', () => {
+  const source = fs.readFileSync(HOST_PAGE, 'utf8');
+  const bodyOf = (name) => {
+    const start = source.indexOf(`const ${name} = `);
+    expect(start).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf('\n  };', start));
+  };
+
+  it('surveyResultsTarget is a per-game key, reset like the other four', () => {
+    expect(gameSessionKeys()).toContain('surveyResultsTarget');
+    expect(initialGameSession().surveyResultsTarget).toBeNull();
+  });
+
+  it('loadSurveyResults records ITS OWN arguments as the target, not the page\'s gameId/eventTitle', () => {
+    const body = bodyOf('loadSurveyResults');
+    expect(body).toMatch(/setSurveyResultsTarget\(\s*\{\s*gameId:\s*targetGameId/);
+    // rejects: reading the page's own `gameId` or `eventTitle` state instead
+    // of the parameters this call actually received — which is exactly how
+    // the bug happened: `loadSurveyResults` took a target id but the RETRY
+    // wiring below reached past it for the stage's own `gameId`.
+    expect(body).not.toMatch(/setSurveyResultsTarget\([^)]*\bgameId\b(?!:\s*targetGameId)/);
+  });
+
+  it('the retry reads surveyResultsTarget, never the bare page gameId', () => {
+    const start = source.indexOf('<SurveyResultsPanel');
+    expect(start).toBeGreaterThan(-1);
+    const block = source.slice(start, source.indexOf('/>', start));
+    expect(block).toMatch(/onRetry=\{surveyResultsTarget/);
+    expect(block).toMatch(/loadSurveyResults\(surveyResultsTarget\.gameId,\s*surveyResultsTarget\.title\)/);
+    // The exact regression: onRetry closing over the page's own `gameId`.
+    expect(block).not.toMatch(/onRetry=\{\(\)\s*=>\s*loadSurveyResults\(gameId\)\}/);
+  });
+
+  it('the panel is told the session\'s title, so a wrong retry could never look right', () => {
+    const start = source.indexOf('<SurveyResultsPanel');
+    const block = source.slice(start, source.indexOf('/>', start));
+    expect(block).toMatch(/title=\{surveyResultsTarget/);
+  });
+
+  it('the live session\'s "See the results" control passes its own gameId AND title', () => {
+    const body = bodyOf('runHostAction');
+    const at = body.indexOf('HOST_INTENTS.SURVEY_RESULTS');
+    expect(at).toBeGreaterThan(-1);
+    const line = body.slice(at, body.indexOf('\n', body.indexOf('break;', at)));
+    expect(line).toMatch(/loadSurveyResults\(gameId,\s*eventTitle\)/);
+  });
+});
+
 describe('the setup dialog / game session boundary', () => {
   const dialog = fs.readFileSync(
     path.join(__dirname, '..', 'components', 'GameSetupDialog.jsx'), 'utf8'
