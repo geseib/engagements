@@ -8,9 +8,9 @@
  * `.superpowers/sdd/2026-09-26-bugsweep/remote-bug-rootcause.md`: every WRITE
  * this phone makes is Cognito-gated and refused by `callerMayDriveSession`
  * when this device's account cannot drive the session; every READ it opened
- * with (`/state`, `/players`) is a plain, unauthenticated `fetch`, so the
- * phone showed the room in full and only failed the moment a button was
- * pressed.
+ * with (`/state`, `/players`) was a plain, unauthenticated `fetch` at the
+ * time, so the phone showed the room in full and only failed the moment a
+ * button was pressed.
  *
  * The fix asks ONE authenticated question up front — `GET
  * /games/{id}/host-details` (bug-sweep Task 1: Cognito + `callerMayDriveSession`
@@ -21,8 +21,11 @@
  * file is the direct test of that ruling — every scenario below seeds a
  * DISTINCTIVE player name, question title and answer text, and the refused
  * scenarios assert none of it ever reaches the DOM, and that this phone never
- * even ASKS for it (`/state`, `/players`, `/questions`, `/answers` are
- * asserted un-called, not merely un-rendered).
+ * even ASKS for it. Integration with bug-sweep Task 7, which moved the state
+ * poll to `GET /games/{id}/host-state` and the answer read to `GET
+ * /games/{id}/answers/host` (both now through `authFetch`): `/host-state`,
+ * `/players`, `/questions` and `/answers/host` are all asserted un-called,
+ * not merely un-rendered, whichever of them are authenticated as of today.
  *
  * `hostRemoteOrgScope.test.jsx` covers the org-switch recheck;
  * `hostRemoteFailureCopy.test.jsx` covers `accessDeniedMessage` and
@@ -92,7 +95,9 @@ function serve({
     if (href.includes('/orgs')) {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ orgs }) });
     }
-    if (href.includes('/state')) {
+    // `/host-state`, through `authFetch` — the session's own reads moved off
+    // the public `/state?includeHostData=true` in bug-sweep Task 7.
+    if (href.includes('/host-state')) {
       stateCalls += 1;
       const status = typeof stateStatus === 'function' ? stateStatus(stateCalls) : stateStatus;
       if (status !== 200) return Promise.resolve({ ok: false, status, json: async () => ({}) });
@@ -130,7 +135,9 @@ function serve({
         json: async () => ({ questions: [TRIVIA], setName: 'Strategic Pricing Plays' }),
       });
     }
-    if (href.includes('/answers')) {
+    // `/answers/host`, through `authFetch` — moved off the public
+    // `?role=host` query param in the same bug-sweep Task 7 change.
+    if (href.includes('/answers/host')) {
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -170,13 +177,20 @@ function expectNoSessionContent() {
   expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
 }
 
-/** Nothing this phone learned about the session was even ASKED for. */
+/**
+ * Nothing this phone learned about the session was even ASKED for.
+ *
+ * `/host-state` and `/answers/host` (bug-sweep Task 7) are the session's own
+ * reads now, alongside `/players` and `/questions` which have not moved —
+ * every one of them must stay silent until `/host-details` clears this
+ * device, regardless of which are authenticated today.
+ */
 function expectNoSessionFetches() {
   const urls = global.fetch.mock.calls.map(([u]) => String(u));
-  expect(urls.some((u) => u.includes('/state'))).toBe(false);
+  expect(urls.some((u) => u.includes('/host-state'))).toBe(false);
   expect(urls.some((u) => u.includes('/players'))).toBe(false);
   expect(urls.some((u) => u.includes('/questions'))).toBe(false);
-  expect(urls.some((u) => u.includes('/answers'))).toBe(false);
+  expect(urls.some((u) => u.includes('/answers/host'))).toBe(false);
 }
 
 beforeEach(() => {
@@ -355,22 +369,23 @@ describe('a status this surface cannot explain', () => {
 
 /**
  * The up-front check and the team-switch recheck are not the only moments
- * this can happen. Once bug-sweep Task 7 lands `/state?includeHostData=true`
- * and `/players` behind their own authorizer, a member removed from the
- * team — or a token that expires — mid-session will make those POLLS start
- * answering 401/404 too, not just the up-front `/host-details` call. Without
- * this, the gate would never notice: it only asks the door at open and on a
- * team switch, so the phone would sit on a frozen "Waiting for the
- * session…"/stale roster instead of showing the same banner it would have
- * shown had the account been wrong from the start.
+ * this can happen. A member removed from the team — or a token that
+ * expires — mid-session makes a POLL start answering 401/404 too, not just
+ * the up-front `/host-details` call. Without this, the gate would never
+ * notice: it only asks the door at open and on a team switch, so the phone
+ * would sit on a frozen "Waiting for the session…"/stale roster instead of
+ * showing the same banner it would have shown had the account been wrong
+ * from the start.
  *
- * `stateStatus`/`playersStatus` do not reflect anything this route actually
- * does TODAY — both are still plain, unauthenticated `fetch`, unchanged by
- * this fix — this only proves the client-side reaction is wired for the day
- * they do.
+ * `stateStatus` is real: `GET /games/{id}/host-state` (bug-sweep Task 7)
+ * IS authenticated, through `authFetch`, so this scenario happens in
+ * production today. `playersStatus` is still forward-looking — `/players`
+ * has not moved behind an authorizer yet, so a 404 from it today would only
+ * mean a genuinely missing session, never a revoked account — this proves
+ * the client-side reaction is already wired for the day it does move.
  */
 describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 item 3)', () => {
-  it('a /state poll that starts 404ing re-runs the access check and the gate replaces the session', async () => {
+  it('a /host-state poll that starts 404ing re-runs the access check and the gate replaces the session', async () => {
     serve({
       hostDetails: (call) => (call === 1 ? 200 : 404),
       stateStatus: (call) => (call === 1 ? 200 : 404),
@@ -378,7 +393,7 @@ describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 
     await connect();
     expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
 
-    // The next 2s poll tick hits the now-404 /state and re-asks the door.
+    // The next 2s poll tick hits the now-404 /host-state and re-asks the door.
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument(), { timeout: 4000 });
     expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
   }, 8000);

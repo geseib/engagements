@@ -134,14 +134,20 @@ const apiBase = () => window.API_BASE || '';
  * NOTHING ELSE IS ASKED UNTIL THAT COMES BACK 200. The owner's ruling, on
  * being shown the alternative of merely disabling the write buttons: *"they
  * should not be able to see the other team's questions. what if they were
- * private customer questions."* `/state?includeHostData=true` carries the
- * live question text and answer tallies, `/players` the room's names — both
- * on routes this task does not touch (bug-sweep Task 7 moves them behind
- * their own authorizer). Never STARTING those polls while the account is
- * refused is what this surface can do about that today: `PENDING`'s branch
- * below renders no round, no roster, no join code, nothing but the banner and
- * a way to fix it, and the effect that starts the state/roster timers does
- * not fire until `status` is `OK`.
+ * private customer questions."* At the time this gate was built, the state
+ * poll (`/state?includeHostData=true`, carrying the live question text and
+ * answer tallies) and `/players` (the room's names) were both still plain,
+ * unauthenticated reads. **Bug-sweep Task 7 has since moved the state read**
+ * behind its own authorizer — `GET /games/{id}/host-state`, through
+ * `authFetch`, see `pollState` below — but **`/players` has not moved yet**
+ * and stays a plain `fetch`. Never STARTING these polls while the account is
+ * refused is what this surface can do about the ones that have not moved, and
+ * keeps doing no harm to the one that has: `PENDING`'s branch below renders no
+ * round, no roster, no join code, nothing but the banner and a way to fix it,
+ * and the effect that starts the state/roster timers does not fire until
+ * `status` is `OK`. `pollState`/`pollRoster` additionally re-ask the door on a
+ * 401/404 from either poll — see their own comments — which is how a member
+ * removed mid-session gets caught even between one open and the next.
  */
 const ACCESS = { PENDING: 'checking', OK: 'ok', DENIED: 'denied' };
 
@@ -164,11 +170,12 @@ function HostRemote() {
   /*
     THE ROUND'S RESPONSES, so the host can pick one to put on the wall.
 
-    `/state?includeHostData=true` carries answer PROGRESS — how many have come
-    in, and who has not answered — but never the text, so this is a second
-    fetch. It is deliberately not folded into the state poll: the text is only
-    needed while the focus panel is open, and pulling every response every two
-    seconds for a panel nobody opened is a request per poll for nothing.
+    `/host-state` (see `pollState` below) carries answer PROGRESS — how many
+    have come in, and who has not answered — but never the text, so this is a
+    second fetch. It is deliberately not folded into the state poll: the text
+    is only needed while the focus panel is open, and pulling every response
+    every two seconds for a panel nobody opened is a request per poll for
+    nothing.
   */
   const [focusAnswers, setFocusAnswers] = useState([]);
   const [focusOpen, setFocusOpen] = useState(false);
@@ -364,24 +371,28 @@ function HostRemote() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     try {
-      // `/state?includeHostData=true` — NOT `/games/{id}`, which the old remote
-      // polled. This is the only endpoint that carries answer/vote progress, and
-      // it computes that progress with the same player deduplication the roster
-      // uses, so the remote and the host screen cannot disagree about whether
-      // the room is finished.
+      // `GET /games/{id}/host-state`, through `authFetch` — NOT the public
+      // `/games/{id}?...` GameHostPage's other reads use, and NOT the old
+      // public `?includeHostData=true` flag this route answered before
+      // bug-sweep Task 7 put it behind Cognito + `callerMayDriveSession`
+      // (get-game-state.js). This is the only endpoint that carries
+      // answer/vote progress, and it computes that progress with the same
+      // player deduplication the roster uses, so the remote and the host
+      // screen cannot disagree about whether the room is finished.
       const res = await authFetch(`${apiBase()}games/${id}/host-state`);
       if (activeGameRef.current !== id) return;
       if (!res.ok) {
         setConnected(false);
-        // Still a plain, unauthenticated fetch today, so this never fires yet
-        // — but bug-sweep Task 7 puts this route behind its own authorizer,
-        // and once it does, a 401/404 here mid-session means exactly what the
-        // up-front check means: this account can no longer drive the session
-        // (removed from the team, or a token that expired while the phone sat
-        // untouched). The gate only asks at open and on a team switch, so
-        // without this a revoked host would sit on a frozen "Waiting for the
-        // session…" instead of ever seeing the banner. Anything else (500,
-        // no response) is a hiccup the "Offline" indicator already covers.
+        // Authenticated as of Task 7, so this DOES fire now: a 401/404
+        // mid-session means exactly what the up-front check means — this
+        // account can no longer drive the session (removed from the team, or
+        // a token that expired while the phone sat untouched). The gate only
+        // asks at open and on a team switch, so without this a revoked host
+        // would sit on a frozen "Waiting for the session…" instead of ever
+        // seeing the banner. Anything else (500, no response) is a hiccup the
+        // "Offline" indicator already covers, and `/players` below is not
+        // authenticated yet — its own 401/404 branch is the one still ahead
+        // of that route actually being able to answer either.
         if (res.status === 401 || res.status === 404) checkAccess(id);
         return;
       }
@@ -401,10 +412,15 @@ function HostRemote() {
   // wrote what, and get-players never returns answer text; see waitingOn().
   const pollRoster = useCallback(async (id) => {
     try {
+      // Still a plain, unauthenticated `fetch` — unlike `/host-state` above,
+      // bug-sweep Task 7 has not moved this route behind an authorizer, so
+      // the 401 branch below is not reachable from here today, only the 404
+      // one (a session that no longer exists). Kept for the day this route
+      // moves too, at which point it starts meaning the same thing it already
+      // means in `pollState`.
       const res = await fetch(`${apiBase()}games/${id}/players`);
       if (activeGameRef.current !== id) return;
       if (!res.ok) {
-        // Same reasoning as pollState above, for the same future route change.
         if (res.status === 401 || res.status === 404) checkAccess(id);
         return;
       }
@@ -415,11 +431,11 @@ function HostRemote() {
   }, [checkAccess]);
 
   // GATED ON `access.status === ACCESS.OK` — the whole point of the access
-  // gate above. `/state?includeHostData=true` and `/players` are unauthenticated
-  // reads that already carry the room's names and the live question text
-  // (bug-sweep Task 7 moves them behind their own authorizer); this phone must
-  // not ask either one for a session the up-front check has not cleared it to
-  // drive, refused account or not.
+  // gate above. `/host-state` (through `authFetch`, see `pollState`) and
+  // `/players` carry the room's names and the live question text; this phone
+  // must not ask either one for a session the up-front check has not cleared
+  // it to drive, refused account or not — regardless of which of the two is
+  // actually authenticated today (see the ACCESS GATE note up top).
   useEffect(() => {
     if (!gameId || access.status !== ACCESS.OK) return undefined;
     setSnapshot(null);
@@ -587,9 +603,11 @@ function HostRemote() {
     let cancelled = false;
     const load = async () => {
       try {
-        // Public route, plain fetch — the same URL GameHostPage uses.
-        // `role=host` is what returns the text rather than the redacted
-        // player view.
+        // `GET /games/{id}/answers/host`, through `authFetch` — the host's
+        // own door on this route (get-answers.js), Cognito + `authFetch`
+        // since bug-sweep Task 7, not the old public `?role=host` query
+        // param. GameHostPage.jsx's own read of this data moved to the same
+        // door in the same change.
         const padded = String(round).padStart(3, '0');
         const res = await authFetch(`${apiBase()}games/${gameId}/answers/host?questionId=${padded}`);
         if (cancelled || !res.ok || activeGameRef.current !== gameId) return;

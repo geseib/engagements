@@ -58,6 +58,12 @@ function serve({
   state, stageBeat = 'results', players = [], aiSummary = null, progress = {}, comments = null,
 }) {
   global.fetch = jest.fn((url) => {
+    // The access gate (Task 6): asked before anything else about the
+    // session. This file is about the call sites downstream of it, so it
+    // always answers 200.
+    if (String(url).includes('/host-details')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    }
     if (String(url).includes('/host-state')) {
       return Promise.resolve({
         ok: true,
