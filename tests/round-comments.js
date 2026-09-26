@@ -125,7 +125,9 @@ const get = (gameId, qs) => handler({
 });
 
 /** A session on round 3, results shown, feedback round open. */
-function seedGame(gameId, { lessonNumber = 3, beat = 'feedback', revealed = true } = {}) {
+function seedGame(gameId, {
+  lessonNumber = 3, beat = 'feedback', revealed = true, clientId = undefined,
+} = {}) {
   store.clear();
   sent = [];
   const padded = String(lessonNumber).padStart(3, '0');
@@ -137,6 +139,14 @@ function seedGame(gameId, { lessonNumber = 3, beat = 'feedback', revealed = true
   });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#p-1', ConnectionId: 'p-1', ConnectionType: 'PLAYER', PlayerName: 'Ada' });
+  // A joined player, matching aComment()'s default author — MEMBERSHIP (fix
+  // round 1, item 1): every test below that posts as 'Ada Lovelace' needs this
+  // row to exist, or comments.js's new PLAYER# check refuses it before the
+  // behaviour the test is actually about is ever reached.
+  put({
+    PK: `GAME#${gameId}`, SK: 'PLAYER#Ada Lovelace', PlayerName: 'Ada Lovelace',
+    ...(clientId ? { ClientId: clientId } : {}),
+  });
 }
 
 const aComment = (over = {}) => ({
@@ -221,32 +231,126 @@ const aComment = (over = {}) => ({
     assert.strictEqual(frame.playerName, undefined, 'the author was broadcast');
   });
 
-  // ---------- 2. the gate ----------
-  console.log('\n2. a comment can only be written into an open feedback round');
+  // ---------- 1b. membership (fix round 1, item 1) ----------
+  console.log('\n1b. only a name that actually joined this session may comment');
 
+  /*
+    Review of the RESULTS-beat loosening above found the gap this section
+    covers: with the beat gone, anyone holding the four-digit code could post
+    arbitrary text under an arbitrary name and have it reach the projector's
+    arrivals (RoomMeter) on every results screen. The owner's ruling: require
+    the commenter to be `PLAYER#<name>` in this game, and — where the codebase
+    already proves a claimed name belongs to the browser that claimed it
+    (join-game.js's `ClientId`, read the identical way
+    get-answers.js's `getOwnAnswer` reads it) — require that same proof.
+  */
+  seedGame('4013');
+  const notJoined = await post('4013', aComment({ playerName: 'A Stranger' }));
+  check('a name with no PLAYER# row in this game is refused', () => {
+    assert.strictEqual(notJoined.statusCode, 409, `got ${notJoined.statusCode}: ${notJoined.body}`);
+    assert.strictEqual(rows('4013', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4014');
+  const joined = await post('4014', aComment());
+  check('a name that IS a joined player (seedGame\'s default PLAYER# row) is accepted', () =>
+    assert.strictEqual(joined.statusCode, 201, `got ${joined.statusCode}: ${joined.body}`));
+
+  seedGame('4015', { clientId: 'real-browser-id' });
+  const noProof = await post('4015', aComment());
+  check('refused with no clientId at all, once the row has one to check against', () => {
+    assert.strictEqual(noProof.statusCode, 409, `got ${noProof.statusCode}: ${noProof.body}`);
+    assert.strictEqual(rows('4015', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4016', { clientId: 'real-browser-id' });
+  const wrongProof = await post('4016', aComment({ clientId: 'a-different-browser-id' }));
+  check('refused when the supplied clientId does not match the one the row was joined with', () => {
+    assert.strictEqual(wrongProof.statusCode, 409, `got ${wrongProof.statusCode}: ${wrongProof.body}`);
+    assert.strictEqual(rows('4016', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4017', { clientId: 'real-browser-id' });
+  const rightProof = await post('4017', aComment({ clientId: 'real-browser-id' }));
+  check('accepted when the supplied clientId matches', () =>
+    assert.strictEqual(rightProof.statusCode, 201, `got ${rightProof.statusCode}: ${rightProof.body}`));
+
+  seedGame('4018'); // PLAYER# row has no ClientId at all — joined before the field existed.
+  const legacyNoProof = await post('4018', aComment());
+  check('a row with no stamped ClientId proves nothing either way, so membership alone is enough', () =>
+    assert.strictEqual(legacyNoProof.statusCode, 201, `got ${legacyNoProof.statusCode}: ${legacyNoProof.body}`));
+
+  // ---------- 2. the gate ----------
+  console.log('\n2. a comment can be written on any beat of the round\'s RESULTS');
+
+  /*
+    THE OWNER'S RULING, 26 SEP 2026: a player's own "Feedback" button (the
+    ordinary RESULTS# screen, PlayerPage.jsx) posts a comment without the host
+    ever opening a feedback round. So a beat OTHER than 'feedback' is no
+    longer a refusal — the session being on THIS round's RESULTS is enough by
+    itself. The three checks below (field-notes, the tally, and feedback
+    itself) are the exhaustive set: BEATS is a closed three-value enum
+    (stage-beats.js), and all three must now accept a comment.
+  */
   seedGame('4002', { beat: 'field-notes' });
-  const notOpen = await post('4002', aComment());
-  check('refused when the host has not opened a feedback round', () => {
-    // Otherwise a phone left on the previous beat keeps writing into a round
-    // the room has finished with, and the comments appear in a report nobody
-    // was invited to comment on.
-    assert.strictEqual(notOpen.statusCode, 409, `got ${notOpen.statusCode}`);
-    assert.strictEqual(rows('4002', 'COMMENT#').length, 0);
+  const onFieldNotes = await post('4002', aComment());
+  check('accepted on field-notes — no feedback round was ever opened', () => {
+    assert.strictEqual(onFieldNotes.statusCode, 201, `got ${onFieldNotes.statusCode}: ${onFieldNotes.body}`);
+    assert.strictEqual(rows('4002', 'COMMENT#').length, 1);
+  });
+
+  seedGame('4002b', { beat: 'results' });
+  const onTally = await post('4002b', aComment());
+  check('accepted on the tally beat too — same round, same rule', () => {
+    assert.strictEqual(onTally.statusCode, 201, `got ${onTally.statusCode}: ${onTally.body}`);
+    assert.strictEqual(rows('4002b', 'COMMENT#').length, 1);
+  });
+
+  seedGame('4002c'); // seedGame's default beat is 'feedback'.
+  const onFeedbackBeat = await post('4002c', aComment());
+  check('the feedback-beat path still works — unchanged, not merely still passing', () => {
+    assert.strictEqual(onFeedbackBeat.statusCode, 201, `got ${onFeedbackBeat.statusCode}`);
+    assert.strictEqual(rows('4002c', 'COMMENT#').length, 1);
   });
 
   seedGame('4003', { lessonNumber: 4 });
   const wrongRound = await post('4003', aComment({ questionNumber: 3 }));
   check('refused when the session has moved on to another round', () => {
     // The stale-phone case. Round 3's composer is still on screen while the
-    // room is on round 4.
+    // room is on round 4. Still refused: this is fact (1) in the header, and
+    // the ruling above never touched it.
     assert.strictEqual(wrongRound.statusCode, 409, `got ${wrongRound.statusCode}`);
     assert.strictEqual(rows('4003', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4003a');
+  put({ PK: 'GAME#4003a', SK: 'STATE', State: 'ASK#003', LessonNumber: 3 });
+  const onAsk = await post('4003a', aComment());
+  check('refused while the session is on ASK', () => {
+    assert.strictEqual(onAsk.statusCode, 409, `got ${onAsk.statusCode}`);
+    assert.strictEqual(rows('4003a', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4003b');
+  put({ PK: 'GAME#4003b', SK: 'STATE', State: 'VOTE#003', LessonNumber: 3 });
+  const onVote = await post('4003b', aComment());
+  check('refused while the session is on VOTE', () => {
+    assert.strictEqual(onVote.statusCode, 409, `got ${onVote.statusCode}`);
+    assert.strictEqual(rows('4003b', 'COMMENT#').length, 0);
   });
 
   seedGame('4004');
   const noGame = await post('9999', aComment());
   check('a session that does not exist is a 404, not a silent write', () =>
     assert.strictEqual(noGame.statusCode, 404, `got ${noGame.statusCode}`));
+
+  seedGame('4004b');
+  store.delete(key('GAME#4004b', 'ROUND#003'));
+  const noRoundRecord = await post('4004b', aComment());
+  check('refused when the round record itself does not exist — a defensive check, not the dropped beat requirement', () => {
+    assert.strictEqual(noRoundRecord.statusCode, 409, `got ${noRoundRecord.statusCode}`);
+    assert.strictEqual(rows('4004b', 'COMMENT#').length, 0);
+  });
 
   // ---------- 3. what the handler refuses ----------
   console.log('\n3. nothing malformed becomes a sort key or a row');

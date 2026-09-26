@@ -19,31 +19,66 @@
  * carries the Cognito authorizer, because it moves what the whole room is
  * looking at.
  *
- * ── THAT SENTENCE IS LOAD-BEARING, AND IT WAS ONCE FALSE ───────────────────
+ * ── THAT SENTENCE WAS LOAD-BEARING, AND IT WAS ONCE FALSE ──────────────────
  *
  * "Carries the Cognito authorizer" was true and not sufficient. Until
  * 2026-08-27 `stage-beat` checked only that the caller was *a* host, never that
  * they were THIS session's host — so a host in any organisation, holding one of
  * the 9,000 four-digit ids, could open a feedback round on a room they had
  * nothing to do with, and the write gate below would then admit anyone with the
- * code. The resulting comments are encrypted under the VICTIM org's key and
- * flow into their round report and session report; the beat undoes, they do
- * not.
- *
- * So THIS ROUTE'S safety is borrowed, not owned: it holds exactly as long as
- * `stage-beat` refuses a caller from another organisation
+ * code. That was fixed in `stage-beat.js` itself
  * (`tenant.callerMayDriveSession`, asserted end-to-end by
- * `tests/session-beat-org-scope.js`). Anything that widens who may write the
- * `feedback` beat widens who may write here, silently. Do not weaken that route
- * without reading this one.
+ * `tests/session-beat-org-scope.js`), and it stays fixed regardless of
+ * anything below — a rival org's host still cannot move this room's stage,
+ * reveal its authors, or open anything on its behalf.
  *
- * WHAT IS DELIBERATELY *NOT* ADDED HERE. Not an identity check — participants
- * have no identity, and requiring one ends the participant journey. Not a
- * roster check on `playerName` either: it is unverified, exactly as it is in
- * `submit-vote.js`, and singling out comments would leave the same trust in
- * every other participant write while implying it had been dealt with. If that
- * posture should change it is one deliberate piece of work across all of them,
- * not a patch here.
+ * ── WHAT PROTECTS THIS ROUTE NOW: MEMBERSHIP, OWNED HERE, NOT BORROWED ─────
+ *
+ * Until 26 Sep 2026 this section said the route's safety was "borrowed, not
+ * owned" from `stage-beat`'s org check, because the write gate's second fact
+ * was `ROUND#nnn.StageBeat === 'feedback'` — a value only a host could set, so
+ * refusing a hijacked beat also refused every comment on that round. That
+ * reasoning stopped being true the moment the beat requirement was dropped
+ * (below): a comment no longer needs the beat, so refusing it upstream no
+ * longer refuses anything here. Review of that change (26 Sep 2026, fix round
+ * 1) found the gap directly: with no beat and no identity check, ANYONE
+ * holding the four-digit code could post arbitrary text under an arbitrary
+ * name, and that text reaches the projector's arrivals (`RoomMeter`) and both
+ * reports. The owner's ruling: add membership.
+ *
+ * So `writeComment` now asks the table one more thing, itself, before it ever
+ * looks at the round: is this playerName actually `PLAYER#<name>` in THIS
+ * game? A name with no such row is refused outright. And where the codebase
+ * already has a way to prove a claimed name is the same browser that claimed
+ * it — `join-game.js` stamps a client-minted `ClientId` on the row, and
+ * `get-answers.js`'s `getOwnAnswer` (`identityProven`) is the existing reader
+ * of that stamp — this route asks the same question: if the row carries a
+ * `ClientId`, the request must present the same one, or it is refused exactly
+ * as a non-member is. A row with no stamped `ClientId` (joined before this
+ * existed, or by a client that could not mint one) proves nothing either way
+ * — and here, unlike in `get-answers.js`, that is accepted rather than
+ * refused: membership alone is enough for a row with no proof to check
+ * against. That is a real divergence, corrected here since fix round 2
+ * mislabeled it as the same posture. `get-answers.js` FAILS CLOSED for
+ * exactly this case: `identityProven` is `false` whenever `storedClientId`
+ * is falsy, no matter what the request supplies, so an unowned row's answer
+ * TEXT is withheld (`answerWithheld: true`) and only the already-public
+ * `hasAnswer` fact is returned. This route does the opposite for that same
+ * unowned row: the write is ALLOWED, not withheld. The owner's ruling this
+ * fix round was specifically to accept a joined player regardless of whether
+ * their row happens to carry proof, not to reach `get-answers.js`'s tighter
+ * no-proof-means-withhold posture for comments — if that should change, it
+ * is a deliberate decision to make here, not an oversight to quietly match.
+ * THIS is now the route's own, owned protection — it does not depend on
+ * `stage-beat`, `feedback`, or any other route staying correct.
+ *
+ * WHAT IS DELIBERATELY *NOT* ADDED HERE, still. Not full participant identity
+ * verification — a player who has never left the room and whose browser holds
+ * no stamped `ClientId` is still trusted on their claimed name, exactly as
+ * `submit-vote.js` trusts it, and singling comments out for more would leave
+ * every other participant write with the same trust while implying it had
+ * been dealt with everywhere. If that posture should change it is one
+ * deliberate piece of work across all of them, not a patch here.
  *
  * THE READ ADDITIONALLY REQUIRES A ROUND, which is stricter than the key
  * format allows: `commentPrefix({})` (comment-keys.js) happily returns the
@@ -66,18 +101,58 @@
  * was ever guarded.
  *
  * So the gate here is not "who are you" but "is the room actually doing this
- * right now", and it is two facts read from the table, not one:
+ * right now", and — AS OF 26 SEP 2026, THE OWNER'S RULING BELOW — it is ONE
+ * fact read from the table, not two:
  *
- *   1. the session's STATE is `RESULTS#<the round being commented on>`, and
- *   2. that round's ROUND# record is on the `feedback` beat.
+ *   1. the session's STATE is `RESULTS#<the round being commented on>`.
  *
- * BOTH, because either alone leaves a hole. Without (1) a phone still showing
- * round 3's composer writes into round 3 while the room is on round 4 — the
- * comment then appears in a report against material the room has moved past.
- * Without (2) anyone holding the four-digit code can write comments into a
- * session that never opened a feedback round at all. Neither is a security
- * boundary — the code is on the projector — but both are correctness
- * boundaries, and the failure they prevent is silent.
+ * Without it a phone still showing round 3's composer writes into round 3
+ * while the room is on round 4 — the comment then appears in a report against
+ * material the room has moved past. Not a security boundary — the code is on
+ * the projector — but a correctness one, and the failure it prevents is
+ * silent.
+ *
+ * ── THE SECOND FACT, AND WHY IT IS GONE FROM THIS HALF OF THE GATE ─────────
+ *
+ * Until 26 Sep 2026 a write ALSO required the round's ROUND# record to be on
+ * the `feedback` beat — the host's "Request feedback" was the only door in.
+ * The owner's ruling that day: *"the player's own Feedback button works on
+ * any round whose results are showing, without the host opening feedback
+ * mode."* A player-initiated comment button on the ORDINARY results screen
+ * (`PlayerPage.jsx`'s RESULTS# arm) cannot depend on the host ever pressing
+ * anything, so `writeComment` below drops the beat requirement: fact (1) is
+ * now sufficient on its own, and posting a comment therefore no longer cares
+ * which of `results` / `field-notes` / `feedback` the round is on. The round
+ * record itself must still exist — `roundRecord()` below still reads it —
+ * which is a defensive check on data integrity, not a reintroduction of the
+ * beat requirement.
+ *
+ * THIS WIDENS *WHEN*, FOR A MEMBER — the membership check above is what still
+ * answers *who*. A round the host never opens for feedback is no longer
+ * permanently closed to comments once it is over: for a joined player, it is
+ * open for exactly as long as the room is looking at its results, the same
+ * window every other participant write (a vote, an answer) already uses. That
+ * is the deliberate point of the ruling, not a side effect of it — see
+ * `tests/session-beat-org-scope.js` for what stays scoped by organisation
+ * regardless (stage-beat, reveal-authors) and for the membership check's own
+ * coverage in `tests/round-comments.js`.
+ *
+ * `readFeedbackRound` (`GET /feedback-round`, further down) is UNCHANGED and
+ * still requires the `feedback` beat. It is the host-triggered, WHOLE-ROOM
+ * switch — the one that pulls every phone in the session into
+ * `FeedbackRoundPanel` at once — and the owner was explicit that mode "stays
+ * exactly as it is." A player's own button opens the same panel for
+ * themselves alone, by a different route entirely, never `GET
+ * /feedback-round`: PlayerPage.jsx snapshots the question it already has,
+ * fetches this round's ranked responses itself from the public `POST
+ * /games/get-results` (confirmed by fix round 2's re-review: the same read
+ * the ordinary results screen already makes, never the host-only transition
+ * path), fetches Workie's read from the public `GET /games/{id}/ai-summary`,
+ * and reads what has already been said through this file's own public `GET
+ * /games/{gameId}/comments`. So loosening the WRITE gate here does not touch
+ * the whole-room switch at all, and confirms names print on the player's own
+ * panel exactly as they do on the host-triggered one — same component, same
+ * read, redacted the same way for a round `AuthorsRevealed` has not reached.
  *
  * ── HTTP, NOT THE WEBSOCKET ANSWER PATH ────────────────────────────────────
  *
@@ -281,10 +356,56 @@ async function writeComment(gameId, body) {
   }
 
   /*
-    THE GATE. Both halves — see the header. `409` rather than `400`: nothing
-    about the request is malformed, the room has simply moved, and a composer
-    that gets a 409 can say "the host has closed this round" instead of "bad
-    request".
+    MEMBERSHIP — see the header's "WHAT PROTECTS THIS ROUTE NOW". Read once the
+    game is known to exist, and checked BEFORE the round/state gate below: a
+    name that never joined this session is refused regardless of what round or
+    state the room is in, the same as it would be on any other round.
+
+    A missing PLAYER# row is a straightforward refusal. A row that DOES carry
+    a `ClientId` (join-game.js stamps one when the joining client minted one)
+    additionally requires the request to present that same id — the identical
+    check `get-answers.js`'s `getOwnAnswer` already makes (`identityProven`) —
+    so typing somebody else's already-claimed name is refused too. A row with
+    no stamped `ClientId` (joined before this existed) proves nothing either
+    way, and here membership alone is enough for it — NOT what `get-answers.js`
+    does with the same fact: it fails closed (`identityProven` is always false
+    with no stored id to check, so the answer TEXT is withheld) rather than
+    allowing anything. This route allows the WRITE instead. That is a
+    deliberate choice for this fix round — the owner's ruling was to accept a
+    joined player whether or not their row happens to carry proof — not a
+    claim that the two routes agree; see the header for the full comparison.
+  */
+  const playerRow = (await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${author}` },
+  }))).Item;
+  if (!playerRow) {
+    return respond(409, { error: 'you have not joined this session' });
+  }
+  const storedClientId = playerRow.ClientId || null;
+  if (storedClientId) {
+    const suppliedClientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
+    if (!suppliedClientId || suppliedClientId !== storedClientId) {
+      return respond(409, { error: 'you have not joined this session' });
+    }
+  }
+
+  /*
+    THE GATE — see the header. `409` rather than `400`: nothing about the
+    request is malformed, the room has simply moved, and a composer that gets
+    a 409 can say "this round is no longer open" instead of "bad request".
+
+    OWNER'S RULING, 26 SEP 2026: this is now the WHOLE gate. Until this date a
+    second check followed — `round.StageBeat !== 'feedback'` — refusing a
+    comment unless the host had opened a feedback round. It is gone: the
+    player's own "Feedback" button (PlayerPage.jsx's RESULTS# arm) posts here
+    with no host action at all, on any beat of RESULTS. The state check below
+    already establishes the one fact that still matters — the room is
+    currently on THIS round's results — so it is sufficient by itself. The
+    feedback-beat path (`stage-beat.js` opening `feedback`, the host's
+    "Request feedback") is UNCHANGED: it always satisfied this same state
+    check, and nothing here treats it any differently from a comment posted
+    while the round is on its tally or its AI read-back.
   */
   if (String(state.State) !== `RESULTS#${padded}`) {
     return respond(409, {
@@ -292,9 +413,14 @@ async function writeComment(gameId, body) {
       currentState: state.State,
     });
   }
+  // The round record itself must still exist — a defensive data-integrity
+  // check, not a reintroduction of the beat requirement dropped above.
   const round = await roundRecord(gameId, padded);
-  if (!round || round.StageBeat !== 'feedback') {
-    return respond(409, { error: 'the host has not opened a feedback round' });
+  if (!round) {
+    return respond(409, {
+      error: 'this round is no longer open for comments',
+      currentState: state.State,
+    });
   }
 
   const now = new Date().toISOString();
@@ -478,6 +604,17 @@ async function readComments(gameId, query) {
  * beat; a phone that arrives between those two calls gets a 409 that says the
  * report is not ready, which is a state the composer can render as "the host is
  * preparing this" rather than an error a participant has to interpret.
+ *
+ * UNCHANGED BY THE 26 SEP 2026 RULING ABOVE, deliberately. `writeComment`
+ * dropped its beat requirement that day; this function still has one, because
+ * it does two things the owner said should stay exactly as they were: it is
+ * the HOST'S whole-room switch (nobody's phone jumps into `FeedbackRoundPanel`
+ * until the host opens `feedback`), and it reads the snapshot the host built,
+ * which a player pressing their own button has no way to have caused to
+ * exist. The player's own button never calls this route at all — it builds
+ * its round from data the page already has plus the public
+ * `GET /games/{id}/ai-summary`, so it needs neither the beat nor the REPORT
+ * row this function depends on.
  */
 async function readFeedbackRound(gameId) {
   const { meta, state } = await readSession(gameId);

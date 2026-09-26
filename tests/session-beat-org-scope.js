@@ -14,32 +14,51 @@
  * ids are four digits (create-game.js:191), so the whole id space is 9,000
  * values and a rival's live session is found by walking it.
  *
- * ── WHY THE BEAT IS THE SHARP ONE ──────────────────────────────────────────
+ * ── WHY THE BEAT WAS THE SHARP ONE, UNTIL 26 SEP 2026 ───────────────────────
  *
  * The beat was reversible and idempotent, so on its own it read as a prank —
  * somebody else's projector jumping between the tally and the read-back. The
- * round-feedback feature made it a WRITE GRANT.
+ * round-feedback feature made it a WRITE GRANT: until that date, a comment
+ * required BOTH `STATE === RESULTS#nnn` AND `ROUND#nnn.StageBeat ===
+ * 'feedback'`, so an unscoped `stage-beat` handed a stranger the second half
+ * of a gate the comment route trusted. Section 2 below used to assert exactly
+ * that chain, and it is why this file exists rather than one more line in
+ * `session-org-ownership.js`: the source scan there proves the guard is
+ * CALLED, and this proved the write never landed.
  *
- * `comments.js` is deliberately public, because participants hold no Cognito
- * identity, and its own header explains that the thing which is NOT public is
- * OPENING a feedback round — `stage-beat`, "which carries the Cognito
- * authorizer". The comment write gate is exactly two table facts:
+ * ── WHAT CHANGED, AND WHY THIS FILE STILL EXISTS ────────────────────────────
  *
- *     STATE === `RESULTS#nnn`  AND  ROUND#nnn.StageBeat === 'feedback'
+ * The owner's ruling that day (see `comments.js`'s header): a JOINED PLAYER
+ * may comment on the round showing on RESULTS, with no host action and no
+ * beat required at all. That drops the beat requirement `writeComment` used
+ * to enforce, which makes the beat-hijack chain section 2 used to assert moot
+ * for comments specifically — a comment was never going to need a hijacked
+ * beat again, because it needs no beat at all. It does NOT reopen the actual
+ * hole this file exists to close: a rival org's HOST still cannot move this
+ * room's stage, reveal its authors, or make this session's projector do
+ * anything on their behalf (sections 1, 3, 4, 5, unchanged).
  *
- * So an unscoped `stage-beat` hands a stranger the second half of a gate the
- * comment route trusts. Post `{beat:'feedback'}` at a rival's live session and
- * anyone holding that code may write comments into their round — comments that
- * are stored ENCRYPTED UNDER THE VICTIM ORGANISATION'S KEY and that flow into
- * their round report and their session report. The beat is reversible; those
- * rows are not.
- *
- * That chain is what section 2 asserts, and it is why this file exists rather
- * than one more line in `session-org-ownership.js`: the source scan there
- * proves the guard is CALLED, and this proves the write never lands.
+ * Dropping the beat requirement opened a DIFFERENT, narrower gap that fix
+ * round 1 (review of this change) found directly: with no beat and no
+ * identity check of any kind, anyone holding the four-digit code could post
+ * a comment under an arbitrary name, on any live session, the instant it
+ * reached RESULTS. The owner's ruling for that: `writeComment` now also
+ * requires the commenter to be `PLAYER#<name>` in THIS game (comments.js's
+ * "WHAT PROTECTS THIS ROUTE NOW"), with the same client-id proof
+ * `get-answers.js` already uses where a row carries one. That MEMBERSHIP
+ * check — not organisation, not encryption, not the beat — is what now
+ * stands between "a stranger with the code" and a comment landing in this
+ * room's report, and it is what section 2 asserts below. (An earlier version
+ * of this section asserted that a comment always decrypts under the room's
+ * own organisation and never a rival's — true, but never the thing standing
+ * between a stranger and the write: the org comes off the session row
+ * regardless of who is asking, with or without membership, so it proves
+ * nothing about who may post. Membership is the actual gate; encryption
+ * scoping is orthogonal to it and is not re-asserted here.)
  *
  * // rejects: a cross-org caller opening a feedback round, revealing a rival's
- * //          authors, or either handler calling the guard and ignoring it.
+ * //          authors, or either handler calling the guard and ignoring it;
+ * //          a name with no PLAYER# row in this game commenting on it.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -243,22 +262,86 @@ const COMMENT = {
   check('the room is told nothing', () =>
     assert.strictEqual(sent.length, 0, `broadcast ${sent.length} frame(s) on a refused call`));
 
-  console.log('\n2. …so the public comment route never opens (the chain)');
+  console.log('\n2. the public comment route: a JOINED PLAYER may comment on RESULTS, without the host\'s beat — a stranger may not');
 
   /*
-    The point of the whole file. `comments.js` is public by design and gates on
-    two table facts, the second of which is the beat this route writes. With the
-    beat refused above, the write window was never opened — so the rival cannot
-    reach the victim's round even though the comment route asks them for nothing.
+    UNTIL 26 SEP 2026 this section asserted a chain that no longer describes
+    the code: refusing a hijacked stage-beat (section 1) meant the comment
+    route's second gate fact (`ROUND#nnn.StageBeat === 'feedback'`) could
+    never be satisfied either, so closing THE HOLE also closed this route to
+    a rival. That gate fact is gone (see comments.js's header) — a comment
+    now succeeds for ANY beat of RESULTS, no host action needed. Since 26 Sep
+    2026 (owner's ruling) a joined player may comment on the round showing on
+    RESULTS without the host ever opening feedback.
+
+    "A stranger" below is not a rival org's host — it is a claimed name with
+    NO `PLAYER#` row in this game at all, which is exactly how anybody merely
+    holding the four-digit code, from any org or none, would reach this
+    route. What refuses them now is MEMBERSHIP (comments.js's PLAYER# check,
+    item 1 of this round of fixes), not organisation and not the beat. This
+    is the property section 2 asserts.
   */
+  seedGame('4242');
   const strangerComment = await postComment('4242', COMMENT);
-  // rejects: a cross-org beat becoming a write grant on somebody else's round.
-  check('a stranger cannot comment into the round', () =>
+  check('a name with no PLAYER# row in this game is refused, regardless of organisation', () =>
     assert.strictEqual(strangerComment.statusCode, 409,
       `got ${strangerComment.statusCode}: ${strangerComment.body}`));
 
-  check('...because no feedback round was ever opened', () =>
-    assert.match(JSON.parse(strangerComment.body).error || '', /has not opened a feedback round/));
+  /*
+    WHICH GATE REFUSED, NOT JUST THAT ONE DID (fix round 2, item 5). Both the
+    membership gate and the state gate (2b, below) answer 409 — a bare status
+    code cannot tell them apart, and a mutation that swapped this refusal for
+    the WRONG gate (e.g. accidentally routed through the state check instead
+    of membership) would still pass a status-code-only assertion. The two
+    error strings are distinct in comments.js and are asserted here by name.
+  */
+  check('...and it is the MEMBERSHIP gate that refused, not the state gate', () =>
+    assert.strictEqual(JSON.parse(strangerComment.body).error, 'you have not joined this session',
+      `got: ${strangerComment.body}`));
+
+  check('...and nothing was written', () =>
+    assert.strictEqual(
+      [...store.values()].filter((i) => i.PK === 'GAME#4242' && String(i.SK).startsWith('COMMENT#')).length,
+      0,
+    ));
+
+  /*
+    A fresh, orgless session for the accepted case: this file's fake DynamoDB
+    has no KMS behind it, so a session WITH an orgId would fail encrypting the
+    comment for an unrelated reason (no data key registered) and obscure what
+    this check is actually about. `orgId: ''` reaches the exact same
+    membership check — `orgOf` and encryption are downstream of it — with
+    nothing else in the way.
+  */
+  seedGame('4244', { orgId: '' });
+  put({ PK: 'GAME#4244', SK: 'PLAYER#A stranger', PlayerName: 'A stranger' });
+  const joinedComment = await postComment('4244', COMMENT);
+  check('the SAME name, once it has actually joined this session, is accepted', () =>
+    assert.strictEqual(joinedComment.statusCode, 201,
+      `got ${joinedComment.statusCode}: ${joinedComment.body}`));
+
+  console.log('\n2b. …and fact (1) — the state check — is unaffected by any of this');
+
+  seedGame('4243');
+  // A joined player here too, so this is unambiguously testing fact (1) — the
+  // state check — and not tripping the membership check from section 2.
+  put({ PK: 'GAME#4243', SK: 'PLAYER#A stranger', PlayerName: 'A stranger' });
+  put({ PK: 'GAME#4243', SK: 'STATE', State: 'RESULTS#002', LessonNumber: 2 });
+  const wrongRoundComment = await postComment('4243', COMMENT);
+  check('a comment for a round the session is not showing is still refused', () =>
+    assert.strictEqual(wrongRoundComment.statusCode, 409,
+      `got ${wrongRoundComment.statusCode}: ${wrongRoundComment.body}`));
+
+  // WHICH GATE, AGAIN (fix round 2, item 5): this player IS a member, so a
+  // refusal here that read "you have not joined this session" would mean the
+  // membership check fired for the wrong reason — this asserts it is
+  // specifically the STATE gate's own message, carrying the mismatched
+  // currentState the composer needs to render "the room has moved on".
+  check('...and it is the STATE gate that refused, not membership — with the actual state attached', () => {
+    const body = JSON.parse(wrongRoundComment.body);
+    assert.strictEqual(body.error, 'this round is no longer open for comments', `got: ${wrongRoundComment.body}`);
+    assert.strictEqual(body.currentState, 'RESULTS#002');
+  });
 
   console.log('\n3. the owning organisation is unaffected');
 
