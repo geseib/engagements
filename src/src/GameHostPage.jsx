@@ -918,25 +918,29 @@ function GameHostPage() {
   };
 
   /*
-    A RELOAD RECOVERS THE COUNT, NOT JUST THE STAGE.
+    RESET ON ROUND CHANGE, RELOAD ON ENTERING RESULTS — FOR ANY BEAT.
 
-    `resultsBeat` restoring to 'feedback' on reload (`serverStageBeatRef`,
-    above) only fixed which BEAT the host sees — `roundComments` is separate
-    state, and nothing kept it in sync with a reload that lands mid-round.
-    Before this, the only two callers of `loadRoundComments` were
-    `requestFeedbackRound` (this device just opened the round) and the
-    `commentPosted` socket handler (somebody just posted) — neither fires on
-    a reload, so a host who reloaded mid-round came back with
-    `roundComments = []` and the projector showed no count until the next
-    comment happened to arrive.
+    Fix round 1, item 4: `roundComments` used to sit exactly as
+    `loadRoundComments` last left it — nothing ever reset it when the round
+    changed. Before comments.js's 26 Sep 2026 ruling that was mostly harmless,
+    because the only way a round GOT any comments was the host explicitly
+    requesting feedback, which itself calls `loadRoundComments()` directly. It
+    stopped being harmless once a comment could land on ANY beat of RESULTS,
+    with no host action at all (a player's own "Feedback" button): a comment
+    posted for round 3 stayed in `roundComments` straight through round 4's
+    ASK and VOTE and into round 4's RESULTS, where the widened meter/arrivals
+    (see the `meter` block below) showed round 3's stale count and quotes as
+    though they belonged to round 4.
 
-    Keyed on `resultsBeat` alone, and gated on the exact value rather than any
-    change into it: `loadRoundComments` reads the live `gameState` itself when
-    it actually runs, so this effect only has to know WHEN to call it, and
-    that is exactly when the beat READS 'feedback' — covering a live open
-    (requestFeedbackRound also calls it directly, so this is a harmless
-    duplicate there) and, the case that was missing, a reload that restores
-    straight onto it.
+    Keyed on `gameState` itself, not `resultsBeat`: entering ANY beat of
+    RESULTS reloads THIS round's real comments — `loadRoundComments` reads the
+    current round off `gameState` when it actually runs, so it is always
+    correctly scoped — and leaving RESULTS for any reason clears the list
+    immediately rather than leaving the outgoing round's rows on screen while
+    the next one plays out. This also covers everything the earlier, narrower
+    effect existed for: a reload landing back on an already-open feedback
+    round, or on an ordinary RESULTS a player has already commented on — both
+    are simply "entering RESULTS" from here.
 
     `loadRoundCommentsRef.current`, not `loadRoundComments` directly: the ref
     is kept current every render (just above), so this avoids the
@@ -945,8 +949,13 @@ function GameHostPage() {
     effect re-run — and refetch — on every render.
   */
   useEffect(() => {
-    if (resultsBeat === 'feedback') loadRoundCommentsRef.current();
-  }, [resultsBeat]);
+    if (phaseOfGameState(gameState) === 'RESULTS') {
+      loadRoundCommentsRef.current();
+    } else {
+      setRoundComments([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState]);
 
   // Host Remote drives the same actions the host toolbar does. The listener below
   // is registered once, so it must not close over a single render's handlers —

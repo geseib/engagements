@@ -107,20 +107,22 @@ describe('the host page can open a feedback round', () => {
 });
 
 /**
- * A RELOAD RECOVERS THE COMMENT COUNT, NOT JUST THE BEAT.
+ * A ROUND CHANGE RESETS THE COMMENT COUNT; ENTERING RESULTS RELOADS IT.
  *
  * `serverStageBeatRef` (above `resultsBeat`'s declaration) already restores
  * WHICH STAGE the host sees on reload — that was the earlier fix
  * (`beat: gameStateData.stageBeat === 'field-notes' ? ...` collapsing
- * 'feedback' to the tally). `roundComments` is separate state, and before
- * this fix nothing kept it in sync with a reload landing mid-round: the only
- * two call sites of `loadRoundComments` were `requestFeedbackRound` (this
- * device just opened the round) and the `commentPosted` socket handler
- * (somebody just posted) — neither fires on a reload. A host who reloaded
- * mid-round came back with `roundComments = []` and the projector showed no
- * count until the next comment happened to arrive.
+ * 'feedback' to the tally). `roundComments` is separate state.
+ *
+ * Fix round 1, item 4: this used to be keyed on `resultsBeat === 'feedback'`
+ * alone, which left `roundComments` holding round 3's rows straight through
+ * round 4's ASK/VOTE and into round 4's RESULTS whenever round 4 never
+ * itself reached the feedback beat — exactly the case a player's own
+ * "Feedback" button (needing no beat at all, since comments.js's 26 Sep 2026
+ * ruling) makes routine. The stage's widened arrivals then showed the
+ * PREVIOUS round's comments as though they belonged to the current one.
  */
-describe('a reload recovers the comment count', () => {
+describe('the comment count follows the round, not the beat', () => {
   /** Every top-level `useEffect(...)` call, () balanced, so a body containing
    *  its own parens (an `if (...)`) does not truncate the extraction. */
   function allEffects(text) {
@@ -141,23 +143,35 @@ describe('a reload recovers the comment count', () => {
     return out;
   }
 
-  test('an effect keyed on resultsBeat reloads the comments once it reads feedback', () => {
+  test('an effect keyed on gameState itself — not resultsBeat — reloads or resets the comments', () => {
     const candidates = allEffects(host).filter(
-      (e) => /\[\s*resultsBeat\s*\]/.test(e) && /loadRoundComments/.test(e),
+      (e) => /\[\s*gameState\s*\]/.test(e) && /loadRoundComments/.test(e),
     );
     expect(candidates.length).toBeGreaterThan(0);
   });
 
-  test('that effect is gated on the feedback beat specifically, not any beat change', () => {
-    // A bare `[resultsBeat]` dependency with no condition would also fire
-    // going INTO 'results' and 'field-notes', firing a fetch that immediately
-    // discards itself (`loadRoundComments` no-ops off-round only, not
-    // off-beat) — wasteful, and it would pass a looser version of the test
-    // above for the wrong reason.
+  test('it reloads on any RESULTS phase, not only the feedback beat', () => {
     const candidates = allEffects(host).filter(
+      (e) => /\[\s*gameState\s*\]/.test(e) && /loadRoundComments/.test(e),
+    );
+    expect(candidates[0]).toMatch(/phaseOfGameState\(gameState\) === 'RESULTS'/);
+    expect(candidates[0]).not.toMatch(/resultsBeat === 'feedback'/);
+  });
+
+  test('it clears roundComments once the room leaves RESULTS, so the next round never opens on a stale count', () => {
+    const candidates = allEffects(host).filter(
+      (e) => /\[\s*gameState\s*\]/.test(e) && /loadRoundComments/.test(e),
+    );
+    expect(candidates[0]).toMatch(/setRoundComments\(\[\]\)/);
+  });
+
+  test('no effect still keys on resultsBeat alone for this', () => {
+    // The old, narrower effect is gone outright rather than left beside the
+    // new one — two readers of the same fact is how they drift.
+    const stale = allEffects(host).filter(
       (e) => /\[\s*resultsBeat\s*\]/.test(e) && /loadRoundComments/.test(e),
     );
-    expect(candidates[0]).toMatch(/resultsBeat === 'feedback'/);
+    expect(stale).toEqual([]);
   });
 });
 
