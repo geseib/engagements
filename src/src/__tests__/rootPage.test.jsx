@@ -6,9 +6,10 @@ import { RETURN_KEY } from '../auth/returnPath';
 
 /**
  * Destinations are asserted on `navigateTo`, never on `window.location`.
- * setupTests.js's location mock is a silent no-op under jsdom 26, so
- * `expect(window.location.href).toBe(...)` passes whatever the code does --
- * which is how a whole OAuth return-path fix once shipped as dead code.
+ * jsdom's Location cannot be mocked and does not implement cross-document
+ * navigation, so `window.location.href` never moves and an assertion on it
+ * says nothing about what the code did -- which is how a whole OAuth
+ * return-path fix once shipped as dead code.
  */
 jest.mock('../auth/navigate', () => ({ navigateTo: jest.fn() }));
 

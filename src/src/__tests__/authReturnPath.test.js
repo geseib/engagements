@@ -1,21 +1,13 @@
 import { rememberReturnPath, takeReturnPath, RETURN_KEY } from '../auth/returnPath';
 
 /**
- * `window.history.pushState` is NOT the lever here, however much it looks like
- * it should be. setupTests.js replaces `window.location` with a plain object,
- * and that assignment succeeds -- so pushState moves `document.location` while
- * `window.location.pathname`, the thing `rememberReturnPath()` actually reads,
- * stays put. A test written with pushState passes or fails for reasons that
- * have nothing to do with the code under test. Move the stand-in instead.
- */
-/**
  * Move the browser, for real.
  *
  * This assigned to `window.location.pathname` and `.search` directly, and under
- * jsdom 26 that is a SILENT NO-OP: `setupTests.js` tries to replace `location`
- * with a plain object, `delete window.location` returns false, the real
- * `Location` survives, and every assignment is treated as an ignored
- * navigation. So the three tests below ran against `/` no matter what they
+ * jsdom 26 that is a SILENT NO-OP: `location` is jsdom's real, unforgeable
+ * `Location` (setupTests.js explains why there is no mock), and every
+ * assignment is treated as an ignored cross-document navigation. So the three
+ * tests below ran against `/` no matter what they
  * asked for — they were not wrong about the behaviour, they were never
  * reaching it.
  *

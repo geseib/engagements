@@ -9,15 +9,15 @@
  * client rather than copied from the server. So these drive the real component
  * through the real History API.
  *
- * ── `setupTests.js` DOES NOT MOCK `window.location`, THOUGH IT TRIES ────────
+ * ── `window.location` IS NOT MOCKED, AND CANNOT BE ─────────────────────────
  *
- * Line 37 is `delete window.location`, and it does nothing: `location` is a
- * non-configurable property of `window`, so the delete fails silently in
- * sloppy mode and the assignment on line 38 goes through the REAL Location
- * setter — which is what emits the "Not implemented: navigation" noise every
- * suite in this repo prints on startup.
+ * `location` is a non-configurable property of `window`. setupTests.js once
+ * tried to replace it with a plain object; the delete failed silently and the
+ * assignment went through the REAL Location setter, which is where the "Not
+ * implemented: navigation" line every suite used to print came from. That mock
+ * is gone, and setupTests.js now fails any suite whose setup writes an error.
  *
- * The consequence is worth stating because a test written against the belief
+ * The consequence is worth stating because a test written against a mock
  * would be wrong in both directions: `window.location` here is jsdom's genuine
  * Location, `history.pushState` genuinely updates `location.search`, and
  * `history.back()` genuinely fires `popstate`. So nothing below simulates the
