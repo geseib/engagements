@@ -345,16 +345,23 @@ function ReportDocument({ reportData }) {
    *                   question set's own description — the set's summary
    *                   when the set has one, the same session Details
    *                   otherwise (there is no second field to split them
-   *                   into today, so a session with a blurb but no separate
-   *                   set summary reads that blurb again under this label —
-   *                   the brief's own wording, deliberately, not an
-   *                   oversight of this component's).
+   *                   into today).
+   *
+   * FIX ROUND 1 (a controller ruling, after the first review): the report
+   * must never print the same sentence twice. `purposeText` still falls
+   * back to `eventDetails` when the set has no description of its own — it
+   * has to, for the case where the set DOES have one and it happens to read
+   * identically — but `showPurpose` is gated on that text actually
+   * DIFFERING from the eventDetails paragraph already shown above it. When
+   * the set has no description, purposeText === eventDetails and the
+   * "What people were asked to do" label is omitted rather than repeating
+   * the same sentence under a second heading.
    */
   const eventDetails = String(reportData.eventDetails || '').trim();
   const setDescription = String((questionSetData && questionSetData.description) || '').trim();
   const purposeText = setDescription || eventDetails;
   const showAbout = Boolean(eventDetails || setDescription);
-  const showPurpose = Boolean(purposeText);
+  const showPurpose = Boolean(purposeText) && purposeText !== eventDetails;
 
   /*
    * "WHO WAS HERE" — a roster of names only, in JOIN order.

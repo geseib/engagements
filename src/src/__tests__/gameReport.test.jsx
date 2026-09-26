@@ -743,19 +743,19 @@ describe('About this session and Who was here', () => {
     expect(screen.getByText('A retro on the launch.')).toBeInTheDocument();
   });
 
-  // rejects: silently dropping the "What people were asked to do" label when
-  // the set has no description of its own. The brief's own wording is "the
-  // session's details AND/OR the question set's description, when present" —
-  // with only one field in the product today, a session with a blurb and no
-  // separate set summary reads that same blurb twice, deliberately, rather
-  // than the label disappearing.
-  test('with no set description, "what people were asked to do" repeats the event details rather than vanishing', () => {
+  // rejects: the report ever printing the same sentence twice. Fix round 1 —
+  // a controller ruling reversed the earlier call to let "What people were
+  // asked to do" repeat the session's Details verbatim when the set has no
+  // description of its own: with only one field behind both labels in that
+  // case, the honest thing is to omit the second label rather than echo the
+  // first paragraph under a different heading.
+  test('with no set description, "what people were asked to do" is omitted — the Details text appears exactly once', () => {
     const detailsOnly = { ...reportData, eventDetails: 'Standup for the whole team.', questionSetData: null };
     const { container } = render(<ReportDocument reportData={detailsOnly} />);
     const about = container.querySelector('.report-about');
-    expect(about.textContent).toContain('What people were asked to do');
-    const matches = [...about.querySelectorAll('p')].filter((p) => p.textContent === 'Standup for the whole team.');
-    expect(matches.length).toBe(2);
+    expect(about.textContent).not.toContain('What people were asked to do');
+    const matches = [...container.querySelectorAll('p')].filter((p) => p.textContent === 'Standup for the whole team.');
+    expect(matches.length).toBe(1);
   });
 
   // rejects: the new roster leaking who answered what in a round the host
