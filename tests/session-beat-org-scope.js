@@ -287,6 +287,18 @@ const COMMENT = {
     assert.strictEqual(strangerComment.statusCode, 409,
       `got ${strangerComment.statusCode}: ${strangerComment.body}`));
 
+  /*
+    WHICH GATE REFUSED, NOT JUST THAT ONE DID (fix round 2, item 5). Both the
+    membership gate and the state gate (2b, below) answer 409 — a bare status
+    code cannot tell them apart, and a mutation that swapped this refusal for
+    the WRONG gate (e.g. accidentally routed through the state check instead
+    of membership) would still pass a status-code-only assertion. The two
+    error strings are distinct in comments.js and are asserted here by name.
+  */
+  check('...and it is the MEMBERSHIP gate that refused, not the state gate', () =>
+    assert.strictEqual(JSON.parse(strangerComment.body).error, 'you have not joined this session',
+      `got: ${strangerComment.body}`));
+
   check('...and nothing was written', () =>
     assert.strictEqual(
       [...store.values()].filter((i) => i.PK === 'GAME#4242' && String(i.SK).startsWith('COMMENT#')).length,
@@ -319,6 +331,17 @@ const COMMENT = {
   check('a comment for a round the session is not showing is still refused', () =>
     assert.strictEqual(wrongRoundComment.statusCode, 409,
       `got ${wrongRoundComment.statusCode}: ${wrongRoundComment.body}`));
+
+  // WHICH GATE, AGAIN (fix round 2, item 5): this player IS a member, so a
+  // refusal here that read "you have not joined this session" would mean the
+  // membership check fired for the wrong reason — this asserts it is
+  // specifically the STATE gate's own message, carrying the mismatched
+  // currentState the composer needs to render "the room has moved on".
+  check('...and it is the STATE gate that refused, not membership — with the actual state attached', () => {
+    const body = JSON.parse(wrongRoundComment.body);
+    assert.strictEqual(body.error, 'this round is no longer open for comments', `got: ${wrongRoundComment.body}`);
+    assert.strictEqual(body.currentState, 'RESULTS#002');
+  });
 
   console.log('\n3. the owning organisation is unaffected');
 
