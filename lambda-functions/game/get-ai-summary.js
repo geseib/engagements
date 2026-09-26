@@ -688,8 +688,19 @@ exports.findDefaultPromptId = findDefaultPromptId;
  *                AIGenerationPromptEditor) and the summary engine cannot run
  *                it. This is the "I added an Art prompt and nothing changed"
  *                report: the fallback fired silently and looked like a no-op.
+ *
+ * `fallbackPromptId` is the NEXT link in the chain below `promptId` — the
+ * set's own promptId, when `promptId` is the session's override. BUGSWEEP
+ * 5b's first pass only ever tried one id before the game-type default:
+ * `sessionPromptId()` already collapses session-vs-set down to a single id
+ * before this function ever sees it, so an archived (or missing, or
+ * unusable) SESSION pick fell straight to the default and skipped the set's
+ * own live prompt entirely. Passing that second id here restores the
+ * intended chain — session → set → default — while an empty or
+ * already-tried `fallbackPromptId` (no such link, or nothing beyond what was
+ * just tried) is skipped exactly as if it had never been offered.
  */
-const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
+const resolvePromptTemplate = async (promptId, gameType, orgId = '', fallbackPromptId = '') => {
   let recoveryReason;
   let unusableDefect;
 
@@ -708,6 +719,18 @@ const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
         `${summaryPromptDefect(promptData)}. Fields present: ${Object.keys(promptData).join(', ')}. ` +
         `Falling back to the ${gameType} default — the attached prompt is having NO effect.`
       );
+    }
+  }
+
+  // THE SET'S OWN LINK, tried before the default — see the doc comment above.
+  const nextLink = String(fallbackPromptId || '').trim();
+  if (nextLink && nextLink !== promptId) {
+    const setPromptData = await fetchPromptFromS3(nextLink, orgId);
+    if (isUsableSummaryPrompt(setPromptData)) {
+      console.warn(`♻️ Prompt ${promptId} unusable — falling back to the question set's own prompt ${nextLink}`);
+      return promptId
+        ? { promptId: nextLink, promptData: setPromptData, recoveredFrom: promptId, recoveryReason, unusableDefect }
+        : { promptId: nextLink, promptData: setPromptData };
     }
   }
 
@@ -1400,6 +1423,12 @@ exports.handler = async (event) => {
       }
     }
     
+    // THE SET'S OWN LINK, preserved before the session's pick may overwrite
+    // `promptId` below — otherwise it is lost, and an archived session pick
+    // falls straight to the game-type default without ever trying it.
+    // Bug sweep final review, Minor 5.
+    const questionSetPromptId = promptId;
+
     // THE SESSION'S OWN PICK, ahead of the set's. Chosen at setup or switched
     // mid-round through PUT /games/{id}; provenance names it so the report can.
     const sessionPick = sessionPromptId(metadata, { promptId });
@@ -1493,6 +1522,11 @@ exports.handler = async (event) => {
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
+      // The set's own promptId, kept apart from `promptId` above so
+      // resolvePromptTemplate can try it before the game-type default when
+      // the session's own pick (now in `promptId`) turns out archived,
+      // missing or unusable. '' when the set names none of its own.
+      questionSetPromptId: questionSetPromptId,
       // Voice selection. The host pick lives on the game so a mid-game switch
       // takes effect from the next question; the set-level one is authored once.
       hostPersonaId: metadata.PersonaId || metadata.personaId || null,
@@ -1868,7 +1902,7 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1949,9 +1983,12 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     return { summary: summaryText, summaryText, discussionQuestions, nextSteps, fullResponse: summaryText, markdownResponse, model: 'fallback' };
   };
 
-  // Fetch the prompt template, recovering to the game-type default if the set
-  // points at a prompt that has since been deleted.
-  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer', orgId);
+  // Fetch the prompt template, recovering to the set's own prompt and then
+  // the game-type default if the session's pick has since been archived or
+  // deleted. `questionSetPromptId` is the same id already inside `promptId`
+  // when the session named no pick of its own, so resolvePromptTemplate's
+  // own "same id" check keeps this from being tried twice in that case.
+  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer', orgId, questionSetPromptId);
 
   if (!resolved) {
     console.warn('⚠️ Prompt template unavailable — returning data-driven fallback summary');

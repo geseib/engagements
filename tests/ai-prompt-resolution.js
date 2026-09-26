@@ -91,6 +91,9 @@ const PUBLIC_PROMPT_ID = 'open-mic';
 // that also still claims to be a game type's default.
 const ARCHIVED_PROMPT_ID = 'stale-recap';
 const ARCHIVED_DEFAULT_ID = 'stale-wavelength-default';
+// T5b EXTENDED: the set's own live prompt — the link the chain must not skip
+// when the SESSION's pick (ahead of it) turns out archived.
+const SET_PROMPT_ID = 'team-recap';
 
 /* The partition names come from tenant.js rather than from string literals, so
    a partition that is renamed there cannot leave this test quietly probing the
@@ -143,6 +146,14 @@ const ddbItems = new Map([
     gameType: 'wavelength', isDefault: true, status: 'archived',
     s3Key: `prompts/wavelength/${ARCHIVED_DEFAULT_ID}/v1.json`,
   }],
+  // T5b EXTENDED: live and usable — the set's own prompt, sitting one link
+  // below the session's in the chain.
+  [`${PLATFORM_PROMPTS_PK}|AIPROMPT#${SET_PROMPT_ID}`, {
+    PK: PLATFORM_PROMPTS_PK, SK: `AIPROMPT#${SET_PROMPT_ID}`,
+    promptId: SET_PROMPT_ID, name: 'Team Recap',
+    gameType: 'call-and-answer', category: 'callandanswer',
+    s3Key: `prompts/callandanswer/${SET_PROMPT_ID}/v1.json`,
+  }],
   // NOTE: no record for DANGLING_PROMPT_ID — that is the whole point.
 ]);
 
@@ -153,10 +164,15 @@ class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class ScanCommand { constructor(i) { this.input = i; this.type = 'scan'; } }
 
+// Every DynamoDB GetCommand key asked for, in order — lets a test tell
+// "resolved without re-fetching" from "resolved, but only after asking twice".
+const ddbGets = [];
+
 const fakeDoc = {
   send: async (cmd) => {
     const inp = cmd.input || {};
     if (cmd.type === 'get') {
+      ddbGets.push(`${inp.Key.PK}|${inp.Key.SK}`);
       return { Item: ddbItems.get(`${inp.Key.PK}|${inp.Key.SK}`) };
     }
     const v = inp.ExpressionAttributeValues || {};
@@ -208,6 +224,11 @@ const s3Bodies = new Map([
     name: 'Stale Recap',
     instructions: 'This must never be read aloud again.',
     outputFormat: '## Stale\n{responsesText}',
+  }],
+  [`prompts/callandanswer/${SET_PROMPT_ID}/v1.json`, {
+    name: 'Team Recap',
+    instructions: 'Sum up the team\'s own way.',
+    outputFormat: '## Team\n{responsesText}',
   }],
 ]);
 
@@ -389,6 +410,58 @@ function check(label, fn) {
     assert.notStrictEqual(wavelengthDefault, ARCHIVED_DEFAULT_ID));
   check('…the hardcoded fallback is used, since nothing else claims default for wavelength', () =>
     assert.strictEqual(wavelengthDefault, 'lessons-learned'));
+
+  // ── T5b EXTENDED: an archived SESSION pick must not skip the SET's own ────
+  // prompt on its way to the game-type default. Final review, Minor 5: the
+  // handler resolved `sessionPromptId` down to a single id before calling
+  // resolvePromptTemplate, so an archived session pick fell straight to the
+  // default and never tried the set's own live prompt one link down. The
+  // fourth argument is that link — the chain is session → set → default,
+  // skipping any archived (or missing, or unusable) link along the way.
+  console.log('\nan archived session pick still tries the set\'s own prompt first\n');
+
+  // 10. The session's pick is archived; the set's own prompt is live. The
+  //     set's prompt must be used, not the game-type default.
+  s3Fetches.length = 0;
+  const sessionArchivedSetLive = await mod.resolvePromptTemplate(
+    ARCHIVED_PROMPT_ID, 'call-and-answer', '', SET_PROMPT_ID);
+  check('the set\'s own prompt is used, not the game-type default', () =>
+    assert.strictEqual(sessionArchivedSetLive.promptId, SET_PROMPT_ID,
+      'fell past the set\'s own prompt straight to the default'));
+  check('…the recovery names the archived SESSION pick', () => {
+    assert.strictEqual(sessionArchivedSetLive.recoveredFrom, ARCHIVED_PROMPT_ID);
+    assert.strictEqual(sessionArchivedSetLive.recoveryReason, 'missing');
+  });
+  check('…the game-type default was never even fetched', () =>
+    assert(!s3Fetches.includes(`prompts/callandanswer/${DEFAULT_PROMPT_ID}/v1.json`),
+      'the default was read even though the set\'s own live prompt should have satisfied the chain'));
+
+  // 11. Both the session's pick and the set's are unusable — the chain must
+  //     still land on the game-type default, exactly as before this fix.
+  const bothArchived = await mod.resolvePromptTemplate(
+    ARCHIVED_PROMPT_ID, 'call-and-answer', '', DANGLING_PROMPT_ID);
+  check('with no usable link before it, the default still answers', () =>
+    assert.strictEqual(bothArchived.promptId, DEFAULT_PROMPT_ID));
+
+  // 12. No fallback offered (the ordinary 3-argument call every other case in
+  //     this file makes) behaves exactly as it always has.
+  const noFallback = await mod.resolvePromptTemplate(ARCHIVED_PROMPT_ID, 'call-and-answer');
+  check('omitting the fallback id changes nothing about the existing behaviour', () =>
+    assert.strictEqual(noFallback.promptId, DEFAULT_PROMPT_ID));
+
+  // 13. A fallback identical to the id already tried must not be re-fetched —
+  //     that is the "no such link" case, e.g. a set with no promptId of its
+  //     own, where the handler passes the same id through both slots.
+  ddbGets.length = 0;
+  const sameIdTwice = await mod.resolvePromptTemplate(
+    ARCHIVED_PROMPT_ID, 'call-and-answer', '', ARCHIVED_PROMPT_ID);
+  check('a fallback equal to the primary id is not looked up a second time', () =>
+    assert.strictEqual(
+      ddbGets.filter((k) => k === `${PLATFORM_PROMPTS_PK}|AIPROMPT#${ARCHIVED_PROMPT_ID}`).length,
+      1,
+      'the archived row was fetched more than once — the "same id" short-circuit did not fire'));
+  check('…and it still reaches the default', () =>
+    assert.strictEqual(sameIdTwice.promptId, DEFAULT_PROMPT_ID));
 
   /* ── WHICH promptId THE ROUND STARTS FROM ─────────────────────────────────
      The session's pick (METADATA.PromptId, from setup or the mid-round switch)
