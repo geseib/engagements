@@ -108,16 +108,24 @@ export default function Dock({
         No `⋯` beside the word. The glyph and the label said the same thing
         inside one 48px target, and the whole argument for adding the label
         was that the glyph alone was unhittable.
+
+        HIDDEN WHEN THERE IS NOTHING FOR IT TO OPEN (fix round 1, M1). Every
+        caller on the live stage has a session panel and passes `onSetup`;
+        `SurveyWalkthrough.jsx` does not, and an unconditional button here was
+        a live-looking control wired to nothing once it stopped being the
+        only caller.
       */}
-      <button
-        type="button"
-        className="dock-more"
-        onClick={onSetup}
-        aria-label="Session panel"
-        title="Session panel — backslash key"
-      >
-        <span className="dock-more-lbl">SESSION</span>
-      </button>
+      {onSetup && (
+        <button
+          type="button"
+          className="dock-more"
+          onClick={onSetup}
+          aria-label="Session panel"
+          title="Session panel — backslash key"
+        >
+          <span className="dock-more-lbl">SESSION</span>
+        </button>
+      )}
     </footer>
   );
 }
