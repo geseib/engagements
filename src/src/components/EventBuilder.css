@@ -1,0 +1,139 @@
+/* components/EventBuilder.jsx, EventItemDialog.jsx — one event's agenda.
+   ==========================================================================
+   Built from docs/design/agenda-redesign/02-builder.html, 02b-cap-reached
+   .html and 03-add-item.html (_src/agenda-console.css over admin-redesign
+   shell.css), under one scope, `.evb`. The add-item dialog is part of this
+   screen and shares its tokens, as QuestionSetsPanel.css holds its dialogs.
+
+   Dusk, on AdminShell's dark work field. Ladder 12 / 13 / 15 / 19 / 30.
+   Agenda rows are 48px: a title and a source line each
+   (agenda-console.css: "the pair does not fit 36 at the 15/13 ladder").
+
+   MEASURED, composited (eventBuilderPalette.test.js):
+     --text / --muted on --surface (the panel)            12.53 / 6.37
+     --muted on a break row (#9BA8BE @3.5% over --surface)      5.71
+     --text / --muted on the moving row (amber @10%)     10.42 / 5.04
+     --text / --muted on the cap's reason (amber @8%)    10.84 / 5.24
+     --primary on --surface (the code, "the most…")            7.42
+     #0F1A2E on --primary (a filled button)                    8.86
+   ========================================================================== */
+.evb {
+  --evb-t-floor: 12px;
+  --evb-t-label: 13px;
+  --evb-t-body: 15px;
+  --evb-t-head: 19px;
+  --evb-t-numeral: 30px;
+  --evb-row-h: 48px;
+
+  --evb-on-accent: #0F1A2E;
+  --evb-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --evb-rule: rgba(155, 168, 190, .20);
+  --evb-rule-strong: rgba(155, 168, 190, .34);
+  --evb-row-hover: rgba(155, 168, 190, .055);
+  --evb-row-sel: rgba(246, 169, 76, .10);
+  --evb-tint-cap: rgba(246, 169, 76, .08);
+  --evb-tint-brk: rgba(155, 168, 190, .035);
+  --evb-tint-danger: rgba(229, 100, 94, .09);
+  --evb-scrim: rgba(6, 11, 22, .72);
+
+  color: var(--text);
+  font: 400 var(--evb-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.evb *,
+.evb *::before,
+.evb *::after { box-sizing: border-box; }
+.evb :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* ------------------------------------------------------------- buttons --- */
+.evb-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: 6px; border: 1px solid var(--evb-rule-strong); background: transparent;
+  color: var(--text); font: 600 var(--evb-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.evb-btn:hover:not(:disabled) { background: var(--evb-row-hover); border-color: var(--muted); }
+.evb-btn:disabled { opacity: .42; cursor: not-allowed; }
+.evb-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--evb-on-accent); font-weight: 700; }
+.evb-btn--primary:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); filter: brightness(1.08); }
+.evb-btn--sm { height: 26px; padding: 0 9px; font-size: var(--evb-t-floor); }
+.evb-btn--icon { width: 26px; padding: 0; justify-content: center; }
+.evb-btn--ghostdanger { border-color: transparent; color: var(--danger-text); }
+.evb-btn--ghostdanger:hover:not(:disabled) { border-color: var(--danger-text); background: var(--evb-tint-danger); }
+.evb-dim { color: var(--muted); }
+.evb-grow { flex: 1 1 auto; min-width: 0; }
+
+/* --------------------------------------------------------------- dialog --- */
+/* The scrim scrolls; the card centres with margin:auto (hard rule 10). */
+.evb-scrim {
+  position: fixed; inset: 0; z-index: 60; background: var(--evb-scrim);
+  display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 28px 24px;
+}
+.evb-modal {
+  margin: auto; width: min(760px, 100%); background: var(--surface); border: 1px solid var(--evb-rule-strong);
+  border-radius: 12px; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); color: var(--text); overflow-wrap: anywhere;
+}
+.evb-modal--wide { width: min(940px, 100%); }
+.evb-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.evb-modal-head h2 { margin: 0; font: 800 var(--evb-t-head)/1.2 var(--font-display); }
+.evb-modal-head p { margin: 4px 0 0; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-x {
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer;
+}
+.evb-x:hover { color: var(--text); background: var(--evb-row-hover); }
+.evb-modal-body { padding: 0 18px 4px; }
+.evb-modal-foot {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap; padding: 14px 18px 16px; margin-top: 12px;
+  border-top: 1px solid var(--evb-rule);
+}
+.evb-step + .evb-step { margin-top: 16px; }
+.evb-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.evb-label { font-size: var(--evb-t-label); font-weight: 600; color: var(--muted); }
+.evb-hint { margin: 6px 0 0; font-size: var(--evb-t-label); color: var(--muted); line-height: 1.45; }
+.evb-input {
+  font: 400 var(--evb-t-body)/1.4 var(--font-ui); color: var(--text); background: var(--bg);
+  border: 1px solid var(--evb-rule-strong); border-radius: 6px; padding: 6px 9px; min-height: 32px; width: 100%;
+}
+.evb-input::placeholder { color: var(--muted); opacity: .62; }
+.evb-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.evb-textarea { min-height: 58px; resize: vertical; line-height: 1.5; }
+.evb-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.evb-span2 { grid-column: span 2; }
+.evb-span4 { grid-column: 1 / -1; }
+.evb-len { display: flex; align-items: center; gap: 8px; }
+.evb-len .evb-input { width: 78px; text-align: center; }
+.evb-search { position: relative; display: flex; align-items: center; max-width: 300px; margin: 0 0 8px; }
+.evb-search > svg { position: absolute; left: 9px; pointer-events: none; color: var(--muted); }
+.evb-search .evb-input { padding-left: 29px; }
+/* The set picker: the sets of ONE type, as a table (lists are tables). */
+.evb-pick { border: 1px solid var(--evb-rule); border-radius: 8px; overflow: auto; max-height: 260px; background: var(--bg); }
+.evb-pick-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.evb-pick-tbl th {
+  text-align: left; font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 8px 10px 7px; border-bottom: 1px solid var(--evb-rule-strong); background: var(--bg);
+}
+.evb-pick-tbl td {
+  height: 40px; padding: 0 10px; border-bottom: 1px solid var(--evb-rule); background: var(--surface);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evb-pick-tbl tr[aria-selected="true"] td { background: var(--evb-row-sel); }
+.evb-pick-tbl .evb-col-r { width: 34px; text-align: center; }
+.evb-pick-tbl .evb-col-plays { width: 130px; }
+.evb-pick-tbl .evb-col-qs { width: 56px; text-align: right; }
+.evb-pick-tbl .evb-col-here { width: 180px; }
+.evb-ver { font-size: var(--evb-t-floor); color: var(--muted); font-weight: 600; }
+.evb-chip {
+  display: inline-flex; align-items: center; font-size: var(--evb-t-floor); font-weight: 600; line-height: 1.5;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--evb-rule-strong); color: var(--muted); white-space: nowrap;
+}
+.evb-chip--warn { color: var(--primary); }
+.evb-error {
+  margin: 12px 0 0; padding: 9px 12px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
+  background: var(--evb-tint-danger); color: var(--danger-text); font-size: var(--evb-t-label);
+}
+.evb-confirm {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap; width: 100%; padding: 9px 12px;
+  border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0; background: var(--evb-tint-danger);
+}
+.evb-confirm p { margin: 0; flex: 1 1 260px; min-width: 0; font-size: var(--evb-t-label); color: var(--text); }
