@@ -574,7 +574,17 @@ check('an unknown kind or a question without a qid is carried as nothing, not th
  * with the reason; one that works a place, a share or a mean out for itself
  * does not — it moves into survey-aggregate.js instead.
  */
-const READERS = new Map([]);
+const READERS = new Map([
+  // Task 3, 2026-09-26 feature sweep: KindResult's per-kind renderers, fed by
+  // GET /games/{id}/survey-results (survey-host.js `results()`), which itself
+  // only relays what THIS module already computed onto SURVEY#RESULTS. Both
+  // files only format a value that is already sitting in `question.result` —
+  // `avgPlace[i].toFixed(1)`, `topTwo`% — never a division of their own; the
+  // third check below (no survey file works out a mean of its own) still runs
+  // against them.
+  ['src/src/components/survey/results/RankResult.jsx', 'displays avgPlace and placeHist, computes neither'],
+  ['src/src/components/survey/results/RatingResult.jsx', 'displays topTwo, computes nothing'],
+]);
 
 const OWN = 'lambda-functions/game/survey-aggregate.js';
 function sourcesUnder(dir) {
