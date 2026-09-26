@@ -62,6 +62,14 @@ export default function QuestionPullDialog({
   availableSets = [],
   onCancel,
   onCopy,
+  /**
+   * Why Copy cannot be pressed right now, or '' when it can. The Questions tab
+   * holds it while a Save is written and read back: copies made then land in a
+   * working copy the read-back replaces. Held, Copy stays, disabled, with the
+   * reason on its title and in words above it — the tab's "Saving..." is
+   * behind this dialog.
+   */
+  copyBlocked = '',
 }) {
   const [sourceSet, setSourceSet] = useState(null);
   const [rows, setRows] = useState([]);
@@ -259,6 +267,8 @@ export default function QuestionPullDialog({
         </>
       )}
 
+      {sourceSet && copyBlocked && <p className="qs-panel-note">{copyBlocked}</p>}
+
       <div className="modal-actions">
         {sourceSet && (
           <button className="btn-secondary" onClick={() => { setSourceSet(null); setRows([]); setChosen([]); }}>
@@ -267,7 +277,12 @@ export default function QuestionPullDialog({
         )}
         <button className="btn-secondary" onClick={onCancel}>Cancel</button>
         {sourceSet && (
-          <button className="btn-primary" onClick={copyChosen} disabled={!chosen.length}>
+          <button
+            className="btn-primary"
+            onClick={copyChosen}
+            disabled={!chosen.length || Boolean(copyBlocked)}
+            title={copyBlocked || undefined}
+          >
             <Icon name="Plus" weight="bold" size={16} color="currentColor" />{' '}
             Copy {chosen.length || ''} question{chosen.length === 1 ? '' : 's'} in
           </button>
