@@ -303,11 +303,14 @@ const askForMyAnswer = (gameId, query) =>
     assert.strictEqual(body(anonymous).answer, undefined,
       `omitting clientId returned "${body(anonymous).answer}"`));
 
-  // Deliberately still true: GET /state already publishes
-  // answerProgress.answererIds — the whole list of who has answered — to any
-  // caller with no identity. Withholding it here would protect nothing and
-  // would break recovery for a legacy row join-game has not claimed.
-  check('but hasAnswer stays truthful — it is already public via /state', () =>
+  // Deliberately still true: GET /players publishes each player's
+  // `readiness.hasAnswered` — who has answered, by name — to any caller with no
+  // identity (the "who has not acted" half of the anonymity split). The public
+  // /state carried the same list as answerProgress.answererIds until
+  // 2026-09-26; that moved to the host's door, the roster did not.
+  // Withholding it here would protect nothing and would break recovery for a
+  // legacy row join-game has not claimed.
+  check('but hasAnswer stays truthful — it is already public via /players', () =>
     assert.strictEqual(body(anonymous).hasAnswer, true));
 
   // ---------- 4. the round-key padding ----------

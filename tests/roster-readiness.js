@@ -67,11 +67,17 @@ const GAME = '4821';
 const PK = `GAME#${GAME}`;
 
 const roster = () => getPlayers.handler({ pathParameters: { gameId: GAME } });
-const state = () => getGameState.handler({ pathParameters: { gameId: GAME } });
 // remove-player carries the Cognito authorizer and refuses a caller with no
 // identity, so the host here is somebody the authorizer saw. The session is
 // orgless, which any host may drive.
 const HOST = { authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } };
+// `answererIds` is the host's view: the host door, not the public round,
+// which no longer carries it (tests/get-game-host-state.js).
+const state = () => getGameState.handler({
+  routeKey: 'GET /games/{gameId}/host-state',
+  requestContext: { ...HOST, routeKey: 'GET /games/{gameId}/host-state' },
+  pathParameters: { gameId: GAME },
+});
 const bodyOf = (res) => JSON.parse(res.body);
 const readinessOf = (list, name) => list.players.find((p) => p.playerName === name).readiness;
 

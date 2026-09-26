@@ -99,11 +99,18 @@ const get = (gameId = GAME) => queueHandler.handler({
   pathParameters: { gameId },
 });
 
+// The HOST'S door onto get-game-state: the public `/state` stopped carrying
+// the queue on 2026-09-26, flag or no flag (tests/get-game-host-state.js).
+// The session is orgless, so any signed-in host may read it.
 const readState = async () => {
   const res = await getState({
-    requestContext: { http: { method: 'GET' } },
+    routeKey: 'GET /games/{gameId}/host-state',
+    requestContext: {
+      http: { method: 'GET' },
+      routeKey: 'GET /games/{gameId}/host-state',
+      authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } },
+    },
     pathParameters: { gameId: GAME },
-    queryStringParameters: { includeHostData: 'true' },
   });
   return JSON.parse(res.body);
 };
@@ -339,7 +346,7 @@ const bodyOf = (res) => JSON.parse(res.body);
   await post({ op: 'add', questionKey: 'c001#018' });
   const state = await readState();
 
-  await check('/state?includeHostData=true carries questionQueue', () =>
+  await check('/host-state carries questionQueue', () =>
     // The remote holds NO socket (HostRemote.jsx explains why) and polls this
     // endpoint every 2s. Without this field the queue is invisible on the
     // surface the host is actually holding.
