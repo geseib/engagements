@@ -109,6 +109,22 @@ const SECTION = {
     subtitle: 'What hosts have run. Data here expires: 90 days from creation.',
     contentTheme: 'dark',
   },
+  /*
+    EVENTS (docs/design/agenda-redesign 01, 01b; roadmap M1) — one code for a
+    whole agenda. Under Sessions, because every engagement in an event runs as
+    a session. Shown only while the tier has the feature switched on
+    (`eventsEnabled`, from GET /orgs `features.events`, roadmap D6). A space
+    not on the Team plan still gets the item, so the feature can be found: its
+    page explains the plan (01b) rather than hiding the door.
+  */
+  events: {
+    id: 'events',
+    label: 'Events',
+    icon: 'CalendarBlank',
+    title: 'Events',
+    subtitle: 'One join code for a whole agenda: engagements and breaks, in the order you run them.',
+    contentTheme: 'dark',
+  },
   library: {
     id: 'library',
     label: 'Public library',
@@ -295,15 +311,20 @@ const group = (id, label, items) => ({ id, label, items });
  *                                  the first group on a team (mockup 01), and
  *                                  is ignored for personal and platform, which
  *                                  say "Your space" and "Engage".
+ * @param {boolean} [input.eventsEnabled] GET /orgs `features.events`: this
+ *                                  tier has Events switched on (roadmap D6)
  * @returns {Array<{id:string,label:string,items:Array<object>}>}
  */
 export function sectionsFor({
-  groups = [], orgRole = '', orgType = '', orgName = '', mode = '',
+  groups = [], orgRole = '', orgType = '', orgName = '', mode = '', eventsEnabled = false,
 } = {}) {
   const memberships = Array.isArray(groups) ? groups : [];
   const isStaff = memberships.includes(PLATFORM_GROUP);
   const type = String(orgType || '');
   const role = String(orgRole || '').toLowerCase();
+  /* Events sit right after Sessions in every org console, and nowhere while
+     the switch is off. Platform mode never gets them: it has no sessions. */
+  const events = eventsEnabled === true ? [SECTION.events] : [];
 
   /*
     PLATFORM MODE IS EXCLUSIVE AND IT IS ASKED FOR. See the header for the two
@@ -353,6 +374,7 @@ export function sectionsFor({
       group('space', 'Your space', [
         SECTION.questionsets,
         SECTION.games,
+        ...events,
         SECTION.library,
         SECTION.prompts,
       ]),
@@ -372,6 +394,7 @@ export function sectionsFor({
   const content = group('org', orgName || 'Your organisation', [
     SECTION.questionsets,
     SECTION.games,
+    ...events,
     SECTION.library,
     ...(isTeamAdmin ? [SECTION.prompts] : []),
   ]);

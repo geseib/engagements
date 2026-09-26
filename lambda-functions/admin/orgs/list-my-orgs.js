@@ -35,6 +35,16 @@ const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { ensurePersonalOrg } = require('./shared/personal-org');
 
+/*
+  WHICH SWITCHED FEATURES THIS TIER HAS ON (roadmap D6). The console reads it
+  to decide whether Events is in the nav at all. The same variable, read the
+  same way, is what makes POST /events refuse
+  (websocket/events/event-http.js `eventsEnabled`); tests/events-switch.js
+  holds the two together. A property of the tier, not of any organisation, so
+  it sits beside the list rather than on an org in it.
+*/
+const eventsEnabled = () => String(process.env.EVENTS_ENABLED || '').trim().toLowerCase() === 'on';
+
 async function listMyOrgs(event) {
   const sub = G.callerSub(event);
   // Fails closed: no identity in the authorizer context means no memberships,
@@ -95,6 +105,7 @@ async function listMyOrgs(event) {
     // The org the caller is currently acting for, so the switcher can mark it
     // without guessing. Empty when they have none — the first-run state.
     activeOrgId: tenant.callerOrgId(event),
+    features: { events: eventsEnabled() },
   });
 }
 

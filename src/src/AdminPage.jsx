@@ -38,6 +38,9 @@ import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
 import BillingPanel from './components/BillingPanel';
 import PrivacyPanel from './components/PrivacyPanel';
+import EventsPanel, { NewEventButton } from './components/EventsPanel';
+import EventBuilder from './components/EventBuilder';
+import pricing from '../../lambda-functions/game/pricing';
 import {
   sectionsFor, sectionIdsFor, defaultSectionIdFor, sectionById, FOOT_SECTIONS,
   PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS, promptsReadOnlyFor,
@@ -283,6 +286,13 @@ function AdminPage() {
   const [creatingOrg, setCreatingOrg] = useState(false);
   const [orgs, setOrgs] = useState([]);
   const [orgsLoaded, setOrgsLoaded] = useState(false);
+  /* WHICH SWITCHED FEATURES THIS TIER HAS ON — GET /orgs `features`
+     (admin/orgs/list-my-orgs.js). Only `events` exists (roadmap D6). */
+  const [features, setFeatures] = useState({});
+  /* EVENTS: the event open in the builder place, `{code, title}`, or null
+     for the list; and whether the new-event dialog is open. */
+  const [eventPlace, setEventPlace] = useState(null);
+  const [creatingEvent, setCreatingEvent] = useState(false);
   const [activeOrgId, setActiveOrgIdState] = useState(() => getActiveOrgId());
 
   useEffect(() => {
@@ -295,6 +305,7 @@ function AdminPage() {
         if (cancelled) return;
         const list = Array.isArray(data.orgs) ? data.orgs : [];
         setOrgs(list);
+        setFeatures(data.features && typeof data.features === 'object' ? data.features : {});
         /*
           Reconcile the remembered choice against what the server says. An id
           in localStorage the account is no longer a member of must NOT be sent
@@ -382,7 +393,11 @@ function AdminPage() {
     orgType: activeOrg?.type,
     orgName: activeOrg?.name,
     mode: onPlatform ? PLATFORM_MODE : '',
+    eventsEnabled: features.events === true,
   };
+  /* The Team plan by the same rule the server gates on (pricing.js planFor):
+     anything but an explicit 'team' plan is not the Team plan. */
+  const eventsTeamPlan = Boolean(activeOrg) && pricing.planFor(activeOrg).id === 'team';
 
   // Usage is fetched only when the Plan & usage section is actually open —
   // it is a per-org read nobody needs while looking at question sets.
@@ -831,6 +846,9 @@ function AdminPage() {
       // Leaving a section closes any place open inside it — the score card is
       // the Public library's version of the detail place editingSet is above.
       setScoreCardId('');
+      // …and the event builder is the Events section's.
+      setEventPlace(null);
+      setCreatingEvent(false);
     }
     setActiveTab(sectionId);
     setSectionAsked(true);
@@ -875,6 +893,7 @@ function AdminPage() {
           // so Back out of a card and Forward into it again returned to a card
           // the screen had already stopped naming.
           setScoreCardId('');
+          setEventPlace(null);
         }
         return next;
       });
@@ -1412,6 +1431,12 @@ function AdminPage() {
     every test green except the one that reads the h1.
   */
   const NEW_SECTION_HEADS = {
+    events: {
+      id: 'events',
+      title: 'Events',
+      subtitle: 'One join code for a whole agenda: engagements and breaks, in the order you run them.',
+      contentTheme: 'dark',
+    },
     members: {
       id: 'members',
       title: 'Members',
@@ -1529,7 +1554,9 @@ function AdminPage() {
         currentUser={currentUser}
         onSignOut={handleSignOut}
         breadcrumb={
-          billingPlace && resolvedTab === 'billing'
+          eventPlace && resolvedTab === 'events'
+            ? { parentLabel: 'Events', onBack: () => setEventPlace(null) }
+            : billingPlace && resolvedTab === 'billing'
             ? (billingPlace === 'history'
               ? { parentLabel: 'Plan & usage', onBack: () => setBillingPlace('') }
               : { parentLabel: 'Billing history', onBack: () => setBillingPlace('history') })
@@ -1540,14 +1567,16 @@ function AdminPage() {
               : null)
         }
         title={
-          billingPlace && resolvedTab === 'billing'
+          eventPlace && resolvedTab === 'events'
+            ? (eventPlace.title || `Event ${eventPlace.code}`)
+            : billingPlace && resolvedTab === 'billing'
             ? (billingPlace === 'history' ? 'Billing history' : `Invoice · ${periodLabel(billingPlace)}`)
             : editingSet
             ? editingSet.name || editingSet.id
             : (scoreCardId && resolvedTab === 'publiclibrary' ? 'Score card' : section.title)
         }
         subtitle={
-          (billingPlace && resolvedTab === 'billing') || editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
+          (eventPlace && resolvedTab === 'events') || (billingPlace && resolvedTab === 'billing') || editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
             ? undefined
             : section.subtitle
         }
@@ -1572,6 +1601,9 @@ function AdminPage() {
         contentTheme={editingSet ? 'dark' : section.contentTheme || 'light'}
         actions={(
           <>
+            {resolvedTab === 'events' && activeOrg && !eventPlace && eventsTeamPlan && (
+              <NewEventButton onClick={() => setCreatingEvent(true)} />
+            )}
             {/* ONE `?`: the guides, and the three ways to tell us something.
                 Reporting used to be a second icon here, then a tab in the
                 corner of every screen; it is this button's menu now (see
@@ -1852,6 +1884,27 @@ function AdminPage() {
               onLeave={homeOrg ? () => handleSwitchOrg(homeOrg.orgId) : undefined}
             />
           )}
+
+          {/* EVENTS (docs/design/agenda-redesign 01, 01b, 02): the list, or one
+              event's agenda as a place with a breadcrumb back — the set
+              editor's shape. `events` is only in the nav while GET /orgs says
+              features.events, so `resolvedTab` cannot be it otherwise. */}
+          {resolvedTab === 'events' && activeOrg && (eventPlace ? (
+            <EventBuilder
+              code={eventPlace.code}
+              sets={questionSets}
+              onTitle={(title) => setEventPlace((place) => (place && place.title !== title ? { ...place, title } : place))}
+            />
+          ) : (
+            <EventsPanel
+              teamPlan={eventsTeamPlan}
+              creating={creatingEvent}
+              onCreatingChange={setCreatingEvent}
+              onOpen={(code, title) => setEventPlace({ code, title })}
+              onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}
+              onShowPlan={visibleIds.includes('billing') ? () => handleNavigate('billing') : undefined}
+            />
+          ))}
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
           {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}

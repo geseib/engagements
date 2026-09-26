@@ -80,6 +80,7 @@ const MARKERS = {
   'Plan & usage': '.bill',
   'Data & privacy': '.privacy',
   'Public library': '.publib',
+  Events: '.evts',
 };
 
 /** Which of the known sections are currently in the document. */
@@ -89,9 +90,9 @@ function mounted() {
     .map(([name]) => name);
 }
 
-function serve(orgs = [HOME]) {
+function serve(orgs = [HOME], features = undefined) {
   global.fetch = jest.fn(async (url) => (String(url).includes('/orgs')
-    ? { ok: true, status: 200, text: async () => '{}', json: async () => ({ orgs }) }
+    ? { ok: true, status: 200, text: async () => '{}', json: async () => ({ orgs, ...(features ? { features } : {}) }) }
     : {
       ok: true,
       status: 200,
@@ -255,5 +256,48 @@ describe('inside an organisation', () => {
     render(<AdminPage />);
     await settle();
     await waitFor(() => expect(mounted()).toEqual(['Question sets']));
+  });
+});
+
+describe('Events (roadmap M1), behind the switch', () => {
+  const TEAM = {
+    orgId: 'org_TEAMteamTEAMteamTEAMte', name: 'Northwind Traders', type: 'team', yourRole: 'owner', plan: 'team',
+  };
+
+  // rejects: Events mounting beside another section, or headed with another's sentence.
+  it('switched on, ?section=events opens Events on its own, with New event in the head', async () => {
+    mockGroups = ['hosts'];
+    mockActiveOrg = TEAM.orgId;
+    window.history.pushState({}, '', '/admin?section=events');
+    serve([TEAM], { events: true });
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Events']));
+    expect(document.querySelector('h1')).toHaveTextContent('Events');
+    expect(document.querySelector('.adm-sub')).toHaveTextContent(/One join code for a whole agenda/);
+    expect(screen.getByRole('button', { name: /new event/i })).toBeInTheDocument();
+  });
+
+  // rejects: the switch being a nav decoration the URL can walk round.
+  it('switched off, the same link falls back to one section', async () => {
+    mockGroups = ['hosts'];
+    mockActiveOrg = TEAM.orgId;
+    window.history.pushState({}, '', '/admin?section=events');
+    serve([TEAM]);
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
+    expect(screen.queryByRole('button', { name: /^events$/i })).toBeNull();
+  });
+
+  it('a Personal space gets the page that explains the Team plan, and no New event', async () => {
+    mockGroups = ['hosts'];
+    mockActiveOrg = HOME.orgId;
+    window.history.pushState({}, '', '/admin?section=events');
+    serve([HOME], { events: true });
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /new event/i })).toBeNull();
   });
 });
