@@ -5412,10 +5412,13 @@ Focus on actionable business strategy insights.`;
   });
   useScoreboardKeys({
     // ...and never over a surface that replaced the stage — there is no stage
-    // for the board to cover.
+    // for the board to cover. `confirmLeave` (fix round 1): "Leave this
+    // session?" is reachable with the session menu closed, and is a dialog
+    // exactly like the others in this list, not an overlay term
+    // `shortcutsSuppressed` already tracks.
     enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
-      && !editTarget && Boolean(gameId),
+      && !editTarget && !confirmLeave && Boolean(gameId),
     open: scoreboard.open,
     canOpen: scoreboardAvail.enabled,
     onOpen: () => publishScoreboard({ open: true }),
@@ -5430,8 +5433,18 @@ Focus on actionable business strategy insights.`;
     `scoreboardKeysOn` is. CLOSING stays SessionSetupPanel's own job (it is
     mounted only while `setupPanelOpen`, and its listener already answers
     both Esc and `\`) — `sessionPanelKeyLive`'s own `setupPanelOpen` term is
-    what keeps this hook quiet the moment that happens, so one press is never
-    both an open and a close. See components/stage/useSessionPanelKey.js.
+    what keeps this hook's `enabled` false the moment that happens.
+
+    FIX ROUND 1: `enabled` going false is necessary but was not sufficient —
+    a real-browser race (reviewer repro, Chromium + React 18.3.1) let one `\`
+    close the panel and immediately reopen it, because this listener used to
+    live on `window` while the panel's closer is on `document`, and a
+    microtask checkpoint mid-dispatch could re-arm the `window` listener
+    before the SAME keystroke finished propagating to it. The fix — this
+    listener now on `document`, plus a `defaultPrevented` check — lives in
+    components/stage/useSessionPanelKey.js, whose header has the full
+    mechanism; `enabled` here is still what decides WHETHER it may run at
+    all, just not what makes one press exactly one change.
   */
   const sessionPanelKeyOn = sessionPanelKeyLive({
     setupPanelOpen,
@@ -5442,10 +5455,11 @@ Focus on actionable business strategy insights.`;
   });
   useSessionPanelKey({
     // ...and never over a surface that replaced the stage — the same list
-    // `useScoreboardKeys`'s own `enabled` carries above.
+    // `useScoreboardKeys`'s own `enabled` carries above, `confirmLeave`
+    // included.
     enabled: sessionPanelKeyOn && !showQuickstartMenu && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
-      && !editTarget && Boolean(gameId),
+      && !editTarget && !confirmLeave && Boolean(gameId),
     onOpen: () => setSetupPanelOpen(true),
   });
 

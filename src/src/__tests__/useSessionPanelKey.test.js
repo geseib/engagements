@@ -63,11 +63,29 @@ describe('sessionPanelKeyIntent', () => {
   test('Alt alone still opens — only Meta and a bare Ctrl are refused', () => {
     expect(sessionPanelKeyIntent(key('\\', { altKey: true }))).toBe('open');
   });
+
+  test('never on auto-repeat — holding \\ must not toggle at the OS repeat rate', () => {
+    // Mirrors HostActionBar.jsx:100's guard on its own advance key.
+    expect(sessionPanelKeyIntent(key('\\', { repeat: true }))).toBeNull();
+  });
+
+  test('never when the event is already defaultPrevented — fix round 1', () => {
+    // The reviewer's real-browser repro: a keystroke another `document`
+    // listener already consumed (SessionSetupPanel's own closer) must not
+    // also be read as "open" here. See useSessionPanelKey.js's header for
+    // the full mechanism this backstops.
+    expect(sessionPanelKeyIntent(key('\\', { defaultPrevented: true }))).toBeNull();
+  });
 });
 
 describe('useSessionPanelKey', () => {
+  // `document`, not `window` — this hook's listener lives on `document`
+  // (fix round 1), the same target SessionSetupPanel's own closer uses.
+  // Firing on `window` directly would never reach it: `window` has nothing
+  // to bubble down THROUGH, which is a test artifact, never anything true of
+  // a browser (a real keystroke always originates below `document`).
   const press = (k, opts = {}) => act(() => {
-    fireEvent.keyDown(opts.target || window, { key: k, ...opts });
+    fireEvent.keyDown(opts.target || document, { key: k, ...opts });
   });
 
   test('\\ opens when enabled', () => {
@@ -112,6 +130,27 @@ describe('useSessionPanelKey', () => {
     );
     rerender({ enabled: false });
     press('\\');
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  test('a \\ keydown already defaultPrevented does not call onOpen — fix round 1', () => {
+    // A listener registered BEFORE this hook's own, on the SAME target,
+    // standing in for whatever upstream `document` listener consumed this
+    // exact keystroke first in a real browser (SessionSetupPanel's closer,
+    // in production).
+    const preempt = (e) => e.preventDefault();
+    document.addEventListener('keydown', preempt);
+    const onOpen = jest.fn();
+    renderHook(() => useSessionPanelKey({ enabled: true, onOpen }));
+    press('\\');
+    document.removeEventListener('keydown', preempt);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  test('holding \\ down does not toggle at the key-repeat rate', () => {
+    const onOpen = jest.fn();
+    renderHook(() => useSessionPanelKey({ enabled: true, onOpen }));
+    press('\\', { repeat: true });
     expect(onOpen).not.toHaveBeenCalled();
   });
 });

@@ -10,16 +10,32 @@
  * three layers `scoreboardHostKeys.test.jsx` covers for S/V, which this file
  * is modeled on.
  *
- * GameHostPage cannot easily be exercised for this (an AuthProvider and a
- * live socket), so behaviour is proven with a small harness that reproduces
- * the page's real arrangement — the hook plus the real `SessionSetupPanel` —
- * and the WIRING (did the page actually pass the right terms) is read from
- * its comment-stripped source, the same technique hostOverlays.test.js and
+ * GameHostPage CAN be exercised for this — __tests__/sessionPanelMounted.
+ * test.jsx does, with the same three-mock pattern endSessionConfirmFlow.
+ * test.jsx and hostRenderTransitions.test.jsx already use. This file instead
+ * proves behaviour with a small harness that isolates the hook and the real
+ * `SessionSetupPanel` from the rest of the page's machinery, which is what
+ * makes it possible to also reproduce, deliberately, the exact real-browser
+ * race a plain mount would only hit by chance (see `flushSync` below); the
+ * WIRING (did the page actually pass the right terms) is read from its
+ * comment-stripped source, the same technique hostOverlays.test.js and
  * scoreboardHostKeys.test.jsx both use.
+ *
+ * FIX ROUND 1 — WHY `flushSync`. A reviewer reproduced, in real Chromium,
+ * one `\` closing the panel and immediately reopening it. jsdom's plain
+ * `fireEvent` inside `act()` never reproduced it — React's test-mode
+ * batching absorbs the exact microtask interleaving a real browser can
+ * insert mid-dispatch — so `SessionSetupPanel`'s `onClose` below forces it
+ * with `flushSync`, the same synchronous flush a browser's own scheduling
+ * effectively produced. Before `useSessionPanelKey.js` moved its listener
+ * from `window` to `document` (this round's fix), this exact harness with
+ * this exact `onClose` failed on every `Host`-based test below — see
+ * backslash-report.md's "Fix round 1" section for the recorded RED.
  */
 import React, { useState } from 'react';
 import fs from 'fs';
 import path from 'path';
+import { flushSync } from 'react-dom';
 import { render, act, fireEvent, screen } from '@testing-library/react';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import { sessionPanelKeyLive } from '../utils/hostOverlays';
@@ -75,7 +91,11 @@ describe('useSessionPanelKey + the real SessionSetupPanel', () => {
     return (
       <div>
         <output data-testid="panel">{setupPanelOpen ? 'open' : 'closed'}</output>
-        {setupPanelOpen && <SessionSetupPanel onClose={() => setSetupPanelOpen(false)} />}
+        {setupPanelOpen && (
+          // flushSync, not a plain setState — see the file header's "FIX
+          // ROUND 1" note. This is what makes the race reproducible at all.
+          <SessionSetupPanel onClose={() => flushSync(() => setSetupPanelOpen(false))} />
+        )}
       </div>
     );
   }
@@ -179,7 +199,7 @@ describe('GameHostPage wires it', () => {
     expect(hook).not.toBeNull();
     expect(hook[1]).toMatch(/enabled:\s*sessionPanelKeyOn\b/);
     for (const term of ['showQuickstartMenu', 'showWelcomeScreen', 'showNewGameDialog',
-      'showReport', 'showSurveyResults', 'showSurveyWalkthrough', 'editTarget', 'gameId']) {
+      'showReport', 'showSurveyResults', 'showSurveyWalkthrough', 'editTarget', 'confirmLeave', 'gameId']) {
       expect(hook[1]).toMatch(new RegExp(`\\b${term}\\b`));
     }
   });
