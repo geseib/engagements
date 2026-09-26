@@ -33,7 +33,9 @@
  * two screens. The only way to catch it is to mount the page and count.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render, screen, fireEvent, waitFor, within, act,
+} from '@testing-library/react';
 
 let mockActiveOrg = '';
 jest.mock('../auth/authFetch', () => ({
@@ -60,6 +62,24 @@ jest.mock('../auth/AuthContext', () => ({
   AuthProvider: ({ children }) => children,
 }));
 
+/* EVENTS' OWN CALLS, mocked directly rather than through `serve`'s generic
+   `global.fetch` stand-in — EventBuilder and EventsPanel both go through
+   utils/eventsApi.js, and the race and wiring tests below need to control
+   exactly when a `getEvent` resolves. `listEvents` defaults to an empty list
+   in `beforeEach` so every OTHER test in this file (which never heard of
+   this mock) keeps seeing the harmless empty state it already expected. */
+jest.mock('../utils/eventsApi', () => ({
+  listEvents: jest.fn(),
+  getEvent: jest.fn(),
+  createEvent: jest.fn(),
+  updateEvent: jest.fn(),
+  addItem: jest.fn(),
+  removeItem: jest.fn(),
+  updateItem: jest.fn(),
+  reorderItems: jest.fn(),
+}));
+const eventsApi = require('../utils/eventsApi');
+
 import AdminPage from '../AdminPage';
 
 const PLATFORM_MODE = '~platform';
@@ -80,7 +100,10 @@ const MARKERS = {
   'Plan & usage': '.bill',
   'Data & privacy': '.privacy',
   'Public library': '.publib',
-  Events: '.evts',
+  // NOT plain '.evts': NewEventButton's head-action wrapper also carries
+  // that class (`evts evts-headact`), so a bare '.evts' matches whether or
+  // not the panel itself ever mounted — this excludes it (Fix round 1 #3).
+  Events: '.evts:not(.evts-headact)',
 };
 
 /** Which of the known sections are currently in the document. */
@@ -110,6 +133,17 @@ beforeEach(() => {
   mockActiveOrg = '';
   mockGroups = ['admins', 'hosts'];
   window.history.pushState({}, '', '/admin');
+  // Harmless defaults for every test that never heard of the Events place —
+  // a bare `.mockReset()` would leave these `undefined`, and EventsPanel's
+  // `setEvents(await listEvents())` needs an array.
+  eventsApi.listEvents.mockReset().mockResolvedValue([]);
+  eventsApi.getEvent.mockReset();
+  eventsApi.createEvent.mockReset();
+  eventsApi.updateEvent.mockReset();
+  eventsApi.addItem.mockReset();
+  eventsApi.removeItem.mockReset();
+  eventsApi.updateItem.mockReset();
+  eventsApi.reorderItems.mockReset();
 });
 
 describe('platform mode', () => {
@@ -275,7 +309,12 @@ describe('Events (roadmap M1), behind the switch', () => {
     await waitFor(() => expect(mounted()).toEqual(['Events']));
     expect(document.querySelector('h1')).toHaveTextContent('Events');
     expect(document.querySelector('.adm-sub')).toHaveTextContent(/One join code for a whole agenda/);
-    expect(screen.getByRole('button', { name: /new event/i })).toBeInTheDocument();
+    // The panel's OWN body, not just its scope class (Fix round 1 #3) — an
+    // empty team org's list.
+    expect(await screen.findByTestId('events-empty')).toBeInTheDocument();
+    // Scoped to the work head: the empty state's own "New event" button lives
+    // in the panel body and must not stand in for this one (Fix round 1 #3).
+    expect(within(document.querySelector('.adm-head-actions')).getByRole('button', { name: /new event/i })).toBeInTheDocument();
   });
 
   // rejects: the switch being a nav decoration the URL can walk round.
@@ -299,5 +338,154 @@ describe('Events (roadmap M1), behind the switch', () => {
     await settle();
     await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /new event/i })).toBeNull();
+  });
+});
+
+describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
+  const TEAM = {
+    orgId: 'org_TEAMteamTEAMteamTEAMte', name: 'Northwind Traders', type: 'team', yourRole: 'owner', plan: 'team',
+  };
+  const ROW_A = {
+    code: 'AAAA', title: 'Event A', place: '', startsAt: '2026-10-09T09:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
+  };
+  const ROW_B = {
+    code: 'BBBB', title: 'Event B', place: '', startsAt: '2026-11-01T10:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
+  };
+  const sectionsNav = () => within(screen.getByRole('navigation', { name: 'Sections' }));
+
+  const openEventsSection = async (rows = [ROW_A]) => {
+    mockGroups = ['hosts'];
+    mockActiveOrg = TEAM.orgId;
+    window.history.pushState({}, '', '/admin?section=events');
+    serve([TEAM], { events: true });
+    eventsApi.listEvents.mockResolvedValue(rows);
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(screen.getAllByTestId('event-row')).toHaveLength(rows.length));
+  };
+
+  const openRow = async (title) => {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^open ${title}$`, 'i') }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent(title));
+  };
+
+  // Item 4: opening a row is a place, shaped like the set editor's.
+  it('opening a row shows the ‹ Events breadcrumb, the title as h1, and no subtitle', async () => {
+    eventsApi.getEvent.mockResolvedValue({ event: ROW_A, items: [] });
+    await openEventsSection();
+    await openRow('Event A');
+    expect(document.querySelector('.adm-back')).toHaveTextContent('Events');
+    expect(document.querySelector('.adm-sub')).toBeNull();
+  });
+
+  // Item 4: the breadcrumb closes the place.
+  it('the ‹ Events breadcrumb closes the place, back to the list', async () => {
+    eventsApi.getEvent.mockResolvedValue({ event: ROW_A, items: [] });
+    await openEventsSection();
+    await openRow('Event A');
+    fireEvent.click(document.querySelector('.adm-back'));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
+    expect(screen.getAllByTestId('event-row')).toHaveLength(1);
+  });
+
+  // Item 4: handleNavigate (another section) closes the place.
+  it('leaving for another section closes the place; returning shows the list, not the builder', async () => {
+    eventsApi.getEvent.mockResolvedValue({ event: ROW_A, items: [] });
+    await openEventsSection();
+    await openRow('Event A');
+    fireEvent.click(sectionsNav().getByRole('button', { name: /^question sets$/i }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Question sets'));
+    fireEvent.click(sectionsNav().getByRole('button', { name: /^events$/i }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
+    expect(screen.getAllByTestId('event-row')).toHaveLength(1);
+  });
+
+  // Item 4: popstate closes the place too (NOT A DEFECT: Back lands on the
+  // section open before Events, the same as the set editor and score card).
+  it('Back (a popstate) closes the place too', async () => {
+    eventsApi.getEvent.mockResolvedValue({ event: ROW_A, items: [] });
+    await openEventsSection(); // pushes '/admin?section=events' onto beforeEach's '/admin'
+    await openRow('Event A');
+    await act(async () => { window.history.back(); });
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Question sets'));
+    fireEvent.click(sectionsNav().getByRole('button', { name: /^events$/i }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
+    expect(screen.getAllByTestId('event-row')).toHaveLength(1);
+  });
+
+  // Item 2 (minor): the New event dialog is a place-level control too — Back
+  // must close it, and Forward must not reopen it.
+  it('the New event dialog closes on Back, and does not reopen on Forward', async () => {
+    await openEventsSection();
+    fireEvent.click(within(document.querySelector('.adm-head-actions')).getByRole('button', { name: /new event/i }));
+    expect(await screen.findByRole('heading', { name: 'New event', level: 2 })).toBeInTheDocument();
+    await act(async () => { window.history.back(); });
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Question sets'));
+    expect(screen.queryByRole('heading', { name: 'New event', level: 2 })).toBeNull();
+    await act(async () => { window.history.forward(); });
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
+    expect(screen.queryByRole('heading', { name: 'New event', level: 2 })).toBeNull();
+  });
+
+  // Item 5 (ruling): the page reuses Billing's own request/state — wired
+  // end to end from AdminPage, not just the component in isolation
+  // (eventsPanel.test.jsx covers the component's own two states).
+  it('a Personal space with a pending Team-plan request shows it as pending, not a button', async () => {
+    mockGroups = ['hosts'];
+    mockActiveOrg = HOME.orgId;
+    window.history.pushState({}, '', '/admin?section=events');
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('/plan-requests')) {
+        return {
+          ok: true, status: 200, text: async () => '{}',
+          json: async () => ({ requests: [{ status: 'requested', requestedAt: '2026-09-20T10:00:00Z', reqId: 'req_1' }] }),
+        };
+      }
+      if (u.includes('/orgs')) {
+        return {
+          ok: true, status: 200, text: async () => '{}', json: async () => ({ orgs: [HOME], features: { events: true } }),
+        };
+      }
+      return {
+        ok: true, status: 200, text: async () => '{}', json: async () => ({ questionSets: [], sets: [], games: [], prompts: [], members: [], invites: [] }),
+      };
+    });
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
+    expect(await screen.findByTestId('preq-strip')).toHaveTextContent('Team plan requested');
+    expect(screen.queryByRole('button', { name: /request the team plan/i })).toBeNull();
+  });
+
+  // Item 1 (IMPORTANT): a slow load for a left-behind event must not rename
+  // the one now open. open A (getEvent pending) -> back -> open B -> resolve
+  // A late: B's title and B's agenda must be what is on screen.
+  it('a slow load for a left-behind event cannot rename the one now open', async () => {
+    let resolveA;
+    const pendingA = new Promise((resolve) => { resolveA = resolve; });
+    eventsApi.getEvent.mockImplementation((code) => (
+      code === 'AAAA' ? pendingA : Promise.resolve({ event: ROW_B, items: [] })
+    ));
+    await openEventsSection([ROW_A, ROW_B]);
+
+    fireEvent.click(screen.getByRole('button', { name: /^open event a$/i }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Event A'));
+
+    fireEvent.click(document.querySelector('.adm-back'));
+    await waitFor(() => expect(screen.getAllByTestId('event-row')).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole('button', { name: /^open event b$/i }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Event B'));
+    expect(await screen.findByTestId('agenda-empty')).toBeInTheDocument();
+
+    // A's load, abandoned when we went back, resolves only now — after B is
+    // already open and showing.
+    resolveA({ event: { ...ROW_A, title: 'Renamed by a stale load' }, items: [] });
+    await act(async () => { await pendingA; });
+
+    expect(document.querySelector('h1')).toHaveTextContent('Event B');
+    expect(document.querySelector('h1')).not.toHaveTextContent('Renamed by a stale load');
+    expect(screen.getByTestId('agenda-empty')).toBeInTheDocument();
   });
 });
