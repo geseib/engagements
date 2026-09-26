@@ -89,6 +89,26 @@ function scoreRowAfterRound(existing, points, round, now) {
   };
 }
 
+/**
+ * The rounds a score row has already been paid for, as padded round strings.
+ *
+ * `scoredRounds` is a string set on the row: get-results.js adds each round it
+ * pays, and pays none it finds here, so a round's points land once whatever
+ * order the closes come in. Comparing with `afterRound` alone — the LAST round
+ * paid — let a close of round 2 after round 3 pay round 2 again
+ * (tests/reclose-round.js). `afterRound` is still included: it is all a row
+ * written before the set existed knows. The join-time "000" is not a round.
+ *
+ * @param {object|undefined} row  the score row as it stands, if any
+ * @returns {Set<string>}
+ */
+function scoredRoundsOf(row) {
+  const stored = row && row.scoredRounds;
+  const rounds = new Set(stored instanceof Set || Array.isArray(stored) ? stored : []);
+  if (row && roundNumber(row.afterRound) > 0) rounds.add(String(row.afterRound));
+  return rounds;
+}
+
 /** Competition ranks for `values` (a Map key → number): 1 + how many are strictly higher. */
 function competitionRanks(values) {
   const all = [...values.values()];
@@ -170,4 +190,4 @@ function computeStandings({ players = [], rows = {}, marker = null } = {}) {
   return { afterRound: latest, standings };
 }
 
-module.exports = { computeStandings, scoreRowAfterRound, roundNumber };
+module.exports = { computeStandings, scoreRowAfterRound, scoredRoundsOf, roundNumber };
