@@ -57,25 +57,45 @@ async function recentPeriods(orgId, currentPeriod, plan, limit = 12) {
     ScanIndexForward: false,
     Limit: limit + 1,
   }));
-  return (page.Items || [])
+  const rows = (page.Items || [])
     .filter((item) => item.SK !== usageSk(currentPeriod))
-    .slice(0, limit)
-    .map((item) => {
-      const usage = {
-        sessionsRun: Math.max(0, Math.trunc(Number(item.sessionsRun) || 0)),
-        setsPeak: Math.max(0, Math.trunc(Number(item.setsPeak) || 0)),
-      };
-      const invoice = projectInvoice(plan, usage);
+    .slice(0, limit);
+  return Promise.all(rows.map(async (item) => {
+    const period = String(item.SK).replace(/^USAGE#/, '');
+    /*
+      A CLOSED PERIOD IS FROZEN. Once an INVOICE# row exists for it, that row
+      IS the figure — never recomputed at whatever the org's plan costs today
+      (invoices.js's header: "never backfilled"). This handler used to price
+      every history row with the CURRENT plan, so a plan change after a month
+      closed silently re-priced every period before it, even one sitting next
+      to a closed invoice that said something else. A period with no invoice
+      yet — nothing has closed it — keeps the old, live-priced behaviour.
+    */
+    const invoiceRow = await getInvoice(db, process.env.TABLE_NAME, orgId, period);
+    if (invoiceRow) {
       return {
-        period: String(item.SK).replace(/^USAGE#/, ''),
-        sessionsRun: usage.sessionsRun,
-        // The column is headed "Sets held", not "sets stored", because what was
-        // charged is the peak — same word as the sentence under the invoice.
-        setsHeld: usage.setsPeak,
-        chargedCents: invoice.totalCents,
-        chargedDisplay: invoice.totalDisplay,
+        period,
+        sessionsRun: Math.max(0, Math.trunc(Number(invoiceRow.usage && invoiceRow.usage.sessionsRun) || 0)),
+        setsHeld: Math.max(0, Math.trunc(Number(invoiceRow.usage && invoiceRow.usage.setsPeak) || 0)),
+        chargedCents: invoiceRow.totalCents,
+        chargedDisplay: invoiceRow.totalDisplay,
       };
-    });
+    }
+    const usage = {
+      sessionsRun: Math.max(0, Math.trunc(Number(item.sessionsRun) || 0)),
+      setsPeak: Math.max(0, Math.trunc(Number(item.setsPeak) || 0)),
+    };
+    const invoice = projectInvoice(plan, usage);
+    return {
+      period,
+      sessionsRun: usage.sessionsRun,
+      // The column is headed "Sets held", not "sets stored", because what was
+      // charged is the peak — same word as the sentence under the invoice.
+      setsHeld: usage.setsPeak,
+      chargedCents: invoice.totalCents,
+      chargedDisplay: invoice.totalDisplay,
+    };
+  }));
 }
 
 exports.handler = async (event) => {
