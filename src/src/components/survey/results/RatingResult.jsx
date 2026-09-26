@@ -62,26 +62,15 @@ export default function RatingResult({ question }) {
   const max = counts.length ? Math.max(1, ...counts) : 1;
   const meanText = r.mean === null || r.mean === undefined ? '—' : r.mean.toFixed(2);
   const topOf = labels.length >= 2 ? `${labels[labels.length - 2]} or ${labels[labels.length - 1]}` : 'the top';
-  const hasTopTwo = r.topTwo !== null && r.topTwo !== undefined;
 
   return (
     <div className="svr-rate">
       <div className="svr-mean">
         <b>{meanText}</b>
         <span>out of {labels[labels.length - 1]} &middot; mean</span>
-        {/*
-          "N answered · X% said 4 or 5" — the task-8 brief's own words for the
-          stage walk-through, which mounts this component with no card header
-          to state the count separately (KindResult's console header does
-          that job on the cut sheet; SurveyWalkthrough.jsx has none). One
-          line, unconditional on the count and conditional only on whether
-          there IS a top-two figure to append, so both surfaces read the same
-          sentence from the same markup — never a second copy of it.
-        */}
-        <em>
-          {n} {n === 1 ? 'answer' : 'answers'}
-          {hasTopTwo ? ` · ${r.topTwo}% said ${topOf}` : ''}
-        </em>
+        {r.topTwo !== null && r.topTwo !== undefined && (
+          <em>{r.topTwo}% said {topOf}</em>
+        )}
       </div>
       <div>
         <div className="svr-hist" style={{ '--n': counts.length || 1 }}>
