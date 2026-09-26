@@ -177,3 +177,34 @@ describe('3. tokens and type', () => {
     expect(SB).toMatch(/font-family:\s*var\(--font-display\)/);
   });
 });
+
+/* Task 1 (2026-09-26): the click-to-close button, on the rail. It carries no
+   new colour — it reuses exactly the tokens the rail already ships (--muted
+   for the chip/context line, --text for emphasis, --primary for the chip's
+   own dot and border), so it reads at the same weight as what is already on
+   screen rather than inventing a fresh contrast claim against the field's
+   gradient (which nothing in this file measures for the *existing* rail
+   content either — see §1's header note: the measured pairs are the boards'
+   own content, not the rail). */
+describe('4. the click-to-close button', () => {
+  test('.sb-close is declared once, rooted at .sb, with a visible hover/focus state', () => {
+    expect(blocks(SB, '.sb .sb-close')).toHaveLength(1);
+    expect(SB).toMatch(/\.sb \.sb-close:hover,\s*\.sb \.sb-close:focus-visible\{/);
+  });
+
+  test('no bare hex on the new rule — tokens only, and only ones already live on the rail', () => {
+    const rule = block(SB, '.sb .sb-close');
+    expect(rule).not.toMatch(/#[0-9A-Fa-f]{3,8}/);
+    expect(rule).toMatch(/color:\s*var\(--muted\)/);
+  });
+
+  test('focus is visible: an outline in --primary, the same colour the chip already carries', () => {
+    expect(SB).toMatch(/\.sb \.sb-close:focus-visible\{outline:2px solid var\(--primary\)/);
+    expect(block(SB, '.sb .sb-chip')).toMatch(/color:var\(--primary\)/);
+  });
+
+  test('the accessible name is JSX, not CSS — no content: "×" trick that would hide it from a screen reader', () => {
+    // (^|[^-]) so "justify-content:" (already in the rule) does not false-positive.
+    expect(block(SB, '.sb .sb-close')).not.toMatch(/(^|[^-])content:/);
+  });
+});

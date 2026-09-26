@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './Scoreboard.css';
+import Icon from '../../Icon';
 import LookBoard from './LookBoard';
 import {
   boardRows, movementLabel, normaliseScoreboard, pageCount, pageDwellMs, pageRange,
@@ -29,9 +30,17 @@ import {
  *     because the number of pages depends on this screen's display profile.
  *   - THE LOOK, handed in (`style`); LookBoard remounts on a switch.
  *
- * What it does NOT own: opening, closing and the look. Those are server
- * facts (scoreboard.js) driven by the host page's S / V / Esc / Space, the
- * remote and the Players tab.
+ * What it does NOT own: opening and the look. Those are server facts
+ * (scoreboard.js) driven by the host page's S / V, the remote and the
+ * Players tab. CLOSING is also a server fact reached from more than one
+ * place — S, Esc, Space on the host page, and now the click-to-close button
+ * this component itself draws in the rail (Task 1, 2026-09-26: "add a way to
+ * click the scoreboard off back to what was showing before"). Either way the
+ * component only calls `onClose`; the host page is still the one that
+ * publishes `{ open: false }`. The button is visible to the room on purpose
+ * (the owner's ruling) but lives only here, inside the host's own stage —
+ * PlayerPage never imports this component, so it never reaches a player's
+ * phone, laptop or tablet.
  *
  * The rows go on the wall by name, with totals — the owner's ruling
  * (2026-09-25), which retires "a full roster WITH SCORES never goes on the
@@ -57,6 +66,7 @@ function usePrefersReducedMotion() {
 
 export default function Scoreboard({
   gameId, apiBase = '', title = '', profile = 'room', board, refreshKey = '', keysEnabled = true,
+  onClose = () => {},
 }) {
   const { style, openedAt, page: remotePage } = normaliseScoreboard({ ...board, open: true });
   const size = placesPerPage(profile);
@@ -195,9 +205,14 @@ export default function Scoreboard({
             <b className={roundOnRail !== afterRound ? 'sb-was' : undefined}>{`After round ${roundOnRail}`}</b>
           </span>
         ) : null}
-        {rows.length ? (
-          <span className="sb-page"><b>{pageRange(current, size, rows.length)}</b><span>{`of ${rows.length}`}</span></span>
-        ) : null}
+        <div className="sb-tail">
+          {rows.length ? (
+            <span className="sb-page"><b>{pageRange(current, size, rows.length)}</b><span>{`of ${rows.length}`}</span></span>
+          ) : null}
+          <button type="button" className="sb-close" onClick={() => onClose()} aria-label="Close scoreboard">
+            <Icon name="X" weight="bold" size={18} />
+          </button>
+        </div>
       </header>
       <div className="sb-body">
         {roster.status === 'loading' && <p className="sb-note">Loading the standings…</p>}

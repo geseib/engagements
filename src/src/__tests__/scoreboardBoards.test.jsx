@@ -17,6 +17,8 @@
  * and stageMotion.test.js.
  */
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import Scoreboard from '../components/stage/scoreboard/Scoreboard';
 import { createDepartureEngine, wrapName } from '../components/stage/scoreboard/departureEngine';
@@ -481,5 +483,50 @@ describe('2. Scoreboard', () => {
       );
     });
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+/* -------------------------------------------------------------- Task 1
+   "add a way to click the scoreboard off back to what was showing before."
+   The owner's ruling (26 Sep 2026): the close button sits ON THE BOARD, so
+   the room sees it too, in every one of the three looks. Keyboard (S / Esc /
+   Space) keeps working — this is additive. */
+describe('the click-to-close button (Task 1)', () => {
+  beforeEach(() => {
+    window.matchMedia = jest.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    mockRoster();
+  });
+  afterEach(() => { jest.useRealTimers(); delete global.fetch; });
+
+  test('renders with the accessible name "Close scoreboard", in every look', async () => {
+    for (const style of ['departure', 'olympic', 'tote']) {
+      document.body.innerHTML = '';
+      // eslint-disable-next-line no-await-in-loop
+      await mount({ board: { open: true, style, page: 0, openedAt: 't' } });
+      expect(screen.getByRole('button', { name: 'Close scoreboard' })).toBeInTheDocument();
+    }
+  });
+
+  test('it lives in the rail, alongside the page range, not in the body with the rows', async () => {
+    await mount();
+    const rail = document.querySelector('.sb-rail');
+    expect(rail.querySelector('.sb-close')).not.toBeNull();
+    expect(document.querySelector('.sb-body .sb-close')).toBeNull();
+  });
+
+  test('a click calls onClose, and only onClose — no event object leaks into the host\'s publish call', async () => {
+    const onClose = jest.fn();
+    await mount({ onClose });
+    fireEvent.click(screen.getByRole('button', { name: 'Close scoreboard' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith();
+  });
+
+  test('the button is absent from a player\'s screen: only GameHostPage renders <Scoreboard>', () => {
+    const playerSrc = fs.readFileSync(path.join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
+    expect(playerSrc).not.toMatch(/<Scoreboard[\s/>]/);
+    expect(playerSrc).not.toMatch(/from ['"].*scoreboard\/Scoreboard['"]/);
+    const hostSrc = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    expect(hostSrc).toMatch(/<Scoreboard/);
   });
 });
