@@ -137,6 +137,10 @@ const MUST_BE_CLOSED = [
   // round below no longer returns any of it to `?includeHostData=true`
   // (tests/get-game-host-state.js).
   ['GET', '/games/{gameId}/host-state'],
+  // THE ANSWERS' HOST DOOR (game/get-answers.js): every answer to a round, at
+  // any phase, with its author on a named round. The phone's read below
+  // answers `?role=host` as it answers a player (tests/get-answers-host.js).
+  ['GET', '/games/{gameId}/answers/host'],
 ];
 
 // The participant journey. None of these carries a token, ever.

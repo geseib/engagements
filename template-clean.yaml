@@ -2514,12 +2514,28 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: a phone reads the answers it votes on here, and a returning
+        # player asks for their own answer back. It answers `?role=host`
+        # exactly as it answers a player (get-answers.js).
         GetAnswersEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/answers
             Method: GET
+        # THE HOST'S DOOR to the same handler: every answer to a round, at any
+        # phase, with its author on a round that is not anonymous. It was the
+        # public `?role=host` until 2026-09-26, open to anyone with the code.
+        # Cognito here, authorizer.js names it for hosts|admins, and
+        # get-answers.js asks callerMayDriveSession. tests/get-answers-host.js.
+        GetAnswersHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/answers/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

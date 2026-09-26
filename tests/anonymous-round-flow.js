@@ -176,10 +176,24 @@ function seedAnonymousRound(gameId, { anonymous = true, revealed = false, state 
   }
 }
 
-const askAnswers = (gameId, role) => getAnswers({
-  pathParameters: { gameId },
-  queryStringParameters: { role, questionId: '001' }
-});
+// 'host' reads through the host's door, GET /games/{gameId}/answers/host:
+// since 2026-09-26 the public route answers `role=host` exactly as it answers
+// a player (tests/get-answers-host.js). The door moved the host's payload
+// behind sign-in without changing it, so every anonymity check below holds of
+// it unchanged. The sessions here are orgless, which any signed-in host may
+// read.
+const HOST_DOOR = 'GET /games/{gameId}/answers/host';
+const askAnswers = (gameId, role) => getAnswers(role === 'host'
+  ? {
+    routeKey: HOST_DOOR,
+    requestContext: { routeKey: HOST_DOOR, authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } } },
+    pathParameters: { gameId },
+    queryStringParameters: { questionId: '001' }
+  }
+  : {
+    pathParameters: { gameId },
+    queryStringParameters: { role, questionId: '001' }
+  });
 
 (async () => {
 

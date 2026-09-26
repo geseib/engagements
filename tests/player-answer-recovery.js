@@ -355,9 +355,17 @@ const askForMyAnswer = (gameId, query) =>
   await answerOverSocket('3005', 'Ada', 'ANSWER#001', { answer: 'a boat', answerType: 'text' });
   await answerOverSocket('3005', 'Grace', 'ANSWER#001', { answer: 'a bug', answerType: 'text' });
 
+  // The host's list, through the host's door (GET /games/{gameId}/answers/host
+  // since 2026-09-26; tests/get-answers-host.js). The session is orgless, so
+  // any signed-in host may read it.
   const list = await getAnswers({
+    routeKey: 'GET /games/{gameId}/answers/host',
+    requestContext: {
+      routeKey: 'GET /games/{gameId}/answers/host',
+      authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } },
+    },
     pathParameters: { gameId: '3005' },
-    queryStringParameters: { role: 'host', questionId: '001' },
+    queryStringParameters: { questionId: '001' },
   });
 
   check('a call with no `player` still returns the list', () => {
