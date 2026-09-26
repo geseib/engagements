@@ -569,6 +569,66 @@ function decorate(setId, fields) {
       assert.deepStrictEqual(meta().versions.map((v) => v.version), [1, 2]));
   }
 
+  // ==== 5c. a legacy replace steps over an occupied version, and drops
+  //          REVIEW/PUBLISHED when it snapshots ============================
+  //
+  // Task 8b. The snapshot above assumes v1 is free, which is true only the
+  // FIRST time a never-versioned set is replaced. Two things can already be
+  // sitting in that legacy (unsuffixed) partition:
+  //   - a REVIEW and/or PUBLISHED row, exactly where set-review.js resolves
+  //     them for a set with no version (reviewKey/publishedKey both fall
+  //     through to the unsuffixed partition for a legacy ref) — a set that was
+  //     checked or shared before it was ever versioned carries them there.
+  //   - stray content already occupying v1 itself, left by an unfinished write.
+  // Neither may be silently mixed into the snapshot: the REVIEW/PUBLISHED rows
+  // are not content, and a version that already holds rows must be stepped
+  // over, not written into.
+  say('\n  -- replacing a legacy set whose next version is occupied --');
+  resetDb();
+  {
+    await importSet('Stray Set', csvV1);
+    makeLegacy('strayset');
+    // A REVIEW verdict and a PUBLISHED marker, exactly as a legacy set that was
+    // judged or shared before it was ever versioned would carry them — the
+    // SAME (unsuffixed) partition as the questions.
+    store.set(`ORG#${ORG}#SET#strayset|REVIEW`, { PK: `ORG#${ORG}#SET#strayset`, SK: 'REVIEW', status: 'passed' });
+    store.set(`ORG#${ORG}#SET#strayset|PUBLISHED`, { PK: `ORG#${ORG}#SET#strayset`, SK: 'PUBLISHED', publicSetId: 'stray-public' });
+    // A stray row already sitting at v1 — an unfinished write from some earlier
+    // attempt. The snapshot must step over it, not write into it.
+    store.set(`ORG#${ORG}#SET#strayset#v1|QUESTION#zzz#001`, {
+      PK: `ORG#${ORG}#SET#strayset#v1`, SK: 'QUESTION#zzz#001', Title: 'STRAY',
+    });
+
+    const res = await replaceSet('strayset', csvV2);
+    const meta = () => plainRow(ORG, store.get(`ORG#${ORG}#SETS|SET#strayset`));
+
+    check('the replace still succeeds', () => assert.strictEqual(res.statusCode, 200, res.body));
+    check('the legacy snapshot steps over the occupied v1, landing on v2', () => {
+      const v1 = rowsIn(`ORG#${ORG}#SET#strayset#v1`);
+      assert.strictEqual(v1.length, 1, 'the stray v1 row was joined by the snapshot');
+      assert.strictEqual(v1[0].Title, 'STRAY');
+      const v2 = rowsIn(`ORG#${ORG}#SET#strayset#v2`);
+      assert.strictEqual(v2.length, 2, `v2 has ${v2.length} question rows`);
+      assert.strictEqual(v2[0].Title, 'THE SMILE');
+    });
+    check('the new replacement content lands one version further on, at v3', () => {
+      assert.strictEqual(parse(res).version, 3);
+      const v3 = rowsIn(`ORG#${ORG}#SET#strayset#v3`);
+      assert.strictEqual(v3.length, 3);
+      assert.strictEqual(v3[0].Title, 'THE SMILE (FIXED)');
+    });
+    check('the snapshot at v2 carries no REVIEW or PUBLISHED row', () => {
+      assert.strictEqual(store.get(`ORG#${ORG}#SET#strayset#v2|REVIEW`), undefined, 'the legacy REVIEW row was copied onto v2');
+      assert.strictEqual(store.get(`ORG#${ORG}#SET#strayset#v2|PUBLISHED`), undefined, 'the legacy PUBLISHED row was copied onto v2');
+    });
+    check('the legacy REVIEW/PUBLISHED rows are left exactly where they were', () => {
+      assert.ok(store.get(`ORG#${ORG}#SET#strayset|REVIEW`), 'the legacy REVIEW row was deleted');
+      assert.ok(store.get(`ORG#${ORG}#SET#strayset|PUBLISHED`), 'the legacy PUBLISHED row was deleted');
+    });
+    check('versions[] records the snapshot at v2 and the new content at v3', () =>
+      assert.deepStrictEqual(meta().versions.map((v) => v.version), [2, 3]));
+  }
+
   // ==== 6. the point of the whole design: a pinned game keeps its version ===
   say('\n  -- a pinned game is not disturbed by a replace --');
   resetDb();

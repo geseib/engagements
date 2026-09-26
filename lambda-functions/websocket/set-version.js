@@ -414,6 +414,39 @@ async function copyPartition(db, tableName, fromPk, toPk) {
 }
 
 /**
+ * How many version numbers a writer steps over before refusing: the rows are
+ * somebody's evidence of an unfinished write, and a caller here must never
+ * guess past them. Both callers of `firstEmptyVersion` below sweep this far.
+ * (delete-question-set.js separately sweeps five ahead, for its own purpose.)
+ */
+const VERSION_PROBES = 10;
+
+/**
+ * The first version number at or after `from` whose content partition holds no
+ * rows.
+ *
+ * One Query with Limit 1 per candidate. Refuses rather than guesses when every
+ * candidate is occupied: the rows are somebody's evidence of an unfinished
+ * write, and neither caller may delete or overwrite them. Used by
+ * archive-restore.js (a restore landing beside content already there) and by
+ * upload-questions.js (a REPLACE of a set that has never been versioned,
+ * snapshotting its legacy content, and the replace's own new version).
+ */
+async function firstEmptyVersion(db, tableName, ref, from) {
+  for (let n = from; n < from + VERSION_PROBES; n += 1) {
+    const res = await db.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk',
+      ExpressionAttributeValues: { ':pk': setPartition(ref, n) },
+      Limit: 1,
+    }));
+    if (((res && res.Items) || []).length === 0) return n;
+  }
+  throw new Error(`Versions ${from} to ${from + VERSION_PROBES - 1} of "${ref.setId}" all already hold rows from `
+    + 'unfinished writes, so nothing was written. Delete the set\'s stray versions or retry.');
+}
+
+/**
  * Every game pinned to a given version of a set, with whether it has ended.
  *
  * One paginated Query of the GAMES index partition, then one GetItem per
@@ -524,4 +557,5 @@ module.exports = {
   queryPartition,
   batchPutItems,
   copyPartition,
+  firstEmptyVersion,
 };

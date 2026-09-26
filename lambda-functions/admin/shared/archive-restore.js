@@ -22,12 +22,12 @@
  * is therefore the first EMPTY version number at or after the predicted one, and images are
  * copied before any row is written. Debris is stepped over, never deleted or overwritten.
  */
-const { GetCommand, PutCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const tenant = require('./tenant');
 const {
   setRef, setPartition, setMetadataKey, queryPartition, batchPutItems, copyPartition,
-  knownVersions, nextVersion, toVersion,
+  knownVersions, nextVersion, toVersion, firstEmptyVersion,
 } = require('./set-version');
 const { batchDeleteKeys } = require('./ddb-delete');
 const { promptKey, promptBodyKey } = require('./prompt-access');
@@ -37,30 +37,6 @@ const { copyMediaIn } = require('./archive-media');
 const snap = require('./archive-snapshot');
 
 const nowIso = (deps) => (deps.now ? deps.now() : new Date().toISOString());
-
-/** How many version numbers a restore steps over before refusing. delete-question-set.js sweeps five ahead. */
-const VERSION_PROBES = 10;
-
-/**
- * The first version number at or after `from` whose content partition holds no rows.
- *
- * One Query with Limit 1 per candidate. Refuses rather than guesses when every candidate is
- * occupied: the rows are somebody's evidence of an unfinished write, and a restore must never
- * delete or overwrite them.
- */
-async function firstEmptyVersion(db, tableName, ref, from) {
-  for (let n = from; n < from + VERSION_PROBES; n += 1) {
-    const res = await db.send(new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: { ':pk': setPartition(ref, n) },
-      Limit: 1,
-    }));
-    if (((res && res.Items) || []).length === 0) return n;
-  }
-  throw new Error(`Versions ${from} to ${from + VERSION_PROBES - 1} of "${ref.setId}" all already hold rows from `
-    + 'unfinished writes, so the restore was not written. Delete the set\'s stray versions or retry.');
-}
 
 /** The prompt a restored set should name on THIS tier, or '' for none. */
 async function resolvePromptLink(deps, envelope) {
