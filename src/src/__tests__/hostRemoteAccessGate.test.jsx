@@ -32,7 +32,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import HostRemote from '../HostRemote';
-import { authFetch } from '../auth/authFetch';
 
 jest.mock('../auth/authFetch', () => ({
   ...jest.requireActual('../auth/authFetch'),
@@ -172,10 +171,6 @@ function expectNoSessionFetches() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // CRA's jest config carries `resetMocks: true`, which strips the
-  // implementation `jest.fn(impl)` was given at mock-factory time before
-  // every test. See hostRemoteOrgScope.test.jsx for the full explanation.
-  authFetch.mockImplementation((...args) => global.fetch(...args));
   window.API_BASE = 'https://api.test/';
   window.localStorage.clear();
 });

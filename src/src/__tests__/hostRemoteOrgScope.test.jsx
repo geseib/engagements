@@ -58,7 +58,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import HostRemote from '../HostRemote';
-import { ACTIVE_ORG_STORAGE_KEY, authFetch } from '../auth/authFetch';
+import { ACTIVE_ORG_STORAGE_KEY } from '../auth/authFetch';
 
 /* PARTIAL MOCK. Only the transport is swapped — the org accessors are the real
    ones, so what the switcher stores is observable here. */
@@ -122,14 +122,6 @@ async function connect() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // CRA's jest config carries `resetMocks: true`, which strips the
-  // implementation `jest.fn(impl)` was GIVEN at mock-factory time before every
-  // single test — `.mock.calls` still records correctly (which is all this
-  // suite used to assert on), but `await authFetch(...)` resolves to
-  // `undefined` unless the implementation is re-armed here. The access gate
-  // (Task 6) is the first caller in this file to read authFetch's RESOLVED
-  // value rather than only whether it was called.
-  authFetch.mockImplementation((...args) => global.fetch(...args));
   window.API_BASE = 'https://api.test/';
   window.localStorage.clear();
 });

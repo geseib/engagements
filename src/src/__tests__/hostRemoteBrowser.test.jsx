@@ -13,7 +13,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import HostRemote from '../HostRemote';
-import { authFetch } from '../auth/authFetch';
 import {
   correctOptionIndex,
   remoteQuestionRow,
@@ -148,10 +147,6 @@ async function connect() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // CRA's jest config carries `resetMocks: true`, which strips the
-  // implementation `jest.fn(impl)` was GIVEN at mock-factory time before every
-  // test — re-armed here for the same reason hostRemoteOrgScope.test.jsx does.
-  authFetch.mockImplementation((...args) => global.fetch(...args));
   window.API_BASE = 'https://api.test/';
 });
 
