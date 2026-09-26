@@ -204,10 +204,11 @@ exports.handler = async (event) => {
     const source = sourceOf(meta);
     // Legacy is null, not 0 — the same reason standing() gives above. Read as 0
     // this named a version 0 in the organisation's own log and stamp, and
-    // `if (version)` then skipped the queue delete: the row the check wrote at
-    // `<org>#<set>#v0` (queueSk counts a legacy version as v0) outlived the
-    // public set it pointed at. The delete is unconditional now — the same key
-    // the check would have written, present or not.
+    // `if (version)` then skipped the queue delete: the row the check wrote
+    // (queueSk counted a legacy version as v0 back then; it now writes no `#v`
+    // suffix for one at all) outlived the public set it pointed at. The delete
+    // is unconditional now — the same key the check would have written,
+    // present or not — and calls queueSk itself, so it always matches.
     const version = toVersion(meta.sourceVersion);
     const reviewer = reviewerOf(event);
     // R10: the organisation is told FIRST — the destructive delete is LAST.

@@ -30,13 +30,18 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stringify(body) });
 
 /**
- * The three shapes of §3.2, and the ref each names. Anything else is refused.
+ * The four shapes of §3.2, and the ref each names. Anything else is refused.
  *
  * `#v([1-9]\d*)` and NOT `#v(\d+)`: a version is one-based, and `v0` would
  * parse to `setPartition(ref, 0)`, which `set-version.js` resolves to the
  * LEGACY UNVERSIONED partition — a different set's content read under a
  * version-shaped key. `v01` is refused on the same reasoning: one spelling per
  * version, so two queue skus cannot name one row.
+ *
+ * The fourth shape is that legacy unversioned partition itself, named the only
+ * way it legitimately can be: no `#v` suffix at all (moderation-queue.js
+ * `queueSk`). It is checked last, after the two fixed `PUBLIC#`/`PLATFORM#`
+ * prefixes, so it can never be reached by either of them.
  */
 function parseSk(raw) {
   const sk = String(raw || '').trim();
@@ -46,6 +51,8 @@ function parseSk(raw) {
   if (m) return { sk, ref: { scope: 'public', orgId: '', setId: m[1] }, version: 0 };
   m = /^PLATFORM#([A-Za-z0-9_-]+)$/.exec(sk);
   if (m) return { sk, ref: { scope: 'platform', orgId: '', setId: m[1] }, version: 0 };
+  m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)$/.exec(sk);
+  if (m) return { sk, ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: null };
   return null;
 }
 

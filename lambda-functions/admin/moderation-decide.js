@@ -158,10 +158,22 @@ const reviewerOf = (event) => String(event?.requestContext?.authorizer?.lambda?.
  * LEGACY UNVERSIONED partition — so `org_acme#safety#v0` would have decided,
  * published and stamped a DIFFERENT set's content than any queue row can name.
  * `v01` goes with it: one spelling per version.
+ *
+ * The second, bare shape below (no `#v` suffix at all) is that same legacy
+ * unversioned partition, named the only way it legitimately can be
+ * (moderation-queue.js `queueSk`) — it is what makes an unversioned org set's
+ * queue row decidable at all. The negative lookahead keeps it from ever
+ * shadowing `PUBLIC#<id>`/`PLATFORM#<id>`: this function runs BEFORE
+ * `parsePublicSk`/`parsePlatformSk` (see `parseBody`, below), and an org id can
+ * never legitimately be either literal.
  */
 function parseOrgSk(raw) {
-  const m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v([1-9]\d*)$/.exec(String(raw || '').trim());
-  return m ? { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) } : null;
+  const s = String(raw || '').trim();
+  let m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v([1-9]\d*)$/.exec(s);
+  if (m) return { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) };
+  m = /^(?!PUBLIC#|PLATFORM#)([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)$/.exec(s);
+  if (m) return { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: null };
+  return null;
 }
 
 /**

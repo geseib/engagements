@@ -13,7 +13,16 @@ const ORG = { scope: 'org', orgId: 'org_acme', setId: 'pricing' };
     assert.strictEqual(Q.queueSk(ORG, 2), 'org_acme#pricing#v2');
     assert.strictEqual(Q.queueSk({ scope: 'platform', setId: 'lessons' }), 'PLATFORM#lessons');
     assert.strictEqual(Q.queueSk({ scope: 'public', setId: 'orgacme-pricing' }), 'PUBLIC#orgacme-pricing');
-    assert.strictEqual(Q.queueSk(ORG, 'not-a-number'), 'org_acme#pricing#v0');
+  });
+  // 7a: an unversioned org set (set-version.js's permanently-supported legacy
+  // read state) has no version to name, so the key names none — `#v0` used to
+  // be written here, and moderation-get.js/moderation-decide.js both refuse to
+  // parse it (deliberately: v0 is not a real version), so the row listed in
+  // the queue but could be neither opened nor decided.
+  await H.test('an unversioned org set gets a bare key, with no #v suffix at all', () => {
+    assert.strictEqual(Q.queueSk(ORG, null), 'org_acme#pricing');
+    assert.strictEqual(Q.queueSk(ORG, undefined), 'org_acme#pricing');
+    assert.strictEqual(Q.queueSk(ORG, 'not-a-number'), 'org_acme#pricing');
   });
   await H.test('a repeat upsert bumps the row: reasons union, latestAt moves, waitingSince stays', async () => {
     H.reset();
