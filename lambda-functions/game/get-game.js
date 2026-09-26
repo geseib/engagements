@@ -1,10 +1,40 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { decryptItem } = require('./tenant-crypto');
+const { callerMayDriveSession } = require('./tenant');
 const { normalizeNames } = require('./survey-names');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/*
+  THE HOST'S DOOR, `GET /games/{gameId}/host-details`: a second event on this
+  function (template-clean.yaml, GetGameHostDetailsEvent), the way
+  /ai-summary/host is on get-ai-summary.js. It returns everything the public
+  `?role=host` branch does, plus the two fields that branch must not carry:
+  the session's Workie context (`AIContext`) and its Call & Answer briefing,
+  both DECRYPTED. They are the host's own writing about their organisation
+  and a customer's document, ciphertext at rest per org, and no phone, laptop
+  or tablet in the room is ever shown them. The edit dialog's prefill is their
+  only reader (GameHostPage.jsx editGameFromHistory).
+
+  Cognito in front, hosts|admins named in authorizer.js, and
+  callerMayDriveSession here. NO IDENTITY IS REFUSED OUTRIGHT, before any
+  read, as get-report.js does: callerMayDriveSession passes a caller with no
+  groups, so on its own it would hand an orgless session's context to anyone
+  the day this route lost its authorizer. The session's owner is checked on
+  the RAW row, before anything is decrypted, so a refused caller costs no
+  KMS call. Every refusal is the same "Game not found" as a code that names
+  nothing: a different answer for "it is somebody else's" is an existence
+  oracle over 9,000 codes. tests/get-game-host-details.js.
+*/
+const HOST_DETAILS_ROUTE = /\/host-details$/;
+
+const gameNotFound = () => ({
+  statusCode: 404,
+  body: JSON.stringify({ error: 'Game not found' }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+});
 
 exports.handler = async (event) => {
   try {
@@ -20,7 +50,18 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`🎮 Getting game info for ${gameId}, role: ${role || 'unspecified'}`);
+    // Which door: the ROUTE decides, never `role`. API Gateway sets routeKey;
+    // rawPath is the fallback when it is absent.
+    const rc = event.requestContext || {};
+    const onHostDoor = HOST_DETAILS_ROUTE.test(rc.routeKey || event.routeKey || event.rawPath || '');
+
+    console.log(`🎮 Getting game info for ${gameId}, ${onHostDoor ? 'host details' : `role: ${role || 'unspecified'}`}`);
+
+    if (onHostDoor) {
+      const authorizer = rc.authorizer || {};
+      const identity = (authorizer.jwt && authorizer.jwt.claims) || authorizer.lambda;
+      if (!identity) return gameNotFound();
+    }
 
     // Get game metadata
     const gameMetadata = await db.send(new GetCommand({
@@ -28,13 +69,8 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
     }));
 
-    if (!gameMetadata.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ error: 'Game not found' }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
-    }
+    if (!gameMetadata.Item) return gameNotFound();
+    if (onHostDoor && !callerMayDriveSession(event, gameMetadata.Item)) return gameNotFound();
 
     // ── THE ANONYMOUS DECRYPT, WHICH IS THE POINT ────────────────────────────
     //
@@ -119,7 +155,18 @@ exports.handler = async (event) => {
     // itself — the route carries no authorizer — to restore a field with no
     // reader. If a surface ever genuinely needs to display a running session's
     // own code, put it on a route that IS authorized.
-    if (role === 'host') {
+    //
+    // `aiContext` and `briefing` LEFT THIS BRANCH ON 2026-09-26 for the same
+    // reason, and went to a route that IS authorized: the host's door at the
+    // top of this file. What is still here is either shown to every phone
+    // anyway (the title, the host's name, and `details`, which the player
+    // branch returns as `engagementInfo`) or settings, not writing: the set's
+    // id and library, the voice and the summary approach (all four also on
+    // the public GET /games/{id}/state), the shuffle flag, the category masks,
+    // and two question lists nothing ever writes. The host page's two public
+    // reads still use this branch for `started`, `anonymousUntilReveal` and
+    // `categoryState`.
+    if (onHostDoor || role === 'host') {
       // Host gets additional administrative information
       const result = {
         ...baseGameInfo,
@@ -133,7 +180,6 @@ exports.handler = async (event) => {
         // is the case the pair exists for. Absent on sessions created before the
         // pin, which the client reads as platform.
         questionSetScope: gameMetadata.Item.QuestionSetScope || 'platform',
-        aiContext: sessionMeta.AIContext,
         details: sessionMeta.Details,
         // Prefill for the edit dialog (PUT /games/{gameId}). None of these is
         // a secret — the persona is a label, and both flags describe behaviour
@@ -145,10 +191,6 @@ exports.handler = async (event) => {
         // the edit's PUT sends promptId, '' REMOVEs it, so a prefill without
         // it erased the approach chosen at create on any edit at all.
         promptId: gameMetadata.Item.PromptId || '',
-        // The Call & Answer briefing, DECRYPTED, for the edit prefill — and on
-        // the host branch only. It is a summary of the host's own document;
-        // the public branch above, which every phone reads, never carries it.
-        briefing: sessionMeta.Briefing || null,
         // Same default-ON rule as anonymousUntilReveal above: only an explicit
         // false means "in written order" (schema-compliant-manager.js:106).
         randomizeQuestions: hostPreferences.randomizeQuestions !== false,
@@ -164,7 +206,16 @@ exports.handler = async (event) => {
         } : null
       };
 
-      console.log(`✅ Returning host game info for ${gameId}`);
+      if (onHostDoor) {
+        // THE HOST'S OWN WRITING, DECRYPTED, for the edit prefill — on the
+        // host's door only (see the top of this file). The Workie context is
+        // what they told the AI about their organisation; the briefing is a
+        // summary of a customer's document, its file name riding inside.
+        result.aiContext = sessionMeta.AIContext;
+        result.briefing = sessionMeta.Briefing || null;
+      }
+
+      console.log(`✅ Returning ${onHostDoor ? 'host details' : 'host game info'} for ${gameId}`);
       return {
         statusCode: 200,
         body: JSON.stringify(result),

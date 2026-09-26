@@ -127,6 +127,7 @@ process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
 
 const getGame = require(path.join(REPO, 'lambda-functions/game/get-game.js')).handler;
 const joinGame = require(path.join(REPO, 'lambda-functions/game/join-game.js')).handler;
+const { routesFromTemplate, findRoute, assertScannerWorks } = require('./helpers/template-routes');
 
 // ---- Tiny harness ----------------------------------------------------------
 let pass = 0, fail = 0;
@@ -332,14 +333,22 @@ const ACCESS_CODE_KEY = /access[\s_-]*code/i;
   const nextResource = rest.slice(1).search(/\n {2}\S/);
   const block = nextResource === -1 ? rest : rest.slice(0, nextResource + 1);
 
-  await check('the block is the /games/{gameId} route and only that route', () => {
+  // TWO EVENTS SINCE 2026-09-26: the public brief, and the host's own door to
+  // the same handler, `/host-details`, which is the one that carries the
+  // authorizer (tests/get-game-host-details.js). The Workie context and the
+  // briefing moved there; this route stays open.
+  await check('the block is the public brief and the host\'s door, and nothing else', () => {
     const paths = (block.match(/^\s*Path:.*$/gm) || []).map((s) => s.trim());
-    assert.deepStrictEqual(paths, ['Path: /games/{gameId}']);
+    assert.deepStrictEqual(paths, ['Path: /games/{gameId}', 'Path: /games/{gameId}/host-details']);
   });
-  await check('it is the GET', () =>
-    assert.ok(/^\s*Method:\s*GET\s*$/m.test(block), block));
-  await check('and it carries NO authorizer', () =>
-    assert.ok(!/^\s*Auth:\s*$/m.test(block) && !/Authorizer:/.test(block),
+  await check('both are GETs', () => {
+    const methods = (block.match(/^\s*Method:\s*(\S+)\s*$/gm) || []).map((s) => s.trim());
+    assert.deepStrictEqual(methods, ['Method: GET', 'Method: GET'], block);
+  });
+  const routes = routesFromTemplate();
+  await check('the template scanner parses routes and sees Auth', () => assertScannerWorks(routes));
+  await check('and the brief itself carries NO authorizer', () =>
+    assert.strictEqual(findRoute(routes, 'GET', '/games/{gameId}').authorizer, null,
       'GET /games/{gameId} now requires a token. RootPage cannot check a typed ' +
       'code, PlayerPage cannot load the brief, and the join flow 401s. The leak ' +
       'is fixed by trimming the PAYLOAD, not by closing the route.'));

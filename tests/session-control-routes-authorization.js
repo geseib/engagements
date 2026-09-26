@@ -128,6 +128,10 @@ const MUST_BE_CLOSED = [
   // the reveal, a trivia answer, every participant's words. The public read
   // below refuses those parameters (tests/ai-summary-host-only-params.js).
   ['GET', '/games/{gameId}/ai-summary/host'],
+  // THE SESSION BRIEF'S HOST DOOR (game/get-game.js): the edit prefill, with
+  // the session's Workie context and briefing decrypted. The public brief
+  // below no longer returns either to `?role=host` (tests/get-game-host-details.js).
+  ['GET', '/games/{gameId}/host-details'],
 ];
 
 // The participant journey. None of these carries a token, ever.

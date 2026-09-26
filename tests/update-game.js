@@ -542,19 +542,30 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert(!('PersonaId' in metadataOf(gameId)), 'clearing left an empty PersonaId attribute behind');
   });
 
-  console.log('\nwhat the edit dialog can prefill from GET ?role=host\n');
+  /*
+    THE EDIT PREFILL IS READ ON THE HOST'S DOOR, GET /games/{gameId}/host-details
+    — Cognito in front, callerMayDriveSession in get-game.js. The public
+    `?role=host` branch no longer carries aiContext or the briefing: `role` is a
+    query parameter anyone can type (tests/get-game-host-details.js).
+  */
+  const hostDetails = async (gameId) => {
+    quiet();
+    const res = await getGameHandler(asOrg({
+      routeKey: 'GET /games/{gameId}/host-details',
+      pathParameters: { gameId },
+    }));
+    loud();
+    return res;
+  };
 
-  await acheck('the host branch carries every prefill field, and still no accessCode', async () => {
+  console.log('\nwhat the edit dialog can prefill from GET /games/{id}/host-details\n');
+
+  await acheck('the host read carries every prefill field, and still no accessCode', async () => {
     // rejects: an edit dialog that cannot seed its own form — and re-adding
     // accessCode to the public read path, whose removal get-game.js:79-92
     // documents as THE private-game control.
     const gameId = created.body.gameId;
-    quiet();
-    const res = await getGameHandler({
-      pathParameters: { gameId },
-      queryStringParameters: { role: 'host' },
-    });
-    loud();
+    const res = await hostDetails(gameId);
     assert.strictEqual(res.statusCode, 200);
     const info = JSON.parse(res.body);
     assert.strictEqual(info.personaId, '', 'personaId missing from the host branch');
@@ -572,13 +583,8 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     // PromptId — so renaming a session erased the approach chosen at create.
     const gameId = created.body.gameId;
     assert.strictEqual((await putGame(gameId, { promptId: 'trivia-quiet' })).status, 200);
-    quiet();
-    const res = await getGameHandler({
-      pathParameters: { gameId },
-      queryStringParameters: { role: 'host' },
-    });
-    loud();
-    assert.strictEqual(JSON.parse(res.body).promptId, 'trivia-quiet', 'promptId missing from the host branch');
+    const res = await hostDetails(gameId);
+    assert.strictEqual(JSON.parse(res.body).promptId, 'trivia-quiet', 'promptId missing from the host read');
     assert.strictEqual((await putGame(gameId, { promptId: '' })).status, 200);
   });
 
@@ -639,7 +645,7 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   });
 
   await acheck('the HOST read returns the briefing decrypted, for the edit prefill', async () => {
-    const info = await hostRead(briefed.body.gameId, 'host');
+    const info = JSON.parse((await hostDetails(briefed.body.gameId)).body);
     assert.strictEqual(info.briefing && info.briefing.text, BRIEF.text);
     assert.strictEqual(info.briefing.source.name, 'q3-support-ops-review.pdf');
   });
@@ -647,6 +653,12 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   await acheck('the PUBLIC read — what a phone makes — carries no briefing key at all', async () => {
     const info = await hostRead(briefed.body.gameId, null);
     assert(!('briefing' in info), 'a participant can read the host\'s briefing');
+    assert(!JSON.stringify(info).includes('Open issues are up 15%'));
+  });
+
+  await acheck('nor does the public ?role=host — a claim anyone can type', async () => {
+    const info = await hostRead(briefed.body.gameId, 'host');
+    assert(!('briefing' in info), 'anyone with the code can read the host\'s briefing');
     assert(!JSON.stringify(info).includes('Open issues are up 15%'));
   });
 

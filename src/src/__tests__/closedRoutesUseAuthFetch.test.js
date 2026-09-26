@@ -63,6 +63,10 @@ describe('the closed routes are never called with bare fetch', () => {
     // Generation and the prompt echo (get-ai-summary.js). The plain public
     // read, `ai-summary` with no `/host`, is a participant route and stays fetch.
     'ai-summary/host',
+    // The host's edit prefill: a session's Workie context and briefing,
+    // decrypted (get-game.js). The public brief, `games/{id}` with no
+    // `/host-details`, is a participant route and stays fetch.
+    'host-details',
   ];
 
   // rejects: a closed route called through the bare global, which is a 401 in
