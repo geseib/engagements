@@ -173,9 +173,18 @@ async function describeSet(db, tableName, setRef) {
   return { missing: false, name, questionCount: Number(row.questionCount) || 0, latestVersion: toVersion(row.activeVersion) };
 }
 
+/**
+ * Every write that loses a race answers with this sentence, and nothing of it
+ * landed: each is one TransactWrite, all or nothing.
+ */
+const AGENDA_CHANGED = 'The event changed while you were saving. Nothing was saved; reload it and try again.';
+
+/** A cancelled TransactWrite: a condition failed, or another write held a row. */
+const isCancelled = (error) => Boolean(error && error.name === 'TransactionCanceledException');
+
 module.exports = {
-  META_SK, INDEX_PREFIX, ITEM_PREFIX,
-  indexSk, itemSk, itemIdOf, codeOf, isCode, isItemId,
+  META_SK, INDEX_PREFIX, ITEM_PREFIX, AGENDA_CHANGED,
+  indexSk, itemSk, itemIdOf, codeOf, isCode, isItemId, isCancelled,
   queryAll, readMeta, readItems, sortItems, openEvent,
   decryptEvent, decryptItemRow, projectEvent, projectItem, describeSet,
 };

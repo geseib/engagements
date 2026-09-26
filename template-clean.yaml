@@ -424,6 +424,34 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  UpdateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-update-event'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/update-event.handler
+      Events:
+        UpdateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Opens and re-seals the event's name and place.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
