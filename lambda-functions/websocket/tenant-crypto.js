@@ -447,6 +447,21 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  `PerQuestion`, `Order` and `TextPages` are counts, question ids and page
    *  counts and stay plaintext, like `results.VoteTallies`. */
   surveyResults: Object.freeze(['Texts']),
+
+  /** An event (docs/design/agenda-redesign/40-data-model.html): its METADATA
+   *  row, PK=EVENT#<code>, and the organisation's list row,
+   *  PK=ORG#<org>#EVENTS / SK=EVENT#<code>. The same two strings ride on both
+   *  rows, so both are sealed — the `session` entity's reasoning about its
+   *  index row, again. `StartsAt`, `TimeZone`, `Access`, `State`,
+   *  `AttendeeReports` and the three counts are when, switches and counts,
+   *  and stay plaintext. */
+  event: Object.freeze(['Title', 'Place']),
+
+  /** One agenda item: PK=EVENT#<code>, SK=ITEM#<id>. Its title and its
+   *  description are what the host wrote for the room. `Type`, `Order`,
+   *  `Minutes`, `State` and `SetRef` — a pointer to a question set, as a
+   *  session's `QuestionSetId` is — are structure, and stay plaintext. */
+  item: Object.freeze(['Title', 'Description']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

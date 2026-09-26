@@ -670,6 +670,37 @@ for (const bad of ['questions', 'Question', 'sets', '', null, undefined]) {
 check('decryptItem refuses an unknown entity too', async () =>
   assert.rejects(() => C.decryptItem('org_nw', 'nope', {}), /unknown entity/));
 
+// ---------- 7b. An event and its agenda items (roadmap M1) ----------
+// The host writes an event's name and place, and each item's title and
+// description, for the room — org content, sealed as a session's title is.
+// Everything the builder and the public agenda arithmetic reads (when, how
+// long, what kind, which set) stays plaintext.
+console.log('\n7b. an event and its items');
+check('event seals exactly its title and place', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.event].sort(), ['Place', 'Title']));
+check('item seals exactly its title and description', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.item].sort(), ['Description', 'Title']));
+check('the schedule, the counts and the set pointer stay plaintext', () => {
+  for (const f of ['StartsAt', 'TimeZone', 'Access', 'State', 'AttendeeReports', 'ItemCount', 'EngagementCount', 'BreakCount']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.event.includes(f), `event would encrypt ${f}`);
+  }
+  for (const f of ['Type', 'Order', 'Minutes', 'State', 'SetRef']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.item.includes(f), `item would encrypt ${f}`);
+  }
+});
+check('an agenda item round-trips, and its words are not in the stored row', async () => {
+  const org = await newOrg('org_event_fields');
+  const row = { PK: 'EVENT#5307', SK: 'ITEM#it_0a1b2c3d', Type: 'trivia', Order: 3, Minutes: 15,
+    Title: 'How well do you know our customers?', Description: 'Ten questions. Scored.' };
+  const enc = await C.encryptItem(org, 'item', row);
+  assert.ok(C.isEnvelope(enc.Title) && C.isEnvelope(enc.Description));
+  assert.strictEqual(enc.Minutes, 15);
+  assert.ok(!JSON.stringify(enc).includes('customers'));
+  const back = await C.decryptItem(org, 'item', enc);
+  assert.strictEqual(back.Title, row.Title);
+  assert.strictEqual(back.Description, row.Description);
+});
+
 // ---------- 8. The three bundle copies are byte-identical ----------
 // CodeUri is per-directory and there are no layers, so this module is
 // triplicated exactly as tenant.js and set-version.js are. A drift here means
