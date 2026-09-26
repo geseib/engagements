@@ -197,3 +197,206 @@ describe('.svw is a plain flow child of .content/.fitbox', () => {
     expect(decl(body, 'height')).toBeNull();
   });
 });
+
+/**
+ * FIX ROUND 1, I1. `.svr-bar-l` / `.svr-rank-l` are `white-space:nowrap;
+ * text-overflow:ellipsis` in SurveyResults.css (the console's own rule,
+ * unchanged) — fine for a laptop card, but stage.css's own rule for exactly
+ * this ("NO LINE CLAMPS LIVE HERE... a clamp in base CSS makes the fitter
+ * blind: content arrives already cut, scrollHeight equals clientHeight, the
+ * fitter concludes it fits and stops") applies just as much to an
+ * unconditional ELLIPSIS as to an unconditional clamp: a long choice option
+ * or rank item silently clips, never grows `.content`'s scrollHeight, and
+ * the scale search never even tries to shrink type to show more of it.
+ *
+ * The fix mirrors `.opt .txt`'s own existing shape exactly: `.svw` overrides
+ * the two selectors to wrap normally (so a long label actually grows the
+ * box, which `over()` can see), and a clamp is reintroduced ONLY behind
+ * `[data-clamped="on"]` — the fitter's own terminal stage, never the base
+ * rule. Both selectors join `useStageFit.js`'s CONTENT list, the same
+ * whitelist `.q` / `.opt .txt` / `.card .ans` already sit on.
+ */
+const USE_STAGE_FIT = read('hooks', 'useStageFit.js');
+
+/** Every top-level rule in `css`, as { head, body } — same parser shape
+    stageLadderScope.test.js uses, needed here because the un-clamped and
+    clamped rules share selector text with multiple comma branches. */
+function rulesOf(css) {
+  const out = [];
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf('{', i);
+    if (open < 0) break;
+    const head = css.slice(i, open).split(';').pop().trim();
+    let depth = 1;
+    let j = open + 1;
+    while (j < css.length && depth > 0) {
+      if (css[j] === '{') depth += 1;
+      else if (css[j] === '}') depth -= 1;
+      j += 1;
+    }
+    const body = css.slice(open + 1, j - 1);
+    if (!head.startsWith('@')) out.push({ head: head.replace(/\s+/g, ' '), body });
+    i = j;
+  }
+  return out;
+}
+const STAGE_RULES = rulesOf(STAGE);
+const hasSelector = (rule, sel) => rule.head.split(',').map((s) => s.trim()).includes(sel);
+
+describe('.svr-bar-l / .svr-rank-l under .svw: wraps instead of silently ellipsing', () => {
+  const rule = STAGE_RULES.find((r) => hasSelector(r, '.svw .svr-bar-l') && hasSelector(r, '.svw .svr-rank-l'));
+
+  test('the un-clamped rule exists, scoped to .svw, covering both selectors', () => {
+    expect(rule).toBeDefined();
+  });
+
+  test('white-space:normal, overflow:visible, text-overflow:clip — no unconditional ellipsis', () => {
+    expect(decl(rule.body, 'white-space')).toBe('normal');
+    expect(decl(rule.body, 'overflow')).toBe('visible');
+    expect(decl(rule.body, 'text-overflow')).toBe('clip');
+  });
+
+  test('the console\'s own .svr-bar-l / .svr-rank-l are untouched — still nowrap + ellipsis', () => {
+    const svrStripped = strip(SVR_CSS);
+    expect(svrStripped).toMatch(/\.svr-bar-l\s*\{[^}]*white-space:\s*nowrap/);
+    expect(svrStripped).toMatch(/\.svr-bar-l\s*\{[^}]*text-overflow:\s*ellipsis/);
+    expect(svrStripped).toMatch(/\.svr-rank-l\s*\{[^}]*white-space:\s*nowrap/);
+    expect(svrStripped).toMatch(/\.svr-rank-l\s*\{[^}]*text-overflow:\s*ellipsis/);
+  });
+});
+
+describe('the terminal clamp lives ONLY behind [data-clamped="on"], never in the base rule', () => {
+  const clampRule = STAGE_RULES.find((r) => hasSelector(r, '.content[data-clamped="on"] .svw .svr-bar-l')
+    && hasSelector(r, '.content[data-clamped="on"] .svw .svr-rank-l'));
+
+  test('the clamp rule exists, gated on [data-clamped="on"]', () => {
+    expect(clampRule).toBeDefined();
+  });
+
+  test('it applies a 2-line clamp, the same shape .opt .txt\'s own terminal rule uses', () => {
+    expect(decl(clampRule.body, '-webkit-line-clamp')).toBe('2');
+    expect(decl(clampRule.body, 'display')).toBe('-webkit-box');
+    expect(decl(clampRule.body, 'overflow')).toBe('hidden');
+  });
+
+  test('no OTHER rule for these two selectors carries a clamp outside [data-clamped]', () => {
+    const offenders = STAGE_RULES.filter((r) => (hasSelector(r, '.svw .svr-bar-l') || hasSelector(r, '.svw .svr-rank-l'))
+      && /webkit-line-clamp/.test(r.body));
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('the fitter can actually see these two elements (useStageFit.js CONTENT)', () => {
+  test('.svw .svr-bar-l and .svw .svr-rank-l are both in the CONTENT whitelist', () => {
+    const m = USE_STAGE_FIT.match(/const CONTENT = '([^']+)'/);
+    expect(m).not.toBeNull();
+    const selectors = m[1].split(',');
+    expect(selectors).toContain('.svw .svr-bar-l');
+    expect(selectors).toContain('.svw .svr-rank-l');
+  });
+});
+
+/**
+ * FIX ROUND 1, M4: stage-scale track heights for the choice bar and the rank
+ * strip, so they read at 25 feet rather than at the console's 14px/10px.
+ * Token-derived, per profile — `--bar-h` already varies by profile
+ * (room 8px / tv 12px / call 10px / table 5px, stage.css's own four
+ * `:root.d-*` blocks) — rather than a second, unrelated literal.
+ */
+describe('choice bars and the rank strip get stage-scale track heights (M4)', () => {
+  const barTrack = STAGE_RULES.find((r) => hasSelector(r, '.svw .svr-bar-t'));
+  const rankStrip = STAGE_RULES.find((r) => hasSelector(r, '.svw .svr-rank-strip'));
+
+  test('both rules exist, scoped to .svw', () => {
+    expect(barTrack).toBeDefined();
+    expect(rankStrip).toBeDefined();
+  });
+
+  test('height is derived from --bar-h (a per-profile token), never a raw pixel', () => {
+    expect(decl(barTrack.body, 'height')).toMatch(/var\(--bar-h\)/);
+    expect(decl(rankStrip.body, 'height')).toMatch(/var\(--bar-h\)/);
+    expect(barTrack.body).not.toMatch(/height:\s*\d+px/);
+    expect(rankStrip.body).not.toMatch(/height:\s*\d+px/);
+  });
+
+  test('--bar-h itself really does vary per profile (the premise)', () => {
+    const values = new Set();
+    for (const head of [':root.d-room{', ':root.d-tv{', ':root.d-call{', ':root.d-table{']) {
+      const start = STAGE.indexOf(head);
+      const body = STAGE.slice(start, STAGE.indexOf('}', start));
+      const m = body.match(/--bar-h\s*:\s*([^;]+);/);
+      if (m) values.add(m[1].trim());
+    }
+    expect(values.size).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * FIX ROUND 1, I2: the presenter's own "N answered" line (`.rule-note`,
+ * s-02/s-04's own class) — found undeclared while reviewing this round:
+ * SurveyWalkthrough.jsx renders it, but nothing in stage.css gave it a
+ * font-size or a colour, which means it would have rendered as unstyled
+ * browser-default text rather than stage-scale type. Ported from the
+ * mockups' own rule verbatim (`.rule-note{font-size:var(--t-meta);
+ * color:var(--muted);font-weight:700;letter-spacing:.06em}`, s-02-choice.html
+ * / s-04-yesno.html), sitting beside `.recap`/`.qdetail` — the OTHER content
+ * typography rules a question's slide uses — not inside `.svw`, since it is
+ * a sibling of `.svw` in the markup, not a descendant.
+ */
+describe('.rule-note ("N answered") is styled with stage tokens', () => {
+  const rule = STAGE_RULES.find((r) => hasSelector(r, '.rule-note'));
+
+  test('the rule exists', () => {
+    expect(rule).toBeDefined();
+  });
+
+  test('reads the label tier (--t-meta), never a pixel', () => {
+    expect(decl(rule.body, 'font-size')).toBe('var(--t-meta)');
+  });
+
+  test('colour is --muted, already measured against the stage field above', () => {
+    expect(decl(rule.body, 'color')).toBe('var(--muted)');
+  });
+});
+
+describe('the track fill clears 3:1 (non-text) against its own track — choice bars and the rank strip', () => {
+  // The fill/track COLOURS are unchanged from SurveyResults.css (M4 only
+  // changes height); this re-measures them because the walk-through is the
+  // first place they are asserted at all — surveyResultsPalette.test.js
+  // never covered this specific pairing for the console either.
+  const svrStripped = strip(SVR_CSS);
+  const svrRule = (selector) => {
+    const found = rulesOf(svrStripped).find((r) => hasSelector(r, selector));
+    if (!found) throw new Error(`no console rule for "${selector}"`);
+    return found.body;
+  };
+  const TRACK_TOKENS = {
+    text: T.text,
+    muted: T.muted,
+    primary: T.primary,
+    'surface-2': T.surface2,
+    secondary: tokenIn(GLOBAL_CSS, ':root {', '--secondary'),
+    'primary-deep': tokenIn(GLOBAL_CSS, ':root {', '--primary-deep'),
+  };
+  const tokenColour = (value) => {
+    const m = String(value).match(/^var\(--([a-z0-9-]+)\)$/);
+    if (!m || !TRACK_TOKENS[m[1]]) throw new Error(`colour "${value}" is not one of the tokens this test knows`);
+    return TRACK_TOKENS[m[1]];
+  };
+  const NON_TEXT = 3;
+
+  test('the choice bar\'s track and its two fills', () => {
+    const track = tokenColour(decl(svrRule('.svr-bar-t'), 'background'));
+    const fill = tokenColour(decl(svrRule('.svr-bar-t i'), 'background'));
+    const topFill = tokenColour(decl(svrRule('.svr-bar.is-top .svr-bar-t i'), 'background'));
+    expect(ratio(parseHex(fill), parseHex(track))).toBeGreaterThanOrEqual(NON_TEXT);
+    expect(ratio(parseHex(topFill), parseHex(track))).toBeGreaterThanOrEqual(NON_TEXT);
+  });
+
+  test('the rank strip\'s track and its lead segment', () => {
+    const track = tokenColour(decl(svrRule('.svr-rank-strip'), 'background'));
+    const p1 = tokenColour(decl(svrRule('.svr-p1'), 'background'));
+    expect(ratio(parseHex(p1), parseHex(track))).toBeGreaterThanOrEqual(NON_TEXT);
+  });
+});

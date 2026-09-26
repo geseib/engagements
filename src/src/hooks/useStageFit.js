@@ -11,8 +11,13 @@ import { searchScale, buildSacrificeList, isAbbreviated } from './fitPolicy';
  */
 
 /** Room-facing CONTENT. These may never be abbreviated. Chrome — rail title,
- *  roster names, podium names — may, and is excluded here on purpose. */
-const CONTENT = '.q,.qdetail,.recap,.opt .txt,.card .ans,.notes .lead,.notes li span,.hero,.terms .t';
+ *  roster names, podium names — may, and is excluded here on purpose.
+ *  `.svw .svr-bar-l` / `.svw .svr-rank-l` joined fix round 1 (I1): the survey
+ *  walk-through's choice-bar and rank-item labels, once styles/stage.css
+ *  stopped letting them ellipsis unconditionally — the same "may only be
+ *  clamped behind [data-clamped=\"on\"]" contract every other entry here
+ *  already holds to. */
+const CONTENT = '.q,.qdetail,.recap,.opt .txt,.card .ans,.notes .lead,.notes li span,.hero,.terms .t,.svw .svr-bar-l,.svw .svr-rank-l';
 
 /** Per-profile scale floor, read off the box because Task 1's profile has
  *  already applied it to the stylesheet by the time this runs (the hook must

@@ -489,6 +489,38 @@ body, .stage-ladder-table{
   --svr-on-accent:#1B2942;
 }
 
+/* ---------------------------------------------------------------------------
+   FIX ROUND 1, I1: `.svr-bar-l` / `.svr-rank-l` (SurveyResults.css) are
+   `white-space:nowrap; text-overflow:ellipsis` unconditionally — right for a
+   laptop card, wrong on the wall for the same reason this file's own "NO LINE
+   CLAMPS LIVE HERE" rule exists above: an unconditional ellipsis clips a long
+   choice option or rank item WITHOUT growing `.content`'s scrollHeight, so
+   `over()` never sees it and the scale search never tries to shrink type to
+   show more. Overridden here to wrap normally — a real overflow the fitter
+   can measure — with a clamp reintroduced ONLY behind the fitter's own
+   terminal `[data-clamped="on"]`, the exact shape `.opt .txt` already uses two
+   sections above. The console's own rule is untouched (a different
+   selector's specificity, `.svw`-scoped) — surveyWalkthroughPalette.test.js
+   holds both halves, and that SurveyResults.css itself did not change. Both
+   selectors join CONTENT in hooks/useStageFit.js so the fitter's
+   `truncated()` check can see them the same way it already sees `.opt .txt`.
+   --------------------------------------------------------------------------- */
+.svw .svr-bar-l,.svw .svr-rank-l{white-space:normal;overflow:visible;text-overflow:clip}
+.content[data-clamped="on"] .svw .svr-bar-l,
+.content[data-clamped="on"] .svw .svr-rank-l{-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+
+/* FIX ROUND 1, M4: stage-scale track heights for the choice bar and the rank
+   strip — SurveyResults.css's own 14px / 10px read fine on a laptop card and
+   vanish from 25 feet. Derived from `--bar-h`, the profile's own bar-weight
+   token (room 8px / tv 12px / call 10px / table 5px, the four `:root.d-*`
+   blocks above) rather than a second, unrelated literal — the fill/track
+   COLOURS are unchanged from the console, only the track's thickness scales
+   per profile. surveyWalkthroughPalette.test.js measures the fill against its
+   track (3:1, non-text) — a colour question this only restates, never
+   changes. */
+.svw .svr-bar-t{height:calc(var(--bar-h) * 2)}
+.svw .svr-rank-strip{height:calc(var(--bar-h) * 2)}
+
 /* ------------------------------------------------------------------- DOCK */
 .dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
   display:flex;align-items:center;gap:calc(1.2vw + 8px);
@@ -646,6 +678,11 @@ body, .stage-ladder-table{
    is not a reminder. */
 .recap{font-size:var(--t-body);color:var(--text);margin:0;font-weight:600;
   max-width:56ch;line-height:1.25}
+/* FIX ROUND 1, I2: the survey walk-through's own "N answered" line — s-02
+   ("Pick one · 38 answered") / s-04 ("38 answered · Not sure 8%")'s
+   `.rule-note`, verbatim. A sibling of `.svw` in the markup (it sits between
+   `.recap` and the kind renderer), never inside it. */
+.rule-note{font-size:var(--t-meta);color:var(--muted);font-weight:700;letter-spacing:.06em}
 /* Ported from 10-ended.html:321-322 now that ENDED renders one. It is already
    in the fitter's CONTENT list, so it may shrink but may never be abbreviated. */
 .hero{font-family:var(--font-display);font-weight:800;font-size:var(--t-hero);
