@@ -448,7 +448,13 @@ function AdminPage() {
     } catch { setPlanRequest(null); }
   }, [activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!activeOrgId) return;
+    /* onPlatform, not just activeOrgId: platform mode's activeOrgId IS the
+       literal string PLATFORM_MODE (truthy), and activeTab is a FETCH guard
+       here (not resolvedTab — see the reasoning above), so it still carries
+       whatever section a staff member last asked for, including 'events' or
+       'billing', after switching to platform view. Without this, either
+       branch below fetched orgs/~platform/plan-requests (Fix round 2 #5). */
+    if (!activeOrgId || onPlatform) return;
     if (activeTab === 'billing') {
       loadPlanRequest();
       // The ledger, read-only for the customer (step 3). Members get a 403 and
@@ -469,7 +475,7 @@ function AdminPage() {
          nothing there ever shows the button this is for. */
       loadPlanRequest();
     }
-  }, [activeTab, activeOrgId, eventsTeamPlan]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, activeOrgId, eventsTeamPlan, onPlatform]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const withdrawPlanRequest = async () => {
     if (!planRequest || !activeOrgId) return;

@@ -247,6 +247,25 @@ describe('platform mode', () => {
     expect(document.querySelector('h1')).toHaveTextContent('Organisations');
   });
 
+  // rejects: the plan-request effect firing off `activeTab` (a fetch guard,
+  // not a render gate — see its own comment) without checking onPlatform.
+  // `?section=events` seeds `activeTab` with a real section id (Events is in
+  // the global vocabulary, ALL_SECTION_IDS, even though platform mode has no
+  // such section) — exactly what a staff member switching to platform view
+  // FROM Events leaves behind. Without the guard this fetches
+  // orgs/~platform/plan-requests, since activeOrgId is the literal string
+  // PLATFORM_MODE and activeOrg is undefined (Fix round 2 #5).
+  it('platform mode makes no plan-requests fetch, even with ?section=events left in the URL', async () => {
+    mockActiveOrg = PLATFORM_MODE;
+    window.history.pushState({}, '', '/admin?section=events');
+    serve();
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(mounted()).toEqual(['Organisations']));
+    const urls = global.fetch.mock.calls.map(([url]) => String(url));
+    expect(urls.some((u) => u.includes('/plan-requests'))).toBe(false);
+  });
+
   // rejects: the heading and the body describing different screens — the state
   // that makes the console feel broken rather than merely wrong.
   it('never disagrees with its own heading', async () => {
@@ -456,6 +475,22 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
     expect(await screen.findByTestId('preq-strip')).toHaveTextContent('Team plan requested');
     expect(screen.queryByRole('button', { name: /request the team plan/i })).toBeNull();
+  });
+
+  // Fix round 2 #4: proves the button actually opens AdminPage's real
+  // PlanRequestDialog, not merely that a mock onRequestPlan callback fired
+  // (eventsPanel.test.jsx already covers that in isolation).
+  it('"Request the Team plan" on Events opens the real PlanRequestDialog', async () => {
+    mockGroups = ['hosts'];
+    mockActiveOrg = HOME.orgId;
+    window.history.pushState({}, '', '/admin?section=events');
+    serve([HOME], { events: true });
+    render(<AdminPage />);
+    await settle();
+    await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Request the Team plan' }));
+    expect(await screen.findByRole('heading', { name: 'Request the Team plan', level: 2 })).toBeInTheDocument();
+    expect(screen.getByTestId('preq-sum')).toBeInTheDocument();
   });
 
   // Item 1 (IMPORTANT): a slow load for a left-behind event must not rename
