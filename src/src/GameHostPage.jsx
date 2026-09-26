@@ -1177,6 +1177,10 @@ function GameHostPage() {
     setAiRetrying(false);
     // Same for a refused survey call: it was about the session being left.
     setSurveyActionError('');
+    // Same for a refused End: "The session did not end: …" was about the
+    // session being left, not the next one opened. Bug sweep final review,
+    // Minor 1 — sessionActionError shipped without this line.
+    setSessionActionError('');
     aiQuestionRef.current = null;
     resetGameSession(gameSessionSetters, overrides);
   };

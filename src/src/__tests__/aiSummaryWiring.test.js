@@ -162,4 +162,16 @@ describe('leaving a game', () => {
     expect(body).toContain('clearAITimers()');
     expect(body).toContain('setAiSummaryFailure(null)');
   });
+
+  // rejects: a refused End's "The session did not end: …" surviving into the
+  // next game opened. sessionActionError is the same shape as
+  // surveyActionError (also asserted here) and, like it, is deliberately NOT
+  // on config/gameSession.js's key list — see the state declaration beside
+  // sessionActionError's useState. Bug sweep final review, Minor 1.
+  it('clears the session action error and the survey action error', () => {
+    const body = functionBody('leaveCurrentGame');
+    expect(body).not.toBeNull();
+    expect(body).toContain("setSurveyActionError('')");
+    expect(body).toContain("setSessionActionError('')");
+  });
 });
