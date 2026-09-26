@@ -345,6 +345,19 @@ function HostRemote() {
     auth?.signOut?.();
   }, [auth]);
 
+  /**
+   * Back to the code entry screen — the remote's menu. Named so the access
+   * gate's "Enter a different code" (fix round 1 item 4) can share it: a
+   * mistyped code answers the SAME 404 a wrong account does — `get-game.js`
+   * refuses both identically, on purpose, so as not to leak which sessions
+   * exist — so the gate needs the same way out the Session card already has.
+   */
+  const backToMenu = useCallback(() => {
+    setGameId('');
+    setGameIdDraft('');
+    setSnapshot(null);
+  }, []);
+
   /* ------------------------------------------------------------ polling */
 
   const pollState = useCallback(async (id) => {
@@ -1081,6 +1094,15 @@ function HostRemote() {
                   <ActiveOrgSwitcher onSwitch={recheckAccess} />
                 </div>
               )}
+              {/* Fix round 1 item 4: the gate had no way back at all. A
+                  mistyped code 404s exactly the same way a wrong account
+                  does — the door cannot tell the two apart, on purpose — so
+                  this offers the same exit the normal Session card's "Back to
+                  Menu" does, for every denial reason, not only 'account'. */}
+              <button className="hr-btn hr-btn--ghost" type="button" onClick={backToMenu}>
+                <Icon name="House" weight="bold" size={18} color="currentColor" />
+                Enter a different code
+              </button>
             </section>
           )
         ) : panelTab ? (
@@ -1462,7 +1484,7 @@ function HostRemote() {
                 <button
                   className="hr-btn hr-btn--ghost"
                   type="button"
-                  onClick={() => { setGameId(''); setGameIdDraft(''); setSnapshot(null); }}
+                  onClick={backToMenu}
                 >
                   {/* House, not ArrowsClockwise: this goes back to the code
                       entry screen, which is the remote's menu. A cycle glyph

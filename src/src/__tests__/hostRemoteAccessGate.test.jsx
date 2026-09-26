@@ -254,6 +254,20 @@ describe('404 — this account cannot drive the session', () => {
     await screen.findByRole('alert');
     expect(await screen.findByTestId('orgsw-chip')).toBeInTheDocument();
   });
+
+  // Fix round 1 item 4: the gate had no way back, and a mistyped code 404s
+  // exactly the same way a wrong account does (`get-game.js` answers the
+  // identical "Game not found" for either reason, on purpose).
+  it('offers a way back to the code entry screen, for a code that was simply mistyped', async () => {
+    serve({ hostDetails: 404 });
+    enterCode();
+
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: /enter a different code/i }));
+
+    expect(screen.getByLabelText(/session code/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
 
 /* ------------------------------------------------------------------- 401 */
@@ -291,6 +305,17 @@ describe('401 — the sign-in itself has run out', () => {
 
     expect(mockSignOut).toHaveBeenCalled();
     expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  // Fix round 1 item 4 — offered on every denial reason, not only 'account'.
+  it('offers a way back to the code entry screen too', async () => {
+    serve({ hostDetails: 401 });
+    enterCode();
+
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: /enter a different code/i }));
+
+    expect(screen.getByLabelText(/session code/i)).toBeInTheDocument();
   });
 });
 
