@@ -335,6 +335,11 @@ const ENCRYPTED_FIELDS = Object.freeze({
   report: Object.freeze([
     'gameTitle',
     'hostName',
+    // The event's own free text (Task 2, "About this session"): the same
+    // class of host-authored content as gameTitle/hostName above, and it is
+    // ENCRYPTED_FIELDS.session's `Details`/`EngagementInfo` on the row this
+    // report is built from.
+    'eventDetails',
     'playerPerformance',
     'detailedQuestions',
     'questionSummaries',

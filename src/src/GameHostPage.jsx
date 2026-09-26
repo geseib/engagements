@@ -4978,6 +4978,14 @@ Focus on actionable business strategy insights.`;
         // from scratch, and a caveat the document never receives is a caveat
         // nobody reads.
         reportCompleteness: report.reportCompleteness,
+        // "About this session" and "Who was here" (Task 2): the event's own
+        // free text, and the question set's summary as a fallback source for
+        // "what people were asked to do". Same rebuilt-from-scratch reason as
+        // every field above — GameReport never sees a field left out here.
+        eventDetails: report.eventDetails || '',
+        questionSetData: report.questionSetData || null,
+        // `playerPerformance` already carries `joinedAt` per player (Task 2);
+        // this is a straight passthrough, so the roster gets it for free.
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
         /*

@@ -296,6 +296,42 @@
   font-feature-settings: "tnum" 1;
 }
 
+/* --------------------------------------------------------------------------
+   ABOUT THIS SESSION & WHO WAS HERE — Task 2's front matter.
+
+   Two short blocks under the title, before the caveat and the rounds. Both
+   reuse the SAME heading and body styling every round already has
+   (`.report-question-header`, `.report-lesson-heading`, `.report-lesson-
+   detail`, `.report-block`, `.report-block-heading`) rather than inventing a
+   second visual language — the only rules that are actually new here are
+   each section's own bottom margin (the title block and the caveat each set
+   their own; there is no `.report-doc > * + *` rule to inherit spacing from)
+   and the roster's own list.
+   -------------------------------------------------------------------------- */
+.report-paper .report-about,
+.report-paper .report-roster {
+  margin: 0 0 40px;
+}
+
+.report-paper .report-roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.report-paper .report-roster-item {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.report-paper .report-roster-item:not(:last-child)::after {
+  content: "\00b7";
+  margin: 0 10px;
+  color: var(--muted);
+}
+
 /* ---- SECTIONS ----
    `.report-content` in styles.css is `max-width:1000px; margin:0 auto;
    padding:20px` — a page-level layout container from when the report WAS the
@@ -994,6 +1030,20 @@
     border-right: 0.5pt solid #999;
     padding-right: 16pt;
     margin-right: 16pt;
+  }
+
+  /* ---- ABOUT THIS SESSION & WHO WAS HERE, IN INK ----
+     Same treatment as the caveat above: short front-matter, so it is never
+     split across a page break. Their headings already inherit break-after:
+     avoid from `.report-question-header` below. */
+  .report-paper .report-about,
+  .report-paper .report-roster {
+    break-inside: avoid;
+    margin: 0 0 22pt;
+  }
+
+  .report-paper .report-roster-item:not(:last-child)::after {
+    color: #666;
   }
 
   /* ---- SECTION BREAKS ----

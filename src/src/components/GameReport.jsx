@@ -330,7 +330,57 @@ function GameReport({
  * a payload it might not have is one `?.` away from a white screen.
  */
 function ReportDocument({ reportData }) {
-  const { gameId, eventTitle, players = [], questions = [] } = reportData;
+  const { gameId, eventTitle, players = [], questions = [], questionSetData } = reportData;
+
+  /*
+   * "ABOUT THIS SESSION" (Task 2 of the 2026-09-26 feature sweep).
+   *
+   * The owner: "for session report it would be nice to have it start with
+   * event info if given ... what they are being asked to do in the
+   * session." Two separate pieces, per the brief:
+   *
+   *   eventDetails    the session's own free text, verbatim (create-report.js
+   *                   reads it off sessionMeta.Details/EngagementInfo).
+   *   "What people were asked to do"   the session's details AND/OR the
+   *                   question set's own description — the set's summary
+   *                   when the set has one, the same session Details
+   *                   otherwise (there is no second field to split them
+   *                   into today, so a session with a blurb but no separate
+   *                   set summary reads that blurb again under this label —
+   *                   the brief's own wording, deliberately, not an
+   *                   oversight of this component's).
+   */
+  const eventDetails = String(reportData.eventDetails || '').trim();
+  const setDescription = String((questionSetData && questionSetData.description) || '').trim();
+  const purposeText = setDescription || eventDetails;
+  const showAbout = Boolean(eventDetails || setDescription);
+  const showPurpose = Boolean(purposeText);
+
+  /*
+   * "WHO WAS HERE" — a roster of names only, in JOIN order.
+   *
+   * `players` is `playerPerformance`, already ordered by score for Final
+   * Scores below; this is a different question ("who showed up", not "who
+   * won") and reuses the same array rather than a second source of truth.
+   * `joinedAt` is only on players reported after Task 2 shipped — a report
+   * with none of it falls back to the array's own order rather than
+   * throwing or reshuffling arbitrarily.
+   *
+   * This never reveals who answered what: a round run with hidden authors
+   * still omits `playerName` on its own answers/comments exactly as it does
+   * today (create-report.js's isHidden gate) — the roster is drawn from
+   * PLAYER# rows (who joined), a fact anonymity was never about withholding.
+   */
+  const roster = players
+    .slice()
+    .sort((a, b) => {
+      const at = a && a.joinedAt;
+      const bt = b && b.joinedAt;
+      if (!at || !bt) return 0;
+      return at < bt ? -1 : at > bt ? 1 : 0;
+    })
+    .map((p) => p && (p.playerName || p.name))
+    .filter(Boolean);
 
   /*
    * WHAT THIS REPORT COULD NOT RECONSTRUCT.
@@ -397,6 +447,48 @@ function ReportDocument({ reportData }) {
           </div>
         </dl>
       </header>
+
+      {/* ---- ABOUT THIS SESSION & WHO WAS HERE — Task 2's front matter ----
+          Under the title, before the caveat and the rounds, per the owner's
+          own ask. Both are `report-keep`, like the caveat below: short
+          front-matter blocks that must never be split by a page break,
+          unlike Final Scores which is allowed to run across one. Task 4's
+          survey section attaches beneath this pair without touching it. */}
+      {showAbout && (
+        <section className="report-about report-keep">
+          <header className="report-question-header">
+            <p className="report-section-index">
+              <span className="report-section-number">Session</span>
+            </p>
+            <h2 className="report-lesson-heading">About this session</h2>
+          </header>
+          {eventDetails && (
+            <p className="report-lesson-detail">{eventDetails}</p>
+          )}
+          {showPurpose && (
+            <div className="report-block report-about-purpose">
+              <h3 className="report-block-heading">What people were asked to do</h3>
+              <p>{purposeText}</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {roster.length > 0 && (
+        <section className="report-roster report-keep">
+          <header className="report-question-header">
+            <p className="report-section-index">
+              <span className="report-section-number">Attendance</span>
+            </p>
+            <h2 className="report-lesson-heading">Who was here</h2>
+          </header>
+          <ol className="report-roster-list">
+            {roster.map((name, idx) => (
+              <li key={`${name}-${idx}`} className="report-roster-item">{name}</li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {/* ---- CAVEAT, when the record is not whole ----------------------- */}
       {caveat && (

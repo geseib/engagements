@@ -801,6 +801,14 @@ exports.handler = async (event) => {
 
       return {
         playerName: playerName,
+        // "Who was here" (Task 2): the frontend roster sorts by this to list
+        // names in join order rather than by score, which is what Final
+        // Scores already owns. Off the deduplicated PLAYER# row itself —
+        // `player` here, not `playerScoreRecord` — because the SCORE row
+        // carries no join time at all. null, not undefined, for a row
+        // written before this field existed or a snapshot recovered from a
+        // report generated before it did.
+        joinedAt: player.JoinedAt || null,
         totalScore: totalScore,
         answersGiven: playerAnswers.length,
         votesGiven: playerVotes.length,
@@ -853,6 +861,15 @@ exports.handler = async (event) => {
       // and `session.HostName`, which are ciphertext at rest on an org's row.
       gameTitle: sessionMeta.EventTitle || sessionMeta.Title || 'Untitled Game',
       hostName: sessionMeta.HostName || 'Unknown Host',
+      // "About this session" (Task 2 of the 2026-09-26 feature sweep): the
+      // event's own free text, verbatim. Same field and fallback order
+      // get-ai-summary.js already reads for its prompt
+      // (eventDetails: metadata.EngagementInfo || metadata.Details || '').
+      // sessionMeta is the decrypted session row two lines up already reads
+      // Title/HostName from — an org's Details is sealed the same way and
+      // opens the same way. '' rather than undefined: the frontend's
+      // conditional block reads absence, not undefined-vs-missing.
+      eventDetails: sessionMeta.EngagementInfo || sessionMeta.Details || '',
       questionSetId: gameMetadata.Item.QuestionSetId,
       gameType: gameMetadata.Item.GameType || 'standard',
       createdAt: gameMetadata.Item.CreatedAt,
