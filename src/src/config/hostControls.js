@@ -316,11 +316,22 @@ export function surveyCloseConfirm(counts) {
  * `irreversible: true` makes the dialog refuse → as yes (ConfirmDialog
  * `arrowConfirms`), since → may just have been the key that advanced the
  * round the host is standing on when they open the panel.
+ *
+ * FIX ROUND 1, ITEM 2 — "THIS CANNOT BE UNDONE" WAS NOT TRUE, so it is not
+ * said. next-question.js's own state-validity guard (~826) lets `skip`,
+ * `select_specific` and `skip_to_specific` through from ANY state, ENDED
+ * included — the check is `!isValidState && action !== 'skip' && ...`, so an
+ * action in that list short-circuits it — and the question browser's "Ask
+ * next" / "Ask again" is not gated on `gameState !== 'ENDED'` either. That is
+ * a separate, pre-existing gap (out of scope here; the controller is
+ * recording it), but a confirm dialog cannot claim a guarantee the rest of
+ * the product does not keep. `irreversible: true` still stands — it is about
+ * how the dialog treats →, not a claim about what happens after.
  */
 export function endSessionConfirm() {
   return {
     title: 'End this session?',
-    message: 'Ending closes the session for every phone, laptop or tablet in the room, right now. This cannot be undone.',
+    message: 'Ending closes the session for every phone, laptop or tablet in the room, right now.',
     confirmText: 'End session',
     irreversible: true,
   };

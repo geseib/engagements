@@ -894,11 +894,54 @@ describe('the page wires "End session" to the intent and the confirm', () => {
     expect(prop).toMatch(/endSessionConfirm\(\)/);
   });
 
+  /*
+    FIX ROUND 1, ITEM 1 — NO MODAL ON A MODAL. `runHostAction` closes every
+    side panel only AFTER `showConfirmation` resolves (it has to: the confirm
+    must be honoured before ANY control dispatches), so calling it directly
+    from a still-open panel's button left the confirm dialog open on top of
+    that panel — and because both the panel and ConfirmDialog carry a
+    document-level Escape listener, one Escape press cancelled the confirm AND
+    closed the panel behind it. `selectQuestion` (~3549) already carries the
+    fix for the same shape of bug: close synchronously, on the click, before
+    anything async runs. Pinned behaviourally (a real mount, a real click) in
+    endSessionConfirmFlow.test.jsx; pinned here as the wiring itself.
+  */
+  test('the panel closes synchronously, before runHostAction ever asks', () => {
+    const start = source.indexOf('onEndSession={');
+    const prop = source.slice(start, source.indexOf('\n', source.indexOf('}}', start)) + 1);
+    const closes = prop.indexOf('closeAllSidePanels(');
+    const dispatches = prop.indexOf('runHostAction(');
+    expect(closes).toBeGreaterThan(-1);
+    expect(dispatches).toBeGreaterThan(closes);
+  });
+
   test('the dispatch does not ask a second time, and is the only caller of itself', () => {
     const dispatch = bodyOf('endSessionNow');
     expect(dispatch).not.toContain('showConfirmation(');
     // The only caller of endSessionNow is the dispatch switch.
     expect(source.match(/endSessionNow\(/g)).toHaveLength(1);
+  });
+
+  /*
+    FIX ROUND 1, ITEM 5 — A REFUSED HOST ACTION IS SAID IN THE DOCK, NEVER
+    alert(). The page's own rule (~491-492, beside surveyActionError): "A
+    refused survey call ... said in the dock beside the button that was
+    pressed — never alert()." endSessionNow shipped as the one exception;
+    fixed to the same shape endSurveyNow already uses.
+  */
+  test('a refused end never alerts — it lands in the dock, like every survey action', () => {
+    const dispatch = bodyOf('endSessionNow');
+    expect(dispatch).not.toContain('alert(');
+    expect(dispatch).toMatch(/setSessionActionError\(/);
+    // Cleared on the way in, the same as endSurveyNow's own success path
+    // clears surveyActionError, so a stale refusal cannot outlive a retry.
+    expect(dispatch).toMatch(/setSessionActionError\(['"]{2}\)/);
+  });
+
+  test('the dock actually reads it — dockHint falls back to it', () => {
+    const start = source.indexOf('const dockHint');
+    const line = source.slice(start, source.indexOf(';', start));
+    expect(line).toMatch(/sessionActionError/);
   });
 
   test('the dispatch calls the route through utils/endSession, with authFetch', () => {

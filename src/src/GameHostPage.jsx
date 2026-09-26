@@ -491,6 +491,11 @@ function GameHostPage() {
   // A refused survey call (a 409 from a second device, a dropped network),
   // said in the dock beside the button that was pressed — never alert().
   const [surveyActionError, setSurveyActionError] = useState('');
+  // Task 4 fix round 1, item 5: End session shipped with `alert()`, the one
+  // exception to the rule stated above it. Same shape as surveyActionError,
+  // kept separate rather than renamed onto it — this fires for every
+  // non-survey type, not only a survey's own three acts.
+  const [sessionActionError, setSessionActionError] = useState('');
   /*
     WHERE THE ROOM IS — hooks/useSurveyProgress.js: GET /survey/progress on
     arrival, the `surveyProgress` frame after. Declared up here, above every
@@ -5538,13 +5543,19 @@ Focus on actionable business strategy insights.`;
     carried on the action runHostAction was given) has already said yes. The
     ask is not here, the same reason closeSurveyNow's own note gives: two asks
     would be one too many. Task 4, 2026-09-26 bug sweep.
+
+    FIX ROUND 1, ITEM 5: a refusal is said in the dock beside the button that
+    was pressed (sessionActionError, read by dockHint), never alert() — the
+    same rule surveyActionError already follows, and the one this shipped
+    breaking.
   */
   const endSessionNow = async () => {
     const result = await requestEndSession({ fetchFn: authFetch, apiBase: API_BASE, gameId });
     if (!result.ended) {
-      alert(`The session did not end: ${result.error}`);
+      setSessionActionError(`The session did not end: ${result.error}`);
       return;
     }
+    setSessionActionError('');
     setGameState('ENDED');
   };
 
@@ -6028,9 +6039,10 @@ Focus on actionable business strategy insights.`;
   // has JOINED. Dropping the hint here lets dockStatus below fall through to
   // statusTextFor's "Waiting for players to join…", which is already keyed
   // off playerCount === 0 for this exact case.
-  // A refused survey call outranks the disabled-primary hint: it is about the
-  // button the host just pressed, and it is the only place it is said.
-  const dockHint = surveyActionError
+  // A refused survey call — or a refused End session (Task 4 fix round 1,
+  // item 5) — outranks the disabled-primary hint: it is about the button the
+  // host just pressed, and it is the only place it is said.
+  const dockHint = surveyActionError || sessionActionError
     || (hostControls.primary.disabled && hostPhase !== 'LOBBY' && players.length > 0
       ? hostControls.primary.hint
       : '');
@@ -7057,12 +7069,30 @@ Focus on actionable business strategy insights.`;
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
           onSwitchGame={requestLeave}
-          // Task 4, 2026-09-26 bug sweep. Built the same way the dock's own
-          // controls are: the intent AND its confirm travel together into
-          // runHostAction, so the generic "the dock asks before it dispatches
-          // any control that carries confirm" gate covers this one too — no
-          // second ask needed here or in endSessionNow.
-          onEndSession={() => runHostAction({ intent: HOST_INTENTS.END, confirm: endSessionConfirm() })}
+          /*
+            Task 4 fix round 1, item 1: CLOSE THE PANEL FIRST. `runHostAction`
+            closes every side panel only AFTER `showConfirmation` resolves — it
+            has to, since the confirm must be honoured before any control (the
+            dock's own included) dispatches — so calling it directly here left
+            the confirm open ON TOP of this still-open panel. Two faults from
+            one cause: a modal drawn over a modal, and — because both carry a
+            document-level Escape listener — one Escape press cancelled the
+            confirm AND closed the panel behind it, with no way to tell which
+            just happened.
+
+            `selectQuestion` (~3549) already had the fix for the same shape of
+            bug ("Close the panel first, so the confirmation is the only thing
+            on screen"): close synchronously, on the click, before anything
+            async runs. The intent AND its confirm still travel together into
+            runHostAction exactly as before, so the generic "the dock asks
+            before it dispatches any control that carries confirm" gate still
+            covers this control — closing first only changes what is on
+            screen while it asks.
+          */
+          onEndSession={() => {
+            closeAllSidePanels();
+            runHostAction({ intent: HOST_INTENTS.END, confirm: endSessionConfirm() });
+          }}
           onSignOut={handleSignOut}
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.

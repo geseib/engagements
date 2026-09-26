@@ -39,13 +39,14 @@ const store = new Map();
 const key = (pk, sk) => `${pk}|${sk}`;
 let sent = [];
 let updates = [];
+let gets = [];
 
 const fakeDoc = {
   send: async (cmd) => {
     const inp = cmd.input || {};
     switch (cmd.type) {
       case 'put': store.set(key(inp.Item.PK, inp.Item.SK), inp.Item); return {};
-      case 'get': return { Item: store.get(key(inp.Key.PK, inp.Key.SK)) };
+      case 'get': gets.push(inp.Key); return { Item: store.get(key(inp.Key.PK, inp.Key.SK)) };
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
       case 'update': {
         updates.push(inp);
@@ -135,9 +136,15 @@ function seed(gameId, { orgId = 'acme', gameType = 'trivia', state = 'ASK#003' }
 (async () => {
   console.log('\n1. the gates');
   seed('5101');
+  gets = [];
   const anon = await endSession('5101', { auth: null });
   check('no caller identity: 404, like next-question.js', () => assert.strictEqual(anon.statusCode, 404, anon.body));
   check('nothing was written', () => assert.strictEqual(stateOf('5101').State, 'ASK#003'));
+  // Fix round 1, item 4: the claims check moved above the two DynamoDB reads,
+  // so an unidentified caller costs the table nothing at all.
+  check('no read was even attempted — refused before touching the table', () => {
+    assert.strictEqual(gets.length, 0, JSON.stringify(gets));
+  });
 
   const other = await endSession('5101', { auth: OTHER_ORG_HOST });
   check("another organisation's host: 404, and nothing written", () => {
@@ -202,9 +209,53 @@ function seed(gameId, { orgId = 'acme', gameType = 'trivia', state = 'ASK#003' }
     assert.strictEqual(survey.statusCode, 400, survey.body);
     assert.strictEqual(stateOf('5301').State, 'SURVEY#OPEN');
   });
-  check('points at survey/end', () => {
+  check('names survey/end by name (fix round 1, item 8)', () => {
     const body = JSON.parse(survey.body);
-    assert.ok(/survey\/end|survey.*end the session/i.test(`${body.error} ${body.message}`), JSON.stringify(body));
+    assert.ok(/survey\/end/i.test(`${body.error} ${body.message}`), JSON.stringify(body));
+  });
+
+  /*
+    FIX ROUND 1, ITEM 3 — a CREATED session is one the UI never offers to end
+    (`canEndSession` refuses the lobby), and this route must refuse it too:
+    ending it would leave `Started` unset and the 90-day ttl in place, with
+    STATE reading ENDED for a session that never opened.
+  */
+  console.log('\n6. a CREATED session has not started — refused, not ended');
+  seed('5401', { state: 'CREATED' });
+  gets = []; updates = []; sent = [];
+  const created = await endSession('5401');
+  check('409, not ended', () => {
+    assert.strictEqual(created.statusCode, 409, created.body);
+    assert.strictEqual(stateOf('5401').State, 'CREATED');
+  });
+  check('says plainly that it has not started', () => {
+    const body = JSON.parse(created.body);
+    assert.ok(/has not started yet/i.test(`${body.error} ${body.message}`), JSON.stringify(body));
+  });
+  check('nothing written, nothing broadcast', () => {
+    assert.strictEqual(updates.length, 0);
+    assert.strictEqual(sent.length, 0);
+  });
+
+  /*
+    FIX ROUND 1, ITEM 6 — THE NO-DUPLICATION REQUIREMENT, PINNED DIRECTLY.
+    next-question.js's pool-dry path must call the shared helper rather than
+    carry its own copy of the ENDED write — the whole point of extracting
+    session-end.js. A source scan, not a behavioural test: the behaviour is
+    already covered above (§2-4), and what could silently regress is someone
+    re-inlining the UpdateCommand beside the call rather than instead of it.
+  */
+  console.log('\n7. the shared helper is not duplicated');
+  const nextQuestionSrc = require('fs').readFileSync(
+    path.join(REPO, 'lambda-functions/game/next-question.js'), 'utf8',
+  );
+  check('next-question.js calls the shared helper for its pool-dry ending', () => {
+    assert.ok(/endSession\(db, process\.env\.TABLE_NAME, gameId/.test(nextQuestionSrc),
+      'endSession(db, process.env.TABLE_NAME, gameId, ...) call not found');
+  });
+  check('next-question.js carries no ENDED UpdateCommand of its own', () => {
+    assert.ok(!nextQuestionSrc.includes("':state': 'ENDED'"),
+      "a literal STATE->ENDED UpdateCommand still exists in next-question.js, outside session-end.js");
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
