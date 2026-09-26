@@ -65,7 +65,37 @@ function Dot({ kind }) {
 /* --------------------------------------------------------------- the log -- */
 
 function AccessLog({ log }) {
-  const { loading = false, error = null, entries = [] } = log || {};
+  /*
+    NO LOG AT ALL — the state AdminPage.jsx actually mounts this panel in
+    today: it passes no `accessLog`, because nothing writes one yet
+    (moderation-get.js's own comment marks the write, "the ORG#<orgId>#ACCESS
+    row", as not there). That is different from a log that was FETCHED and
+    came back empty, which is the `entries: []` case below and stays exactly
+    as it was.
+
+    "Nobody at Engage has read anything" and "Every read … appears here" are
+    both false in this state: nothing is ever recorded, and staff CAN open a
+    set's real content once — when a shared set is queued for a person to
+    decide, moderation-get.js reads the S3 snapshot the automated check judged
+    (`readSnapshot`, ~line 157). That happens if the check itself cannot
+    decide, or if the org appeals a rejection (appeal-question-set.js), and
+    today it leaves no row here either way.
+  */
+  if (log == null) {
+    return (
+      <div className="priv-state">
+        <h4>There is no read log yet</h4>
+        <p>
+          Nothing is recorded here yet, so this page cannot say who has read
+          your data. One thing is certain: if a set you share needs a person to
+          decide — because the check cannot, or you appeal one it rejected —
+          an Engage reviewer opens exactly what the check saw.
+        </p>
+      </div>
+    );
+  }
+
+  const { loading = false, error = null, entries = [] } = log;
 
   if (loading) {
     return (

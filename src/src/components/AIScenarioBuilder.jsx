@@ -1044,6 +1044,15 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     && (interpreted.outcome === 'complete'
       || (interpreted.outcome === 'partial' && reviewingPartial));
 
+  /** See TriviaAIBuilder.requestClose — same contract, same reasons. */
+  const requestClose = () => {
+    if (isAppend(appendTo) && reviewing && keptScenarios.length > 0
+      && !window.confirm('Close without adding these scenarios? They have not been added and will be lost.')) {
+      return;
+    }
+    onClose();
+  };
+
   /** A scenario with no prompt text is nothing a room can respond to. */
   const scenarioDefect = (scenario) => {
     if (!String(scenario?.title || '').trim()) return 'No title.';
@@ -1106,11 +1115,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   return (
     <div className="ai-scenario-builder-modal">
-      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-overlay" onClick={requestClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder{isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}</h2>
-          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
+          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -1689,7 +1698,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={requestClose}>
                 Cancel
               </button>
             </>

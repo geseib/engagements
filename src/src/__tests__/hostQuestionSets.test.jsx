@@ -1319,4 +1319,39 @@ describe("a host's own set whose content could not be decrypted", () => {
     await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
     expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
   });
+
+  /*
+    THE GAP THE MARK LEFT OPEN. Being told a row is unreadable and then handed
+    "Edit questions" and "Rename" anyway is worse than no warning at all — both
+    open on fields the server nulled, and a save would write blank text back
+    over whatever of the row is still recoverable. QuestionSetsPanel (the
+    console's own list) already withholds Edit and Share the same way for the
+    same reason; this shelf is the one surface that had not caught up.
+  */
+  // rejects: `{set.name}` rendered and the badge shown, with the two controls
+  // that need the row's content left exactly as they are on a readable row.
+  test('Edit questions and Rename are withheld on the unreadable row', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    const row = screen.getByText('q3retro').closest('tr');
+    expect(within(row).queryByRole('button', { name: /edit questions/i })).toBeNull();
+    expect(within(row).queryByRole('button', { name: /^rename$/i })).toBeNull();
+  });
+
+  // rejects: withholding Delete along with the other two. It needs no content
+  // to act on, and it is the one control that can actually clear a row that
+  // will never decrypt — the recovery path the row's own badge points to.
+  test('Delete stays, because it needs no content and is the recovery', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    const row = screen.getByText('q3retro').closest('tr');
+    expect(within(row).getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
+  });
+
+  // rejects: a global change that also strips the controls off an ordinary
+  // row — Ivy Retro decrypted fine and keeps every one of its own.
+  test('a readable row beside it keeps Edit questions and Rename', async () => {
+    await openDialog({}, { sets: [...HOST_VIEW, UNREADABLE] });
+    const row = rowFor('Ivy Retro');
+    expect(within(row).getByRole('button', { name: /edit questions/i })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: /^rename$/i })).toBeInTheDocument();
+  });
 });

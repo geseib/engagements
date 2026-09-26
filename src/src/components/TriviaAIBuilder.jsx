@@ -393,6 +393,22 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     && (interpreted.outcome === 'complete'
       || (interpreted.outcome === 'partial' && reviewingPartial));
 
+  /*
+   * EVERY WAY OUT OF THE REVIEW SCREEN GOES THROUGH THIS — the scrim, the X,
+   * and Cancel. Configuring or generating loses nothing (the job keeps
+   * running and is remembered, resumable on reopen), so this asks only when
+   * ADDING and the review holds questions not yet added — appendOnly mode
+   * makes no set, so they live nowhere else, and reopening would auto-start a
+   * fresh job that overwrites the one just abandoned.
+   */
+  const requestClose = () => {
+    if (isAppend(appendTo) && reviewing && keptTrivia.length > 0
+      && !window.confirm('Close without adding these questions? They have not been added and will be lost.')) {
+      return;
+    }
+    onClose();
+  };
+
   /**
    * A real defect the model produces, not a decoration: a correctAnswer that
    * does not name one of the options this set actually has. upload-questions
@@ -426,11 +442,11 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
 
   return (
     <div className="trivia-ai-builder-modal">
-      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-overlay" onClick={requestClose}></div>
       <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'AI Trivia Builder'}</h2>
-          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
+          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -875,7 +891,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
               <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={requestClose}>
                 Cancel
               </button>
             </>

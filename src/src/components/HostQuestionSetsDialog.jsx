@@ -732,25 +732,39 @@ export default function HostQuestionSetsDialog({
                           then decide. One control, two labels, because the two
                           states are two different jobs.
                         */}
-                        <button
-                          type="button"
-                          className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated ? ' qsets-btn--primary' : ''}`}
-                          onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
-                        >
-                          {!set.active && set.isAIGenerated ? 'Review' : 'Edit questions'}
-                        </button>
-                        <button
-                          type="button"
-                          className="qsets-btn qsets-btn--sm"
-                          onClick={() => setEditing({
-                            id: set.id,
-                            name: set.name || '',
-                            description: set.description || '',
-                            busy: false,
-                          })}
-                        >
-                          Rename
-                        </button>
+                        {/*
+                          NEITHER NEEDS CONTENT THIS ROW DOES NOT HAVE. Edit
+                          questions opens the editor on this set's rows and
+                          Rename writes back over its name/description — both
+                          read as blank or nulled on a row the server could not
+                          decrypt, so opening either shows nothing to fix and a
+                          save would write over whatever is still recoverable.
+                          Delete alone needs no content and stays offered, same
+                          as the console's QuestionSetsPanel for the same row.
+                        */}
+                        {!isUnreadableSet(set) && (
+                          <>
+                            <button
+                              type="button"
+                              className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated ? ' qsets-btn--primary' : ''}`}
+                              onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
+                            >
+                              {!set.active && set.isAIGenerated ? 'Review' : 'Edit questions'}
+                            </button>
+                            <button
+                              type="button"
+                              className="qsets-btn qsets-btn--sm"
+                              onClick={() => setEditing({
+                                id: set.id,
+                                name: set.name || '',
+                                description: set.description || '',
+                                busy: false,
+                              })}
+                            >
+                              Rename
+                            </button>
+                          </>
+                        )}
                         <button
                           type="button"
                           className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
