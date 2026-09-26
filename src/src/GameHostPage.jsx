@@ -2430,12 +2430,49 @@ Focus on actionable business strategy insights.`;
         await fetchQuestionSets(true); // true = during restoration, no auto-selection
         if (superseded()) return false;
 
+        // Parse and restore game state. MOVED UP FROM BELOW (fix round 2): the
+        // metadata block right after this needs `questionNumber` and
+        // `gameStateData.currentQuestionData` in hand to decide whether the old
+        // catalogue lookup would race an upcoming `/question` read — see the
+        // note beside that call. Nothing here reads anything the metadata block
+        // sets, so moving it earlier changes nothing else.
+        const currentState = gameStateData.state || 'LOBBY';
+        let questionNumber = gameStateData.currentQuestion || 0;
+
+        // Trust the currentQuestion from backend - don't override it by parsing state
+        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
+
+        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
+        if (questionNumber === 0 && (currentState.includes('#'))) {
+          const stateQuestionMatch = currentState.match(/#(\d+)/);
+          if (stateQuestionMatch) {
+            questionNumber = parseInt(stateQuestionMatch[1], 10);
+            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
+          }
+        }
+
+        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
+
+        // Use server state directly instead of mapping to legacy format
+        setGameState(currentState);
+        console.log(`🎮 HOST: Set game state to ${currentState}`);
+
+        // The durable fact, read straight from the ROUND# record (get-game-state
+        // .js now includes it) rather than inferred from the state string. An
+        // early reveal — the override for a host who reveals before closing the
+        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
+        // questionStarted, votingStarted) that runs before RESULTS; deriving
+        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
+        // that case, since none of those events are RESULTS transitions.
+        setAuthorsRevealed(!!gameStateData.authorsRevealed);
+        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
+
         // Restore basic game metadata
         //
         // `restoredSetId`/`restoredSetScope` are declared out here, not `const`
-        // inside the block below, because the currentQuestionData branch further
-        // down (where the old catalogue lookup is now called — see there for why)
-        // needs them too, and that branch is not nested inside this one.
+        // inside the block below, because they used to be needed further down
+        // too. Left hoisted rather than folded back — a smaller diff for the
+        // next reviewer to compare against fix round 1.
         let restoredSetId = '';
         let restoredSetScope = DEFAULT_SCOPE;
         if (gameStateData.gameMetadata) {
@@ -2466,8 +2503,26 @@ Focus on actionable business strategy insights.`;
           restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
           setSelectedSetId(restoredSetId);
           setSelectedSetScope(restoredSetScope);
-          // NOT called here any more — see the currentQuestionData branch below,
-          // which is the only place left that still needs it.
+          // THE OLD CATALOGUE LOOKUP MUST COVER EVERY PATH EXCEPT THE ONE THAT
+          // READS THESE FIELDS OFF ITS OWN /question RESPONSE (fix round 2,
+          // GitHub #18). That excluded path is exactly `questionNumber > 0 AND
+          // no currentQuestionData` — the branch below that awaits `/question`
+          // and calls `applyQuestionSetInstruction` with what it gets back.
+          //
+          // Fix round 1 confined this call to the `currentQuestionData` branch
+          // ALONE, nested inside `if (questionNumber > 0)` — which never runs
+          // at all when questionNumber is 0: an open lobby before round 1, or
+          // an ended session with zero rounds. `setRoundNoun` feeds the LOBBY
+          // primary CTA (~getHostRoundNoun below), so that regression showed up
+          // as "Start First Round" instead of the set's own noun (e.g. "Start
+          // First Lesson") on a lobby reload, until round 1 actually started.
+          //
+          // This still closes the race fix round 1 fixed: the excluded branch
+          // is the ONLY writer of these fields on its path, so nothing here
+          // competes with it.
+          if (!(questionNumber > 0 && !gameStateData.currentQuestionData)) {
+            fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+          }
           console.log(`🎮 HOST: Restored game metadata`);
 
           // Restore categories from bitmask if we have a question set
@@ -2477,38 +2532,6 @@ Focus on actionable business strategy insights.`;
           }
         }
 
-        // Parse and restore game state
-        const currentState = gameStateData.state || 'LOBBY';
-        let questionNumber = gameStateData.currentQuestion || 0;
-        
-        // Trust the currentQuestion from backend - don't override it by parsing state
-        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
-        
-        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
-        if (questionNumber === 0 && (currentState.includes('#'))) {
-          const stateQuestionMatch = currentState.match(/#(\d+)/);
-          if (stateQuestionMatch) {
-            questionNumber = parseInt(stateQuestionMatch[1], 10);
-            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
-          }
-        }
-        
-        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
-        
-        // Use server state directly instead of mapping to legacy format
-        setGameState(currentState);
-        console.log(`🎮 HOST: Set game state to ${currentState}`);
-
-        // The durable fact, read straight from the ROUND# record (get-game-state
-        // .js now includes it) rather than inferred from the state string. An
-        // early reveal — the override for a host who reveals before closing the
-        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
-        // questionStarted, votingStarted) that runs before RESULTS; deriving
-        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
-        // that case, since none of those events are RESULTS transitions.
-        setAuthorsRevealed(!!gameStateData.authorsRevealed);
-        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
-        
         // If we have a current question, set it up
         if (questionNumber > 0) {
           setCurrentQuestionIndex(questionNumber - 1); // Convert to 0-based index
@@ -2522,21 +2545,9 @@ Focus on actionable business strategy insights.`;
             // instruction resolver falls all the way through to the generic
             // call-and-answer default — even on an Art Title round.
             setCurrentQuestionId(gameStateData.currentQuestionData.id);
-            // THE ONE CASE THE OLD CATALOGUE LOOKUP STILL COVERS (GitHub #18,
-            // fix-round 1). get-game-state's currentQuestionData carries no
-            // setCustomInstruction/setRoundNoun — applyQuestionSetInstruction
-            // would find nothing here and null both out — so this is the only
-            // branch that still calls the whole-catalogue search.
-            //
-            // NOT called unconditionally any more (it used to fire once, above,
-            // before this if/else even ran): the `else` branch below awaits its
-            // own `/question` fetch and applies the fields straight off THAT
-            // response, and the two writes had no ordering between them — a
-            // slow catalogue response landing after the question fetch could
-            // (and in review, was shown to) blank the correct instruction right
-            // back out. Confining this call to the one branch that still needs
-            // it removes the race outright: the racing write is never made.
-            fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+            // The catalogue lookup for this case already ran above, in the
+            // metadata block — see the note there for why this branch is the
+            // one path that still needs it.
             console.log(`📝 HOST: Loaded question ${questionNumber} from game state:`, gameStateData.currentQuestionData.title);
           } else {
             // Try to fetch question data with question number

@@ -503,6 +503,76 @@ describe('the stage takes a set instruction from the question, not only the cata
     // ever made on this path at all — the race is closed, not just won.
     expect(catalogueCalls).toBe(1);
   });
+
+  /**
+   * FIX-ROUND 2: closing the race in fix round 1 broke the LOBBY.
+   *
+   * Fix round 1 moved the catalogue lookup into
+   * `if (questionNumber > 0) { if (gameStateData.currentQuestionData) { ... } }`
+   * — which never runs at all when `questionNumber` is 0: an open lobby
+   * before round 1 has started, or an ended session with zero rounds. With no
+   * question ever loaded, the `/question`-response path (which now supplies
+   * the fields in every other case) never runs either, so `setRoundNoun`
+   * stayed null. `getHostRoundNoun()` feeds the LOBBY primary CTA's label —
+   * `Start First ${roundNoun}` (config/hostControls.js) — so a host who
+   * reloaded the host page while still in the lobby saw the generic
+   * "Start First Round" instead of the set's own noun (e.g. "Start First
+   * Lesson"), even though the set names one, until the first round actually
+   * started.
+   *
+   * The fix restores the old catalogue lookup on every reload path that does
+   * not itself read these fields off a `/question` response — the lobby
+   * included — while keeping it OUT of the one path that does (proven by the
+   * previous test, which must stay green alongside this one).
+   */
+  test('a lobby reload still shows the set\'s own round noun on the primary CTA', async () => {
+    const LOBBY_GAME = '5680';
+
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      if (u.includes(`games/${LOBBY_GAME}/state`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            // No question at all yet — the exact case fix round 1 broke.
+            state: 'CREATED',
+            currentQuestion: 0,
+            gameMetadata: {
+              title: 'Lobby game', gameType: 'call-and-answer',
+              questionSetId: 'setA', questionSetScope: 'platform',
+            },
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LOBBY_GAME}?role=host`)) {
+        return { ok: true, status: 200, json: async () => ({ gameId: LOBBY_GAME, started: true }), text: async () => '{}' };
+      }
+      // The bare catalogue route only — this IS reached on a lobby reload,
+      // unlike the previous test's scenario.
+      if (/\/question-sets(\?|$)/.test(u)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            sets: [{ id: 'setA', scope: 'platform', roundNoun: 'Lesson', customInstruction: 'Read the prompt aloud.', active: true }],
+          }),
+          text: async () => '{}',
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    window.history.pushState({}, '', `/host?gameId=${LOBBY_GAME}`);
+    render(<GameHostPage />);
+
+    // THE REGRESSION: fix round 1 left this reading "Start First Round" —
+    // the generic default — forever, because the lookup that would have
+    // supplied "Lesson" was never called on this path.
+    await waitFor(
+      () => expect(screen.getByText('Start First Lesson')).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+  });
 });
 
 /*
