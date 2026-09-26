@@ -296,6 +296,42 @@
   font-feature-settings: "tnum" 1;
 }
 
+/* --------------------------------------------------------------------------
+   ABOUT THIS SESSION & WHO WAS HERE — Task 2's front matter.
+
+   Two short blocks under the title, before the caveat and the rounds. Both
+   reuse the SAME heading and body styling every round already has
+   (`.report-question-header`, `.report-lesson-heading`, `.report-lesson-
+   detail`, `.report-block`, `.report-block-heading`) rather than inventing a
+   second visual language — the only rules that are actually new here are
+   each section's own bottom margin (the title block and the caveat each set
+   their own; there is no `.report-doc > * + *` rule to inherit spacing from)
+   and the roster's own list.
+   -------------------------------------------------------------------------- */
+.report-paper .report-about,
+.report-paper .report-roster {
+  margin: 0 0 40px;
+}
+
+.report-paper .report-roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.report-paper .report-roster-item {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.report-paper .report-roster-item:not(:last-child)::after {
+  content: "\00b7";
+  margin: 0 10px;
+  color: var(--muted);
+}
+
 /* ---- SECTIONS ----
    `.report-content` in styles.css is `max-width:1000px; margin:0 auto;
    padding:20px` — a page-level layout container from when the report WAS the
@@ -725,6 +761,21 @@
   margin: 0;
 }
 
+/* ---- SURVEY RESULTS (Task 4 of the 2026-09-26 feature sweep) ----
+   `.report-survey-results` is a plain `.report-question` (see SECTIONS
+   above): no card, no shadow, the same section-break rule every other block
+   in `.report-content` gets. The cards themselves are
+   components/survey/results/SurveyResults.css's `.svr-card` family, mounted
+   unchanged — that file is deliberately theme-agnostic (its own header says
+   so) and needs no rule here to read correctly under this document's
+   data-theme="light". This stylesheet only lays the cards out and marks
+   each one indivisible for print. */
+.report-paper .report-survey-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 /* ---- FINAL SCORES ----
    A ranked list, set as a table. The auto-fit grid of coloured tiles was a
    dashboard widget; on a page it produced a different number of columns at
@@ -996,6 +1047,20 @@
     margin-right: 16pt;
   }
 
+  /* ---- ABOUT THIS SESSION & WHO WAS HERE, IN INK ----
+     Same treatment as the caveat above: short front-matter, so it is never
+     split across a page break. Their headings already inherit break-after:
+     avoid from `.report-question-header` below. */
+  .report-paper .report-about,
+  .report-paper .report-roster {
+    break-inside: avoid;
+    margin: 0 0 22pt;
+  }
+
+  .report-paper .report-roster-item:not(:last-child)::after {
+    color: #666;
+  }
+
   /* ---- SECTION BREAKS ----
      A rule and 26pt of air. Not a card: cards on paper are the single loudest
      tell that a page was screenshotted rather than typeset. */
@@ -1066,6 +1131,15 @@
     border-bottom: 0.5pt solid #bbb;
     padding-bottom: 5pt;
     margin-bottom: 10pt;
+  }
+
+  /* ---- SURVEY RESULTS — one question's card is an indivisible unit ---- */
+  .report-paper .report-survey-card {
+    break-inside: avoid;
+  }
+
+  .report-paper .report-survey-grid {
+    gap: 14pt;
   }
 
   /* ---- TRIVIA CHOICES — one option is an indivisible unit ---- */

@@ -274,6 +274,14 @@ export const HOST_INTENTS = {
   CLOSE_SURVEY: 'close-survey', // SURVEY#OPEN → SURVEY#CLOSED; counts freeze
   WARN_SURVEY: 'warn-survey',   // tell every phone it closes in two minutes
   END_SURVEY: 'end-survey',     // SURVEY#CLOSED → ENDED
+  // Phase 3, 2026-09-26 feature sweep: GET /games/{id}/survey-results, once
+  // closed. Offered as CLOSED's and a survey's ENDED's secondary — the
+  // results are already frozen the instant CLOSE_SURVEY lands.
+  SURVEY_RESULTS: 'survey-results',
+  // Task 8, 2026-09-26 feature sweep: the same frozen results, one question
+  // at a time, full size — SurveyWalkthrough.jsx. Offered beside
+  // SURVEY_RESULTS, as CLOSED's and a survey's ENDED's tertiary.
+  SURVEY_PRESENT: 'survey-present',
 };
 
 /**
@@ -479,10 +487,17 @@ function primaryFor(phase, {
       };
     case 'ENDED':
       /*
-        A survey has no session report to open — create-report.js reads
-        rounds, and a survey has none. Its results are phase 3's
-        (SURVEY#RESULTS), so the only honest act on the last screen is the way
-        out, which the round types carry as their secondary.
+        A closed survey DOES have a session report now — create-report.js
+        reuses survey-host.js's surveyResultsPayload (Task 4, 2026-09-26
+        feature sweep; I-2, the same sweep's final review), so the saved
+        document carries every chart and every open answer, not just phase
+        3's live SURVEY#RESULTS. That report is not opened from this live
+        dock's primary/secondary pair for ANY session type, survey or not —
+        it is reached from the Sessions list (SessionHistoryPanel's Report,
+        now offered alongside Results for a closed survey) or, for a live
+        session, from Settings → Rounds. So the honest primary on the last
+        screen stays the way out, exactly as before; only the reasoning here
+        was stale.
       */
       if (isSurvey) {
         return {
@@ -657,6 +672,15 @@ export function hostControlsFor({
     menu."
   */
   let secondary = null;
+  // Task 8, 2026-09-26 feature sweep: "walk the room through survey results,
+  // one question at a time, full size" — beside `secondary` (SURVEY_RESULTS)
+  // below, on the same two phases, never anywhere else. A THIRD slot rather
+  // than a replacement, because both of CLOSED's and a survey's ENDED's two
+  // slots are already spoken for. The "another control is just another thing
+  // to aim at while a room watches" rule that keeps every mid-round phase to
+  // one button does not apply here: nothing is live on either phase — the
+  // same reasoning ENDED's own "Back to Menu" secondary already rests on.
+  let tertiary = null;
   if (resolvedPhase === 'COLLECTING') {
     /*
       THE TWO-MINUTE WARNING — s-01-collecting's second button. It moves
@@ -674,8 +698,21 @@ export function hostControlsFor({
       hint: '',
     };
   } else if (resolvedPhase === 'CLOSED' || (isSurvey && resolvedPhase === 'ENDED')) {
-    // CLOSED's one act is ending it; a survey's ENDED primary IS the way out.
-    secondary = null;
+    /*
+      SEE THE RESULTS — Phase 3 of the survey plan. The results are frozen
+      the instant CLOSE_SURVEY lands (survey-host.js `close()` calls
+      `freeze()` synchronously), so both phases where they are the only
+      other thing on screen — CLOSED (before End) and a survey's own ENDED
+      (after) — offer the same secondary. Never the primary: CLOSED's one
+      forward act is ending it, and ENDED's is leaving, and a results screen
+      the host can return from is not a step in that sequence.
+    */
+    secondary = {
+      id: 'survey-results', label: 'See the results', icon: 'ChartBar', intent: HOST_INTENTS.SURVEY_RESULTS, disabled: false, hint: '',
+    };
+    tertiary = {
+      id: 'survey-present', label: 'Walk through', icon: 'Monitor', intent: HOST_INTENTS.SURVEY_PRESENT, disabled: false, hint: '',
+    };
   } else if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
   } else if (resolvedPhase === 'FIELD_NOTES' && primary.intent === HOST_INTENTS.PAGE) {
@@ -763,6 +800,7 @@ export function hostControlsFor({
     phase: resolvedPhase,
     primary,
     secondary,
+    tertiary,
     status: { text, tone: statusTone(text) },
   };
 }

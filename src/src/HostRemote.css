@@ -180,6 +180,20 @@
   overflow-wrap: anywhere;
 }
 
+/* --------------------------------------------------------- the access gate
+
+   Task 6: what this phone shows in place of the whole session — the banner,
+   the sign-in action, and (only for a wrong-account refusal) the Session
+   card carrying `ActiveOrgSwitcher` — while `GET /games/{id}/host-details`
+   has not cleared this device to drive it. Every child reuses `.hr-flash`,
+   `.hr-btn` and `.hr-card`; this rule is only the stack between them, the
+   same gap `.hr-body` already uses between its own top-level sections. */
+.hr-access {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .hr-progress { margin-top: 18px; }
 
 .hr-meter {

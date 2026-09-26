@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
-const { ORG } = require('./tenant');
+const { ORG, callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { normalizeNames } = require('./survey-names');
 
@@ -13,7 +13,8 @@ const { normaliseScoreboard } = require('./scoreboard-state');
  * WHOSE SESSION IS THIS? — read off the row, never off the caller.
  *
  * `GET /games/{gameId}/state` is PUBLIC: every participant's phone polls it
- * with no identity, and the Host Remote polls it every two seconds. So the
+ * with no identity. (The Host Remote polls the host's door onto this same
+ * handler every two seconds, and the org test there is on the row too.) So the
  * organisation cannot come from `tenant.callerOrgId(event)` — that is '' for
  * every anonymous caller, and a blank orgId THROWS in tenant-crypto rather
  * than defaulting. The METADATA row carries `orgId` for exactly this reason
@@ -26,6 +27,37 @@ const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.tri
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
+
+/*
+  THE HOST'S DOOR, `GET /games/{gameId}/host-state`: a third event on this
+  function (template-clean.yaml, GetGameHostStateEvent), the way
+  /host-details is on get-game.js. It returns everything the public round
+  does, plus the host block: the running order (`questionQueue`, the questions
+  the room has NOT been asked yet), the category counts and masks, and who has
+  answered or voted, by name. One read carries both halves, so the phone
+  remote's two-second poll stays one request.
+
+  The public `/state` used to assemble that block for a typed
+  `?includeHostData=true`, and for any read with no player id on the path. A
+  query parameter is a claim, not an identity, so anyone holding the code read
+  the running order the lock on `GET /games/{id}/queue` was put there to
+  protect. The public route now never assembles it, whatever the query says.
+
+  Cognito in front, hosts|admins named in authorizer.js, and
+  callerMayDriveSession here. NO IDENTITY IS REFUSED OUTRIGHT, before any read:
+  callerMayDriveSession passes a caller with no groups, so on its own it would
+  hand an orgless session's running order to anyone the day this route lost
+  its authorizer. The owner is checked on the RAW row, before anything is
+  decrypted. Every refusal is the same "Game not found" as a code that names
+  nothing. tests/get-game-host-state.js.
+*/
+const HOST_STATE_ROUTE = /\/host-state$/;
+
+const gameNotFound = () => ({
+  statusCode: 404,
+  body: JSON.stringify({ error: 'Game not found' }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+});
 
 exports.handler = async (event) => {
   // Handle CORS preflight
@@ -52,19 +84,25 @@ exports.handler = async (event) => {
       };
     }
 
+    // Which door: the ROUTE decides, never a query parameter. API Gateway sets
+    // routeKey; rawPath is the fallback when it is absent.
+    const rc = event.requestContext || {};
+    const onHostDoor = HOST_STATE_ROUTE.test(rc.routeKey || event.routeKey || event.rawPath || '');
+
+    if (onHostDoor) {
+      const authorizer = rc.authorizer || {};
+      const identity = (authorizer.jwt && authorizer.jwt.claims) || authorizer.lambda;
+      if (!identity) return gameNotFound();
+    }
+
     // Get game metadata
     const gameMetadata = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
     }));
 
-    if (!gameMetadata.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ error: 'Game not found' }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
-    }
+    if (!gameMetadata.Item) return gameNotFound();
+    if (onHostDoor && !callerMayDriveSession(event, gameMetadata.Item)) return gameNotFound();
 
     // THE SESSION BRIEF, in the clear for this response only. `Title`,
     // `HostName`, `Details` and `AIContext` are ciphertext at rest on an org's
@@ -290,9 +328,10 @@ exports.handler = async (event) => {
                 already draws for the identical field. Two handlers serving one
                 question had two different rules; now they have one.
 
-                NOT gated on `includeHostData`: that flag is a query parameter
-                on an unauthenticated route, so it proves nothing and would only
-                move the leak somewhere slightly less obvious.
+                NOT gated on the host's door either: this line is the same for
+                every caller, so the stage and the phones cannot disagree about
+                when the answer is out. (`includeHostData`, the query flag that
+                once chose the host block, proved nothing and is now ignored.)
               */
               ...(revealed ? { correctAnswer: questionItem.correctAnswer } : {}),
               points: questionItem.points || 10
@@ -435,14 +474,16 @@ exports.handler = async (event) => {
       }
     }
 
-    // If host is requesting, get additional host-specific data
-    if (!playerId || event.queryStringParameters?.includeHostData === 'true') {
+    // The host block, on the host's door ONLY (see the top of this file). The
+    // public route used to assemble it for `?includeHostData=true` and for any
+    // read with no player id — a claim anyone could make.
+    if (onHostDoor) {
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
 
         The phone remote holds no WebSocket at all (HostRemote.jsx explains
         why: the host connection row gets evicted, so the remote deliberately
-        does not hold one). It polls this endpoint every 2s and that is its
+        does not hold one). It polls this door every 2s and that is its
         ONLY channel. A queue announced solely over `questionQueueChanged`
         would be invisible on the surface the host is actually holding — they
         would queue three questions on the stage and see nothing on the phone,

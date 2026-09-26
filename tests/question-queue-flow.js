@@ -99,11 +99,18 @@ const get = (gameId = GAME) => queueHandler.handler({
   pathParameters: { gameId },
 });
 
+// The HOST'S door onto get-game-state: the public `/state` stopped carrying
+// the queue on 2026-09-26, flag or no flag (tests/get-game-host-state.js).
+// The session is orgless, so any signed-in host may read it.
 const readState = async () => {
   const res = await getState({
-    requestContext: { http: { method: 'GET' } },
+    routeKey: 'GET /games/{gameId}/host-state',
+    requestContext: {
+      http: { method: 'GET' },
+      routeKey: 'GET /games/{gameId}/host-state',
+      authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } },
+    },
     pathParameters: { gameId: GAME },
-    queryStringParameters: { includeHostData: 'true' },
   });
   return JSON.parse(res.body);
 };
@@ -189,12 +196,21 @@ const bodyOf = (res) => JSON.parse(res.body);
   seed();
   const announced = await post({ op: 'add', questionKey: 'c001#017' });
 
-  await check('every connection is told, host included', () => {
+  await check('the host\'s screen is told, and NO player socket is', () => {
     // The stage is the host connection. If it is not told, queueing on the
     // phone changes a row and nothing else, which is the whole point of the
     // endpoint.
+    //
+    // And ONLY the host's screens. The frame carries the whole running order,
+    // the questions the room has not been asked yet; anyone holding the code
+    // can open a PLAYER socket, so a frame to every connection walked round
+    // the lock on GET /queue and /host-state (tests/get-game-host-state.js).
+    // The phone remote holds no socket and polls /host-state, so nothing that
+    // needs the frame loses it.
+    //
+    // rejects: questionQueueChanged sent to every CONNECTION# row.
     const ids = frames.map((f) => f.connectionId).sort();
-    assert.deepStrictEqual(ids, ['host-1', 'player-1'], `announced to [${ids}]`);
+    assert.deepStrictEqual(ids, ['host-1'], `announced to [${ids}]`);
   });
 
   await check('the frame is questionQueueChanged with the version and the list', () => {
@@ -217,7 +233,9 @@ const bodyOf = (res) => JSON.parse(res.body);
 
   console.log('\n5. a dead projector must not fail the host\'s press');
 
-  seed();
+  // Two host screens (connect.js leaves same-millisecond host peers in
+  // place), one of them dead, and a player who must hear nothing either way.
+  seed({ connections: ['host-1', 'host-2', 'player-1'] });
   gone.add('host-1');
   const withDead = await post({ op: 'add', questionKey: 'c001#017' });
 
@@ -225,8 +243,8 @@ const bodyOf = (res) => JSON.parse(res.body);
     assert.strictEqual(withDead.statusCode, 200, `got ${withDead.statusCode}: ${withDead.body}`));
   await check('410 Gone still persists the queue', () =>
     assert.deepStrictEqual(queueRow().Queue, ['c001#017']));
-  await check('410 Gone still reaches the live connection', () =>
-    assert.deepStrictEqual(frames.map((f) => f.connectionId), ['player-1']));
+  await check('410 Gone still reaches the live host screen, and no player', () =>
+    assert.deepStrictEqual(frames.map((f) => f.connectionId), ['host-2']));
   await check('410 Gone REAPS the dead connection row', () =>
     // This delete is why the SAM policy is DynamoDBCrudPolicy and not
     // Read+Write: DynamoDBWritePolicy has no DeleteItem, and the AccessDenied
@@ -339,7 +357,7 @@ const bodyOf = (res) => JSON.parse(res.body);
   await post({ op: 'add', questionKey: 'c001#018' });
   const state = await readState();
 
-  await check('/state?includeHostData=true carries questionQueue', () =>
+  await check('/host-state carries questionQueue', () =>
     // The remote holds NO socket (HostRemote.jsx explains why) and polls this
     // endpoint every 2s. Without this field the queue is invisible on the
     // surface the host is actually holding.

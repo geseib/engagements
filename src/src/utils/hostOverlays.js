@@ -1,5 +1,5 @@
 /**
- * Two pure rules about the host page's overlays.
+ * Pure rules about the host page's overlays.
  *
  * Both live here for the same reason `qrOverlayClassName` does: the overlays
  * only ever mount inside GameHostPage, which needs an AuthProvider (and a live
@@ -107,6 +107,42 @@ export function shortcutsSuppressed({
  */
 export function scoreboardKeysLive({ setupPanelOpen = false, ...overlays } = {}) {
   return !setupPanelOpen && !shortcutsSuppressed({ ...overlays, scoreboardOpen: false });
+}
+
+/**
+ * May the SESSION PANEL's own open key (`\`) fire?
+ *
+ * The same overlay terms `scoreboardKeysLive` yields to — a confirm modal,
+ * the expanded QR, the reports modal, a pinned QR, a spotlight, a past round,
+ * loading — with two deliberate differences:
+ *
+ *   - `lessonExpanded` does NOT hold it back. An expanded question detail is
+ *     not a reason to keep the host from reaching the session menu the way it
+ *     is a reason to keep S/V away from the board underneath it.
+ *   - the scoreboard's OWN open state does not either. The panel is a side
+ *     surface a host may want to reach mid-board, and the board's own keys
+ *     already go quiet the moment this panel opens (`scoreboardKeysLive`'s
+ *     `setupPanelOpen` term above). FIX ROUND 1: "quiet" here means `enabled`
+ *     goes false, and that alone was not enough to stop an Escape pressed
+ *     while BOTH were open from also closing the board — `useScoreboardKeys`
+ *     carries its own `defaultPrevented` guard against that now (see its
+ *     header), because `enabled` flipping mid-dispatch cannot be trusted on
+ *     its own; see the next paragraph for why.
+ *
+ * `setupPanelOpen` itself DOES hold this one back, for a narrower reason than
+ * the board's: CLOSING is a different listener's job — SessionSetupPanel's
+ * own, mounted only while it is open (that file's own Esc/`\` effect). Once
+ * the panel is open this hook must go quiet, but `enabled` toggling false is
+ * only half the guarantee — a keystroke already mid-dispatch can still cause
+ * this hook to re-attach and see that SAME keystroke before `enabled` has any
+ * chance to stop it. `components/stage/useSessionPanelKey.js`'s header has
+ * the full mechanism and the fix (the listener moved to `document`, the same
+ * target and phase as the closer, plus a `defaultPrevented` check) — without
+ * it, one keystroke could reach two listeners and either close-then-reopen or
+ * open-then-close in the same press.
+ */
+export function sessionPanelKeyLive({ setupPanelOpen = false, ...overlays } = {}) {
+  return !setupPanelOpen && !shortcutsSuppressed({ ...overlays, lessonExpanded: false, scoreboardOpen: false });
 }
 
 /**

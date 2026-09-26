@@ -330,6 +330,55 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
     assert.deepStrictEqual(JSON.parse(res.body).games, []);
   });
 
+  /*
+    §5 surveyClosed — Task 3 fix round 1, 2026-09-26 feature sweep. The
+    Sessions list needs to say whether a SURVEY session has results to show,
+    so the history panel can offer "See the results" only then (mirrors
+    `roundsPlayed`'s own use of STATE, read off the SAME BatchGetItem — no
+    second query). Reads STATE.State directly rather than seedSession, which
+    only ever writes RESULTS#nnn.
+  */
+  console.log('\n§5  surveyClosed: the Sessions list flags a closed survey, and only that');
+
+  const surveySession = (gameId, state, started = true) => {
+    put({
+      PK: `ORG#${ORG}#GAMES`, SK: `GAME#${gameId}`, Title: 'Pulse check', GameType: 'survey',
+      QuestionSetId: 'set-alpha', CreatedAt: new Date().toISOString(), Started: started, HostName: 'Ada',
+    });
+    if (state) put({ PK: `GAME#${gameId}`, SK: 'STATE', State: state });
+  };
+
+  await check('SURVEY#CLOSED is flagged surveyClosed: true', async () => {
+    store.clear();
+    surveySession('4821', 'SURVEY#CLOSED');
+    assert.strictEqual(byId(await list(), '4821').surveyClosed, true);
+  });
+
+  await check('SURVEY#OPEN (still collecting) is not flagged', async () => {
+    store.clear();
+    surveySession('4821', 'SURVEY#OPEN');
+    assert.strictEqual(byId(await list(), '4821').surveyClosed, false);
+  });
+
+  await check('a survey that reached ENDED (after its close) is still flagged', async () => {
+    store.clear();
+    surveySession('4821', 'ENDED');
+    assert.strictEqual(byId(await list(), '4821').surveyClosed, true);
+  });
+
+  await check('a survey never opened (no STATE row) is not flagged', async () => {
+    store.clear();
+    surveySession('4821', null, false);
+    assert.strictEqual(byId(await list(), '4821').surveyClosed, false);
+  });
+
+  await check('a non-survey session that reached ENDED is never flagged surveyClosed', async () => {
+    store.clear();
+    seedSession('4821', { players: [], rounds: 4 }); // GameType: call-and-answer
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'ENDED';
+    assert.strictEqual(byId(await list(), '4821').surveyClosed, false);
+  });
+
   console.log(`\n${pass} passed, ${fail} failed\n`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

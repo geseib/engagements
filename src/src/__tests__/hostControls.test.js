@@ -145,12 +145,16 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
           It moves nothing — the survey stays open and nobody's answers are
           touched — so it is not a second way to advance either; it tells the
           phones the close is coming.
+
+          A SIXTH: SURVEY_RESULTS (Phase 3, 2026-09-26 feature sweep). CLOSED
+          and a survey's own ENDED offer "See the results" beside their one
+          forward act; opening a read-only results screen advances nothing.
         */
         if (controls.secondary) {
           expect([
             HOST_INTENTS.SKIP, HOST_INTENTS.LEAVE,
             HOST_INTENTS.FEEDBACK, HOST_INTENTS.FIELD_NOTES,
-            HOST_INTENTS.WARN_SURVEY,
+            HOST_INTENTS.WARN_SURVEY, HOST_INTENTS.SURVEY_RESULTS,
           ]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }
@@ -737,18 +741,51 @@ describe('a survey: the four phases, each with exactly one primary', () => {
     expect(early).toMatch(/cannot be reopened/);
   });
 
-  test('CLOSED: "End the session", and nothing beside it', () => {
+  test('CLOSED: "End the session", with "See the results" beside it', () => {
     const c = survey('CLOSED');
     expect(c.primary).toMatchObject({ label: 'End the session', intent: HOST_INTENTS.END_SURVEY, disabled: false });
-    expect(c.secondary).toBeNull();
+    expect(c.secondary).toMatchObject({ label: 'See the results', intent: HOST_INTENTS.SURVEY_RESULTS });
+    expect(c.secondary.confirm).toBeFalsy();
   });
 
-  test('ENDED: "Back to Menu" is the primary — a survey has no round report to open', () => {
+  test('ENDED: "Back to Menu" is the primary — a survey has no round report to open — with the results beside it', () => {
     const c = survey('ENDED');
     expect(c.primary).toMatchObject({ label: 'Back to Menu', intent: HOST_INTENTS.LEAVE });
-    expect(c.secondary).toBeNull();
+    expect(c.secondary).toMatchObject({ label: 'See the results', intent: HOST_INTENTS.SURVEY_RESULTS });
     // Every other type keeps its report.
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).primary.intent).toBe(HOST_INTENTS.REPORT);
+  });
+
+  /**
+   * TASK 8, 2026-09-26 feature sweep: "walk the room through survey results,
+   * one question at a time, full size." The brief asks for it "beside 'See
+   * the results'" — and both of CLOSED's and a survey's ENDED's two slots are
+   * already spoken for (primary and secondary above), so it is a third,
+   * `tertiary`, slot rather than replacing either. Neither round is live —
+   * CLOSED and ENDED are exactly the two phases the file's own ENDED comment
+   * already argues nobody is "aiming" a shortcut at — so the "another control
+   * is just another thing to aim at while a room watches" rule this file
+   * states for mid-round phases does not apply here.
+   */
+  test('CLOSED and a survey\'s ENDED also carry a "Walk through" tertiary, beside the results', () => {
+    for (const phase of ['CLOSED', 'ENDED']) {
+      const c = survey(phase);
+      expect(c.tertiary).toMatchObject({ label: 'Walk through', intent: HOST_INTENTS.SURVEY_PRESENT });
+      expect(c.tertiary.confirm).toBeFalsy();
+    }
+  });
+
+  test('no other phase or game type grows a tertiary control', () => {
+    // Same scope as `secondary`'s own for this branch (line ~687 above): CLOSED
+    // for ANY game type (the survey-only guard applies to ENDED alone), never
+    // a game-type check of its own — the tertiary rides in the same `if` as
+    // the secondary it sits beside, so it is exactly as broad.
+    for (const type of ALL_TYPES) {
+      for (const phase of HOST_PHASES) {
+        if (phase === 'CLOSED' || (type === 'survey' && phase === 'ENDED')) continue;
+        expect(hostControlsFor({ gameType: type, phase, ...READY }).tertiary).toBeNull();
+      }
+    }
   });
 
   test('the close is the ONLY primary that asks first', () => {
@@ -778,7 +815,7 @@ describe('a survey: the four phases, each with exactly one primary', () => {
 
   test('the page dispatches every survey intent', () => {
     const source = fs.readFileSync(HOST_PAGE, 'utf8');
-    for (const name of ['OPEN_SURVEY', 'CLOSE_SURVEY', 'WARN_SURVEY', 'END_SURVEY']) {
+    for (const name of ['OPEN_SURVEY', 'CLOSE_SURVEY', 'WARN_SURVEY', 'END_SURVEY', 'SURVEY_RESULTS', 'SURVEY_PRESENT']) {
       expect(HOST_INTENTS[name]).toBeTruthy();
       expect(source).toContain(`case HOST_INTENTS.${name}:`);
     }

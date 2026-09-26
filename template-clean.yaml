@@ -2753,12 +2753,28 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: a phone reads the answers it votes on here, and a returning
+        # player asks for their own answer back. It answers `?role=host`
+        # exactly as it answers a player (get-answers.js).
         GetAnswersEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/answers
             Method: GET
+        # THE HOST'S DOOR to the same handler: every answer to a round, at any
+        # phase, with its author on a round that is not anonymous. It was the
+        # public `?role=host` until 2026-09-26, open to anyone with the code.
+        # Cognito here, authorizer.js names it for hosts|admins, and
+        # get-answers.js asks callerMayDriveSession. tests/get-answers-host.js.
+        GetAnswersHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/answers/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3312,6 +3328,9 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: every phone reads the round here with no token. It returns
+        # only what a player may see, whatever the query says; the
+        # `?includeHostData=true` flag is ignored (get-game-state.js).
         GetGameStateEvent:
           Type: HttpApi
           Properties:
@@ -3324,6 +3343,21 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/state/{playerId}
             Method: GET
+        # THE HOST'S DOOR to the same handler: the round plus the running
+        # order, the category counts and masks, and who has answered or voted.
+        # It was the public `?includeHostData=true` until 2026-09-26, open to
+        # anyone with the code, which walked around the lock on /queue.
+        # Cognito here, authorizer.js names it for hosts|admins, and
+        # get-game-state.js asks callerMayDriveSession.
+        # tests/get-game-host-state.js.
+        GetGameHostStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/host-state
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3778,6 +3812,17 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
+        # The frozen tallies, once closed (game/survey-host.js `results()`).
+        # PLAN.md "Phase 3" names it with the hyphen, matching SURVEY#RESULTS'
+        # own SK rather than its siblings' /survey/<verb> shape.
+        SurveyResultsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey-results
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3805,12 +3850,27 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: a count of the round's votes, and nothing else. It answers
+        # `?role=host` with that count too (get-votes.js).
         GetVotesEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/votes
             Method: GET
+        # THE HOST'S DOOR to the same handler: every ballot in a round,
+        # decrypted, with its voter. It was the public `?role=host` until
+        # 2026-09-26, open to anyone with the code. Cognito here,
+        # authorizer.js names it for hosts|admins, and get-votes.js asks
+        # callerMayDriveSession. tests/get-votes-host.js.
+        GetVotesHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/votes/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

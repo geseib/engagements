@@ -109,13 +109,22 @@ const projectQueue = (item) => ({
 });
 
 /**
- * Tell the room — or rather, tell the other host surface.
+ * Tell the other host surface — and ONLY the host's screens.
+ *
+ * HOST CONNECTIONS ONLY (`ConnectionType = 'HOST'`, the filter host-notify.js
+ * and survey-broadcast.js use). The frame carries the whole running order: the
+ * questions the room has not been asked yet. Anyone holding the code can open
+ * a PLAYER socket, so sending it to every connection walked round the lock on
+ * `GET /queue` and on the host's door onto the game state
+ * (get-game-state.js `/host-state`). The stage is a HOST connection; the phone
+ * remote holds no socket and polls `/host-state`, so nothing that needs this
+ * frame loses it. tests/question-queue-flow.js §4.
  *
  * Never throws. The write has already landed by the time this runs, and
  * reporting a failure would train the host to press again; the second press is
  * the one that looks broken. Same contract as `stage-beat.js`.
  */
-const broadcastToGame = async (gameId, message) => {
+const broadcastToHosts = async (gameId, message) => {
   try {
     const apigateway = new ApiGatewayManagementApiClient({
       endpoint: process.env.WEBSOCKET_API_ENDPOINT,
@@ -124,12 +133,13 @@ const broadcastToGame = async (gameId, message) => {
     const res = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#' },
+      FilterExpression: 'ConnectionType = :type',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':type': 'HOST' },
     }));
 
     const connections = res.Items || [];
     if (connections.length === 0) {
-      console.log(`⚠️ QUEUE: no active connections for game ${gameId}`);
+      console.log(`⚠️ QUEUE: no host connections for game ${gameId}`);
       return;
     }
 
@@ -333,7 +343,7 @@ exports.handler = async (event) => {
           },
         }));
 
-        await broadcastToGame(gameId, {
+        await broadcastToHosts(gameId, {
           type: 'questionQueueChanged',
           gameId,
           version: nextVersion,

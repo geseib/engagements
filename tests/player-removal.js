@@ -66,7 +66,13 @@ const remove = (playerName, body) => removePlayer.handler({
   pathParameters: { gameId: GAME, playerName }, body: JSON.stringify(body || {}),
 });
 const roster = () => getPlayers.handler({ pathParameters: { gameId: GAME } });
-const state = () => getGameState.handler({ pathParameters: { gameId: GAME } });
+// The live counts are the host's view: the host door, not the public round,
+// which no longer carries them (tests/get-game-host-state.js).
+const state = () => getGameState.handler({
+  routeKey: 'GET /games/{gameId}/host-state',
+  requestContext: { ...HOST, routeKey: 'GET /games/{gameId}/host-state' },
+  pathParameters: { gameId: GAME },
+});
 const report = () => createReport.handler({ pathParameters: { gameId: GAME } });
 
 const bodyOf = (res) => JSON.parse(res.body);

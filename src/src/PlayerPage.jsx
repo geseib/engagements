@@ -132,6 +132,102 @@ const RANK_SLOTS = ['first', 'second', 'third'];
 export const rankHolding = (votes, answerIndex) =>
   RANK_SLOTS.find((slot) => votes[slot] === String(answerIndex)) || null;
 
+/**
+ * THE ROUND'S RANKED RESPONSES, FROM THE SAME PAYLOAD THE RESULTS SCREEN
+ * ALREADY TRUSTS — never from the page's own `answers` state.
+ *
+ * Fix round 1, item 3: the player's own feedback panel used to snapshot
+ * `answers`, which for Call & Answer is the VOTE-TIME BALLOT
+ * (`loadVotingData`'s `GET /answers`, no ranks) — `loadResultsData` never
+ * repopulates it for this game type, only trivia's branch does. So a reload
+ * during RESULTS left it `[]` and the panel printed "Nobody responded to
+ * this round," which was false. This reads the SAME `POST /games/get-results`
+ * body the ordinary results screen already fetches (`loadResultsData`) and
+ * converts whichever shape it comes back in into the flat, ranked rows
+ * `RoundReport` expects:
+ *
+ *   - trivia answers `data.leaderboard` — already ranked, used as-is;
+ *   - Call & Answer answers `data.voteTallies`, an OBJECT keyed by answer
+ *     index, never an array — sorted by `totalScore` here, with the same
+ *     tie rule `create-report.js` uses (equal scores share a rank);
+ *   - WAVELENGTH answers `data.answers` (fix round 2, item 1) — one row per
+ *     submission (get-results.js's wavelength handler), genuinely unranked:
+ *     there is no vote or score to sort by, so submission order is kept and
+ *     numbered as printed, never invented. Round 1 missed this shape
+ *     entirely and every wavelength round's panel said nobody responded.
+ *   - Call & Answer with ZERO votes (fix round 2, item 1) is NOT the same as
+ *     "nobody responded" and must not return as if it were silently correct:
+ *     get-results.js's own early return for that case
+ *     (`{message, totalVotes: 0, winners: [], voteTallies: {}}`) carries no
+ *     response text at all, so there is nothing here to rank. This function
+ *     still returns `[]` for it — there is nothing to show — but
+ *     `feedbackAnswersStatusFrom` below tells the caller WHY, so it can say
+ *     "nobody voted" rather than the flatly false "nobody responded".
+ *
+ * NAMES ARE NOT REDACTED HERE, and that is not a new disclosure: `get-results
+ * .js`'s own header states plainly that it "does not redact — the response
+ * hands back every author's name," because by the time a round's results can
+ * be read at all, `AuthorsRevealed` is already unconditionally true for it.
+ * The ordinary personal results screen simply chooses not to PRINT other
+ * players' names (a minimalism decision — "this page will not repeat them" —
+ * not a security redaction); the feedback panel is the one screen the design
+ * explicitly gives a reason to show more (RoundReport's own header), the same
+ * reason the host-triggered whole-room panel already shows full attribution
+ * for this exact data — confirmed by the owner's ruling (fix round 2): the
+ * player's own panel may print names exactly as the host-triggered one does,
+ * same component, same read. Rows are still handed to `RoundReport` exactly
+ * as fetched, which reads each one through `displayLabelFor`
+ * (config/anonymity.js) the same way every other response list in this app
+ * does, so a genuinely hidden-author round (no `playerName` on the row) still
+ * redacts correctly rather than printing nothing.
+ */
+export function rankedResultsFrom(data) {
+  if (data && Array.isArray(data.leaderboard)) {
+    return data.leaderboard.map((row) => ({
+      answer: row.answer, playerName: row.playerName, rank: row.rank,
+    }));
+  }
+  if (data && data.voteTallies && typeof data.voteTallies === 'object'
+    && Object.keys(data.voteTallies).length > 0) {
+    const list = Object.values(data.voteTallies)
+      .map((t) => ({
+        answer: t.answerText, playerName: t.playerName, totalScore: Number(t.totalScore) || 0,
+      }))
+      .sort((a, b) => b.totalScore - a.totalScore);
+    let currentRank = 1;
+    return list.map((row, idx) => {
+      if (idx > 0 && row.totalScore !== list[idx - 1].totalScore) currentRank = idx + 1;
+      return { answer: row.answer, playerName: row.playerName, rank: currentRank };
+    });
+  }
+  if (data && Array.isArray(data.answers)) {
+    return data.answers.map((row, i) => ({
+      answer: row.answer, playerName: row.playerName, rank: i + 1,
+    }));
+  }
+  return [];
+}
+
+/**
+ * WHY THE LIST IS EMPTY, WHEN IT IS — fix round 2, item 1.
+ *
+ * `rankedResultsFrom` returning `[]` is ambiguous on its own: a round nobody
+ * answered and a Call & Answer round nobody VOTED on both produce it, and
+ * they are not the same claim. `'no-data'` names the second case — the
+ * payload literally carries no response text to show, per the doc-block
+ * above — so the caller can say "nobody voted" rather than "nobody
+ * responded". `'ok'` covers everything else, including a genuinely empty
+ * round (RoundReport's own default text already handles that honestly).
+ */
+export function feedbackAnswersStatusFrom(data) {
+  if (data && Array.isArray(data.leaderboard)) return 'ok';
+  if (data && Array.isArray(data.answers)) return 'ok';
+  if (data && data.voteTallies && typeof data.voteTallies === 'object') {
+    return Object.keys(data.voteTallies).length > 0 ? 'ok' : 'no-data';
+  }
+  return 'no-data';
+}
+
 // Which round the player is on. The payload spells this three different ways
 // depending on which endpoint answered (get-question sends lessonNumber +
 // questionNumber + id, get-game-state sends id, and the results-reconstruction
@@ -180,8 +276,39 @@ function PlayerPage() {
   const feedbackNumberRef = useRef(null);
   /** The pending debounce timer for a burst of `commentPosted` frames. */
   const commentRefetchRef = useRef(null);
+  /** The same mirror, for the player's own panel (minor, fix round 1): the
+   *  `commentPosted` handler is registered once, so it reads this rather than
+   *  the `myFeedbackNumber` state it closed over on its first render. */
+  const myFeedbackNumberRef = useRef(null);
   const [feedbackNumber, setFeedbackNumber] = useState(null);
   const [feedbackComments, setFeedbackComments] = useState([]);
+  /*
+    THE PLAYER'S OWN FEEDBACK BUTTON — the owner's ruling, 26 Sep 2026: it
+    works on any round whose results are showing, without the host opening
+    feedback mode. Entirely separate from `feedbackRound` above, which is the
+    host-triggered, whole-room switch (`stageBeatChanged` / `GET
+    /feedback-round`) and is unaffected by any of this.
+
+    `myFeedbackSnapshot` holds the question and the responses AS THEY WERE the
+    moment the player pressed the button — not a live read of
+    `currentQuestion`/`answers`, which the page overwrites with the NEXT
+    round's data the instant the host advances. A player mid-comment must keep
+    rereading the round they are actually commenting on.
+  */
+  const [myFeedbackOpen, setMyFeedbackOpen] = useState(false);
+  const [myFeedbackNumber, setMyFeedbackNumber] = useState(null);
+  const [myFeedbackSnapshot, setMyFeedbackSnapshot] = useState(null);
+  const [myFeedbackComments, setMyFeedbackComments] = useState([]);
+  const [myFeedbackSummary, setMyFeedbackSummary] = useState(null);
+  /** 'loading' | 'ok' | 'no-data' | 'error' — fix round 2, item 1. Drives what
+   *  RoundReport says in place of the responses while they are not simply
+   *  showing: never "Nobody responded" for a fetch that is still running, has
+   *  failed, or answered with nothing to rank (Call & Answer, zero votes). */
+  const [myFeedbackAnswersStatus, setMyFeedbackAnswersStatus] = useState('loading');
+  /** Lifted out of FeedbackRoundPanel (fix round 1, item 6) — whether the
+   *  composer currently holds unsent text, so this page can decide whether
+   *  it is safe to follow the room automatically once the round moves on. */
+  const [myFeedbackHasDraft, setMyFeedbackHasDraft] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -1094,18 +1221,33 @@ function PlayerPage() {
     setFeedbackComments((result.round && result.round.comments) || []);
   };
 
-  /** Just the comments — what a `commentPosted` frame triggers. Re-reading the
-   *  whole round to pick up one new comment would make a busy room re-read its
-   *  own report dozens of times a minute. */
+  /**
+   * Just the comments — what a `commentPosted` frame triggers. Re-reading the
+   * whole round to pick up one new comment would make a busy room re-read its
+   * own report dozens of times a minute.
+   *
+   * REFRESHES BOTH LISTS (minor, fix round 1): the host-triggered
+   * `feedbackComments` AND the player's own `myFeedbackComments`, whichever
+   * is actually open — a comment from someone else lands here exactly the
+   * same way whether the room is in a host-opened feedback round or a player
+   * is reading their own panel on an ordinary RESULTS phase.
+   */
   const loadComments = async () => {
-    if (!feedbackNumberRef.current) return;
-    const result = await fetchComments({
-      apiBase: API_BASE, gameId, questionNumber: feedbackNumberRef.current,
-    });
-    // Only on success: "there are no comments" and "I could not read them" look
-    // identical if a failure also sets an empty list, and the second must not
-    // wipe what the room can already see.
-    if (result.ok) setFeedbackComments(result.comments);
+    if (feedbackNumberRef.current) {
+      const result = await fetchComments({
+        apiBase: API_BASE, gameId, questionNumber: feedbackNumberRef.current,
+      });
+      // Only on success: "there are no comments" and "I could not read them"
+      // look identical if a failure also sets an empty list, and the second
+      // must not wipe what the room can already see.
+      if (result.ok) setFeedbackComments(result.comments);
+    }
+    if (myFeedbackNumberRef.current) {
+      const result = await fetchComments({
+        apiBase: API_BASE, gameId, questionNumber: myFeedbackNumberRef.current,
+      });
+      if (result.ok) setMyFeedbackComments(result.comments);
+    }
   };
 
   /**
@@ -1121,6 +1263,7 @@ function PlayerPage() {
       apiBase: API_BASE,
       gameId,
       playerName,
+      clientId: getClientId(gameId),
       questionNumber: draft.questionNumber || feedbackNumber,
       anchorKind: draft.anchorKind,
       anchorRef: draft.anchorRef,
@@ -1134,9 +1277,190 @@ function PlayerPage() {
     return result;
   };
 
+  /**
+   * WORKIE'S READ, FOR THE PLAYER'S OWN PANEL.
+   *
+   * Fetched from the public `GET /games/{id}/ai-summary` — never from the
+   * feedback round's stored REPORT row (`GET /feedback-round`), which only
+   * exists once the host has built it (`POST /report`, host-only, Cognito).
+   * The owner's ruling is that this button works without the host doing
+   * anything at all, so the panel cannot depend on a row only the host can
+   * create. A summary that has not been generated yet is not an error: the
+   * panel shows the round with no "AI summary" body, the same as any round
+   * `hasSummary()` already says no to.
+   */
+  const loadMyFeedbackSummary = async (padded) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(padded)}`,
+      );
+      if (!res.ok) { setMyFeedbackSummary(null); return; }
+      const data = await res.json();
+      setMyFeedbackSummary({
+        summaryText: data.summaryText || data.summary || '',
+        discussionQuestions: Array.isArray(data.discussionQuestions) ? data.discussionQuestions : [],
+        nextSteps: Array.isArray(data.nextSteps) ? data.nextSteps : [],
+        markdownResponse: data.markdownResponse || null,
+        personaName: data.personaName || null,
+        contextUsed: data.contextUsed || null,
+      });
+    } catch {
+      // Not fatal — the panel simply shows no AI summary, same as a round
+      // that never had one.
+      setMyFeedbackSummary(null);
+    }
+  };
+
+  /** Every comment already on this round, for the player's own panel — a
+   *  separate read from `loadComments` above (which serves the host-triggered
+   *  `feedbackRound`) so the two panels never fight over one piece of state. */
+  const loadMyFeedbackComments = async (padded) => {
+    const result = await fetchComments({ apiBase: API_BASE, gameId, questionNumber: padded });
+    if (result.ok) setMyFeedbackComments(result.comments);
+  };
+
+  /**
+   * THE RESPONSES, FETCHED FRESH — see `rankedResultsFrom`'s header for why
+   * this calls the results endpoint itself rather than trusting `answers`.
+   * Merged into the snapshot already showing the question, rather than
+   * blocking on it: the panel opens on the question immediately and the
+   * responses fill in once this resolves, instead of sitting on
+   * FeedbackRoundPanel's "preparing this round" screen for a network round
+   * trip.
+   *
+   * SETS `myFeedbackAnswersStatus` on every path (fix round 2, item 1) —
+   * 'loading' while this call is in flight (set by the caller before this
+   * runs, so a retry re-enters the same state), 'ok'/'no-data' from
+   * `feedbackAnswersStatusFrom` once the server answers, 'error' on a bad
+   * response or a network failure. RoundReport is told which one applies
+   * through `answersEmptyText` at render time — never left to guess "Nobody
+   * responded" for a round that was simply never checked.
+   */
+  const loadMyFeedbackAnswers = async (padded) => {
+    try {
+      const res = await fetch(`${API_BASE}games/get-results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId, questionNumber: padded }),
+      });
+      if (!res.ok) { setMyFeedbackAnswersStatus('error'); return; }
+      const data = await res.json();
+      const ranked = rankedResultsFrom(data);
+      setMyFeedbackSnapshot((current) => (current ? { ...current, answers: ranked } : current));
+      setMyFeedbackAnswersStatus(feedbackAnswersStatusFrom(data));
+    } catch {
+      setMyFeedbackAnswersStatus('error');
+    }
+  };
+
+  /**
+   * OPEN THE PLAYER'S OWN FEEDBACK PANEL — the "Feedback" button on the
+   * ordinary results screen. See the state declarations above for why the
+   * question is snapshotted rather than read live; `loadMyFeedbackAnswers`
+   * fills the responses in once they arrive.
+   */
+  const openMyFeedback = () => {
+    const match = String(gameState || '').match(/^RESULTS#(\d+)$/);
+    if (!match) return;
+    const padded = match[1];
+    const q = currentQuestion || {};
+    setMyFeedbackNumber(padded);
+    setMyFeedbackSnapshot({
+      title: q.title || 'This round',
+      detail: q.questionDetail || q.detail || '',
+      options: ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+        .map((key) => q[key]).filter(Boolean),
+      answerDetails: q.answerDetails || '',
+      answers: [],
+    });
+    setMyFeedbackComments([]);
+    setMyFeedbackSummary(null);
+    setMyFeedbackHasDraft(false);
+    setMyFeedbackAnswersStatus('loading');
+    setMyFeedbackOpen(true);
+    loadMyFeedbackComments(padded);
+    loadMyFeedbackSummary(padded);
+    loadMyFeedbackAnswers(padded);
+  };
+
+  /** Closing returns the player to the results screen — or, once the round
+   *  has moved on, to whatever the room is doing now. Nothing is posted for
+   *  them — an unsent draft is simply dropped, the same as closing any other
+   *  composer without pressing Post. This is also "Go to the question" (fix
+   *  round 1, item 6): the same action, the label just says where it goes
+   *  when there was something to leave behind. */
+  const closeMyFeedback = () => {
+    setMyFeedbackOpen(false);
+    setMyFeedbackNumber(null);
+    setMyFeedbackSnapshot(null);
+    setMyFeedbackComments([]);
+    setMyFeedbackSummary(null);
+    setMyFeedbackHasDraft(false);
+    setMyFeedbackAnswersStatus('loading');
+  };
+
+  /**
+   * FOLLOW THE ROOM ONCE THERE IS NOTHING TO LOSE — fix round 1, item 6.
+   *
+   * A player who opened their own panel just to read (never typed anything)
+   * used to stay stuck on it even once the next question went live, because
+   * the render branch above kept winning regardless of a draft. With no
+   * draft, staying there serves nobody — the panel closes itself and the
+   * player lands on whatever the room is actually doing now, same as if they
+   * had pressed Close themselves. With a draft, this does nothing: the render
+   * branch's own `myFeedbackHasDraft` check keeps the panel (and the
+   * "go to the question" banner) up until the player acts.
+   */
+  useEffect(() => {
+    if (myFeedbackOpen && myFeedbackNumber
+      && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft) {
+      closeMyFeedback();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber]);
+
+  /** Post one comment from the player's OWN panel — the same shape as
+   *  `submitComment` above, kept separate because it writes to
+   *  `myFeedbackComments`, not `feedbackComments`. */
+  const submitMyFeedbackComment = async (draft) => {
+    const result = await postComment({
+      apiBase: API_BASE,
+      gameId,
+      playerName,
+      clientId: getClientId(gameId),
+      questionNumber: draft.questionNumber || myFeedbackNumber,
+      anchorKind: draft.anchorKind,
+      anchorRef: draft.anchorRef,
+      anchorLabel: draft.anchorLabel,
+      anchorExcerpt: draft.anchorExcerpt,
+      text: draft.text,
+    });
+    if (result.ok && result.comment) {
+      setMyFeedbackComments((current) => [...current, result.comment]);
+    }
+    return result;
+  };
+
+  /** The round object the player's own panel reads: the snapshot taken when
+   *  they opened it, plus whatever AI summary has loaded since. Built in the
+   *  shape `config/sessionHistory.js`'s `roundsFrom` produces, because
+   *  `RoundReport` (inside `FeedbackRoundPanel`) is written against that
+   *  shape. */
+  const myFeedbackRoundData = myFeedbackSnapshot ? {
+    number: myFeedbackNumber,
+    ordinal: parseInt(myFeedbackNumber, 10) || 0,
+    ...myFeedbackSnapshot,
+    aiSummary: myFeedbackSummary,
+  } : null;
+
   // The ref exists so the once-registered socket handler can read the CURRENT
   // round number; this is the only thing that keeps the two in step.
   useEffect(() => { feedbackNumberRef.current = feedbackNumber; }, [feedbackNumber]);
+  // Same reason, for the player's own panel: null while it is closed, so the
+  // socket handler below knows not to refresh a list nobody is looking at.
+  useEffect(() => {
+    myFeedbackNumberRef.current = myFeedbackOpen ? myFeedbackNumber : null;
+  }, [myFeedbackOpen, myFeedbackNumber]);
 
   // A pending refetch must not fire into an unmounted page.
   useEffect(() => () => {
@@ -2553,12 +2877,103 @@ function PlayerPage() {
   let dock = null;
   let body = null;
 
+  /* ------------------------------------------------ PLAYER-OWN FEEDBACK --
+     CHECKED FIRST, ahead of every gameState branch below — including ENDED —
+     while there is a reason to. The round can leave RESULTS (the host
+     advances) while the player is still writing, and the composer's own
+     draft text lives inside `FeedbackRoundPanel`'s local state: it only
+     survives if that component stays mounted. Falling through to whatever
+     `gameState` says next would unmount it and silently throw the draft
+     away — exactly what the owner's ruling forbids ("it never silently
+     discards a comment").
+
+     FIX ROUND 1, ITEM 6 refines WHEN "there is a reason to": with nothing
+     typed (`myFeedbackHasDraft` — lifted out of FeedbackRoundPanel, which is
+     the only place the draft text itself lives), a player who is only
+     reading has nothing to lose, and stayed stuck on the old round's panel
+     even once the next question was live. So this branch now only wins the
+     chain while the round it opened on is still showing, OR there is
+     something unsent — the effect just below closes it out from under
+     nobody once neither holds; render checks the same pair so nothing
+     flashes on the frame before that effect runs.
+
+     Independent of `feedbackRound`/the branch below that reads it: that one is
+     the host-triggered, whole-room switch and is unaffected by any of this. */
+  const myFeedbackStillOpen = myFeedbackOpen && gameState === `RESULTS#${myFeedbackNumber}`;
+  const myFeedbackShowing = myFeedbackOpen && (myFeedbackStillOpen || myFeedbackHasDraft);
+  /* THE SESSION HAS ENDED, NOT MERELY "THE NEXT QUESTION IS LIVE" (fix round
+     2, item 3) — the exact wording matters when there is no next question to
+     go to at all. `myFeedbackExitLabel` covers both the button and the top
+     exit's accessible name, so the two can never say different things. */
+  const myFeedbackEnded = gameState === 'ENDED';
+  const myFeedbackExitLabel = myFeedbackStillOpen
+    ? 'Close'
+    : (myFeedbackEnded ? 'Close' : 'Go to the question');
+  /*
+    WHAT ROUNDREPORT SAYS INSTEAD OF THE RESPONSES — fix round 2, item 1.
+    `undefined` for 'ok' lets RoundReport's own default ("Nobody responded to
+    this round.") apply, which is the honest claim for a genuinely empty
+    round. The other three states are never that claim: a fetch still running,
+    one that failed, or Call & Answer's own "no votes" shape, which carries no
+    response text to show at all (see `feedbackAnswersStatusFrom`'s header).
+  */
+  const myFeedbackAnswersEmptyText = myFeedbackAnswersStatus === 'loading'
+    ? "Loading the round's responses…"
+    : myFeedbackAnswersStatus === 'error'
+      ? 'The responses could not be loaded.'
+      : myFeedbackAnswersStatus === 'no-data'
+        ? 'Nobody voted on this round.'
+        : undefined;
+  const myFeedbackRetryAnswers = myFeedbackAnswersStatus === 'error'
+    ? () => loadMyFeedbackAnswers(myFeedbackNumber)
+    : undefined;
+
+  if (myFeedbackShowing) {
+    volume = 'act';
+    ctx = position ? `${position} · Feedback` : 'Feedback';
+    body = (
+      <>
+        {/* A TOP EXIT, NOT ONLY A BOTTOM ONE (minor, fix round 1) — the report
+            can run long (the question, every response, Workie's read), and on
+            a phone the bottom button is a long scroll away. Same handler, same
+            destination, as the button at the foot of the panel. */}
+        <button
+          type="button"
+          className="plr-feedback-top-close"
+          onClick={closeMyFeedback}
+          aria-label={myFeedbackExitLabel}
+        >
+          <Icon name="X" size={20} />
+        </button>
+        {!myFeedbackStillOpen && (
+          <p className="plr-lede plr-muted" role="status">
+            {myFeedbackEnded
+              ? 'The session has ended. What you have written is still here — you can copy it, or close this.'
+              : 'The next question is live. What you have written is still here — you can copy it, or go to the question.'}
+          </p>
+        )}
+        <FeedbackRoundPanel
+          round={myFeedbackRoundData}
+          questionNumber={myFeedbackNumber}
+          comments={myFeedbackComments}
+          onSubmit={submitMyFeedbackComment}
+          onDraftChange={setMyFeedbackHasDraft}
+          answersEmptyText={myFeedbackAnswersEmptyText}
+          onRetryAnswers={myFeedbackRetryAnswers}
+          postDisabled={!myFeedbackStillOpen}
+        />
+        <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
+          {myFeedbackExitLabel}
+        </button>
+      </>
+    );
+
   /* ---------------------------------------------------------------- ENDED --
      BEFORE `isWaitingState`, which used to swallow it: `isWaitingState` is
      true for anything that is not ASK#/VOTE#/RESULTS#, so a finished session
      rendered "✅ You're in! / Waiting for the game to start… / ● Ready to
      play" and left the player there permanently (INVENTORY §7.2). */
-  if (gameState === 'ENDED') {
+  } else if (gameState === 'ENDED') {
     volume = 'watch';
     ctx = 'Session complete';
     centre = true;
@@ -3364,6 +3779,30 @@ function PlayerPage() {
         </>
       );
     }
+
+    /*
+      THE FEEDBACK BUTTON — every ordinary RESULTS screen gets one, trivia,
+      wavelength and call-and-answer alike. The owner's ruling, 26 Sep 2026:
+      it works on ANY round whose results are showing, without the host
+      opening feedback mode first — `comments.js`'s write gate now accepts a
+      comment whenever the session is on this round's RESULTS, and this is
+      the button that reaches it. Appended to whichever `body` the game-type
+      branch above built, rather than duplicated inside each of the three, so
+      the three cannot drift on whether they offer it.
+    */
+    body = (
+      <>
+        {body}
+        <button
+          type="button"
+          className="plr-btn plr-btn--ghost plr-feedback-btn"
+          onClick={openMyFeedback}
+        >
+          <Icon name="ChatCircleText" size={18} />
+          {' '}Feedback
+        </button>
+      </>
+    );
 
   /* --------------------------------------------- LOBBY / BETWEEN ROUNDS -- */
   } else {

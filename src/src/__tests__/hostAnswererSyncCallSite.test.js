@@ -104,12 +104,22 @@ describe('the refresh reads the one field it needs, from the payload that has it
     return code.slice(at, code.indexOf('const ANSWERER_SYNC_MS', at));
   })();
 
-  test('it requests host data, or answerProgress is not in the reply at all', () => {
-    // rejects: `${API_BASE}games/${id}/state` with no flag. get-game-state.js
-    // assembles answerProgress only under includeHostData=true, so the plain
-    // route returns 200 with nothing to read and this fails silently — the
-    // exact failure mode being fixed, reintroduced by a shorter URL.
-    expect(refresh).toMatch(/state\?includeHostData=true/);
+  test('it reads the host\'s door, or answerProgress is not in the reply at all', () => {
+    // rejects: `${API_BASE}games/${id}/state`, with or without
+    // `?includeHostData=true`. Since 2026-09-26 get-game-state.js assembles
+    // answerProgress only on the authenticated `/host-state`
+    // (tests/get-game-host-state.js), so the public route returns 200 with
+    // nothing to read and this fails silently — the exact failure mode being
+    // fixed, reintroduced by the old URL.
+    expect(refresh).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{forGameId\}\/host-state`\)/);
+    expect(refresh).not.toMatch(/includeHostData/);
+    expect(refresh).not.toMatch(/\/state[`?]/);
+  });
+
+  test('with a token: the door carries the Cognito authorizer', () => {
+    // rejects: a bare `fetch` on the door, which is a 401 on every refresh —
+    // the names would stop moving exactly as they did before this fix.
+    expect(refresh).not.toMatch(/(?<![\w.])fetch\(/);
   });
 
   test('it goes through answererIdsFrom rather than reading the array raw', () => {

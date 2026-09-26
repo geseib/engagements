@@ -27,6 +27,8 @@ import { authFetch } from '../auth/authFetch';
 import ReportSavedDialog from './ReportSavedDialog';
 import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
 import { calculatePlayerRankings } from '../config/podium';
+import { namesMode } from '../config/surveyNames';
+import KindResult from './survey/results/KindResult';
 import './GameReport.css';
 
 const API_BASE = window.API_BASE;
@@ -330,7 +332,93 @@ function GameReport({
  * a payload it might not have is one `?.` away from a white screen.
  */
 function ReportDocument({ reportData }) {
-  const { gameId, eventTitle, players = [], questions = [] } = reportData;
+  const { gameId, eventTitle, players = [], questions = [], questionSetData } = reportData;
+
+  /*
+   * "ABOUT THIS SESSION" (Task 2 of the 2026-09-26 feature sweep).
+   *
+   * The owner: "for session report it would be nice to have it start with
+   * event info if given ... what they are being asked to do in the
+   * session." Two separate pieces, per the brief:
+   *
+   *   eventDetails    the session's own free text, verbatim (create-report.js
+   *                   reads it off sessionMeta.Details/EngagementInfo).
+   *   "What people were asked to do"   the session's details AND/OR the
+   *                   question set's own description — the set's summary
+   *                   when the set has one, the same session Details
+   *                   otherwise (there is no second field to split them
+   *                   into today).
+   *
+   * FIX ROUND 1 (a controller ruling, after the first review): the report
+   * must never print the same sentence twice. `purposeText` still falls
+   * back to `eventDetails` when the set has no description of its own — it
+   * has to, for the case where the set DOES have one and it happens to read
+   * identically — but `showPurpose` is gated on that text actually
+   * DIFFERING from the eventDetails paragraph already shown above it. When
+   * the set has no description, purposeText === eventDetails and the
+   * "What people were asked to do" label is omitted rather than repeating
+   * the same sentence under a second heading.
+   */
+  const eventDetails = String(reportData.eventDetails || '').trim();
+  const setDescription = String((questionSetData && questionSetData.description) || '').trim();
+  const purposeText = setDescription || eventDetails;
+  const showAbout = Boolean(eventDetails || setDescription);
+  const showPurpose = Boolean(purposeText) && purposeText !== eventDetails;
+
+  /*
+   * "WHO WAS HERE" — a roster of names only, in JOIN order.
+   *
+   * `players` is `playerPerformance`, already ordered by score for Final
+   * Scores below; this is a different question ("who showed up", not "who
+   * won") and reuses the same array rather than a second source of truth.
+   * `joinedAt` is only on players reported after Task 2 shipped — a report
+   * with none of it falls back to the array's own order rather than
+   * throwing or reshuffling arbitrarily.
+   *
+   * This never reveals who answered what: a round run with hidden authors
+   * still omits `playerName` on its own answers/comments exactly as it does
+   * today (create-report.js's isHidden gate) — the roster is drawn from
+   * PLAYER# rows (who joined), a fact anonymity was never about withholding.
+   */
+  const roster = players
+    .slice()
+    .sort((a, b) => {
+      const at = a && a.joinedAt;
+      const bt = b && b.joinedAt;
+      if (!at || !bt) return 0;
+      return at < bt ? -1 : at > bt ? 1 : 0;
+    })
+    .map((p) => p && (p.playerName || p.name))
+    .filter(Boolean);
+
+  /*
+   * SURVEY RESULTS (Task 4 of the 2026-09-26 feature sweep): "this should
+   * also be what the report shows, not who filled in the survey." `null`
+   * for every game type but survey, and for a survey whose close has not
+   * yet frozen anything (create-report.js's own comment on the field).
+   */
+  const isSurvey = reportData.gameType === 'survey';
+  const surveyResults = reportData.surveyResults || null;
+  // `surveyNames` travels on its own even when `surveyResults` is still
+  // null (a report requested before the survey has closed), so this reads
+  // off it first and falls back to the frozen results' own copy.
+  const surveyNamesId = isSurvey
+    ? namesMode(reportData.surveyNames ?? (surveyResults && surveyResults.names)).id
+    : null;
+
+  /*
+   * NO ROSTER BESIDE ANONYMOUS ANSWERS. "Who was here" says who JOINED —
+   * a fact from the PLAYER# rows, unrelated to a survey's Names setting —
+   * and that is exactly the problem for an Anonymous survey: with no
+   * minimum group size (the owner's ruling), a small room's anonymous
+   * open answers sitting next to a short, named roster invites guessing
+   * who wrote what, even though nothing in the data actually links them.
+   * Finished and Named surveys keep the roster, same as every other game
+   * type — Named's own promise ("the wall, the shared link and the report
+   * never show a name") is about the ANSWERS, not attendance, and a
+   * Finished survey never linked a name to an answer to begin with.
+   */
+  const showRoster = roster.length > 0 && !(isSurvey && surveyNamesId === 'anonymous');
 
   /*
    * WHAT THIS REPORT COULD NOT RECONSTRUCT.
@@ -369,7 +457,13 @@ function ReportDocument({ reportData }) {
     || questions?.[0]?.questionData;
 
   const printedOn = new Date().toLocaleDateString('en-US', LONG_DATE);
-  const roundsLabel = pluralRoundNoun(reportRoundNoun(headerSampleQuestion), questions.length);
+  // A survey has no `detailedQuestions` (it writes no QUESTION# rows at
+  // all), so `questions.length` would head every survey report "0
+  // Questions". Its own count lives on `surveyResults` instead — the same
+  // noun ("Question", config/gameTypes.js) still resolves correctly with
+  // no sample question to read an image off.
+  const roundCount = isSurvey ? (surveyResults ? surveyResults.questions.length : 0) : questions.length;
+  const roundsLabel = pluralRoundNoun(reportRoundNoun(headerSampleQuestion), roundCount);
 
   return (
     <>
@@ -393,10 +487,52 @@ function ReportDocument({ reportData }) {
           </div>
           <div className="report-meta-item">
             <dt>{roundsLabel}</dt>
-            <dd>{questions.length}</dd>
+            <dd>{roundCount}</dd>
           </div>
         </dl>
       </header>
+
+      {/* ---- ABOUT THIS SESSION & WHO WAS HERE — Task 2's front matter ----
+          Under the title, before the caveat and the rounds, per the owner's
+          own ask. Both are `report-keep`, like the caveat below: short
+          front-matter blocks that must never be split by a page break,
+          unlike Final Scores which is allowed to run across one. Task 4's
+          survey section attaches beneath this pair without touching it. */}
+      {showAbout && (
+        <section className="report-about report-keep">
+          <header className="report-question-header">
+            <p className="report-section-index">
+              <span className="report-section-number">Session</span>
+            </p>
+            <h2 className="report-lesson-heading">About this session</h2>
+          </header>
+          {eventDetails && (
+            <p className="report-lesson-detail">{eventDetails}</p>
+          )}
+          {showPurpose && (
+            <div className="report-block report-about-purpose">
+              <h3 className="report-block-heading">What people were asked to do</h3>
+              <p>{purposeText}</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {showRoster && (
+        <section className="report-roster report-keep">
+          <header className="report-question-header">
+            <p className="report-section-index">
+              <span className="report-section-number">Attendance</span>
+            </p>
+            <h2 className="report-lesson-heading">Who was here</h2>
+          </header>
+          <ol className="report-roster-list">
+            {roster.map((name, idx) => (
+              <li key={`${name}-${idx}`} className="report-roster-item">{name}</li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {/* ---- CAVEAT, when the record is not whole ----------------------- */}
       {caveat && (
@@ -406,8 +542,44 @@ function ReportDocument({ reportData }) {
         </aside>
       )}
 
-      {/* ---- ROUNDS ---------------------------------------------------- */}
+      {/* ---- ROUNDS, or a survey's results ------------------------------ */}
       <div className="report-content">
+        {isSurvey ? (
+          /*
+            SURVEY RESULTS (Task 4): the same KindResult cards Task 3 built
+            for the console (SurveyResultsPanel), mounted here unchanged —
+            "props in, markup out" (KindResult's own contract) is exactly
+            what lets the identical component render correctly under this
+            document's data-theme="light" with no code of its own. No
+            `onOpenAnswers` is passed: a text question has no "Read all N"
+            link, which is the right shape for a document rather than a
+            console with a place to click through to. `full` IS passed
+            (fix I-1, 2026-09-26 final review): the owner's binding ruling is
+            that the saved report shows every open answer, even under 5, so
+            this document cannot inherit TextResult's console preview of 3 —
+            it has no click-through to see the rest. `null` — a survey that
+            has not closed yet — renders nothing further; the front matter
+            above is still a complete document as far as it goes.
+          */
+          surveyResults && surveyResults.questions.length > 0 && (
+            <section className="report-question report-survey-results">
+              <header className="report-question-header">
+                <p className="report-section-index">
+                  <span className="report-section-number">Results</span>
+                </p>
+                <h2 className="report-lesson-heading">Survey results</h2>
+              </header>
+              <div className="report-survey-grid">
+                {surveyResults.questions.map((q) => (
+                  <div key={q.qid} className="report-keep report-survey-card">
+                    <KindResult question={q} full />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )
+        ) : (
+        <>
         {questions.map((question, qIdx) => {
           // Extract question data from backend format
           const questionNumber = question.questionNumber;
@@ -652,6 +824,8 @@ function ReportDocument({ reportData }) {
             })()}
           </ol>
         </section>
+        </>
+        )}
 
         {/* The document has to end somewhere, and a page that just stops is the
             tell of a screenshot. The running foot identifies the sheet; this

@@ -104,6 +104,11 @@ const MUST_BE_CLOSED = [
   ['POST', '/games/{gameId}/survey/end'],
   ['GET', '/games/{gameId}/survey/progress'],
   ['GET', '/games/{gameId}/survey/people'],
+  // The frozen tallies, once closed (game/survey-host.js `results()`, Task 3
+  // of the 2026-09-26 feature sweep). Same reasoning as the two above: it
+  // carries the Cognito authorizer and would otherwise fall through to
+  // "GET + games is public".
+  ['GET', '/games/{gameId}/survey-results'],
   // The stored report. It was on the list below as a participant read; it is
   // not one — `?role=host` returned the whole room (tests/get-report-authorization.js).
   ['GET', '/games/{gameId}/report'],
@@ -132,6 +137,19 @@ const MUST_BE_CLOSED = [
   // the session's Workie context and briefing decrypted. The public brief
   // below no longer returns either to `?role=host` (tests/get-game-host-details.js).
   ['GET', '/games/{gameId}/host-details'],
+  // THE ROUND'S HOST DOOR (game/get-game-state.js): the running order, the
+  // category counts and masks, and who has answered or voted. The public
+  // round below no longer returns any of it to `?includeHostData=true`
+  // (tests/get-game-host-state.js).
+  ['GET', '/games/{gameId}/host-state'],
+  // THE ANSWERS' HOST DOOR (game/get-answers.js): every answer to a round, at
+  // any phase, with its author on a named round. The phone's read below
+  // answers `?role=host` as it answers a player (tests/get-answers-host.js).
+  ['GET', '/games/{gameId}/answers/host'],
+  // THE BALLOTS' HOST DOOR (game/get-votes.js): every ballot in a round,
+  // decrypted, with its voter. The public count below answers `?role=host`
+  // with a count (tests/get-votes-host.js).
+  ['GET', '/games/{gameId}/votes/host'],
 ];
 
 // The participant journey. None of these carries a token, ever.
@@ -213,7 +231,7 @@ for (const bare of [
 // The survey host GETs, by concrete path — the `rawPath` fallback — where the
 // generic rule would read `GET` + `games` and return PUBLIC.
 console.log('\n   and the survey host reads are not public by their concrete path');
-for (const bare of ['games/1234/survey/people', 'games/1234/survey/progress']) {
+for (const bare of ['games/1234/survey/people', 'games/1234/survey/progress', 'games/1234/survey-results']) {
   check(`GET ${bare} requires hosts or admins`, () =>
     assert.deepStrictEqual(requiredGroupsForRoute('GET', bare), ['hosts', 'admins'],
       `got ${JSON.stringify(requiredGroupsForRoute('GET', bare))} — any signed-in account could list who finished`));

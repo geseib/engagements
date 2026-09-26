@@ -44,6 +44,7 @@ const mount = (props = {}) => {
   const handlers = {
     onCopyPlayerUrl: jest.fn(), onInvite: jest.fn(), onReport: jest.fn(),
     onOpen: jest.fn(), onStart: jest.fn(), onEdit: jest.fn(), onClose: jest.fn(),
+    onResults: jest.fn(),
   };
   const utils = render(
     <SessionHistoryPanel sessions={[started, fresh]} {...handlers} {...props} />
@@ -58,7 +59,7 @@ describe('§1 the pure rules', () => {
     // No edit: PUT /games/{id} refuses any session whose STATE is not
     // CREATED, so an Edit button here could only ever produce a 400.
     expect(rowActions(started)).toEqual({
-      start: false, continue: true, report: true, edit: false,
+      start: false, continue: true, report: true, edit: false, results: false,
     });
   });
 
@@ -75,7 +76,55 @@ describe('§1 the pure rules', () => {
       disappeared. rowActions carries the full argument.
     */
     expect(rowActions(fresh)).toEqual({
-      start: true, continue: false, report: false, edit: true,
+      start: true, continue: false, report: false, edit: true, results: false,
+    });
+  });
+});
+
+describe('§1b a closed survey offers Results AND Report — I-2, 2026-09-26 final review', () => {
+  /*
+    Task 3 fix round 1 had `results` REPLACE `report` in a closed survey's
+    row, on the premise that "a survey has no session report to open at
+    all" — false once Task 4 shipped: create-report.js reuses
+    survey-host.js's surveyResultsPayload, so a closed survey's report is a
+    real document with every chart and every open answer. `results` is the
+    lightweight modal (GET /games/{id}/survey-results, Task 3); `report` is
+    the full saved document (Task 4). They show different things and a host
+    coming back for either one should find it. So both are true for a closed
+    survey now, alongside `continue` — see the JSX comment by `.shist__acts`
+    for how the fixed 2-column grid holds a third verb button.
+    `session.surveyClosed` (get-games-list.js) is the ONLY thing this reads —
+    the flag already means "SURVEY#CLOSED or ENDED", so rowActions asks
+    nothing else about state.
+  */
+  const closedSurvey = {
+    ...started, gameId: '5001', title: 'Pulse check', gameType: 'survey', surveyClosed: true,
+  };
+  const collectingSurvey = {
+    ...started, gameId: '5002', title: 'Still open', gameType: 'survey', surveyClosed: false,
+  };
+
+  test('a closed survey: Continue, Results and Report — never Start or Edit', () => {
+    expect(rowActions(closedSurvey)).toEqual({
+      start: false, continue: true, report: true, edit: false, results: true,
+    });
+  });
+
+  test('a survey still collecting offers no Results — the same shape as any other started session', () => {
+    expect(rowActions(collectingSurvey)).toEqual({
+      start: false, continue: true, report: true, edit: false, results: false,
+    });
+  });
+
+  test('a non-survey session is never offered Results, even if surveyClosed is (wrongly) set', () => {
+    expect(rowActions({ ...started, surveyClosed: true })).toEqual({
+      start: false, continue: true, report: true, edit: false, results: false,
+    });
+  });
+
+  test('an unstarted survey offers Edit and Start, not Results', () => {
+    expect(rowActions({ ...fresh, gameType: 'survey', surveyClosed: false })).toEqual({
+      start: true, continue: false, report: false, edit: true, results: false,
     });
   });
 
@@ -259,6 +308,49 @@ describe('§4 the other row actions', () => {
     const { onClose } = mount();
     fireEvent.click(screen.getByRole('button', { name: /Close your sessions/i }));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('§4b Results, rendered — Task 3 fix round 1', () => {
+  const closedSurvey = {
+    gameId: '5001', title: 'Pulse check', gameType: 'survey',
+    questionSetId: 'set-alpha', hostName: 'Ada',
+    createdAt: '2026-09-20T09:00:00Z', lastPlayedAt: '2026-09-20T09:40:00Z',
+    started: true, playerCount: 12, roundsPlayed: 0, surveyClosed: true,
+  };
+  const collectingSurvey = { ...closedSurvey, gameId: '5002', title: 'Still open', surveyClosed: false };
+
+  test('a closed survey row offers Results, and it names the session it opens', () => {
+    mount({ sessions: [closedSurvey] });
+    const btn = within(rowFor('Pulse check')).getByRole('button', { name: /Results/i });
+    expect(btn).toHaveAttribute('title', expect.stringContaining('Pulse check'));
+  });
+
+  test('clicking Results calls onResults with the session\'s id and title', () => {
+    const { onResults } = mount({ sessions: [closedSurvey] });
+    fireEvent.click(within(rowFor('Pulse check')).getByRole('button', { name: /Results/i }));
+    expect(onResults).toHaveBeenCalledWith('5001', 'Pulse check');
+  });
+
+  test('a survey still collecting offers no Results button', () => {
+    mount({ sessions: [collectingSurvey] });
+    expect(within(rowFor('Still open')).queryByRole('button', { name: /Results/i })).toBeNull();
+  });
+
+  // I-2 (2026-09-26 final review): Results replacing Report entirely hid
+  // Task 4's saved document from a host who came back for it later — the
+  // row must offer both, wired to the same two independent handlers.
+  test('a closed survey row ALSO offers Report, wired to the same report path other sessions use', () => {
+    const { onReport } = mount({ sessions: [closedSurvey] });
+    const btn = within(rowFor('Pulse check')).getByRole('button', { name: /Report/i });
+    expect(btn).toHaveAttribute('title', expect.stringContaining('Pulse check'));
+    fireEvent.click(btn);
+    expect(onReport).toHaveBeenCalledWith('5001', 'Pulse check');
+  });
+
+  test('an ordinary (non-survey) closed session offers no Results button', () => {
+    mount(); // started = call-and-answer, no surveyClosed field at all
+    expect(within(rowFor('Q3 Offsite')).queryByRole('button', { name: /Results/i })).toBeNull();
   });
 });
 

@@ -185,6 +185,26 @@ export default function RoundReport({
    * prop keeps them off a screen; it does not keep them off the wire.
    */
   showWorkieContext = false,
+  /**
+   * WHAT TO SAY WHEN THERE ARE NO RESPONSES — fix round 2. Defaults to the
+   * original, honest statement of a real outcome. The player's own feedback
+   * panel (PlayerPage.jsx) fetches this round's responses itself, on its own
+   * schedule, and three OTHER states can put `answers` at `[]` that are not
+   * "nobody responded": still loading, the fetch failed, or (Call & Answer
+   * with zero votes) the server's own response for that case carries no
+   * response data at all — get-results.js's early return there is
+   * `{message, totalVotes: 0, winners: [], voteTallies: {}}`, nothing else,
+   * so the honest claim is "nobody voted", not "nobody responded". Each of
+   * those passes its own text here rather than this component guessing.
+   */
+  answersEmptyText = 'Nobody responded to this round.',
+  /**
+   * Retry fetching the responses, offered only in the failed-fetch case.
+   * Optional, and its absence is every other caller: PastRound and the
+   * host-triggered feedback round both read a round that already exists in
+   * full, with nothing to retry.
+   */
+  onRetryAnswers,
 }) {
   if (!round) return null;
 
@@ -253,8 +273,17 @@ export default function RoundReport({
         {answers.length === 0 ? (
           /* A round with no responses is a real outcome and has to read as one.
              Rendering an empty list instead looks like a load that failed,
-             which sends the reader looking for a bug. */
-          <p className="past-round__empty">Nobody responded to this round.</p>
+             which sends the reader looking for a bug — which is exactly why
+             the CALLER'S text matters here: a load that actually did fail
+             must not be dressed up as this same honest outcome. */
+          <>
+            <p className="past-round__empty">{answersEmptyText}</p>
+            {onRetryAnswers && (
+              <button type="button" className="btn-secondary past-round__retry" onClick={onRetryAnswers}>
+                Try again
+              </button>
+            )}
+          </>
         ) : (
           /*
             THE BRIEF BAR, AND A WAY INTO THE WHOLE THING.

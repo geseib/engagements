@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { isHidden, redactAnswers } = require('./anonymity');
 const { decryptItem, decryptItems } = require('./tenant-crypto');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -16,11 +17,41 @@ const db = DynamoDBDocumentClient.from(client);
  */
 const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
 
+/*
+  THE HOST'S DOOR, `GET /games/{gameId}/answers/host`: a second event on this
+  function (template-clean.yaml, GetAnswersHostEvent), the way /host-details
+  is on get-game.js. It returns every answer to a round, decrypted, at any
+  phase, with its author on a round that is not anonymous: what the stage and
+  the phone remote put on the wall.
+
+  The public route used to return exactly that to a typed `?role=host`. A
+  query parameter is a claim, not an identity, so anyone holding the code could
+  watch every answer land, by name, while the room was still answering. The
+  public route now answers `role=host` the way it answers a player: the answers
+  during VOTE, and a count otherwise.
+
+  Cognito in front, hosts|admins named in authorizer.js, and
+  callerMayDriveSession here. NO IDENTITY IS REFUSED OUTRIGHT, before any read:
+  callerMayDriveSession passes a caller with no groups, so on its own it would
+  hand an orgless session's answers to anyone the day this route lost its
+  authorizer. The owner is checked on the RAW row, before anything is
+  decrypted or the round is read. Every refusal is the same "Game not found"
+  as a code that names nothing. tests/get-answers-host.js.
+*/
+const HOST_ANSWERS_ROUTE = /\/answers\/host$/;
+
+const gameNotFound = () => ({
+  statusCode: 404,
+  body: JSON.stringify({ error: 'Game not found' }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+});
+
 exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const queryParams = event.queryStringParameters || {};
-    // `role` is 'host' or 'player'. `question` is an accepted spelling of
+    // `role` is logged and nothing more: the ROUTE decides who is the host
+    // (see the top of this file). `question` is an accepted spelling of
     // `questionId` because that is what the player client has always sent.
     const { role, questionId, question, player, clientId } = queryParams;
 
@@ -32,7 +63,26 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`📋 Getting answers for game ${gameId}, role: ${role || 'unspecified'}, questionId: ${questionId || question || 'current'}`);
+    // Which door: API Gateway sets routeKey; rawPath is the fallback.
+    const rc = event.requestContext || {};
+    const onHostDoor = HOST_ANSWERS_ROUTE.test(rc.routeKey || event.routeKey || event.rawPath || '');
+
+    console.log(`📋 Getting answers for game ${gameId}, ${onHostDoor ? 'host door' : `role: ${role || 'unspecified'}`}, questionId: ${questionId || question || 'current'}`);
+
+    // The host's door: an identity, then the session's owner, on the raw row,
+    // before the round or any answer is read.
+    let hostMeta = null;
+    if (onHostDoor) {
+      const authorizer = rc.authorizer || {};
+      const identity = (authorizer.jwt && authorizer.jwt.claims) || authorizer.lambda;
+      if (!identity) return gameNotFound();
+      const metaRes = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+      }));
+      if (!metaRes.Item || !callerMayDriveSession(event, metaRes.Item)) return gameNotFound();
+      hostMeta = metaRes.Item;
+    }
 
     let targetQuestionId = questionId || question;
 
@@ -100,7 +150,8 @@ exports.handler = async (event) => {
     //
     // Server-side is the only place this can be fixed durably: client-side
     // state preservation cannot survive a page reload, and this can.
-    if (player) {
+    // The phone's path only: the host's door reads the whole round.
+    if (player && !onHostDoor) {
       return await getOwnAnswer(gameId, targetQuestionId, player, clientId);
     }
 
@@ -119,10 +170,12 @@ exports.handler = async (event) => {
 
     // Anonymity is decided here, once, for both role branches below.
     //
-    // There is deliberately no host exemption: `role` arrives as a query
-    // parameter (see :11), so a payload we would emit to role=host we would
-    // emit to anybody who typed it. The only implementable guarantee is that
-    // the names are not in the response at all.
+    // There is deliberately no host exemption: `role` arrived as a query
+    // parameter, so a payload we would emit to role=host we would have emitted
+    // to anybody who typed it. The only implementable guarantee was that the
+    // names are not in the response at all. The host's door (see the top of
+    // this file) moved the host's payload behind sign-in WITHOUT changing it,
+    // so the same rule holds there too.
     //
     // HOISTED ABOVE `fullAnswers` because the METADATA row is now needed for a
     // second reason: it carries the `orgId` that decrypts `Answer`. Both the
@@ -130,7 +183,8 @@ exports.handler = async (event) => {
     // extra — but the ORDER matters, and it is the ordering that would break
     // silently: build the payload first and every answer in it is an envelope.
     const [metaRes, roundRes] = await Promise.all([
-      db.send(new GetCommand({
+      // The door has already read this row to check its owner.
+      hostMeta ? { Item: hostMeta } : db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
       })),
@@ -170,8 +224,8 @@ exports.handler = async (event) => {
     // positional and get-results tallies vote index against answers[index].
     const baseAnswers = hidden ? redactAnswers(fullAnswers) : fullAnswers;
 
-    // Role-specific information
-    if (role === 'host') {
+    // Which payload: the ROUTE decides, never `role`.
+    if (onHostDoor) {
       // Host gets complete answer information plus question details
       const result = {
         gameId: gameId,
@@ -246,8 +300,11 @@ exports.handler = async (event) => {
  * TWO FIELDS, TWO DIFFERENT DISCLOSURE RULES, and the split is the whole design:
  *
  *   `hasAnswer` — whether a named player has submitted. Discloses nothing new.
- *     GET /games/{id}/state already returns `answerProgress.answererIds`, the
- *     full list of who has answered, to any caller with no identity at all.
+ *     GET /games/{id}/players already returns each player's
+ *     `readiness.hasAnswered`, who has answered by name, to any caller with no
+ *     identity at all. (The public /state carried the same list as
+ *     `answerProgress.answererIds` until 2026-09-26; that moved to the host's
+ *     door, the roster did not.)
  *     This is the "who has not acted" half of the anonymity split that
  *     anonymity.js draws, and it is deliberately public: the host needs it to
  *     know whether the room can move on.
