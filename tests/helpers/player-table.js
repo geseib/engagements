@@ -524,9 +524,18 @@ function createTable() {
             return {};
           }
 
-          case 'delete':
-            store.delete(keyOf(input.Key.PK, input.Key.SK));
+          case 'delete': {
+            const k = keyOf(input.Key.PK, input.Key.SK);
+            if (input.ConditionExpression
+              && !evaluateCondition(
+                input.ConditionExpression, store.get(k),
+                input.ExpressionAttributeNames, input.ExpressionAttributeValues
+              )) {
+              throw conditionalFailure();
+            }
+            store.delete(k);
             return {};
+          }
 
           case 'query': {
             const pk = input.ExpressionAttributeValues[':pk'];

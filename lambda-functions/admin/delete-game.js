@@ -120,9 +120,16 @@ exports.handler = async (event) => {
     }
 
     console.log('Releasing the game code reservation...');
+    // BELT AND SUSPENDERS: the read above already refuses an event's code with
+    // its own 404 before anything is touched. This condition says the same
+    // thing at the write, so a reordering of this handler, or a race that
+    // slips an event's Kind onto the row after that read, still cannot make
+    // this route release a code it does not own — it would throw
+    // ConditionalCheckFailedException instead (tests/event-code-reservation.js).
     await db.send(new DeleteCommand({
       TableName: TABLE_NAME,
-      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` }
+      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` },
+      ConditionExpression: 'attribute_not_exists(Kind)'
     }));
     pointerRowsDeleted += 1;
 

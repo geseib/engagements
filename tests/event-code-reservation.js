@@ -144,6 +144,36 @@ const newSession = () => createGame({
     assert.ok(reservation('5307'), 'the event\'s code was released');
   });
 
+  console.log('\n6. the final delete refuses an event\'s code too, not only the read');
+  // rejects: a bug that moves or drops the early read-and-refuse check above,
+  // or a race that slips Kind onto the row between that read and this route's
+  // own final delete — either way the write itself must still refuse, not
+  // rely on the read alone (Task 3 review; delete-game.js's last DeleteCommand
+  // now carries `ConditionExpression: 'attribute_not_exists(Kind)'`).
+  table.clear();
+  seedOrg(table, 'org_nw');
+  await check('a code that becomes an event\'s mid-delete is not released', async () => {
+    const created = await newSession();
+    assert.strictEqual(created.statusCode, 201, created.body);
+    const gameId = bodyOf(created).gameId;
+    const gate = table.hold((c) => c.type === 'delete'
+      && c.input.Key && c.input.Key.PK === 'GAMES' && c.input.Key.SK === `GAME#${gameId}`);
+    const slow = deleteGame({
+      pathParameters: { gameId },
+      requestContext: { ...asHost('org_nw'), http: { method: 'DELETE', path: `/admin/games/${gameId}` } },
+    });
+    await gate.reached;
+    // The race: this handler's own early read already ran and saw no Kind —
+    // that is why it got this far — but something turns the code into an
+    // event's before the reservation delete it decided on actually lands.
+    table.put({ ...reservation(gameId), Kind: 'event' });
+    gate.release();
+    const res = await slow;
+    assert.strictEqual(res.statusCode, 500, res.body);
+    assert.ok(reservation(gameId), 'the reservation was deleted despite carrying Kind');
+    assert.strictEqual(reservation(gameId).Kind, 'event');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);
