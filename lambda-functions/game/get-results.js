@@ -7,7 +7,7 @@ const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wave
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
-const { scoreRowAfterRound } = require('./standings');
+const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -214,6 +214,10 @@ const isHostTransitionRoute = (event) =>
  * A missing `event` is a programming error — a fifth exit that forgot to pass
  * it — and throws rather than silently declining, because silently declining
  * is how a host ends up staring at a round that will not close.
+ *
+ * It writes whatever round it is given, so it is never reached for a round
+ * BEFORE the one the session is on: the handler refuses that first (409),
+ * before any branch has scored anything (tests/reclose-round.js).
  */
 const enterResultsState = async (event, gameId, paddedQuestionId) => {
   if (!event || typeof event !== 'object') {
@@ -371,8 +375,9 @@ exports.handler = async (event) => {
       in the round went on the stage, for anyone holding four digits, by asking
       for the results instead of asking for the reveal. It also awards the
       scores, and unlike the state move that does not undo: the score row
-      carries `afterRound`, so a second close of the same round is skipped as
-      already scored. A rival did not merely move the room, they spent it.
+      records the rounds it has paid (`scoredRounds`), so a second close of
+      the same round is skipped as already scored. A rival did not merely move
+      the room, they spent it.
 
       GATED ON THE ROUTE, NOT MERELY ON THE CALLER, and the read route is the
       reason. `POST /games/get-results` is public and must stay that way —
@@ -497,6 +502,45 @@ exports.handler = async (event) => {
           body: JSON.stringify({
             error: 'Host authentication required',
             message: 'Results for this round are not available yet'
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+    }
+
+    // AN OLDER ROUND IS NOT CLOSED AGAIN.
+    //
+    // Everything below writes RESULTS#<asked> and LessonNumber=<asked>, reveals
+    // the round's authors, pays its points and tells the room. Asked for a
+    // round BEFORE the one the session is on, that moved the whole room back
+    // to it and paid it a second time. The likely sender is a second host
+    // screen that has not caught up: the phone remote polls /state and closes
+    // the round it last saw, so a poll just before the stage moves on sends
+    // the old number.
+    //
+    // Every caller closes the round the session is ON — GameHostPage's
+    // `lessonNumber`, the remote's `currentQuestion` — so nothing a host means
+    // to do is refused, and re-showing the CURRENT round is still a re-close.
+    // Refused before any branch, because by the time enterResultsState runs
+    // the round has been scored. 409 and nothing written, like the survey
+    // refusal above; the sentence is what the phone remote prints.
+    if (isHostTransitionRoute(event)) {
+      const gameState = await readGameState();
+      const onRound = Number(gameState?.LessonNumber) || 0;
+      const askedRound = parseInt(String(targetQuestionId), 10);
+      if (onRound > 0 && askedRound < onRound) {
+        console.log(`🔒 Refusing to close round ${askedRound} of ${gameId}: the session is on round ${onRound}`);
+        const reason = `This session has moved on to round ${onRound}. Round ${askedRound} is over, so nothing was changed.`;
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: reason,
+            message: reason,
+            staleRound: true,
+            gameId,
+            round: askedRound,
+            currentRound: onRound,
+            state: gameState.State || null
           }),
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
@@ -665,14 +709,16 @@ exports.handler = async (event) => {
 
           let currentScore = 0;
           let lastRound = null;
+          const paidRounds = scoredRoundsOf(currentScoreRecord.Item);
 
           if (currentScoreRecord.Item) {
             currentScore = currentScoreRecord.Item.score || 0;
             lastRound = currentScoreRecord.Item.afterRound;
             console.log(`📊 Found existing score record for ${tally.playerName}: ${currentScore} points from round ${lastRound}`);
-            
-            // Check if this round was already scored
-            if (lastRound === paddedQuestionId) {
+
+            // Paid once per round, in whatever order the closes come — not
+            // merely "not the round paid last" (standings.scoredRoundsOf).
+            if (paidRounds.has(paddedQuestionId)) {
               console.log(`⚠️ Player ${tally.playerName} already scored for round ${paddedQuestionId}, skipping update`);
               return;
             }
@@ -693,6 +739,7 @@ exports.handler = async (event) => {
               SK: scoreKey,
               PlayerName: tally.playerName,
               ...scoreRowAfterRound(currentScoreRecord.Item, tally.totalScore, paddedQuestionId, new Date().toISOString()),
+              scoredRounds: new Set([...paidRounds, paddedQuestionId]),
               ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
             }
           }));
@@ -948,14 +995,15 @@ async function handleTriviaResults(event, gameId, questionId) {
 
         let currentScore = 0;
         let lastRound = null;
+        const paidRounds = scoredRoundsOf(currentScoreRecord.Item);
 
         if (currentScoreRecord.Item) {
           currentScore = currentScoreRecord.Item.score || 0;
           lastRound = currentScoreRecord.Item.afterRound;
           console.log(`📊 Found existing score record for ${answer.PlayerName}: ${currentScore} points from round ${lastRound}`);
-          
-          // Check if this round was already scored
-          if (lastRound === paddedQuestionId) {
+
+          // Paid once per round — the same rule as the call-and-answer path.
+          if (paidRounds.has(paddedQuestionId)) {
             console.log(`⚠️ Player ${answer.PlayerName} already scored for round ${paddedQuestionId}, skipping update`);
             return;
           }
@@ -975,6 +1023,7 @@ async function handleTriviaResults(event, gameId, questionId) {
             SK: scoreKey,
             PlayerName: answer.PlayerName,
             ...scoreRowAfterRound(currentScoreRecord.Item, answer.PointsEarned, paddedQuestionId, new Date().toISOString()),
+            scoredRounds: new Set([...paidRounds, paddedQuestionId]),
             ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
           }
         }));
