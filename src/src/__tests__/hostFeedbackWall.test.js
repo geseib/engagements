@@ -19,7 +19,7 @@ describe('the meter on FEEDBACK', () => {
     const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
     expect(meter).toMatch(/hostPhase === 'FEEDBACK'/);
     expect(meter).toMatch(/heading: 'Comments'/);
-    expect(meter).toMatch(/roundComments\.length/);
+    expect(meter).toMatch(/scopedRoundComments\.length/);
     const el = SRC.slice(SRC.indexOf('<RoomMeter'), SRC.indexOf('/>', SRC.indexOf('<RoomMeter')));
     expect(el).toMatch(/arrivals=\{meterArrivals\}/);
   });
@@ -28,9 +28,37 @@ describe('the meter on FEEDBACK', () => {
     const def = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
     expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
     expect(def).toMatch(/wallComments !== false/);
-    expect(def).toMatch(/items:\s*roundComments/);
+    expect(def).toMatch(/items:\s*scopedRoundComments/);
     expect(def).toMatch(/onPick:\s*handleFeatureComment/);
     expect(def).toMatch(/featuredId/);
+  });
+});
+
+describe('scoped to the round actually showing (fix round 2, item 2)', () => {
+  // A fetch kicked off for round 3, slow enough to resolve after the room has
+  // already moved into round 4's RESULTS, must not overwrite round 4's
+  // correct comments with round 3's stale ones. Every comment row carries its
+  // own questionNumber (comments.js's toWire()), so the meter/arrivals read a
+  // FILTERED list rather than trusting roundComments state directly.
+  test('scopedRoundComments filters roundComments by the round currently on screen', () => {
+    const def = SRC.slice(SRC.indexOf('const scopedRoundComments'), SRC.indexOf(';', SRC.indexOf('const scopedRoundComments')));
+    expect(def).toMatch(/roundComments\.filter/);
+    expect(def).toMatch(/c\.questionNumber === currentResultsRound/);
+  });
+
+  test('currentResultsRound reads the round off gameState the same way loadRoundComments does', () => {
+    const def = SRC.slice(SRC.indexOf('const currentResultsRound'), SRC.indexOf(';', SRC.indexOf('const currentResultsRound')));
+    expect(def).toMatch(/phaseOfGameState\(gameState\) === 'RESULTS'/);
+    expect(def).toMatch(/padStart\(3, '0'\)/);
+  });
+
+  test('nothing downstream reads the raw roundComments state directly any more', () => {
+    const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
+    expect(meter).not.toMatch(/[^d]roundComments\.length/);
+    const featured = SRC.slice(SRC.indexOf('const featuredComment'), SRC.indexOf('const meterArrivals'));
+    expect(featured).not.toMatch(/[^d]roundComments\.filter/);
+    const arrivals = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
+    expect(arrivals).not.toMatch(/items:\s*roundComments[^S]/);
   });
 });
 
@@ -45,14 +73,14 @@ describe('arrivals do not depend on the feedback beat (owner\'s ruling, 26 Sep 2
     const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
     expect(meter).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
     // Gated on there being one — a round with no comments still runs solo.
-    expect(meter).toMatch(/hostPhase === 'FIELD_NOTES'\)\s*&&\s*roundComments\.length > 0\)/);
+    expect(meter).toMatch(/hostPhase === 'FIELD_NOTES'\)\s*&&\s*scopedRoundComments\.length > 0\)/);
   });
 
   test('the arrivals themselves are not gated to FEEDBACK alone', () => {
     const def = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
     expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
     expect(def).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
-    expect(def).toMatch(/roundComments\.length > 0/);
+    expect(def).toMatch(/scopedRoundComments\.length > 0/);
     // The session setting still governs whether they show at all.
     expect(def).toMatch(/wallComments !== false/);
   });

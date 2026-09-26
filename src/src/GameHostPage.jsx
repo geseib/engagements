@@ -5797,6 +5797,26 @@ Focus on actionable business strategy insights.`;
     COLLECTING: 'ask', CLOSED: 'done',
   };
 
+  /*
+    SCOPED TO THE ROUND ACTUALLY SHOWING — fix round 2, item 2. `roundComments`
+    is refreshed by `loadRoundComments` (fix round 1, item 4) and by the
+    `commentPosted`/`commentFeatured` socket handlers above, and none of those
+    writes is guaranteed to land in order: a fetch kicked off for round 3,
+    slow enough to resolve after the room has already moved into round 4's
+    RESULTS (whose OWN, faster fetch already applied), would otherwise
+    overwrite round 4's correct comments with round 3's stale ones. Every
+    comment row carries its own `questionNumber` (comments.js's `toWire()`),
+    so filtering by the round actually on screen right now, at render time, is
+    a cheap guard that holds regardless of which write landed last — no ref,
+    no discard-the-stale-response bookkeeping needed.
+  */
+  const currentResultsRound = phaseOfGameState(gameState) === 'RESULTS'
+    ? String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0')
+    : null;
+  const scopedRoundComments = currentResultsRound
+    ? roundComments.filter((c) => c.questionNumber === currentResultsRound)
+    : [];
+
   /**
    * The ONE progress count, and the only place it is stated.
    *
@@ -5826,7 +5846,7 @@ Focus on actionable business strategy insights.`;
     if (hostPhase === 'FEEDBACK') {
       // The comments so far — the same count the stage prints — with the
       // arrivals beneath it (meterArrivals, below).
-      return { heading: 'Comments', body: String(roundComments.length) };
+      return { heading: 'Comments', body: String(scopedRoundComments.length) };
     }
     /*
       OWNER'S RULING (26 Sep 2026): a player's own "Feedback" button posts a
@@ -5839,8 +5859,8 @@ Focus on actionable business strategy insights.`;
       one, so a round with none still runs solo exactly as the block below
       intends.
     */
-    if ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && roundComments.length > 0) {
-      return { heading: 'Comments', body: String(roundComments.length) };
+    if ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0) {
+      return { heading: 'Comments', body: String(scopedRoundComments.length) };
     }
     /*
       A SURVEY (s-01-collecting): FINISHED of joined — the one fraction — and
@@ -5882,13 +5902,13 @@ Focus on actionable business strategy insights.`;
     with no comments running solo, exactly as it did before this ruling.
   */
   const featuredComment = (hostPhase === 'FEEDBACK'
-    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && roundComments.length > 0))
-    ? roundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
+    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
+    ? scopedRoundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
     : null;
   const meterArrivals = (hostPhase === 'FEEDBACK'
-    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && roundComments.length > 0))
+    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
     && wallComments !== false
-    ? { items: roundComments, onPick: handleFeatureComment, featuredId: featuredComment ? featuredComment.commentId : null }
+    ? { items: scopedRoundComments, onPick: handleFeatureComment, featuredId: featuredComment ? featuredComment.commentId : null }
     : null;
 
   /**
