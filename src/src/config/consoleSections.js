@@ -92,6 +92,17 @@ export const PLATFORM_MODE = '~platform';
    back to Circle rather than crashing, which is why designSystem.test.jsx
    asserts every entry resolves — a silent Circle is still a defect. */
 
+/*
+  ONE SENTENCE, READ IN TWO PLACES. AdminPage.jsx's NEW_SECTION_HEADS carries
+  its own copy for every section this file doesn't already give a title/theme
+  a nav entry can borrow (Members, Plan & usage, Data & privacy — see that
+  file's header comment) — Events needed one too, and a second literal string
+  is a second place to edit when the copy changes. Exported so AdminPage.jsx
+  reads this one rather than retyping it (Fix round 1 #7); consoleSections.test.js
+  and adminOneSection.test.jsx both match against this same string.
+*/
+export const EVENTS_SUBTITLE = 'One join code for a whole agenda: engagements and breaks, in the order you run them.';
+
 const SECTION = {
   questionsets: {
     id: 'questionsets',
@@ -122,7 +133,7 @@ const SECTION = {
     label: 'Events',
     icon: 'CalendarBlank',
     title: 'Events',
-    subtitle: 'One join code for a whole agenda: engagements and breaks, in the order you run them.',
+    subtitle: EVENTS_SUBTITLE,
     contentTheme: 'dark',
   },
   library: {

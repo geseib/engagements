@@ -43,7 +43,7 @@ import EventBuilder from './components/EventBuilder';
 import pricing from '../../lambda-functions/game/pricing';
 import {
   sectionsFor, sectionIdsFor, defaultSectionIdFor, sectionById, FOOT_SECTIONS,
-  PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS, promptsReadOnlyFor,
+  PLATFORM_GROUP, PLATFORM_MODE, ALL_SECTION_IDS, promptsReadOnlyFor, EVENTS_SUBTITLE,
 } from './config/consoleSections';
 import { getActiveOrgId, setActiveOrgId } from './auth/authFetch';
 import { adminApiUrl } from './utils/adminApi';
@@ -448,18 +448,28 @@ function AdminPage() {
     } catch { setPlanRequest(null); }
   }, [activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (activeTab !== 'billing' || !activeOrgId) return;
-    loadPlanRequest();
-    // The ledger, read-only for the customer (step 3). Members get a 403 and
-    // see no panel, which is the design.
-    (async () => {
-      try {
-        const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/adjustments`));
-        const data = await res.json().catch(() => ({}));
-        setOrgAdjustments(res.ok ? (data.adjustments || []) : null);
-      } catch { setOrgAdjustments(null); }
-    })();
-  }, [activeTab, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!activeOrgId) return;
+    if (activeTab === 'billing') {
+      loadPlanRequest();
+      // The ledger, read-only for the customer (step 3). Members get a 403 and
+      // see no panel, which is the design.
+      (async () => {
+        try {
+          const res = await authFetch(adminApiUrl(`orgs/${activeOrgId}/adjustments`));
+          const data = await res.json().catch(() => ({}));
+          setOrgAdjustments(res.ok ? (data.adjustments || []) : null);
+        } catch { setOrgAdjustments(null); }
+      })();
+    } else if (activeTab === 'events' && !eventsTeamPlan) {
+      /* EVENTS' Team-plan page (TeamPlanOnly) offers "Request the Team plan" —
+         the SAME request Billing tracks, read through the SAME fetch/state
+         rather than a second route, so a request already pending reads as
+         pending here too instead of offering a button that would 409
+         (Fix round 1 #5, ruling). Skipped once the org IS on the Team plan:
+         nothing there ever shows the button this is for. */
+      loadPlanRequest();
+    }
+  }, [activeTab, activeOrgId, eventsTeamPlan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const withdrawPlanRequest = async () => {
     if (!planRequest || !activeOrgId) return;
@@ -894,6 +904,7 @@ function AdminPage() {
           // the screen had already stopped naming.
           setScoreCardId('');
           setEventPlace(null);
+          setCreatingEvent(false);
         }
         return next;
       });
@@ -1434,7 +1445,9 @@ function AdminPage() {
     events: {
       id: 'events',
       title: 'Events',
-      subtitle: 'One join code for a whole agenda: engagements and breaks, in the order you run them.',
+      // Fix round 1 #7: one string, in consoleSections.js, so a copy change
+      // cannot land in the nav's sentence and not this page's, or the reverse.
+      subtitle: EVENTS_SUBTITLE,
       contentTheme: 'dark',
     },
     members: {
@@ -1893,7 +1906,17 @@ function AdminPage() {
             <EventBuilder
               code={eventPlace.code}
               sets={questionSets}
-              onTitle={(title) => setEventPlace((place) => (place && place.title !== title ? { ...place, title } : place))}
+              /* Keyed on the event this place was opened FOR, captured now —
+                 not read off `eventPlace` when the call lands. A slow load
+                 for an event already left behind (open A, back, open B, A
+                 resolves late) must not rename B's place; EventBuilder's own
+                 load() carries the matching guard (Fix round 1 #1). */
+              onTitle={(title) => {
+                const forCode = eventPlace.code;
+                setEventPlace((place) => (
+                  place && place.code === forCode && place.title !== title ? { ...place, title } : place
+                ));
+              }}
             />
           ) : (
             <EventsPanel
@@ -1901,6 +1924,9 @@ function AdminPage() {
               creating={creatingEvent}
               onCreatingChange={setCreatingEvent}
               onOpen={(code, title) => setEventPlace({ code, title })}
+              /* Billing's own request/state, reused rather than fetched a
+                 second way (Fix round 1 #5) — see the effect above. */
+              planRequest={planRequest}
               onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}
               onShowPlan={visibleIds.includes('billing') ? () => handleNavigate('billing') : undefined}
             />
