@@ -49,12 +49,21 @@ const TTL_ACTIVE_PHASE = 7 * 24 * 60 * 60;    // 7 days
  * Query with a filter bolted on. A filter is a line of code somebody can delete;
  * a partition boundary is not.
  *
- * A HALF-CREATED GAME IS IMPOSSIBLE, and not by transaction: the nine writes
- * are interleaved with Queries of the question set, so they cannot be one
- * TransactWriteItems. Instead the reservation is taken first and RELEASED again
- * if anything after it fails — so a failed create leaves no rows and no burnt
- * code. The release deliberately does not run for a ConditionalCheckFailed,
- * because that row belongs to the session that won the race.
+ * A FAILED CREATE RELEASES ITS TWO POINTERS, not the whole partition — and
+ * that distinction now matters more than it used to (bug sweep Task 2). The
+ * nine writes are interleaved with Queries of the question set, so they
+ * cannot be one TransactWriteItems; instead the reservation is taken first
+ * and, if anything after it fails, the catch block below deletes the GAMES
+ * row and the org's index row. It does NOT delete any METADATA / STATE /
+ * CATEGORY# rows a later write already landed before the failure — this
+ * handler has no record of how far the nine got, so it cannot know whether
+ * there is anything left to remove. Before Task 2 that half-built leftover
+ * cost only 90 days of an id nobody could list or reach. Now that step 0
+ * below treats ANY row in `GAME#<id>` as "taken", a create that fails
+ * partway through can retire that code FOR GOOD — nothing yet reclaims it,
+ * and nothing should be assumed to. The release deliberately does not run
+ * for a ConditionalCheckFailed, because that row belongs to the session that
+ * won the race.
  */
 // Create game with proper schema compliance
 const createGame = async (gameId, gameData) => {
@@ -570,10 +579,17 @@ const createGame = async (gameId, gameData) => {
     return true;
   } catch (error) {
     console.error(`❌ Error creating game ${gameId}:`, error);
-    // RELEASE THE CODE. A create that fell over after the lock was taken would
-    // otherwise burn one of 9,000 codes for 90 days for nothing, and leave a
-    // half-built partition no list shows and no delete finds. Not attempted when
-    // the failure IS the lock — that row is another session's.
+    // RELEASE THE POINTERS — not the whole partition. This deletes the GAMES
+    // reservation and the org's index row, so the id is not held by a lock
+    // nobody is using. It does NOT delete any METADATA / STATE / CATEGORY#
+    // rows a later write already landed before this failure: those are real
+    // data, and this handler has no way to know how far the nine writes got.
+    // Before Task 2, a leftover like that cost only 90 days of an id nobody
+    // could list or reach. Since the "any row in this partition means taken"
+    // rule this task added (step 0, above), a create that fails partway
+    // through can now retire the code FOR GOOD until the fuller fix — session
+    // stamps on every row — exists. Not attempted at all when the failure IS
+    // the lock — that row belongs to the session that won the race.
     if (reserved && error && error.name !== 'ConditionalCheckFailedException') {
       try {
         await db.send(new DeleteCommand({

@@ -38,4 +38,35 @@ function ttlFrom(iso, days) {
 const unstartedTtl = (createdIso) => ttlFrom(createdIso, UNSTARTED_DAYS);
 const startedTtl = (startedIso) => ttlFrom(startedIso, STARTED_DAYS);
 
-module.exports = { DAY, UNSTARTED_DAYS, STARTED_DAYS, ttlFrom, unstartedTtl, startedTtl };
+/**
+ * A SESSION'S CONTENT DOES NOT FOLLOW THE RULE ABOVE. The rule above is about
+ * the session's own four rows; a `ROUND#` record (game/get-results.js's
+ * enterResultsState, game/reveal-authors.js, game/stage-beat.js,
+ * game/stage-focus.js) is content the session PRODUCES, and until
+ * 2026-09-26 it carried no ttl at all — four call sites, each an
+ * unconditional UpdateCommand upsert, none of them ever stamping one.
+ *
+ * Bug sweep Task 2 found the consequence: the "any row still in this
+ * partition means the code is taken" rule a fresh draw now applies
+ * (websocket/schema-compliant-manager.js) retired a code FOR GOOD the
+ * moment a session ever reached results, because its `ROUND#` row never
+ * expired to let the code go.
+ *
+ * `ROUND_RECORD_DAYS` matches the 30-day life already hardcoded onto
+ * `PLAYER#x#SCORE` (game/join-game.js) and `QUESTION#nnn#AISummary`
+ * (game/get-ai-summary.js) — the other two row kinds that already outlive a
+ * session's own ttl, and that the fresh-draw rule above now has to wait out
+ * too. All four `ROUND#` writers set it with `if_not_exists(#ttl, :ttl)`, so
+ * whichever of them touches a round FIRST stamps the clock and the other
+ * three leave it alone — the ttl counts from when the round was first
+ * counted, not from the last time anybody touched it.
+ *
+ * No backfill: a round already resolved before this line existed keeps no
+ * ttl, and its code stays out of rotation. That is a known, accepted cost
+ * (bug sweep Task 2 ruling) — not an oversight to "finish" here.
+ */
+const ROUND_RECORD_DAYS = 30;
+
+module.exports = {
+  DAY, UNSTARTED_DAYS, STARTED_DAYS, ROUND_RECORD_DAYS, ttlFrom, unstartedTtl, startedTtl
+};

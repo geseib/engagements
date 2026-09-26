@@ -50,6 +50,7 @@ const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand, DeleteC
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const { callerMayDriveSession } = require('./tenant');
+const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -182,14 +183,19 @@ exports.handler = async (event) => {
     // would un-reveal a round get-results had already revealed — every
     // attributed answer on the stage would go back in the box the moment the
     // host asked for the read-back.
+    //
+    // #ttl = if_not_exists(#ttl, :ttl) (bug sweep Task 2, fix round 1): see
+    // get-results.js's enterResultsState for why this row now needs one at
+    // all. Whichever of the four ROUND# writers touches a round first stamps
+    // the 30-day clock; the rest leave it alone.
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
-      UpdateExpression: 'SET #beat = :beat, #updatedAt = :now, #qn = :qn',
+      UpdateExpression: 'SET #beat = :beat, #updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl)',
       ExpressionAttributeNames: {
-        '#beat': 'StageBeat', '#updatedAt': 'UpdatedAt', '#qn': 'QuestionNumber'
+        '#beat': 'StageBeat', '#updatedAt': 'UpdatedAt', '#qn': 'QuestionNumber', '#ttl': 'ttl'
       },
-      ExpressionAttributeValues: { ':beat': beat, ':now': now, ':qn': padded }
+      ExpressionAttributeValues: { ':beat': beat, ':now': now, ':qn': padded, ':ttl': ttlFrom(null, ROUND_RECORD_DAYS) }
     }));
 
     await broadcastToGame(gameId, {

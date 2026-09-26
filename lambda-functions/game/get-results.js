@@ -8,6 +8,7 @@ const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
 const { scoreRowAfterRound } = require('./standings');
+const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -260,15 +261,25 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
   //
   // Unconditional SET, so it is idempotent: a host who resolves the same round
   // twice does not error, and POST /reveal-authors having run first is a no-op.
+  //
+  // #ttl = if_not_exists(#ttl, :ttl) (bug sweep Task 2, fix round 1): this row
+  // had NO ttl at all until now, so it never expired, and once
+  // websocket/schema-compliant-manager.js started treating any row in
+  // GAME#<id> as "taken", a session that ever reached results retired its
+  // code FOR GOOD. `if_not_exists` means whichever of this handler,
+  // reveal-authors.js, stage-beat.js or stage-focus.js touches a round FIRST
+  // stamps the 30-day clock (session-ttl.js's ROUND_RECORD_DAYS) and the
+  // other three, touching the same round later, leave it alone.
   await db.send(new UpdateCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionId}` },
-    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt',
+    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt, #ttl = if_not_exists(#ttl, :ttl)',
     ExpressionAttributeNames: {
-      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt'
+      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt', '#ttl': 'ttl'
     },
     ExpressionAttributeValues: {
-      ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString()
+      ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString(),
+      ':ttl': ttlFrom(null, ROUND_RECORD_DAYS)
     }
   }));
 

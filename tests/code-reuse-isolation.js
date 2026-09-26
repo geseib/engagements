@@ -46,6 +46,13 @@ function stub(name, exports) { stubs.set(name, exports); }
 const store = new Map();
 const key = (pk, sk) => `${pk}|${sk}`;
 
+/** Every Query input the fake ever received, in order. Round-1 review found
+ *  that a fake this permissive (no ConsistentRead/Limit/FilterExpression
+ *  enforcement) would pass an eventually-consistent read or a `ttl > :now`
+ *  filter just as happily as the real, correct Query — so the input itself
+ *  is recorded here and asserted on below, not inferred from behaviour. */
+const queries = [];
+
 class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class PutCommand { constructor(i) { this.input = i; this.type = 'put'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
@@ -144,6 +151,7 @@ const fakeDoc = {
         return {};
       }
       case 'query': {
+        queries.push({ ...inp });
         const v = inp.ExpressionAttributeValues || {};
         const pk = v[':pk'] ?? v[':PK'];
         const prefix = v[':sk'] ?? v[':prefix'] ?? '';
@@ -213,7 +221,7 @@ const createGame = async (body) => {
  *  exactly `code`. The +0.5 keeps it off the floor boundary. */
 const randFor = (code) => (code - 1000 + 0.5) / 9000;
 
-function reset() { store.clear(); }
+function reset() { store.clear(); queries.length = 0; }
 
 /** A stale session's leftover rows — a SCORE row and an AISummary row — with
  *  deliberately NO `GAMES` reservation row, the exact shape day-8-to-30 of a
@@ -251,8 +259,15 @@ function seedReservedGame(code) {
     Math.random = () => seq[Math.min(call++, seq.length - 1)];
     try {
       quiet();
-      const res = await createGame({ eventTitle: 'New room', gameType: 'call-and-answer', randomizeQuestions: false });
-      loud();
+      let res;
+      try {
+        res = await createGame({ eventTitle: 'New room', gameType: 'call-and-answer', randomizeQuestions: false });
+      } finally {
+        // In `finally`, not right after the await: a throw from createGame()
+        // must not leave console.log muted for every check that runs after
+        // this one — that swallows their PASS/FAIL lines too, silently.
+        loud();
+      }
       assert.strictEqual(res.status, 201, JSON.stringify(res.body));
       assert.strictEqual(res.body.gameId, '5100',
         `the stale code was handed out — got gameId ${res.body.gameId}`);
@@ -291,8 +306,12 @@ function seedReservedGame(code) {
     Math.random = () => seq[Math.min(call++, seq.length - 1)];
     try {
       quiet();
-      const res = await createGame({ eventTitle: 'No room left', gameType: 'call-and-answer', randomizeQuestions: false });
-      loud();
+      let res;
+      try {
+        res = await createGame({ eventTitle: 'No room left', gameType: 'call-and-answer', randomizeQuestions: false });
+      } finally {
+        loud();
+      }
       assert.strictEqual(res.status, 503, JSON.stringify(res.body));
       assert.strictEqual(call, 8, `expected all 8 attempts to be drawn, saw ${call}`);
       // Nothing was written for any of the eight — a give-up must not leave a
@@ -315,13 +334,52 @@ function seedReservedGame(code) {
     Math.random = () => seq[Math.min(call++, seq.length - 1)];
     try {
       quiet();
-      const res = await createGame({ eventTitle: 'Fresh room', gameType: 'call-and-answer', randomizeQuestions: false });
-      loud();
+      let res;
+      try {
+        res = await createGame({ eventTitle: 'Fresh room', gameType: 'call-and-answer', randomizeQuestions: false });
+      } finally {
+        loud();
+      }
       assert.strictEqual(res.status, 201, JSON.stringify(res.body));
       assert.strictEqual(res.body.gameId, '6100');
       // Exactly one draw — a correct implementation must not retry a clean id.
       assert.strictEqual(call, 1, `expected exactly one draw, saw ${call}`);
       assert.ok(store.get(key('GAMES', 'GAME#6100')), 'no reservation was written for the accepted code');
+    } finally {
+      Math.random = realRandom;
+    }
+  });
+
+  await acheck('the collision check is a strongly consistent, unfiltered, Limit-1 Query', async () => {
+    // This fake's `query` case ignores ConsistentRead/Limit/FilterExpression
+    // entirely — it would return the same Items for an eventually consistent
+    // read, for a Limit of 1000, or for a `ttl > :now` filter that quietly
+    // reintroduces the bug this task fixes (a filter is exactly how a stale-
+    // but-not-yet-swept row could be made to look absent again). So the
+    // INPUT of the Query the fix issues is asserted directly, not inferred
+    // from behaviour the fake cannot tell apart.
+    reset();
+    const seq = [randFor(7100)];
+    let call = 0;
+    Math.random = () => seq[Math.min(call++, seq.length - 1)];
+    try {
+      quiet();
+      let res;
+      try {
+        res = await createGame({ eventTitle: 'Checked room', gameType: 'call-and-answer', randomizeQuestions: false });
+      } finally {
+        loud();
+      }
+      assert.strictEqual(res.status, 201, JSON.stringify(res.body));
+
+      const collisionQuery = queries.find((q) => (q.ExpressionAttributeValues || {})[':pk'] === 'GAME#7100');
+      assert.ok(collisionQuery, 'no Query was ever issued against GAME#7100 — the collision check did not run');
+      assert.strictEqual(collisionQuery.ConsistentRead, true,
+        'the collision check must read strongly consistent — DynamoDB deletes lazily, so an eventually consistent read can miss a row that is still there');
+      assert.strictEqual(collisionQuery.Limit, 1,
+        'the collision check only needs to know ANY row exists — a larger Limit reads more than the question requires');
+      assert.strictEqual(collisionQuery.FilterExpression, undefined,
+        'a FilterExpression here (e.g. ttl > :now) would let a row past its ttl look absent — exactly the bug this task fixes');
     } finally {
       Math.random = realRandom;
     }
