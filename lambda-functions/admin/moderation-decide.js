@@ -453,8 +453,14 @@ exports.handler = async (event) => {
         const promptId = (snapshot.meta && snapshot.meta.promptId) || '';
         const promptDropped = Boolean(promptId) && !(await platformPromptExists(db, TABLE(), promptId));
         await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, notice, orphaned: true });
+        // Ruling R9 applies here exactly as it does to the ordinary path's
+        // resumingApprove below: the queue row is the completion marker, so a
+        // crash between this publish landing and the row's delete must
+        // converge on retry rather than mint a second public version.
+        // `resume: true` was missing here — the one approve path that forgot
+        // it — which is what let a retried orphan approve publish twice (7b).
         const published = await publishSnapshot(db, TABLE(), snapshot, {
-          review: { findings: [], note }, sourceOrgName: pointer.orgName || '', promptDropped,
+          review: { findings: [], note }, sourceOrgName: pointer.orgName || '', promptDropped, resume: true,
         });
         if (notice.length) await writeSensitivity(published.pubRef, notice);
         // No-ops when the whole set was deleted; lands when only the version

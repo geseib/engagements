@@ -253,6 +253,36 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     assert.strictEqual(events.filter((e) => e.event === 'published').length, 1);
     assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is finally clearable');
   });
+  /*
+    7b — RETRYING AN ORPHAN APPROVE MUST NOT MINT A SECOND PUBLIC VERSION.
+
+    The orphan approve above calls `publishSnapshot` without `resume: true`,
+    unlike the ordinary resumingApprove path a few tests up. So a crash after
+    the first publish landed but before the queue row's delete — the same
+    crash window Ruling R9 exists for — mints a SECOND public version when the
+    retry runs: the "every card becomes Public v2" outcome, on the one path
+    that forgot the flag. The crash is simulated directly (the orphan path has
+    no REVIEW row transition to interrupt, unlike the ordinary path's crash
+    tests above), then the retry runs through the handler as a real caller
+    would resend it.
+  */
+  await H.test('an orphan approve that crashed after publishing is finished by the retry, not doubled (7b)', async () => {
+    await seed();
+    wipeVersionPartition();
+    await publishSnapshot(db, T, SNAPSHOT, { review: { findings: [], note: '' }, sourceOrgName: 'Acme', promptDropped: true });
+    const afterCrash = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }) }))).Item;
+    assert.strictEqual(afterCrash.activeVersion, 1, 'the crashed attempt already made the set live');
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 1, 'the queue row survives the crash');
+
+    const res = await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: 'Clinical, not gratuitous.', notice: ['graphic-medical'] });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(parse(res), { decision: 'approve', publicSetId: PUB, publicVersion: 1, orphaned: true });
+
+    const afterRetry = (await db.send(new GetCommand({ TableName: T, Key: V.setMetadataKey({ scope: 'public', orgId: '', setId: PUB }) }))).Item;
+    assert.strictEqual(afterRetry.activeVersion, 1, 'a second public version was minted on retry');
+    assert.strictEqual(afterRetry.versions.length, 1, 'a duplicate versions[] entry was pushed');
+    assert.strictEqual(H.rowsWhere((r) => r.PK === Q.QUEUE_PK).length, 0, 'the queue row is finally clearable');
+  });
   await H.test('a version deleted under a queued item is still rejectable, and the queue row clears (R19)', async () => {
     await seed();
     wipeVersionPartition();
