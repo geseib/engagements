@@ -150,8 +150,19 @@ export const rankHolding = (votes, answerIndex) =>
  *   - Call & Answer answers `data.voteTallies`, an OBJECT keyed by answer
  *     index, never an array — sorted by `totalScore` here, with the same
  *     tie rule `create-report.js` uses (equal scores share a rank);
- *   - anything else (wavelength, or a round with no votes yet) has no
- *     discrete ranked rows to offer, and returns none.
+ *   - WAVELENGTH answers `data.answers` (fix round 2, item 1) — one row per
+ *     submission (get-results.js's wavelength handler), genuinely unranked:
+ *     there is no vote or score to sort by, so submission order is kept and
+ *     numbered as printed, never invented. Round 1 missed this shape
+ *     entirely and every wavelength round's panel said nobody responded.
+ *   - Call & Answer with ZERO votes (fix round 2, item 1) is NOT the same as
+ *     "nobody responded" and must not return as if it were silently correct:
+ *     get-results.js's own early return for that case
+ *     (`{message, totalVotes: 0, winners: [], voteTallies: {}}`) carries no
+ *     response text at all, so there is nothing here to rank. This function
+ *     still returns `[]` for it — there is nothing to show — but
+ *     `feedbackAnswersStatusFrom` below tells the caller WHY, so it can say
+ *     "nobody voted" rather than the flatly false "nobody responded".
  *
  * NAMES ARE NOT REDACTED HERE, and that is not a new disclosure: `get-results
  * .js`'s own header states plainly that it "does not redact — the response
@@ -162,11 +173,13 @@ export const rankHolding = (votes, answerIndex) =>
  * not a security redaction); the feedback panel is the one screen the design
  * explicitly gives a reason to show more (RoundReport's own header), the same
  * reason the host-triggered whole-room panel already shows full attribution
- * for this exact data. Rows are still handed to `RoundReport` exactly as
- * fetched, which reads each one through `displayLabelFor` (config/anonymity.js)
- * the same way every other response list in this app does, so a row that
- * genuinely carried no `playerName` would still fall back to a position label
- * rather than printing nothing.
+ * for this exact data — confirmed by the owner's ruling (fix round 2): the
+ * player's own panel may print names exactly as the host-triggered one does,
+ * same component, same read. Rows are still handed to `RoundReport` exactly
+ * as fetched, which reads each one through `displayLabelFor`
+ * (config/anonymity.js) the same way every other response list in this app
+ * does, so a genuinely hidden-author round (no `playerName` on the row) still
+ * redacts correctly rather than printing nothing.
  */
 export function rankedResultsFrom(data) {
   if (data && Array.isArray(data.leaderboard)) {
@@ -174,7 +187,8 @@ export function rankedResultsFrom(data) {
       answer: row.answer, playerName: row.playerName, rank: row.rank,
     }));
   }
-  if (data && data.voteTallies && typeof data.voteTallies === 'object') {
+  if (data && data.voteTallies && typeof data.voteTallies === 'object'
+    && Object.keys(data.voteTallies).length > 0) {
     const list = Object.values(data.voteTallies)
       .map((t) => ({
         answer: t.answerText, playerName: t.playerName, totalScore: Number(t.totalScore) || 0,
@@ -186,7 +200,32 @@ export function rankedResultsFrom(data) {
       return { answer: row.answer, playerName: row.playerName, rank: currentRank };
     });
   }
+  if (data && Array.isArray(data.answers)) {
+    return data.answers.map((row, i) => ({
+      answer: row.answer, playerName: row.playerName, rank: i + 1,
+    }));
+  }
   return [];
+}
+
+/**
+ * WHY THE LIST IS EMPTY, WHEN IT IS — fix round 2, item 1.
+ *
+ * `rankedResultsFrom` returning `[]` is ambiguous on its own: a round nobody
+ * answered and a Call & Answer round nobody VOTED on both produce it, and
+ * they are not the same claim. `'no-data'` names the second case — the
+ * payload literally carries no response text to show, per the doc-block
+ * above — so the caller can say "nobody voted" rather than "nobody
+ * responded". `'ok'` covers everything else, including a genuinely empty
+ * round (RoundReport's own default text already handles that honestly).
+ */
+export function feedbackAnswersStatusFrom(data) {
+  if (data && Array.isArray(data.leaderboard)) return 'ok';
+  if (data && Array.isArray(data.answers)) return 'ok';
+  if (data && data.voteTallies && typeof data.voteTallies === 'object') {
+    return Object.keys(data.voteTallies).length > 0 ? 'ok' : 'no-data';
+  }
+  return 'no-data';
 }
 
 // Which round the player is on. The payload spells this three different ways
@@ -261,6 +300,11 @@ function PlayerPage() {
   const [myFeedbackSnapshot, setMyFeedbackSnapshot] = useState(null);
   const [myFeedbackComments, setMyFeedbackComments] = useState([]);
   const [myFeedbackSummary, setMyFeedbackSummary] = useState(null);
+  /** 'loading' | 'ok' | 'no-data' | 'error' — fix round 2, item 1. Drives what
+   *  RoundReport says in place of the responses while they are not simply
+   *  showing: never "Nobody responded" for a fetch that is still running, has
+   *  failed, or answered with nothing to rank (Call & Answer, zero votes). */
+  const [myFeedbackAnswersStatus, setMyFeedbackAnswersStatus] = useState('loading');
   /** Lifted out of FeedbackRoundPanel (fix round 1, item 6) — whether the
    *  composer currently holds unsent text, so this page can decide whether
    *  it is safe to follow the room automatically once the round moves on. */
@@ -1283,6 +1327,14 @@ function PlayerPage() {
    * responses fill in once this resolves, instead of sitting on
    * FeedbackRoundPanel's "preparing this round" screen for a network round
    * trip.
+   *
+   * SETS `myFeedbackAnswersStatus` on every path (fix round 2, item 1) —
+   * 'loading' while this call is in flight (set by the caller before this
+   * runs, so a retry re-enters the same state), 'ok'/'no-data' from
+   * `feedbackAnswersStatusFrom` once the server answers, 'error' on a bad
+   * response or a network failure. RoundReport is told which one applies
+   * through `answersEmptyText` at render time — never left to guess "Nobody
+   * responded" for a round that was simply never checked.
    */
   const loadMyFeedbackAnswers = async (padded) => {
     try {
@@ -1291,14 +1343,13 @@ function PlayerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameId, questionNumber: padded }),
       });
-      if (!res.ok) return;
+      if (!res.ok) { setMyFeedbackAnswersStatus('error'); return; }
       const data = await res.json();
       const ranked = rankedResultsFrom(data);
       setMyFeedbackSnapshot((current) => (current ? { ...current, answers: ranked } : current));
+      setMyFeedbackAnswersStatus(feedbackAnswersStatusFrom(data));
     } catch {
-      // Leave the snapshot's empty list as-is. RoundReport reads that as
-      // "Nobody responded to this round", which is a safer default here than
-      // guessing from stale local state.
+      setMyFeedbackAnswersStatus('error');
     }
   };
 
@@ -1325,6 +1376,7 @@ function PlayerPage() {
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
     setMyFeedbackHasDraft(false);
+    setMyFeedbackAnswersStatus('loading');
     setMyFeedbackOpen(true);
     loadMyFeedbackComments(padded);
     loadMyFeedbackSummary(padded);
@@ -1344,6 +1396,7 @@ function PlayerPage() {
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
     setMyFeedbackHasDraft(false);
+    setMyFeedbackAnswersStatus('loading');
   };
 
   /**
@@ -2848,6 +2901,32 @@ function PlayerPage() {
      the host-triggered, whole-room switch and is unaffected by any of this. */
   const myFeedbackStillOpen = myFeedbackOpen && gameState === `RESULTS#${myFeedbackNumber}`;
   const myFeedbackShowing = myFeedbackOpen && (myFeedbackStillOpen || myFeedbackHasDraft);
+  /* THE SESSION HAS ENDED, NOT MERELY "THE NEXT QUESTION IS LIVE" (fix round
+     2, item 3) — the exact wording matters when there is no next question to
+     go to at all. `myFeedbackExitLabel` covers both the button and the top
+     exit's accessible name, so the two can never say different things. */
+  const myFeedbackEnded = gameState === 'ENDED';
+  const myFeedbackExitLabel = myFeedbackStillOpen
+    ? 'Close'
+    : (myFeedbackEnded ? 'Close' : 'Go to the question');
+  /*
+    WHAT ROUNDREPORT SAYS INSTEAD OF THE RESPONSES — fix round 2, item 1.
+    `undefined` for 'ok' lets RoundReport's own default ("Nobody responded to
+    this round.") apply, which is the honest claim for a genuinely empty
+    round. The other three states are never that claim: a fetch still running,
+    one that failed, or Call & Answer's own "no votes" shape, which carries no
+    response text to show at all (see `feedbackAnswersStatusFrom`'s header).
+  */
+  const myFeedbackAnswersEmptyText = myFeedbackAnswersStatus === 'loading'
+    ? "Loading the round's responses…"
+    : myFeedbackAnswersStatus === 'error'
+      ? 'The responses could not be loaded.'
+      : myFeedbackAnswersStatus === 'no-data'
+        ? 'Nobody voted on this round.'
+        : undefined;
+  const myFeedbackRetryAnswers = myFeedbackAnswersStatus === 'error'
+    ? () => loadMyFeedbackAnswers(myFeedbackNumber)
+    : undefined;
 
   if (myFeedbackShowing) {
     volume = 'act';
@@ -2862,14 +2941,15 @@ function PlayerPage() {
           type="button"
           className="plr-feedback-top-close"
           onClick={closeMyFeedback}
-          aria-label={myFeedbackStillOpen ? 'Close' : 'Go to the question'}
+          aria-label={myFeedbackExitLabel}
         >
           <Icon name="X" size={20} />
         </button>
         {!myFeedbackStillOpen && (
           <p className="plr-lede plr-muted" role="status">
-            The next question is live. What you have written is still here — you can copy it,
-            or go to the question.
+            {myFeedbackEnded
+              ? 'The session has ended. What you have written is still here — you can copy it, or close this.'
+              : 'The next question is live. What you have written is still here — you can copy it, or go to the question.'}
           </p>
         )}
         <FeedbackRoundPanel
@@ -2878,9 +2958,12 @@ function PlayerPage() {
           comments={myFeedbackComments}
           onSubmit={submitMyFeedbackComment}
           onDraftChange={setMyFeedbackHasDraft}
+          answersEmptyText={myFeedbackAnswersEmptyText}
+          onRetryAnswers={myFeedbackRetryAnswers}
+          postDisabled={!myFeedbackStillOpen}
         />
         <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
-          {myFeedbackStillOpen ? 'Close' : 'Go to the question'}
+          {myFeedbackExitLabel}
         </button>
       </>
     );

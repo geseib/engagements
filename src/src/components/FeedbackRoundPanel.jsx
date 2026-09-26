@@ -69,6 +69,23 @@ export default function FeedbackRoundPanel({
    * side-effect free on the host-triggered caller, which does not pass it.
    */
   onDraftChange,
+  /**
+   * Pass-through to RoundReport (fix round 2) — see that component's own doc
+   * for why. Neither is used by the host-triggered caller, which reads a
+   * round already loaded in full.
+   */
+  answersEmptyText,
+  onRetryAnswers,
+  /**
+   * DISABLE THE COMMIT, NOT THE DRAFT — fix round 2, item 3. Once the round
+   * this panel opened on has left RESULTS, a post would be refused by
+   * comments.js's own state check; disabling "Post comment" says so before
+   * the round trip rather than after it, while the textarea stays open and
+   * selectable so the words can still be copied. Default false: the
+   * host-triggered whole-room panel is only ever shown while its round is
+   * current, so it never needs this.
+   */
+  postDisabled = false,
 }) {
   /** The section being commented on, or null when the composer is closed. */
   const [anchor, setAnchor] = useState(null);
@@ -149,6 +166,8 @@ export default function FeedbackRoundPanel({
         round={round}
         comments={comments}
         onComment={open}
+        answersEmptyText={answersEmptyText}
+        onRetryAnswers={onRetryAnswers}
       />
 
       {anchor && (
@@ -197,6 +216,13 @@ export default function FeedbackRoundPanel({
 
           {error && <p className="fbr__error">{error}</p>}
 
+          {postDisabled && (
+            <p className="fbr__error" role="status">
+              This round has moved on, so this can no longer be posted — copy it if you want to
+              keep it.
+            </p>
+          )}
+
           <div className="fbr__actions">
             {/* The way out that is not the commit. */}
             <button type="button" className="fbr__cancel" onClick={close} disabled={busy}>
@@ -206,7 +232,7 @@ export default function FeedbackRoundPanel({
               type="button"
               className="fbr__post"
               onClick={send}
-              disabled={busy || !text.trim()}
+              disabled={busy || !text.trim() || postDisabled}
             >
               <Icon name="PaperPlaneTilt" size={16} />
               {busy ? 'Posting…' : 'Post comment'}

@@ -284,3 +284,69 @@ describe('while the host is still preparing', () => {
     expect(screen.queryByRole('button', { name: /Comment on/ })).toBeNull();
   });
 });
+
+describe('the empty-responses text and retry (fix round 2)', () => {
+  const EMPTY_ROUND = { ...ROUND, answers: [] };
+
+  test('defaults to the original honest statement', () => {
+    mount({ round: EMPTY_ROUND });
+    expect(screen.getByText('Nobody responded to this round.')).toBeInTheDocument();
+  });
+
+  test('a caller can say something else instead — loading, for instance', () => {
+    // PlayerPage.jsx's own panel is mid-fetch when it first opens: `answers`
+    // is `[]` before the round trip resolves, and "Nobody responded" would be
+    // a lie about a round nobody has checked yet.
+    mount({ round: EMPTY_ROUND, answersEmptyText: "Loading the round's responses…" });
+    expect(screen.getByText("Loading the round's responses…")).toBeInTheDocument();
+    expect(screen.queryByText('Nobody responded to this round.')).toBeNull();
+  });
+
+  test('a retry button appears only when onRetryAnswers is given, and calls it', () => {
+    const onRetryAnswers = jest.fn();
+    mount({
+      round: EMPTY_ROUND,
+      answersEmptyText: 'The responses could not be loaded.',
+      onRetryAnswers,
+    });
+    const retry = screen.getByRole('button', { name: /Try again/ });
+    fireEvent.click(retry);
+    expect(onRetryAnswers).toHaveBeenCalledTimes(1);
+  });
+
+  test('no retry button when onRetryAnswers is not given, even with custom text', () => {
+    mount({ round: EMPTY_ROUND, answersEmptyText: 'Nobody voted on this round.' });
+    expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull();
+  });
+
+  test('the responses themselves are unaffected — a non-empty round never shows this at all', () => {
+    mount({ answersEmptyText: 'should never appear' });
+    expect(screen.queryByText('should never appear')).toBeNull();
+  });
+});
+
+describe('disabling the commit without touching the draft (fix round 2, item 3)', () => {
+  test('Post comment is disabled when postDisabled is true, but the box stays editable', () => {
+    mount({ postDisabled: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Worth keeping.' } });
+    expect(screen.getByRole('button', { name: /Post comment/ })).toBeDisabled();
+    expect(screen.getByRole('textbox')).toHaveValue('Worth keeping.');
+    expect(screen.getByRole('textbox')).not.toBeDisabled();
+  });
+
+  test('says plainly why, and to copy it instead', () => {
+    mount({ postDisabled: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+    expect(screen.getByText(/moved on/i)).toBeInTheDocument();
+    expect(screen.getByText(/copy/i)).toBeInTheDocument();
+  });
+
+  test('by default (the host-triggered caller) Post comment is never disabled by this', () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+    expect(screen.getByRole('button', { name: /Post comment/ })).not.toBeDisabled();
+  });
+});

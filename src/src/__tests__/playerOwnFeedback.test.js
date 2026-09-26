@@ -107,6 +107,22 @@ describe('opening the player\'s own panel', () => {
     expect(fn).toMatch(/\.\.\.current/);
   });
 
+  test('sets a status on every path — ok/no-data, error on a bad response, error on a thrown failure (fix round 2, item 1)', () => {
+    const fn = sliceFrom(player, 'const loadMyFeedbackAnswers = async (padded) => {', '\n  };');
+    expect(fn).toMatch(/feedbackAnswersStatusFrom\(data\)/);
+    expect(fn).toMatch(/setMyFeedbackAnswersStatus\('error'\)/);
+    // Never left silently at whatever it was — a failed fetch must not read
+    // as "still loading" forever, nor default to "ok".
+    const okBranchAt = fn.indexOf("if (!res.ok)");
+    expect(okBranchAt).toBeGreaterThan(-1);
+    expect(fn.slice(okBranchAt, okBranchAt + 60)).toMatch(/setMyFeedbackAnswersStatus\('error'\)/);
+  });
+
+  test('opening sets the status to loading before the fetch resolves, so the panel never shows "Nobody responded" for a round nobody has checked yet', () => {
+    const fn = sliceFrom(player, 'const openMyFeedback = () => {', '\n  };');
+    expect(fn).toMatch(/setMyFeedbackAnswersStatus\('loading'\)/);
+  });
+
   test('fetches Workie\'s read from the public ai-summary endpoint, never from GET /feedback-round', () => {
     // `readFeedbackRound` (comments.js) stays gated on the feedback beat and
     // the REPORT row the host alone can build — a player-initiated open must
@@ -130,9 +146,13 @@ describe('while the panel is open', () => {
     // and throw the draft away.
     const chainStart = player.indexOf('let body = null;');
     const openAt = player.indexOf('if (myFeedbackShowing) {', chainStart);
-    const endedAt = player.indexOf("gameState === 'ENDED'", chainStart);
+    // The exact branch check, not any mention of the string — fix round 2
+    // added `const myFeedbackEnded = gameState === 'ENDED';` ahead of the
+    // chain (to phrase the "moved on" banner), which a bare substring search
+    // would find first and misreport as the chain's own ENDED branch.
+    const endedAt = player.indexOf("} else if (gameState === 'ENDED') {", chainStart);
     expect(openAt).toBeGreaterThan(chainStart);
-    expect(openAt).toBeLessThan(endedAt);
+    expect(endedAt).toBeGreaterThan(openAt);
   });
 
   test('shows while the round it opened on is still showing, OR there is an unsent draft (fix round 1, item 6)', () => {
@@ -165,10 +185,32 @@ describe('while the panel is open', () => {
     expect(branch).toMatch(/<FeedbackRoundPanel/);
   });
 
-  test('the button reads "Go to the question" once moved on, "Close" while still on the same round', () => {
+  test('the button reads "Go to the question" once moved on, "Close" while still on the same round or once the session has ended', () => {
     const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
     expect(branch).toMatch(/onClick=\{closeMyFeedback\}/);
-    expect(branch).toMatch(/myFeedbackStillOpen \? 'Close' : 'Go to the question'/);
+    expect(branch).toMatch(/\{myFeedbackExitLabel\}/);
+    const def = sliceFrom(player, 'const myFeedbackExitLabel =', ';');
+    expect(def).toMatch(/myFeedbackStillOpen\s*\n?\s*\?\s*'Close'/);
+    expect(def).toMatch(/myFeedbackEnded \? 'Close' : 'Go to the question'/);
+  });
+
+  test('the session-ended case reads "The session has ended", not "the next question is live" (fix round 2, item 3)', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
+    expect(branch).toMatch(/myFeedbackEnded/);
+    expect(branch).toMatch(/session has ended/i);
+    // Both messages exist, gated by the same flag — never shown together.
+    expect(branch).toMatch(/next question is live/i);
+  });
+
+  test('the composer is told the round has moved on, so it disables Post rather than letting it fail silently on submit', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
+    expect(branch).toMatch(/postDisabled=\{!myFeedbackStillOpen\}/);
+  });
+
+  test('RoundReport is told what to say instead of the responses, and given a retry only on failure', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
+    expect(branch).toMatch(/answersEmptyText=\{myFeedbackAnswersEmptyText\}/);
+    expect(branch).toMatch(/onRetryAnswers=\{myFeedbackRetryAnswers\}/);
   });
 
   test('closing (or "going to the question") calls a dedicated handler that posts nothing', () => {
