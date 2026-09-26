@@ -7015,8 +7015,23 @@ Focus on actionable business strategy insights.`;
                 REVERSED by the owner on 2026-09-22 for the TEXT the host
                 chooses: the arrivals in the meter are unattributed, and the one
                 the host puts up carries its author, who was told on their phone
-                that their name would be shown with it (FeedbackWall.jsx). */}
-            {hostPhase === 'FEEDBACK' && (
+                that their name would be shown with it (FeedbackWall.jsx).
+
+                FIX ROUND 1, ITEM 5: featuring a comment on RESULTS or
+                FIELD_NOTES (possible since the meter/arrivals widened for
+                comments.js's 26 Sep 2026 ruling — see `featuredComment`
+                above) used to write `Featured: true` with nowhere for it to
+                land: this block only rendered on FEEDBACK, so the wall never
+                appeared, even though both reports print "Shown to the room"
+                for it. Ruling: render the SAME component, in this SAME
+                position, on RESULTS/FIELD_NOTES too — but only once there
+                actually is a featured comment. `FeedbackWall`'s un-featured
+                branch prints "What do you make of it? / Tap any part of the
+                round on your phone" — a feedback-round-specific invitation
+                that would be a non-sequitur mid-tally or mid-field-notes, so
+                it must never render there with nothing featured. */}
+            {(hostPhase === 'FEEDBACK'
+              || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && featuredComment)) && (
               // The wall is its own component: the question, one instruction line,
               // and the comment the host put up as a pull quote (FeedbackWall.jsx).
               // The count is the meter's; the arrivals are the meter's list.

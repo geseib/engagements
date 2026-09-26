@@ -85,7 +85,7 @@ describe('featuring', () => {
     `.lede` class are gone with it.
   */
   test('the FEEDBACK wall is FeedbackWall, handed the featured comment and the toggle', () => {
-    const from = SRC.indexOf("{hostPhase === 'FEEDBACK' && (");
+    const from = SRC.indexOf("{(hostPhase === 'FEEDBACK'");
     const stage = SRC.slice(from, SRC.indexOf("{hostPhase === 'ENDED'", from));
     expect(stage).toMatch(/<FeedbackWall/);
     expect(stage).toMatch(/featured=\{featuredComment\}/);
@@ -94,6 +94,22 @@ describe('featuring', () => {
     expect(stage).not.toMatch(/className="lede"/);
     expect(stage).not.toMatch(/className="kicker"/);
     expect(SRC).toMatch(/import FeedbackWall from '\.\/components\/stage\/FeedbackWall';/);
+  });
+
+  /*
+    Fix round 1, item 5: featuring a comment on RESULTS or FIELD_NOTES used to
+    write Featured: true with nowhere for it to land — this block only ever
+    rendered on the FEEDBACK phase, so the wall never appeared even though
+    both reports print "Shown to the room" for it.
+  */
+  test('the same wall also renders on RESULTS/FIELD_NOTES, but only once a comment is actually featured', () => {
+    const from = SRC.indexOf("{(hostPhase === 'FEEDBACK'");
+    const stage = SRC.slice(from, SRC.indexOf("{hostPhase === 'ENDED'", from));
+    expect(stage).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+    // Gated on featuredComment itself, not merely the phase — a round with
+    // nothing featured must not show the wall's un-featured invitation
+    // ("What do you make of it?") outside an actual feedback round.
+    expect(stage).toMatch(/hostPhase === 'FIELD_NOTES'\) && featuredComment\)/);
   });
 });
 
