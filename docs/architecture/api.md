@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-151 routes across 7 groups. 130 carry the Cognito authorizer; 21 are public.
+152 routes across 7 groups. 131 carry the Cognito authorizer; 21 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -74,6 +74,7 @@ on `requestContext.routeKey`.
 | GET | `/games/{gameId}/survey/progress` | **Cognito** | `lambda-functions/game/survey-host.js` |
 | POST | `/games/{gameId}/survey/submit` | public | `lambda-functions/game/survey-answers.js` |
 | POST | `/games/{gameId}/survey/warning` | **Cognito** | `lambda-functions/game/survey-host.js` |
+| GET | `/games/{gameId}/votes/host` | **Cognito** | `lambda-functions/game/get-votes.js` |
 | POST | `/games/{gameId}/comments/{commentId}/feature` | **Cognito** | `lambda-functions/game/comments.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover` | **Cognito** | `lambda-functions/game/grant-handover.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover-request` | public | `lambda-functions/game/request-handover.js` |

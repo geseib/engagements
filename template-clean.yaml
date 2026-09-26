@@ -3600,12 +3600,27 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: a count of the round's votes, and nothing else. It answers
+        # `?role=host` with that count too (get-votes.js).
         GetVotesEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/votes
             Method: GET
+        # THE HOST'S DOOR to the same handler: every ballot in a round,
+        # decrypted, with its voter. It was the public `?role=host` until
+        # 2026-09-26, open to anyone with the code. Cognito here,
+        # authorizer.js names it for hosts|admins, and get-votes.js asks
+        # callerMayDriveSession. tests/get-votes-host.js.
+        GetVotesHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/votes/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

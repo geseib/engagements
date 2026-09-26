@@ -141,6 +141,10 @@ const MUST_BE_CLOSED = [
   // any phase, with its author on a named round. The phone's read below
   // answers `?role=host` as it answers a player (tests/get-answers-host.js).
   ['GET', '/games/{gameId}/answers/host'],
+  // THE BALLOTS' HOST DOOR (game/get-votes.js): every ballot in a round,
+  // decrypted, with its voter. The public count below answers `?role=host`
+  // with a count (tests/get-votes-host.js).
+  ['GET', '/games/{gameId}/votes/host'],
 ];
 
 // The participant journey. None of these carries a token, ever.

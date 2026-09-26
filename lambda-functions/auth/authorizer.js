@@ -690,6 +690,15 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && /^games\/[^/]+\/answers\/host$/.test(path)) {
     return ['hosts', 'admins'];
   }
+  // THE BALLOTS' HOST DOOR, `GET /games/{gameId}/votes/host`. Every ballot in a
+  // round, decrypted, with its voter. The public `GET /games/{gameId}/votes`
+  // no longer returns it to a typed `?role=host`. Named here for the answers
+  // door's two reasons: "GET + games is public", and `path.includes('vote')`,
+  // which this path contains. Anchored, so the public count stays `[]`.
+  // tests/get-votes-host.js.
+  if (method === 'GET' && /^games\/[^/]+\/votes\/host$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // Game creation/management requires host or admin group
   if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
     return ['hosts', 'admins'];
