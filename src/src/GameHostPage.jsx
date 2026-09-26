@@ -1004,10 +1004,12 @@ function GameHostPage() {
     return () => window.removeEventListener('message', handleRemoteCommand);
   }, []);
   
-  // Check game status helper function
+  // Check game status helper function. `started` is on the public session
+  // brief for every caller, so this stays a plain fetch with no role: the
+  // public route ignores `?role=host` since 2026-09-26 (get-game.js).
   const checkGameStatus = async (gameId) => {
     try {
-      const response = await fetch(`${API_BASE}games/${gameId}?role=host`);
+      const response = await fetch(`${API_BASE}games/${gameId}`);
       if (response.ok) {
         const gameData = await response.json();
         return {
@@ -2374,8 +2376,12 @@ Focus on actionable business strategy insights.`;
         return false; // Return false to indicate no restoration occurred
       }
       
-      // Use new game state API with host data
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      // The host's door onto the game state: the public round plus the
+      // running order, the category counts and who has answered or voted.
+      // authFetch, because it carries the Cognito authorizer; the public
+      // /state stopped returning the host's half on 2026-09-26
+      // (get-game-state.js).
+      const stateRes = await authFetch(`${API_BASE}games/${gameId}/host-state`);
       if (superseded()) return false;
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
@@ -2605,7 +2611,7 @@ Focus on actionable business strategy insights.`;
             // Get answers for voting display
             try {
               const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
-              const answersRes = await fetch(`${API_BASE}games/${gameId}/answers?role=host&questionId=${paddedQuestionNumber}`);
+              const answersRes = await authFetch(`${API_BASE}games/${gameId}/answers/host?questionId=${paddedQuestionNumber}`);
               
               if (answersRes.ok) {
                 const answersData = await answersRes.json();
@@ -2774,10 +2780,12 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`📡 HOST: Fetching answers for question ${questionNumber}`);
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
-      const url = `${API_BASE}games/${gameId}/answers?role=host&questionId=${paddedQuestionNumber}`;
+      // The host's door (get-answers.js): every answer at any phase. The
+      // public route answers `?role=host` as it answers a phone.
+      const url = `${API_BASE}games/${gameId}/answers/host?questionId=${paddedQuestionNumber}`;
       console.log(`📡 HOST: API call: ${url}`);
       
-      const res = await fetch(url);
+      const res = await authFetch(url);
       const json = await res.json();
       console.log(`📊 HOST: Raw answer response:`, json);
       
@@ -2827,17 +2835,16 @@ Focus on actionable business strategy insights.`;
    * answered.
    *
    * IT EXPOSES NOTHING NEW. `answerProgress.answererIds` is the same field
-   * restoreGameState already reads on every resync, on the same public route,
-   * and get-answers.js:216 documents it as deliberately public: "who has not
-   * acted yet is a different fact from who wrote what."
+   * restoreGameState already reads on every resync, on the same route.
    *
-   * `includeHostData=true` because get-game-state only assembles
-   * `answerProgress` under that flag — without it this would read a payload
-   * with no participation in it at all and quietly do nothing.
+   * THE HOST'S DOOR, `/host-state`, with authFetch, because get-game-state
+   * assembles `answerProgress` there and only there. The public `/state`
+   * returns a payload with no participation in it at all, flag or no flag,
+   * and this would quietly do nothing.
    */
   const refreshAnswerersFromState = async (forGameId) => {
     try {
-      const res = await fetch(`${API_BASE}games/${forGameId}/state?includeHostData=true`);
+      const res = await authFetch(`${API_BASE}games/${forGameId}/host-state`);
       if (!res.ok) return;
       const stateData = await res.json();
       // The host may have switched games while this was in flight; the same
@@ -2906,10 +2913,12 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`📡 HOST: Fetching votes for question ${questionNumber}`);
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
-      const url = `${API_BASE}games/${gameId}/votes?role=host&questionNumber=${paddedQuestionNumber}`;
+      // The host's door (get-votes.js): every ballot with its voter. The
+      // public route answers `?role=host` with a count.
+      const url = `${API_BASE}games/${gameId}/votes/host?questionNumber=${paddedQuestionNumber}`;
       console.log(`📡 HOST: API call: ${url}`);
       
-      const res = await fetch(url);
+      const res = await authFetch(url);
       const json = await res.json();
       console.log(`📊 HOST: Raw votes response:`, json);
       
@@ -3101,7 +3110,10 @@ Focus on actionable business strategy insights.`;
       // If restoring from existing game, get the bitmask data
       if (restoreFromGame && gameId) {
         try {
-          const gameRes = await fetch(`${API_BASE}games/${gameId}?role=host`);
+          // The host's door, `/host-details` (get-game.js): the category
+          // masks are the host's read since 2026-09-26, and the public brief
+          // answers `?role=host` with the player's view.
+          const gameRes = await authFetch(`${API_BASE}games/${gameId}/host-details`);
           if (gameRes.ok) {
             const gameData = await gameRes.json();
             // The per-game anonymity flag (IMPORTANT 2): this is the one place
@@ -3209,8 +3221,8 @@ Focus on actionable business strategy insights.`;
     if (!gameId) return;
     
     try {
-      // Get category counts
-      const countsRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      // Category counts and masks: the host's door onto the game state.
+      const countsRes = await authFetch(`${API_BASE}games/${gameId}/host-state`);
       if (countsRes.ok) {
         const stateData = await countsRes.json();
         

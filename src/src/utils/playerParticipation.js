@@ -21,8 +21,9 @@
  * 1. IT ASKED THE WRONG ENDPOINT. Both checks read `GET /games/{id}/state` and
  *    then dug through `answerProgress.answererIds` / `votingProgress.votersIds`
  *    — the HOST's roster lists. That request carries no player identity at all,
- *    so get-game-state.js takes its `if (!playerId || includeHostData)` branch
- *    and answers as though a host had asked. Worse, those two lists are emitted
+ *    so get-game-state.js took its `if (!playerId || includeHostData)` branch
+ *    and answered as though a host had asked (that branch is gone: the host's
+ *    view is the authenticated `/host-state` since 2026-09-26). Worse, those two lists are emitted
  *    only during their own phase: `answerProgress` exists solely while the state
  *    is `ASK#`, `votingProgress` solely while it is `VOTE#`. Resync during
  *    RESULTS, or in the beat after the host closes the round, and the list the

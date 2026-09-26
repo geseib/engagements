@@ -206,7 +206,7 @@ function HostRemote() {
       // it computes that progress with the same player deduplication the roster
       // uses, so the remote and the host screen cannot disagree about whether
       // the room is finished.
-      const res = await fetch(`${apiBase()}games/${id}/state?includeHostData=true`);
+      const res = await authFetch(`${apiBase()}games/${id}/host-state`);
       if (activeGameRef.current !== id) return;
       if (!res.ok) { setConnected(false); return; }
       setSnapshot(await res.json());
@@ -404,7 +404,7 @@ function HostRemote() {
         // `role=host` is what returns the text rather than the redacted
         // player view.
         const padded = String(round).padStart(3, '0');
-        const res = await fetch(`${apiBase()}games/${gameId}/answers?role=host&questionId=${padded}`);
+        const res = await authFetch(`${apiBase()}games/${gameId}/answers/host?questionId=${padded}`);
         if (cancelled || !res.ok || activeGameRef.current !== gameId) return;
         const payload = await res.json();
         setFocusAnswers(Array.isArray(payload.answers) ? payload.answers : []);
