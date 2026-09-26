@@ -11,7 +11,10 @@
  * rejects: a 17th item or a 9th engagement written; a break counted; a
  * refusal worded differently from the builder's menu; two concurrent adds
  * both landing the 8th-and-9th engagement; an insert that leaves two rows at
- * one place; a set from another organisation's library pinned to this
+ * one place; two concurrent APPENDS landing at the same place (an append
+ * renumbers no existing row, so nothing but the counters' own equality check
+ * stops it); a non-numeric `position` — null, '', false — read as 0 instead
+ * of "the end"; a set from another organisation's library pinned to this
  * agenda; a set of the wrong type; an unpinned version; plaintext titles;
  * a presentation or survey item added before its release; removing an item
  * that has started; counts left behind by a removal; an add racing a
@@ -293,6 +296,49 @@ async function freshEvent() {
     assert.strictEqual(ttls.size, 1, 'the agenda ended up on two different clocks');
     assert.strictEqual(itemRows().length, 2);
   });
+
+  console.log('\n8. two concurrent appends never land at the same Order (fix round 1)');
+  // The brief's own append code (`position = clampPosition(body.position,
+  // rows.length)`, `Order: position + 1`) renumbers no existing row for a
+  // pure append, so nothing tied the new Order to what else might land at
+  // the same moment. Two hosts both appending — or one appending while
+  // another inserts mid-list — read the same `rows.length` and both wrote
+  // `Order: n+1` before this fix. Reproduced directly against the
+  // unprotected code: poll:1, poll:2, break:2 (two rows sharing Order 2).
+  await freshEvent();
+  await add(poll('First'));
+  await check('two hosts appending at once: exactly one 201, one 409, and the orders stay unique', async () => {
+    const gate = table.hold((c) => c.type === 'transactWrite');
+    const slow = add(poll('Second (slow)'));
+    await gate.reached;
+    const fast = await add({ type: 'break', minutes: 5, description: 'Stretch.' });
+    gate.release();
+    const late = await slow;
+    const codes = [fast.statusCode, late.statusCode].sort();
+    assert.deepStrictEqual(codes, [201, 409], `expected one 201 and one 409, got ${codes}`);
+    const loser = fast.statusCode === 409 ? fast : late;
+    assert.strictEqual(bodyOf(loser).error, S.AGENDA_CHANGED, 'the loser should read agenda_changed, not a cap sentence');
+    assert.strictEqual(bodyOf(loser).code, 'agenda_changed');
+    // The loser wrote nothing: exactly two rows exist (the pre-seeded 'First'
+    // and whichever of the two appends actually landed), and no two rows
+    // share an Order.
+    assert.strictEqual(itemRows().length, 2, 'the losing append still wrote a row');
+    const orders = itemRows().map((r) => r.Order);
+    assert.strictEqual(new Set(orders).size, orders.length, `two rows share one Order: ${orders}`);
+  });
+
+  console.log('\n9. an append with no usable position — null, empty string, false — still means "the end"');
+  await freshEvent();
+  await add(trivia('A'));
+  for (const [label, value] of [['null', null], ['an empty string', ''], ['false', false]]) {
+    await check(`position: ${label} appends, rather than prepending at 0`, async () => {
+      const before = itemRows().length;
+      const res = await add(trivia(`After (${label})`, { position: value }));
+      assert.strictEqual(res.statusCode, 201, res.body);
+      assert.strictEqual(bodyOf(res).item.order, before + 1, 'a non-numeric position was read as 0, not "the end"');
+      assert.deepStrictEqual(itemRows().map((r) => r.Order), itemRows().map((_, i) => i + 1), 'a row was left out of order');
+    });
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

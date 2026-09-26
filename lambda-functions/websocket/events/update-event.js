@@ -30,7 +30,7 @@
  * and this time reads the agenda whole. items.js carries the matching half:
  * its own item Put rides beside a METADATA Update conditioned on `ttl`
  * matching what IT read, so a date move that commits first is the one that
- * makes an in-flight add lose instead. See tests/event-caps.js §6 for both
+ * makes an in-flight add lose instead. See tests/event-caps.js §7 for both
  * orderings driven end to end.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');

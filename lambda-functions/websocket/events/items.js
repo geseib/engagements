@@ -22,9 +22,18 @@
  *
  * ── ORDER IS A FIELD ──────────────────────────────────────────────────────
  * RATIONALE §c: "a reorder rewrites numbers, never keys". Every row carries
- * `Order`, 1..n. An insert renumbers the rows after it in the same transaction
- * as the Put, each update conditioned on the number it read, so a concurrent
- * change cancels the lot rather than leaving two rows with one number.
+ * `Order`, 1..n. A MID-LIST insert renumbers the rows after it in the same
+ * transaction as the Put, each update conditioned on the number it read, so a
+ * concurrent change cancels the lot rather than leaving two rows with one
+ * number. An APPEND renumbers no existing row at all — there is nothing after
+ * it — so that alone cannot stop two concurrent appends computing the same
+ * `Order` from the same `rows.length` and both landing. What stops them is
+ * the same guard the cap race already needs: the METADATA counters' Update
+ * (below) is conditioned on `ItemCount`/`EngagementCount`/`BreakCount`
+ * matching what THIS request read, so the loser's counters move out from
+ * under it and its whole transaction — Put included — cancels. See
+ * tests/event-caps.js §8 for two concurrent appends proven to land at
+ * different Orders, never the same one.
  *
  * ── ONLY A PLANNED ITEM CHANGES ───────────────────────────────────────────
  * An item is born `planned` (decision 11: nothing is active before the host
@@ -38,18 +47,19 @@
  * event's date changes, built from a read of the agenda taken before that
  * transaction commits. An item added here between that read and that commit
  * would otherwise carry the ttl this route read at ITS OWN start — stale the
- * instant the date move lands. So the item's Put and the METADATA counters'
- * Update both ride the SAME transaction as a `ttl = :ttlWas` condition,
- * `:ttlWas` the event's ttl as this request read it: if a date move commits
- * first, that condition fails, the whole add cancels, and the caller sees the
- * same AGENDA_CHANGED 409 a lost cap race gets. The opposite ordering — an
- * add landing between update-event's read of the items and ITS commit — is
- * update-event's own condition to hold (its METADATA Update, when the date
- * moves, also checks ItemCount/EngagementCount/BreakCount against what it
- * read at its own start); together the two conditions mean a date move and an
- * add can never both land with one row on the old clock. See
- * tests/event-caps.js §6 for the add-loses-the-race half and
- * tests/event-update.js for the date-move-loses-the-race half.
+ * instant the date move lands. So the add's transaction carries the item's
+ * Put ALONGSIDE the METADATA counters' Update, and it is that counters'
+ * Update alone — never the Put — that also carries a `ttl = :ttlWas`
+ * condition, `:ttlWas` the event's ttl as this request read it: if a date
+ * move commits first, that condition fails, the whole add cancels (Put
+ * included, since the transaction is all-or-nothing), and the caller sees the
+ * same AGENDA_CHANGED 409 a lost cap or Order race gets. The opposite
+ * ordering — an add landing between update-event's read of the items and ITS
+ * commit — is update-event's own condition to hold (its METADATA Update, when
+ * the date moves, also checks ItemCount/EngagementCount/BreakCount against
+ * what it read at its own start); together the two conditions mean a date
+ * move and an add can never both land with one row on the old clock. See
+ * tests/event-caps.js §7 for both orderings driven end to end.
  */
 const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -73,11 +83,19 @@ const countsOf = (meta) => ({
 });
 const newItemId = () => `it_${crypto.randomBytes(4).toString('hex')}`;
 
-/** Where a new item goes: its 0-based index in the whole agenda, breaks included. */
+/**
+ * Where a new item goes: its 0-based index in the whole agenda, breaks
+ * included. Only a genuine integer counts as a request for a particular
+ * place; anything else — no `position` at all, `null`, `''`, `false`, a
+ * float, a string — means "append at the end". Checked by `typeof` rather
+ * than coerced with `Number()`, because `Number(null)` and `Number('')` are
+ * both `0` in JavaScript: coercing first would silently turn "no position
+ * given" into "prepend", which is not what an omitted field means anywhere
+ * else in this route.
+ */
 function clampPosition(value, length) {
-  const n = Number(value);
-  if (!Number.isInteger(n)) return length;
-  return Math.max(0, Math.min(length, n));
+  if (typeof value !== 'number' || !Number.isInteger(value)) return length;
+  return Math.max(0, Math.min(length, value));
 }
 
 /**
@@ -85,12 +103,24 @@ function clampPosition(value, length) {
  * `capFor`, the update also carries the cap that `type` must still be under,
  * so a race lost between this route's read and its write cancels the write.
  *
+ * `wasCounts` (add only) — `{items, engagements, breaks}`, this request's own
+ * `countsOf(meta)` — ties the whole Update to the counts as THIS request read
+ * them: `ItemCount = :icWas AND EngagementCount = :ecWas AND BreakCount =
+ * :bcWas`, alongside (never instead of) the cap conditions above. This is
+ * what stops two concurrent APPENDS landing at the same `Order`: an append
+ * renumbers no existing row (see the file header's "ORDER IS A FIELD"), so
+ * without this the second add's transaction has nothing in it that the
+ * first add's transaction also touches, and both commit. With it, the first
+ * add's counters move and the second add's equality check fails the moment
+ * it tries to commit, cancelling its Put along with everything else in its
+ * transaction.
+ *
  * `ttlWas`, given only when adding, ties the same Update to the event's ttl
  * as this request read it — see the file header's note on the date-move race.
- * A removal touches no row that carries a fresh ttl, so it carries no such
- * condition.
+ * A removal touches no row that carries a fresh ttl or depends on a read of
+ * `rows.length`, so it passes neither `wasCounts` nor `ttlWas`.
  */
-function counterUpdate(code, delta, now, capFor, ttlWas) {
+function counterUpdate(code, delta, now, capFor, ttlWas, wasCounts) {
   const conditions = ['attribute_exists(PK)'];
   const names = { '#ua': 'UpdatedAt', '#ic': 'ItemCount', '#ec': 'EngagementCount', '#bc': 'BreakCount' };
   const values = { ':di': delta.items, ':de': delta.engagements, ':db': delta.breaks, ':now': now };
@@ -104,6 +134,12 @@ function counterUpdate(code, delta, now, capFor, ttlWas) {
       conditions.push('#ec < :maxE');
       values[':maxE'] = rules.MAX_ENGAGEMENTS;
     }
+  }
+  if (wasCounts) {
+    conditions.push('#ic = :icWas', '#ec = :ecWas', '#bc = :bcWas');
+    values[':icWas'] = wasCounts.items;
+    values[':ecWas'] = wasCounts.engagements;
+    values[':bcWas'] = wasCounts.breaks;
   }
   if (ttlWas !== undefined) {
     conditions.push('#ttl = :ttlWas');
@@ -197,7 +233,8 @@ async function addItem(request, meta, code) {
   const fields = rules.checkItemFields(body, type);
   if (fields.error) return json(400, { error: fields.error });
 
-  const capped = rules.capRefusal(countsOf(meta), type);
+  const wasCounts = countsOf(meta);
+  const capped = rules.capRefusal(wasCounts, type);
   if (capped) return json(409, { error: capped.message, cap: capped.cap });
 
   let setRef = null;
@@ -229,7 +266,7 @@ async function addItem(request, meta, code) {
   const delta = { items: counted ? 1 : 0, engagements: rules.isEngagement(type) ? 1 : 0, breaks: counted ? 0 : 1 };
   const tx = [
     { Put: { TableName: TABLE(), Item: await encryptItem(meta.orgId, 'item', plain), ConditionExpression: 'attribute_not_exists(SK)' } },
-    { Update: counterUpdate(code, delta, now, type, meta.ttl) },
+    { Update: counterUpdate(code, delta, now, type, meta.ttl, wasCounts) },
   ];
   if (counted) tx.push({ Update: listCountUpdate(meta.orgId, code, 1) });
   [...rows.slice(0, position), null, ...rows.slice(position)].forEach((row, i) => {
@@ -242,8 +279,9 @@ async function addItem(request, meta, code) {
     if (!S.isCancelled(error)) throw error;
     // Lost a race. If it was the cap, say the cap's sentence — that is what
     // the other host's add has just made true. Otherwise it was the ttl
-    // guard (a date move landed first, or the agenda moved under us some
-    // other way): the generic "reload and try again" sentence.
+    // guard, or the counts guard (another add or remove landed, including a
+    // concurrent append that would otherwise have shared this one's Order):
+    // the generic "reload and try again" sentence.
     const fresh = await S.readMeta(db, TABLE(), code);
     if (!fresh) return notFound();
     const capNow = rules.capRefusal(countsOf(fresh), type);
