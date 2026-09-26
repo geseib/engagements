@@ -30,8 +30,12 @@ const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
  * The host types an event title, an AI context and a persona choice on this
  * page. A bare spacebar shortcut that fires while they are typing would advance
  * a live room mid-word, so every text surface is excluded.
+ *
+ * Exported: this is the page's one typing-target check, and
+ * `useSessionPanelKey` (components/stage/useSessionPanelKey.js) reuses it
+ * rather than keeping a second copy.
  */
-function isTypingTarget(target) {
+export function isTypingTarget(target) {
   if (!target || !target.tagName) return false;
   if (TYPING_TAGS.has(target.tagName)) return true;
   return Boolean(target.isContentEditable);

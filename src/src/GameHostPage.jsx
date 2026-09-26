@@ -36,6 +36,7 @@ import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
+import useSessionPanelKey from './components/stage/useSessionPanelKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
@@ -50,7 +51,9 @@ import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
-import { shortcutsSuppressed, scoreboardKeysLive, qrOverlayInstructions } from './utils/hostOverlays';
+import {
+  shortcutsSuppressed, scoreboardKeysLive, sessionPanelKeyLive, qrOverlayInstructions,
+} from './utils/hostOverlays';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -5418,6 +5421,32 @@ Focus on actionable business strategy insights.`;
     onOpen: () => publishScoreboard({ open: true }),
     onClose: () => publishScoreboard({ open: false }),
     onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboard.style) }),
+  });
+
+  /*
+    THE SESSION PANEL'S OPEN KEY — `\` — wired the same way the scoreboard's
+    just above: a page-level hook, ABOVE THE EARLY RETURNS for the same
+    hook-order reason, `enabled` built from hostOverlays.js the way
+    `scoreboardKeysOn` is. CLOSING stays SessionSetupPanel's own job (it is
+    mounted only while `setupPanelOpen`, and its listener already answers
+    both Esc and `\`) — `sessionPanelKeyLive`'s own `setupPanelOpen` term is
+    what keeps this hook quiet the moment that happens, so one press is never
+    both an open and a close. See components/stage/useSessionPanelKey.js.
+  */
+  const sessionPanelKeyOn = sessionPanelKeyLive({
+    setupPanelOpen,
+    showConfirmModal, showExpandedQR, showReportsModal,
+    isLoadingData, qrMode,
+    spotlightOpen: spotlightIndex !== null,
+    pastRoundOpen: pastRoundIndex !== null,
+  });
+  useSessionPanelKey({
+    // ...and never over a surface that replaced the stage — the same list
+    // `useScoreboardKeys`'s own `enabled` carries above.
+    enabled: sessionPanelKeyOn && !showQuickstartMenu && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && Boolean(gameId),
+    onOpen: () => setSetupPanelOpen(true),
   });
 
   // Render the quickstart menu if it's being shown

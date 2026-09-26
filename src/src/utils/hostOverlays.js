@@ -110,6 +110,32 @@ export function scoreboardKeysLive({ setupPanelOpen = false, ...overlays } = {})
 }
 
 /**
+ * May the SESSION PANEL's own open key (`\`) fire?
+ *
+ * The same overlay terms `scoreboardKeysLive` yields to — a confirm modal,
+ * the expanded QR, the reports modal, a pinned QR, a spotlight, a past round,
+ * loading — with two deliberate differences:
+ *
+ *   - `lessonExpanded` does NOT hold it back. An expanded question detail is
+ *     not a reason to keep the host from reaching the session menu the way it
+ *     is a reason to keep S/V away from the board underneath it.
+ *   - the scoreboard's OWN open state does not either. The panel is a side
+ *     surface a host may want to reach mid-board, and the board's own keys
+ *     already go quiet the moment this panel opens (`scoreboardKeysLive`'s
+ *     `setupPanelOpen` term above) — there is no risk of the two colliding.
+ *
+ * `setupPanelOpen` itself DOES hold this one back, for a narrower reason than
+ * the board's: CLOSING is a different listener's job — SessionSetupPanel's
+ * own, mounted only while it is open (that file's own Esc/`\` effect). Once
+ * the panel is open this hook must go quiet, or one keystroke would reach two
+ * listeners and either close-then-reopen or open-then-close in the same
+ * press — see components/stage/useSessionPanelKey.js.
+ */
+export function sessionPanelKeyLive({ setupPanelOpen = false, ...overlays } = {}) {
+  return !setupPanelOpen && !shortcutsSuppressed({ ...overlays, lessonExpanded: false, scoreboardOpen: false });
+}
+
+/**
  * What the expanded-QR overlay tells the host to do to get rid of it.
  *
  * A PREVIEW MUST NOT SAY "CLICK". The preview overlay is
