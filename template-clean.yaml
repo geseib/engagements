@@ -475,6 +475,22 @@ Resources:
             Method: delete
             Auth:
               Authorizer: CognitoAuthorizer
+        ReorderEventItems:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        EditEventItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items/{itemId}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         # Seals and opens item titles and descriptions.
         - Version: '2012-10-17'

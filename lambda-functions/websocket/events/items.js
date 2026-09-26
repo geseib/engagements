@@ -63,7 +63,7 @@
  */
 const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, TransactWriteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../tenant');
 const { encryptItem } = require('../tenant-crypto');
 const { getSetMetadata, knownVersions, toVersion } = require('../set-version');
@@ -321,6 +321,114 @@ async function removeItem(meta, code, itemId) {
   return json(200, { removed: itemId });
 }
 
+// ── PUT /items/{itemId}: edit ───────────────────────────────────────────────
+async function editItem(request, meta, code, itemId) {
+  const body = readBody(request);
+  if (!body) return json(400, { error: 'The request body is not valid JSON.' });
+  const row = await readItem(code, itemId);
+  if (!row) return notFound();
+  if (row.State !== PLANNED) return json(409, { error: NOT_PLANNED, code: 'not_planned' });
+
+  const current = await S.decryptItemRow(meta.orgId, row);
+  const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+  const fields = rules.checkItemFields({
+    title: has('title') ? body.title : current.Title,
+    description: has('description') ? body.description : current.Description,
+    minutes: has('minutes') ? body.minutes : current.Minutes,
+  }, row.Type);
+  if (fields.error) return json(400, { error: fields.error });
+
+  let setRef = row.SetRef || null;
+  if (has('version')) {
+    if (!rules.isEngagement(row.Type) || !setRef) return json(400, { error: 'Only an engagement plays a version of a set.' });
+    const pinned = await pinSet(meta, row.Type, { ...setRef, version: body.version });
+    if (pinned.error) return json(400, { error: pinned.error });
+    setRef = pinned.setRef;
+  }
+
+  const now = new Date().toISOString();
+  const sealed = await encryptItem(meta.orgId, 'item', { Title: fields.value.title, Description: fields.value.description });
+  const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
+  const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
+  let expression = 'SET #t = :t, #d = :d, #m = :m, #ua = :now';
+  if (setRef) {
+    expression += ', #sr = :sr';
+    names['#sr'] = 'SetRef';
+    values[':sr'] = setRef;
+  }
+  try {
+    await db.send(new UpdateCommand({
+      TableName: TABLE(),
+      Key: { PK: row.PK, SK: row.SK },
+      UpdateExpression: expression,
+      ConditionExpression: 'attribute_exists(SK) AND #st = :planned',
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    }));
+  } catch (error) {
+    if (error && error.name === 'ConditionalCheckFailedException') {
+      return json(409, { error: S.AGENDA_CHANGED, code: 'agenda_changed' });
+    }
+    throw error;
+  }
+  return json(200, {
+    item: S.projectItem({
+      ...row, Title: fields.value.title, Description: fields.value.description, Minutes: fields.value.minutes,
+      ...(setRef ? { SetRef: setRef } : {}),
+    }),
+  });
+}
+
+// ── PUT /items: reorder ─────────────────────────────────────────────────────
+/**
+ * Task 7 review, carried into this task's notes: conditioning each row's
+ * write on the `Order` it read (below) catches a concurrent MID-LIST insert
+ * or remove that touches one of the rows THIS reorder also repositions — that
+ * shifts the row's `Order` out from under the condition. It does NOT catch a
+ * concurrent APPEND: an append renumbers no existing row (items.js's own file
+ * header, "ORDER IS A FIELD"), so a reorder that happens to leave every row it
+ * touches at the `Order` it read would commit right over it, silently
+ * stranding the appended item outside the order the host just saved. So this
+ * transaction also carries the METADATA counters' Update, conditioned on
+ * `ItemCount`/`EngagementCount`/`BreakCount` matching what THIS request read
+ * — the same guard addItem's own counters' Update uses for the same reason
+ * (counterUpdate's `wasCounts`). A concurrent add or remove always moves one
+ * of those three, so it always fails this condition even when it never
+ * touches a row's `Order` at all. See tests/event-item-edit.js, "a reorder is
+ * refused, not silently missing a concurrent append".
+ */
+async function reorderItems(request, meta, code) {
+  const body = readBody(request);
+  if (!body) return json(400, { error: 'The request body is not valid JSON.' });
+  const order = Array.isArray(body.order) ? body.order.map(String) : null;
+  if (!order) return json(400, { error: 'Send the whole agenda\'s order: { order: [itemId, …] }.' });
+
+  const rows = await S.readItems(db, TABLE(), code);
+  const byId = new Map(rows.map((row) => [S.itemIdOf(row), row]));
+  // The whole agenda, each item once — anything else was read from an agenda
+  // that has since changed, and applying it would lose or duplicate a place.
+  const whole = order.length === rows.length && new Set(order).size === order.length && order.every((id) => byId.has(id));
+  if (!whole) return json(409, { error: S.AGENDA_CHANGED, code: 'agenda_changed' });
+
+  const now = new Date().toISOString();
+  const tx = [];
+  order.forEach((id, i) => {
+    const row = byId.get(id);
+    if (Number(row.Order) !== i + 1) tx.push({ Update: orderUpdate(row, i + 1, now) });
+  });
+  if (tx.length) {
+    const zero = { items: 0, engagements: 0, breaks: 0 };
+    tx.push({ Update: counterUpdate(code, zero, now, null, undefined, countsOf(meta)) });
+    try {
+      await db.send(new TransactWriteCommand({ TransactItems: tx }));
+    } catch (error) {
+      if (!S.isCancelled(error)) throw error;
+      return json(409, { error: S.AGENDA_CHANGED, code: 'agenda_changed' });
+    }
+  }
+  return json(200, { order });
+}
+
 exports.handler = async (request) => {
   trace('event-items', request);
   const params = request.pathParameters || {};
@@ -332,6 +440,8 @@ exports.handler = async (request) => {
     if (!meta) return notFound();
     if (method === 'POST' && itemId === null) return await addItem(request, meta, code);
     if (method === 'DELETE' && itemId !== null) return await removeItem(meta, code, itemId);
+    if (method === 'PUT' && itemId === null) return await reorderItems(request, meta, code);
+    if (method === 'PUT' && itemId !== null) return await editItem(request, meta, code, itemId);
     return json(404, { error: 'Endpoint not found' });
   } catch (error) {
     console.error('❌ event-items failed:', error && error.message);
