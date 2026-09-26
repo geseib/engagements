@@ -131,3 +131,35 @@ describe('the contract', () => {
     expect(stripped(MY_CSS)).toMatch(/\.evb-pick-tbl\s*\{[^}]*table-layout:\s*fixed/);
   });
 });
+
+describe('the agenda place (02, 02b)', () => {
+  test.each([
+    ['titles and times on the panel', T.text, PANEL],
+    ['source lines and the foot on the panel', T.muted, PANEL],
+    ['the join code and "the most an event can hold" in amber', T.primary, PANEL],
+  ])('%s clears AA', (_label, fg, layers) => {
+    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  });
+  test('a break row, the row being moved, and the cap\'s reason', () => {
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-tint-brk')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [T.bg, T.surface, tint('--evb-row-sel')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-row-sel')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [T.bg, T.surface, tint('--evb-tint-cap')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-tint-cap')])).toBeGreaterThanOrEqual(AA);
+  });
+  test('the cap\'s reason is never drawn at the disabled opacity', () => {
+    const note = stripped(MY_CSS).match(/\.evb-capnote\s*\{([^}]*)\}/)[1];
+    expect(note).not.toMatch(/opacity/);
+  });
+  test('the agenda is fixed-layout and its row actions never use flex-end (hard rules 9 and 11)', () => {
+    const css = stripped(MY_CSS);
+    expect(css).toMatch(/\.evb-tbl\s*\{[^}]*table-layout:\s*fixed/);
+    expect(css).toMatch(/\.evb-rowact > :first-child\s*\{\s*margin-left:\s*auto;\s*\}/);
+    expect(css).not.toMatch(/\.evb-rowact\s*\{[^}]*justify-content:\s*flex-end/);
+  });
+  test('a truncating title is one text node with min-width 0 (hard rule 8)', () => {
+    const nm = stripped(MY_CSS).match(/\.evb-nm\s*\{([^}]*)\}/)[1];
+    expect(nm).toMatch(/min-width:\s*0/);
+    expect(nm).toMatch(/text-overflow:\s*ellipsis/);
+  });
+});

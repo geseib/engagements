@@ -127,7 +127,7 @@
   display: inline-flex; align-items: center; font-size: var(--evb-t-floor); font-weight: 600; line-height: 1.5;
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--evb-rule-strong); color: var(--muted); white-space: nowrap;
 }
-.evb-chip--warn { color: var(--primary); }
+.evb-chip--warn { color: var(--primary); border-color: rgba(246, 169, 76, .5); }
 .evb-error {
   margin: 12px 0 0; padding: 9px 12px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
   background: var(--evb-tint-danger); color: var(--danger-text); font-size: var(--evb-t-label);
@@ -137,3 +137,97 @@
   border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0; background: var(--evb-tint-danger);
 }
 .evb-confirm p { margin: 0; flex: 1 1 260px; min-width: 0; font-size: var(--evb-t-label); color: var(--text); }
+
+/* ======================================================= the agenda place ==
+   Everything below is the builder itself (EventBuilder.jsx). */
+.evb-alert {
+  display: flex; align-items: center; gap: 9px; margin: 0 0 14px; padding: 9px 12px;
+  border: 1px solid var(--evb-rule-strong); border-left: 3px solid var(--danger); border-radius: 6px;
+  background: var(--evb-tint-danger); color: var(--danger-text);
+}
+.evb-alert > span { flex: 1 1 auto; min-width: 0; }
+.evb-loading { color: var(--muted); }
+
+/* The event's facts: each said once, each with its label. The code is the
+   one display numeral the place is allowed. */
+.evb-facts {
+  display: flex; flex-wrap: wrap; margin: 0 0 14px; border: 1px solid var(--evb-rule);
+  border-radius: 10px; background: var(--surface);
+}
+.evb-fact { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 10px 16px; border-right: 1px solid var(--evb-rule); }
+.evb-fact:last-child { border-right: 0; }
+.evb-lab { font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.evb-v { font-size: var(--evb-t-body); font-weight: 600; white-space: nowrap; }
+.evb-code { font: 800 var(--evb-t-numeral)/1 var(--font-display); letter-spacing: .08em; color: var(--primary); }
+.evb-facts-acts { flex-direction: row; align-items: center; margin-left: auto; }
+
+.evb-panel { position: relative; margin: 0 0 14px; border: 1px solid var(--evb-rule); border-radius: 10px; background: var(--surface); }
+.evb-panel-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 11px 14px; border-bottom: 1px solid var(--evb-rule); }
+.evb-panel-head h2 { margin: 0; font: 700 var(--evb-t-head)/1.2 var(--font-display); }
+.evb-note { margin: 0; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-menuwrap { position: relative; margin-left: auto; }
+
+/* The agenda table: the console's table plus a grip, a place and a time. */
+.evb-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.evb-tbl th {
+  text-align: left; font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 9px 10px 7px; white-space: nowrap; border-bottom: 1px solid var(--evb-rule-strong);
+}
+.evb-tbl td {
+  height: var(--evb-row-h); padding: 0 10px; border-bottom: 1px solid var(--evb-rule);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evb-tbl tbody tr:hover td { background: var(--evb-row-hover); }
+.evb-tbl .evb-row--brk td { background: var(--evb-tint-brk); }
+.evb-tbl .evb-row--moving td { background: var(--evb-row-sel); }
+.evb-col-grip { width: 30px; }
+.evb-col-no { width: 34px; }
+.evb-col-at { width: 66px; }
+.evb-col-type { width: 158px; }
+.evb-col-len { width: 74px; }
+.evb-col-acts { width: 196px; }
+.evb-grip { color: var(--muted); text-align: center; cursor: grab; }
+.evb-no { text-align: right; font-weight: 700; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-at { font-weight: 700; }
+.evb-len-cell { text-align: right; }
+.evb-nm { display: block; min-width: 0; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.evb-row--brk .evb-nm { font-weight: 500; color: var(--muted); }
+.evb-sub { display: block; min-width: 0; font-size: var(--evb-t-label); color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.evb-sub--bad { color: var(--danger-text); }
+/* A type is an icon AND a word, everywhere (colour never alone). */
+.evb-type {
+  display: inline-flex; align-items: center; gap: 5px; font-size: var(--evb-t-floor); font-weight: 600; line-height: 1.5;
+  padding: 2px 8px 2px 6px; border-radius: 999px; border: 1px solid var(--evb-rule-strong); color: var(--text); white-space: nowrap;
+}
+.evb-type--brk { border-color: transparent; color: var(--muted); }
+/* Row actions: margin-left auto on the first child, never flex-end (hard rule 9). */
+.evb-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
+.evb-rowact > :first-child { margin-left: auto; }
+.evb-foot { padding: 11px 14px; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-foot b { color: var(--text); }
+.evb-warn { margin-left: 6px; font-size: var(--evb-t-floor); font-weight: 700; color: var(--primary); }
+
+/* The add menu: a popover under its button, so the one dialog behind it is
+   the set picker — never a modal opened from a modal. */
+.evb-menu {
+  position: absolute; z-index: 40; top: 36px; right: 0; width: 392px; padding: 6px;
+  border: 1px solid var(--evb-rule-strong); border-radius: 10px; background: var(--surface);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, .5);
+}
+.evb-menu-h { margin: 8px 10px 4px; font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.evb-menu-item {
+  display: flex; gap: 11px; align-items: flex-start; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px;
+  background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.evb-menu-item:hover:not(:disabled) { background: var(--evb-row-hover); }
+.evb-menu-item:disabled { opacity: .5; cursor: not-allowed; }
+.evb-menu-item b { display: block; font-size: var(--evb-t-body); }
+.evb-menu-item span { display: block; font-size: var(--evb-t-label); color: var(--muted); line-height: 1.4; }
+.evb-menu-rule { border: 0; border-top: 1px solid var(--evb-rule); margin: 5px 4px; }
+/* The cap's reason: full contrast, above the kinds it disables. A disabled
+   control is exempt from contrast; the sentence saying why is not. */
+.evb-capnote {
+  margin: 2px 10px 8px; padding: 8px 10px; border-left: 3px solid var(--primary); border-radius: 0 6px 6px 0;
+  background: var(--evb-tint-cap); font-size: var(--evb-t-label); color: var(--muted); line-height: 1.45;
+}
+.evb-capnote b { color: var(--text); font-weight: 600; }

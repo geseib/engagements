@@ -207,7 +207,8 @@ the premise (`.qs-empty` IS taken) so it cannot quietly become vacuous.
 
 Taken prefixes: `qsets`, `adm`, `sp`, `um`, `wel`, `entry`, `au`, `hr`, `hrc`, `hrq`,
 `git`, `gjp`, `plib`, `pvi`, `ppf`, `pap`, `pc`, `round`, `issue`, `help`, `report`,
-`join`, `qs` (legacy, `styles.css`), plus everything in `styles.css` and `stage.css`.
+`join`, `qs` (legacy, `styles.css`), `evts`, `evb`, plus everything in `styles.css`
+and `stage.css`.
 
 ---
 
