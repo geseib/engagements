@@ -101,6 +101,11 @@ const SETS_REFUSAL = {
   },
 };
 
+/* Every request no route above answers. The throw alone is not enough: the
+   component catches it and renders it, so the test only saw it when the timing
+   happened to put it on screen. Asserted empty after every test. */
+let unhandled = [];
+
 function mockApi({ upload = { status: 200, body: { message: 'Successfully created question set "Space Quiz"' } }, afterCreate = false } = {}) {
   let listCalls = 0;
   authFetch.mockImplementation(async (url, options = {}) => {
@@ -115,10 +120,34 @@ function mockApi({ upload = { status: 200, body: { message: 'Successfully create
     if (method === 'GET' && /\/question-sets\/[^/]+\/questions$/.test(url)) {
       return jsonResponse(200, { setId: CREATED.setId, questions: [] });
     }
+    /* And the media check the editor runs as it mounts (SetMediaPanel's
+       verify). Left unanswered, the throw below became a SECOND role="status"
+       — "The check could not run" — inside the shelf dialog, where the editor
+       renders, and the shelf's own notice could no longer be found by role.
+       Whether it had rendered yet when the test looked was down to timer
+       order, so this failed one full run in several (dev, 2026-09-25). The
+       shape is admin/media-status.js's, as setMediaPanel.test.jsx has it. */
+    if (method === 'GET' && /\/question-sets\/[^/]+\/media$/.test(url)) {
+      return jsonResponse(200, {
+        setId: CREATED.setId,
+        prefix: `sets/${CREATED.setId}/`,
+        totalQuestions: 0,
+        counts: { none: 0, remote: 0, asset: 0, key: 0 },
+        missingCount: 0,
+        missing: [],
+        unused: [],
+        deadRemoteCount: 0,
+        deadRemote: [],
+        remoteChecked: 0,
+        remoteUnchecked: 0,
+        unverifiable: 0,
+      });
+    }
     if (method === 'POST' && url.includes('/admin/upload-questions')) {
       if (upload.throws) throw new Error(upload.throws);
       return jsonResponse(upload.status, upload.body);
     }
+    unhandled.push(`${method} ${url}`);
     throw new Error(`Unhandled request: ${method} ${url}`);
   });
   return {
@@ -251,7 +280,12 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  const seen = unhandled;
+  unhandled = [];
+  expect(seen).toEqual([]);
+});
 
 describe.each(BUILDERS)('the $kind builder hands over questions, not a set', (b) => {
   test('the shelf uploads them, exactly as the console does', async () => {
