@@ -15,6 +15,23 @@
  * left on the other. The reservation is conditioned on `Kind = event`, so
  * this route can never touch a session's code. At most 16 + 16 items plus
  * three rows: inside DynamoDB's 100.
+ *
+ * ── A RACE AGAINST items.js's ADD (OR REMOVE) ─────────────────────────────
+ * The per-item updates above are built from ONE read of the agenda
+ * (`S.readItems`), taken before this transaction commits. An item added by
+ * items.js between that read and this commit would be invisible to this
+ * list — it would keep the ttl it was written with and never receive the new
+ * date's, while every row this route did see moves on. So, whenever the date
+ * actually moves, METADATA's own Update also checks
+ * ItemCount/EngagementCount/BreakCount against the values this route read at
+ * its own start: an add (or a remove) landing in that window changes at
+ * least one of them, the condition fails, and the whole date move cancels
+ * with the same AGENDA_CHANGED 409 a lost cap race gets — the host retries
+ * and this time reads the agenda whole. items.js carries the matching half:
+ * its own item Put rides beside a METADATA Update conditioned on `ttl`
+ * matching what IT read, so a date move that commits first is the one that
+ * makes an in-flight add lose instead. See tests/event-caps.js §6 for both
+ * orderings driven end to end.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
@@ -62,15 +79,31 @@ exports.handler = async (request) => {
     const values = {
       ':t': sealed.Title, ':pl': sealed.Place, ':sa': v.startsAt, ':tz': v.timeZone, ':ac': v.access, ':ttl': ttl,
     };
+    // When the date moves, this Update's own condition also pins down the
+    // agenda's shape as this route read it — see the file header's note on
+    // the race with items.js's add/remove. A rename with no date change
+    // touches no item row, so it carries no such condition.
+    const metaConditions = ['attribute_exists(PK)'];
+    const metaNames = { ...names, '#ar': 'AttendeeReports', '#ua': 'UpdatedAt' };
+    const metaValues = { ...values, ':ar': v.attendeeReports, ':now': now };
+    if (moved) {
+      metaConditions.push('#ic = :icWas', '#ec = :ecWas', '#bc = :bcWas');
+      Object.assign(metaNames, { '#ic': 'ItemCount', '#ec': 'EngagementCount', '#bc': 'BreakCount' });
+      Object.assign(metaValues, {
+        ':icWas': Number(meta.ItemCount) || 0,
+        ':ecWas': Number(meta.EngagementCount) || 0,
+        ':bcWas': Number(meta.BreakCount) || 0,
+      });
+    }
     const tx = [
       {
         Update: {
           TableName: TABLE(),
           Key: { PK: tenant.eventPk(code), SK: S.META_SK },
           UpdateExpression: 'SET #t = :t, #pl = :pl, #sa = :sa, #tz = :tz, #ac = :ac, #ttl = :ttl, #ar = :ar, #ua = :now',
-          ConditionExpression: 'attribute_exists(PK)',
-          ExpressionAttributeNames: { ...names, '#ar': 'AttendeeReports', '#ua': 'UpdatedAt' },
-          ExpressionAttributeValues: { ...values, ':ar': v.attendeeReports, ':now': now },
+          ConditionExpression: metaConditions.join(' AND '),
+          ExpressionAttributeNames: metaNames,
+          ExpressionAttributeValues: metaValues,
         },
       },
       {

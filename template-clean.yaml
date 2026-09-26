@@ -452,6 +452,42 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  EventItemsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-event-items'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/items.handler
+      Events:
+        AddEventItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        RemoveEventItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items/{itemId}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Seals and opens item titles and descriptions.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
