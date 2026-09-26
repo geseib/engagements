@@ -2115,12 +2115,30 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: RootPage checks a typed code here before anyone signs in, and
+        # every phone reads the session brief. `?role=host` is a query
+        # parameter anyone can type, so its branch carries nothing that is the
+        # host's own writing (get-game.js).
         GetGameEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}
             Method: GET
+        # THE HOST'S DOOR to the same handler: the edit prefill, with the
+        # session's Workie context and Call & Answer briefing decrypted. It
+        # was the public `?role=host` branch until 2026-09-26, open to anyone
+        # with the code. Cognito here, authorizer.js names it for
+        # hosts|admins, and get-game.js asks callerMayDriveSession.
+        # tests/get-game-host-details.js.
+        GetGameHostDetailsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/host-details
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

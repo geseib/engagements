@@ -610,7 +610,7 @@ function GameHostPage() {
   const [creatingSession, setCreatingSession] = useState(false);
   /*
     THE SESSION BEING EDITED from history — `{ gameId, values }` or null, where
-    `values` is what GET /games/{id}?role=host returned (the prefill).
+    `values` is what GET /games/{id}/host-details returned (the prefill).
     Deliberately NOT the page's own eventTitle/selectedSetId state: an edit
     targets a session that need not be the one on stage, and must not disturb
     it. Non-null renders <GameSetupDialog mode="edit"> over the history modal.
@@ -4514,12 +4514,17 @@ Focus on actionable business strategy insights.`;
     EDIT A SESSION BEFORE IT STARTS, from the history list. Prefill comes from
     the server, not from the row: the list rows carry no details/aiContext/
     persona, and inventing a prefill from partial data would blank fields on
-    save. authFetch on both calls — GET for the host branch, PUT because the
-    update route carries the Cognito authorizer.
+    save. authFetch on both calls: both routes carry the Cognito authorizer.
+
+    The GET is the host's door, `/host-details`, not the public brief's
+    `?role=host`. That branch no longer returns the Workie context or the
+    briefing — `role` is a query parameter anyone can type — and the dialog
+    sends back what it was seeded with, so a prefill without them would erase
+    both on Save (get-game.js; tests/get-game-host-details.js).
   */
   const editGameFromHistory = async (selectedGameId) => {
     try {
-      const res = await authFetch(`${API_BASE}games/${selectedGameId}?role=host`);
+      const res = await authFetch(`${API_BASE}games/${selectedGameId}/host-details`);
       if (!res.ok) throw new Error(`Failed to load session: ${res.status}`);
       const values = await res.json();
       if (values.started) {

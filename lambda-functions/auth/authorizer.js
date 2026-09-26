@@ -658,6 +658,17 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && /^games\/[^/]+\/ai-summary\/host$/.test(path)) {
     return ['hosts', 'admins'];
   }
+  // THE SESSION BRIEF'S HOST DOOR, `GET /games/{gameId}/host-details`. The edit
+  // prefill: the session's Workie context and its Call & Answer briefing,
+  // decrypted — the host's own writing, which the public `GET /games/{gameId}`
+  // no longer returns to a typed `?role=host`. Named for the report's reason:
+  // "GET + games is public" would otherwise pass any account, `pending`
+  // included, and callerMayDriveSession reads an account in no group as a
+  // participant. Anchored, so the public brief itself stays `[]`; the class
+  // matches the template and a concrete id. tests/get-game-host-details.js.
+  if (method === 'GET' && /^games\/[^/]+\/host-details$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // Game creation/management requires host or admin group
   if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
     return ['hosts', 'admins'];

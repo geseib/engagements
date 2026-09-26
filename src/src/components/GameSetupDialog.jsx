@@ -95,7 +95,7 @@ import './GameSetupDialog.css';
 export default function GameSetupDialog({
   /*
     'create' (default) | 'edit'. Edit is the same form pointed at an EXISTING
-    unstarted session: the page fetches `GET /games/{id}?role=host`, hands the
+    unstarted session: the page fetches `GET /games/{id}/host-details`, hands the
     result in as `initialValues`, and this component seeds its state from it.
     Still pure-props — no fetch enters this file — and in edit mode the fields
     the backend's PUT whitelist refuses (format, question set, shuffle) are
@@ -114,7 +114,7 @@ export default function GameSetupDialog({
   refusal = null,
   /** Where the plan lives: the console's Billing section. */
   billingHref = '/admin?section=billing',
-  /** What GET /games/{id}?role=host returned — the host branch of get-game.js. */
+  /** What GET /games/{id}/host-details returned — get-game.js's host door. */
   initialValues = null,
   isFirstEngagement = true,
   eventTitle = '',
