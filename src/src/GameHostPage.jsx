@@ -5820,6 +5820,20 @@ Focus on actionable business strategy insights.`;
       return { heading: 'Comments', body: String(roundComments.length) };
     }
     /*
+      OWNER'S RULING (26 Sep 2026): a player's own "Feedback" button posts a
+      comment on any RESULTS phase, not only once the host opens the feedback
+      beat (comments.js's write gate). `roundComments` already refreshes
+      regardless of phase — the `commentPosted` socket handler above calls
+      `loadRoundCommentsRef.current()` unconditionally — so the only gap is
+      here: without this, a comment posted before the host ever requests
+      feedback has nowhere to show on the stage at all. Gated on there BEING
+      one, so a round with none still runs solo exactly as the block below
+      intends.
+    */
+    if ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && roundComments.length > 0) {
+      return { heading: 'Comments', body: String(roundComments.length) };
+    }
+    /*
       A SURVEY (s-01-collecting): FINISHED of joined — the one fraction — and
       beneath it how far through the form the room is, a row per question.
       The rows are a different fact from the fraction, which is why they
@@ -5846,15 +5860,25 @@ Focus on actionable business strategy insights.`;
   })();
 
   /*
-    WHAT ARRIVES ON THE WALL in a FEEDBACK round — the round's comments, text
-    and anchor only, never the author (RoomMeter.jsx). Gated on the session
-    setting so a host who wants the old count-only wall keeps it. The
-    featured one is whichever the host pressed last.
+    WHAT ARRIVES ON THE WALL — the round's comments, text and anchor only,
+    never the author (RoomMeter.jsx). Gated on the session setting so a host
+    who wants the old count-only wall keeps it. The featured one is whichever
+    the host pressed last.
+
+    NOT `hostPhase === 'FEEDBACK'` ALONE, since 26 Sep 2026: a player's own
+    Feedback button posts a comment on any RESULTS phase, and those arrivals
+    have to reach the stage the same way a beat-triggered one does (see the
+    `meter` block above for the matching change and the reasoning). The extra
+    `roundComments.length > 0` on the RESULTS/FIELD_NOTES arm keeps a round
+    with no comments running solo, exactly as it did before this ruling.
   */
-  const featuredComment = hostPhase === 'FEEDBACK'
+  const featuredComment = (hostPhase === 'FEEDBACK'
+    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && roundComments.length > 0))
     ? roundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
     : null;
-  const meterArrivals = hostPhase === 'FEEDBACK' && wallComments !== false
+  const meterArrivals = (hostPhase === 'FEEDBACK'
+    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && roundComments.length > 0))
+    && wallComments !== false
     ? { items: roundComments, onPick: handleFeatureComment, featuredId: featuredComment ? featuredComment.commentId : null }
     : null;
 

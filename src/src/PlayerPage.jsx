@@ -182,6 +182,24 @@ function PlayerPage() {
   const commentRefetchRef = useRef(null);
   const [feedbackNumber, setFeedbackNumber] = useState(null);
   const [feedbackComments, setFeedbackComments] = useState([]);
+  /*
+    THE PLAYER'S OWN FEEDBACK BUTTON — the owner's ruling, 26 Sep 2026: it
+    works on any round whose results are showing, without the host opening
+    feedback mode. Entirely separate from `feedbackRound` above, which is the
+    host-triggered, whole-room switch (`stageBeatChanged` / `GET
+    /feedback-round`) and is unaffected by any of this.
+
+    `myFeedbackSnapshot` holds the question and the responses AS THEY WERE the
+    moment the player pressed the button — not a live read of
+    `currentQuestion`/`answers`, which the page overwrites with the NEXT
+    round's data the instant the host advances. A player mid-comment must keep
+    rereading the round they are actually commenting on.
+  */
+  const [myFeedbackOpen, setMyFeedbackOpen] = useState(false);
+  const [myFeedbackNumber, setMyFeedbackNumber] = useState(null);
+  const [myFeedbackSnapshot, setMyFeedbackSnapshot] = useState(null);
+  const [myFeedbackComments, setMyFeedbackComments] = useState([]);
+  const [myFeedbackSummary, setMyFeedbackSummary] = useState(null);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -1133,6 +1151,118 @@ function PlayerPage() {
     }
     return result;
   };
+
+  /**
+   * WORKIE'S READ, FOR THE PLAYER'S OWN PANEL.
+   *
+   * Fetched from the public `GET /games/{id}/ai-summary` — never from the
+   * feedback round's stored REPORT row (`GET /feedback-round`), which only
+   * exists once the host has built it (`POST /report`, host-only, Cognito).
+   * The owner's ruling is that this button works without the host doing
+   * anything at all, so the panel cannot depend on a row only the host can
+   * create. A summary that has not been generated yet is not an error: the
+   * panel shows the round with no "AI summary" body, the same as any round
+   * `hasSummary()` already says no to.
+   */
+  const loadMyFeedbackSummary = async (padded) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(padded)}`,
+      );
+      if (!res.ok) { setMyFeedbackSummary(null); return; }
+      const data = await res.json();
+      setMyFeedbackSummary({
+        summaryText: data.summaryText || data.summary || '',
+        discussionQuestions: Array.isArray(data.discussionQuestions) ? data.discussionQuestions : [],
+        nextSteps: Array.isArray(data.nextSteps) ? data.nextSteps : [],
+        markdownResponse: data.markdownResponse || null,
+        personaName: data.personaName || null,
+        contextUsed: data.contextUsed || null,
+      });
+    } catch {
+      // Not fatal — the panel simply shows no AI summary, same as a round
+      // that never had one.
+      setMyFeedbackSummary(null);
+    }
+  };
+
+  /** Every comment already on this round, for the player's own panel — a
+   *  separate read from `loadComments` above (which serves the host-triggered
+   *  `feedbackRound`) so the two panels never fight over one piece of state. */
+  const loadMyFeedbackComments = async (padded) => {
+    const result = await fetchComments({ apiBase: API_BASE, gameId, questionNumber: padded });
+    if (result.ok) setMyFeedbackComments(result.comments);
+  };
+
+  /**
+   * OPEN THE PLAYER'S OWN FEEDBACK PANEL — the "Feedback" button on the
+   * ordinary results screen. See the state declarations above for why the
+   * question and the responses are snapshotted rather than read live.
+   */
+  const openMyFeedback = () => {
+    const match = String(gameState || '').match(/^RESULTS#(\d+)$/);
+    if (!match) return;
+    const padded = match[1];
+    const q = currentQuestion || {};
+    setMyFeedbackNumber(padded);
+    setMyFeedbackSnapshot({
+      title: q.title || 'This round',
+      detail: q.questionDetail || q.detail || '',
+      options: ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
+        .map((key) => q[key]).filter(Boolean),
+      answerDetails: q.answerDetails || '',
+      answers: Array.isArray(answers) ? answers : [],
+    });
+    setMyFeedbackComments([]);
+    setMyFeedbackSummary(null);
+    setMyFeedbackOpen(true);
+    loadMyFeedbackComments(padded);
+    loadMyFeedbackSummary(padded);
+  };
+
+  /** Closing returns the player to the results screen. Nothing is posted for
+   *  them — an unsent draft is simply dropped, the same as closing any other
+   *  composer without pressing Post. */
+  const closeMyFeedback = () => {
+    setMyFeedbackOpen(false);
+    setMyFeedbackNumber(null);
+    setMyFeedbackSnapshot(null);
+    setMyFeedbackComments([]);
+    setMyFeedbackSummary(null);
+  };
+
+  /** Post one comment from the player's OWN panel — the same shape as
+   *  `submitComment` above, kept separate because it writes to
+   *  `myFeedbackComments`, not `feedbackComments`. */
+  const submitMyFeedbackComment = async (draft) => {
+    const result = await postComment({
+      apiBase: API_BASE,
+      gameId,
+      playerName,
+      questionNumber: draft.questionNumber || myFeedbackNumber,
+      anchorKind: draft.anchorKind,
+      anchorRef: draft.anchorRef,
+      anchorLabel: draft.anchorLabel,
+      anchorExcerpt: draft.anchorExcerpt,
+      text: draft.text,
+    });
+    if (result.ok && result.comment) {
+      setMyFeedbackComments((current) => [...current, result.comment]);
+    }
+    return result;
+  };
+
+  /** The round object the player's own panel reads: the snapshot taken when
+   *  they opened it, plus whatever AI summary has loaded since. Built in the
+   *  shape `config/sessionHistory.js`'s `roundsFrom` produces, because
+   *  `RoundReport` (inside `FeedbackRoundPanel`) is written against that
+   *  shape. */
+  const myFeedbackRoundData = myFeedbackSnapshot ? {
+    number: myFeedbackNumber,
+    ordinal: parseInt(myFeedbackNumber, 10) || 0,
+    ...myFeedbackSnapshot,
+    aiSummary: myFeedbackSummary,
+  } : null;
 
   // The ref exists so the once-registered socket handler can read the CURRENT
   // round number; this is the only thing that keeps the two in step.
@@ -2553,12 +2683,49 @@ function PlayerPage() {
   let dock = null;
   let body = null;
 
+  /* ------------------------------------------------ PLAYER-OWN FEEDBACK --
+     CHECKED FIRST, ahead of every gameState branch below — including ENDED —
+     and that is deliberate. The round can leave RESULTS (the host advances)
+     while the player is still writing, and the composer's own draft text
+     lives inside `FeedbackRoundPanel`'s local state: it only survives if that
+     component stays mounted. Falling through to whatever `gameState` says
+     next would unmount it and silently throw the draft away — exactly what
+     the owner's ruling forbids ("it never silently discards a comment"). So
+     this stays up until the PLAYER closes it, never until the game moves on
+     under them.
+
+     Independent of `feedbackRound`/the branch below that reads it: that one is
+     the host-triggered, whole-room switch and is unaffected by any of this. */
+  if (myFeedbackOpen) {
+    volume = 'act';
+    ctx = position ? `${position} · Feedback` : 'Feedback';
+    const stillOpen = gameState === `RESULTS#${myFeedbackNumber}`;
+    body = (
+      <>
+        {!stillOpen && (
+          <p className="plr-lede plr-muted" role="status">
+            This round has moved on. What you have written is still here — post it, or close
+            this to go back.
+          </p>
+        )}
+        <FeedbackRoundPanel
+          round={myFeedbackRoundData}
+          questionNumber={myFeedbackNumber}
+          comments={myFeedbackComments}
+          onSubmit={submitMyFeedbackComment}
+        />
+        <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
+          Close
+        </button>
+      </>
+    );
+
   /* ---------------------------------------------------------------- ENDED --
      BEFORE `isWaitingState`, which used to swallow it: `isWaitingState` is
      true for anything that is not ASK#/VOTE#/RESULTS#, so a finished session
      rendered "✅ You're in! / Waiting for the game to start… / ● Ready to
      play" and left the player there permanently (INVENTORY §7.2). */
-  if (gameState === 'ENDED') {
+  } else if (gameState === 'ENDED') {
     volume = 'watch';
     ctx = 'Session complete';
     centre = true;
@@ -3364,6 +3531,30 @@ function PlayerPage() {
         </>
       );
     }
+
+    /*
+      THE FEEDBACK BUTTON — every ordinary RESULTS screen gets one, trivia,
+      wavelength and call-and-answer alike. The owner's ruling, 26 Sep 2026:
+      it works on ANY round whose results are showing, without the host
+      opening feedback mode first — `comments.js`'s write gate now accepts a
+      comment whenever the session is on this round's RESULTS, and this is
+      the button that reaches it. Appended to whichever `body` the game-type
+      branch above built, rather than duplicated inside each of the three, so
+      the three cannot drift on whether they offer it.
+    */
+    body = (
+      <>
+        {body}
+        <button
+          type="button"
+          className="plr-btn plr-btn--ghost plr-feedback-btn"
+          onClick={openMyFeedback}
+        >
+          <Icon name="ChatCircleText" size={18} />
+          {' '}Feedback
+        </button>
+      </>
+    );
 
   /* --------------------------------------------- LOBBY / BETWEEN ROUNDS -- */
   } else {

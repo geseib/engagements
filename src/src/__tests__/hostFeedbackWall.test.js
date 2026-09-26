@@ -34,6 +34,36 @@ describe('the meter on FEEDBACK', () => {
   });
 });
 
+describe('arrivals do not depend on the feedback beat (owner\'s ruling, 26 Sep 2026)', () => {
+  // "a comment made this way appears in the stage's arrivals (RoomMeter) the
+  // same as a beat-triggered one" — the player's own Feedback button
+  // (PlayerPage.jsx) posts a comment on any RESULTS phase, and comments.js's
+  // write gate no longer requires the feedback beat. The stage side has to
+  // match: a comment posted before the host ever opens feedback must still
+  // reach the meter and the wall.
+  test('the meter counts comments on the ordinary RESULTS and FIELD_NOTES phases too, once there is one', () => {
+    const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
+    expect(meter).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+    // Gated on there being one — a round with no comments still runs solo.
+    expect(meter).toMatch(/hostPhase === 'FIELD_NOTES'\)\s*&&\s*roundComments\.length > 0\)/);
+  });
+
+  test('the arrivals themselves are not gated to FEEDBACK alone', () => {
+    const def = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
+    expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
+    expect(def).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+    expect(def).toMatch(/roundComments\.length > 0/);
+    // The session setting still governs whether they show at all.
+    expect(def).toMatch(/wallComments !== false/);
+  });
+
+  test('featuring a comment still works the same way outside the feedback beat', () => {
+    const def = SRC.slice(SRC.indexOf('const featuredComment'), SRC.indexOf(';', SRC.indexOf('const featuredComment')));
+    expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
+    expect(def).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+  });
+});
+
 describe('featuring', () => {
   test('goes through the client helper with the host\'s authFetch, then the socket refetches', () => {
     expect(SRC).toMatch(/import \{ fetchComments, featureComment \} from '\.\/utils\/commentsClient';/);
