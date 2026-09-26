@@ -504,6 +504,61 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  EventAgendaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-event-agenda'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/get-agenda.handler
+      Events:
+        GetEventAgenda:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/agenda
+            Method: get
+            # PUBLIC: an attendee has no account. The handler shows an open
+            # event's agenda and nothing an agenda does not need.
+      Policies:
+        # Opens the event's and its items' words for the public agenda.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ResolveJoinCodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-resolve-join-code'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/resolve-code.handler
+      Events:
+        ResolveJoinCode:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /join/{code}
+            Method: get
+            # PUBLIC: the join box asks it before anybody has an identity.
+      Policies:
+        # Opens an event's title for the join screen.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:

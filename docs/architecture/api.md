@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-149 routes across 7 groups. 128 carry the Cognito authorizer; 21 are public.
+159 routes across 9 groups. 136 carry the Cognito authorizer; 23 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -16,6 +16,20 @@ design, so those checks live in code. See `callerMayDriveSession` in
 `lambda-functions/game/tenant.js`, and note that `get-results.js` serves one
 public route and one authenticated route from the same handler, discriminating
 on `requestContext.routeKey`.
+
+## /events
+
+| Method | Path | Auth | Handler |
+|---|---|---|---|
+| GET | `/events` | **Cognito** | `lambda-functions/websocket/events/get-events.js` |
+| POST | `/events` | **Cognito** | `lambda-functions/websocket/events/create-event.js` |
+| GET | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/get-event.js` |
+| PUT | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/update-event.js` |
+| GET | `/events/{code}/agenda` | public | `lambda-functions/websocket/events/get-agenda.js` |
+| POST | `/events/{code}/items` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| PUT | `/events/{code}/items` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| DELETE | `/events/{code}/items/{itemId}` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| PUT | `/events/{code}/items/{itemId}` | **Cognito** | `lambda-functions/websocket/events/items.js` |
 
 ## /games
 
@@ -184,6 +198,12 @@ on `requestContext.routeKey`.
 | POST | `/admin/question-sets/{setId}/media/uploads` | **Cognito** | `lambda-functions/admin/media-upload-urls.js` |
 | DELETE | `/admin/question-sets/{setId}/versions/{version}` | **Cognito** | `lambda-functions/admin/delete-set-version.js` |
 | POST | `/admin/question-sets/{setId}/versions/{version}/promote` | **Cognito** | `lambda-functions/admin/promote-set-version.js` |
+
+## /join
+
+| Method | Path | Auth | Handler |
+|---|---|---|---|
+| GET | `/join/{code}` | public | `lambda-functions/websocket/events/resolve-code.js` |
 
 ## /platform
 
