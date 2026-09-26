@@ -537,6 +537,35 @@ exports.handler = async (event) => {
     // refusal above; the sentence is what the phone remote prints.
     if (isHostTransitionRoute(event)) {
       const gameState = await readGameState();
+
+      // THE SESSION HAS ALREADY ENDED.
+      //
+      // Task 4's mid-round End (2026-09-26 bug sweep) made ENDED reachable
+      // from ASK or VOTE, not only after the last round's results — before
+      // it, a close here could only ever find the session on CREATED or a
+      // live round. A close of that same round afterwards writes
+      // RESULTS#<asked> over ENDED, scores the round and broadcasts the
+      // transition: un-ending the session. The likely sender is the same
+      // stale second host screen the older-round guard just below exists
+      // for — a request already in flight, or HostRemote's poll landing
+      // after the host has already ended from the stage. 409 and nothing
+      // written, same spot and same style as that guard; the sentence is
+      // what the phone remote prints.
+      if (gameState?.State === 'ENDED') {
+        console.log(`🔒 Refusing to close round ${targetQuestionId} of ${gameId}: the session has ended`);
+        const reason = 'This session has ended.';
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: reason,
+            message: reason,
+            ended: true,
+            gameId,
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
       const onRound = Number(gameState?.LessonNumber) || 0;
       const askedRound = parseInt(String(targetQuestionId), 10);
       if (onRound > 0 && askedRound < onRound) {

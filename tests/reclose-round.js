@@ -23,6 +23,14 @@
  *   §2  wavelength: its stored-results path re-announces, and must not rewind.
  *   §3  scoring is idempotent per round on its own, even with the transition
  *       guard out of the way: the score row records the rounds it has counted.
+ *   §4  BUGSWEEP FINAL REVIEW, MINOR 3: closing the CURRENT round after the
+ *       session has ENDED must not un-end it. Task 4's mid-round End made
+ *       ENDED reachable from ASK or VOTE, not only after the last round's
+ *       results, so a close of that same round afterwards — a stale second
+ *       host screen (HostRemote polls /state every 2s), or a request already
+ *       in flight — would otherwise write RESULTS#<n> over ENDED, score the
+ *       round and broadcast resultsReady. The §1 guard does not catch this:
+ *       the round being closed is the CURRENT one, not an older one.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -240,6 +248,43 @@ async function expectRefused(label, questionNumber, { state, lesson, scores }) {
     assert.strictEqual(scoreOf('Ada'), 30);
     assert.deepStrictEqual([...scoreRow('Ada').scoredRounds].sort(), ['002', '003']);
   });
+
+  console.log('\n4. ending mid-round refuses a close of the round underneath it');
+  for (const gameType of ['trivia', 'call-and-answer']) {
+    const per = POINTS[gameType];
+    seedRoom(gameType);
+    askRound(gameType, 2);
+    // Simulate end-session.js / next-question.js's pool-dry path (session-end.js
+    // `endSession`): STATE.State -> ENDED, LessonNumber and CurrentQuestionId
+    // untouched — exactly what a mid-round End leaves behind.
+    Object.assign(stateRow(), { State: 'ENDED' });
+
+    const mark = table.log.length;
+    const framesBefore = sent.length;
+    const res = await closeRound(2);
+    let body = {};
+    try { body = JSON.parse(res.body); } catch { /* asserted below */ }
+
+    await check(`${gameType}: closing the current round after ENDED: 409`, () =>
+      assert.strictEqual(res.statusCode, 409, res.body));
+    await check(`${gameType}: the refusal says the session has ended, plainly`, () => {
+      assert.ok(typeof body.message === 'string' && body.message.trim(), 'message is a sentence');
+      assert.strictEqual(body.error, body.message, 'error and message carry the same sentence');
+      assert.match(body.message, /this session has ended/i);
+    });
+    await check(`${gameType}: nothing is written`, () => {
+      const writes = writesSince(mark);
+      assert.deepStrictEqual(writes.map((c) => `${c.type} ${(c.input.Key || c.input.Item || {}).SK}`), []);
+    });
+    await check(`${gameType}: STATE stays ENDED, not RESULTS#002`, () =>
+      assert.strictEqual(stateRow().State, 'ENDED'));
+    await check(`${gameType}: nobody's points move`, () => {
+      assert.strictEqual(scoreOf('Ada'), 0);
+      assert.strictEqual(scoreOf('Bo'), 0);
+    });
+    await check(`${gameType}: the room is not told anything`, () =>
+      assert.strictEqual(sent.length, framesBefore, JSON.stringify(sent.slice(framesBefore))));
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
