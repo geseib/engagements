@@ -609,10 +609,13 @@ function requiredGroupsForRoute(method, path) {
   // concrete path (the `rawPath` fallback carries a real id), and the handler
   // (game/survey-host.js) additionally asks callerMayDriveSession.
   //
-  // Only these two. The phone's own `GET /games/{gameId}/survey` stays public,
-  // and a prefix here would close it and 401 every participant.
+  // Only these two, PLUS `survey-results` (Phase 3): the frozen tallies once a
+  // survey closes, same reasoning — it carries the Cognito authorizer and
+  // would otherwise fall through to "GET + games is public" below. The phone's
+  // own `GET /games/{gameId}/survey` stays public, and a prefix here would
+  // close it and 401 every participant.
   // tests/session-control-routes-authorization.js holds both sides.
-  const SURVEY_HOST_READ = /^games\/[^/]+\/survey\/(progress|people)$/;
+  const SURVEY_HOST_READ = /^games\/[^/]+\/(survey\/(progress|people)|survey-results)$/;
   if (method === 'GET' && SURVEY_HOST_READ.test(path)) {
     return ['hosts', 'admins'];
   }

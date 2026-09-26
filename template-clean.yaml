@@ -3539,6 +3539,17 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
+        # The frozen tallies, once closed (game/survey-host.js `results()`).
+        # PLAN.md "Phase 3" names it with the hyphen, matching SURVEY#RESULTS'
+        # own SK rather than its siblings' /survey/<verb> shape.
+        SurveyResultsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey-results
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

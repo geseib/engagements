@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, QueryCommand, BatchGetCommand } = require('@aws-
 const { countParticipants } = require('./player-rows');
 const { callerOrgId, gamesIndexPk } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
+const { SURVEY_CLOSED } = require('./survey-names');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -97,10 +98,19 @@ function knowablePlayerCount(count, game) {
  * `State` is a DynamoDB RESERVED WORD, hence the `#st` alias — a bare `State`
  * in a ProjectionExpression is a validation error at runtime, which is the kind
  * of thing that passes every local test and fails on deploy.
+ *
+ * THE SAME READ ALSO ANSWERS "does this survey have results" — Task 3 fix
+ * round 1, 2026-09-26 feature sweep: the Sessions list needs to say whether a
+ * survey session is closed, so the history panel can offer "See the results"
+ * only then (mirrors survey-host.js `close()`: STATE moves to SURVEY#CLOSED
+ * the instant the results freeze, and stays closed through ENDED). Riding on
+ * this BatchGetItem rather than a second one — the whole point of the
+ * function is that a hundred sessions cost one call, not two per session.
  */
 const IN_FLIGHT = /^(ASK|VOTE)#/;
 async function roundsPlayedByGame(gameIds) {
-  const out = new Map();
+  const rounds = new Map();
+  const state = new Map();
   for (let i = 0; i < gameIds.length; i += BATCH_LIMIT) {
     const slice = gameIds.slice(i, i + BATCH_LIMIT);
     try {
@@ -118,15 +128,20 @@ async function roundsPlayedByGame(gameIds) {
         const id = String(item.PK).replace('GAME#', '');
         const served = Number(item.LessonNumber) || 0;
         const open = IN_FLIGHT.test(String(item.State || '')) ? 1 : 0;
-        out.set(id, Math.max(0, served - open));
+        rounds.set(id, Math.max(0, served - open));
+        state.set(id, String(item.State || ''));
       });
     } catch (error) {
-      // Leave this slice unset: the rows render an em dash rather than a zero.
+      // Leave this slice unset: the rows render an em dash rather than a zero,
+      // and surveyClosed reads as not-yet-closed rather than throwing.
       console.error(`⚠️ rounds batch failed for ${slice.length} sessions:`, error.message);
     }
   }
-  return out;
+  return { rounds, state };
 }
+
+/** Once frozen, a survey's results outlive COLLECTING through ENDED (survey-host.js). */
+const SURVEY_RESULTS_STATES = new Set([SURVEY_CLOSED, 'ENDED']);
 
 /** Player count per gameId. A failed or absent query leaves the id unset. */
 async function playerCountsByGame(gameIds) {
@@ -225,12 +240,16 @@ exports.handler = async (event) => {
     */
     const ids = games.map((game) => game.gameId);
     let rounds = new Map();
+    let states = new Map();
     let players = new Map();
     try {
-      [rounds, players] = await Promise.all([
+      const [roundsResult, playersResult] = await Promise.all([
         roundsPlayedByGame(ids),
         playerCountsByGame(ids),
       ]);
+      rounds = roundsResult.rounds;
+      states = roundsResult.state;
+      players = playersResult;
     } catch (error) {
       console.error('⚠️ session counts unavailable, returning the list without them:', error.message);
     }
@@ -240,6 +259,10 @@ exports.handler = async (event) => {
       game.playerCount = players.has(game.gameId)
         ? knowablePlayerCount(players.get(game.gameId), game)
         : null;
+      // Whether the Sessions list may offer "See the results" (Task 3 fix
+      // round 1). false, never null, on a failed or absent read: an unreadable
+      // state is not evidence of results existing.
+      game.surveyClosed = game.gameType === 'survey' && SURVEY_RESULTS_STATES.has(states.get(game.gameId));
     });
 
     console.log(`✅ Returning ${games.length} games for history`);

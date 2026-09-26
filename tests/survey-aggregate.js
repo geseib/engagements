@@ -574,7 +574,24 @@ check('an unknown kind or a question without a qid is carried as nothing, not th
  * with the reason; one that works a place, a share or a mean out for itself
  * does not — it moves into survey-aggregate.js instead.
  */
-const READERS = new Map([]);
+const READERS = new Map([
+  // Task 3, 2026-09-26 feature sweep: KindResult's per-kind renderers, fed by
+  // GET /games/{id}/survey-results (survey-host.js `results()`), which itself
+  // only relays what THIS module already computed onto SURVEY#RESULTS. Both
+  // files only format a value that is already sitting in `question.result` —
+  // `avgPlace[i].toFixed(1)`, `topTwo`% — never a division of their own.
+  //
+  // CORRECTED, review fix round 1: this comment used to claim the check below
+  // ("no survey file works out a mean of its own") still ran against a
+  // registered reader. It does not — that check's own filter is
+  // `!READERS.has(f)`, the identical exclusion this one uses, so registering a
+  // file here is silence on BOTH checks, not one. What actually holds these
+  // two safe is narrower and true: neither line divides anything — read the
+  // two files before adding a third entry here on the strength of this
+  // comment alone.
+  ['src/src/components/survey/results/RankResult.jsx', 'displays avgPlace and placeHist, computes neither'],
+  ['src/src/components/survey/results/RatingResult.jsx', 'displays topTwo, computes nothing'],
+]);
 
 const OWN = 'lambda-functions/game/survey-aggregate.js';
 function sourcesUnder(dir) {

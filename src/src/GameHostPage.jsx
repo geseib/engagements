@@ -22,6 +22,7 @@ import SessionHistoryPanel from './components/SessionHistoryPanel';
 import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
+import SurveyResultsPanel from './components/SurveyResultsPanel';
 import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
@@ -360,6 +361,24 @@ function GameHostPage() {
   // sessions that are not the one currently loaded.
   const [reportTarget, setReportTarget] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
+
+  /*
+    THE SURVEY'S RESULTS PANEL — Phase 3, 2026-09-26 feature sweep. Same
+    shape as the report's own state just above: `showSurveyResults` gates the
+    early return alone (never `&& surveyResultsData`, for the report's own
+    reason — GET /survey-results is fetched fresh on every open, and the
+    condition must not fall through to the stage while that is in flight).
+  */
+  const [showSurveyResults, setShowSurveyResults] = useState(false);
+  const [surveyResultsData, setSurveyResultsData] = useState(null);
+  const [surveyResultsStatus, setSurveyResultsStatus] = useState('idle');
+  const [surveyResultsError, setSurveyResultsError] = useState(null);
+  /**
+   * WHICH SESSION THE PANEL ABOVE IS SHOWING — { gameId, title } — fix round
+   * 2. Not `gameId`: the panel opens for any closed survey from the Sessions
+   * list, so Retry must name the session it fetched rather than the stage's.
+   */
+  const [surveyResultsTarget, setSurveyResultsTarget] = useState(null);
 
   /**
    * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
@@ -1139,6 +1158,11 @@ function GameHostPage() {
     loadingAIInsights: setLoadingAIInsights,
     showReport: setShowReport,
     reportData: setReportData,
+    showSurveyResults: setShowSurveyResults,
+    surveyResultsData: setSurveyResultsData,
+    surveyResultsStatus: setSurveyResultsStatus,
+    surveyResultsError: setSurveyResultsError,
+    surveyResultsTarget: setSurveyResultsTarget,
     eventTitle: setEventTitle,
     gameCreatedAt: setGameCreatedAt,
     lessonExpanded: setLessonExpanded,
@@ -4877,6 +4901,49 @@ Focus on actionable business strategy insights.`;
   };
 
   /**
+   * THE SURVEY RESULTS PANEL — GET /games/{id}/survey-results (Phase 3, the
+   * 2026-09-26 feature sweep). Mirrors generateReportForGame below: the shell
+   * shows its loading state first, since the route is a fetch with real
+   * latency, not a navigation.
+   *
+   * ONE FUNCTION, TWO CALLERS (Task 3 fix round 1): the live session's CLOSED/
+   * ENDED "See the results" control (runHostAction), and the Sessions list's
+   * "Results" row for any closed survey — SessionHistoryPanel's `onResults`,
+   * mirroring `onReport={generateReportForGame}` beside it. `setShowReportsModal
+   * (false)` is a no-op from the live-session caller (the modal is already
+   * closed) and closes the history list from the other, exactly as
+   * generateReportForGame does for Report.
+   *
+   * RECORDS ITS OWN ARGUMENTS AS THE TARGET (fix round 2) — never the page's
+   * `gameId`/`eventTitle`. Both callers already have the right session to
+   * hand it: runHostAction has the stage's own; the history row already
+   * carries the id and title of whichever survey the host clicked. Reading
+   * past `targetGameId` for the page's `gameId` here is exactly the bug this
+   * fixes — Retry (below) closes over THIS state, not the stage.
+   */
+  const loadSurveyResults = async (targetGameId, targetTitle = '') => {
+    setShowReportsModal(false);
+    setSurveyResultsTarget({ gameId: targetGameId, title: targetTitle });
+    setSurveyResultsData(null);
+    setSurveyResultsError(null);
+    setSurveyResultsStatus('loading');
+    setShowSurveyResults(true);
+    try {
+      const res = await authFetch(`${API_BASE}games/${targetGameId}/survey-results`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `The survey results could not be loaded (${res.status}).`);
+      }
+      setSurveyResultsData(data);
+      setSurveyResultsStatus('ready');
+    } catch (error) {
+      console.error('Error loading survey results:', error);
+      setSurveyResultsError(error.message || 'The survey results could not be loaded.');
+      setSurveyResultsStatus('error');
+    }
+  };
+
+  /**
    * THE REPORT BUTTON OPENS THE REPORT.
    *
    * It used to open the games-history list, from which the host picked the
@@ -5162,7 +5229,7 @@ Focus on actionable business strategy insights.`;
   useEffect(() => {
     if (!autoMode) return undefined;
     if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
-        || showReport || showReportsModal || editTarget) return undefined;
+        || showReport || showSurveyResults || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
       lessonExpanded, isLoadingData, qrMode,
@@ -5225,7 +5292,7 @@ Focus on actionable business strategy insights.`;
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
-    showNewGameDialog, showReport, showReportsModal, editTarget,
+    showNewGameDialog, showReport, showSurveyResults, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open]);
 
@@ -5254,7 +5321,7 @@ Focus on actionable business strategy insights.`;
     // ...and never over a surface that replaced the stage — there is no stage
     // for the board to cover.
     enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
-      && !showNewGameDialog && !showReport && !editTarget && Boolean(gameId),
+      && !showNewGameDialog && !showReport && !showSurveyResults && !editTarget && Boolean(gameId),
     open: scoreboard.open,
     canOpen: scoreboardAvail.enabled,
     onOpen: () => publishScoreboard({ open: true }),
@@ -5351,6 +5418,25 @@ Focus on actionable business strategy insights.`;
     );
   }
 
+  // Same reasoning as `showReport` just above: gated on the flag alone, never
+  // `&& surveyResultsData`, so the window between "See the results" and the
+  // fetch landing shows the panel's own loading state rather than falling
+  // through to the stage.
+  if (showSurveyResults) {
+    return (
+      <SurveyResultsPanel
+        results={surveyResultsData}
+        status={surveyResultsStatus}
+        error={surveyResultsError}
+        title={surveyResultsTarget ? surveyResultsTarget.title : ''}
+        onClose={() => { setShowSurveyResults(false); setSurveyResultsStatus('idle'); }}
+        onRetry={surveyResultsTarget
+          ? () => loadSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title)
+          : null}
+      />
+    );
+  }
+
 
   /*
     THE EDIT DIALOG — the same <GameSetupDialog>, pointed at an existing
@@ -5420,6 +5506,7 @@ Focus on actionable business strategy insights.`;
               createdAt: session.createdAt,
             })}
             onReport={generateReportForGame}
+            onResults={loadSurveyResults}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
@@ -5745,6 +5832,9 @@ Focus on actionable business strategy insights.`;
         break;
       case HOST_INTENTS.END_SURVEY:
         endSurveyNow();
+        break;
+      case HOST_INTENTS.SURVEY_RESULTS:
+        loadSurveyResults(gameId, eventTitle);
         break;
       case HOST_INTENTS.LEAVE:
         /*
