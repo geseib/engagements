@@ -55,10 +55,21 @@
  * of that stamp — this route asks the same question: if the row carries a
  * `ClientId`, the request must present the same one, or it is refused exactly
  * as a non-member is. A row with no stamped `ClientId` (joined before this
- * existed, or by a client that could not mint one) proves nothing either way,
- * so it is treated as the pre-existing rows in `get-answers.js` are: allowed
- * once membership itself is established, with nothing stronger claimed. THIS
- * is now the route's own, owned protection — it does not depend on
+ * existed, or by a client that could not mint one) proves nothing either way
+ * — and here, unlike in `get-answers.js`, that is accepted rather than
+ * refused: membership alone is enough for a row with no proof to check
+ * against. That is a real divergence, corrected here since fix round 2
+ * mislabeled it as the same posture. `get-answers.js` FAILS CLOSED for
+ * exactly this case: `identityProven` is `false` whenever `storedClientId`
+ * is falsy, no matter what the request supplies, so an unowned row's answer
+ * TEXT is withheld (`answerWithheld: true`) and only the already-public
+ * `hasAnswer` fact is returned. This route does the opposite for that same
+ * unowned row: the write is ALLOWED, not withheld. The owner's ruling this
+ * fix round was specifically to accept a joined player regardless of whether
+ * their row happens to carry proof, not to reach `get-answers.js`'s tighter
+ * no-proof-means-withhold posture for comments — if that should change, it
+ * is a deliberate decision to make here, not an oversight to quietly match.
+ * THIS is now the route's own, owned protection — it does not depend on
  * `stage-beat`, `feedback`, or any other route staying correct.
  *
  * WHAT IS DELIBERATELY *NOT* ADDED HERE, still. Not full participant identity
@@ -131,10 +142,17 @@
  * switch — the one that pulls every phone in the session into
  * `FeedbackRoundPanel` at once — and the owner was explicit that mode "stays
  * exactly as it is." A player's own button opens the same panel for
- * themselves alone, by a different route entirely (PlayerPage.jsx builds the
- * round from data it already has, plus the public `GET /ai-summary`, never
- * from `GET /feedback-round`), so loosening the WRITE gate here does not touch
- * the whole-room switch at all.
+ * themselves alone, by a different route entirely, never `GET
+ * /feedback-round`: PlayerPage.jsx snapshots the question it already has,
+ * fetches this round's ranked responses itself from the public `POST
+ * /games/get-results` (confirmed by fix round 2's re-review: the same read
+ * the ordinary results screen already makes, never the host-only transition
+ * path), fetches Workie's read from the public `GET /games/{id}/ai-summary`,
+ * and reads what has already been said through this file's own public `GET
+ * /games/{gameId}/comments`. So loosening the WRITE gate here does not touch
+ * the whole-room switch at all, and confirms names print on the player's own
+ * panel exactly as they do on the host-triggered one — same component, same
+ * read, redacted the same way for a round `AuthorsRevealed` has not reached.
  *
  * ── HTTP, NOT THE WEBSOCKET ANSWER PATH ────────────────────────────────────
  *
@@ -349,8 +367,13 @@ async function writeComment(gameId, body) {
     check `get-answers.js`'s `getOwnAnswer` already makes (`identityProven`) —
     so typing somebody else's already-claimed name is refused too. A row with
     no stamped `ClientId` (joined before this existed) proves nothing either
-    way and is treated as `get-answers.js` treats it: membership alone is
-    enough, exactly as before this check existed for everyone.
+    way, and here membership alone is enough for it — NOT what `get-answers.js`
+    does with the same fact: it fails closed (`identityProven` is always false
+    with no stored id to check, so the answer TEXT is withheld) rather than
+    allowing anything. This route allows the WRITE instead. That is a
+    deliberate choice for this fix round — the owner's ruling was to accept a
+    joined player whether or not their row happens to carry proof — not a
+    claim that the two routes agree; see the header for the full comparison.
   */
   const playerRow = (await db.send(new GetCommand({
     TableName: process.env.TABLE_NAME,
