@@ -422,7 +422,10 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
   });
 
   reset();
-  const editable = await createFor(ACME, { eventTitle: 'Before' });
+  // Born with an access code: a switch to private is refused with no code on
+  // the row (tests/update-game.js covers that refusal), and this test is about
+  // the mirror, not about that gate.
+  const editable = await createFor(ACME, { eventTitle: 'Before', visibility: 'private', accessCode: '1234' });
   // rejects: update-game mirroring Title/Visibility onto the old global key —
   // the edit lands, and every list goes on showing the old title.
   await check('an edit is mirrored onto the org\'s index row', async () => {

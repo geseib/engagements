@@ -145,7 +145,10 @@ exports.handler = async (event) => {
       db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-        ProjectionExpression: 'orgId, GameType, OpenedAt'
+        // AccessCode is projected read-only, to check a switch to private
+        // against it below — this handler never accepts a new one (see the
+        // whitelist note on accessCode above).
+        ProjectionExpression: 'orgId, GameType, OpenedAt, AccessCode'
       })),
     ]);
     const ownerOrgId = (gameMeta.Item && gameMeta.Item.orgId) || '';
@@ -268,6 +271,16 @@ exports.handler = async (event) => {
       if (!VISIBILITIES.includes(body.visibility)) {
         return reply(400, {
           error: `Unknown visibility "${body.visibility}". Expected one of: ${VISIBILITIES.join(', ')}`
+        });
+      }
+      // A private session with no access code is unjoinable — session-gate.js
+      // (the gate every join runs through) has nothing to check the phone's
+      // code against and answers 500. This handler never accepts a new
+      // AccessCode (see the whitelist note above), so the only code a switch
+      // to private can rely on is one already on the row.
+      if (body.visibility === 'private' && !(gameMeta.Item && gameMeta.Item.AccessCode)) {
+        return reply(400, {
+          error: 'A private session needs an access code. Set one when the session is created.'
         });
       }
       names['#visibility'] = 'Visibility';
