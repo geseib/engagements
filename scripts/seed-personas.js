@@ -56,6 +56,7 @@ const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
       tagline: persona.tagline,
       icon: persona.icon,
       voice: persona.voice,
+      ...(persona.requiredAddition ? { requiredAddition: persona.requiredAddition } : {}),
       gameTypes: persona.gameTypes || ['all'],
       isDefault: persona.isDefault === true,
       sortOrder: persona.sortOrder ?? 500,

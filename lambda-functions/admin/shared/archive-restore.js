@@ -22,12 +22,12 @@
  * is therefore the first EMPTY version number at or after the predicted one, and images are
  * copied before any row is written. Debris is stepped over, never deleted or overwritten.
  */
-const { GetCommand, PutCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const tenant = require('./tenant');
 const {
-  setRef, setPartition, setMetadataKey, queryPartition, batchPutItems, copyPartition,
-  knownVersions, nextVersion, toVersion,
+  setRef, setPartition, setMetadataKey, queryPartition, batchPutItems,
+  knownVersions, nextVersion, toVersion, firstEmptyVersion,
 } = require('./set-version');
 const { batchDeleteKeys } = require('./ddb-delete');
 const { promptKey, promptBodyKey } = require('./prompt-access');
@@ -37,30 +37,6 @@ const { copyMediaIn } = require('./archive-media');
 const snap = require('./archive-snapshot');
 
 const nowIso = (deps) => (deps.now ? deps.now() : new Date().toISOString());
-
-/** How many version numbers a restore steps over before refusing. delete-question-set.js sweeps five ahead. */
-const VERSION_PROBES = 10;
-
-/**
- * The first version number at or after `from` whose content partition holds no rows.
- *
- * One Query with Limit 1 per candidate. Refuses rather than guesses when every candidate is
- * occupied: the rows are somebody's evidence of an unfinished write, and a restore must never
- * delete or overwrite them.
- */
-async function firstEmptyVersion(db, tableName, ref, from) {
-  for (let n = from; n < from + VERSION_PROBES; n += 1) {
-    const res = await db.send(new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: { ':pk': setPartition(ref, n) },
-      Limit: 1,
-    }));
-    if (((res && res.Items) || []).length === 0) return n;
-  }
-  throw new Error(`Versions ${from} to ${from + VERSION_PROBES - 1} of "${ref.setId}" all already hold rows from `
-    + 'unfinished writes, so the restore was not written. Delete the set\'s stray versions or retry.');
-}
 
 /** The prompt a restored set should name on THIS tier, or '' for none. */
 async function resolvePromptLink(deps, envelope) {
@@ -118,9 +94,18 @@ async function restoreSetSnapshot(deps, envelope, ctx) {
     } else {
       const legacyPk = setPartition(ref, null);
       const { items: legacyRows } = await queryPartition(db, tableName, legacyPk);
-      if (legacyRows.length > 0) {
+      // EXCEPT THE REVIEW AND PUBLISHED ROWS, which are not content. A set that was checked or
+      // shared before it was ever versioned carries them in this same legacy partition
+      // (set-review.js resolves a legacy ref's review/published key to the unsuffixed
+      // partition), and copying them onto the snapshot would misdescribe it: the snapshot's own
+      // REVIEW row is per-version, and a stray PUBLISHED marker would claim it was already
+      // shared. copy-question-set.js and upload-questions.js's own legacy-replace path skip
+      // them for the same reason.
+      const publishableLegacyRows = legacyRows.filter((row) => !snap.LIFECYCLE_SKS.includes(String(row.SK)));
+      if (publishableLegacyRows.length > 0) {
         const legacyVersion = await firstEmptyVersion(db, tableName, ref, 1);
-        await copyPartition(db, tableName, legacyPk, setPartition(ref, legacyVersion));
+        const legacyCopies = publishableLegacyRows.map((row) => ({ ...row, PK: setPartition(ref, legacyVersion) }));
+        await batchPutItems(db, tableName, legacyCopies);
         seed = [{
           version: legacyVersion,
           createdAt: existing.createdAt || now,

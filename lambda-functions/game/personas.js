@@ -39,6 +39,11 @@ const {
  * this array is the starting point, not the runtime source of truth.
  *
  * `icon` must be a name present in src/src/components/Icon.jsx.
+ *
+ * `requiredAddition` is the one concrete thing the voice must put in the
+ * reply, finishing the sentence "the reply must include …". The voice alone is
+ * not heard — see buildVoiceDirective. The house default has none: it is the
+ * register the templates already write in.
  */
 const SEED_PERSONAS = [
   {
@@ -61,6 +66,7 @@ const SEED_PERSONAS = [
     icon: 'Confetti',
     sortOrder: 20,
     gameTypes: ['all'],
+    requiredAddition: 'at least one genuinely funny line about a specific answer, aimed at the idea and never at the person who wrote it',
     voice:
       'You are a quick-witted host with genuinely good comic timing. Be funny about the ANSWERS, ' +
       'never at the expense of the people who wrote them — punch at the idea, never the person. ' +
@@ -74,6 +80,7 @@ const SEED_PERSONAS = [
     icon: 'ChartLineUp',
     sortOrder: 30,
     gameTypes: ['all'],
+    requiredAddition: 'one concrete recommendation, drawn from a specific answer, stated as the single thing the organisation should do next',
     voice:
       'You are a seasoned advisor briefing a leadership team. Direct and specific. Draw the ' +
       'through-line between what people said and what the organisation should actually do. ' +
@@ -87,6 +94,7 @@ const SEED_PERSONAS = [
     icon: 'Target',
     sortOrder: 40,
     gameTypes: ['all'],
+    requiredAddition: 'at least one question put back to the room about something its answers have not yet examined, or where it agreed too easily',
     voice:
       'You are a coach, not a consultant. You are more interested in what the group has not yet ' +
       'examined than in giving them answers. Reflect patterns back as questions. Be encouraging ' +
@@ -99,6 +107,7 @@ const SEED_PERSONAS = [
     icon: 'Books',
     sortOrder: 50,
     gameTypes: ['all'],
+    requiredAddition: 'ONE relevant fact, origin story or historical precedent from general knowledge, tied to one answer the room wrote',
     voice:
       'You are a knowledgeable enthusiast who cannot resist good context. Connect what the group ' +
       'said to a relevant fact, origin story or precedent — one, chosen well, not a list. Only ' +
@@ -112,6 +121,7 @@ const SEED_PERSONAS = [
     icon: 'Trophy',
     sortOrder: 60,
     gameTypes: ['all'],
+    requiredAddition: 'at least one line called as live play-by-play, present tense and punchy, about the leading answer or the standings',
     voice:
       'You are calling this session like a live sports broadcast. High energy, present tense, ' +
       'short punchy sentences. Treat the standings and the winning answer as the drama they are. ' +
@@ -125,6 +135,7 @@ const SEED_PERSONAS = [
     icon: 'MagnifyingGlass',
     sortOrder: 70,
     gameTypes: ['all'],
+    requiredAddition: 'one challenge to the assumption doing the most work in the leading answer, after saying what is genuinely good in it',
     voice:
       'You are the constructive dissenter in the room. Take the group\'s answers seriously enough ' +
       'to test them: what assumption is doing the heavy lifting, what would have to be true, what ' +
@@ -138,6 +149,7 @@ const SEED_PERSONAS = [
     icon: 'ChatCircleText',
     sortOrder: 80,
     gameTypes: ['all'],
+    requiredAddition: 'one concrete, human image taken from the answers, which the rest of the reply builds on',
     voice:
       'You find the story in what the group said. Open with the most human detail in the responses, ' +
       'then widen out to what it says about this team. Concrete images over abstractions. You are ' +
@@ -165,6 +177,7 @@ const SEED_PERSONAS = [
     icon: 'Microphone',
     sortOrder: 90,
     gameTypes: ['trivia'],
+    requiredAddition: 'the two hosts\' patter, with every spoken line labeled **Nikki:** or **Dez:**',
     voice:
       'You are TWO music-television VJs co-hosting a trivia round, in the style of early MTV.\n\n' +
       'NIKKI VOX was there. She has the authority of someone who stood in the room while it ' +
@@ -228,6 +241,7 @@ const SEED_PERSONAS = [
     icon: 'ListChecks',
     sortOrder: 100,
     gameTypes: ['call-and-answer', 'poll'],
+    requiredAddition: 'the disagreement named in both sides\' own words, and one recommendation with a named owner',
     voice:
       'You are the advisor a working team keeps around because you tell them the truth about ' +
       'their own meeting. Direct, plain, unhurried, and specific.\n\n' +
@@ -265,6 +279,7 @@ const SEED_PERSONAS = [
     icon: 'Waveform',
     sortOrder: 110,
     gameTypes: ['wavelength'],
+    requiredAddition: 'at least one word that only one person reached for, named as where different experience shows',
     voice: [
       'You are the person who notices that everyone used the same word and meant slightly '
       + 'different things by it.',
@@ -530,6 +545,60 @@ const buildHostDirective = ({ hostInstructions, eventDetails } = {}) => {
 };
 
 /**
+ * THE VOICE'S REQUIRED ADDITION — why picking a persona changes the reply.
+ *
+ * The voice rides at the top of the prompt, and every default template follows
+ * it with an identity of its own and rule 1: "Every claim comes from the
+ * material listed at the end… You know nothing else about this room." Haiku
+ * obeys the specific rule over the general voice — games 1935 and 4567 again,
+ * this time for the persona. Measured on dev's live default Workie, 2026-09-24,
+ * Haiku 4.5, six runs each, counting replies from The Historian with a fact:
+ *
+ *   the prompt as it was                                  0/6
+ *   plus a PERMISSION to use general knowledge            0/6
+ *   plus the voice restated after the contract            1/6
+ *   plus a concrete required addition, in this shape      6/6
+ *
+ * A FACT is heard when it is asked for as something CHECKABLE, stated after
+ * the contract as part of the format, with a self-check — the shape
+ * buildHostDirective found for the host's instructions. A TONE is not, yet:
+ * against the same Workie The Comedian made no joke in 4 of 4 before this and
+ * 4 of 4 after, and The Sports Commentator gave no play-by-play in 4 of 4
+ * after. The template's own identity ("You are reading back one round…") and
+ * its fourteen rules still outweigh a register. The additions cost those
+ * voices nothing, and stay for when that is fixed.
+ *
+ * Rule 1 is widened here for general knowledge of the world and nothing else:
+ * what the room wrote, voted and counted still comes only from the material.
+ * The facts come at a measured cost — most Haiku runs above tied a real event
+ * to an embellished detail — and the owner chose to ship them on Haiku
+ * knowing that. A voice's own tighter limits (the VJs never state a chart
+ * position) still hold.
+ *
+ * BEFORE the host's additions, so what the host asked for this session stays
+ * the last word before the briefing. '' when the voice asks for nothing —
+ * the inferred voice, a context-as-voice, or the house default.
+ */
+const buildVoiceDirective = (persona) => {
+  const addition = String((persona && persona.requiredAddition) || '').trim();
+  if (!addition) return '';
+  const name = persona.name || persona.personaId || 'the chosen voice';
+  return (
+    "THE VOICE'S REQUIRED ADDITION — a requirement of the FORMAT block above, identical in force to the headings. " +
+    `This room's voice is ${name}, and the reply must include ${addition}. ` +
+    'Put it inside whichever section it sharpens most; do not add a heading for it.\n' +
+    'The rules above that limit you to "the material listed at the end", and to numbers "you can copy from that ' +
+    'material", govern what you say about THIS ROOM: what people wrote, how they voted, the counts, and this ' +
+    'organisation. They do not forbid general knowledge of the world. When you use it, state only what you are ' +
+    'confident is true, connect it to one answer rather than stretching it to fit them all, never present it as ' +
+    'something the room said, and never contradict the correct answer or any reveal printed in the material. ' +
+    'Where the voice itself sets tighter limits on what you may state, those limits hold.\n' +
+    'A reply without it is malformed, exactly as a misspelled heading would be. Before you reply, re-read it and ' +
+    'confirm it is there.'
+  );
+};
+
+/**
  * THE BRIEFING LAYER — a Call & Answer session's document summary, the last
  * thing in Workie's prompt (docs/design/session-setup-redesign, page 40, word
  * for word; RATIONALE §c "How the briefing enters Workie's prompt").
@@ -573,12 +642,14 @@ const buildBriefingLayer = ({ briefing } = {}) => {
 
 /**
  * A prompt with its briefing layer taken out, for anything that RETURNS a
- * prompt on a route participants can call. GET /games/{id}/ai-summary has no
- * authorizer — every phone reads it — and ?debug=true hands back the prompt
- * Workie was given. The briefing is the host's private summary of a customer's
- * document ("participants never see it", RATIONALE §c), so it is withheld
- * there. The layer is always last (buildBriefingLayer), so everything from its
- * heading to the end goes; the prompt before it is untouched.
+ * prompt. ?debug=true hands back the prompt Workie was given — since
+ * 2026-09-25 only on GET /games/{id}/ai-summary/host, to the session's own
+ * host; the public route refuses it (get-ai-summary.js refuseUnlessHost). The
+ * briefing is the host's private summary of a customer's document
+ * ("participants never see it", RATIONALE §c), so it stays withheld from the
+ * echo as a second line. The layer is always last (buildBriefingLayer), so
+ * everything from its heading to the end goes; the prompt before it is
+ * untouched.
  */
 const withholdBriefing = (prompt) => {
   const s = String(prompt ?? '');
@@ -586,6 +657,57 @@ const withholdBriefing = (prompt) => {
   if (at === -1) return s;
   return `${s.slice(0, at)}THE BRIEFING — withheld. The host's briefing is part of Workie's prompt, but this route never returns it.`;
 };
+
+/**
+ * The one label Background travels under, in the injected block and in {contextSections}.
+ *
+ * HERE, not beside buildContextBlock: tests/briefing.js reads everything from
+ * `const resolvePersona` to `const buildContextBlock` as the persona chain and
+ * holds it free of the word "briefing", which HONESTY_RULE's note must use.
+ */
+const BACKGROUND_LABEL = 'BACKGROUND ON THIS QUESTION (from the set\'s author, not something the room said): ';
+const backgroundLine = (text) => {
+  const t = typeof text === 'string' ? text.trim() : '';
+  return t ? `${BACKGROUND_LABEL}${t}` : '';
+};
+
+/**
+ * A prompt (or one template variable) with the question's Background taken
+ * out, for anything that RETURNS it — the same job withholdBriefing does for
+ * the briefing. ?debug=true and ?promptDebug=true hand back the prompt Workie
+ * was given and its variables; since 2026-09-25 only on GET
+ * /games/{id}/ai-summary/host, to the session's own host (get-ai-summary.js
+ * refuseUnlessHost). The Background is "never shown to players"
+ * (question-background spec §1), and the question's REF row exists from ASK,
+ * so it stays withheld from the echo as a second line behind that gate.
+ *
+ * BY VALUE, because the Background has no fixed position: it rides the
+ * injected block, {contextSections}, or wherever a template put {background}.
+ * Every occurrence of the value goes, then — as a fallback for a value the
+ * variable substitution changed after it was placed — the rest of any
+ * labelled line. The model's own prompt is never passed through this.
+ */
+const BACKGROUND_WITHHELD = "[withheld — the question's Background is part of Workie's prompt, but this route never returns it]";
+const BACKGROUND_LABELLED_LINE = new RegExp(
+  `^(${BACKGROUND_LABEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}).*$`, 'gm');
+const withholdBackground = (text, background) => {
+  const s = String(text ?? '');
+  const value = typeof background === 'string' ? background.trim() : '';
+  if (!value) return s;
+  return s.split(value).join(BACKGROUND_WITHHELD)
+    .replace(BACKGROUND_LABELLED_LINE, (line, label) => `${label}${BACKGROUND_WITHHELD}`);
+};
+
+/**
+ * ONE HONESTY RULE, ON EVERY PROMPT (question-background spec §3). Appended by
+ * get-ai-summary.js after the host's additions and before the briefing, so it is
+ * among the last words the model reads whatever the template says — and
+ * withholdBriefing above, which cuts from the briefing's heading to the end,
+ * never takes it with it.
+ */
+const HONESTY_RULE = 'Facts come from the material above, from what the room said, or from general knowledge '
+  + 'you are certain of. Never invent numbers, names, quotations, or anything about this organisation or event. '
+  + 'When something you would like is missing, work with what you have and do not mention that it is missing.';
 
 /**
  * Resolve which voice to use.
@@ -628,7 +750,16 @@ const resolvePersona = async ({
       console.warn(`⚠️ PERSONA: ${id} is inactive — falling through`);
       return null;
     }
-    return { source, personaId: record.personaId || id, name: record.name || id, voice: record.voice, inferred: false };
+    const personaId = record.personaId || id;
+    // The rows on every tier were seeded before `requiredAddition` existed and
+    // nothing but scripts/seed-personas.js writes them, so a row without one
+    // takes the seed's. A row that carries its own wins.
+    const seeded = SEED_PERSONAS.find((p) => p.personaId === personaId);
+    const requiredAddition = record.requiredAddition || (seeded && seeded.requiredAddition) || '';
+    return {
+      source, personaId, name: record.name || id, voice: record.voice, inferred: false,
+      ...(requiredAddition ? { requiredAddition } : {}),
+    };
   };
 
   const fromHost = await tryPersona(hostPersonaId, 'host');
@@ -708,8 +839,12 @@ const resolvePersona = async ({
  *   eventDetails        what this session IS (the "extra info about the event")
  *   hostInstructions    what the host wants from the AI, in their words
  *   questionSetContext  what the set's author wanted every session to know
+ *   questionBackground  this question's Background: facts and angles its author
+ *                       wrote for Workie (question-background spec §3). The
+ *                       caller passes '' when the template places {background}
+ *                       itself, so the material is never said twice.
  */
-const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext } = {}) => {
+const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext, questionBackground } = {}) => {
   const lines = [];
   if (eventDetails && String(eventDetails).trim()) {
     lines.push(`ABOUT THIS SESSION: ${String(eventDetails).trim()}`);
@@ -720,6 +855,8 @@ const buildContextBlock = ({ eventDetails, hostInstructions, questionSetContext 
   if (questionSetContext && String(questionSetContext).trim()) {
     lines.push(`FROM THE QUESTION SET'S AUTHOR: ${String(questionSetContext).trim()}`);
   }
+  const bg = backgroundLine(questionBackground);
+  if (bg) lines.push(bg);
   if (!lines.length) return '';
   return `SESSION CONTEXT — weave this into your reading of the room:\n${lines.join('\n')}`;
 };
@@ -735,6 +872,9 @@ module.exports = {
   SEED_PERSONAS,
   INFERRED_VOICE,
   buildContextBlock,
+  backgroundLine,
+  withholdBackground,
+  HONESTY_RULE,
   DEFAULT_OUTPUT_SECTIONS,
   normalizeOutputSections,
   resolveOutputSections,
@@ -744,6 +884,7 @@ module.exports = {
   OPENING_MOVES,
   pickOpeningMove,
   buildHostDirective,
+  buildVoiceDirective,
   buildBriefingLayer,
   withholdBriefing,
   buildPromptPreamble,

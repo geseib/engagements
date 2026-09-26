@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './AIPromptManager.css';
 import { authFetch } from '../auth/authFetch';
-import { normalizeGameType } from '../config/gameTypes';
+import { normalizeGameType, gameTypeLabel } from '../config/gameTypes';
 import Icon from './Icon';
 import PromptLibraryPanel from './PromptLibraryPanel';
+import PromptReadOnlyView, { PROMPTS_READ_ONLY_NOTE } from './PromptReadOnlyView';
 import StatusMessage from './StatusMessage';
 
 const API_BASE = window.API_BASE;
@@ -56,8 +57,15 @@ const GAME_TYPE_OPTIONS = [
   { value: 'wavelength', label: 'Wavelength' }
 ];
 
-function AIGenerationPromptEditor() {
+/**
+ * `readOnly` — outside Engage mode, where no prompt can be changed (owner,
+ * 2026-09-24; config/consoleSections.js `promptsReadOnlyFor`). The panel gets
+ * no Create, Edit or status handler, so it draws none, and a row opens in
+ * PromptReadOnlyView.
+ */
+function AIGenerationPromptEditor({ readOnly = false }) {
   const [prompts, setPrompts] = useState([]);
+  const [viewingPrompt, setViewingPrompt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPrompt, setSelectedPrompt] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -418,6 +426,11 @@ function AIGenerationPromptEditor() {
           A generation prompt is the instruction the AI is given when it writes a new question
           set. Each engagement type and scenario has one.
         </p>
+        {readOnly && (
+          <p className="pgen-readonly-note" data-testid="pgen-readonly-note">
+            {PROMPTS_READ_ONLY_NOTE}
+          </p>
+        )}
       </div>
 
       {notice && (
@@ -456,10 +469,31 @@ function AIGenerationPromptEditor() {
             + 'question set. Until one exists for an engagement type and scenario, the '
             + 'builder falls back to the template compiled into the code.'
           }
-          onEdit={handleEditPrompt}
-          onCreate={handleCreateNew}
-          onToggleStatus={applyStatus}
+          onView={readOnly ? setViewingPrompt : undefined}
+          showOwner={readOnly}
+          onEdit={readOnly ? undefined : handleEditPrompt}
+          onCreate={readOnly ? undefined : handleCreateNew}
+          onToggleStatus={readOnly ? undefined : applyStatus}
           busyPromptId={togglingId}
+        />
+      )}
+
+      {viewingPrompt && (
+        <PromptReadOnlyView
+          prompt={viewingPrompt}
+          facts={[
+            { label: 'Engagement type', value: gameTypeLabel(viewingPrompt.gameType) },
+            { label: 'Scenario', value: viewingPrompt.scenarioType },
+            { label: 'State', value: viewingPrompt.status },
+          ]}
+          parts={[
+            { label: 'Base prompt', text: viewingPrompt.basePrompt },
+            { label: 'Context template', text: viewingPrompt.contextTemplate },
+            { label: 'Audience template', text: viewingPrompt.audienceTemplate },
+            { label: 'Category template', text: viewingPrompt.categoryTemplate },
+            { label: 'Output format', text: viewingPrompt.outputFormat },
+          ]}
+          onClose={() => setViewingPrompt(null)}
         />
       )}
 

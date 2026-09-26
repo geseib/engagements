@@ -23,11 +23,20 @@ exports.handler = async (event) => {
     // sequence would just be three times the latency for no fewer reads.
     const scopeRefs = readableSetRefs(event, '');
     const perScope = await Promise.all(scopeRefs.map(async (ref) => {
-      const res = await db.send(new QueryCommand({
-        TableName: process.env.TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk',
-        ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK }
-      }));
+      // Every page: the shared libraries grow with every organisation, and a
+      // Query stops at 1 MB. tests/library-reads-paged.js.
+      const res = { Items: [] };
+      let ExclusiveStartKey;
+      do {
+        const page = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: { ':pk': setMetadataKey(ref).PK },
+          ExclusiveStartKey,
+        }));
+        res.Items.push(...((page && page.Items) || []));
+        ExclusiveStartKey = page && page.LastEvaluatedKey;
+      } while (ExclusiveStartKey);
       // Decrypted per scope, because the org is a property of the partition
       // this Query named and one `ref` covers every row it returned. Platform
       // and public rows were never encrypted — there is no org to key them to

@@ -46,24 +46,45 @@ describe('featuring', () => {
     expect(SRC).toMatch(/onMessage\('commentFeatured'/);
   });
 
-  test('the featured comment is on the stage with its text, its anchor and its author; the arrivals stay nameless', () => {
-    const stage = SRC.slice(SRC.indexOf("{hostPhase === 'FEEDBACK' && ("), SRC.indexOf("{hostPhase === 'ENDED' && ("));
-    expect(stage).toMatch(/featuredComment && \(/);
-    expect(stage).toMatch(/className="featured"/);
-    expect(stage).toMatch(/featuredComment\.text/);
-    expect(stage).toMatch(/featuredComment\.anchorLabel/);
-    expect(stage).toMatch(/featuredComment\.playerName/);
-    // The count survives, as before.
-    expect(stage).toMatch(/comments so far/);
+  /*
+    THE WALL IS ITS OWN COMPONENT (components/stage/FeedbackWall.jsx, tested
+    by feedbackWall.test.jsx), handed the featured comment and the same
+    toggle the meter's cards use, so pressing the quote takes it down.
+    The owner, 2026-09-24: "the small type is not needed". The count is the
+    meter's, not a second line on the wall; the kicker and the undefined
+    `.lede` class are gone with it.
+  */
+  test('the FEEDBACK wall is FeedbackWall, handed the featured comment and the toggle', () => {
+    const from = SRC.indexOf("{hostPhase === 'FEEDBACK' && (");
+    const stage = SRC.slice(from, SRC.indexOf("{hostPhase === 'ENDED'", from));
+    expect(stage).toMatch(/<FeedbackWall/);
+    expect(stage).toMatch(/featured=\{featuredComment\}/);
+    expect(stage).toMatch(/onTakeDown=\{handleFeatureComment\}/);
+    expect(stage).not.toMatch(/comments so far/);
+    expect(stage).not.toMatch(/className="lede"/);
+    expect(stage).not.toMatch(/className="kicker"/);
+    expect(SRC).toMatch(/import FeedbackWall from '\.\/components\/stage\/FeedbackWall';/);
   });
 });
 
 describe('the wall styles', () => {
-  test('arrivals and the featured quote are styled, and stilled under reduced motion', () => {
+  test('arrivals and the pull quote are styled, and stilled under reduced motion', () => {
     expect(CSS).toMatch(/\.meter\.arrivals\{/);
     expect(CSS).toMatch(/\.arr\{[^}]*animation:arrive/);
-    expect(CSS).toMatch(/\.featured\{/);
-    expect(CSS).toMatch(/\.featured \.who\{/);
+    expect(CSS).toMatch(/\.fb-quote\{[^}]*animation:arrive/);
+    const reduced = CSS.slice(CSS.indexOf('@media (prefers-reduced-motion:reduce)'));
+    expect(reduced).toMatch(/\.fb-quote\{animation:none\}/);
+  });
+
+  // rejects: any of the wall's own type at the label tier, and the old
+  // small-type rules left behind as dead selectors.
+  test('nothing on the wall is set at the label size, and the old small type is gone', () => {
+    const wallRules = CSS.match(/(^|\n)\.(fb-[\w-]+|hero\.fb-question)[^{]*\{[^}]*\}/g) || [];
+    expect(wallRules.length).toBeGreaterThanOrEqual(5);
+    for (const rule of wallRules) expect(rule).not.toMatch(/--t-meta/);
+    expect(CSS).not.toMatch(/\.arr \.n\{/);
+    expect(CSS).not.toMatch(/\.meter\.arrivals h5\{/);
+    expect(CSS).not.toMatch(/(^|\n)\.featured[ {]/);
   });
 
   /*
@@ -81,14 +102,14 @@ describe('the wall styles', () => {
   };
   // rejects: the measure on the box, where 26ch is a strip of body characters.
   test('the measure sits on the quote, not on the box around it', () => {
-    expect(block('.featured')).not.toMatch(/max-width:var\(--measure\)/);
-    expect(block('.featured .say')).toMatch(/max-width:var\(--measure\)/);
+    expect(block('.fb-quote')).not.toMatch(/max-width:var\(--measure\)/);
+    expect(block('.fb-quote .say')).toMatch(/max-width:var\(--measure\)/);
   });
   // rejects: `anywhere`, which breaks words between any two letters and
   // shrinks the box's min-content to a single letter.
   test('the quote never breaks a word that fits on a line', () => {
-    expect(block('.featured .say')).not.toMatch(/overflow-wrap:anywhere/);
-    expect(block('.featured .say')).toMatch(/overflow-wrap:break-word/);
+    expect(block('.fb-quote .say')).not.toMatch(/overflow-wrap:anywhere/);
+    expect(block('.fb-quote .say')).toMatch(/overflow-wrap:break-word/);
   });
   // rejects: min-width:0 on the dock's room-facing status — the one thing
   // that gave in a crowded dock, down to a word a line ("Results / are / on").

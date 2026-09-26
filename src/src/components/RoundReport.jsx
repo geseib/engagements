@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 import AnswerSpotlight from './AnswerSpotlight';
 import MarkdownRenderer from './MarkdownRenderer';
+import WorkieContextHint from './WorkieContextHint';
 import {
   hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
@@ -165,6 +166,25 @@ export default function RoundReport({
    * finished round rather than taking part in a feedback round.
    */
   onComment,
+  /**
+   * Show the "Workie had: …" hint (question-background spec §4). Off by
+   * default, and NO CALLER PASSES IT TODAY, because both surfaces this renderer
+   * is mounted on are ones the spec keeps the hint off:
+   *   - `PastRound`, a modal over the host page — the projected stage;
+   *   - `FeedbackRoundPanel`, inline on a participant's own phone.
+   * The host reads the hint on the remote instead (`RemoteSessionPanel`'s round
+   * view and HostRemote's "What we heard"), which do not use this renderer. A
+   * future host-only surface that does — one nobody but the host can see —
+   * opts in here rather than this component guessing where it is.
+   *
+   * WHAT THIS GATES IS THE RENDERING, NOT THE DATA. The `contextUsed` flags are
+   * five booleans, never content, and they are not the host's alone in
+   * transit: the public `GET /games/{id}/ai-summary` returns them, and the
+   * feedback round's report slice (comments.js) hands the whole round, flags
+   * included, to participants' phones. Nothing there renders them. So this
+   * prop keeps them off a screen; it does not keep them off the wire.
+   */
+  showWorkieContext = false,
 }) {
   if (!round) return null;
 
@@ -380,6 +400,9 @@ export default function RoundReport({
                 session, and the briefing lives exactly as long as the session. */}
             {summary.briefingUsed && (
               <p className="past-round__voice">Workie had the host&rsquo;s briefing for this round</p>
+            )}
+            {showWorkieContext && (
+              <WorkieContextHint contextUsed={summary.contextUsed || null} />
             )}
           </>
         ) : (

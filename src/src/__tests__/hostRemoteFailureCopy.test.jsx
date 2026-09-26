@@ -102,11 +102,16 @@ function serve({ questions = [TRIVIA], questionsThen = null, dispatch = null, ca
   });
 }
 
+// Connected means the session's first `/state` reply is on screen, not that the
+// code box has gone: until that reply lands the remote's controls are disabled
+// and a tap on one is swallowed. The full account, and the test that pins it,
+// are at connect() in hostRemoteBrowser.test.jsx.
 async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument());
+  const status = screen.getByText(/^(Live|Offline)$/);
+  await waitFor(() => expect(status).toHaveTextContent(/^Live$/));
 }
 
 async function openQuestions() {

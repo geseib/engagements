@@ -410,6 +410,72 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert.strictEqual(listRowOf(gameId).Visibility, 'public', 'Visibility was not mirrored onto the GAMES row');
   });
 
+  await acheck('switching to private with no access code on the row is refused', async () => {
+    // This handler never accepts a new AccessCode (the header explains why:
+    // rotating it silently strands players who already hold the old one), so a
+    // session with none can never GET one through an edit. Letting the switch
+    // through anyway is exactly the session-gate.js 500 this test exists to
+    // keep unreachable: a private session join answers "Game configuration
+    // error" instead of ever refusing 400 up front.
+    quiet();
+    const noCode = await createGame({
+      eventTitle: 'No code at birth', gameType: 'call-and-answer', questionSetId: 'set-a',
+    });
+    const gameId = noCode.body.gameId;
+    const before = structuredClone(metadataOf(gameId));
+    const m = mark();
+    const res = await putGame(gameId, { visibility: 'private' });
+    loud();
+    assert.strictEqual(res.status, 400, `expected 400, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.deepStrictEqual(writesIn(sentSince(m)), [], 'a refused edit must not have written anything');
+    assert.strictEqual(metadataOf(gameId).Visibility, before.Visibility, 'Visibility changed despite the refusal');
+  });
+
+  await acheck('switching to private is allowed when the row already carries a code', async () => {
+    // The mirror case: a session born private (accessCode at creation) may be
+    // toggled public and back — this is not a blanket refusal of visibility
+    // edits, only of the specific state a private session with no code.
+    quiet();
+    const withCode = await createGame({
+      eventTitle: 'Born with a code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private', accessCode: '1357',
+    });
+    const gameId = withCode.body.gameId;
+    const toPublic = await putGame(gameId, { visibility: 'public' });
+    const backToPrivate = await putGame(gameId, { visibility: 'private' });
+    loud();
+    assert.strictEqual(toPublic.status, 200);
+    assert.strictEqual(backToPrivate.status, 200, `expected 200, got ${backToPrivate.status}: ${JSON.stringify(backToPrivate.body)}`);
+    assert.strictEqual(metadataOf(gameId).Visibility, 'private');
+    assert.strictEqual(metadataOf(gameId).AccessCode, '1357', 'the original access code must survive both edits');
+  });
+
+  await acheck('create refuses a private session with no access code', async () => {
+    // The create path's mirror image of the two tests above: session-gate.js
+    // answers a join to a private/no-code session with a 500 "Game
+    // configuration error", so the state must never be reachable at all — not
+    // through an edit (above) and not at birth (here).
+    quiet();
+    const res = await createGame({
+      eventTitle: 'Private with no code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private',
+    });
+    loud();
+    assert.strictEqual(res.status, 400, `expected 400, got ${res.status}: ${JSON.stringify(res.body)}`);
+
+    const res2 = await createGame({
+      eventTitle: 'Private with a blank code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private', accessCode: '   ',
+    });
+    assert.strictEqual(res2.status, 400, `a whitespace-only code must not count as one, got ${res2.status}`);
+
+    const ok = await createGame({
+      eventTitle: 'Private with a real code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private', accessCode: '2468',
+    });
+    assert.strictEqual(ok.status, 201, `a private session WITH a code must still be created, got ${ok.status}`);
+  });
+
   console.log('\nthe whitelist\n');
 
   await acheck('fields off the whitelist are ignored even when sent', async () => {
@@ -542,19 +608,30 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert(!('PersonaId' in metadataOf(gameId)), 'clearing left an empty PersonaId attribute behind');
   });
 
-  console.log('\nwhat the edit dialog can prefill from GET ?role=host\n');
+  /*
+    THE EDIT PREFILL IS READ ON THE HOST'S DOOR, GET /games/{gameId}/host-details
+    — Cognito in front, callerMayDriveSession in get-game.js. The public
+    `?role=host` branch no longer carries aiContext or the briefing: `role` is a
+    query parameter anyone can type (tests/get-game-host-details.js).
+  */
+  const hostDetails = async (gameId) => {
+    quiet();
+    const res = await getGameHandler(asOrg({
+      routeKey: 'GET /games/{gameId}/host-details',
+      pathParameters: { gameId },
+    }));
+    loud();
+    return res;
+  };
 
-  await acheck('the host branch carries every prefill field, and still no accessCode', async () => {
+  console.log('\nwhat the edit dialog can prefill from GET /games/{id}/host-details\n');
+
+  await acheck('the host read carries every prefill field, and still no accessCode', async () => {
     // rejects: an edit dialog that cannot seed its own form — and re-adding
     // accessCode to the public read path, whose removal get-game.js:79-92
     // documents as THE private-game control.
     const gameId = created.body.gameId;
-    quiet();
-    const res = await getGameHandler({
-      pathParameters: { gameId },
-      queryStringParameters: { role: 'host' },
-    });
-    loud();
+    const res = await hostDetails(gameId);
     assert.strictEqual(res.statusCode, 200);
     const info = JSON.parse(res.body);
     assert.strictEqual(info.personaId, '', 'personaId missing from the host branch');
@@ -572,13 +649,8 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     // PromptId — so renaming a session erased the approach chosen at create.
     const gameId = created.body.gameId;
     assert.strictEqual((await putGame(gameId, { promptId: 'trivia-quiet' })).status, 200);
-    quiet();
-    const res = await getGameHandler({
-      pathParameters: { gameId },
-      queryStringParameters: { role: 'host' },
-    });
-    loud();
-    assert.strictEqual(JSON.parse(res.body).promptId, 'trivia-quiet', 'promptId missing from the host branch');
+    const res = await hostDetails(gameId);
+    assert.strictEqual(JSON.parse(res.body).promptId, 'trivia-quiet', 'promptId missing from the host read');
     assert.strictEqual((await putGame(gameId, { promptId: '' })).status, 200);
   });
 
@@ -639,7 +711,7 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   });
 
   await acheck('the HOST read returns the briefing decrypted, for the edit prefill', async () => {
-    const info = await hostRead(briefed.body.gameId, 'host');
+    const info = JSON.parse((await hostDetails(briefed.body.gameId)).body);
     assert.strictEqual(info.briefing && info.briefing.text, BRIEF.text);
     assert.strictEqual(info.briefing.source.name, 'q3-support-ops-review.pdf');
   });
@@ -647,6 +719,12 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
   await acheck('the PUBLIC read — what a phone makes — carries no briefing key at all', async () => {
     const info = await hostRead(briefed.body.gameId, null);
     assert(!('briefing' in info), 'a participant can read the host\'s briefing');
+    assert(!JSON.stringify(info).includes('Open issues are up 15%'));
+  });
+
+  await acheck('nor does the public ?role=host — a claim anyone can type', async () => {
+    const info = await hostRead(briefed.body.gameId, 'host');
+    assert(!('briefing' in info), 'anyone with the code can read the host\'s briefing');
     assert(!JSON.stringify(info).includes('Open issues are up 15%'));
   });
 

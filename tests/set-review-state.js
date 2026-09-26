@@ -236,6 +236,76 @@ const PLAT_REF = { scope: 'platform', setId: '80strivia' };
     assert.notStrictEqual(legacy.PK, R.reviewKey(PLAT_REF, 1).PK);
   });
 
+  // -------------------------------------------------------- observed cap --
+  say('\n7. observed has a size cap (7c)');
+  /*
+    Bedrock is asked with `outputScope: 'FULL'` (content-guardrail.js), so
+    every judged category comes back for every question, and
+    finding-explanations.js adds up to a 240-character explanation to each one
+    it can. A large enough set's `observed` array alone can pass DynamoDB's
+    400 KB item limit before `findings`, `tally` or anything else on the row
+    is even counted. The TALLY is computed from the FULL list before this cap
+    ever runs (content-guardrail.js `tallyOf`, called in set-check-worker.js
+    on the un-truncated array) -- so a capped row still tells the truth about
+    every category's counts; only the per-item detail underneath it is cut.
+  */
+  const bigObserved = Array.from({ length: R.OBSERVED_CAP + 50 }, (_, i) => ({
+    questionId: `q${i}`, category: 'VIOLENCE', band: 'LOW', intervened: false,
+  }));
+  await checkAsync('a set large enough to exceed the cap stores a capped, flagged list', async () => {
+    store.clear();
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, {
+      status: R.STATUS.PASSED,
+      tally: { scope: 'full', questions: bigObserved.length, categories: {} },
+      observed: bigObserved,
+    });
+    const r = await R.readReview(fakeDoc, 'engage-test', ORG_REF, 2);
+    assert.strictEqual(r.observed.length, R.OBSERVED_CAP, 'the stored list was not capped');
+    assert.strictEqual(r.observedTruncated, true, 'nothing says the list was cut');
+    assert.strictEqual(r.tally.questions, bigObserved.length, 'the tally must stay whole even though the detail was cut');
+  });
+  await checkAsync('a list at or under the cap round-trips whole, with no truncation flag', async () => {
+    store.clear();
+    const atCap = bigObserved.slice(0, R.OBSERVED_CAP);
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, { status: R.STATUS.PASSED, observed: atCap });
+    const r = await R.readReview(fakeDoc, 'engage-test', ORG_REF, 2);
+    assert.strictEqual(r.observed.length, R.OBSERVED_CAP);
+    assert.strictEqual(r.observedTruncated, undefined, 'a whole list must not be marked truncated');
+  });
+  /*
+    ROUND 1 REVIEW, IMPORTANT #2(a): set-check-worker.js appends the set's own
+    text LAST (`observed = [...result.observed, ...setResult.observed]`), so a
+    blind prefix cut (the fix above) drops it FIRST on a large set — and
+    reviewMeasurement.js's setTextClean reads `observed` for exactly that
+    subject, so a set whose own title/description held a LOW/MEDIUM would then
+    report "all clean in every category" on the score card. The cap must never
+    drop a `(set)`-subject entry; it caps only the per-question entries to fill
+    whatever room remains.
+  */
+  const SET_SUBJECT = '(set)';
+  await checkAsync('the cap never drops a (set)-subject entry, only per-question ones', async () => {
+    store.clear();
+    const perQuestion = Array.from({ length: R.OBSERVED_CAP + 50 }, (_, i) => ({
+      questionId: `q${i}`, category: 'VIOLENCE', band: 'LOW', intervened: false,
+    }));
+    const setObservation = { questionId: SET_SUBJECT, category: 'VIOLENCE', band: 'MEDIUM', intervened: false };
+    // The set's own text is appended LAST, exactly as set-check-worker.js does.
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 2, {
+      status: R.STATUS.PASSED,
+      tally: { scope: 'full', questions: perQuestion.length, categories: {} },
+      observed: [...perQuestion, setObservation],
+    });
+    const r = await R.readReview(fakeDoc, 'engage-test', ORG_REF, 2);
+    assert.strictEqual(r.observedTruncated, true);
+    assert.strictEqual(r.observed.length, R.OBSERVED_CAP, 'the total must still respect the cap');
+    assert.ok(
+      r.observed.some((o) => o.questionId === SET_SUBJECT),
+      'the (set)-subject entry was dropped in favour of a per-question one',
+    );
+    const kept = r.observed.filter((o) => o.questionId !== SET_SUBJECT);
+    assert.strictEqual(kept.length, R.OBSERVED_CAP - 1, 'exactly one per-question slot was given up for the (set) entry');
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   Module._load = realLoad;
   suiteFinished();

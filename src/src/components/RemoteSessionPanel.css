@@ -235,6 +235,17 @@
 
 .hrs-round-detail { color: var(--muted); }
 
+/* WorkieContextHint in an opened round — the quiet line HostRemote.css gives it
+   under "What we heard": --muted on --surface, a pairing already in the measured
+   table above. A step smaller than the summary it sits under, because it is a
+   footnote to the summary rather than part of it. */
+.hrs-round-body .workie-context-hint {
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 .hrs-answers {
   margin: 0;
   padding: 0;

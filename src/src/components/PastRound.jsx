@@ -181,6 +181,13 @@ export default function PastRound({
         onRegenerate={onRegenerate}
         regenerating={busy}
         comments={round.comments || []}
+        /*
+          NO "Workie had" HINT HERE. This dialog only ever opens as a modal
+          over the host page, which is the surface the room may be watching —
+          question-background spec §4 keeps the hint off it. The host reads it
+          on the remote instead (RemoteSessionPanel's round view, and the live
+          "What we heard" block in HostRemote).
+        */
       />
 
       <div className="past-round__nav">

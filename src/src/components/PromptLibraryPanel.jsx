@@ -4,6 +4,7 @@ import { gameTypeLabel, normalizeGameType } from '../config/gameTypes';
 import { matchesListFilters } from '../config/listControls';
 import useListControls from '../hooks/useListControls';
 import { promptOwnerTag, promptOwnerRank, PROMPT_OWNER_OPTIONS } from '../utils/setOwnerTag';
+import { promptLibraryLabel, promptLibraryTitle } from './PromptReadOnlyView';
 
 /**
  * THE PROMPT LIBRARY — the list half of the Prompts admin section.
@@ -317,6 +318,13 @@ export default function PromptLibraryPanel({
   emptyBody = 'A summary prompt is what Workie says after a round. Until one exists, every session'
     + ' of every engagement type falls back to the shipped default for its type.',
   onEdit,
+  /** Open a prompt READ-ONLY — `(prompt) => void`. The read-only mount's
+   *  answer to `onEdit` (outside Engage mode no prompt can be changed; owner,
+   *  2026-09-24). Same rule as every row action: no handler, no button. */
+  onView,
+  /** Say which library each row is in (Engage, or your team). On for the
+   *  read-only mount, where a frozen team Workie sits beside Engage's. */
+  showOwner = false,
   onAdvise,
   onDelete,
   onCreate,
@@ -610,6 +618,11 @@ export default function PromptLibraryPanel({
                 </td>
                 <td>
                   <div className="plib-states">
+                    {showOwner && (
+                      <span className="plib-chip" title={promptLibraryTitle(prompt)}>
+                        {promptLibraryLabel(prompt)}
+                      </span>
+                    )}
                     <StatusChip
                       prompt={prompt}
                       onToggleStatus={onToggleStatus}
@@ -646,6 +659,16 @@ export default function PromptLibraryPanel({
                 </td>
                 <td>
                   <div className="plib-rowact">
+                    {onView && (
+                      <button
+                        type="button"
+                        className="plib-btn"
+                        onClick={() => onView(prompt)}
+                        title="Read this prompt"
+                      >
+                        View
+                      </button>
+                    )}
                     {onEdit && (
                       <button
                         type="button"
@@ -661,9 +684,9 @@ export default function PromptLibraryPanel({
                         type="button"
                         className="plib-btn"
                         onClick={() => onAdvise(prompt)}
-                        title="Ask the AI advisor about this prompt"
+                        title="Improve this prompt"
                       >
-                        Advisor
+                        Improve
                       </button>
                     )}
                     {/*

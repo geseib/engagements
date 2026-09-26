@@ -59,14 +59,18 @@ const Photo = ({ photo, extraClass = '' }) => (
  * The tally performs once (§1 change 5): bars are declared at zero with the
  * real value in `--w`, and once the block is 35% in view `.mk-tally--in` lands, the
  * bars grow and the counts count up in the same 700ms. Then stillness.
+ *
+ * The count is POINTS, not votes (2026-09-25): each player ranks a top three,
+ * scored 3/2/1, and points are what the results and the report show. The
+ * unit comes from content/home.js with the numbers it describes.
  */
-const TallyRow = ({ row, go }) => {
-  const votes = useCountUp(row.votes, go);
+const TallyRow = ({ row, unit, go }) => {
+  const points = useCountUp(row.points, go);
   return (
     <div className={`mk-tally-row${row.cool ? ' mk-tally-row--cool' : ''}`}>
       <div className="mk-tally-top">
         <b>{row.text}</b>
-        <span className="mk-tally-n"><span data-count={row.votes}>{votes}</span> votes</span>
+        <span className="mk-tally-n"><span data-count={row.points}>{points}</span> {unit}</span>
       </div>
       <div className="mk-tally-track"><i style={{ '--w': `${row.width}%` }} /></div>
     </div>
@@ -83,7 +87,7 @@ const Tally = ({ tally }) => {
       </div>
       <p className="mk-muted">{tally.meta}</p>
       <div className="mk-tally-rows">
-        {tally.rows.map((row) => <TallyRow key={row.text} row={row} go={inView} />)}
+        {tally.rows.map((row) => <TallyRow key={row.text} row={row} unit={tally.unit} go={inView} />)}
       </div>
       <p className="mk-tally-note">{tally.note}</p>
     </div>

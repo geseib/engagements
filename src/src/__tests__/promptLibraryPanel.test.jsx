@@ -537,7 +537,7 @@ describe('the status chip activates and deactivates', () => {
 });
 
 describe('the row actions reach the callbacks', () => {
-  test('edit, advisor, copy and retire each hand back the right thing', () => {
+  test('edit, improve, copy and retire each hand back the right thing', () => {
     /*
       rejects: wiring Retire to the prompt object when handleDeletePrompt takes
       an id, which would send `[object Object]` into the DELETE URL and 404
@@ -557,7 +557,7 @@ describe('the row actions reach the callbacks', () => {
     fireEvent.click(within(row).getByText('Edit'));
     expect(onEdit).toHaveBeenCalledWith(PROMPTS[0]);
 
-    fireEvent.click(within(row).getByText('Advisor'));
+    fireEvent.click(within(row).getByText('Improve'));
     expect(onAdvise).toHaveBeenCalledWith(PROMPTS[0]);
 
     fireEvent.click(within(row).getByText('Copy to archive'));

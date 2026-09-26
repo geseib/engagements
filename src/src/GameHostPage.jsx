@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
+import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
@@ -25,11 +26,16 @@ import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
+import FeedbackWall from './components/stage/FeedbackWall';
 import Podium from './components/stage/Podium';
 import WavelengthSessionVocabulary from './components/stage/WavelengthSessionVocabulary';
 import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
+import Scoreboard from './components/stage/scoreboard/Scoreboard';
+import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
+import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
+import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
@@ -42,7 +48,7 @@ import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
-import { shortcutsSuppressed, qrOverlayInstructions } from './utils/hostOverlays';
+import { shortcutsSuppressed, scoreboardKeysLive, qrOverlayInstructions } from './utils/hostOverlays';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -57,7 +63,7 @@ import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
-  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType,
+  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
 } from './config/hostControls';
 import { stageAnswersKey, stageAnswersReady, askFetchStillCurrent } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
@@ -243,6 +249,26 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  /*
+    THE SCOREBOARD (docs/superpowers/specs/2026-09-25-scoreboard-design.md):
+    a session fact on the server's STATE row — { open, style, openedAt, page }
+    — that this page mirrors, restores on a reload and follows over
+    `scoreboardChanged`. `scoresAfterRound` is the roster's last fully scored
+    round (get-players), which is what decides whether the board may open:
+    "Scores appear after the first round".
+
+    useScoreboardSync holds it, because four sources report it — this page's
+    own POST, the frame, and every /state refresh — and a refresh already on
+    its way when the host pressed S must not land afterwards and shut the
+    board again. Each copy carries the server's revision; the hook applies
+    only a newer one. While this page's own write is in flight it holds
+    copies back and settles on the newest of them and the reply, and a
+    write that hangs gives up rather than holding them back for good.
+  */
+  const {
+    scoreboard, applyServerBoard, publishScoreboard, resetScoreboard,
+  } = useScoreboardSync({ gameId, apiBase: API_BASE, fetchFn: authFetch });
+  const [scoresAfterRound, setScoresAfterRound] = useState(null);
 
 
 
@@ -465,6 +491,11 @@ function GameHostPage() {
   // A refused survey call (a 409 from a second device, a dropped network),
   // said in the dock beside the button that was pressed — never alert().
   const [surveyActionError, setSurveyActionError] = useState('');
+  // Task 4 fix round 1, item 5: End session shipped with `alert()`, the one
+  // exception to the rule stated above it. Same shape as surveyActionError,
+  // kept separate rather than renamed onto it — this fires for every
+  // non-survey type, not only a survey's own three acts.
+  const [sessionActionError, setSessionActionError] = useState('');
   /*
     WHERE THE ROOM IS — hooks/useSurveyProgress.js: GET /survey/progress on
     arrival, the `surveyProgress` frame after. Declared up here, above every
@@ -585,7 +616,7 @@ function GameHostPage() {
   const [creatingSession, setCreatingSession] = useState(false);
   /*
     THE SESSION BEING EDITED from history — `{ gameId, values }` or null, where
-    `values` is what GET /games/{id}?role=host returned (the prefill).
+    `values` is what GET /games/{id}/host-details returned (the prefill).
     Deliberately NOT the page's own eventTitle/selectedSetId state: an edit
     targets a session that need not be the one on stage, and must not disturb
     it. Non-null renders <GameSetupDialog mode="edit"> over the history modal.
@@ -1121,6 +1152,8 @@ function GameHostPage() {
     gameDebugMode: setGameDebugMode,
     surveyNames: setSurveyNames,
     surveyWarnedAt: setSurveyWarnedAt,
+    scoreboard: resetScoreboard,
+    scoresAfterRound: setScoresAfterRound,
   };
 
   // The game every in-flight async write is allowed to touch. Bumped
@@ -1144,6 +1177,10 @@ function GameHostPage() {
     setAiRetrying(false);
     // Same for a refused survey call: it was about the session being left.
     setSurveyActionError('');
+    // Same for a refused End: "The session did not end: …" was about the
+    // session being left, not the next one opened. Bug sweep final review,
+    // Minor 1 — sessionActionError shipped without this line.
+    setSessionActionError('');
     aiQuestionRef.current = null;
     resetGameSession(gameSessionSetters, overrides);
   };
@@ -1211,6 +1248,35 @@ function GameHostPage() {
       setCustomInstruction(null);
       setSetRoundNoun(null);
     }
+  };
+
+  /**
+   * Apply the set's instruction and round noun the moment a QUESTION response
+   * carries them (GitHub #18).
+   *
+   * `fetchQuestionSetInstruction` above finds the set by fetching the WHOLE
+   * catalogue (`GET /question-sets`) and searching it — the same list
+   * get-question-sets.js drops a deactivated set from, and any fetch error
+   * leaves it null. A deactivated set is exactly the case that matters here:
+   * the session still plays it (the round pins a partition, not a catalogue
+   * membership), so every phone kept showing its instruction — PlayerPage
+   * reads `setCustomInstruction`/`setRoundNoun` straight off get-question.js's
+   * response (PlayerPage.jsx `applyQuestionSetInstruction`), which resolves
+   * the set by the PINNED PARTITION and never searches a list — while the
+   * stage, whose only source was the catalogue search, went blank and stayed
+   * that way for the rest of the session.
+   *
+   * `games/{gameId}/question?role=host` already projects both fields; this
+   * mirrors PlayerPage's reader exactly, guarded the same way: on `setId`,
+   * not called unconditionally, because a RESULTS payload built elsewhere in
+   * this file carries no set fields and must not blank an instruction the
+   * room is still looking at.
+   */
+  const applyQuestionSetInstruction = (questionData) => {
+    const setId = questionData?.setId || questionData?.questionSetId;
+    if (!setId) return;
+    setCustomInstruction(questionData.setCustomInstruction ?? null);
+    setSetRoundNoun(questionData.setRoundNoun ?? null);
   };
 
   // Instruction hierarchy lives in config/instructions.js so the host and the
@@ -1370,9 +1436,13 @@ function GameHostPage() {
     if (!gameId || !questionId) return null;
     
     try {
-      const debugParam = gameDebugMode ? '?debug=true' : '';
-      const response = await fetch(`${API_BASE}games/${gameId}/ai-summary${debugParam}`);
-      
+      // The prompt echo (?debug=true) is served only on the host's route,
+      // which carries the Cognito authorizer; the public route refuses it
+      // (get-ai-summary.js). The plain read stays public, as the phones make it.
+      const response = gameDebugMode
+        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true`)
+        : await fetch(`${API_BASE}games/${gameId}/ai-summary`);
+
       if (response.ok) {
         const summaryData = await response.json();
         // Update local state with fetched data
@@ -1461,8 +1531,10 @@ function GameHostPage() {
     const debugParam = gameDebugMode ? '&debug=true' : '';
     try {
       // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
-      const response = await fetch(
-        `${API_BASE}games/${gameId}/ai-summary?questionId=${questionId}&generateNew=true${debugParam}`,
+      // authFetch, on the host's route: the public one refuses generateNew
+      // (get-ai-summary.js), and this one carries the Cognito authorizer.
+      const response = await authFetch(
+        `${API_BASE}games/${gameId}/ai-summary/host?questionId=${questionId}&generateNew=true${debugParam}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       );
       if (!response.ok && response.status !== 202) {
@@ -2002,6 +2074,17 @@ Focus on actionable business strategy insights.`;
       `focusToStage` would compare every index against 0 and open nothing. Same
       trap `gameStateRef` exists for.
     */
+    /*
+      THE SCOREBOARD MOVED — opened, closed, restyled or paged, from the phone
+      or from this page. The frame carries the whole board, so it is applied
+      verbatim. NO restoreGameState, for stage-beat's reason. A frame for
+      another session (a slow socket across a switch) is dropped.
+    */
+    webSocketClient.onMessage('scoreboardChanged', (data) => {
+      if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
+      applyServerBoard(data);
+    });
+
     webSocketClient.onMessage('stageFocusChanged', (data) => {
       console.log('🔌 Stage focus notification:', data);
       const focus = focusFromFrame(data, gameStateRef.current);
@@ -2189,6 +2272,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('authorsRevealed');
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
+      webSocketClient.offMessage('scoreboardChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
@@ -2347,12 +2431,60 @@ Focus on actionable business strategy insights.`;
         */
         pendingFocusRef.current = gameStateData.stageFocus || null;
 
+        // THE SCOREBOARD, as the room last saw it: a reload over an open board
+        // comes back up on it rather than dropping the room to the stage.
+        applyServerBoard(gameStateData.scoreboard);
+
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
         await fetchQuestionSets(true); // true = during restoration, no auto-selection
         if (superseded()) return false;
 
+        // Parse and restore game state. MOVED UP FROM BELOW (fix round 2): the
+        // metadata block right after this needs `questionNumber` and
+        // `gameStateData.currentQuestionData` in hand to decide whether the old
+        // catalogue lookup would race an upcoming `/question` read — see the
+        // note beside that call. Nothing here reads anything the metadata block
+        // sets, so moving it earlier changes nothing else.
+        const currentState = gameStateData.state || 'LOBBY';
+        let questionNumber = gameStateData.currentQuestion || 0;
+
+        // Trust the currentQuestion from backend - don't override it by parsing state
+        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
+
+        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
+        if (questionNumber === 0 && (currentState.includes('#'))) {
+          const stateQuestionMatch = currentState.match(/#(\d+)/);
+          if (stateQuestionMatch) {
+            questionNumber = parseInt(stateQuestionMatch[1], 10);
+            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
+          }
+        }
+
+        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
+
+        // Use server state directly instead of mapping to legacy format
+        setGameState(currentState);
+        console.log(`🎮 HOST: Set game state to ${currentState}`);
+
+        // The durable fact, read straight from the ROUND# record (get-game-state
+        // .js now includes it) rather than inferred from the state string. An
+        // early reveal — the override for a host who reveals before closing the
+        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
+        // questionStarted, votingStarted) that runs before RESULTS; deriving
+        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
+        // that case, since none of those events are RESULTS transitions.
+        setAuthorsRevealed(!!gameStateData.authorsRevealed);
+        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
+
         // Restore basic game metadata
+        //
+        // `restoredSetId`/`restoredSetScope` are declared out here, not `const`
+        // inside the block below, because they used to be needed further down
+        // too. Left hoisted rather than folded back — a smaller diff for the
+        // next reviewer to compare against fix round 1.
+        let restoredSetId = '';
+        let restoredSetScope = DEFAULT_SCOPE;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
@@ -2374,16 +2506,35 @@ Focus on actionable business strategy insights.`;
           */
           setSurveyNames(namesMode(gameStateData.names ?? gameStateData.gameMetadata.names).id);
           setSurveyWarnedAt(gameStateData.warnedAt ?? gameStateData.gameMetadata.warnedAt ?? null);
-          const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
+          restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           // The scope the SESSION pinned, not a fresh search. A session plays
           // one partition for its whole life; reloading the host screen must
           // read that one.
-          const restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
+          restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
           setSelectedSetId(restoredSetId);
           setSelectedSetScope(restoredSetScope);
-          fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+          // THE OLD CATALOGUE LOOKUP MUST COVER EVERY PATH EXCEPT THE ONE THAT
+          // READS THESE FIELDS OFF ITS OWN /question RESPONSE (fix round 2,
+          // GitHub #18). That excluded path is exactly `questionNumber > 0 AND
+          // no currentQuestionData` — the branch below that awaits `/question`
+          // and calls `applyQuestionSetInstruction` with what it gets back.
+          //
+          // Fix round 1 confined this call to the `currentQuestionData` branch
+          // ALONE, nested inside `if (questionNumber > 0)` — which never runs
+          // at all when questionNumber is 0: an open lobby before round 1, or
+          // an ended session with zero rounds. `setRoundNoun` feeds the LOBBY
+          // primary CTA (~getHostRoundNoun below), so that regression showed up
+          // as "Start First Round" instead of the set's own noun (e.g. "Start
+          // First Lesson") on a lobby reload, until round 1 actually started.
+          //
+          // This still closes the race fix round 1 fixed: the excluded branch
+          // is the ONLY writer of these fields on its path, so nothing here
+          // competes with it.
+          if (!(questionNumber > 0 && !gameStateData.currentQuestionData)) {
+            fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+          }
           console.log(`🎮 HOST: Restored game metadata`);
-          
+
           // Restore categories from bitmask if we have a question set
           if (restoredSetId) {
             await fetchCategories(restoredSetId, true, restoredSetScope); // true = restore from game bitmask
@@ -2391,38 +2542,6 @@ Focus on actionable business strategy insights.`;
           }
         }
 
-        // Parse and restore game state
-        const currentState = gameStateData.state || 'LOBBY';
-        let questionNumber = gameStateData.currentQuestion || 0;
-        
-        // Trust the currentQuestion from backend - don't override it by parsing state
-        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
-        
-        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
-        if (questionNumber === 0 && (currentState.includes('#'))) {
-          const stateQuestionMatch = currentState.match(/#(\d+)/);
-          if (stateQuestionMatch) {
-            questionNumber = parseInt(stateQuestionMatch[1], 10);
-            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
-          }
-        }
-        
-        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
-        
-        // Use server state directly instead of mapping to legacy format
-        setGameState(currentState);
-        console.log(`🎮 HOST: Set game state to ${currentState}`);
-
-        // The durable fact, read straight from the ROUND# record (get-game-state
-        // .js now includes it) rather than inferred from the state string. An
-        // early reveal — the override for a host who reveals before closing the
-        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
-        // questionStarted, votingStarted) that runs before RESULTS; deriving
-        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
-        // that case, since none of those events are RESULTS transitions.
-        setAuthorsRevealed(!!gameStateData.authorsRevealed);
-        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
-        
         // If we have a current question, set it up
         if (questionNumber > 0) {
           setCurrentQuestionIndex(questionNumber - 1); // Convert to 0-based index
@@ -2436,6 +2555,9 @@ Focus on actionable business strategy insights.`;
             // instruction resolver falls all the way through to the generic
             // call-and-answer default — even on an Art Title round.
             setCurrentQuestionId(gameStateData.currentQuestionData.id);
+            // The catalogue lookup for this case already ran above, in the
+            // metadata block — see the note there for why this branch is the
+            // one path that still needs it.
             console.log(`📝 HOST: Loaded question ${questionNumber} from game state:`, gameStateData.currentQuestionData.title);
           } else {
             // Try to fetch question data with question number
@@ -2447,6 +2569,7 @@ Focus on actionable business strategy insights.`;
                 const questionData = await questionRes.json();
                 setQuestions([questionData]);
                 setCurrentQuestionId(questionData.id);
+                applyQuestionSetInstruction(questionData);
                 console.log(`📝 HOST: Loaded question ${questionNumber}:`, questionData.title);
                 console.log('🔍 HOST: Question data keys:', Object.keys(questionData));
                 console.log('🔍 HOST: Updated questions array:', [questionData]);
@@ -2835,6 +2958,9 @@ Focus on actionable business strategy insights.`;
       
       console.log('Transformed players:', transformedPlayers);
       setPlayers(transformedPlayers);
+      // The last fully scored round, or null before any (standings.js) — the
+      // scoreboard may open only once there is one.
+      setScoresAfterRound(Number.isInteger(json.afterRound) ? json.afterRound : null);
 
       // WHO LEFT, kept apart. `players` above is the room, and every count in
       // this file is drawn from it; these are for the Players tab, which is the
@@ -3559,6 +3685,7 @@ Focus on actionable business strategy insights.`;
       setManualStateChange(true);
       setGameState(newState);
       setQuestions([questionData]);
+      applyQuestionSetInstruction(questionData);
       setLessonNumber(lessonNumber);
       setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
 
@@ -3774,10 +3901,11 @@ Focus on actionable business strategy insights.`;
       // the outer catch told the host "the round moved on, but this screen could
       // not refresh". Which was true, and was this line.
       setCurrentQuestionId(questionId);
-      
+
       // Set the questions array
       setQuestions([questionData]);
-      
+      applyQuestionSetInstruction(questionData);
+
       // WebSocket notification is handled automatically by the backend
       console.log(`✅ HOST: Question ${lessonNumber} started successfully`);
       
@@ -4342,13 +4470,30 @@ Focus on actionable business strategy insights.`;
       return;
     }
 
-    switchToGame(gameIdToUse);
+    // THE SAME CHECK THE `?gameId=` URL LOADER RUNS (a few hundred lines up).
+    // Typing a code was the one door onto the live stage that skipped it: an
+    // unstarted session lands with "Start First Round" disabled until a
+    // player joins, and a join is refused before start (session-gate.js) —
+    // a dead end. Route an unstarted session the way the URL loader already
+    // does, into game history, where Start is one click away; anything else
+    // (started, or the status check itself failing) goes straight to the
+    // stage as before.
+    checkGameStatus(gameIdToUse).then((gameStatus) => {
+      if (gameStatus.exists && !gameStatus.started) {
+        console.log(`⚠️ HOST: Game ${gameIdToUse} exists but not started — showing game history`);
+        setShowWelcomeScreen(true);
+        setTimeout(() => handleViewGameHistory(), 500);
+        return;
+      }
 
-    // Update URL
-    const url = new URL(window.location);
-    url.searchParams.set('gameId', gameIdToUse);
-    window.history.replaceState(null, '', url);
-    console.log(`🔗 HOST: Continuing game ${gameIdToUse}`);
+      switchToGame(gameIdToUse);
+
+      // Update URL
+      const url = new URL(window.location);
+      url.searchParams.set('gameId', gameIdToUse);
+      window.history.replaceState(null, '', url);
+      console.log(`🔗 HOST: Continuing game ${gameIdToUse}`);
+    });
   };
 
   const handleViewGameHistory = async () => {
@@ -4462,12 +4607,17 @@ Focus on actionable business strategy insights.`;
     EDIT A SESSION BEFORE IT STARTS, from the history list. Prefill comes from
     the server, not from the row: the list rows carry no details/aiContext/
     persona, and inventing a prefill from partial data would blank fields on
-    save. authFetch on both calls — GET for the host branch, PUT because the
-    update route carries the Cognito authorizer.
+    save. authFetch on both calls: both routes carry the Cognito authorizer.
+
+    The GET is the host's door, `/host-details`, not the public brief's
+    `?role=host`. That branch no longer returns the Workie context or the
+    briefing — `role` is a query parameter anyone can type — and the dialog
+    sends back what it was seeded with, so a prefill without them would erase
+    both on Save (get-game.js; tests/get-game-host-details.js).
   */
   const editGameFromHistory = async (selectedGameId) => {
     try {
-      const res = await authFetch(`${API_BASE}games/${selectedGameId}?role=host`);
+      const res = await authFetch(`${API_BASE}games/${selectedGameId}/host-details`);
       if (!res.ok) throw new Error(`Failed to load session: ${res.status}`);
       const values = await res.json();
       if (values.started) {
@@ -5014,6 +5164,7 @@ Focus on actionable business strategy insights.`;
       lessonExpanded, isLoadingData, qrMode,
       spotlightOpen: spotlightIndex !== null,
       pastRoundOpen: pastRoundIndex !== null,
+      scoreboardOpen: scoreboard.open,
     })) return undefined;
 
     const roundPhase = phaseOfGameState(gameState);
@@ -5072,7 +5223,40 @@ Focus on actionable business strategy insights.`;
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
     showNewGameDialog, showReport, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
-    spotlightIndex, pastRoundIndex]);
+    spotlightIndex, pastRoundIndex, scoreboard.open]);
+
+  /*
+    THE SCOREBOARD — opening, closing and the look, from every surface that can.
+
+    `publishScoreboard` (useScoreboardSync) is the one way this page changes
+    the board: the keys below, the Players tab's button and the Settings tab's
+    look all come through it. ABOVE THE EARLY RETURNS, both of them, and that
+    is forced: a hook below a conditional return breaks the order React calls
+    hooks in.
+  */
+  const scoreboardAvail = scoreboardAvailability({ gameType: currentGameType, afterRound: scoresAfterRound });
+  // The board's keys — S, V, Esc, Space here and ← / → on the board itself —
+  // are live only over a clear stage: not with the session menu open, not
+  // under a spotlight, a past round, a pinned QR or a dialog
+  // (utils/hostOverlays.js scoreboardKeysLive says why each one matters).
+  const scoreboardKeysOn = scoreboardKeysLive({
+    setupPanelOpen,
+    showConfirmModal, showExpandedQR, showReportsModal,
+    lessonExpanded, isLoadingData, qrMode,
+    spotlightOpen: spotlightIndex !== null,
+    pastRoundOpen: pastRoundIndex !== null,
+  });
+  useScoreboardKeys({
+    // ...and never over a surface that replaced the stage — there is no stage
+    // for the board to cover.
+    enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !editTarget && Boolean(gameId),
+    open: scoreboard.open,
+    canOpen: scoreboardAvail.enabled,
+    onOpen: () => publishScoreboard({ open: true }),
+    onClose: () => publishScoreboard({ open: false }),
+    onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboard.style) }),
+  });
 
   // Render the quickstart menu if it's being shown
   if (showQuickstartMenu) {
@@ -5394,6 +5578,7 @@ Focus on actionable business strategy insights.`;
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
     spotlightOpen: spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
+    scoreboardOpen: scoreboard.open,
   });
 
   /*
@@ -5442,6 +5627,27 @@ Focus on actionable business strategy insights.`;
       return;
     }
     setSurveyActionError('');
+    setGameState('ENDED');
+  };
+
+  /*
+    END SESSION — once the confirm (config/hostControls.js endSessionConfirm,
+    carried on the action runHostAction was given) has already said yes. The
+    ask is not here, the same reason closeSurveyNow's own note gives: two asks
+    would be one too many. Task 4, 2026-09-26 bug sweep.
+
+    FIX ROUND 1, ITEM 5: a refusal is said in the dock beside the button that
+    was pressed (sessionActionError, read by dockHint), never alert() — the
+    same rule surveyActionError already follows, and the one this shipped
+    breaking.
+  */
+  const endSessionNow = async () => {
+    const result = await requestEndSession({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (!result.ended) {
+      setSessionActionError(`The session did not end: ${result.error}`);
+      return;
+    }
+    setSessionActionError('');
     setGameState('ENDED');
   };
 
@@ -5511,6 +5717,13 @@ Focus on actionable business strategy insights.`;
         // pointing ENDED's primary at it would have made the one control on
         // the last screen of the session do nothing at all.
         generateReportForGame(gameId, eventTitle);
+        break;
+      case HOST_INTENTS.END:
+        // Task 4, 2026-09-26 bug sweep. The settings panel's own control, not
+        // the dock's — see canEndSession (config/hostControls.js) for why it
+        // is never offered on a survey, the lobby, or an already-ENDED
+        // session.
+        endSessionNow();
         break;
       case HOST_INTENTS.OPEN_SURVEY:
         // A survey still in CREATED — its create-time open was refused, or it
@@ -5626,9 +5839,13 @@ Focus on actionable business strategy insights.`;
       };
     }
     // RESULTS, FIELD_NOTES and ENDED run solo. The mockup's standings column
-    // is a list of names WITH A SCORE BESIDE EACH, which is the half of the
-    // old rule that did not get retired — see RoomMeter.jsx's doc-block and
-    // standingsVisible().
+    // was a list of names WITH A SCORE BESIDE EACH, and it stays out of the
+    // meter. That is no longer because a scored roster may never go on the
+    // wall — the owner reversed that on 2026-09-25 ("I don't think it matters
+    // as long as scores are not tallied until all votes are in") — but because
+    // the standings now have their own full-screen home, the scoreboard the
+    // host opens on demand (docs/superpowers/specs/2026-09-25-scoreboard-design.md,
+    // components/stage/scoreboard/).
     return null;
   })();
 
@@ -5914,9 +6131,10 @@ Focus on actionable business strategy insights.`;
   // has JOINED. Dropping the hint here lets dockStatus below fall through to
   // statusTextFor's "Waiting for players to join…", which is already keyed
   // off playerCount === 0 for this exact case.
-  // A refused survey call outranks the disabled-primary hint: it is about the
-  // button the host just pressed, and it is the only place it is said.
-  const dockHint = surveyActionError
+  // A refused survey call — or a refused End session (Task 4 fix round 1,
+  // item 5) — outranks the disabled-primary hint: it is about the button the
+  // host just pressed, and it is the only place it is said.
+  const dockHint = surveyActionError || sessionActionError
     || (hostControls.primary.disabled && hostPhase !== 'LOBBY' && players.length > 0
       ? hostControls.primary.hint
       : '');
@@ -6161,6 +6379,25 @@ Focus on actionable business strategy insights.`;
             />
           </Dock>
         )}
+        /* THE SCOREBOARD, in the stage's own layer: over the rail, bar and
+           main, with the dock still live beneath it. Mounted only while the
+           server's board is open; the rows, pages and motion are its own
+           (components/stage/scoreboard/Scoreboard.jsx). `refreshKey` is the
+           room's state AND the last counted round, so a round scored under an
+           open board lands on it — including when the roster learns of the
+           count after the phase frame did. Its keys are off under any
+           overlay (scoreboardKeysOn). */
+        overlay={scoreboard.open && scoreboardAvail.show ? (
+          <Scoreboard
+            gameId={gameId}
+            apiBase={API_BASE}
+            title={eventTitle}
+            profile={profile}
+            board={scoreboard}
+            refreshKey={`${gameState}|${scoresAfterRound}`}
+            keysEnabled={scoreboardKeysOn}
+          />
+        ) : null}
       >
         {/* data-grow is the fitter's CEILING for this state, from the mockups.
             The ladder is a legibility floor, not a ceiling: a state carrying
@@ -6375,16 +6612,17 @@ Focus on actionable business strategy insights.`;
                     neither is coming back in this shape: each is a list of
                     names WITH A SCORE BESIDE EACH, and a score beside a name
                     is attribution by arithmetic (standingsVisible, §5.6.4).
-                    THE CONSTRAINT HAS NARROWED AND THIS HALF OF IT HAS NOT.
-                    The meter now names who is still waiting (RoomMeter.jsx's
-                    doc-block carries the owner's ruling) — a waiting list is
-                    who has not acted, which is not authorship; a standings
-                    roster is a scoreboard, which is. What replaces these is
-                    still not decided here — 07-results-trivia's own answer is
-                    a Standings roster in the meter, which RoomMeter still has
-                    no slot for. That conflict is real and it is
-                    plan 4/5's to settle; until it does, trivia's room-facing
-                    payoff is the correct row and its share of the vote below.
+                    THE STANDINGS HALF OF THAT IS SETTLED, AND NOT HERE. The
+                    owner ruled on 2026-09-25 that names with totals may go on
+                    the wall "as long as scores are not tallied until all
+                    votes are in" — which get-results guarantees, since a
+                    round is only scored at RESULTS — and asked for them as
+                    their own moment: the scoreboard, opened on demand from
+                    the remote, S, or the Players tab
+                    (docs/superpowers/specs/2026-09-25-scoreboard-design.md).
+                    So this state keeps trivia's room-facing payoff to the
+                    correct row and its share of the vote below, and the
+                    running totals live on the board.
                     The old empty-state is not restored either: it printed
                     JSON.stringify(answers) at a room. */}
                 {/* Blank until this round's results are the ones in hand, so
@@ -6743,43 +6981,17 @@ Focus on actionable business strategy insights.`;
                 its responses ranked. The second is practical — comments arrive
                 during the round, so a wall of them would reflow under the
                 room's eyes every few seconds. Everyone holds the full text on
-                their own device, which is where reading belongs. */}
+                their own device, which is where reading belongs.
+
+                REVERSED by the owner on 2026-09-22 for the TEXT the host
+                chooses: the arrivals in the meter are unattributed, and the one
+                the host puts up carries its author, who was told on their phone
+                that their name would be shown with it (FeedbackWall.jsx). */}
             {hostPhase === 'FEEDBACK' && (
-              <>
-                <div className="kicker">Your thoughts</div>
-                <h1 className="hero">What do you make of it?</h1>
-                <p className="lede">
-                  The round is on your device. Tap a section — the summary, the results,
-                  or any single response — and say what you think.
-                </p>
-
-                {/* A count, not a list. See above. `roundComments` is empty
-                    until the first one lands, and an empty state that said
-                    "no comments yet" would be a wall telling forty people they
-                    have not done the thing they are being asked to do. */}
-                {roundComments.length > 0 && (
-                  <p className="lede">
-                    {roundComments.length === 1
-                      ? '1 comment so far.'
-                      : `${roundComments.length} comments so far.`}
-                  </p>
-                )}
-
-                {/* THE ONE THE HOST PUT UP. The ruling above is reversed by
-                    the owner on 2026-09-22 for the text the host CHOOSES: the
-                    arrivals in the meter are unattributed; this one carries
-                    its author, who was told on their phone that their name
-                    would be shown with the comment. */}
-                {featuredComment && (
-                  <blockquote className="featured" data-drop="4" data-drop-note="The featured comment">
-                    <p className="say">{featuredComment.text}</p>
-                    <footer>
-                      {featuredComment.playerName && <span className="who">{featuredComment.playerName}</span>}
-                      {featuredComment.anchorLabel && <span className="on">{`on ${featuredComment.anchorLabel}`}</span>}
-                    </footer>
-                  </blockquote>
-                )}
-              </>
+              // The wall is its own component: the question, one instruction line,
+              // and the comment the host put up as a pull quote (FeedbackWall.jsx).
+              // The count is the meter's; the arrivals are the meter's list.
+              <FeedbackWall featured={featuredComment} onTakeDown={handleFeatureComment} />
             )}
 
             {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.
@@ -6874,6 +7086,10 @@ Focus on actionable business strategy insights.`;
           onRemovePlayer={(name) => setPlayerRemoved(name, true)}
           onRestorePlayer={(name) => setPlayerRemoved(name, false)}
           onGrantHandover={grantNameHandover}
+          scoreboard={scoreboard}
+          scoreboardAvailability={scoreboardAvail}
+          onToggleScoreboard={(open) => publishScoreboard({ open })}
+          onScoreboardStyle={(style) => publishScoreboard({ style })}
           gameState={gameState}
           playersWhoAnswered={playersWhoAnswered}
           playersWhoVoted={playersWhoVoted}
@@ -6945,6 +7161,30 @@ Focus on actionable business strategy insights.`;
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
           onSwitchGame={requestLeave}
+          /*
+            Task 4 fix round 1, item 1: CLOSE THE PANEL FIRST. `runHostAction`
+            closes every side panel only AFTER `showConfirmation` resolves — it
+            has to, since the confirm must be honoured before any control (the
+            dock's own included) dispatches — so calling it directly here left
+            the confirm open ON TOP of this still-open panel. Two faults from
+            one cause: a modal drawn over a modal, and — because both carry a
+            document-level Escape listener — one Escape press cancelled the
+            confirm AND closed the panel behind it, with no way to tell which
+            just happened.
+
+            `selectQuestion` (~3549) already had the fix for the same shape of
+            bug ("Close the panel first, so the confirmation is the only thing
+            on screen"): close synchronously, on the click, before anything
+            async runs. The intent AND its confirm still travel together into
+            runHostAction exactly as before, so the generic "the dock asks
+            before it dispatches any control that carries confirm" gate still
+            covers this control — closing first only changes what is on
+            screen while it asks.
+          */
+          onEndSession={() => {
+            closeAllSidePanels();
+            runHostAction({ intent: HOST_INTENTS.END, confirm: endSessionConfirm() });
+          }}
           onSignOut={handleSignOut}
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.

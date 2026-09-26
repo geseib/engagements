@@ -119,6 +119,30 @@ export function anchorLabelFor(anchor, context = {}) {
 }
 
 /**
+ * What a featured comment was about, as the phrase the stage credits it with:
+ * "Dana Reyes on Priya Shah's response" (components/stage/FeedbackWall.jsx).
+ *
+ * Read from the label `anchorLabelFor` wrote, because that is what the writer
+ * saw when they chose where to comment — and on a round whose answers were
+ * redacted the label carries no name, so neither does the phrase ("on
+ * response 2"). An anchor this file does not know keeps its own label rather
+ * than vanishing; no anchor at all is ''.
+ */
+export function wallCreditFor(comment) {
+  const kind = comment && comment.anchorKind;
+  const label = String((comment && comment.anchorLabel) || '').trim();
+  if (kind === 'summary') return 'on the summary';
+  if (kind === 'results') return 'on the results';
+  if (kind === 'response') {
+    const [ordinal, who] = label.split(/\s+—\s+/);
+    if (who && who.trim()) return `on ${who.trim()}’s response`;
+    if (ordinal) return `on ${ordinal.toLowerCase()}`;
+    return '';
+  }
+  return label ? `on ${label}` : '';
+}
+
+/**
  * The slice of the commented-on material that travels with the comment.
  *
  * Whitespace is collapsed first: the source is a participant's own prose, often

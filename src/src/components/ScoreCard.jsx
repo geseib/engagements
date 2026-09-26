@@ -722,6 +722,15 @@ export default function ScoreCard({ publicSetId, mode = 'org', onBack, onTakenDo
                 </tbody>
               </table>
               {observed.length > 0 && <SeenTable rows={worstFirst(observed)} />}
+              {/* set-review.js caps a large observed list rather than risk
+                  DynamoDB's item limit (round 1 review, Important #2c); the
+                  server's own OBSERVED_CAP travels as `review.observedCap`
+                  so this never hard-codes a second copy of that number. */}
+              {review.observedTruncated && (
+                <p className="scard-fine" data-testid="scard-observed-truncated">
+                  Only the first {review.observedCap} observations are listed.
+                </p>
+              )}
             </>
           )}
           {/* Stage 3: reports by type, and each report's note (never the reporter). */}

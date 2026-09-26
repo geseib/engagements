@@ -59,14 +59,17 @@ function previousPeriod(period) {
 }
 
 /**
- * Every organisation, from the platform's index.
+ * Every organisation, from the platform's index: its `ORG#` rows ONLY.
  *
- * Tolerant about the row shape on purpose: it reads `orgId` if the row carries
- * one and otherwise strips the `ORG#` prefix off the sort key. The index is
- * owned elsewhere, and a reconciler that silently reconciles NOBODY because a
- * sort key gained a prefix is worse than one that copes with both spellings.
- * A run that finds no organisations at all is logged as a warning for exactly
- * that reason.
+ * The partition also holds promo codes (CODE#), invoice pointers
+ * (INVOICE#<period>#<orgId>) and the plan-request queue (PLANREQ#). Read them
+ * as organisations and a code gets reconciled and invoiced — dev closed
+ * INVOICE#2026-08#CODE#WELCOME26 that way — and every org with an invoice or a
+ * request is handed to closeInvoice more than once. tests/orgs-index-readers.js.
+ *
+ * Within an ORG# row it reads `orgId` if the row carries one and otherwise
+ * strips the prefix off the sort key. A run that finds no organisations at all
+ * is logged as a warning: reconciling NOBODY is the silent failure.
  */
 async function listOrgIds() {
   const ids = [];
@@ -74,8 +77,8 @@ async function listOrgIds() {
   do {
     const page = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: { ':pk': ORGS_INDEX_PK },
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': ORGS_INDEX_PK, ':sk': 'ORG#' },
       ExclusiveStartKey,
     }));
     for (const item of page.Items || []) {

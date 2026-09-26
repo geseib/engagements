@@ -6,7 +6,9 @@
  * create-report.js rebuilds the whole report from the live table every time it
  * is asked, and the rows it reads expire on four different clocks:
  *
- *   24 hours   QUESTION#nnn#REF                  next-question.js:1123
+ *   session    QUESTION#nnn#REF                  next-question.js (was 24 hours
+ *                                                 until 2026-09-25; now the
+ *                                                 session's own ttl)
  *    7 days    QUESTION#nnn#ANSWER#{player}      websocket/message.js:374
  *    7 days    QUESTION#nnn#VOTE#{player}        submit-vote.js:66
  *    7 days    PLAYER#{name}                     join-game.js:338

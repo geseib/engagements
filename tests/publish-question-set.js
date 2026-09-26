@@ -406,6 +406,31 @@ function snapshotOf({ version = 2, contentHash } = {}) {
     assert.strictEqual(meta.sourceSetId, SET);
     assert.strictEqual(meta.sourceVersion, 2);
   });
+  // rejects: stamping the published record with whatever counts the org's SETS
+  // row currently carries. upload-questions.js keeps questionCount/categoryCount/
+  // hasImages on that row in sync with the ACTIVE version only — publishing an
+  // older, non-active version must describe THAT version's content, not v2's.
+  await check('publishing a non-active version stamps that version\'s own counts', async () => {
+    await seed(); // v2 is active: two questions, one category, no images.
+    const row = store.get(key(`ORG#${ORG}#SETS`, `SET#${SET}`));
+    // The org row as upload-questions.js leaves it: mirroring the active version.
+    store.set(key(`ORG#${ORG}#SETS`, `SET#${SET}`), {
+      ...row, questionCount: 2, categoryCount: 1, hasImages: false,
+    });
+    // v1: an older, smaller version with different content — one question, no
+    // categories, and an image.
+    store.set(key(`ORG#${ORG}#SET#${SET}#v1`, 'QUESTION#q000'), {
+      PK: `ORG#${ORG}#SET#${SET}#v1`, SK: 'QUESTION#q000', Title: 'THE OLD ONE', Detail: 'Before the redo.', Image: 'legacy.png',
+    });
+    await R.writeReview(fakeDoc, 'engage-test', ORG_REF, 1, { status: R.STATUS.PASSED });
+
+    const res = await publish(owner({ version: 1 }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const meta = publicMeta();
+    assert.strictEqual(meta.questionCount, 1, `read ${meta.questionCount} questions — the ACTIVE version's count, not v1's`);
+    assert.strictEqual(meta.categoryCount, 0, `read ${meta.categoryCount} categories — the ACTIVE version's count, not v1's`);
+    assert.strictEqual(meta.hasImages, true, 'v1 has an image, but the published row says otherwise');
+  });
 
   say('\n3. re-sharing adds a version, it does not spawn an orphan');
   /*

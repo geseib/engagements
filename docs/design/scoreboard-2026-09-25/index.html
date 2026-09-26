@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Standings scoreboard — three directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Index for docs/design/scoreboard-2026-09-25: the three boards as live
+   thumbnails. Each iframe renders at the stage's 1280x720 and is scaled to
+   its card, so the thumbnail is the real page, running, not a picture of it.
+   Laptop surface, dusk: the 12/13/15/19/24px ladder, measured ink
+   (#F4EDE4 on #1B2942 12.53:1, #B6C2D4 on #1B2942 8.08:1, links #A7C3EF 8.11:1). */
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#B6C2D4; --primary:#F6A94C; --secondary:#7CA7E6;
+  --secondary-text:#A7C3EF; --rule:rgba(155,168,190,.22);
+  --font-display:"Archivo Expanded","Archivo",system-ui,sans-serif;
+  --font-ui:"Inter",system-ui,sans-serif;
+}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.sbx{max-width:1680px;margin:0 auto;padding:32px 16px 48px}
+.sbx h1{font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:24px;line-height:1.2;margin:0 0 8px}
+.sbx .lede{color:var(--muted);max-width:92ch;margin:0 0 24px}
+.sbx .lede b{color:var(--text);font-weight:600}
+.sbx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:20px}
+.sbx-card{background:var(--surface);border:1px solid var(--rule);border-radius:16px;overflow:hidden;
+  display:flex;flex-direction:column;min-width:0}
+.sbx-thumb{position:relative;aspect-ratio:16/9;overflow:hidden;background:#070C16;border-bottom:1px solid var(--rule)}
+.sbx-thumb iframe{position:absolute;left:0;top:0;width:1280px;height:720px;border:0;
+  transform-origin:0 0;transform:scale(var(--s,.34))}
+.sbx-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px}
+.sbx-body h2{font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:19px;line-height:1.25;margin:0}
+.sbx-body h2 span{color:var(--primary)}
+.sbx-body p{margin:0;color:var(--muted)}
+.sbx-links{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:4px}
+.sbx-links a{color:var(--secondary-text);font-weight:600;text-decoration:none}
+.sbx-links a:hover{text-decoration:underline}
+.sbx-links a:focus-visible{outline:2px solid var(--secondary);outline-offset:2px;border-radius:4px}
+.sbx-notes{margin:28px 0 0;padding:16px;border:1px solid var(--rule);border-radius:12px;color:var(--muted);max-width:110ch}
+.sbx-notes h3{font-size:15px;color:var(--text);margin:0 0 6px}
+.sbx-notes ul{margin:0;padding-left:20px}
+.sbx-notes li{margin:4px 0}
+.sbx-notes code{font-size:13px;color:var(--text)}
+</style>
+</head>
+<body>
+<main class="sbx">
+  <h1>Standings: three scoreboard directions</h1>
+  <p class="lede">A full-screen stage moment the host opens between rounds. All three share the decided behaviour:
+    <b>Trivia and Call &amp; Answer only</b>; totals as of the last fully scored round (after round 6);
+    each row shows its place change since the previous round (▲n, ▼n, NEW, –); ties are competition-ranked
+    (=4, =4, 6); pages auto-flip, end back on the top page and hold; <b>← →</b> step pages;
+    <b>Room: 10 per page</b> (default) or <b>TV: 5 per page</b>. 14 players, one with a long name that wraps.</p>
+
+  <div class="sbx-grid">
+    <article class="sbx-card">
+      <div class="sbx-thumb"><iframe src="a-departure-board.html" title="A. Departure board, running" tabindex="-1"></iframe></div>
+      <div class="sbx-body">
+        <h2><span>A</span> Departure board</h2>
+        <p>Split-flap modules in a housing: changed cells fall through a few letters and land, line by line, so each page arrives as a wave.</p>
+        <div class="sbx-links">
+          <a href="a-departure-board.html">Open full size</a>
+          <a href="a-departure-board.html?size=5">TV profile</a>
+          <a href="a-departure-board.html?reduced=1">Reduced motion</a>
+        </div>
+      </div>
+    </article>
+    <article class="sbx-card">
+      <div class="sbx-thumb"><iframe src="b-olympic-board.html" title="B. Olympic results board, running" tabindex="-1"></iframe></div>
+      <div class="sbx-body">
+        <h2><span>B</span> Olympic results board</h2>
+        <p>Lanes with medal rank blocks and three-letter codes; the old list clears, then each lane posts in turn and the leader's lane takes one gold sweep.</p>
+        <div class="sbx-links">
+          <a href="b-olympic-board.html">Open full size</a>
+          <a href="b-olympic-board.html?size=5">TV profile</a>
+          <a href="b-olympic-board.html?reduced=1">Reduced motion</a>
+        </div>
+      </div>
+    </article>
+    <article class="sbx-card">
+      <div class="sbx-thumb"><iframe src="c-tote-board.html" title="C. Tote board, running" tabindex="-1"></iframe></div>
+      <div class="sbx-body">
+        <h2><span>C</span> Tote board</h2>
+        <p>Bulb-matrix figures on an infield board: each page first shows the order after round 5, then the lamps relight and the field rides to its new places.</p>
+        <div class="sbx-links">
+          <a href="c-tote-board.html">Open full size</a>
+          <a href="c-tote-board.html?size=5">TV profile</a>
+          <a href="c-tote-board.html?reduced=1">Reduced motion</a>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <section class="sbx-notes" aria-labelledby="sbx-n">
+    <h3 id="sbx-n">Notes</h3>
+    <ul>
+      <li>Each board is drawn in a 16:9 stage frame with the stage's tokens, rail and Room/TV ladders (<code>src/src/styles/stage.css</code>), read against the frame so the composition holds at any window size. The strip at the foot is mockup-only: profile switch, reduced-motion switch, replay.</li>
+      <li>Motion follows the stage's contract (<code>__tests__/stageMotion.test.js</code>): keyframes touch only transform, opacity, border-color and visibility, and every animated selector is stilled under <code>prefers-reduced-motion</code> and under <code>?reduced=1</code>, where the page swap is instant.</li>
+      <li>Add <code>?fast=1</code> to any board to run the sequence at about a third of its real timing.</li>
+      <li>Display face: these load Archivo at width 125 from Google Fonts. The app's <code>public/index.html</code> asks Google Fonts for <code>Archivo Expanded</code>, a family it does not serve: asked for alone it answers 400 "Missing font family", and the app's combined request returns Inter only. So the live stage's display type is the system face, not the wide face these boards show.</li>
+    </ul>
+  </section>
+</main>
+<script>
+(() => {
+  const fit = (box) => box.style.setProperty('--s', (box.clientWidth / 1280).toFixed(4));
+  const boxes = [...document.querySelectorAll('.sbx-thumb')];
+  const ro = new ResizeObserver((es) => es.forEach((e) => fit(e.target)));
+  boxes.forEach((b) => { fit(b); ro.observe(b); });
+})();
+</script>
+</body>
+</html>

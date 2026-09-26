@@ -62,6 +62,15 @@
  * later change: touching the modal primitive while several dialogs are being
  * edited would put a shared-state refactor underneath work in flight. Recorded
  * so the next reader knows the narrow fix was a sequencing decision.
+ *
+ * ── THE SCOREBOARD ─────────────────────────────────────────────────────────
+ *
+ * `scoreboardOpen` joined for the same reason as the two dialogs, decided in
+ * advance rather than after an incident: while the board is up, → and ← turn
+ * ITS pages and Space CLOSES it without advancing the game
+ * (docs/superpowers/specs/2026-09-25-scoreboard-design.md §3). Without this
+ * term HostActionBar's window listener would hear the same → and Space and
+ * move the live room behind the board.
  */
 export function shortcutsSuppressed({
   showConfirmModal = false,
@@ -72,12 +81,32 @@ export function shortcutsSuppressed({
   qrMode = null,
   spotlightOpen = false,
   pastRoundOpen = false,
+  scoreboardOpen = false,
 } = {}) {
   return Boolean(
     showConfirmModal || showExpandedQR ||
     showReportsModal || lessonExpanded || isLoadingData || qrMode === 'pinned' ||
-    spotlightOpen || pastRoundOpen
+    spotlightOpen || pastRoundOpen || scoreboardOpen
   );
+}
+
+/**
+ * May the SCOREBOARD's own keys fire? (S, V, Esc, Space, and the board's
+ * ← / →.)
+ *
+ * Not while the session menu is open — it owns Escape — and not while any of
+ * the overlays that take SPACE away is up: an answer spotlight opened over the
+ * board (from the phone) steps its answers with ← / → and closes on Escape, a
+ * past round likewise, and a confirm dialog's focused button takes Space. If
+ * the board's keys stayed live under them, → would step the spotlight AND the
+ * hidden board, Escape would close both, and Space on the dialog's button
+ * would close the board instead.
+ *
+ * The same terms as `shortcutsSuppressed`, minus the board's own: an open
+ * board is exactly when its keys should work.
+ */
+export function scoreboardKeysLive({ setupPanelOpen = false, ...overlays } = {}) {
+  return !setupPanelOpen && !shortcutsSuppressed({ ...overlays, scoreboardOpen: false });
 }
 
 /**

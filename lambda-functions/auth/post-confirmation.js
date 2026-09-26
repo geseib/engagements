@@ -15,7 +15,15 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const TABLE_NAME = process.env.TABLE_NAME;
 
 exports.handler = async (event) => {
-  console.log('Post-confirmation event:', JSON.stringify(event, null, 2));
+  /*
+    THIS USED TO PRINT THE WHOLE EVENT, whose userAttributes carry the new
+    account's email and name. Which trigger, and which account by its sub —
+    nothing else (tests/lambda-event-not-logged.js).
+  */
+  console.log('Post-confirmation', JSON.stringify({
+    triggerSource: event.triggerSource,
+    sub: event.request?.userAttributes?.sub || null,
+  }));
 
   // Check if user is verified (email/phone verified OR external provider)
   const isEmailVerified = event.request.userAttributes.email_verified === 'true';
@@ -36,7 +44,7 @@ exports.handler = async (event) => {
     const name = event.request.userAttributes.name || email.split('@')[0];
     const userId = event.request.userAttributes.sub;
 
-    console.log(`Processing post-confirmation for user: ${username}, email: ${email}`);
+    console.log(`Processing post-confirmation for user: ${username}`);
 
     // Check if user already has pending status (duplicate signup detection)
     try {

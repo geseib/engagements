@@ -41,15 +41,18 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 
 const { normalizeGameType, gameTypeSpellings } = require('./shared/game-types');
 const { normalizeTags } = require('./shared/tags');
+const { clampBackground } = require('./shared/question-background');
 const {
   itemsPerCall, maxTokensFor, perItemTokens,
   lengthGuidance, tagGuidance, buildItemsTool, invokeStructured,
 } = require('./shared/structured-generation');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
+  openJob, isCallersJob, workerCaller, claimJob,
 } = require('./shared/generation-jobs');
 const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds');
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
+const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
 const { callerUsername } = require('./shared/require-admin');
 const { callerUserId } = require('./shared/question-set-access');
 const { callerOrgId, callerOrgRole } = require('./shared/tenant');
@@ -69,6 +72,8 @@ const CORS = {
 const json = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), headers: CORS });
 
 const MAX_COUNT = 100;
+/** The job-row `kind`. The poll serves this kind and no other. */
+const JOB_KIND = 'scenarios';
 /** Observed Sonnet throughput on this account. Used only to budget the deadline. */
 const OUTPUT_TOKENS_PER_SEC = 45;
 
@@ -167,6 +172,7 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt, pro
 function buildPrompt({
   template, engagementType, count, difficulty, context, audience, customPrompt,
   categories, mustHaveCategories, alreadyUsedTitles, roundKind, roundKindBrief,
+  batchGuidance,
 }) {
   const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
 
@@ -186,14 +192,26 @@ function buildPrompt({
   // direction written for discussion rounds must not reach them.
   const direction = roundKindDirection(engagementType, roundKind, roundKindBrief);
 
+  // THE AUTHOR'S GUIDANCE FOR THIS BATCH — "include George Washington in at
+  // least one" — goes after the direction and before the topic, for the same
+  // reason the direction goes first. See shared/batch-guidance.js.
+  const guidance = batchGuidanceBlock(batchGuidance);
+
   // With no direction the opening line stays byte-identical to what it has
   // always been. Trivia and wavelength take no direction, and their prompts
-  // should not drift as a side effect of a call-and-answer fix.
-  let p = direction
-    ? `Create ${count} ${itemNoun}.\n\n${direction}\n\n`
+  // should not drift as a side effect of a call-and-answer fix. Guidance is
+  // the one thing that restructures it, and only when there is some.
+  let p;
+  if (direction) {
+    p = `Create ${count} ${itemNoun}.\n\n${direction}\n\n`
       + `Where the direction above and the topic below disagree, follow the direction.\n\n`
-      + `TOPIC: ${template.basePrompt}`
-    : `Create ${count} ${itemNoun}. ${template.basePrompt}`;
+      + (guidance ? `${guidance}\n\n` : '')
+      + `TOPIC: ${template.basePrompt}`;
+  } else if (guidance) {
+    p = `Create ${count} ${itemNoun}.\n\n${guidance}\n\nTOPIC: ${template.basePrompt}`;
+  } else {
+    p = `Create ${count} ${itemNoun}. ${template.basePrompt}`;
+  }
 
   if (context && template.contextTemplate) p += template.contextTemplate.replace('{context}', context);
   if (audience && template.audienceTemplate) p += template.audienceTemplate.replace('{audience}', audience);
@@ -264,6 +282,11 @@ function normalizeItem(raw, engagementType) {
     customInstructions: String(raw?.customInstructions || '').trim(),
     // Normalised on write; readers tolerate legacy casing. See shared/tags.js.
     tags: normalizeTags(raw?.tags),
+    // ONLY call-and-answer, for the same reason wavelength carries no detail:
+    // the tool schema never asked wavelength for one (structured-generation.js
+    // buildItemsTool), so this is a guarantee, not a filter, for whatever a
+    // model volunteers anyway.
+    background: engagementType === 'call-and-answer' ? clampBackground(raw?.background) : '',
   };
 }
 
@@ -315,18 +338,22 @@ async function runWorker(event, context) {
   // context at all, so identity had to be captured on the POST; the row is the
   // carrier because only the authorised POST can write it. See
   // shared/generated-set.js, note 3.
-  let caller = {};
-  try {
-    const record = await getJob(dynamodb, tableName, jobId);
-    caller = {
-      userId: record?.callerUserId,
-      username: record?.callerUsername,
-      orgId: record?.callerOrgId,
-      orgRole: record?.callerOrgRole,
-    };
-  } catch (error) {
-    console.error(`⚠️ Job ${jobId}: could not read its own row for the caller: ${error.message}`);
-  }
+  //
+  // FAIL CLOSED. With no caller there is nothing to seal under and nobody to
+  // file a set for, and carrying on as `{}` wrote the org's content in
+  // plaintext and put its set in the platform library. A read that throws is
+  // left to throw, so Lambda's retry re-reads before anything is paid for; see
+  // shared/generation-jobs.js's workerCaller for the other two ways.
+  const caller = await workerCaller(dynamodb, tableName, jobId);
+  if (!caller) return;
+  // ONE DELIVERY GENERATES. An Event invoke arrives at least once and a failed
+  // one is retried, so a job already taken — running, finished, or failed after
+  // Bedrock was paid for — is left alone. See shared/generation-jobs.js's
+  // claimJob.
+  if (!(await claimJob(dynamodb, tableName, jobId))) return;
+  // Everything this worker writes back is sealed under the organisation that
+  // asked (shared/generation-jobs.js). Absent for Engage's own library.
+  const sealFor = caller.orgId || '';
 
   try {
     const {
@@ -350,6 +377,10 @@ async function runWorker(event, context) {
     }
 
     const total = Math.min(Math.max(parseInt(count, 10) || 1, 1), MAX_COUNT);
+
+    // ONE RUN'S INSTRUCTION, trimmed and capped, '' when blank. Every pass
+    // gets it. Never logged — see shared/batch-guidance.js.
+    const batchGuidance = readBatchGuidance(payload.batchGuidance);
 
     // The category clamp used to be Math.min(n, 24, chunkCount). With one item
     // per chunk that evaluated to 1 EVERY time — the logs read "Limited category
@@ -411,6 +442,7 @@ async function runWorker(event, context) {
         alreadyUsedTitles: produced.map((s) => s.title),
         roundKind,
         roundKindBrief,
+        batchGuidance,
       });
 
       let result;
@@ -431,7 +463,7 @@ async function runWorker(event, context) {
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
               alreadyUsedTitles: produced.map((s) => s.title),
-              roundKind, roundKindBrief,
+              roundKind, roundKindBrief, batchGuidance,
             }),
             tool,
             maxTokens: maxTokensFor(engagementType, halved),
@@ -466,6 +498,7 @@ async function runWorker(event, context) {
         phase: `Generated ${produced.length} of ${total}...`,
         items: produced,
         warnings,
+        sealFor,
       });
 
       // No forward progress means another pass will not help either.
@@ -494,14 +527,17 @@ async function runWorker(event, context) {
   });
 
   if (generationError) {
-    await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced });
+    await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced, sealFor });
   } else {
-    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, promptSource });
+    await completeJob(dynamodb, tableName, jobId, { items: produced, warnings, promptSource, sealFor });
     console.log(`✅ Job ${jobId} complete: ${produced.length} items`);
   }
 }
 
 // ------------------------------------------------------------------ handler
+
+// The prompt's own tests (tests/question-guidance.js) read this directly.
+exports.buildPrompt = buildPrompt;
 
 exports.handler = async (event, context) => {
   // Async worker: invoked with InvocationType 'Event', so it runs against the
@@ -520,26 +556,43 @@ exports.handler = async (event, context) => {
     if (method === 'GET' || jobIdParam) {
       if (!jobIdParam) return json(400, { error: 'jobId is required' });
       const item = await getJob(dynamodb, tableName, jobIdParam);
-      if (!item) return json(404, { error: 'Job not found or expired' });
-      return json(200, jobToResponse(item));
+      // THE CALLER WHO STARTED IT, ACTING WHERE THEY STARTED IT — the rule
+      // shared/generation-jobs.js states once. This poll is open to hosts as
+      // well as admins (auth/authorizer.js, AI_JOB_POLL), and a job id is not a
+      // capability: anyone else gets the same bare 404 as an expired job.
+      const mine = isCallersJob(item, {
+        kind: JOB_KIND, userId: callerUserId(event), orgId: callerOrgId(event),
+      });
+      if (!mine) return json(404, { error: 'Job not found or expired' });
+      return json(200, jobToResponse(await openJob(item)));
     }
 
     // ---- start ------------------------------------------------------------
+    // A job is handed over only to the user who started it, so one started
+    // with no user could never be read — and its set would be filed as an
+    // internal write, in Engage's library. The authorizer always supplies one.
+    const userId = callerUserId(event);
+    if (!userId) return json(401, { error: 'This request carried no signed-in user. Sign in again and retry.' });
+
     if (!event.body) return json(400, { error: 'No request body provided' });
     const payload = JSON.parse(event.body);
 
     const requested = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
     const jobId = newJobId();
+    const orgId = callerOrgId(event);
 
     await createJob(dynamodb, tableName, {
       jobId,
-      kind: 'scenarios',
+      kind: JOB_KIND,
       requested,
       request: {
         scenarioType: payload.scenarioType,
         engagementType: payload.engagementType,
         count: requested,
       },
+      // Sealed from the row's first write for a caller acting inside an
+      // organisation; Engage's own library stays plaintext.
+      sealFor: orgId,
       // THE ONLY PLACE THE CALLER CAN STILL BE READ — the worker runs without
       // an authorizer. Both parsers are the existing ones: `callerUserId` from
       // question-set-access.js (what `ownerStamp` reads) and `callerUsername`
@@ -557,9 +610,9 @@ exports.handler = async (event, context) => {
       // write without one: an orgId alone would resolve to no writable scope
       // and the set would be refused rather than misfiled.
       caller: {
-        userId: callerUserId(event),
+        userId,
         username: callerUsername(event),
-        orgId: callerOrgId(event),
+        orgId,
         orgRole: callerOrgRole(event),
       },
     });
@@ -585,3 +638,7 @@ exports.handler = async (event, context) => {
     return json(500, { error: `Failed to generate scenarios: ${error.message || 'unexpected error'}` });
   }
 };
+
+// Exported for tests/question-background-generators.js: normalizeItem is the
+// only place that gates a generated scenario's background on engagement type.
+module.exports.normalizeItem = normalizeItem;

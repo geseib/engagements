@@ -9,9 +9,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
  * `App` and asserts what the router actually chose.
  *
  * Note the navigation technique: `window.location.pathname = '/x'` is a SILENT
- * no-op under jsdom 26 (`delete window.location` returns false, so setupTests's
- * mock never replaced the real Location, and the setter is an unimplemented
- * navigation). A test written that way asserts nothing at all. `pushState` is a
+ * no-op under jsdom 26 (`location` is the real, unforgeable Location, and the
+ * setter is an unimplemented cross-document navigation). A test written that
+ * way asserts nothing at all. `pushState` is a
  * real same-document navigation and does move `location.pathname`.
  */
 

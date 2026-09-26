@@ -50,6 +50,7 @@ const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand, DeleteC
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const { callerMayDriveSession } = require('./tenant');
+const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -197,19 +198,26 @@ exports.handler = async (event) => {
       item. A PUT here would un-reveal a round get-results had already revealed
       — every attributed answer on the stage going back in the box because the
       host enlarged one of them — and would throw the round back to its tally.
+
+      #ttl = if_not_exists(#ttl, :ttl) (bug sweep Task 2, fix round 1): see
+      get-results.js's enterResultsState for why this row now needs one at
+      all. Whichever of the four ROUND# writers touches a round first stamps
+      the 30-day clock; the rest leave it alone.
     */
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
-      UpdateExpression: 'SET #focus = :focus, #idx = :idx, #updatedAt = :now, #qn = :qn',
+      UpdateExpression: 'SET #focus = :focus, #idx = :idx, #updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl)',
       ExpressionAttributeNames: {
         '#focus': 'StageFocus',
         '#idx': 'StageFocusIndex',
         '#updatedAt': 'UpdatedAt',
-        '#qn': 'QuestionNumber'
+        '#qn': 'QuestionNumber',
+        '#ttl': 'ttl'
       },
       ExpressionAttributeValues: {
-        ':focus': focus, ':idx': storedIndex, ':now': now, ':qn': padded
+        ':focus': focus, ':idx': storedIndex, ':now': now, ':qn': padded,
+        ':ttl': ttlFrom(null, ROUND_RECORD_DAYS)
       }
     }));
 

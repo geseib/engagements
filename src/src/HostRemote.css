@@ -328,6 +328,16 @@
 
 .hr-notes-foot { margin-top: 14px; }
 
+/* Same pairing as `.hr-notes-foot` just above it — --muted on --surface,
+   already the report's own quiet-line treatment. Host-only fact, never the
+   content: WorkieContextHint.jsx returns null when there is nothing to say. */
+.hr-notes .workie-context-hint {
+  margin: 8px 0 0;
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 /* --------------------------------------------------------------- flash */
 
 .hr-flash {
@@ -751,4 +761,24 @@
   padding: 8px 12px;
   font-size: .875rem;
   align-self: flex-start;
+}
+
+/* ------------------------------------------------------------ scoreboard
+   components/RemoteScoreboardPanel.jsx. The three looks sit in one row of
+   equal buttons under the open/next pair; the one on the room's screen is
+   marked by aria-pressed, in --primary on the card's --surface (7.42:1),
+   plus a doubled border — never colour alone. */
+.hr-sb-controls { margin-top: 10px; }
+.hr-sb-reason { margin-top: 10px; }
+.hr-sb-looks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.hr-sb-looks .hr-btn--small { align-self: stretch; min-width: 0; }
+.hr-sb-looks .hr-btn[aria-pressed="true"] {
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }

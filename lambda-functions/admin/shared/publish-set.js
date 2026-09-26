@@ -82,7 +82,14 @@ async function publishSnapshot(db, tableName, snapshot, {
     contentHash: hash,
   });
 
-  const questionCount = copies.filter((row) => String(row.SK).startsWith('QUESTION#')).length;
+  const publishedQuestions = copies.filter((row) => String(row.SK).startsWith('QUESTION#'));
+  const questionCount = publishedQuestions.length;
+  // The rest of a set's counts, the same way -- from the rows actually copied,
+  // never from the org's SETS row, which upload-questions.js keeps in sync with
+  // the ACTIVE version only. Publishing an older, non-active version must
+  // describe THAT version's content.
+  const categoryCount = copies.filter((row) => String(row.SK).startsWith('CATEGORY#')).length;
+  const hasImages = publishedQuestions.some((row) => String(row.Image || '').trim() !== '');
   const versions = Array.isArray(existing && existing.versions) ? [...existing.versions] : [];
   // Resuming converges onto a version already recorded here -- never push a
   // second entry for the same version number.
@@ -99,6 +106,9 @@ async function publishSnapshot(db, tableName, snapshot, {
     personaId: meta.personaId,
     activeVersion: publicVersion,
     versions,
+    questionCount,
+    categoryCount,
+    hasImages,
     active: true,
     Quickstart: false,
     sourceOrgId: source.orgId,

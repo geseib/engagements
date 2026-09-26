@@ -4,9 +4,11 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor } from '../utils/appendMode';
+import BatchGuidanceField from './BatchGuidanceField';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
+import { buildWorkieSetNote } from '../utils/workieSetNote';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
@@ -57,6 +59,13 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
       return { ...prev, ...next, count: Math.min(100, next.numberOfCategories * per) };
     });
   }, [appendMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // GUIDANCE FOR THIS BATCH, adding only — BatchGuidanceField. Its own state,
+  // not a triviaConfig key: it is not the set's brief and is not kept. It may
+  // arrive from the Add questions dialog, so the auto-start sends it.
+  // `guidanceSent` is what the running batch was made with, for the review.
+  const [batchGuidance, setBatchGuidance] = useState(appendTo?.batchGuidance || '');
+  const [guidanceSent, setGuidanceSent] = useState('');
 
   const [generatedTrivia, setGeneratedTrivia] = useState([]);
   const [currentTriviaIndex, setCurrentTriviaIndex] = useState(0);
@@ -169,6 +178,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     const stored = recallGenerationJob(ENDPOINT);
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
+    // Remembered with the job, so the review still quotes it after a reload.
+    setGuidanceSent(stored.batchGuidance || '');
     watchJob(stored.jobId);
   }, [watchJob]);
 
@@ -182,6 +193,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     setEditingItem(false);
     setReviewingPartial(false);
     setStep(2);
+    const sentGuidance = batchGuidanceFor(appendTo, batchGuidance);
+    setGuidanceSent(sentGuidance);
 
     // Generation runs as a background job. It cannot run inside the request:
     // API Gateway's 30s integration timeout is a hard ceiling and a full set
@@ -197,6 +210,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         numberOfCategories: appendTo?.numberOfCategories || triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
         customPrompt: withAppendRequirement(triviaConfig.customPrompt, appendTo),
+        // Its own field, never folded into customPrompt; absent when blank.
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
         // question set itself now — that is the fix for "Close — this keeps
         // running", which was true about the job and false about the outcome —
@@ -207,7 +222,10 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      rememberGenerationJob(ENDPOINT, jobId, { topic: triviaConfig.topic });
+      rememberGenerationJob(ENDPOINT, jobId, {
+        topic: triviaConfig.topic,
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
+      });
       await watchJob(jobId);
     } catch (error) {
       console.error('AI trivia generation error:', error);
@@ -291,7 +309,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   };
 
   const generateTriviaCSV = () => {
-    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags';
+    const headers = 'Category,Question#,Title,QuestionDetail,AnswerDetails,School,OptionA,OptionB,OptionC,OptionD,OptionE,OptionF,CorrectAnswer,Difficulty,Tags,Background';
     // Excluded rows are excluded everywhere. Exporting what the operator just
     // said to leave out would make the CSV and the set disagree.
     const rows = keptTrivia.map((trivia, index) => {
@@ -312,7 +330,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         trivia.optionF || '',
         correctAnswer,
         trivia.difficulty,
-        tagsToCsvCell(trivia.tags)
+        tagsToCsvCell(trivia.tags),
+        trivia.background || ''
       ]);
     });
     return buildCsv(headers, rows);
@@ -333,7 +352,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     title: `${triviaConfig.topic} Trivia${triviaConfig.audience ? ` for ${triviaConfig.audience}` : ''}`,
     description: `AI-generated trivia questions about ${triviaConfig.topic}. Difficulty: ${triviaConfig.difficulty}. ${triviaConfig.numChoices} choices per question.`,
     customInstructions: `Select the best answer for each question. ${triviaConfig.numCorrect > 1 ? `Some questions may have ${triviaConfig.numCorrect} correct answers.` : ''}`,
-    aiContextInstructions: `These are ${triviaConfig.difficulty}-level trivia questions about ${triviaConfig.topic}. Provide explanations for correct answers and encourage learning.`
+    aiContextInstructions: buildWorkieSetNote({
+      subject: `${triviaConfig.topic} trivia`,
+      audience: triviaConfig.audience,
+      difficulty: triviaConfig.difficulty,
+      brief: triviaConfig.customPrompt,
+    })
   });
 
   /**
@@ -369,6 +393,22 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
     && (interpreted.outcome === 'complete'
       || (interpreted.outcome === 'partial' && reviewingPartial));
 
+  /*
+   * EVERY WAY OUT OF THE REVIEW SCREEN GOES THROUGH THIS — the scrim, the X,
+   * and Cancel. Configuring or generating loses nothing (the job keeps
+   * running and is remembered, resumable on reopen), so this asks only when
+   * ADDING and the review holds questions not yet added — appendOnly mode
+   * makes no set, so they live nowhere else, and reopening would auto-start a
+   * fresh job that overwrites the one just abandoned.
+   */
+  const requestClose = () => {
+    if (isAppend(appendTo) && reviewing && keptTrivia.length > 0
+      && !window.confirm('Close without adding these questions? They have not been added and will be lost.')) {
+      return;
+    }
+    onClose();
+  };
+
   /**
    * A real defect the model produces, not a decoration: a correctAnswer that
    * does not name one of the options this set actually has. upload-questions
@@ -402,11 +442,11 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
 
   return (
     <div className="trivia-ai-builder-modal">
-      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-overlay" onClick={requestClose}></div>
       <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'AI Trivia Builder'}</h2>
-          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
+          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -433,6 +473,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
               />
 
               <div className="config-form">
+                {/* ADDING ONLY, and first: this batch's instruction. */}
+                {isAppend(appendTo) && <BatchGuidanceField value={batchGuidance} onChange={setBatchGuidance} />}
+
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
@@ -594,6 +637,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
                   items={generatedTrivia}
                   requested={interpreted.requested}
                   noun="questions"
+                  guidance={guidanceSent}
                   excluded={excluded}
                   savedAs={interpreted.createdSet}
                   onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
@@ -847,7 +891,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
               <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={requestClose}>
                 Cancel
               </button>
             </>

@@ -3,11 +3,13 @@ import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import { normalizeTags, tagsToCsvCell } from '../utils/tags';
+import { buildWorkieSetNote } from '../utils/workieSetNote';
 import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement } from '../utils/appendMode';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor } from '../utils/appendMode';
+import BatchGuidanceField from './BatchGuidanceField';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
 import {
@@ -77,6 +79,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     roundKindBrief: '',
     roundKindInstruction: ''
   });
+  // GUIDANCE FOR THIS BATCH, adding only — BatchGuidanceField. Kept out of
+  // scenarioConfig on purpose: it is not the set's brief, it is not kept, and
+  // handleConfigSubmit logs scenarioConfig to the browser console. It may
+  // arrive from the Add questions dialog, so the auto-start sends it.
+  // `guidanceSent` is what the running batch was made with, for the review.
+  const [batchGuidance, setBatchGuidance] = useState(appendTo?.batchGuidance || '');
+  const [guidanceSent, setGuidanceSent] = useState('');
   const [generatedScenarios, setGeneratedScenarios] = useState([]);
   const [generatedMetadata, setGeneratedMetadata] = useState(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
@@ -543,6 +552,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     const stored = recallGenerationJob(ENDPOINT);
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
+    // Remembered with the job, so the review still quotes it after a reload.
+    setGuidanceSent(stored.batchGuidance || '');
     watchJob(stored.jobId);
   }, [watchJob]);
 
@@ -647,6 +658,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     setEditingItem(false);
     setReviewingPartial(false);
     setStep(3);
+    const sentGuidance = batchGuidanceFor(appendTo, batchGuidance);
+    setGuidanceSent(sentGuidance);
 
     try {
       const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
@@ -775,6 +788,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         // choosing a topic card resets both fields from the prompt's defaults.
         ...appendCategoryDefaults(appendTo),
         ...(isAppend(appendTo) ? { appendOnly: true } : {}),
+        // THIS BATCH'S GUIDANCE, its own field and never inside customPrompt;
+        // the backend places it after the direction and before the topic.
+        // Absent when blank.
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
         // DIRECTION. The backend puts this IN FRONT OF the topic's basePrompt,
         // because basePrompt used to be the first thing the model read and
         // first is what a model follows — which is why typing an Apply brief
@@ -801,7 +818,10 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         }
       }, { label: 'Generation', onStatus: setGenerationStatus });
 
-      rememberGenerationJob(ENDPOINT, jobId, { scenarioType: backendScenarioType });
+      rememberGenerationJob(ENDPOINT, jobId, {
+        scenarioType: backendScenarioType,
+        ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
+      });
       await watchJob(jobId);
     } catch (error) {
       console.error('AI generation error:', error);
@@ -835,7 +855,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   };
 
   const generateCSVContent = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags';
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background';
 
     // First, group scenarios by category. Excluded rows are excluded
     // everywhere — exporting one the operator just dropped would make the CSV
@@ -861,7 +881,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           scenario.detail,
           scenario.school || 'Professional Development',
           scenario.customInstructions || '',
-          tagsToCsvCell(scenario.tags)
+          tagsToCsvCell(scenario.tags),
+          scenario.background || ''
         ]));
       });
     });
@@ -990,17 +1011,19 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   // Generate AI context instructions
   const generateAIContextInstructions = () => {
-    const audienceContext = scenarioConfig.audience ? ` The target audience is ${scenarioConfig.audience}.` : '';
-    const difficultyContext = ` These are ${scenarioConfig.difficulty}-level scenarios.`;
-    
-    // Check if it's Amazon Leadership Principles for special context
     const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
-    const actualScenarioType = selectedType?.source === 'database' && selectedType.dbPrompt 
-      ? selectedType.dbPrompt.scenarioType 
-      : scenarioConfig.type;
-    const typeContext = actualScenarioType === 'amazon-principles' ? ' Focus on Amazon Leadership Principles and STAR format responses.' : '';
-
-    return `These scenarios are designed for professional development and learning.${audienceContext}${difficultyContext}${typeContext} Provide constructive feedback and encourage specific, detailed responses.`;
+    return buildWorkieSetNote({
+      subject: selectedType?.title || '',
+      audience: scenarioConfig.audience,
+      difficulty: scenarioConfig.difficulty,
+      brief: scenarioConfig.context,
+    }, {
+      // The note may say "each question carries Background notes" only where
+      // the generator writes them — call-and-answer, the same literal gate
+      // structured-generation.js and ai-generate-scenarios.js use. A wavelength
+      // subject never has one, and saying otherwise tells Workie something false.
+      backgroundLine: engagementType === 'call-and-answer',
+    });
   };
 
   const navigateScenario = (direction) => {
@@ -1020,6 +1043,15 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   const reviewing = !isGenerating && !transportError
     && (interpreted.outcome === 'complete'
       || (interpreted.outcome === 'partial' && reviewingPartial));
+
+  /** See TriviaAIBuilder.requestClose — same contract, same reasons. */
+  const requestClose = () => {
+    if (isAppend(appendTo) && reviewing && keptScenarios.length > 0
+      && !window.confirm('Close without adding these scenarios? They have not been added and will be lost.')) {
+      return;
+    }
+    onClose();
+  };
 
   /** A scenario with no prompt text is nothing a room can respond to. */
   const scenarioDefect = (scenario) => {
@@ -1083,11 +1115,11 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
 
   return (
     <div className="ai-scenario-builder-modal">
-      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-overlay" onClick={requestClose}></div>
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder{isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}</h2>
-          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
+          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -1328,6 +1360,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               />
 
               <div className="config-form">
+                {/* ADDING ONLY, and first: this batch's instruction. */}
+                {isAppend(appendTo) && <BatchGuidanceField value={batchGuidance} onChange={setBatchGuidance} />}
+
                 {/* NO TITLE WHEN ADDING. The set already has one, and these
                     questions join it — the owner: "you shouldnt get to set the
                     question set title when adding questions." Hidden, not just
@@ -1498,6 +1533,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   items={generatedScenarios}
                   requested={interpreted.requested}
                   noun="scenarios"
+                  guidance={guidanceSent}
                   excluded={excluded}
                   savedAs={interpreted.createdSet}
                   onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
@@ -1662,7 +1698,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
               <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={requestClose}>
                 Cancel
               </button>
             </>

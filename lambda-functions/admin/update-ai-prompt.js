@@ -2,12 +2,12 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
-const { normalizeOutputSections, inferPromptType } = require('./shared/prompt-shape');
+const { normalizeOutputSections, normalizeAngleWeights, inferPromptType } = require('./shared/prompt-shape');
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
 const {
-  findPromptForCaller, canManagePrompt, promptKey, promptBodyKey,
+  findPromptForCaller, canManagePrompt, promptRefusalMessage, promptKey, promptBodyKey,
 } = require('./shared/prompt-access');
 const { requestedScope, callerUserId } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
@@ -83,6 +83,9 @@ exports.handler = async (event) => {
       // Declared output shape. Omit to leave whatever the prompt already has;
       // send [] or null to clear it and go back to the system default triad.
       outputSections: rawOutputSections,
+      // Round-angle mix (game/round-angles.js). Omit to leave it; null or {}
+      // to go back to the house mix.
+      angleWeights: rawAngleWeights,
       isDefault,
       status,
       questionSetIds,
@@ -176,9 +179,9 @@ exports.handler = async (event) => {
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Allow-Methods': 'PUT, OPTIONS'
         },
-        body: JSON.stringify({
-          error: 'This Workie belongs to someone else. You can only change Workies you created.'
-        })
+        // Which rule refused, and what to do — the owner's own save came back
+        // "belongs to someone else", which named neither (prompt-access.js).
+        body: JSON.stringify({ error: promptRefusalMessage(event, found.item) })
       };
     }
 
@@ -208,6 +211,11 @@ exports.handler = async (event) => {
     if (outputSectionsSupplied && rawOutputSections && !outputSections) {
       throw new Error('outputSections must be 1-8 entries of { heading, guidance }, each heading unique, single-line plain text without markdown syntax');
     }
+    // Same convention: undefined = leave alone; null or {} = back to the house mix.
+    const angleWeightsSupplied = rawAngleWeights !== undefined;
+    const angleWeightsCheck = angleWeightsSupplied ? normalizeAngleWeights(rawAngleWeights) : { ok: true, weights: null };
+    if (!angleWeightsCheck.ok) throw new Error(angleWeightsCheck.error);
+    const angleWeights = angleWeightsCheck.weights;
 
     // See PROMPT_STATUSES. `undefined` means "not supplied", same convention as
     // every other field here; anything else has to be one of the three.
@@ -434,6 +442,9 @@ exports.handler = async (event) => {
       ...(outputSectionsSupplied
         ? (outputSections ? { outputSections } : { outputSections: undefined })
         : (currentContent?.outputSections ? { outputSections: currentContent.outputSections } : {})),
+      ...(angleWeightsSupplied
+        ? { angleWeights: angleWeights || undefined }
+        : (currentContent?.angleWeights ? { angleWeights: currentContent.angleWeights } : {})),
       isDefault: isDefault !== undefined ? isDefault : currentContent?.isDefault || currentPrompt.isDefault,
       status: status !== undefined ? status : currentContent?.status || currentPrompt.status,
       questionSetIds: questionSetIds !== undefined ? questionSetIds : currentContent?.questionSetIds || currentPrompt.questionSetIds || [],
@@ -559,6 +570,13 @@ exports.handler = async (event) => {
       expressionAttributeValues[':outputSections'] = await store('outputSections', outputSections || []);
     }
 
+    if (angleWeightsSupplied) {
+      // The row's mirror of the body. A setting, never prose: plaintext on every
+      // scope. Cleared writes an empty map, which reads as the house mix.
+      updateExpression.push('angleWeights = :angleWeights');
+      expressionAttributeValues[':angleWeights'] = angleWeights || {};
+    }
+
     // Always update these fields
     updateExpression.push('updatedAt = :updatedAt');
     expressionAttributeValues[':updatedAt'] = timestamp;
@@ -600,14 +618,23 @@ exports.handler = async (event) => {
           // First, clear isDefault from all other prompts in the same category
           console.log(`🧹 Clearing default status from other prompts in ${currentPrompt.gameType}/${updatedContent.category}`);
           
-          const { Items: allPrompts } = await dynamodb.send(new QueryCommand({
-            TableName: tableName,
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-            ExpressionAttributeValues: {
-              ':pk': 'AIPROMPTS',
-              ':sk': 'AIPROMPT#'
-            }
-          }));
+          // Every page: a default past the first 1 MB would survive the sweep
+          // and leave two. tests/library-reads-paged.js.
+          const allPrompts = [];
+          let ExclusiveStartKey;
+          do {
+            const page = await dynamodb.send(new QueryCommand({
+              TableName: tableName,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: {
+                ':pk': 'AIPROMPTS',
+                ':sk': 'AIPROMPT#'
+              },
+              ExclusiveStartKey,
+            }));
+            allPrompts.push(...(page.Items || []));
+            ExclusiveStartKey = page.LastEvaluatedKey;
+          } while (ExclusiveStartKey);
 
           // One default per GAME TYPE, not per game type + category — see the
           // matching note in create-ai-prompt.js (D17). Matched on the

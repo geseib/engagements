@@ -127,8 +127,18 @@ stub('@aws-sdk/client-bedrock-runtime', {
   },
   InvokeModelCommand: class { constructor(i) { this.input = i; } },
 });
+// The advisor starts its analysis with an Event self-invoke; the payload is
+// recorded so advise() below can run that worker the way Lambda would.
+let dispatchedPayloads = [];
 stub('@aws-sdk/client-lambda', {
-  LambdaClient: class { async send() { return {}; } },
+  LambdaClient: class {
+    async send(cmd) {
+      if (cmd.input && cmd.input.Payload) {
+        dispatchedPayloads.push(JSON.parse(Buffer.from(cmd.input.Payload).toString('utf8')));
+      }
+      return {};
+    }
+  },
   InvokeCommand: class { constructor(i) { this.input = i; } },
 });
 stub('@aws-sdk/client-apigatewaymanagementapi', {
@@ -178,9 +188,19 @@ async function wand(body) {
 
 async function advise(body) {
   bedrockCalls = [];
+  dispatchedPayloads = [];
   bedrockReply = '```json\n{"overallScore":8}\n```';
   quiet();
-  const res = await advisor.handler({ body: JSON.stringify(body) });
+  // The request only STARTS the analysis now (202 + a job) — Bedrock runs in the
+  // worker, off API Gateway's 30s ceiling. Run that worker from the payload the
+  // request dispatched, exactly as Lambda's Event invoke would.
+  const context = { functionName: 'test-advisor' };
+  const res = await advisor.handler({
+    requestContext: { ...ADMIN.requestContext, http: { method: 'POST' } },
+    body: JSON.stringify(body),
+  }, context);
+  const payload = dispatchedPayloads[dispatchedPayloads.length - 1];
+  if (payload) await advisor.handler(payload, context);
   loud();
   bedrockReply = '{"instructions":"i","outputFormat":"o"}';
   return { res, prompt: bedrockCalls[0] };
@@ -288,7 +308,7 @@ const putUpdate = async (promptId, body) => {
       analysisType,
     });
     await acheck(`${analysisType}: the advisor prompt carries the real variable list`, async () => {
-      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(res.statusCode, 202, res.body);
       assert(prompt.includes('{responsesText}') && prompt.includes('{leaderboard}'),
         `the ${analysisType} variant asks the model about variables without listing any`);
     });
@@ -298,13 +318,20 @@ const putUpdate = async (promptId, body) => {
     const { prompt } = await advise({
       promptText: 'x', gameType: 'wavelength', analysisType: 'validate',
     });
-    assert(prompt.includes('{commonWords}'), 'wavelength variables missing');
-    assert(!prompt.includes('{voteTally}'), 'wavelength never votes');
+    // The LIST, not the whole prompt: since 2026-09-24 every advisor prompt
+    // also carries describeAuthoringRules(), whose misleading-variables rule
+    // names {voteTally} for every game type, exactly as the wand's does.
+    const start = prompt.indexOf('Template Variables that exist');
+    const end = prompt.indexOf('Rules the save gate enforces');
+    assert(start >= 0 && end > start, 'the variable block could not be found in the advisor prompt');
+    const list = prompt.slice(start, end);
+    assert(list.includes('{commonWords}'), 'wavelength variables missing');
+    assert(!list.includes('{voteTally}'), 'wavelength never votes');
   });
 
   await acheck('an unknown game type still gets the full list, never an empty one', async () => {
     const { res, prompt } = await advise({ promptText: 'x', analysisType: 'improve' });
-    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(res.statusCode, 202, res.body);
     assert(prompt.includes('{questionTitle}') && prompt.includes('{commonWords}'),
       'with no game type to filter on, show everything — an advisor with no list is the bug');
   });

@@ -245,12 +245,15 @@ describe('a host in an organisation', () => {
   // rejects: showing a host the plan and the access log — powers, not
   // information. A member who can see the invoice but not change it is being
   // shown a control that refuses them.
+  // Prompts left a member's console 2026-09-24 (owner: "team admins could view
+  // them") — owners and admins get a read-only view; see consoleModes.test.js.
   it('keeps the content and loses the money and the log', async () => {
     render(<AdminPage />);
     const labels = await navLabels();
     expect(labels).toEqual(expect.arrayContaining([
-      'Question sets', 'Sessions', 'Public library', 'Prompts', 'Members',
+      'Question sets', 'Sessions', 'Public library', 'Members',
     ]));
+    expect(labels).not.toContain('Prompts');
     expect(labels).not.toContain('Plan & usage');
     expect(labels).not.toContain('Data & privacy');
     expect(labels).not.toContain('Accounts');

@@ -3,7 +3,7 @@ const { DynamoDBDocumentClient, GetCommand, BatchWriteCommand, UpdateCommand } =
 const {
   BATCH_LIMIT,
   batchPutItems,
-  copyPartition,
+  firstEmptyVersion,
   knownVersions,
   FIRST_VERSION,
   nextVersion,
@@ -12,6 +12,7 @@ const {
   setMetadataKey,
   toVersion,
 } = require('./shared/set-version');
+const { LIFECYCLE_SKS } = require('./shared/archive-snapshot');
 const { normalizeTags } = require('./shared/tags');
 const {
   normalizeSetTopic, normalizeSetTags, setTopicRefusal,
@@ -32,6 +33,7 @@ const { dispatchHouseCheck } = require('./shared/house-check');
 const {
   SURVEY_CATEGORY, SURVEY_CSV_COLUMNS, surveyFieldsFromCells, validateSurvey, itemFields, legacySurveyJsonToCsv,
 } = require('./shared/survey-kinds');
+const { clampBackground } = require('./shared/question-background');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -436,6 +438,7 @@ exports.handler = async (event) => {
     let titleIndex = getColumnIndex('Title');
     let questionDetailIndex = getColumnIndex('QuestionDetail');
     let answerDetailsIndex = getColumnIndex('AnswerDetails');
+    let backgroundIndex = getColumnIndex('Background');
     let detailIndex = getColumnIndex('Detail_lesson'); // Legacy support
     let schoolIndex = getColumnIndex('School');
     let customInstructionIndex = getColumnIndex('CustomInstruction');
@@ -656,6 +659,7 @@ exports.handler = async (event) => {
         const title = cell(values, titleIndex);
         const questionDetail = cell(values, questionDetailIndex);
         const answerDetails = cell(values, answerDetailsIndex);
+        const background = clampBackground(cell(values, backgroundIndex));
         const legacyDetail = cell(values, detailIndex);
         const school = cell(values, schoolIndex);
         const questionCustomInstruction = cell(values, customInstructionIndex);
@@ -759,6 +763,13 @@ exports.handler = async (event) => {
           // property the reveal needs, so the gate is lifted for every type.
           if (finalAnswerDetails) {
             baseQuestion.AnswerDetails = finalAnswerDetails;
+          }
+
+          // BACKGROUND — the author's material for Workie (question-background spec
+          // §1). Same property as the reveal: no player or host payload carries it.
+          // Clamped here, on the way in, by the one rule every door uses.
+          if (background) {
+            baseQuestion.Background = background;
           }
 
           // Add engagement-type specific fields
@@ -962,13 +973,29 @@ exports.handler = async (event) => {
       if (!alreadyVersioned) {
         const legacyPk = setPartition(targetRef, null);
         const { items: legacyItems } = await queryPartition(db, process.env.TABLE_NAME, legacyPk);
-        if (legacyItems.length > 0) {
-          snapshotted = await copyPartition(db, process.env.TABLE_NAME, legacyPk, setPartition(targetRef, 1));
-          console.log(`📸 Snapshotted ${snapshotted} legacy row(s) of "${setId}" to v1 before replacing`);
+        // EXCEPT THE REVIEW AND PUBLISHED ROWS, which are not content. A set
+        // that was checked or shared before it was ever versioned carries them
+        // in this same legacy partition (set-review.js resolves a legacy ref's
+        // review/published key to the unsuffixed partition), and copying them
+        // onto the snapshot would misdescribe it: the snapshot's own REVIEW row
+        // is per-version, and a stray PUBLISHED marker would claim it was
+        // already shared. copy-question-set.js skips them for the same reason
+        // (shared/archive-snapshot.js).
+        const publishableLegacyItems = legacyItems.filter((row) => !LIFECYCLE_SKS.includes(String(row.SK)));
+        if (publishableLegacyItems.length > 0) {
+          // THE FIRST EMPTY VERSION, not a literal v1 — a stray write can
+          // already occupy it. Reused from archive-restore.js, which faces the
+          // exact same "snapshot legacy content before writing a new version"
+          // step for a restore.
+          const legacyVersion = await firstEmptyVersion(db, process.env.TABLE_NAME, targetRef, 1);
+          const legacyCopies = publishableLegacyItems.map((item) => ({ ...item, PK: setPartition(targetRef, legacyVersion) }));
+          await batchPutItems(db, process.env.TABLE_NAME, legacyCopies);
+          snapshotted = legacyCopies.length;
+          console.log(`📸 Snapshotted ${snapshotted} legacy row(s) of "${setId}" to v${legacyVersion} before replacing`);
           existingMeta = {
             ...existingMeta,
             versions: [{
-              version: 1,
+              version: legacyVersion,
               createdAt: existingMeta.createdAt || new Date().toISOString(),
               questionCount: existingMeta.questionCount || 0,
               categoryCount: existingMeta.categoryCount || 0,
@@ -979,7 +1006,12 @@ exports.handler = async (event) => {
         }
       }
 
-      targetVersion = nextVersion(existingMeta);
+      // THE FIRST EMPTY VERSION AT OR AFTER `nextVersion`, not `nextVersion`
+      // itself — the number `nextVersion` predicts (max known + 1) can already
+      // hold rows from an unfinished write that never made it into `versions[]`
+      // (the same situation the snapshot step above guards against, one step
+      // later in the same replace).
+      targetVersion = await firstEmptyVersion(db, process.env.TABLE_NAME, targetRef, nextVersion(existingMeta));
       console.log(`↻ Replacing set "${setId}" — writing version v${targetVersion}`);
     }
 
@@ -1129,6 +1161,7 @@ exports.handler = async (event) => {
         // parsed at line ~297, assembled onto baseQuestion, then silently lost
         // here. Written only when non-empty so ordinary sets are unchanged.
         ...(question.AnswerDetails ? { AnswerDetails: question.AnswerDetails } : {}),
+        ...(question.Background ? { Background: question.Background } : {}),
         CustomInstructions: question.CustomInstructions || '',
         Tags: question.Tags || [],
         // Per-question OVERRIDE of the set's direction, and the Apply round's

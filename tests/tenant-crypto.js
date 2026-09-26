@@ -134,6 +134,11 @@ check('question fields are exactly the agreed set', () =>
     // options, labels, prompts and placeholder, surveys and polls alike.
     // docs/design/survey-redesign/IMPLEMENTATION-phase-0-1.md, "Encryption".
     'options', 'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder',
+    // The Background: a note for Workie only, never shown to the room. Stored
+    // like the Reveal (AnswerDetails) because it is the same kind of thing —
+    // content an author wrote that a player must never be served.
+    // docs/superpowers/specs/2026-09-25-question-background-design.md §1.
+    'Background',
   ].sort()));
 check('the survey switches and vocabulary stay plaintext — flags, not prose', () => {
   for (const f of ['kind', 'required', 'allowMultiple', 'maxPicks', 'allowOther', 'shuffle', 'scale',
@@ -389,7 +394,11 @@ const MUST_NOT_LEAK = {
     'FullResponse', 'MarkdownResponse', 'DebugInfo'],
   report: ['gameTitle', 'hostName', 'playerPerformance', 'detailedQuestions',
     'questionSummaries', 'questionSetData'],
-  job: ['request', 'items', 'meta'],
+  // `result` is the prompt advisor's analysis of an org's Workie, which quotes
+  // the Workie's own prose back and rewrites it (admin/ai-prompt-advisor.js).
+  // `createdSetName` and `setCreationError` carry the generated set's title,
+  // which the set row itself seals as `name` (shared/generated-set.js).
+  job: ['request', 'items', 'meta', 'result', 'createdSetName', 'setCreationError'],
   // A Workie. defaultSettings and tags added after review — see the
   // ENCRYPTED_FIELDS.prompt comment for why they belong here and not with
   // category/status.

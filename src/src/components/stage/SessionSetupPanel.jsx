@@ -4,12 +4,15 @@ import Icon from '../Icon';
 import {
   setupPanelTabs, categoryRows, questionsRemaining,
   browserRow, filterBrowserRows, rosterRows, departedRows, questionKey,
+  scoreboardButton,
 } from '../../config/setupPanel';
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
 } from '../../config/anonymity';
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { queuePosition } from '../../config/questionQueue';
+import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
+import { canEndSession } from '../../config/hostControls';
 import QueueList from './QueueList';
 import HelpButton from '../HelpButton';
 import BrandMark from '../BrandMark';
@@ -82,6 +85,14 @@ export default function SessionSetupPanel({
   onRemovePlayer = () => {},
   onRestorePlayer = () => {},
   onGrantHandover = () => {},
+  /* THE SCOREBOARD (docs/superpowers/specs/2026-09-25-scoreboard-design.md):
+     the server's board as the page mirrors it, whether it may open
+     (config/scoreboard.js scoreboardAvailability), and the two ways this panel
+     changes it — the Players tab's button and the Settings tab's look. */
+  scoreboard = { open: false, style: 'departure' },
+  scoreboardAvailability = { show: false, enabled: false, reason: '' },
+  onToggleScoreboard = () => {},
+  onScoreboardStyle = () => {},
 
   // Questions — categories
   categories = [],
@@ -189,6 +200,13 @@ export default function SessionSetupPanel({
   onViewReports = () => {},
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
+  // Task 4, 2026-09-26 bug sweep: what pressing "End session" does. Whether
+  // it is offered at all is `canEndSession(gameType, gameState)` below, from
+  // the two props this panel already carries — the same pattern
+  // `anonymityActive` and `hasScoreboard` use elsewhere in this file. The
+  // confirm lives on the action the page builds, not here — this panel stays
+  // presentational.
+  onEndSession = () => {},
   onSignOut = () => {},
   // Whether to offer the Admin link at all. Derived by the page from the
   // signed-in user's Cognito groups, not read here, so the panel stays a
@@ -266,6 +284,7 @@ export default function SessionSetupPanel({
   };
 
   const roster = rosterRows({ players, gameState, playersWhoAnswered, playersWhoVoted });
+  const sbButton = scoreboardButton({ board: scoreboard, availability: scoreboardAvailability });
   const departed = departedRows(removedPlayers);
 
   const catRows = useMemo(
@@ -435,6 +454,30 @@ export default function SessionSetupPanel({
                   AuthorsRevealed unconditionally on entering RESULTS, so there
                   is no state in which a cumulative total attributes an
                   unrevealed answer. */}
+              {/* THE SCOREBOARD — the full standings on the room's screen,
+                  above the list it would put there. Owner, 2026-09-25: open
+                  it "from the remote, a keyboard shortcut, or a button on the
+                  Players tab". */}
+              {sbButton.show && (
+                <div className="setup-row setup-scoreboard">
+                  <button
+                    type="button"
+                    data-testid="scoreboard-toggle"
+                    aria-pressed={Boolean(scoreboard.open)}
+                    disabled={sbButton.disabled}
+                    onClick={() => {
+                      const opening = !scoreboard.open;
+                      onToggleScoreboard(opening);
+                      // The menu stands over the stage with a scrim; put it
+                      // away so the room sees the board it just asked for.
+                      if (opening) onClose();
+                    }}
+                  >
+                    {sbButton.label}
+                  </button>
+                  {sbButton.reason && <p className="setup-note">{sbButton.reason}</p>}
+                </div>
+              )}
               {roster.length === 0 ? (
                 <p className="setup-empty">Nobody has joined yet.</p>
               ) : (
@@ -1003,6 +1046,30 @@ export default function SessionSetupPanel({
                 controls always work.
               </p>
 
+              {/* THE SCOREBOARD'S LOOK. Owner: "for now the setting sits under
+                  'Scoreboard' and nothing else" — a later overall theme may
+                  take it over. Applied live if the board is up. */}
+              {scoreboardAvailability.show && (
+                <>
+                  <h3 className="setup-h">Scoreboard</h3>
+                  <label className="setup-field">
+                    <span>Scoreboard style</span>
+                    <select
+                      value={scoreboard.style || 'departure'}
+                      onChange={(e) => onScoreboardStyle(e.target.value)}
+                    >
+                      {SCOREBOARD_STYLES.map((style) => (
+                        <option key={style} value={style}>{STYLE_LABELS[style]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="setup-note">
+                    How the standings look on the room&apos;s screen. Press V to change it
+                    while the board is up.
+                  </p>
+                </>
+              )}
+
               <h3 className="setup-h">Display</h3>
               <label className="setup-field">
                 <span>Display profile</span>
@@ -1077,6 +1144,21 @@ export default function SessionSetupPanel({
                 */}
                 <button type="button" onClick={onSwitchGame}>Back to Menu</button>
                 {/*
+                  "END SESSION", AND UNLIKE ITS NEIGHBOUR, THIS ONE DOES WRITE
+                  ENDED. Task 4, 2026-09-26 bug sweep: before this, a trivia,
+                  poll, call-and-answer or wavelength session reached ENDED
+                  only when the question pool ran dry — a host who wanted to
+                  stop after round 4 of 10 had no way to. `canEndSession`
+                  (config/hostControls.js) keeps this off a survey (its own
+                  CLOSED phase carries the equivalent control), the lobby
+                  (nothing running to stop), and an already-ENDED session (the
+                  stage's own primary is the way on). The confirm is on the
+                  action `onEndSession` builds, not here.
+                */}
+                {canEndSession(gameType, gameState) && (
+                  <button type="button" className="btn-danger" onClick={onEndSession}>End session</button>
+                )}
+                {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
 
                   `App.jsx` is a `window.location.pathname` switch with no
@@ -1110,6 +1192,12 @@ export default function SessionSetupPanel({
               <ul className="setup-keys">
                 <li><kbd>Space</kbd> or <kbd>→</kbd> advance</li>
                 <li><kbd>←</kbd> step back a beat</li>
+                {hasScoreboard(gameType) && (
+                  <>
+                    <li><kbd>S</kbd> show or hide the scoreboard</li>
+                    <li><kbd>V</kbd> change the scoreboard&apos;s look, while it is up</li>
+                  </>
+                )}
                 <li><kbd>\</kbd> open and close this panel</li>
                 <li><kbd>Esc</kbd> close</li>
               </ul>

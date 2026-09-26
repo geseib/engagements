@@ -76,6 +76,26 @@ describe('the report is on the participant’s own device', () => {
     mount();
     expect(screen.queryByRole('button', { name: /Regenerate|Generate summary/ })).toBeNull();
   });
+
+  // "Workie had: …" (question-background spec §4) is a HOST-ONLY hint. This
+  // panel is the participant's own copy of RoundReport — same renderer PastRound
+  // uses for the host — and must never pass RoundReport's `showWorkieContext`
+  // prop, even though the round's aiSummary carries the flags.
+  test('never shows what Workie had, even when the round carries the flags', () => {
+    mount({
+      round: {
+        ...ROUND,
+        aiSummary: {
+          ...ROUND.aiSummary,
+          contextUsed: {
+            background: true, setNote: true, eventDetails: true,
+            hostInstructions: true, briefing: true,
+          },
+        },
+      },
+    });
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+  });
 });
 
 describe('the composer', () => {

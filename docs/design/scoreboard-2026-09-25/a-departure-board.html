@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en" class="d-room">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Standings — A. Departure board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================================
+   STANDINGS, A — THE DEPARTURE BOARD (split-flap).
+
+   A full-screen stage moment the host opens between rounds (remote button,
+   keyboard, or the Players tab). Trivia and Call & Answer only; totals as of
+   the last fully scored round; each row carries its place change since the
+   previous round. Pages auto-flip and end back on the top page, holding.
+
+   What makes it a departure board: a fixed grid of flap modules in a housing,
+   one character per flap, columns printed on the housing, and every change
+   happening by flaps FALLING — the top leaf folds down over the hinge and the
+   next character's lower half swings up beneath it. Cells that do not change
+   do not move. Changed cells rattle through one to three intermediate
+   characters and land, staggered by line then by column, so a page change
+   reads as a wave travelling down the board. The sound is implied by the
+   stagger, never played.
+
+   Adapted, not pasted: the flaps are the stage's own --surface and
+   --ridge-front, the characters are Warm Summit ink (amber place, paper-white
+   name and points, the stage's success/muted/periwinkle text tints for the
+   movement), the type is Inter 800, and the chrome above is the stage's rail.
+
+   A LONG NAME TAKES A SECOND LINE OF FLAPS. Names wrap at a word (or a
+   hyphen), never ellipsise. The board's line count is the most any page of
+   the current page size needs, so the grid never changes shape between pages
+   — exactly like a physical board, where a continuation line has blank
+   place/points flaps.
+
+   MOTION CONTRACT (src/src/__tests__/stageMotion.test.js, applied here):
+   keyframes touch only transform, opacity, border-color and visibility; every
+   animated selector is listed again with `animation:none` under
+   prefers-reduced-motion AND under :root.rm (the ?reduced=1 switch), where
+   the page swap is an instant change.
+
+   CONTRAST, measured (flat / after the stage's projector black-lift model,
+   host-redesign/audit.js A9):
+     name, points  #F4EDE4 on flap #1B2942   12.53 / 8.34
+     place         #F6A94C on flap #1B2942    7.42 / 4.94
+     ▲ climbed     #6FD0A4 on flap #1B2942    7.79 / 5.18
+     ▼ / –         #B6C2D4 on flap #1B2942    8.08 / 5.38
+     NEW           #A7C3EF on flap #1B2942    8.11 / 5.40
+     column heads  #B6C2D4 on housing #0A1322 10.32 / 7.51
+   (the lower half, #16233B, is darker and scores higher on every pairing)
+   =========================================================================== */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+[hidden]{display:none !important}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+:root{
+  /* Warm Summit, re-entered as the stage re-enters it (stage.css `.stage`) */
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#B6C2D4;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --success-text:#6FD0A4;
+  --ridge-front:#16233B;
+  --rule:rgba(155,168,190,.22); --hair:1px; --radius:16px;
+  --font-display:"Archivo Expanded","Archivo",system-ui,sans-serif;
+  --font-ui:"Inter",system-ui,sans-serif;
+  /* this board's own */
+  --secondary-text:#A7C3EF;   /* NEW: #7CA7E6 is 3.93:1 lifted on a flap; this is 5.40 */
+  --sfb-housing:#0A1322;
+  --sfb-flap-top:var(--surface);
+  --sfb-flap-bot:var(--ridge-front);
+  --sfb-letterbox:#070C16;
+}
+
+/* The stage's ladders (stage.css:43-94), read against the 16:9 frame rather
+   than the window so the composition is the same at any size. */
+:root, :root.d-room{
+  --L-hero:clamp(56px,8.4cqh,104px); --L-primary:clamp(40px,5.6cqh,68px);
+  --L-secondary:clamp(28px,3.7cqh,44px); --L-body:clamp(22px,2.8cqh,34px);
+  --L-meta:clamp(20px,1.9cqh,24px); --floor:20px;
+}
+:root.d-tv{
+  --L-hero:clamp(72px,11cqh,132px); --L-primary:clamp(52px,7.4cqh,88px);
+  --L-secondary:clamp(36px,4.8cqh,56px); --L-body:clamp(28px,3.5cqh,42px);
+  --L-meta:clamp(26px,2.4cqh,31px); --floor:26px;
+}
+
+body{background:var(--sfb-letterbox);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+  display:grid;place-items:center}
+.sb-frame{position:relative;width:min(100vw,177.78vh);height:min(56.25vw,100vh);
+  container-type:size;overflow:hidden;background:var(--bg)}
+.stage{position:absolute;inset:0;display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
+
+/* the field, as stage.css draws it */
+.field{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%)}
+.field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:44%;
+  background:linear-gradient(180deg,#17253C 0%, #0E1828 100%);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.85}
+
+/* the rail, as stage.css draws it, plus the page indicator on the right */
+.rail{position:relative;z-index:2;min-width:0;display:flex;align-items:center;
+  gap:calc(1.2cqw + 8px);padding:calc(1.1cqh + 6px) calc(2.4cqw + 10px)}
+.chip{flex:none;display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-stretch:125%;font-weight:800;
+  font-size:var(--L-meta);letter-spacing:.13em;text-transform:uppercase;
+  padding:.34em .8em;border-radius:999px;border:2px solid currentColor;color:var(--primary)}
+.chip .dot{width:.6em;height:.6em;border-radius:50%;background:currentColor}
+.rail-title{flex:0 1 auto;min-width:0;font-size:var(--L-meta);font-weight:700;letter-spacing:.02em;
+  white-space:normal}
+.rail-ctx{flex:none;font-size:var(--L-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.rail-ctx b{color:var(--text);font-weight:700}
+.rail-page{flex:none;margin-left:auto;display:flex;align-items:center;gap:.7em;white-space:nowrap;
+  font-size:var(--L-meta);color:var(--muted);font-weight:600}
+.rail-page b{font-family:var(--font-display);font-stretch:125%;font-weight:800;color:var(--text);
+  font-size:calc(var(--L-meta) * 1.3);letter-spacing:.02em;
+  display:inline-block;min-width:5.4ch;text-align:right}   /* the widest range, so the rail never reflows between pages */
+
+/* ------------------------------------------------------------ THE HOUSING */
+.sfb{position:relative;z-index:2;min-height:0;margin:0 calc(2.4cqw + 10px);
+  background:var(--sfb-housing);border:var(--hair) solid var(--rule);border-radius:calc(var(--radius) * .75);
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.04), 0 18px 48px rgba(0,0,0,.35);
+  padding:calc(1.4cqh + 6px) calc(1.6cqw + 8px);display:flex;flex-direction:column;gap:calc(.8cqh + 4px)}
+.sfb-heads,.sfb-ln{display:flex;align-items:flex-start;gap:var(--colgap)}
+.sfb-heads span{font-size:var(--L-meta);font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap}
+.sfb-heads .h-pos,.sfb-heads .h-pts{text-align:right}
+.sfb-grid{flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--lgap);justify-content:flex-start}
+.sfb-body{flex:1;min-height:0;display:flex;justify-content:center}
+.sfb-inner{display:flex;flex-direction:column;gap:calc(.8cqh + 4px)}
+.cg{display:flex;gap:var(--cgap)}
+
+/* ------------------------------------------------------------- ONE FLAP
+   Two static halves (the new character's top, the old character's bottom)
+   and two leaves (the old top, which falls; the new bottom, which rises). */
+.fl{position:relative;width:var(--cw);height:var(--ch);flex:none;
+  perspective:calc(var(--ch) * 3.2);font-weight:800;font-size:var(--fs);
+  font-family:var(--font-ui);letter-spacing:0}
+.fl .h{position:absolute;left:0;right:0;height:calc(50% - .5px);overflow:hidden;
+  backface-visibility:hidden}
+.fl .t,.fl .lt{top:0;background:var(--sfb-flap-top);border-radius:4px 4px 1px 1px;transform-origin:50% 100%}
+.fl .b,.fl .lb{bottom:0;background:var(--sfb-flap-bot);border-radius:1px 1px 4px 4px;transform-origin:50% 0%}
+.fl .h b{position:absolute;left:0;right:0;height:var(--ch);line-height:var(--ch);
+  text-align:center;font-weight:inherit}
+.fl .t b,.fl .lt b{top:0}
+.fl .b b,.fl .lb b{bottom:0}
+.fl .lf{visibility:hidden;z-index:2}
+.fl .lf::after{content:"";position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+/* the axle: two pins and a dark hinge line */
+.fl::before{content:"";position:absolute;left:-1px;right:-1px;top:calc(50% - .5px);height:1px;
+  background:rgba(0,0,0,.45);z-index:3}
+
+/* ink, by column and by movement */
+.k-pos{color:var(--primary)}
+.k-nm,.k-pts{color:var(--text)}
+.k-up{color:var(--success-text)}
+.k-dn,.k-eq{color:var(--muted)}
+.k-new{color:var(--secondary-text)}
+
+/* A flip step. Two parity classes with twin keyframes so the JS can restart a
+   flap by swapping the class — no forced reflow per flap. */
+.fl.p0 .lf,.fl.p1 .lf{visibility:visible}
+.fl.p0 .lt{animation:ft0 calc(var(--st) / 2) cubic-bezier(.55,0,1,.45) both}
+.fl.p1 .lt{animation:ft1 calc(var(--st) / 2) cubic-bezier(.55,0,1,.45) both}
+.fl.p0 .lb{animation:fb0 calc(var(--st) / 2) cubic-bezier(0,.55,.45,1.25) calc(var(--st) / 2) both}
+.fl.p1 .lb{animation:fb1 calc(var(--st) / 2) cubic-bezier(0,.55,.45,1.25) calc(var(--st) / 2) both}
+.fl.p0 .lt::after{animation:fs0 calc(var(--st) / 2) linear both}
+.fl.p1 .lt::after{animation:fs1 calc(var(--st) / 2) linear both}
+.fl.p0 .lb::after{animation:fr0 calc(var(--st) / 2) linear calc(var(--st) / 2) both}
+.fl.p1 .lb::after{animation:fr1 calc(var(--st) / 2) linear calc(var(--st) / 2) both}
+@keyframes ft0{from{transform:rotateX(0deg)}to{transform:rotateX(-90deg)}}
+@keyframes ft1{from{transform:rotateX(0deg)}to{transform:rotateX(-90deg)}}
+@keyframes fb0{from{transform:rotateX(90deg)}to{transform:rotateX(0deg)}}
+@keyframes fb1{from{transform:rotateX(90deg)}to{transform:rotateX(0deg)}}
+@keyframes fs0{from{opacity:0}to{opacity:.5}}
+@keyframes fs1{from{opacity:0}to{opacity:.5}}
+@keyframes fr0{from{opacity:.4}to{opacity:0}}
+@keyframes fr1{from{opacity:.4}to{opacity:0}}
+
+/* --------------------------------------------- the host strip (mockup only)
+   Stands in for the dock. Its text is host-facing, read at arm's length, so
+   it sits on the laptop ladder (15px body), not the room's. */
+.strip{position:relative;z-index:3;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px calc(2.4cqw + 10px) 10px;font-size:15px;color:var(--muted)}
+.strip .st{font-weight:600;color:var(--text)}
+.strip .st small{font-weight:500;color:var(--muted);font-size:15px}
+.strip kbd{font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--text);
+  border:var(--hair) solid var(--rule);border-radius:6px;padding:2px 7px;background:rgba(27,41,66,.8)}
+.strip .ctl{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:inline-flex;border:var(--hair) solid var(--rule);border-radius:999px;overflow:hidden;
+  background:rgba(10,19,34,.85)}
+.seg button,.strip .btn{font:inherit;font-size:14px;font-weight:600;color:var(--muted);background:transparent;
+  border:0;padding:6px 14px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--primary);color:var(--bg)}
+.strip .btn{border:var(--hair) solid var(--rule);border-radius:999px;background:rgba(10,19,34,.85);color:var(--text)}
+.strip .btn[aria-pressed="true"]{border-color:var(--secondary);color:var(--secondary-text)}
+.seg button:focus-visible,.strip .btn:focus-visible{outline:2px solid var(--secondary);outline-offset:2px}
+
+/* ------------------------------------------------------- REDUCED MOTION
+   The final state, immediately: the JS sets every flap to its character with
+   no leaf in play, and nothing here animates. Written twice with identical
+   selectors: once for the OS setting, once for ?reduced=1. */
+@media (prefers-reduced-motion: reduce){
+  .fl.p0 .lt,.fl.p1 .lt,.fl.p0 .lb,.fl.p1 .lb,
+  .fl.p0 .lt::after,.fl.p1 .lt::after,.fl.p0 .lb::after,.fl.p1 .lb::after{animation:none;transition:none}
+  .fl.p0 .lf,.fl.p1 .lf{visibility:hidden}
+}
+:root.rm .fl.p0 .lt,:root.rm .fl.p1 .lt,:root.rm .fl.p0 .lb,:root.rm .fl.p1 .lb,
+:root.rm .fl.p0 .lt::after,:root.rm .fl.p1 .lt::after,:root.rm .fl.p0 .lb::after,:root.rm .fl.p1 .lb::after{animation:none;transition:none}
+:root.rm .fl.p0 .lf,:root.rm .fl.p1 .lf{visibility:hidden}
+</style>
+</head>
+<body>
+<div class="sb-frame">
+  <div class="stage">
+    <div class="field" aria-hidden="true"></div>
+    <header class="rail">
+      <span class="chip"><span class="dot"></span>Standings</span>
+      <span class="rail-title">Q3 Leadership Offsite</span>
+      <span class="rail-ctx"><b>After round 6</b></span>
+      <span class="rail-page"><b id="range">1–10</b><span id="of">of 14</span></span>
+    </header>
+    <main class="sfb" aria-label="Standings after round 6">
+      <div class="sfb-body" id="body">
+        <div class="sfb-inner">
+          <div class="sfb-heads" id="heads" aria-hidden="true">
+            <span class="h-pos">Pos</span><span class="h-nm">Player</span><span class="h-pts">Pts</span><span class="h-mv">Move</span>
+          </div>
+          <div class="sfb-grid" id="grid"></div>
+        </div>
+      </div>
+      <ol id="sr" class="vh"></ol>
+    </main>
+    <footer class="strip" aria-label="Host strip — mockup controls">
+      <span class="st" id="status">Auto-flipping</span>
+      <span><kbd>←</kbd> <kbd>→</kbd> step pages</span>
+      <span class="ctl">
+        <span class="seg" role="group" aria-label="Display profile">
+          <button type="button" data-size="5">TV: 5 per page</button>
+          <button type="button" data-size="10">Room: 10 per page</button>
+        </span>
+        <button type="button" class="btn" id="rm">Reduced motion</button>
+        <button type="button" class="btn" id="replay">Replay</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+/* ------------------------------------------------------------------ DATA
+   14 players as they typed their names. prev = total after round 5 (null:
+   joined during round 6); r6 = round 6 points (a question is worth <=15). */
+const RAW = [
+  ['Priya', 66, 15], ['Marcus', 70, 8], ['Oluwaseun Adebayo-Richardson', 60, 12],
+  ['Hannah', 52, 14], ['Tomás', 58, 8], ['Keiko', 59, 4], ['Dev', 47, 12],
+  ['Sofia', 50, 5], ['Liam', 48, 4], ['Aisha', 41, 10], ['Grace', 44, 0],
+  ['Ben', 30, 9], ['Inès', null, 14], ['Kofi', null, 11],
+];
+const all = RAW.map(([name, prev, r6], id) => ({ id, name, prev, r6, total: (prev || 0) + r6 }));
+const cur = [...all].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+cur.forEach((p) => {
+  p.rank = 1 + all.filter((q) => q.total > p.total).length;       // competition ranking
+  p.tied = all.filter((q) => q.total === p.total).length > 1;
+});
+const had = all.filter((p) => p.prev != null);
+had.forEach((p) => { p.prevRank = 1 + had.filter((q) => q.prev > p.prev).length; });
+cur.forEach((p) => { p.move = p.prev == null ? 'new' : p.prevRank - p.rank; });
+const place = (p) => (p.tied ? '=' : '') + p.rank;
+const moveOf = (p) => p.move === 'new' ? ['NEW', 'new'] : p.move > 0 ? ['▲' + p.move, 'up']
+  : p.move < 0 ? ['▼' + (-p.move), 'dn'] : ['–', 'eq'];
+
+/* ------------------------------------------------------------- SETTINGS */
+const root = document.documentElement;
+const qs = new URLSearchParams(location.search);
+if (qs.get('reduced') === '1') root.classList.add('rm');
+const mq = matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = () => root.classList.contains('rm') || mq.matches;
+const SPEED = qs.get('fast') === '1' ? 0.35 : 1;
+let size = qs.get('size') === '5' ? 5 : 10;
+
+/* -------------------------------------------------------------- BOARD */
+const $ = (id) => document.getElementById(id);
+const grid = $('grid'), heads = $('heads'), body = $('body');
+const POS = 2, PTS = 2, MV = 3;
+const STEP = 120;                 // ms per flap fall
+let geom = null, cells = [], gen = 0, timers = [];
+const pagesOf = () => Math.ceil(cur.length / size);
+const rowsOf = (pi) => cur.slice(pi * size, pi * size + size);
+
+function wrap(name, n) {
+  const words = name.toUpperCase().split(/\s+/);
+  const tokens = [];
+  for (const w of words) {            // a word longer than the field breaks at its hyphens, then hard
+    if (w.length <= n) { tokens.push(w); continue; }
+    const parts = w.split(/(?<=-)/);
+    for (const part of parts) for (let i = 0; i < part.length; i += n) tokens.push(part.slice(i, i + n));
+  }
+  const lines = []; let line = '';
+  for (const t of tokens) {
+    const glue = line && !line.endsWith('-') ? ' ' : '';
+    if (!line) line = t;
+    else if ((line + glue + t).length <= n) line += glue + t;
+    else { lines.push(line); line = t; }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function linesFor(pi, n) {
+  const out = [];
+  for (const p of rowsOf(pi)) {
+    const [mv, mk] = moveOf(p);
+    wrap(p.name, n).forEach((nm, i) => out.push(i === 0
+      ? { pos: place(p), nm, pts: String(p.total), mv, mk }
+      : { pos: '', nm, pts: '', mv: '', mk: 'eq' }));
+  }
+  return out;
+}
+function fit() {
+  const W = body.clientWidth, H = body.clientHeight - 4;
+  const cqh = document.querySelector('.sb-frame').clientHeight / 100;
+  const floor = parseFloat(getComputedStyle(root).getPropertyValue('--floor')) || 20;
+  const headH = parseFloat(getComputedStyle(heads.firstElementChild).fontSize) * 1.25;
+  const pages = [...Array(pagesOf()).keys()];
+  const minCw = floor / 0.62 / 1.4;
+  for (let cw = 90; cw >= minCw; cw -= 0.25) {
+    const ch = cw * 1.4, cgap = cw * 0.1, colgap = cw * 0.7, lgap = ch * 0.14;
+    const pitch = cw + cgap;
+    const n = Math.floor((W - 3 * colgap + cgap * 4) / pitch) - (POS + PTS + MV);
+    if (n < 12) continue;
+    const nm = Math.min(n, 24);                                   // a 24-flap name module at most
+    const L = Math.max(size, ...pages.map((pi) => linesFor(pi, nm).length));
+    const h = headH + (0.8 * cqh + 4) + L * ch + (L - 1) * lgap;
+    if (h <= H) return { cw, ch, cgap, colgap, lgap, n: nm, L, fs: ch * 0.62 };
+  }
+  const cw = minCw, ch = cw * 1.4;
+  return { cw, ch, cgap: cw * 0.1, colgap: cw * 0.7, lgap: ch * 0.14, n: 12,
+    L: Math.max(size, ...[...Array(pagesOf()).keys()].map((pi) => linesFor(pi, 12).length)), fs: ch * 0.62 };
+}
+function mkFlap() {
+  const el = document.createElement('span');
+  el.className = 'fl';
+  el.innerHTML = '<span class="h t"><b></b></span><span class="h b"><b></b></span>'
+    + '<span class="h lf lt"><b></b></span><span class="h lf lb"><b></b></span>';
+  const g = el.querySelectorAll('b');
+  return { el, g, ch: ' ', k: 'k-nm', par: 0 };
+}
+function setGlyph(b, ch, k) { b.textContent = ch === ' ' ? '' : ch; b.className = k; }
+function setStatic(c, ch, k) {
+  c.el.classList.remove('p0', 'p1');
+  c.g.forEach((b) => setGlyph(b, ch, k));
+  c.ch = ch; c.k = k;
+}
+function build() {
+  geom = fit();
+  const s = grid.style;
+  const inner = grid.parentElement.style;
+  for (const [k, v] of Object.entries({ cw: geom.cw, ch: geom.ch, cgap: geom.cgap, colgap: geom.colgap, lgap: geom.lgap, fs: geom.fs })) {
+    inner.setProperty('--' + k, v + 'px');
+  }
+  inner.setProperty('--st', STEP + 'ms');
+  const w = (n) => n * geom.cw + (n - 1) * geom.cgap;
+  const hs = heads.children;
+  [POS, geom.n, PTS, MV].forEach((n, i) => { hs[i].style.width = w(n) + 'px'; });
+  grid.textContent = ''; cells = [];
+  for (let l = 0; l < geom.L; l++) {
+    const ln = document.createElement('div'); ln.className = 'sfb-ln';
+    const row = [];
+    for (const n of [POS, geom.n, PTS, MV]) {
+      const cg = document.createElement('span'); cg.className = 'cg';
+      for (let i = 0; i < n; i++) { const c = mkFlap(); cg.appendChild(c.el); row.push(c); }
+      ln.appendChild(cg);
+    }
+    grid.appendChild(ln); cells.push(row);
+  }
+}
+function targetsFor(pi) {
+  const specs = linesFor(pi, geom.n);
+  const out = [];
+  for (let l = 0; l < geom.L; l++) {
+    const s = specs[l] || { pos: '', nm: '', pts: '', mv: '', mk: 'eq' };
+    const seg = (txt, n, right) => (right ? txt.padStart(n, ' ') : txt.padEnd(n, ' ')).slice(0, n).split('');
+    const chars = [...seg(s.pos, POS, true), ...seg(s.nm, geom.n), ...seg(s.pts, PTS, true), ...seg(s.mv, MV)];
+    const kinds = [...Array(POS).fill('k-pos'), ...Array(geom.n).fill('k-nm'), ...Array(PTS).fill('k-pts'),
+      ...Array(MV).fill('k-' + s.mk)];
+    out.push(chars.map((ch, i) => [ch, kinds[i]]));
+  }
+  return out;
+}
+const ALPHA = 'ABCDEFGHIJKLMNOPRSTUVWY', DIGITS = '0123456789';
+function show(pi) {
+  const my = ++gen;
+  timers.forEach(clearTimeout); timers = [];
+  const T = targetsFor(pi);
+  let end = 0;
+  T.forEach((line, l) => line.forEach(([ch, k], c) => {
+    const cell = cells[l][c];
+    if (cell.ch === ch && cell.k === k) return;
+    if (reduced()) { setStatic(cell, ch, k); return; }
+    const pool = /[0-9]/.test(ch) || k === 'k-pos' || k === 'k-pts' ? DIGITS : ALPHA;
+    const hops = ch === ' ' && cell.ch === ' ' ? 0 : 1 + Math.floor(Math.random() * 3);
+    const seq = [];
+    for (let i = 0; i < hops; i++) seq.push([pool[Math.floor(Math.random() * pool.length)], k]);
+    seq.push([ch, k]);
+    const start = (l * 70 + c * 22 + Math.random() * 40) * SPEED;
+    seq.forEach(([to, tk], i) => {
+      timers.push(setTimeout(() => {
+        if (my !== gen) return;
+        const [t, b, lt, lb] = cell.g;
+        setGlyph(t, to, tk); setGlyph(lb, to, tk);         // new: static top, rising lower leaf
+        setGlyph(b, cell.ch, cell.k); setGlyph(lt, cell.ch, cell.k); // old: static bottom, falling top leaf
+        cell.par ^= 1;
+        cell.el.classList.remove('p0', 'p1');
+        cell.el.classList.add('p' + cell.par);
+        cell.ch = to; cell.k = tk;
+      }, start + i * STEP));
+    });
+    end = Math.max(end, start + seq.length * STEP);
+  }));
+  return end;
+}
+function snap(pi) {  // instant, used after a resize
+  gen++; timers.forEach(clearTimeout); timers = [];
+  targetsFor(pi).forEach((line, l) => line.forEach(([ch, k], c) => setStatic(cells[l][c], ch, k)));
+}
+
+/* ------------------------------------------------------------ SEQUENCER */
+let page = 0, auto = true, timer = null;
+const dwell = (pi) => (3600 + rowsOf(pi).length * 280) * SPEED;
+function indicator() {
+  const rows = rowsOf(page);
+  $('range').textContent = `${page * size + 1}–${page * size + rows.length}`;
+  $('of').textContent = `of ${cur.length}`;
+  const sr = $('sr'); sr.textContent = '';
+  rows.forEach((p) => { const li = document.createElement('li'); li.textContent = `${place(p)} ${p.name}, ${p.total} points, ${moveOf(p)[0]}`; sr.appendChild(li); });
+}
+function status(msg) { $('status').innerHTML = msg; }
+function go(pi) {
+  page = (pi + pagesOf()) % pagesOf(); indicator();
+  (window.sbLog = window.sbLog || []).push([Math.round(performance.now()), page + 1, auto ? 'auto' : 'held']);
+  return show(page);
+}
+function next() {
+  if (!auto) return;
+  if (page < pagesOf() - 1) {
+    const t = go(page + 1);
+    status(`Auto-flipping <small>· page ${page + 1} of ${pagesOf()}</small>`);
+    clearTimeout(timer); timer = setTimeout(next, t + dwell(page));
+  } else {
+    go(0); auto = false;
+    status('Holding on the top page');
+  }
+}
+function run() {
+  clearTimeout(timer); auto = true;
+  snap(-1);                                   // the board wakes blank, then flaps to page 1
+  const t = go(0);
+  status(`Auto-flipping <small>· page 1 of ${pagesOf()}</small>`);
+  timer = setTimeout(next, t + dwell(0));
+}
+function step(d) {
+  clearTimeout(timer); auto = false;
+  go(page + d);
+  status(`Stepped by the host <small>· page ${page + 1} of ${pagesOf()}</small>`);
+}
+function setSize(n) {
+  size = n;
+  root.classList.toggle('d-tv', n === 5); root.classList.toggle('d-room', n !== 5);
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.size) === n)));
+  build(); run();
+}
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setSize(Number(b.dataset.size))));
+$('replay').addEventListener('click', run);
+$('rm').addEventListener('click', () => { root.classList.toggle('rm'); syncRm(); run(); });
+function syncRm() { $('rm').setAttribute('aria-pressed', String(root.classList.contains('rm'))); }
+addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+});
+let rz = null;
+addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { build(); snap(page); }, 150); });
+syncRm();
+const start = () => setSize(size);
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start);
+})();
+</script>
+</body>
+</html>

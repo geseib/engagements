@@ -245,6 +245,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'Detail',
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF',
     'AnswerDetails',
+    'Background',
     'CustomInstructions',
     'options',
     'lowLabel', 'highLabel',
@@ -365,8 +366,27 @@ const ENCRYPTED_FIELDS = Object.freeze({
 
   /** An AI generation job: PK=AIJOBS, SK=AIJOB#<id>. `request` is where a
    *  PASTED SOURCE DOCUMENT lands — a customer paste of arbitrary internal
-   *  material — and `items` is the generated content before it becomes a set. */
-  job: Object.freeze(['request', 'items', 'meta']),
+   *  material — and `items` is the generated content before it becomes a set.
+   *
+   *  `result` is the PROMPT ADVISOR's answer (admin/ai-prompt-advisor.js): an
+   *  analysis of an org's Workie that quotes its prose back and, for "improve"
+   *  and "optimize", rewrites the whole of it. It is the Workie's text in a
+   *  second row, so it is sealed as the Workie is. The advisor's job row holds
+   *  no other content — the prompt it analyses rides in the worker's invoke
+   *  payload and is never stored.
+   *
+   *  `createdSetName` and `setCreationError` are where a whole-set generator
+   *  records the draft set it made (admin/shared/generated-set.js): the first
+   *  IS the set's title, which the `set` entity seals as `name`, and the second
+   *  is the importer's refusal, which quotes that title back. `createdSetId`
+   *  stays plaintext — it is a key, like every SK above.
+   *
+   *  These are sealed only where a call site passes `sealFor`
+   *  (admin/shared/generation-jobs.js): the AI builders' jobs do; the set-check
+   *  jobs, which carry ids and bands and no content, do not. */
+  job: Object.freeze([
+    'request', 'items', 'meta', 'result', 'createdSetName', 'setCreationError',
+  ]),
 
   /** A comment on one section of a round's report:
    *  SK=COMMENT#<nnn>#<anchorKind>#<anchorRef>#<commentId>.

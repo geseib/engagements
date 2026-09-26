@@ -145,8 +145,12 @@ export default function MarketingShell({ title, current, scene = true, rootClass
                 <a className="mk-btn mk-btn-quiet" href="/auth" onClick={goToAuth('/auth')}>
                   Sign in
                 </a>
+                {/* `mk-nav-register` is the hook MarketingShell.css uses to
+                    take this door out of the row at mid widths, before the
+                    links collapse. Never hide by `mk-btn-primary`: "Open the
+                    app" wears it too. */}
                 <a
-                  className="mk-btn mk-btn-primary"
+                  className="mk-btn mk-btn-primary mk-nav-register"
                   href="/auth?mode=register"
                   onClick={goToAuth('/auth?mode=register')}
                 >

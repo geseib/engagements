@@ -342,3 +342,24 @@ export function departedRows(removedPlayers = []) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * The Players tab's scoreboard button (docs/superpowers/specs/2026-09-25-scoreboard-design.md §3).
+ *
+ * `availability` is config/scoreboard.js's scoreboardAvailability: no button
+ * for a game type without a board, disabled with its reason before the first
+ * scored round. HIDING IS NEVER DISABLED: a board that is up must always be
+ * closable from here, whatever the scores are doing.
+ */
+export function scoreboardButton({ board, availability } = {}) {
+  const open = Boolean(board && board.open);
+  const avail = availability || { show: false, enabled: false, reason: '' };
+  if (!avail.show) return { show: false, label: '', disabled: true, reason: '' };
+  if (open) return { show: true, label: 'Hide scoreboard', disabled: false, reason: '' };
+  return {
+    show: true,
+    label: 'Show scoreboard on screen',
+    disabled: !avail.enabled,
+    reason: avail.enabled ? '' : (avail.reason || ''),
+  };
+}

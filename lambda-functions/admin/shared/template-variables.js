@@ -346,6 +346,15 @@ const TEMPLATE_VARIABLES = [
     example: 'Real title: The Starry Night, Vincent van Gogh, 1889, Museum of Modern Art, New York.',
   },
   {
+    // question-background spec §3. Read at RESULTS only; carried by no player payload.
+    name: 'background',
+    description: 'Background the question\'s author wrote for Workie: context, facts and angles to draw on. '
+      + 'Never shown to players. Empty when the author left it blank.',
+    category: 'Question Info',
+    gameTypes: ALL_TYPES,
+    example: 'Version control records every change to a codebase, so a team can see who changed what and undo it.',
+  },
+  {
     /*
       THE WITHHELD REVEAL — and the tag that stopped anyone finding it.
 

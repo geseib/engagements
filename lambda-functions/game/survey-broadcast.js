@@ -6,7 +6,13 @@
  *             the screen the host is looking at may be any one of them
  *             (submit-vote.js getHostConnections records the frozen meter that
  *             `Items[0]` produced). Not host-notify.js, which sends to one; not
- *             the manager's `IsHost` filter, which no writer sets.
+ *             the manager's `broadcastToGame` (schema-compliant-manager.js),
+ *             which queries a single page with no `ExclusiveStartKey` loop —
+ *             a big room's connections would silently miss whatever fell past
+ *             the first page. (Its `HOST`/`PARTICIPANTS` filter used to read
+ *             `IsHost`, a field no writer ever set; fixed to `ConnectionType`
+ *             in the 2026-09-26 bug sweep, task 10a — that bug is gone, the
+ *             pagination gap is why this file still exists.)
  *   toAll     every connection on the session — the phones and the stage.
  *
  * `surveyProgress` goes to hosts only and carries counts only; the phones need

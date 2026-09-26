@@ -153,15 +153,23 @@ const reviewerOf = (event) => String(event?.requestContext?.authorizer?.lambda?.
  * Only the org shape decides here; PUBLIC# and PLATFORM# rows are reports
  * (Stage 3).
  *
- * `#v([1-9]\d*)` and NOT `#v(\d+)`: a version is one-based, and `v0` would
- * parse to `setPartition(ref, 0)`, which `set-version.js` resolves to the
- * LEGACY UNVERSIONED partition — so `org_acme#safety#v0` would have decided,
- * published and stamped a DIFFERENT set's content than any queue row can name.
- * `v01` goes with it: one spelling per version.
+ * `#v(0|[1-9]\d*)`: a version is one-based, but `v0` is the one reserved
+ * spelling for "no version" — moderation-queue.js's `queueSk` writes exactly
+ * `#v0` for an unversioned org set, and `setPartition(ref, null)`, which
+ * `v0` resolves to below, is that same LEGACY UNVERSIONED partition: the
+ * permanently supported, never-migrated read state for a set that predates
+ * versioning. Without this an unversioned set's own queue row could never be
+ * decided at all. `v01` is refused on the same reasoning: one spelling per
+ * version (and per "no version"), so two queue skus cannot name one row.
+ *
+ * A set that has SINCE been versioned still answers a `v0` request against
+ * its own legacy partition — a distinct, permanently addressable row that
+ * coexists with any numbered version added later — never against `v1`/`v2`/…,
+ * so this never decides, publishes or stamps a different version's content.
  */
 function parseOrgSk(raw) {
-  const m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v([1-9]\d*)$/.exec(String(raw || '').trim());
-  return m ? { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) } : null;
+  const m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v(0|[1-9]\d*)$/.exec(String(raw || '').trim());
+  return m ? { sk: m[0], ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: m[3] === '0' ? null : Number(m[3]) } : null;
 }
 
 /**
@@ -441,8 +449,14 @@ exports.handler = async (event) => {
         const promptId = (snapshot.meta && snapshot.meta.promptId) || '';
         const promptDropped = Boolean(promptId) && !(await platformPromptExists(db, TABLE(), promptId));
         await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, notice, orphaned: true });
+        // Ruling R9 applies here exactly as it does to the ordinary path's
+        // resumingApprove below: the queue row is the completion marker, so a
+        // crash between this publish landing and the row's delete must
+        // converge on retry rather than mint a second public version.
+        // `resume: true` was missing here — the one approve path that forgot
+        // it — which is what let a retried orphan approve publish twice (7b).
         const published = await publishSnapshot(db, TABLE(), snapshot, {
-          review: { findings: [], note }, sourceOrgName: pointer.orgName || '', promptDropped,
+          review: { findings: [], note }, sourceOrgName: pointer.orgName || '', promptDropped, resume: true,
         });
         if (notice.length) await writeSensitivity(published.pubRef, notice);
         // No-ops when the whole set was deleted; lands when only the version

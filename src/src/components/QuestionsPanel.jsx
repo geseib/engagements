@@ -324,15 +324,29 @@ export default function QuestionsPanel({
       : nothingToPreview(rows);
   const previewing = viewMode === 'preview' && !previewBlocked;
 
-  // WHY THE PREVIEW'S EDIT IS HELD, or '' when it is not. The preview stays up
-  // while a Save — or a replace from a CSV — is written and while the set is
-  // read back after it, and the read-back gives every row a new uid. So a
-  // dialog opened in that time is an edit of a row about to stop existing, and
-  // finished after the read-back it has no row to land on (`commitEdit`
-  // refuses it; it used to append it, the saved question twice). Held until
-  // the set on screen is the saved one: disabled, saying why, never live and
-  // never missing from the bar.
-  const editBlocked = loadState === 'ready' && !saving && !isReplacing ? '' : 'Wait for the save to finish.';
+  // WHY NOTHING MAY CHANGE THE WORKING COPY RIGHT NOW, or '' when it may.
+  //
+  // A Save — or a replace from a CSV — posts the rows as they are when it is
+  // pressed, then reads the set back and replaces `rows` with what it read,
+  // every row under a new uid. Anything changed in between — an Add, a Pull, a
+  // row's Edit, Remove, move or Restore, a tick, a dialog's Done or Copy —
+  // landed in a copy the read-back then overwrote, without a word; and an edit
+  // opened in that time has no row to land on after it (`commitEdit` refuses
+  // it; it used to append it, the saved question twice). So every control that
+  // changes the working copy — the preview's Edit included — reads this one
+  // value, from the moment the write starts until the saved set is on screen:
+  // disabled, saying why, never live and never missing. Before the first load
+  // lands, and after it fails, the same controls have nothing to act on, and
+  // say that instead of naming a save nobody made.
+  const workingCopyHeld = saving || isReplacing ? 'Wait for the save to finish.'
+    : loadState === 'loading' ? 'The questions are still loading.'
+      : loadState === 'error' ? 'The questions could not be loaded.'
+        : '';
+  // The controls that would START a copy — Add, Add questions, Pull — are held
+  // by the same reason first, then by `writesBlocked`: a save in flight is the
+  // more urgent thing to say, and it passes; the missing room does not.
+  const copyStartHeld = workingCopyHeld
+    || (writesBlocked ? 'No room for a copy — delete one of your own sets or upgrade.' : '');
 
   /* ----------------------------------------------------------- loading --- */
 
@@ -651,8 +665,14 @@ export default function QuestionsPanel({
 
   const move = (uid, delta) => setRows((current) => moveRow(current, uid, delta));
 
-  const toggleSelected = (uid) => setSelected((s) =>
-    (s.includes(uid) ? s.filter((id) => id !== uid) : [...s, uid]));
+  const toggleSelected = (uid) => {
+    // Held here as well as by `disabled`, whatever the click came from. A
+    // user's click never reaches a disabled checkbox, but a dispatched one
+    // still ticks it (jsdom's does), and React passes that change on — it
+    // drops a disabled button's onClick, not a checkbox's onChange.
+    if (workingCopyHeld) return;
+    setSelected((s) => (s.includes(uid) ? s.filter((id) => id !== uid) : [...s, uid]));
+  };
 
   const discard = () => {
     setRows(baseline);
@@ -1089,6 +1109,10 @@ export default function QuestionsPanel({
       setNewSetError(`Could not create "${title}": ${error.message}`);
     } finally {
       setSaving(false);
+      // Whatever happened, no create is under way now. A failure is said on
+      // the card; "Creating..." left here outlived the dialog, claiming a set
+      // that was never made. (A success has already replaced it above.)
+      setStatus((current) => (current.tone === 'pending' ? { text: '', tone: '' } : current));
     }
   };
 
@@ -1269,7 +1293,12 @@ export default function QuestionsPanel({
               <Icon name="FloppyDisk" weight="bold" size={14} color="currentColor" />{' '}
               {saving ? 'Saving...' : saveLabel}
             </button>
-            <button className="btn-secondary btn-small" onClick={() => setConfirmDiscard(true)} disabled={saving}>
+            <button
+              className="btn-secondary btn-small"
+              onClick={() => setConfirmDiscard(true)}
+              disabled={Boolean(workingCopyHeld)}
+              title={workingCopyHeld || undefined}
+            >
               Discard changes
             </button>
           </div>
@@ -1283,10 +1312,16 @@ export default function QuestionsPanel({
           <SurveyAddMenu
             onAdd={startAddKind}
             onPull={() => setShowPull(true)}
-            disabled={loadState !== 'ready' || writesBlocked}
+            disabled={Boolean(copyStartHeld)}
+            title={copyStartHeld || undefined}
           />
         ) : (
-          <button className="btn-primary btn-small" onClick={startAdd} disabled={loadState !== 'ready' || writesBlocked}>
+          <button
+            className="btn-primary btn-small"
+            onClick={startAdd}
+            disabled={Boolean(copyStartHeld)}
+            title={copyStartHeld || undefined}
+          >
             <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add a question
           </button>
         )}
@@ -1294,8 +1329,8 @@ export default function QuestionsPanel({
         <button
           className="btn-secondary btn-small"
           onClick={() => setShowAdd(true)}
-          disabled={loadState !== 'ready' || writesBlocked}
-          title={writesBlocked ? 'No room for a copy — delete one of your own sets or upgrade.' : undefined}
+          disabled={Boolean(copyStartHeld)}
+          title={copyStartHeld || undefined}
           data-testid="add-questions"
         >
           <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" /> Add questions…
@@ -1304,14 +1339,17 @@ export default function QuestionsPanel({
           <button
             className="btn-secondary btn-small"
             onClick={() => setShowPull(true)}
-            disabled={loadState !== 'ready' || writesBlocked}
+            disabled={Boolean(copyStartHeld)}
+            title={copyStartHeld || undefined}
           >
             <Icon name="Books" weight="bold" size={14} color="currentColor" /> Pull from another set
           </button>
         )}
         {/* The selection is the table's checkboxes, and Preview does not show
             them: a "Save 2 selected" there acts on two questions nothing on
-            screen names. Hidden, not cleared — it returns with the table. */}
+            screen names. Hidden, not cleared — it returns with the table.
+            Held with the checkboxes while a Save is written: the read-back
+            starts the selection over. */}
         {selected.length > 0 && !previewing && (
           <button
             className="btn-secondary btn-small"
@@ -1320,6 +1358,8 @@ export default function QuestionsPanel({
               title: `${setName} — selection`,
               rows: rows.filter((r) => selected.includes(r.uid)),
             })}
+            disabled={Boolean(workingCopyHeld)}
+            title={workingCopyHeld || undefined}
           >
             Save {selected.length} selected as a new set…
           </button>
@@ -1367,7 +1407,7 @@ export default function QuestionsPanel({
             : (questionSet?.customInstruction || '')}
           setId={setId}
           onEditQuestion={startEdit}
-          editBlocked={editBlocked}
+          editBlocked={workingCopyHeld}
           selectRequest={previewRequest}
         />
       )}
@@ -1406,6 +1446,8 @@ export default function QuestionsPanel({
                       className="qs-question-select"
                       checked={selected.includes(row.uid)}
                       onChange={() => toggleSelected(row.uid)}
+                      disabled={Boolean(workingCopyHeld)}
+                      title={workingCopyHeld || undefined}
                       aria-label={`Select ${row.title || 'untitled question'}`}
                     />
                   )}
@@ -1431,7 +1473,12 @@ export default function QuestionsPanel({
                   {isSurvey && <SurveyRequiredMark required={row.required === true} />}
                   <div className="qs-question-actions">
                     {row.removed ? (
-                      <button className="btn-secondary btn-small" onClick={() => restoreRow(row.uid)}>
+                      <button
+                        className="btn-secondary btn-small"
+                        onClick={() => restoreRow(row.uid)}
+                        disabled={Boolean(workingCopyHeld)}
+                        title={workingCopyHeld || undefined}
+                      >
                         <Icon name="ArrowCounterClockwise" weight="bold" size={14} color="currentColor" />{' '}
                         Restore
                       </button>
@@ -1440,28 +1487,35 @@ export default function QuestionsPanel({
                         <button
                           className="btn-secondary btn-small"
                           onClick={() => move(row.uid, -1)}
-                          disabled={rowIndex === 0 || Boolean(activeCategory)}
+                          disabled={Boolean(workingCopyHeld) || rowIndex === 0 || Boolean(activeCategory)}
                           aria-label={`Move ${row.title || 'question'} up`}
-                          title={activeCategory ? 'Clear the category filter to reorder' : 'Move up'}
+                          title={workingCopyHeld || (activeCategory ? 'Clear the category filter to reorder' : 'Move up')}
                         >
                           <Icon name="ArrowUp" weight="bold" size={14} color="currentColor" />
                         </button>
                         <button
                           className="btn-secondary btn-small"
                           onClick={() => move(row.uid, 1)}
-                          disabled={rowIndex === rows.length - 1 || Boolean(activeCategory)}
+                          disabled={Boolean(workingCopyHeld) || rowIndex === rows.length - 1 || Boolean(activeCategory)}
                           aria-label={`Move ${row.title || 'question'} down`}
-                          title={activeCategory ? 'Clear the category filter to reorder' : 'Move down'}
+                          title={workingCopyHeld || (activeCategory ? 'Clear the category filter to reorder' : 'Move down')}
                         >
                           <Icon name="ArrowDown" weight="bold" size={14} color="currentColor" />
                         </button>
-                        <button className="btn-secondary btn-small" onClick={() => startEdit(row)}>
+                        <button
+                          className="btn-secondary btn-small"
+                          onClick={() => startEdit(row)}
+                          disabled={Boolean(workingCopyHeld)}
+                          title={workingCopyHeld || undefined}
+                        >
                           <Icon name="PencilSimple" weight="bold" size={14} color="currentColor" /> Edit
                         </button>
                         <button
                           className="btn-danger btn-small"
                           onClick={() => removeRow(row.uid)}
+                          disabled={Boolean(workingCopyHeld)}
                           aria-label={`Remove ${row.title || 'question'}`}
+                          title={workingCopyHeld || undefined}
                         >
                           <Icon name="Trash" weight="bold" size={14} color="currentColor" /> Remove
                         </button>
@@ -1537,6 +1591,12 @@ export default function QuestionsPanel({
             onChange={(next) => { setDraft(next); setFormError(''); }}
             onCancel={cancelEdit}
             onDone={commitEdit}
+            /* A Save can still start under this dialog: Modal does not move
+               focus when it opens, so focus can be left on Save. Done then
+               waits with everything else that changes the working copy —
+               pressed during the write, the draft landed in a copy the
+               read-back replaced. */
+            doneBlocked={workingCopyHeld}
             formError={formError}
             confirmDrop={confirmDropDraft}
             onKeepEditing={() => setConfirmDropDraft(false)}
@@ -1584,7 +1644,12 @@ export default function QuestionsPanel({
             {saving ? 'Saving...' : saveLabel}
           </button>
           {dirty && (
-            <button className="btn-secondary" onClick={() => setConfirmDiscard(true)} disabled={saving}>
+            <button
+              className="btn-secondary"
+              onClick={() => setConfirmDiscard(true)}
+              disabled={Boolean(workingCopyHeld)}
+              title={workingCopyHeld || undefined}
+            >
               Discard changes
             </button>
           )}
@@ -1711,6 +1776,7 @@ export default function QuestionsPanel({
           availableSets={availableSets}
           onCancel={() => setShowPull(false)}
           onCopy={acceptPulled}
+          copyBlocked={workingCopyHeld}
         />
       )}
 
@@ -1765,7 +1831,11 @@ export default function QuestionsPanel({
                 type="text"
                 className="form-input"
                 value={newSetDialog.title}
-                onChange={(e) => setNewSetDialog({ ...newSetDialog, title: e.target.value })}
+                onChange={(e) => {
+                  setNewSetDialog({ ...newSetDialog, title: e.target.value });
+                  // The refusal was about the name as it stood.
+                  setNewSetError('');
+                }}
               />
             </div>
 
@@ -1810,6 +1880,8 @@ export default function QuestionsPanel({
  */
 function QuestionForm({
   draft, engagementType, showKind, onChange, onCancel, onDone,
+  /** Why Done cannot be pressed right now, or '' when it can. */
+  doneBlocked = '',
   formError = '',
   confirmDrop = false,
   onKeepEditing,
@@ -1839,6 +1911,7 @@ function QuestionForm({
       onDropDraft={onDropDraft}
       onDone={onDone}
       onCancel={onCancel}
+      doneBlocked={doneBlocked}
     />
   );
 
@@ -2113,6 +2186,27 @@ function QuestionForm({
         </div>
       </div>
 
+      {/* BACKGROUND — the author's material for Workie (question-background spec §1).
+          Full width: it runs to 600 characters. Never shown to players. Hint reuses
+          `.qs-panel-note`, the panel's own field-help ink (--muted on the question
+          dialog's --surface card, 6.06:1 — questionSetEditorPalette.test.js), the same
+          class the AI-draft note and the "Writing alongside these" note already use. */}
+      <div className="form-group">
+        <label htmlFor={id('background')}>Background for Workie</label>
+        <textarea
+          id={id('background')}
+          className="form-textarea"
+          rows="3"
+          maxLength={600}
+          value={draft.background || ''}
+          onChange={set('background')}
+          aria-describedby={id('background-hint')}
+        />
+        <p id={id('background-hint')} className="qs-panel-note">
+          Facts and context Workie may use. Never shown to players.
+        </p>
+      </div>
+
       {footer}
     </div>
   );
@@ -2123,7 +2217,7 @@ function QuestionForm({
  * the "throw it away?" strip or Done / Cancel.
  */
 function QuestionFormFooter({
-  formError, confirmDrop, isAdding, onKeepEditing, onDropDraft, onDone, onCancel,
+  formError, confirmDrop, isAdding, onKeepEditing, onDropDraft, onDone, onCancel, doneBlocked = '',
 }) {
   return (
     <>
@@ -2148,10 +2242,19 @@ function QuestionFormFooter({
         </div>
       ) : (
         <div className="qs-panel-actions">
-          <button className="btn-primary btn-small" onClick={onDone}>Done</button>
+          <button
+            className="btn-primary btn-small"
+            onClick={onDone}
+            disabled={Boolean(doneBlocked)}
+            title={doneBlocked || undefined}
+          >
+            Done
+          </button>
           <button className="btn-secondary btn-small" onClick={onCancel}>Cancel</button>
+          {/* A held Done says why in words as well as on its title: the panel's
+              "Saving..." is behind this dialog, and a title needs a pointer. */}
           <span className="qs-panel-note">
-            Done puts it in the working copy. Nothing is written until you Save the set.
+            {doneBlocked || 'Done puts it in the working copy. Nothing is written until you Save the set.'}
           </span>
         </div>
       )}

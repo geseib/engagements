@@ -320,56 +320,6 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
-  StartQuestionFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub '${StackName}-start-question'
-      CodeUri: lambda-functions/websocket/
-      Handler: start-question.handler
-      Events:
-        StartQuestion:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RestApi
-            Path: /games/{gameId}/start-question
-            Method: post
-            # HOST/ADMIN ONLY. This route was PUBLIC.
-            #
-            # A four-digit join code is not a secret — it is on the projector and
-            # typed by everyone in the room. Unauthenticated, every participant, and
-            # anyone they forward the code to, could drive somebody else's live
-            # session: advance the round out from under the host, push the room into
-            # voting before people had answered, or change which categories get
-            # asked. POST /games is the other kind of problem — an unauthenticated
-            # creator leaves a session with no owner to attribute and no org to bill.
-            #
-            # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO. Every caller is
-            # a signed-in host surface, but they all used plain `fetch`, which sends
-            # no Authorization header. Attaching this first would have 401'd the
-            # host's own advance button and frozen the room mid-round. GameHostPage,
-            # HostRemote and QuickstartMenu moved to authFetch together — including
-            # HostRemote's two ${apiBase()}${request.path} dispatches, whose paths
-            # are built in config/hostRemote.js and so name no route here.
-            #
-            # The GROUP check is NOT here. requiredGroupsForRoute answers
-            # ['hosts','admins'] via its POST/PUT/DELETE + games rule, which sits
-            # ABOVE the generic public rule — so start-vote is not handed to
-            # path.includes('vote'). tests/session-control-routes-authorization.js
-            # pins both halves.
-            Auth:
-              Authorizer: CognitoAuthorizer
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref GameTable
-        - Statement:
-          - Effect: Allow
-            Action:
-              - execute-api:ManageConnections
-            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
-      Tags:
-        Environment: !Ref Environment
-        StackName: !Ref StackName
-
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -605,6 +555,44 @@ Resources:
         # connection survives forever and is retried on every future broadcast —
         # and the failure is an AccessDenied inside a catch that never throws,
         # so nothing surfaces anywhere.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ScoreboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-scoreboard'
+      CodeUri: lambda-functions/game/
+      Handler: scoreboard.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Events:
+        ScoreboardEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/scoreboard
+            Method: post
+            # HOST ONLY, exactly like /stage-focus above. It puts every name in
+            # the room, with its total, full-screen on the wall — on a public
+            # route that is a button any phone holding the four-digit game id
+            # could press. The handler also asks callerMayDriveSession.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Crud, NOT Write, for /stage-focus's reason: the broadcast reaps dead
+        # CONNECTION# rows with DeleteItem, which DynamoDBWritePolicy does not
+        # grant. Reads: METADATA (org, type) and STATE; writes: STATE.Scoreboard.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # The other host surface has to hear it: open the board from the phone,
+        # watch the projector follow, and the other way round.
         - Statement:
           - Effect: Allow
             Action:
@@ -2127,12 +2115,30 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: RootPage checks a typed code here before anyone signs in, and
+        # every phone reads the session brief. `?role=host` is a query
+        # parameter anyone can type, so its branch carries nothing that is the
+        # host's own writing (get-game.js).
         GetGameEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}
             Method: GET
+        # THE HOST'S DOOR to the same handler: the edit prefill, with the
+        # session's Workie context and Call & Answer briefing decrypted. It
+        # was the public `?role=host` branch until 2026-09-26, open to anyone
+        # with the code. Cognito here, authorizer.js names it for
+        # hosts|admins, and get-game.js asks callerMayDriveSession.
+        # tests/get-game-host-details.js.
+        GetGameHostDetailsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/host-details
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -2276,6 +2282,49 @@ Resources:
             # ABOVE the generic public rule — so start-vote is not handed to
             # path.includes('vote'). tests/session-control-routes-authorization.js
             # pins both halves.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # POST /games/{gameId}/end — THE HOST STOPS A NON-SURVEY SESSION EARLY
+  # (Task 4, 2026-09-26 bug sweep). Before this a trivia, poll, call-and-answer
+  # or wavelength session reached ENDED only when next-question.js's pool-dry
+  # path ran out of questions to serve; a host who wanted to stop after round
+  # 4 of 10 had no way to. Cognito here, and `callerMayDriveSession` on the
+  # session's own org inside the handler (end-session.js) — the same pair
+  # next-question.js and the comment-feature route pay. The write and the
+  # broadcast are session-end.js's shared `endSession`, the same helper
+  # next-question.js's own pool-dry path now calls, so a host's early end and
+  # a pool running dry look identical on the wire. A survey is refused here,
+  # 400, and points at its own survey/end.
+  EndSessionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-end-session'
+      CodeUri: lambda-functions/game/
+      Handler: end-session.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # The ENDED broadcast reaches every phone, laptop and tablet in the
+        # room. Without this it is a silent AccessDenied and nothing tells
+        # them the session is over.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        EndSessionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/end
+            Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -2612,7 +2661,7 @@ Resources:
             # the guard is in the handler now that it can mean something.
             #
             # THE CLIENT HALF SHIPPED IN THE SAME CHANGE AND HAD TO, for the
-            # reason recorded on StartQuestionFunction above. Every caller is a
+            # reason recorded on StartVoteFunction above. Every caller is a
             # signed-in host surface — GameHostPage and HostRemote are both
             # behind ProtectedRoute — but three of the four used plain `fetch`.
             # `loadRounds` is the sharp one: it fires from a useEffect when the
@@ -2792,12 +2841,29 @@ Resources:
               Action: execute-api:ManageConnections
               Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
+        # PUBLIC: every phone and the host's remote read the round's summary
+        # here, and a participant holds no token. It refuses generateNew,
+        # debug and promptDebug (get-ai-summary.js) — those are the host's.
         GetAISummaryEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/ai-summary
             Method: GET
+        # THE HOST'S DOOR to the same handler: generation, and the prompt and
+        # template variables behind a summary — which carry the question's
+        # reveal, a trivia round's correct answer and every participant's
+        # answer. Cognito here, authorizer.js names it for hosts|admins, and
+        # get-ai-summary.js asks callerMayDriveSession.
+        # tests/ai-summary-host-only-params.js.
+        GetAISummaryHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/ai-summary/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -4750,6 +4816,14 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # THE PROMPT ADVISOR, AS A JOB. It called Sonnet inside the request and took
+  # 35-62s, so API Gateway's hard 30s integration ceiling answered 503 while the
+  # Lambda was still working. POST now records a job and self-invokes a worker
+  # (Event), which gets this function's full 900s; the screen polls the GET
+  # route below. Same shape as the AI builders' generation jobs.
+  #
+  # Admins only, POST and GET alike — auth/authorizer.js keeps it off the host
+  # routes on purpose, and the handler checks again with require-admin.js.
   AdminAIPromptAdvisorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -4757,12 +4831,27 @@ Resources:
       CodeUri: lambda-functions/admin/
       Handler: ai-prompt-advisor.handler
       Runtime: nodejs22.x
-      Timeout: 120
+      Timeout: 900
       MemorySize: 512
       Environment:
         Variables:
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # Tenant content is encrypted per organisation. This function opens an
+        # org's own Workie to analyse it and seals the analysis on the job row,
+        # so it needs to unwrap that org's data key — and ONLY with an orgId
+        # encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        # Async analysis: the POST self-invokes the worker (Event).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-prompt-advisor'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - S3CrudPolicy:
@@ -4790,6 +4879,16 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/ai-prompt-advisor
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Job status poll. The handler hands a job only to the admin who
+        # started it, acting for the same organisation.
+        AdminAIPromptAdvisorStatusEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/ai-prompt-advisor/{jobId}
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

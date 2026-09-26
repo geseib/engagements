@@ -182,18 +182,25 @@ describe('Escape is gated on the work, not switched off', () => {
 });
 
 describe('the advisor got a way out of the bottom', () => {
+  /*
+    SINCE 2026-09-25 the advisor is the editor's Improve view, not a dialog of
+    its own (docs/superpowers/specs/2026-09-25-prompt-workbench-design.md): the
+    row's Improve opens the editor ON it, and it shares the editor's × and
+    requestClose. What this block has always pinned still holds — a named
+    dialog, and a bottom exit outside the region that scrolls.
+  */
   async function openAdvisor() {
     authFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ prompts: [PROMPT] }) });
     render(<AIPromptManager />);
-    fireEvent.click(await screen.findByTitle('Ask the AI advisor about this prompt'));
-    await screen.findByText('AI Prompt Advisor');
+    fireEvent.click(await screen.findByTitle('Improve this prompt'));
+    await screen.findByTestId('pmgr-advisor-body');
   }
 
   test('it is a dialog with a name', async () => {
     await openAdvisor();
     const dialog = screen.getAllByRole('dialog')[0];
     expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(dialog).toHaveAccessibleName(/AI Prompt Advisor/);
+    expect(dialog).toHaveAccessibleName(/Improve “Lessons Learned”/);
   });
 
   test('the exit is after everything there is to read', async () => {
@@ -211,10 +218,12 @@ describe('the advisor got a way out of the bottom', () => {
 
   test('the bottom exit actually closes it', async () => {
     // rejects: a decorative Cancel. A dead control is the one people reach for
-    // first, so a rendered exit must be a wired exit.
+    // first, so a rendered exit must be a wired exit. Nothing is unsaved, so
+    // it closes without asking.
     await openAdvisor();
     fireEvent.click(screen.getByTestId('pmgr-advisor-close'));
-    await waitFor(() => expect(screen.queryByText('AI Prompt Advisor')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId('pmgr-advisor-body')).not.toBeInTheDocument());
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   test('the exit lives outside the region that scrolls', async () => {

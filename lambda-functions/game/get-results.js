@@ -7,6 +7,8 @@ const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wave
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
+const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
+const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -63,12 +65,6 @@ const apigateway = new ApiGatewayManagementApiClient({
 });
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const lambda = LambdaClient ? new LambdaClient({}) : null;
-
-// Helper function to check if a bit is set in a bitmask
-const isBitSet = (mask, position) => {
-  const pos = position - 1; // Convert to 0-based index
-  return mask[pos] === '1';
-};
 
 /**
  * Tell the room the round has resolved.
@@ -194,6 +190,8 @@ const isHostTransitionRoute = (event) =>
  *     ASK#nnn for the rest of the round.
  *   - call-and-answer with zero votes: returned "No votes found" early, also
  *     without writing the state.
+ *   - trivia with zero answers: the same early return, found later
+ *     (tests/scoreboard-standings.js §3b2).
  *
  * Neither was visible from the host page, because GameHostPage.handleShowResults
  * sets `RESULTS#nnn` in its OWN React state regardless of what the server did —
@@ -205,8 +203,8 @@ const isHostTransitionRoute = (event) =>
  * also proof the game is underway.
  *
  * WHO IS ALLOWED TO DO THIS is decided HERE, not at the call sites, for the
- * same reason the write itself lives here: there are four exits, two of them
- * once forgot the write entirely, and a permission check pasted into some of
+ * same reason the write itself lives here: there are several exits, three of
+ * them once forgot the write entirely, and a permission check pasted into some of
  * them would grow the identical hole. `event` is threaded in so this function
  * can answer the question itself; a public read reaches this point only when
  * the round it asked about is ALREADY in RESULTS (the handler refuses
@@ -217,6 +215,10 @@ const isHostTransitionRoute = (event) =>
  * A missing `event` is a programming error — a fifth exit that forgot to pass
  * it — and throws rather than silently declining, because silently declining
  * is how a host ends up staring at a round that will not close.
+ *
+ * It writes whatever round it is given, so it is never reached for a round
+ * BEFORE the one the session is on: the handler refuses that first (409),
+ * before any branch has scored anything (tests/reclose-round.js).
  */
 const enterResultsState = async (event, gameId, paddedQuestionId) => {
   if (!event || typeof event !== 'object') {
@@ -263,19 +265,81 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
   //
   // Unconditional SET, so it is idempotent: a host who resolves the same round
   // twice does not error, and POST /reveal-authors having run first is a no-op.
+  //
+  // #ttl = if_not_exists(#ttl, :ttl) (bug sweep Task 2, fix round 1): this row
+  // had NO ttl at all until now, so it never expired, and once
+  // websocket/schema-compliant-manager.js started treating any row in
+  // GAME#<id> as "taken", a session that ever reached results retired its
+  // code FOR GOOD. `if_not_exists` means whichever of this handler,
+  // reveal-authors.js, stage-beat.js or stage-focus.js touches a round FIRST
+  // stamps the 30-day clock (session-ttl.js's ROUND_RECORD_DAYS) and the
+  // other three, touching the same round later, leave it alone.
   await db.send(new UpdateCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionId}` },
-    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt',
+    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt, #ttl = if_not_exists(#ttl, :ttl)',
     ExpressionAttributeNames: {
-      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt'
+      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt', '#ttl': 'ttl'
     },
     ExpressionAttributeValues: {
-      ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString()
+      ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString(),
+      ':ttl': ttlFrom(null, ROUND_RECORD_DAYS)
     }
   }));
 
   await broadcastResultsReady(gameId, paddedQuestionId);
+};
+
+/**
+ * THE SESSION'S RECORD OF THE ROUND IT COUNTED — `STATE.ScoresAfterRound`,
+ * `ScoresAt`, and the count before it, `PrevScoresAt`.
+ *
+ * The scoreboard (standings.js) reads the latest round and its NEW cutoff from
+ * here. The score rows cannot say it on their own: a round in which nobody
+ * scores — every trivia answer wrong, nobody voting — writes no score row at
+ * all, and the board would go on saying "After round 5" with round 6 over.
+ *
+ * Written on every COUNTED round, zero points included, on the host's
+ * transition only (like enterResultsState — a public read reports, it does not
+ * count). The already-counted guard is the score rows' own, one level up: a
+ * second close of the same round finds its round already recorded and writes
+ * nothing, so it cannot shift the previous count onto itself. It is `>=`, not
+ * `===`: a host who goes back and closes an OLDER round again must not move
+ * the board back to "after round 2" with round 3 over — the record only ever
+ * moves forward.
+ *
+ * Plain SETs from a fresh read rather than a conditional copy: two closes of
+ * ONE round racing both write the same previous count, which is harmless, and
+ * rounds are sequential, so no other race exists.
+ */
+const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
+  if (!isHostTransitionRoute(event)) return;
+  const round = parseInt(paddedQuestionId, 10);
+  if (!Number.isInteger(round) || round < 1) return;
+  try {
+    const current = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+      ProjectionExpression: '#r, #at',
+      ExpressionAttributeNames: { '#r': 'ScoresAfterRound', '#at': 'ScoresAt' }
+    }));
+    const was = current.Item || {};
+    if (Number(was.ScoresAfterRound) >= round) return;
+    await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+      UpdateExpression: 'SET #r = :r, #at = :at, #prev = :prev',
+      ExpressionAttributeNames: { '#r': 'ScoresAfterRound', '#at': 'ScoresAt', '#prev': 'PrevScoresAt' },
+      ExpressionAttributeValues: {
+        ':r': round,
+        ':at': new Date().toISOString(),
+        ':prev': typeof was.ScoresAt === 'string' ? was.ScoresAt : null
+      }
+    }));
+  } catch (error) {
+    // The points are written; only the board's "after round N" is at stake.
+    console.error(`❌ Could not record round ${paddedQuestionId} as counted for ${gameId}:`, error?.message);
+  }
 };
 
 exports.handler = async (event) => {
@@ -322,8 +386,9 @@ exports.handler = async (event) => {
       in the round went on the stage, for anyone holding four digits, by asking
       for the results instead of asking for the reveal. It also awards the
       scores, and unlike the state move that does not undo: the score row
-      carries `afterRound`, so a second close of the same round is skipped as
-      already scored. A rival did not merely move the room, they spent it.
+      records the rounds it has paid (`scoredRounds`), so a second close of
+      the same round is skipped as already scored. A rival did not merely move
+      the room, they spent it.
 
       GATED ON THE ROUTE, NOT MERELY ON THE CALLER, and the read route is the
       reason. `POST /games/get-results` is public and must stay that way —
@@ -454,6 +519,74 @@ exports.handler = async (event) => {
       }
     }
 
+    // AN OLDER ROUND IS NOT CLOSED AGAIN.
+    //
+    // Everything below writes RESULTS#<asked> and LessonNumber=<asked>, reveals
+    // the round's authors, pays its points and tells the room. Asked for a
+    // round BEFORE the one the session is on, that moved the whole room back
+    // to it and paid it a second time. The likely sender is a second host
+    // screen that has not caught up: the phone remote polls /state and closes
+    // the round it last saw, so a poll just before the stage moves on sends
+    // the old number.
+    //
+    // Every caller closes the round the session is ON — GameHostPage's
+    // `lessonNumber`, the remote's `currentQuestion` — so nothing a host means
+    // to do is refused, and re-showing the CURRENT round is still a re-close.
+    // Refused before any branch, because by the time enterResultsState runs
+    // the round has been scored. 409 and nothing written, like the survey
+    // refusal above; the sentence is what the phone remote prints.
+    if (isHostTransitionRoute(event)) {
+      const gameState = await readGameState();
+
+      // THE SESSION HAS ALREADY ENDED.
+      //
+      // Task 4's mid-round End (2026-09-26 bug sweep) made ENDED reachable
+      // from ASK or VOTE, not only after the last round's results — before
+      // it, a close here could only ever find the session on CREATED or a
+      // live round. A close of that same round afterwards writes
+      // RESULTS#<asked> over ENDED, scores the round and broadcasts the
+      // transition: un-ending the session. The likely sender is the same
+      // stale second host screen the older-round guard just below exists
+      // for — a request already in flight, or HostRemote's poll landing
+      // after the host has already ended from the stage. 409 and nothing
+      // written, same spot and same style as that guard; the sentence is
+      // what the phone remote prints.
+      if (gameState?.State === 'ENDED') {
+        console.log(`🔒 Refusing to close round ${targetQuestionId} of ${gameId}: the session has ended`);
+        const reason = 'This session has ended.';
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: reason,
+            message: reason,
+            ended: true,
+            gameId,
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+
+      const onRound = Number(gameState?.LessonNumber) || 0;
+      const askedRound = parseInt(String(targetQuestionId), 10);
+      if (onRound > 0 && askedRound < onRound) {
+        console.log(`🔒 Refusing to close round ${askedRound} of ${gameId}: the session is on round ${onRound}`);
+        const reason = `This session has moved on to round ${onRound}. Round ${askedRound} is over, so nothing was changed.`;
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: reason,
+            message: reason,
+            staleRound: true,
+            gameId,
+            round: askedRound,
+            currentRound: onRound,
+            state: gameState.State || null
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+    }
+
     console.log(`🎯 Calculating results for question: ${targetQuestionId}`);
 
     // Handle trivia results differently from call-and-answer
@@ -500,6 +633,9 @@ exports.handler = async (event) => {
       // A round nobody voted on is still a resolved round. This used to return
       // without touching the state, so the game sat on VOTE#nnn while the host
       // screen (which sets RESULTS# locally regardless) showed results.
+      // It is also a COUNTED round — nobody scored in it — so the scoreboard
+      // moves on to it (recordScoresCounted).
+      await recordScoresCounted(event, gameId, paddedQuestionId);
       await enterResultsState(event, gameId, paddedQuestionId);
 
       return {
@@ -594,9 +730,6 @@ exports.handler = async (event) => {
       }
     });
 
-    // Update game state to results (preserve LessonNumber!)
-    await enterResultsState(event, gameId, paddedQuestionId);
-
     // Update player scores using simplified PLAYER#{playerName}#SCORE architecture
     console.log(`🏆 Updating player scores for ${gameId} using simplified score records`);
     const playerUpdatePromises = Object.entries(voteTallies).map(async ([index, tally]) => {
@@ -616,14 +749,16 @@ exports.handler = async (event) => {
 
           let currentScore = 0;
           let lastRound = null;
+          const paidRounds = scoredRoundsOf(currentScoreRecord.Item);
 
           if (currentScoreRecord.Item) {
             currentScore = currentScoreRecord.Item.score || 0;
             lastRound = currentScoreRecord.Item.afterRound;
             console.log(`📊 Found existing score record for ${tally.playerName}: ${currentScore} points from round ${lastRound}`);
-            
-            // Check if this round was already scored
-            if (lastRound === paddedQuestionId) {
+
+            // Paid once per round, in whatever order the closes come — not
+            // merely "not the round paid last" (standings.scoredRoundsOf).
+            if (paidRounds.has(paddedQuestionId)) {
               console.log(`⚠️ Player ${tally.playerName} already scored for round ${paddedQuestionId}, skipping update`);
               return;
             }
@@ -634,16 +769,17 @@ exports.handler = async (event) => {
           const newScore = currentScore + tally.totalScore;
           console.log(`🧮 Score update for ${tally.playerName}: ${currentScore} + ${tally.totalScore} = ${newScore} (round ${paddedQuestionId})`);
 
-          // Update consolidated score record
+          // Update consolidated score record. `prevScore` / `prevScoredAt`
+          // ride along so the scoreboard can say who moved (standings.js);
+          // the trivia path below builds its row from the same helper.
           await db.send(new PutCommand({
             TableName: process.env.TABLE_NAME,
             Item: {
               PK: `GAME#${gameId}`,
               SK: scoreKey,
               PlayerName: tally.playerName,
-              score: newScore,
-              afterRound: paddedQuestionId,
-              updatedAt: new Date().toISOString(),
+              ...scoreRowAfterRound(currentScoreRecord.Item, tally.totalScore, paddedQuestionId, new Date().toISOString()),
+              scoredRounds: new Set([...paidRounds, paddedQuestionId]),
               ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
             }
           }));
@@ -659,6 +795,17 @@ exports.handler = async (event) => {
     });
 
     await Promise.all(playerUpdatePromises);
+
+    /*
+      THE ROOM IS TOLD ONLY ONCE THE POINTS ARE COUNTED. enterResultsState
+      used to run before the score writes above, so its RESULTS frame reached
+      the stage while last round's totals were still on the rows: anything that
+      reacted to it — the scoreboard's refetch, the roster — read stale points
+      and nothing ever told it to look again. Trivia already counted first.
+      Update game state to results (preserve LessonNumber!).
+    */
+    await recordScoresCounted(event, gameId, paddedQuestionId);
+    await enterResultsState(event, gameId, paddedQuestionId);
 
     const result = {
       gameId: gameId,
@@ -692,9 +839,12 @@ exports.handler = async (event) => {
       })
     }));
 
-    // Decrement category counts after results are calculated (prevent duplicates)
-    console.log(`🔢 Calling decrementCategoryCount for ${gameId}, question ${paddedQuestionId}`);
-    await decrementCategoryCount(gameId, paddedQuestionId);
+    // THE CATEGORY COUNT IS NOT THIS HANDLER'S. next-question.js takes the
+    // question off STATE#CATS#COUNTS when the round is ASKED. The Put above
+    // replaces this row whole, which drops the `CategoryCountDecremented` flag
+    // next-question put there, and every phone's read of the resolved round
+    // comes through here again. A decrement here would therefore run once on
+    // close and once more per phone (tests/category-count-decrement-once.js).
 
     console.log(`✅ Calculated results for ${gameId}: ${winners.length} winner(s) with ${maxScore} points`);
     return {
@@ -806,6 +956,14 @@ async function handleTriviaResults(event, gameId, questionId) {
   }
 
   if (answers.length === 0) {
+    // Nobody answered: a counted round with no points (recordScoresCounted),
+    // and a resolved one. This exit used to return without writing the state,
+    // the hole enterResultsState's comment records for the call-and-answer
+    // zero-vote exit: the session sat on ASK#nnn while the host page moved on,
+    // and every phone's read of the round was refused as not yet in RESULTS.
+    // Same order as that exit: counted, then the room is told.
+    await recordScoresCounted(event, gameId, paddedQuestionId);
+    await enterResultsState(event, gameId, paddedQuestionId);
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -877,14 +1035,15 @@ async function handleTriviaResults(event, gameId, questionId) {
 
         let currentScore = 0;
         let lastRound = null;
+        const paidRounds = scoredRoundsOf(currentScoreRecord.Item);
 
         if (currentScoreRecord.Item) {
           currentScore = currentScoreRecord.Item.score || 0;
           lastRound = currentScoreRecord.Item.afterRound;
           console.log(`📊 Found existing score record for ${answer.PlayerName}: ${currentScore} points from round ${lastRound}`);
-          
-          // Check if this round was already scored
-          if (lastRound === paddedQuestionId) {
+
+          // Paid once per round — the same rule as the call-and-answer path.
+          if (paidRounds.has(paddedQuestionId)) {
             console.log(`⚠️ Player ${answer.PlayerName} already scored for round ${paddedQuestionId}, skipping update`);
             return;
           }
@@ -895,16 +1054,16 @@ async function handleTriviaResults(event, gameId, questionId) {
         const newScore = currentScore + answer.PointsEarned;
         console.log(`🧮 Score update for ${answer.PlayerName}: ${currentScore} + ${answer.PointsEarned} = ${newScore} (round ${paddedQuestionId})`);
 
-        // Update consolidated score record
+        // Update consolidated score record — the same helper as the
+        // call-and-answer path, so both carry `prevScore` (standings.js).
         await db.send(new PutCommand({
           TableName: process.env.TABLE_NAME,
           Item: {
             PK: `GAME#${gameId}`,
             SK: scoreKey,
             PlayerName: answer.PlayerName,
-            score: newScore,
-            afterRound: paddedQuestionId,
-            updatedAt: new Date().toISOString(),
+            ...scoreRowAfterRound(currentScoreRecord.Item, answer.PointsEarned, paddedQuestionId, new Date().toISOString()),
+            scoredRounds: new Set([...paidRounds, paddedQuestionId]),
             ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
           }
         }));
@@ -917,10 +1076,8 @@ async function handleTriviaResults(event, gameId, questionId) {
   });
 
   await Promise.all(playerUpdatePromises);
-
-  // Decrement category counts after trivia results are calculated (prevent duplicates)
-  console.log(`🔢 Calling decrementCategoryCount for trivia ${gameId}, question ${paddedQuestionId}`);
-  await decrementCategoryCount(gameId, paddedQuestionId);
+  // Counted, zero points included — the scoreboard moves on to this round.
+  await recordScoresCounted(event, gameId, paddedQuestionId);
 
   // Update game state to RESULTS (important for trivia flow!)
   await enterResultsState(event, gameId, paddedQuestionId);
@@ -1518,260 +1675,5 @@ async function runWavelengthClusterWorker(event) {
       timestamp: new Date().toISOString()
     }, 'WAVELENGTH BROADCAST');
     return { statusCode: 200 };
-  }
-}
-
-/**
- * Decrement category count when a question is completed
- * Uses atomic updates with version control for concurrent safety
- */
-async function decrementCategoryCount(gameId, questionId) {
-  try {
-    console.log(`🔢 Decrementing category count for completed question ${questionId} in game ${gameId}`);
-    
-    // Check if this question has already been decremented (prevent duplicates)
-    const resultsCheck = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` }
-    }));
-    
-    if (resultsCheck.Item && resultsCheck.Item.CategoryCountDecremented) {
-      console.log(`⚠️ Question ${questionId} already processed for category count decrement, skipping`);
-      return;
-    }
-    
-    // Get the question reference to determine which category was used
-    const questionRef = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#REF` }
-    }));
-
-    if (!questionRef.Item || !questionRef.Item.SourceQuestionId) {
-      console.log(`⚠️ Question reference not found for ${questionId}, skipping category count decrement`);
-      return;
-    }
-
-    // Extract category from source question ID (format: QUESTION#{categoryId}#{questionNumber})
-    const sourceQuestionId = questionRef.Item.SourceQuestionId;
-    const categoryMatch = sourceQuestionId.match(/^QUESTION#([^#]+)#/);
-    
-    if (!categoryMatch) {
-      console.log(`⚠️ Could not extract category from source question ID: ${sourceQuestionId}`);
-      return;
-    }
-
-    const categoryId = categoryMatch[1];
-    console.log(`🎯 Identified category ${categoryId} for completed question`);
-
-    // Get current category counts with retry logic for concurrent updates
-    let attempts = 0;
-    const maxAttempts = 3;
-    
-    while (attempts < maxAttempts) {
-      try {
-        const countsResult = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS#COUNTS' }
-        }));
-
-        if (!countsResult.Item) {
-          console.log(`📊 No category counts found for game ${gameId}, skipping decrement`);
-          return;
-        }
-
-        // Get the position of this category from the game's category state
-        const categoryStateResult = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
-        }));
-
-        if (!categoryStateResult.Item) {
-          console.log(`⚠️ Category state not found for game ${gameId}, skipping decrement`);
-          return;
-        }
-
-        // Find category position by querying question set categories.
-        // Category POSITIONS are what the bitmask counters are indexed by, and
-        // two versions of a set can order categories differently — so this must
-        // read the same version the round was served from.
-        const resolvedCategorySet = await resolveSetPartition(
-          db, process.env.TABLE_NAME,
-          refSetRef(questionRef.Item, questionRef.Item.SetId || 'unknown'),
-          questionRef.Item.SetVersion
-        );
-        const categoriesQuery = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': resolvedCategorySet.pk,
-            ':sk': 'CATEGORY#'
-          }
-        }));
-
-        const allCategories = categoriesQuery.Items || [];
-        let categoryPosition = null;
-        
-        for (let i = 0; i < allCategories.length; i++) {
-          const catId = allCategories[i].SK.replace('CATEGORY#', '');
-          if (catId === categoryId) {
-            categoryPosition = i + 1; // 1-based position
-            break;
-          }
-        }
-
-        if (!categoryPosition) {
-          console.log(`⚠️ Could not determine position for category ${categoryId}, skipping decrement`);
-          return;
-        }
-
-        console.log(`📋 Found category ${categoryId} at position ${categoryPosition}`);
-
-        const currentCounts = countsResult.Item;
-        console.log(`🔍 Current counts record:`, JSON.stringify(currentCounts, null, 2));
-        
-        // Check for Version field
-        if (typeof currentCounts.Version !== 'number') {
-          console.log(`⚠️ Version field missing or invalid: ${currentCounts.Version}, initializing to 1`);
-          currentCounts.Version = 1;
-        }
-        
-        const counts1_8 = [...(currentCounts['1-8'] || [])];
-        const counts9_16 = [...(currentCounts['9-16'] || [])];
-        const counts17_24 = [...(currentCounts['17-24'] || [])];
-        
-        console.log(`📊 Current counts - 1-8: [${counts1_8}], 9-16: [${counts9_16}], 17-24: [${counts17_24}]`);
-        
-        // Determine which array and index to update
-        let arrayIndex, targetArray, arrayName;
-        if (categoryPosition >= 1 && categoryPosition <= 8) {
-          arrayIndex = categoryPosition - 1;
-          targetArray = counts1_8;
-          arrayName = '1-8';
-        } else if (categoryPosition >= 9 && categoryPosition <= 16) {
-          arrayIndex = categoryPosition - 9;
-          targetArray = counts9_16;
-          arrayName = '9-16';
-        } else if (categoryPosition >= 17 && categoryPosition <= 24) {
-          arrayIndex = categoryPosition - 17;
-          targetArray = counts17_24;
-          arrayName = '17-24';
-        } else {
-          console.log(`⚠️ Invalid category position ${categoryPosition}, skipping decrement`);
-          return;
-        }
-
-        const currentRemaining = targetArray[arrayIndex] || 0;
-        console.log(`🎯 Target: ${categoryId} at position ${categoryPosition} → ${arrayName}[${arrayIndex}] = ${currentRemaining}`);
-        
-        // Check if already at 0
-        if (currentRemaining <= 0) {
-          console.log(`⚠️ Category ${categoryId} already at 0 remaining questions`);
-          return;
-        }
-
-        // Update the array
-        const newCount = Math.max(0, currentRemaining - 1);
-        targetArray[arrayIndex] = newCount;
-        console.log(`🔄 Decrementing ${categoryId}: ${currentRemaining} → ${newCount}`);
-
-        // Recalculate totalRemaining from enabled categories only (should match totalEnabled)
-        const totalRemaining = totalEnabled;
-        
-        // Calculate total enabled (need to check bitmasks)
-        const hostMask1_8 = categoryStateResult.Item['HostMask1-8'];
-        const hostMask9_16 = categoryStateResult.Item['HostMask9-16'];
-        const hostMask17_24 = categoryStateResult.Item['HostMask17-24'];
-        
-        let totalEnabled = 0;
-        
-        // Count enabled questions from 1-8
-        for (let i = 0; i < 8; i++) {
-          if (isBitSet(hostMask1_8, i + 1)) {
-            totalEnabled += counts1_8[i] || 0;
-          }
-        }
-        
-        // Count enabled questions from 9-16
-        for (let i = 0; i < 8; i++) {
-          if (isBitSet(hostMask9_16, i + 1)) {
-            totalEnabled += counts9_16[i] || 0;
-          }
-        }
-        
-        // Count enabled questions from 17-24
-        for (let i = 0; i < 8; i++) {
-          if (isBitSet(hostMask17_24, i + 1)) {
-            totalEnabled += counts17_24[i] || 0;
-          }
-        }
-
-        // Atomic update with optimistic locking
-        await db.send(new UpdateCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS#COUNTS' },
-          UpdateExpression: 'SET #ver = :newVer, #c1_8 = :c1_8, #c9_16 = :c9_16, #c17_24 = :c17_24, #totEnabled = :totEnabled, #totRemaining = :totRemaining, #updated = :updated',
-          ConditionExpression: 'Version = :expectedVer',
-          ExpressionAttributeNames: {
-            '#ver': 'Version',
-            '#c1_8': '1-8',
-            '#c9_16': '9-16',
-            '#c17_24': '17-24',
-            '#totEnabled': 'TotalEnabled',
-            '#totRemaining': 'TotalRemaining',
-            '#updated': 'UpdatedAt'
-          },
-          ExpressionAttributeValues: {
-            ':newVer': currentCounts.Version + 1,
-            ':c1_8': counts1_8,
-            ':c9_16': counts9_16,
-            ':c17_24': counts17_24,
-            ':totEnabled': totalEnabled,
-            ':totRemaining': totalRemaining,
-            ':updated': new Date().toISOString(),
-            ':expectedVer': currentCounts.Version
-          }
-        }));
-
-        console.log(`✅ Decremented ${categoryId} (position ${categoryPosition}, ${arrayName}[${arrayIndex}]): ${currentRemaining} → ${currentRemaining - 1}`);
-        console.log(`📊 Updated totals - Enabled: ${totalEnabled}, Total Remaining: ${totalRemaining}`);
-        
-        // Mark this question's results as having been processed for category count
-        try {
-          await db.send(new UpdateCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionId}#RESULTS` },
-            UpdateExpression: 'SET CategoryCountDecremented = :flag',
-            ExpressionAttributeValues: {
-              ':flag': true
-            }
-          }));
-          console.log(`🏷️ Marked question ${questionId} as processed for category count`);
-        } catch (markError) {
-          console.log(`⚠️ Failed to mark question as processed, but decrement succeeded:`, markError.message);
-        }
-        
-        return; // Success, exit retry loop
-
-      } catch (error) {
-        attempts++;
-        
-        if (error.name === 'ConditionalCheckFailedException') {
-          console.log(`🔄 Concurrent update detected, retrying (${attempts}/${maxAttempts})`);
-          if (attempts < maxAttempts) {
-            // Brief delay before retry
-            await new Promise(resolve => setTimeout(resolve, 100 * attempts));
-            continue;
-          }
-        }
-        
-        throw error; // Re-throw non-retryable errors or max attempts reached
-      }
-    }
-    
-    console.log(`❌ Failed to decrement category count after ${maxAttempts} attempts`);
-    
-  } catch (error) {
-    console.error(`❌ Error decrementing category count for game ${gameId}, question ${questionId}:`, error);
-    // Don't throw - this shouldn't block results processing
   }
 }

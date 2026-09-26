@@ -200,15 +200,18 @@ exports.handler = async (event) => {
       // is precisely the defect this block was rewritten to end.
       const carriesImages = questions.some(q => String(q.Image || q.image || '').trim());
       const carriesAnswerDetails = questions.some(q => String(q.AnswerDetails || q.answerDetails || '').trim());
+      const carriesBackground = questions.some(q => String(q.Background || q.background || '').trim());
       const carriesRoundKind = questions.some(q => String(q.RoundKind || q.roundKind || '').trim());
       const carriesAttribution = questions.some(q => String(q.SourceAttribution || q.sourceAttribution || '').trim());
       const carriesSourceSet = questions.some(q => String(q.SourceSetId || q.sourceSetId || '').trim());
       const carriesSourceSk = questions.some(q => String(q.SourceQuestionSk || q.sourceQuestionSk || '').trim());
-      const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesImages ? ',Image' : '')
+      const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesBackground ? ',Background' : '')
+        + (carriesImages ? ',Image' : '')
         + (carriesRoundKind ? ',RoundKind' : '') + (carriesAttribution ? ',SourceAttribution' : '')
         + (carriesSourceSet ? ',SourceSetId' : '') + (carriesSourceSk ? ',SourceQuestionSk' : '');
       const optionalCells = (q) =>
         (carriesAnswerDetails ? `,"${esc(q.AnswerDetails || q.answerDetails)}"` : '')
+        + (carriesBackground ? `,"${esc(q.Background || q.background)}"` : '')
         + (carriesImages ? `,"${esc(q.Image || q.image)}"` : '')
         + (carriesRoundKind ? `,"${esc(q.RoundKind || q.roundKind)}"` : '')
         + (carriesAttribution ? `,"${esc(q.SourceAttribution || q.sourceAttribution)}"` : '')

@@ -37,9 +37,12 @@
  *     questionHeading: string,
  *     prompt: string,
  *     answers: [{ text, votes, width, votesText, by }],
- *       // votes: number (0 is valid and must render — the zero-vote answer
- *       //   is deliberate); width: 0-100, the meter's percentage width;
- *       // votesText: the exact "N votes" string as the mockup writes it;
+ *       // votes: number, the count shown beside the answer (0 is valid and
+ *       //   must render — the zero answer is deliberate). On the HOME view
+ *       //   it is points (see "THE HOME VIEW'S COUNTS" below); on the /reports
+ *       //   view it is still the mockup's vote count.
+ *       // width: 0-100, the meter's percentage width;
+ *       // votesText: the exact label beside the answer ("52 points", "9 votes");
  *       // by: author, with "· “a quote”" appended where the mockup does —
  *       //   one string, as the mockup writes it in one span.
  *     summaryHeading: string,
@@ -50,8 +53,9 @@
  *     nextSteps: string[],
  *   },
  *   standingsHeading: string,
- *   standingsCols: { rank, player, correct, points },
- *   standings: [{ rank, name, correct, points }],
+ *   standingsCols: { rank, player, correct?, points },
+ *                                    // no `correct` → SampleReport draws no Correct column
+ *   standings: [{ rank, name, correct?, points }],
  *   footer: {
  *     links: [{ label }],            // rendered as inert labels, no href — see SampleReport.jsx
  *     note?: string,                 // home view only
@@ -101,16 +105,40 @@ const STANDING_PRIYA = { rank: 3, name: 'Priya N.', correct: '8 of 10', points: 
 // No `href`: these render as inert labels (a picture of a button), not real
 // links — see SampleReport.jsx's footer comment for why.
 const EXPORT_LINK = { label: 'Export PDF' };
+const PRINT_LINK = { label: 'Print' };
 const SHARE_LINK = { label: 'Copy shareable link' };
+// The real report's toolbar (GameReport.jsx): Print, and Save report, which is
+// how a PDF gets made and kept.
+const SAVE_LINK = { label: 'Save report' };
 
 // ---- rows that differ between the two mockups --------------------------
+/*
+ * THE HOME VIEW'S COUNTS (2026-09-25, docs/design/front-page-copy-2026-09-25/
+ * COPY.md). The home sheet shows what the real report prints: POINTS. Each
+ * player ranks a top three, scored 3/2/1 (game/get-results.js), and
+ * GameReport.jsx labels the total "N points". Twenty ballots hand out 120;
+ * 52 + 44 + 24 + 0 is 120, and the home tally (content/home.js) carries the
+ * same numbers. The answer text and bylines are still the shared rows above,
+ * spread in, so the two sheets remain one invented session.
+ *
+ * The standings drop the Correct column the real report does not have, and
+ * sit in range: a trivia question pays 10 for a right answer plus up to 5 for
+ * speed (websocket/message.js). The /reports view keeps its mockup counts
+ * until that page's copy is corrected.
+ */
+const inPoints = (answer, points, width) => ({
+  ...answer, votes: points, width, votesText: `${points} points`,
+});
+
 const ANSWER_STATUS_MEETING_HOME = {
   text: 'The weekly status meeting nobody reads',
-  votes: 7,
-  width: 64,
-  votesText: '7 votes',
+  votes: 44,
+  width: 69,
+  votesText: '44 points',
   by: 'Tomas B.',
 };
+
+const STANDINGS_COLS_HOME = { rank: '#', player: 'Player', points: 'Points' };
 const ANSWER_STATUS_MEETING_FULL = {
   text: 'The weekly status meeting nobody reads',
   votes: 7,
@@ -127,7 +155,12 @@ export const SAMPLE_REPORT_HOME = {
   round: {
     questionHeading: 'Question 3 · call and answer',
     prompt: PROMPT,
-    answers: [ANSWER_DISCOVERY, ANSWER_STATUS_MEETING_HOME, ANSWER_RELEASE_NOTES, ANSWER_ESTIMATES],
+    answers: [
+      inPoints(ANSWER_DISCOVERY, 52, 82),
+      ANSWER_STATUS_MEETING_HOME,
+      inPoints(ANSWER_RELEASE_NOTES, 24, 38),
+      inPoints(ANSWER_ESTIMATES, 0, 2),
+    ],
     summaryHeading: 'Summary and next steps',
     summary: SUMMARY,
     nextSteps: [
@@ -137,11 +170,15 @@ export const SAMPLE_REPORT_HOME = {
     ],
   },
   standingsHeading: STANDINGS_HEADING,
-  standingsCols: STANDINGS_COLS,
-  standings: [STANDING_ALINA, STANDING_TOMAS, STANDING_PRIYA],
+  standingsCols: STANDINGS_COLS_HOME,
+  standings: [
+    { rank: STANDING_ALINA.rank, name: STANDING_ALINA.name, points: '41' },
+    { rank: STANDING_TOMAS.rank, name: STANDING_TOMAS.name, points: '38' },
+    { rank: STANDING_PRIYA.rank, name: STANDING_PRIYA.name, points: '33' },
+  ],
   footer: {
-    links: [EXPORT_LINK, SHARE_LINK],
-    note: 'Every answer, every vote and every comment is kept — not only the ones that won.',
+    links: [PRINT_LINK, SAVE_LINK],
+    note: 'Every answer and every comment stays in the report, not only the winners.',
   },
 };
 
@@ -174,6 +211,6 @@ export const SAMPLE_REPORT = {
     { rank: 5, name: 'Sam O.', correct: '7 of 10', points: '968' },
   ],
   footer: {
-    links: [EXPORT_LINK, { label: 'Print' }, SHARE_LINK],
+    links: [EXPORT_LINK, PRINT_LINK, SHARE_LINK],
   },
 };

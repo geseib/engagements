@@ -21,7 +21,8 @@
  * bundle and cannot be resolved from the repo root at all.
  *
  * THE TABLE STUB ENFORCES ConditionExpression, and that is load-bearing rather
- * than decorative: `attribute_not_exists(setCreationClaimedAt)` is the whole
+ * than decorative: the worker's `#status = :queued` job claim and
+ * `attribute_not_exists(setCreationClaimedAt)` behind it are the whole
  * idempotency guard, and a stub that ignored conditions would let a broken
  * guard pass.
  */
@@ -87,11 +88,22 @@ function applyUpdate(item, input) {
   }
 }
 
-/** Only the one condition this code writes. Anything else is a test bug. */
-function conditionHolds(condition, item) {
-  const match = String(condition).match(/^attribute_not_exists\((\w+)\)$/);
-  if (!match) throw new Error(`stub cannot evaluate ConditionExpression: ${condition}`);
-  return item[match[1]] === undefined;
+/**
+ * Only the two conditions this code writes: createSetForJob's
+ * `attribute_not_exists(setCreationClaimedAt)` and the worker's
+ * `#status = :queued` claim (generation-jobs.js, claimJob). Anything else is a
+ * test bug.
+ */
+function conditionHolds(input, item) {
+  const condition = String(input.ConditionExpression);
+  const notExists = condition.match(/^attribute_not_exists\((\w+)\)$/);
+  if (notExists) return item[notExists[1]] === undefined;
+  const equals = condition.match(/^\s*(#?\w+)\s*=\s*(:\w+)\s*$/);
+  if (equals) {
+    const attr = (input.ExpressionAttributeNames || {})[equals[1]] || equals[1];
+    return item[attr] !== undefined && item[attr] === (input.ExpressionAttributeValues || {})[equals[2]];
+  }
+  throw new Error(`stub cannot evaluate ConditionExpression: ${condition}`);
 }
 
 const docClient = {
@@ -107,7 +119,7 @@ const docClient = {
     if (cmd.kind === 'update') {
       const k = rowKey(Key.PK, Key.SK);
       const existing = ddb.get(k) || { ...Key };
-      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input.ConditionExpression, existing)) {
+      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input, existing)) {
         throw new ConditionalCheckFailedException();
       }
       applyUpdate(existing, cmd.input);
@@ -279,10 +291,17 @@ async function runJob(handler, body, workerCtx = ctx(), starter = adminEvent) {
   const { jobId } = JSON.parse(started.body);
   const dispatch = dispatched[dispatched.length - 1].payload;
   await handler(dispatch, workerCtx);
+  // Polled AS THE STARTER: a job is read only by whoever started it, acting for
+  // the same organisation (tests/generation-job-owner.js).
   const polled = await handler(
-    { requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
+    { requestContext: { http: { method: 'GET' }, authorizer: starter(body).requestContext.authorizer }, pathParameters: { jobId } },
+    ctx());
   return { started, jobId, dispatch, job: JSON.parse(polled.body) };
 }
+const jobRow = (jobId) => ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
+const isEnvelope = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+  && typeof v.v === 'number' && typeof v.iv === 'string'
+  && typeof v.tag === 'string' && typeof v.ct === 'string';
 
 const setRows = () => [...ddb.values()].filter((row) => row.PK === 'SETS');
 /** Set metadata rows in ONE organisation's library. tenant.js keys it this way. */
@@ -472,21 +491,65 @@ const scenarioBody = (overrides = {}) => ({
     assert.deepStrictEqual(orgSetRows(), []);
   });
 
-  await test('an unidentifiable caller leaves the set unowned rather than owned by ""', async () => {
+  await test('an unidentifiable caller starts nothing, so no set is ever owned by ""', async () => {
     // rejects: falling back to a username or to an empty string. isSetOwner
     // requires both halves to be non-empty precisely because `'' === ''` would
     // hand every legacy set to every unauthenticated request.
+    //
+    // Since a job is read only by the user who started it, a POST with no user
+    // is refused outright (401): its job could never be handed over, and its
+    // set would have landed in Engage's library through createSetRef's
+    // no-groups-no-org "internal" branch. The authorizer always supplies one.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'anon'));
     const started = await scenarios(
       { requestContext: { http: { method: 'POST' } }, body: JSON.stringify(scenarioBody({ count: 2 })) },
       ctx());
-    const { jobId } = JSON.parse(started.body);
-    await scenarios(dispatched[dispatched.length - 1].payload, ctx());
-    const set = setRows()[0];
-    assert.ok(set, 'no set was created for an anonymous caller');
-    assert.strictEqual(set.createdBy, undefined, 'an unattributable write recorded an owner of ""');
-    assert.ok(jobId);
+    assert.strictEqual(started.statusCode, 401, `an anonymous POST answered ${started.statusCode}`);
+    assert.strictEqual(dispatched.length, 0, 'an anonymous POST dispatched a worker');
+    assert.deepStrictEqual(setRows(), [], 'an anonymous POST created a set');
+    assert.strictEqual([...ddb.keys()].filter((k) => k.startsWith('AIJOBS|')).length, 0,
+      'an anonymous POST wrote a job row');
+  });
+
+  /*
+    THE SET'S NAME IS CONTENT, and the job row is a second copy of it. The set
+    row seals `name` (ENCRYPTED_FIELDS.set); the job row carried the same title
+    readable as `createdSetName`, and an importer refusal quotes it back in
+    `setCreationError` ("Question set "World Leaders" already exists"). Both are
+    sealed under the caller's organisation and opened on the owner's poll.
+  */
+  await test('an org job names its new set only under the org\'s key', async () => {
+    reset();
+    await mint();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'sealedname'));
+    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    const row = jobRow(jobId);
+    assert.ok(isEnvelope(row.createdSetName), `createdSetName at rest was ${JSON.stringify(row.createdSetName)}`);
+    assert.ok(!JSON.stringify(row).includes('World Leaders'), 'the set\'s title is readable on the job row');
+    assert.deepStrictEqual(job.createdSet, { setId: 'worldleaders', setName: 'World Leaders' },
+      'the owner\'s poll did not open the set name');
+  });
+
+  await test('an org job\'s set-creation refusal is sealed too, and read back by its owner', async () => {
+    reset();
+    await mint();
+    ddb.set(rowKey('ORG#org_acme#SETS', 'SET#worldleaders'),
+      { PK: 'ORG#org_acme#SETS', SK: 'SET#worldleaders', orgId: 'org_acme' });
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'sealedclash'));
+    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    assert.match(job.setCreationError || '', /already exists/i, `the refusal was ${JSON.stringify(job.setCreationError)}`);
+    const row = jobRow(jobId);
+    assert.ok(isEnvelope(row.setCreationError), `setCreationError at rest was ${JSON.stringify(row.setCreationError)}`);
+    assert.ok(!JSON.stringify(row).includes('World Leaders'), 'the set\'s title is readable on the job row');
+  });
+
+  await test('Engage\'s own job names its set in plaintext, as every platform row is', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'plainname'));
+    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.strictEqual(jobRow(jobId).createdSetName, 'World Leaders');
+    assert.strictEqual(job.createdSet.setName, 'World Leaders');
   });
 
   say('\nthe direction travels with the set');
@@ -552,11 +615,10 @@ const scenarioBody = (overrides = {}) => ({
   say('\nno double creation, ever');
 
   await test('a worker retry creates no second set', async () => {
-    // rejects: removing the conditional `attribute_not_exists` claim on the job
-    // row. Lambda retries an Event invoke by itself, so a second run of the
-    // same worker is not hypothetical — and without the claim the second one
-    // reaches the importer, is refused for a name already taken, and replaces a
-    // job that had a set with a job that reports a failure.
+    // rejects: a retry that reaches the importer at all. Lambda retries an
+    // Event invoke by itself, so a second run of the same worker is not
+    // hypothetical. The job claim (generation-jobs.js, claimJob) stops it
+    // before Bedrock; the set-creation claim below is the guard behind that.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(3, 'retry'));
     const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }));
@@ -567,6 +629,32 @@ const scenarioBody = (overrides = {}) => ({
     const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
     assert.strictEqual(row.setCreationError, undefined,
       `the retry reported "${row.setCreationError}" over a set that already existed`);
+    assert.strictEqual(row.createdSetId, 'worldleaders');
+  });
+
+  await test('createSetForJob run twice for one job creates one set', async () => {
+    // rejects: removing the conditional `attribute_not_exists` claim on the job
+    // row. The worker's job claim keeps a second delivery from getting this
+    // far, so this drives createSetForJob directly: without its own claim the
+    // second call reaches the importer, is refused for a name already taken,
+    // and replaces a job that had a set with a job that reports a failure.
+    reset();
+    const items = scenarioItems(3, 'twice');
+    bedrockHandler = () => toolResponse(items);
+    const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }));
+    const { createSetForJob, scenariosToCsv } = require(path.join(REPO, 'lambda-functions/admin/shared/generated-set.js'));
+
+    const again = await createSetForJob({
+      dynamodb: docClient, tableName: 'engage-test', jobId,
+      spec: { engagementType: () => 'call-and-answer', toCsv: scenariosToCsv },
+      payload: dispatch.payload, items, caller: { userId: 'sub-ada', username: 'ada' },
+    });
+
+    assert.strictEqual(again, null, `the second call created a set: ${JSON.stringify(again)}`);
+    assert.strictEqual(setRows().length, 1, 'a second call minted a second set');
+    const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
+    assert.strictEqual(row.setCreationError, undefined,
+      `the second call reported "${row.setCreationError}" over a set that already existed`);
     assert.strictEqual(row.createdSetId, 'worldleaders');
   });
 
@@ -598,6 +686,18 @@ const scenarioBody = (overrides = {}) => ({
     const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
     assert.deepStrictEqual(job.createdSet, { setId: 'worldleaders', setName: 'World Leaders' });
     assert.strictEqual(job.setCreationError, null);
+  });
+
+  await test('a generated question keeps its background on the stored row', async () => {
+    // rejects: any hop between the model's tool call and the stored row dropping it.
+    reset();
+    const items = scenarioItems(2, 'bg').map((it, i) => ({ ...it, background: `zqbg-${i} Git records every change.` }));
+    bedrockHandler = () => toolResponse(items);
+    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.ok(job.createdSet, `no set was created: ${job.setCreationError}`);
+    const questionRows = [...ddb.values()].filter((r) => String(r.SK).startsWith('QUESTION#'));
+    assert.ok(questionRows.length === 2, `expected 2 question rows, saw ${questionRows.length}`);
+    for (const r of questionRows) assert.ok(r.Background, `a row has no Background: ${r.SK}`);
   });
 
   await test('a set that could not be created is reported, not hidden', async () => {
@@ -837,7 +937,10 @@ const scenarioBody = (overrides = {}) => ({
     await mint();
     const { periodOf } = require(path.join(REPO, 'lambda-functions/admin/shared/usage.js'));
     const period = periodOf(new Date());
-    ddb.set(rowKey('ORG#org_acme', 'METADATA'), { PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
+    // MERGED onto the row `mint()` wrote, not over it: the real METADATA row
+    // carries the plan AND the wrapped data key, and the job row is sealed
+    // under that key from the POST onward.
+    ddb.set(rowKey('ORG#org_acme', 'METADATA'), { ...ddb.get(rowKey('ORG#org_acme', 'METADATA')), PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
     ddb.set(rowKey('ORG#org_acme', `USAGE#${period}`), { PK: 'ORG#org_acme', SK: `USAGE#${period}`, orgId: 'org_acme', period, sessionsRun: 0, setsCurrent: 5, setsPeak: 5 });
     bedrockHandler = () => toolResponse(scenarioItems(2, 'capped'));
     const { job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);

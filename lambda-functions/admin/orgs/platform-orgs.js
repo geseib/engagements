@@ -92,13 +92,22 @@ async function listOrgs(event) {
   const refusal = requirePlatformAdmin(event);
   if (refusal) return refusal;
 
-  const res = await G.db.send(new QueryCommand({
-    TableName: G.tableName(),
-    KeyConditionExpression: 'PK = :pk',
-    ExpressionAttributeValues: { ':pk': tenant.ORGS_INDEX_PK },
-  }));
-
-  const rows = (res && res.Items) || [];
+  // Every page: the index grows with every organisation, and a Query stops at
+  // 1 MB. tests/library-reads-paged.js.
+  // ORG# rows only: the partition also holds CODE#, INVOICE# and PLANREQ#
+  // rows, and each would list as an organisation. tests/orgs-index-readers.js.
+  const rows = [];
+  let ExclusiveStartKey;
+  do {
+    const res = await G.db.send(new QueryCommand({
+      TableName: G.tableName(),
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': tenant.ORGS_INDEX_PK, ':sk': 'ORG#' },
+      ExclusiveStartKey,
+    }));
+    rows.push(...((res && res.Items) || []));
+    ExclusiveStartKey = res && res.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
   const orgs = await Promise.all(rows.map(async (row) => {
     const orgId = G.clean(row.orgId) || G.clean(row.SK).replace(/^ORG#/, '');
     return {

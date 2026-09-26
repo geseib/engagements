@@ -87,6 +87,35 @@ describe('a briefed round', () => {
   });
 });
 
+// WorkieContextHint — what Workie had, host-only fact, never the content.
+// `RoundReport` is shared: PastRound (a modal over the projected host page) AND
+// FeedbackRoundPanel (a participant's own phone, via PlayerPage) both mount it,
+// and the spec keeps the hint off both. So it is opt-in via `showWorkieContext`
+// — off by default — and neither passes it (sessionHistory.test.jsx,
+// feedbackRoundPanel.test.jsx, workieContextHint.test.jsx). These pin what the
+// opt-in does for a future host-only surface that uses this renderer.
+describe('what Workie had', () => {
+  test('with showWorkieContext, a round shows what Workie had', () => {
+    const contextUsed = { background: true, setNote: false, eventDetails: true, hostInstructions: false, briefing: false };
+    render(<RoundReport showWorkieContext round={aRound({ aiSummary: { ...aRound().aiSummary, contextUsed } })} />);
+    expect(screen.getByTestId('workie-context-hint').textContent)
+      .toBe('Workie had: question notes ✓ · set note — · event details ✓ · host instructions — · briefing —');
+  });
+
+  test('with showWorkieContext, a round summarised before the flags existed shows no hint', () => {
+    render(<RoundReport showWorkieContext round={aRound()} />);
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+  });
+
+  test('without showWorkieContext (the default), no hint renders even when contextUsed is set', () => {
+    // This is the participant's case: FeedbackRoundPanel never passes the prop,
+    // so even a round whose aiSummary carries contextUsed must render nothing.
+    const contextUsed = { background: true, setNote: true, eventDetails: true, hostInstructions: true, briefing: true };
+    render(<RoundReport round={aRound({ aiSummary: { ...aRound().aiSummary, contextUsed } })} />);
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+  });
+});
+
 describe('the three sections', () => {
   test('renders the question, the responses and the AI summary', () => {
     render(<RoundReport round={aRound()} />);

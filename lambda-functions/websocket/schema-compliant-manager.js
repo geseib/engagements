@@ -49,12 +49,22 @@ const TTL_ACTIVE_PHASE = 7 * 24 * 60 * 60;    // 7 days
  * Query with a filter bolted on. A filter is a line of code somebody can delete;
  * a partition boundary is not.
  *
- * A HALF-CREATED GAME IS IMPOSSIBLE, and not by transaction: the nine writes
- * are interleaved with Queries of the question set, so they cannot be one
- * TransactWriteItems. Instead the reservation is taken first and RELEASED again
- * if anything after it fails — so a failed create leaves no rows and no burnt
- * code. The release deliberately does not run for a ConditionalCheckFailed,
- * because that row belongs to the session that won the race.
+ * A FAILED CREATE RELEASES ITS TWO POINTERS, not the whole partition — and
+ * that distinction now matters more than it used to (bug sweep Task 2). The
+ * nine writes are interleaved with Queries of the question set, so they
+ * cannot be one TransactWriteItems; instead the reservation is taken first
+ * and, if anything after it fails, the catch block below deletes the GAMES
+ * row and the org's index row. It does NOT delete any METADATA / STATE /
+ * CATEGORY# rows a later write already landed before the failure — this
+ * handler has no record of how far the nine got, so it cannot know whether
+ * there is anything left to remove. Before Task 2 that half-built leftover
+ * cost only 90 days of an id nobody could list or reach. Now that step 0
+ * below treats ANY row in `GAME#<id>` as "taken", a create that fails
+ * partway through can hold that code for up to ~90 days — the unstarted ttl
+ * already on METADATA and STATE (session-ttl.js), not forever. Nothing
+ * before then reclaims it, and nothing should be assumed to. The release
+ * deliberately does not run for a ConditionalCheckFailed, because that row
+ * belongs to the session that won the race.
  */
 // Create game with proper schema compliance
 const createGame = async (gameId, gameData) => {
@@ -70,6 +80,67 @@ const createGame = async (gameId, gameData) => {
     const ttl = unstartedTtl(now);
 
     console.log(`🎮 Creating game ${gameId} for org ${orgId || '(none)'} with schema compliance`);
+
+    /*
+      0. IS THIS CODE ALREADY SPOKEN FOR — by ANY row, not just the reservation?
+      (bug sweep Task 2, 2026-09-26)
+
+      The reservation row below is not the only thing a session leaves in this
+      partition, and it is not the longest-lived: it carries the 90-day-from-
+      creation / 7-day-from-start ttl (session-ttl.js), but a `PLAYER#x#SCORE`
+      row and a `QUESTION#nnn#AISummary` row both carry their OWN 30-day ttl,
+      written straight onto `GAME#<id>` with no reference back to the
+      reservation. Once the reservation expires and is swept, a fresh draw of
+      the same 4-digit code sailed straight through `attribute_not_exists(PK)`
+      on the reservation — that condition only ever looked at the `GAMES`
+      partition — and inherited whatever the last session left in `GAME#<id>`:
+      its leaderboard, its cached Workie summaries, its report rounds.
+
+      So before the reservation Put, ask the partition itself. Strongly
+      consistent, because the failure mode this guards against IS "a lazily-
+      deleted row DynamoDB has not swept yet" (below) — an eventually
+      consistent read could report a partition empty that a stale row is still
+      sitting in.
+
+      An item whose `ttl` has already passed but which DynamoDB has not yet
+      reaped STILL COUNTS AS TAKEN. DynamoDB deletes expired items within
+      about 48 hours of expiry, not at the instant they expire, and until it
+      does the row is live data — exactly the row this bug hands to a stranger.
+      There is no attribute to filter it out by, and filtering it out would BE
+      the bug: "already past its ttl" is precisely the window Task 2 exists
+      for.
+
+      ORDER: this runs BEFORE the conditional `GAMES` Put, not atomically with
+      it, and that is safe rather than merely convenient. A session's
+      `GAME#<id>` rows are never written until its creator has already WON
+      that Put — it is the first of the nine writes (the header above). So if
+      this Query sees an empty partition, no concurrent creator can be
+      mid-write on this same id without having already taken the reservation;
+      and if one has, THIS attempt's own reservation Put (right below) fails
+      on the very same `ConditionalCheckFailedException` the retry loop in
+      create-game.js already treats as "drawn again". A race can only make
+      this check too CAUTIOUS (seeing rows for an id someone else just won and
+      is mid-write on, which the reservation Put would have refused anyway),
+      never too permissive.
+
+      Thrown with the reservation's own error name so create-game.js's
+      existing retry loop — "on ConditionalCheckFailedException, draw again" —
+      handles this exactly like a reservation collision, with no change there.
+      `reserved` is still false here, so the failure cleanup below correctly
+      does nothing: there is nothing yet to release.
+    */
+    const stillHeld = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}` },
+      ConsistentRead: true,
+      Limit: 1
+    }));
+    if (stillHeld.Items && stillHeld.Items.length > 0) {
+      const err = new Error(`GAME#${gameId} still holds rows from a previous session`);
+      err.name = 'ConditionalCheckFailedException';
+      throw err;
+    }
 
     // Resolve — and then PIN — the question-set version this game plays.
     //
@@ -509,10 +580,19 @@ const createGame = async (gameId, gameData) => {
     return true;
   } catch (error) {
     console.error(`❌ Error creating game ${gameId}:`, error);
-    // RELEASE THE CODE. A create that fell over after the lock was taken would
-    // otherwise burn one of 9,000 codes for 90 days for nothing, and leave a
-    // half-built partition no list shows and no delete finds. Not attempted when
-    // the failure IS the lock — that row is another session's.
+    // RELEASE THE POINTERS — not the whole partition. This deletes the GAMES
+    // reservation and the org's index row, so the id is not held by a lock
+    // nobody is using. It does NOT delete any METADATA / STATE / CATEGORY#
+    // rows a later write already landed before this failure: those are real
+    // data, and this handler has no way to know how far the nine writes got.
+    // Before Task 2, a leftover like that cost only 90 days of an id nobody
+    // could list or reach. Since the "any row in this partition means taken"
+    // rule this task added (step 0, above), a create that fails partway
+    // through can now hold the code for up to ~90 days — the unstarted ttl
+    // already on METADATA and STATE (session-ttl.js), not forever — until
+    // the fuller fix — session stamps on every row — exists. Not attempted
+    // at all when the failure IS the lock — that row belongs to the session
+    // that won the race.
     if (reserved && error && error.name !== 'ConditionalCheckFailedException') {
       try {
         await db.send(new DeleteCommand({
@@ -658,9 +738,9 @@ const broadcastToGame = async (gameId, message, targetType = 'ALL') => {
     // Filter connections based on target type
     let targetConnections = connections;
     if (targetType === 'HOST') {
-      targetConnections = connections.filter(conn => conn.IsHost === true);
+      targetConnections = connections.filter(conn => conn.ConnectionType === 'HOST');
     } else if (targetType === 'PARTICIPANTS') {
-      targetConnections = connections.filter(conn => conn.IsHost !== true);
+      targetConnections = connections.filter(conn => conn.ConnectionType !== 'HOST');
     }
     
     const broadcastPromises = targetConnections.map(async (connection) => {

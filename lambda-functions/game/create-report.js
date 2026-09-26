@@ -689,6 +689,10 @@ exports.handler = async (event) => {
           // Written with the host's Call & Answer briefing? A flag the summary
           // row froze — the report says WHICH rounds, never the brief's text.
           briefingUsed: questionAISummary.BriefingUsed === true,
+          // WHAT WORKIE HAD — flags only, never the content (Task 6). `null` for
+          // a row written before ContextUsed existed, so the renderer can tell
+          // "nothing was on" from "we never recorded this".
+          contextUsed: questionAISummary.ContextUsed || null,
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,
         

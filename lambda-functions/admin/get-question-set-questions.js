@@ -122,12 +122,13 @@ exports.handler = async (event) => {
       ? await decryptItem(cryptoOrgId, 'set', setRes.Item)
       : setRes.Item;
 
-    // DEBUG: Log the first raw item to see what fields are available
-    if (questionsRes.Items && questionsRes.Items.length > 0) {
-      console.log('🔍 Raw database item fields:', Object.keys(questionsRes.Items[0]));
-      console.log('🔍 Sample raw item:', questionsRes.Items[0]);
-    }
-    
+    // NO SAMPLE ROW IN THE LOGS. A DEBUG block here printed the first question
+    // row whole — AFTER the decrypt above, so an organisation's title, detail,
+    // AnswerDetails and Background went to CloudWatch in the clear.
+    // question-background spec: Background content is never logged. The trace
+    // is the request line above and the count below; never what a question says.
+    // tests/question-background-not-logged.js.
+
     const questions = (questionsRes.Items || []).map(item => ({
       id: item.SK.replace('QUESTION#', ''),
       title: item.title || item.Title,

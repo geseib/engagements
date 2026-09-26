@@ -39,11 +39,20 @@ const GLOBAL_CSS = read('styles.css');
  */
 const CONSUMERS = [
   ['components/AIPromptManager.jsx', read('components', 'AIPromptManager.jsx')],
+  // The advisor dialog, lifted out of AIPromptManager.jsx (2026-09-24). It
+  // still renders inside `.pmgr` — Modal does not portal — so `.pmgr` paints it.
+  ['components/AIPromptAdvisor.jsx', read('components', 'AIPromptAdvisor.jsx')],
+  // The workbench's pieces (2026-09-25), all rendered inside the editor's `.pmgr` dialog.
+  ['components/PromptOutputSectionsField.jsx', read('components', 'PromptOutputSectionsField.jsx')],
+  ['components/PromptBeforeAfter.jsx', read('components', 'PromptBeforeAfter.jsx')],
+  ['components/PromptImportReview.jsx', read('components', 'PromptImportReview.jsx')],
   ['components/PromptLibraryPanel.jsx', read('components', 'PromptLibraryPanel.jsx')],
   ['components/PromptVariableInspector.jsx', read('components', 'PromptVariableInspector.jsx')],
   ['components/PromptPreflightPanel.jsx', read('components', 'PromptPreflightPanel.jsx')],
   ['components/PromptAssembledPreview.jsx', read('components', 'PromptAssembledPreview.jsx')],
   ['components/AIGenerationPromptEditor.jsx', read('components', 'AIGenerationPromptEditor.jsx')],
+  // The read-only view both libraries open outside Engage mode (2026-09-24).
+  ['components/PromptReadOnlyView.jsx', read('components', 'PromptReadOnlyView.jsx')],
   ['AdminPage.jsx', read('AdminPage.jsx')],
 ];
 const MARKUP = CONSUMERS.map(([, src]) => src).join('\n');
@@ -93,7 +102,7 @@ const rootOf = (selector) => {
  */
 const SCOPES = {
   padm: 'AdminPage.jsx — the prompts section: the chooser and the back control',
-  pmgr: 'AIPromptManager.jsx — the analysis library, both dialogs, the editor form',
+  pmgr: 'AIPromptManager.jsx — the analysis library, both dialogs (the advisor in AIPromptAdvisor.jsx), the editor form',
   pgen: 'AIGenerationPromptEditor.jsx — the generation library and its editor form',
   plib: 'PromptLibraryPanel.jsx — the table, its controls and its empty states',
   pvi: 'PromptVariableInspector.jsx',
@@ -215,7 +224,8 @@ describe('nothing was orphaned by the rename', () => {
     // rejects: `reachable` degenerating into "anything starting with a dash",
     // which would excuse every orphan in the sheet.
     expect(STEMS.length).toBeGreaterThan(0);
-    expect(STEMS).toContain('priority-');
+    // The advisor's checklist colours each item by its severity.
+    expect(STEMS).toContain('pmgr-advice-item--');
   });
 
   test('each scope root appears in the file that is supposed to render it', () => {
@@ -322,6 +332,29 @@ describe('the prompt admin has no blocking browser dialogs left', () => {
     expect(JSX).toMatch(/import Modal from '\.\/Modal'/);
     expect(JSX).not.toMatch(/className="prompt-(editor|advisor)-overlay"/);
     expect((JSX.match(/<Modal\b/g) || []).length).toBeGreaterThanOrEqual(4);
+    /*
+      THE ADVISOR IS A VIEW OF THE EDITOR'S DIALOG NOW (2026-09-25), and so is
+      an uploaded file's review. Each used to be — or would be — a modal opened
+      from a modal, which is the pattern the container rule rejects: two ×s,
+      two Escapes, two scroll locks. They render inside the editor's Modal and
+      share its requestClose; neither may grow a Modal of its own.
+    */
+    for (const file of ['AIPromptAdvisor.jsx', 'PromptImportReview.jsx']) {
+      const src = read('components', file)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      expect(src).not.toMatch(/<Modal\b/);
+      expect(src).not.toMatch(/(^|[^.\w])alert\s*\(/m);
+      expect(src).not.toMatch(/window\.confirm\s*\(/);
+    }
+    expect(JSX).toMatch(/<AIPromptAdvisor\b[\s\S]*?onClose=\{requestClose\}/);
+    expect(JSX).toMatch(/<PromptImportReview\b[\s\S]*?onClose=\{requestClose\}/);
+  });
+
+  test('a hidden view really is hidden — its display rule does not outrank [hidden]', () => {
+    // rejects: `.pmgr-wb-view { display: flex }` alone, under which the
+    // workbench kept drawing over the form after Back — jsdom cannot see it.
+    expect(stripped(CSS)).toMatch(/\.pmgr-wb-view\[hidden\]\s*\{\s*display:\s*none;?\s*\}/);
   });
 
   test('Escape is gated on unsaved work rather than disabled', () => {

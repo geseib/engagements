@@ -219,6 +219,15 @@ export function initialGameSession() {
     surveyNames: 'anonymous',
     // When the two-minute warning went out. A new session has not warned.
     surveyWarnedAt: null,
+
+    // --- the scoreboard (docs/superpowers/specs/2026-09-25-scoreboard-design.md)
+    // The server's board for THIS session, mirrored. A board left open in the
+    // last session must not stand over the next one's lobby; the restore reads
+    // the new session's own.
+    scoreboard: { open: false, style: 'departure', page: 0, openedAt: null, rev: 0 },
+    // The roster's last fully scored round — what lets the board open. A new
+    // session has scored nothing.
+    scoresAfterRound: null,
   };
 }
 

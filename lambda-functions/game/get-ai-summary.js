@@ -1,17 +1,19 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
+  buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
+  backgroundLine, withholdBackground, HONESTY_RULE,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
 const { isCallAndAnswer } = require('./briefing');
-const { isUsableSummaryPrompt, summaryPromptDefect } = require('./prompt-shape');
+const { isUsableSummaryPrompt, summaryPromptDefect, normalizeAngleWeights } = require('./prompt-shape');
+const { houseWeightsFor, availableAngles, pickAngle, buildAngleDirective } = require('./round-angles');
 const { extractVariableTokens } = require('./template-variables');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
@@ -23,7 +25,7 @@ const { consensusLabel } = require('./consensus');
 // or the preflight reads the sliced text's interpolations as unknown
 // brace-tokens and goes red.
 const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
-const { ORG, promptsMetadataPk } = require('./tenant');
+const { ORG, promptsMetadataPk, callerMayDriveSession } = require('./tenant');
 const { setMetadataKey } = require('./set-version');
 const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tenant-crypto');
 // Every log line below that is ABOUT the room's words — the answers, the
@@ -107,13 +109,77 @@ function sessionSetOrgId(metadata) {
   return metadata && metadata.QuestionSetScope === ORG ? (metadata.orgId || '') : '';
 }
 
-async function sessionOrgId(gameId) {
+/** The session's METADATA row, projected to its owning org — null when there is none. */
+async function sessionOwnerRow(gameId) {
   const res = await db.send(new GetCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: 'GAME#' + gameId, SK: 'METADATA' },
     ProjectionExpression: 'orgId'
   }));
-  return orgOf(res && res.Item);
+  return (res && res.Item) || null;
+}
+
+async function sessionOrgId(gameId) {
+  return orgOf(await sessionOwnerRow(gameId));
+}
+
+/**
+ * WHO MAY GENERATE A SUMMARY, AND WHO MAY READ THE PROMPT BEHIND ONE.
+ *
+ * GET /games/{gameId}/ai-summary is PUBLIC: every phone and the host's remote
+ * read the round's summary there, and a participant holds no token. Three of
+ * its parameters were never a participant's business:
+ *
+ *   generateNew   starts a generation (Bedrock, and an overwrite of the stored
+ *                 summary). Read for truthiness below, so ANY value generates.
+ *   debug         returns the full prompt Workie was given.
+ *   promptDebug   returns every template variable.
+ *
+ * The prompt and the variables carry the question's reveal (answerDetails), a
+ * trivia round's correctAnswer and every participant's answer text. The
+ * question's REF row exists from ASK and generation has no round-state gate,
+ * so anyone with the four-digit code could generate with debug after the first
+ * answer and read the answer mid-round (review, 2026-09-25).
+ *
+ * So they are served only on GET /games/{gameId}/ai-summary/host — Cognito in
+ * front (template-clean.yaml), hosts|admins in authorizer.js, and
+ * callerMayDriveSession here. The public route refuses them before it reads
+ * anything; its plain read is unchanged. On the host route every refusal is
+ * the same "Game not found" as a code that names nothing: a different answer
+ * for "it is somebody else's" is an existence oracle over 9,000 codes. No
+ * identity is refused outright, as get-report.js does — callerMayDriveSession
+ * alone passes a caller with no groups.
+ *
+ * Returns the response to send, or null to carry on.
+ * tests/ai-summary-host-only-params.js.
+ */
+const HOST_ROUTE = /\/ai-summary\/host$/;
+
+async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug }) {
+  const rc = event.requestContext || {};
+  const route = rc.routeKey || event.routeKey || event.rawPath || '';
+  if (!HOST_ROUTE.test(route)) {
+    const hostOnly = Boolean(generateNew) || debug === 'true' || promptDebug === 'true';
+    if (!hostOnly) return null;
+    return {
+      statusCode: 403,
+      body: JSON.stringify({
+        error: 'Generating a summary and reading its prompt are for the session host, on GET /games/{gameId}/ai-summary/host.'
+      }),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+  }
+  const authorizer = rc.authorizer || {};
+  const identity = (authorizer.jwt && authorizer.jwt.claims) || authorizer.lambda;
+  if (identity) {
+    const owner = await sessionOwnerRow(gameId);
+    if (owner && callerMayDriveSession(event, owner)) return null;
+  }
+  return {
+    statusCode: 404,
+    body: JSON.stringify({ error: 'Game not found' }),
+    headers: { 'Access-Control-Allow-Origin': '*' }
+  };
 }
 const s3 = new S3Client({ region: 'us-east-1' });
 const lambda = new LambdaClient({});
@@ -342,13 +408,29 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
     const promptRecord = isOrgRow
       ? await decryptItem(orgId, 'prompt', dbResult.Item)
       : dbResult.Item;
+
+    /*
+      BUGSWEEP 5b. `delete-ai-prompt.js`'s soft delete only sets `status:
+      'archived'` on this DynamoDB row — it never touches the S3 body, so a
+      stale 'active' status can sit in the object this function is about to
+      fetch. The row is the authoritative copy, and checking it here (rather
+      than the fetched `promptData`) is what lets an archive survive even
+      though the S3 read below would otherwise happily return a fully usable,
+      long-out-of-date template. Treated as if the row does not exist, so the
+      caller's existing "missing" recovery — the game-type default — runs.
+    */
+    if (promptRecord.status === 'archived') {
+      console.warn(`⚠️ Prompt ${promptId} is archived — not used to drive a summary`);
+      return null;
+    }
+
     const s3Key = promptRecord.s3Key;
-    
+
     if (!s3Key) {
       console.error(`❌ No S3 key found in prompt record for ${promptId}`);
       return null;
     }
-    
+
     console.log(`📄 Using S3 Key from DB record: ${s3Key}`);
     
     const response = await s3.send(new GetObjectCommand({
@@ -362,7 +444,10 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
     // `decryptValue` returns a non-envelope unchanged, so this is safe on any
     // pre-migration body.
     const promptData = isOrgRow ? await decryptValue(orgId, raw) : raw;
-    console.log(`✅ Successfully fetched prompt: ${promptData.name || 'Unknown'}`);
+    // An org Workie's name is sealed at rest (ENCRYPTED_FIELDS.prompt) and is
+    // open here, so the line names the prompt by its id — a pointer — and only
+    // describes the name. tests/ai-summary-prompt-name-not-logged.js.
+    console.log(`✅ Successfully fetched prompt ${promptId}: name ${shapeForLog(promptData.name)}`);
 
     return promptData;
   } catch (error) {
@@ -378,8 +463,12 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
           Key: { PK: pk, SK: `AIPROMPT#${promptId}` }
         }));
         if (!hit.Item) continue;
+        const record = pk === 'AIPROMPTS' ? hit.Item : await decryptItem(orgId, 'prompt', hit.Item);
+        // Same archived check as the primary path above — this fallback must
+        // not resurrect an archived prompt just because S3 failed to serve it.
+        if (record.status === 'archived') continue;
         console.log(`✅ Using DynamoDB record as fallback for prompt ${promptId}`);
-        return pk === 'AIPROMPTS' ? hit.Item : await decryptItem(orgId, 'prompt', hit.Item);
+        return record;
       }
     } catch (dbError) {
       console.error(`❌ DynamoDB fallback also failed:`, dbError);
@@ -444,6 +533,51 @@ const PREFERRED_DEFAULT_CATEGORY = {
   survey: 'general',
 };
 
+/**
+ * The angle the previous round was read from, or null. Stored plaintext as
+ * `Angle` on its AISummary row (round-angles.js), so an org session's sealed
+ * row needs no key to read it.
+ */
+const previousRoundAngle = async (gameId, paddedQuestionNumber) => {
+  const n = parseInt(paddedQuestionNumber, 10);
+  if (!(n > 1)) return null;
+  const prev = String(n - 1).padStart(String(paddedQuestionNumber).length, '0');
+  try {
+    const hit = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${prev}#AISummary` },
+      ProjectionExpression: '#angle',
+      ExpressionAttributeNames: { '#angle': 'Angle' },
+    }));
+    return (hit.Item && hit.Item.Angle) || null;
+  } catch (error) {
+    console.warn(`⚠️ ROUND ANGLE: could not read the previous round's angle: ${error.message}`);
+    return null;
+  }
+};
+
+/**
+ * Best effort: is this the session's last round? The session stores no round
+ * count — next-question.js walks each active category's cursor — so a round is
+ * final when every CATEGORY#<id>#ACTIVE row has served its last question.
+ * Unreadable means "not final": the lean toward the race is a nicety.
+ */
+const sessionOnFinalRound = async (gameId) => {
+  try {
+    const rows = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CATEGORY#' },
+    }));
+    const active = (rows.Items || []).filter((item) => /#ACTIVE$/.test(String(item.SK || '')));
+    return active.length > 0
+      && active.every((item) => Number(item.ActiveIndex || 0) >= Number(item.QuestionCount || 0));
+  } catch (error) {
+    console.warn(`⚠️ ROUND ANGLE: could not read the session's categories: ${error.message}`);
+    return false;
+  }
+};
+
 // Find default prompt ID for a given game type
 const findDefaultPromptId = async (gameType) => {
   const canonical = normalizeGameType(gameType);
@@ -451,19 +585,38 @@ const findDefaultPromptId = async (gameType) => {
     console.log(`🔍 Finding default prompt for game type: ${gameType} → ${canonical}`);
 
     // Rows exist under BOTH spellings (`callandanswer` from the analysis
-    // manager, `call-and-answer` from the generation editor). Scan on PK alone
+    // manager, `call-and-answer` from the generation editor). Read on PK alone
     // and match in JS so either spelling resolves.
-    const scanResult = await db.send(new ScanCommand({
-      TableName: process.env.TABLE_NAME,
-      FilterExpression: 'PK = :pk AND isDefault = :isDefault',
-      ExpressionAttributeValues: {
-        ':pk': 'AIPROMPTS',
-        ':isDefault': true
-      }
-    }));
+    //
+    // A Query on the AIPROMPTS partition, followed to its last page. This was
+    // one table Scan: a Scan reads 1 MB and filters afterwards, so on dev
+    // (6,083 rows) it saw the first 1,987, none of them defaults, and every
+    // summary fell back to the data-driven template.
+    // tests/ai-summary-default-prompt-paged.js.
+    const defaults = [];
+    let ExclusiveStartKey;
+    do {
+      const page = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk',
+        FilterExpression: 'isDefault = :isDefault',
+        ExpressionAttributeValues: {
+          ':pk': 'AIPROMPTS',
+          ':isDefault': true
+        },
+        ExclusiveStartKey,
+      }));
+      defaults.push(...(page.Items || []));
+      ExclusiveStartKey = page.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
 
-    const candidates = (scanResult.Items || []).filter(item =>
-      item.promptId && normalizeGameType(item.gameType) === canonical);
+    // BUGSWEEP 5b: an archived prompt must not keep running just because it
+    // was never unmarked as the game-type default. `item.status` here is
+    // straight off the DynamoDB row this Query just read, which is exactly
+    // what delete-ai-prompt.js's soft delete updates.
+    const candidates = defaults.filter(item =>
+      item.promptId && normalizeGameType(item.gameType) === canonical
+      && item.status !== 'archived');
 
     if (candidates.length > 0) {
       if (candidates.length > 1) {
@@ -535,8 +688,19 @@ exports.findDefaultPromptId = findDefaultPromptId;
  *                AIGenerationPromptEditor) and the summary engine cannot run
  *                it. This is the "I added an Art prompt and nothing changed"
  *                report: the fallback fired silently and looked like a no-op.
+ *
+ * `fallbackPromptId` is the NEXT link in the chain below `promptId` — the
+ * set's own promptId, when `promptId` is the session's override. BUGSWEEP
+ * 5b's first pass only ever tried one id before the game-type default:
+ * `sessionPromptId()` already collapses session-vs-set down to a single id
+ * before this function ever sees it, so an archived (or missing, or
+ * unusable) SESSION pick fell straight to the default and skipped the set's
+ * own live prompt entirely. Passing that second id here restores the
+ * intended chain — session → set → default — while an empty or
+ * already-tried `fallbackPromptId` (no such link, or nothing beyond what was
+ * just tried) is skipped exactly as if it had never been offered.
  */
-const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
+const resolvePromptTemplate = async (promptId, gameType, orgId = '', fallbackPromptId = '') => {
   let recoveryReason;
   let unusableDefect;
 
@@ -551,10 +715,22 @@ const resolvePromptTemplate = async (promptId, gameType, orgId = '') => {
       recoveryReason = 'unusable';
       unusableDefect = summaryPromptDefect(promptData);
       console.error(
-        `❌ Prompt ${promptId} ("${promptData.name || 'unnamed'}") EXISTS but cannot drive a summary: ` +
+        `❌ Prompt ${promptId} (name ${shapeForLog(promptData.name)}) EXISTS but cannot drive a summary: ` +
         `${summaryPromptDefect(promptData)}. Fields present: ${Object.keys(promptData).join(', ')}. ` +
         `Falling back to the ${gameType} default — the attached prompt is having NO effect.`
       );
+    }
+  }
+
+  // THE SET'S OWN LINK, tried before the default — see the doc comment above.
+  const nextLink = String(fallbackPromptId || '').trim();
+  if (nextLink && nextLink !== promptId) {
+    const setPromptData = await fetchPromptFromS3(nextLink, orgId);
+    if (isUsableSummaryPrompt(setPromptData)) {
+      console.warn(`♻️ Prompt ${promptId} unusable — falling back to the question set's own prompt ${nextLink}`);
+      return promptId
+        ? { promptId: nextLink, promptData: setPromptData, recoveredFrom: promptId, recoveryReason, unusableDefect }
+        : { promptId: nextLink, promptData: setPromptData };
     }
   }
 
@@ -599,6 +775,31 @@ exports.sessionPromptId = sessionPromptId;
 exports.isUsableSummaryPrompt = isUsableSummaryPrompt;
 exports.summaryPromptDefect = summaryPromptDefect;
 
+/**
+ * WHAT THE DEBUG READS MAY RETURN OF A SUMMARY'S DebugInfo.
+ *
+ * ?debug=true / ?promptDebug=true hand back the prompt and its variables —
+ * since 2026-09-25 only on GET /games/{id}/ai-summary/host, to the session's
+ * own host (refuseUnlessHost above); the public route refuses them. The
+ * question's Background is "never shown to players" (question-background spec
+ * §1), so it is withheld from the echo as well, a second line behind that
+ * gate, by VALUE — it has no fixed place in the prompt — the way personas.js
+ * withholdBriefing withholds the briefing. The value is the one the summary
+ * stored in its own templateVariables. The model's prompt, and the stored
+ * DebugInfo, are untouched: this is only what the route returns.
+ */
+const debugBackground = (debugInfo) => {
+  const vars = debugInfo && debugInfo.templateVariables;
+  return vars && typeof vars.background === 'string' ? vars.background : '';
+};
+const publicTemplateVariables = (debugInfo) => {
+  const { background, ...rest } = (debugInfo && debugInfo.templateVariables) || {};
+  if (typeof rest.contextSections === 'string') {
+    rest.contextSections = withholdBackground(rest.contextSections, background);
+  }
+  return rest;
+};
+
 exports.handler = async (event) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
   // with __workerMode set, so the full generation runs off the API Gateway 30s
@@ -623,6 +824,13 @@ exports.handler = async (event) => {
         body: JSON.stringify({ error: 'Game ID is required' }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
+    }
+
+    // generateNew, debug and promptDebug are the host's (refuseUnlessHost).
+    // The worker was started by a request that already passed this.
+    if (!workerMode) {
+      const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug });
+      if (refusal) return refusal;
     }
 
     console.log(`🤖 Getting AI summary for game ${gameId}, questionId: ${questionId || 'current'}`);
@@ -712,23 +920,27 @@ exports.handler = async (event) => {
           markdownResponse: existingSummary.Item.MarkdownResponse || null,
           personaName: existingSummary.Item.PersonaName || null,
           personaSource: existingSummary.Item.PersonaSource || null,
+          // null for a row written before ContextUsed existed, or by the fallback.
+          contextUsed: existingSummary.Item.ContextUsed || null,
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
         
         // Add debug information if debug mode is enabled
         if (debug === 'true' && existingSummary.Item.DebugInfo) {
-          // This route is public: the briefing is withheld from any prompt it
-          // returns (personas.js withholdBriefing).
+          // Only the host route gets this far with debug (refuseUnlessHost).
+          // The briefing and the question's Background are withheld all the
+          // same (personas.js withholdBriefing, withholdBackground).
           responseData.debugPrompt = existingSummary.Item.DebugInfo.fullPrompt
-            ? withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt)
+            ? withholdBackground(withholdBriefing(existingSummary.Item.DebugInfo.fullPrompt),
+              debugBackground(existingSummary.Item.DebugInfo))
             : 'Debug info not available';
           responseData.debugProvenance = existingSummary.Item.DebugInfo.promptProvenance || null;
         }
         
         // Add prompt debug information if prompt debug mode is enabled
         if (promptDebug === 'true' && existingSummary.Item.DebugInfo) {
-          responseData.templateVariables = existingSummary.Item.DebugInfo.templateVariables || {};
+          responseData.templateVariables = publicTemplateVariables(existingSummary.Item.DebugInfo);
           responseData.promptTemplate = existingSummary.Item.DebugInfo.promptTemplate || '';
           responseData.promptName = existingSummary.Item.DebugInfo.promptName || '';
           responseData.promptSource = existingSummary.Item.DebugInfo.promptSource || '';
@@ -881,7 +1093,8 @@ exports.handler = async (event) => {
       // lines up, and correctAnswer is often the right option's own text.
       console.log(`🔍 RAW QUESTION DATA: correctAnswer ${shapeForLog(question.correctAnswer || question.CorrectAnswer)}, `
         + `optionA ${shapeForLog(question.optionA || question.OptionA)}, `
-        + `answerDetails ${shapeForLog(question.answerDetails || question.AnswerDetails)}`);
+        + `answerDetails ${shapeForLog(question.answerDetails || question.AnswerDetails)}, `
+        + `background ${shapeForLog(question.background || question.Background)}`);
     }
 
     // If question not found in set, create a fallback question object
@@ -919,7 +1132,11 @@ exports.handler = async (event) => {
       question.optionE = question.optionE || question.OptionE;
       question.optionF = question.optionF || question.OptionF;
       question.answerDetails = question.answerDetails || question.AnswerDetails;
-      
+      // BACKGROUND (question-background spec §3). Either spelling; a string only —
+      // an envelope that failed to open is not material, it is nothing.
+      const rawBackground = question.background ?? question.Background;
+      question.background = typeof rawBackground === 'string' ? rawBackground.trim() : '';
+
       console.log(`🔧 AFTER NORMALIZATION: title ${shapeForLog(question.title)}, `
         + `correctAnswer ${shapeForLog(question.correctAnswer)}, optionA ${shapeForLog(question.optionA)}, `
         + `optionB ${shapeForLog(question.optionB)}`);
@@ -1206,6 +1423,12 @@ exports.handler = async (event) => {
       }
     }
     
+    // THE SET'S OWN LINK, preserved before the session's pick may overwrite
+    // `promptId` below — otherwise it is lost, and an archived session pick
+    // falls straight to the game-type default without ever trying it.
+    // Bug sweep final review, Minor 5.
+    const questionSetPromptId = promptId;
+
     // THE SESSION'S OWN PICK, ahead of the set's. Chosen at setup or switched
     // mid-round through PUT /games/{id}; provenance names it so the report can.
     const sessionPick = sessionPromptId(metadata, { promptId });
@@ -1273,6 +1496,10 @@ exports.handler = async (event) => {
       orgId: summaryOrgId,
       eventTitle: metadata.EventTitle || metadata.Title || 'Engagement Event',
       gameType: metadata.GameType || 'call-and-answer',
+      // {sessionDuration} counts from here. generateAISummary() has no session
+      // row in scope; it read `metadata.CreatedAt` there and threw a
+      // ReferenceError every round (tests/ai-summary-session-duration.js).
+      sessionCreatedAt: metadata.CreatedAt || '',
       /*
         TWO FIELDS, TWO SLOTS. This read was `AIContext || EngagementInfo` —
         one slot, so a host who filled in the AI instructions ERASED their own
@@ -1295,6 +1522,11 @@ exports.handler = async (event) => {
       questionSetAiContext: questionSetAiContext,
       customInstruction: customInstruction,
       promptId: promptId,
+      // The set's own promptId, kept apart from `promptId` above so
+      // resolvePromptTemplate can try it before the game-type default when
+      // the session's own pick (now in `promptId`) turns out archived,
+      // missing or unusable. '' when the set names none of its own.
+      questionSetPromptId: questionSetPromptId,
       // Voice selection. The host pick lives on the game so a mid-game switch
       // takes effect from the next question; the set-level one is authored once.
       hostPersonaId: metadata.PersonaId || metadata.personaId || null,
@@ -1374,6 +1606,12 @@ exports.handler = async (event) => {
       // Written with the briefing? Only the model path can say yes; the
       // data-driven fallback never read it.
       ...(summaryData.briefingUsed ? { BriefingUsed: true } : {}),
+      // Which context the model had: five booleans, plaintext like
+      // PersonaSource — never the content, so never in ENCRYPTED_FIELDS.
+      ...(summaryData.contextUsed ? { ContextUsed: summaryData.contextUsed } : {}),
+      // Which angle this round was read from (round-angles.js). Plaintext, like
+      // PersonaSource: a word from a fixed list, never the room's content.
+      ...(summaryData.angle ? { Angle: summaryData.angle } : {}),
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
@@ -1418,19 +1656,21 @@ exports.handler = async (event) => {
       markdownResponse: summaryData.markdownResponse,
       personaName: summaryData.personaName || null,
       personaSource: summaryData.personaSource || null,
+      contextUsed: summaryData.contextUsed || null,
       generatedAt: now,
       fromCache: false
     };
     
     // Add debug information if debug mode is enabled
     if (debug === 'true' && summaryData.debugInfo) {
-      responseData.debugPrompt = withholdBriefing(summaryData.debugInfo.fullPrompt);
+      responseData.debugPrompt = withholdBackground(withholdBriefing(summaryData.debugInfo.fullPrompt),
+        debugBackground(summaryData.debugInfo));
       responseData.debugProvenance = summaryData.debugInfo.promptProvenance;
     }
     
     // Add prompt debug information if prompt debug mode is enabled
     if (promptDebug === 'true' && summaryData.debugInfo) {
-      responseData.templateVariables = summaryData.debugInfo.templateVariables || {};
+      responseData.templateVariables = publicTemplateVariables(summaryData.debugInfo);
       responseData.promptTemplate = summaryData.debugInfo.promptTemplate || '';
       responseData.promptName = summaryData.debugInfo.promptName || '';
       responseData.promptSource = summaryData.debugInfo.promptSource || '';
@@ -1581,6 +1821,31 @@ function describeCorrectAnswer(question) {
 exports.describeCorrectAnswer = describeCorrectAnswer;
 
 /**
+ * BUGSWEEP 5d, GitHub #3 residue: the trivia winner line, isolated so its
+ * wording can be tested directly.
+ *
+ * "Winner: Ada with \"Mercury\" (12 points)" runs after EVERY question, and
+ * reads exactly like a final-score claim — the same shape as the bug GitHub
+ * #3 reported, where the AI took a round's points for the room's running
+ * total. Both this and `triviaResultsSummary` below now say "this round".
+ */
+function triviaWinnerInfo(winners) {
+  if (!winners.length) return 'No clear winner';
+  return `Winner this round: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)`;
+}
+exports.triviaWinnerInfo = triviaWinnerInfo;
+
+/** Sibling of `triviaWinnerInfo` — see its comment. The tie and no-answer
+ *  cases never said "winner" ambiguously, so only the single-winner line
+ *  changes. */
+function triviaResultsSummary(winners) {
+  if (winners.length === 1) return `Clear winner this round with ${winners[0].score} points`;
+  if (winners.length > 1) return `${winners.length}-way tie for first place with ${winners[0].score} points each`;
+  return 'No correct answers';
+}
+exports.triviaResultsSummary = triviaResultsSummary;
+
+/**
  * A POLL'S OPTIONS, as the prompt reads them: "Option 1: …, Option 2: …".
  *
  * From the question's `options` ARRAY, which is the only attribute
@@ -1637,7 +1902,7 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1718,9 +1983,12 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     return { summary: summaryText, summaryText, discussionQuestions, nextSteps, fullResponse: summaryText, markdownResponse, model: 'fallback' };
   };
 
-  // Fetch the prompt template, recovering to the game-type default if the set
-  // points at a prompt that has since been deleted.
-  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer', orgId);
+  // Fetch the prompt template, recovering to the set's own prompt and then
+  // the game-type default if the session's pick has since been archived or
+  // deleted. `questionSetPromptId` is the same id already inside `promptId`
+  // when the session named no pick of its own, so resolvePromptTemplate's
+  // own "same id" check keeps this from being tried twice in that case.
+  const resolved = await resolvePromptTemplate(promptId, gameType || 'call-and-answer', orgId, questionSetPromptId);
 
   if (!resolved) {
     console.warn('⚠️ Prompt template unavailable — returning data-driven fallback summary');
@@ -1743,7 +2011,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     }
   }
 
-  console.log(`📝 Using prompt template: ${promptData.name}`);
+  // By id, never by name: an org Workie's name is sealed at rest.
+  console.log(`📝 Using prompt template ${resolved.promptId}: name ${shapeForLog(promptData.name)}`);
 
   // Decide whose voice Workie speaks in. Precedence and the fall-through
   // behaviour live in ./personas.js; a dangling or inactive personaId degrades
@@ -1898,6 +2167,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   let leaderboard = [];
   let totalScores = '';
   let averageScore = 0;
+  // The race angle's numbers (round-angles.js): standings after this round and
+  // before it, and how many joined. Empty on a hidden round, like the leaderboard.
+  let raceStandings = [];
+  let raceStandingsBefore = [];
+  let joinedCount = 0;
   
   try {
     // Query for player score records using efficient SK pattern
@@ -1913,12 +2187,33 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // Filter for score records only (SK contains '#SCORE')
     const scoreRecords = scoresQuery.Items?.filter(item => item.SK && item.SK.includes('#SCORE')) || [];
     
+    // A join writes PLAYER#<name>; the score and other rows carry a suffix.
+    joinedCount = (scoresQuery.Items || []).filter((item) => /^PLAYER#[^#]+$/.test(String(item.SK || ''))).length;
+
     if (scoreRecords.length > 0) {
       console.log(`📊 Found ${scoreRecords.length} player score records`);
-      const playerScores = scoreRecords.map(scoreRecord => ({
-        name: scoreRecord.PlayerName,
-        score: scoreRecord.score || 0  // Note: lowercase 'score' based on get-results.js
-      })).sort((a, b) => b.score - a.score);
+      /*
+        THE STANDINGS AFTER THIS ROUND. get-results.js adds a round's vote
+        points to each scorer's row and stamps `afterRound`; a row without this
+        round's stamp has not counted them yet, so they are added here, and a
+        row that has is left alone — never counted twice. Call & Answer only:
+        its points are the vote tallies this function already holds; other
+        game types keep the stored score as it was.
+      */
+      const roundPointsByName = {};
+      if (normalizeGameType(gameType) === 'call-and-answer') {
+        for (const t of Object.values(results.voteTallies || {})) {
+          if (t && t.playerName && Number(t.totalScore) > 0) {
+            roundPointsByName[t.playerName] = (roundPointsByName[t.playerName] || 0) + Number(t.totalScore);
+          }
+        }
+      }
+      const playerScores = scoreRecords.map(scoreRecord => {
+        const stored = scoreRecord.score || 0;  // Note: lowercase 'score' based on get-results.js
+        const thisRound = roundPointsByName[scoreRecord.PlayerName] || 0;
+        const after = scoreRecord.afterRound === paddedQuestionNumber ? stored : stored + thisRound;
+        return { name: scoreRecord.PlayerName, score: after, before: after - thisRound };
+      }).sort((a, b) => b.score - a.score);
 
       // ANONYMITY: cumulative standings are attribution by arithmetic — the
       // same leak `standingsVisible` exists to prevent on the host screen. A
@@ -1934,6 +2229,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
         console.log('🔒 Round is unrevealed — withholding the leaderboard from the prompt');
       } else {
         leaderboard = playerScores;
+        raceStandings = playerScores.map(({ name, score }) => ({ name, score }));
+        raceStandingsBefore = playerScores.map(({ name, before }) => ({ name, score: before }));
         totalScores = playerScores.slice(0, 5).map((p, idx) =>
           `${idx + 1}. ${p.name}: ${p.score} pts`
         ).join(', ');
@@ -2052,21 +2349,18 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       return `${emoji} ${data.answerText} (${data.totalScore} votes)`;
     }).join(', ');
   
-  // Winner info (different format for trivia vs voting)
-  const winnerInfo = winners.length > 0 ? 
-    gameType === 'trivia' ?
-      `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)` :
-      `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} vote points)` : 
-    'No clear winner';
-  
+  // Winner info (different format for trivia vs voting). Trivia's wording is
+  // BUGSWEEP 5d's triviaWinnerInfo — see its comment above.
+  const winnerInfo = gameType === 'trivia'
+    ? triviaWinnerInfo(winners)
+    : winners.length > 0
+      ? `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} vote points)`
+      : 'No clear winner';
+
   // Results summary (different for trivia vs wavelength vs voting) - wavelength will be updated later
   let resultsSummary = '';
   if (gameType === 'trivia') {
-    resultsSummary = winners.length === 1 ? 
-      `Clear winner with ${winners[0].score} points` :
-      winners.length > 1 ? 
-      `${winners.length}-way tie for first place with ${winners[0].score} points each` :
-      'No correct answers';
+    resultsSummary = triviaResultsSummary(winners);
   } else if (gameType === 'wavelength') {
     // Provisional — the wavelength branch below overwrites this once the real
     // analysis is in hand. Kept in the new vocabulary so a future refactor
@@ -2126,11 +2420,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Current round/question number
   const currentRound = `Question ${parseInt(paddedQuestionNumber)}`;
   
-  // Session duration - calculate from game metadata if available
+  // Session duration - from METADATA.CreatedAt, passed in by the handler
   let sessionDuration = 'Current session';
   try {
-    if (metadata.CreatedAt) {
-      const gameStart = new Date(metadata.CreatedAt);
+    if (sessionCreatedAt) {
+      const gameStart = new Date(sessionCreatedAt);
       const now = new Date();
       const durationMs = now - gameStart;
       const minutes = Math.floor(durationMs / 60000);
@@ -2498,7 +2792,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       a confident wrong sentence is not.
     */
     reveal: question.answerDetails || '',
-    
+    // The question's Background, for a prompt that wants to place it itself
+    // (question-background spec §3). Any other prompt gets it in the context
+    // block or in {contextSections} — never both (see templateNamesBackground).
+    background: (question && question.background) || '',
+
     // ANSWERS
     playerAnswers: playerAnswers,
     playerResponses: playerAnswers, // Trivia template uses playerResponses
@@ -2576,7 +2874,26 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     throw new Error('Prompt must have either template OR both instructions and outputFormat');
   }
 
-  console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`);
+  /*
+    THE QUESTION'S BACKGROUND, SAID ONCE (question-background spec §3). Three
+    doors, and exactly one opens:
+      - the template names {background}: it goes where the author put it, and
+        nowhere else;
+      - the template places {contextSections}: it rides inside that block,
+        under the same label the injected block uses;
+      - neither: the injected context block below carries it.
+    contextSections is rebuilt here rather than above because only now is it
+    known whether the template names {background}.
+  */
+  const background = (question && question.background) || '';
+  const templateNamesBackground = templateBody.includes('{background}');
+  if (background && !templateNamesBackground) {
+    templateVars.contextSections = '\nCONTEXT INFORMATION:\n'
+      + contextSections.concat(backgroundLine(background)).join('\n') + '\n';
+  }
+
+  console.log(`🎭 PERSONA: using ${persona.source}${persona.name ? ` (${persona.name})` : ''}${persona.inferred ? ' — adaptive' : ''}`
+    + `${persona.requiredAddition ? ', with its required addition' : ''}`);
 
   // Structure is prompt-owned but system-validated: a prompt that declares a
   // well-formed `outputSections` gets that shape, anything else (absent, or
@@ -2608,6 +2925,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // become the voice travels.
     hostInstructions: persona.source === 'game_context' ? '' : gameAiContext,
     questionSetContext: persona.source === 'question_set_context' ? '' : questionSetAiContext,
+    // Left out when the template places {background} itself — see above.
+    questionBackground: templateNamesBackground ? '' : background,
   });
   const templateCarriesContext = templateBody.includes('{contextSections}');
   const contextLayer = (!templateCarriesContext && contextBlock)
@@ -2632,6 +2951,12 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   });
   const hostLayer = hostDirective ? `\n\n${hostDirective}` : '';
 
+  // THE VOICE'S REQUIRED ADDITION, after the contract and before the host's —
+  // a voice stated only at the top is not heard (personas.js
+  // buildVoiceDirective carries the measurements).
+  const voiceDirective = buildVoiceDirective(persona);
+  const voiceLayer = voiceDirective ? `\n\n${voiceDirective}` : '';
+
   /*
     ONE OPENING MOVE PER ROUND — the anti-template device (personas.js:
     OPENING_MOVES carries the argument). Drawn here, at generation time, so
@@ -2643,7 +2968,45 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const openingMove = pickOpeningMove();
   console.log(`🎬 OPENING MOVE: ${openingMove}`);
 
-  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${hostLayer}`;
+  /*
+    THIS ROUND'S ANGLE — question, race, event or fact, drawn per round
+    (round-angles.js; docs/superpowers/specs/2026-09-24-workie-round-angles-design.md).
+    After the contract, where the model measurably obeys, and before the
+    voice's and the host's additions so the host keeps the last word. A game
+    type with no house mix draws nothing and its prompt is unchanged.
+  */
+  let angle = null;
+  let anglesAvailable = [];
+  let isFinalRound = false;
+  let angleLayer = '';
+  const houseWeights = houseWeightsFor(gameType);
+  if (houseWeights) {
+    const override = normalizeAngleWeights(promptData.angleWeights);
+    if (!override.ok) console.warn(`⚠️ ROUND ANGLE: ignoring the Workie's angleWeights — ${override.error}`);
+    const weights = override.ok && override.weights ? { ...houseWeights, ...override.weights } : houseWeights;
+    const hasEventText = [eventDetails, questionSetAiContext, briefing].some((t) => String(t || '').trim());
+    anglesAvailable = availableAngles({
+      hidden, roundNumber: parseInt(paddedQuestionNumber, 10), standings: raceStandings, hasEventText,
+    });
+    const lastAngle = await previousRoundAngle(gameId, paddedQuestionNumber);
+    isFinalRound = await sessionOnFinalRound(gameId);
+    angle = pickAngle({ available: anglesAvailable, weights, lastAngle, isFinalRound });
+    const angleDirective = buildAngleDirective(angle, {
+      turnout: { answered: answers.length, voted: votes ? votes.length : 0, joined: joinedCount },
+      // The host's own description of the session — never the briefing, which
+      // is the host's private summary and has its own layer (personas.js).
+      eventWords: eventDetails,
+      standings: raceStandings,
+      standingsBefore: raceStandingsBefore,
+      roundWinners: (results.winners || []).map((w) => ({ name: w.playerName, points: w.score })),
+    });
+    angleLayer = angleDirective ? `\n\n${angleDirective}` : '';
+    // The angle and what was on offer, never the standings they are drawn from.
+    console.log(`🧭 ROUND ANGLE: ${angle} (available: ${anglesAvailable.join(', ')}`
+      + `${lastAngle ? `; last round ${lastAngle}` : ''}${isFinalRound ? '; final round' : ''})`);
+  }
+
+  let prompt = `VOICE:\n${persona.voice}\n\n${contextLayer}${templateBody}\n\n${buildOutputContract(promptData, { openingMove })}${angleLayer}${voiceLayer}${hostLayer}`;
 
   /*
     WHICH VARIABLES ARE EMPTY, NOT WHAT THE FULL ONES SAY.
@@ -2687,6 +3050,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       unresolvedVariables.map((n) => `{${n}}`).join(', '));
   }
 
+  // ONE HONESTY RULE, ON EVERY PROMPT (personas.js HONESTY_RULE). After the
+  // template, the contract and the host's additions, so it is among the last
+  // words the model reads whatever the template says; BEFORE the briefing, so
+  // withholdBriefing — which cuts from the briefing's heading to the end —
+  // never takes it with it.
+  prompt += `\n\n${HONESTY_RULE}`;
+
   /*
     THE BRIEFING LAYER, LAST — after the host's required additions, the
     position games 1935 and 4567 showed the model obeys (personas.js
@@ -2697,6 +3067,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   */
   const briefingLayer = buildBriefingLayer({ briefing });
   if (briefingLayer) prompt += `\n\n${briefingLayer}`;
+
+  // WHAT CONTEXT THIS SUMMARY WAS WRITTEN WITH — yes/no flags, never the
+  // content (question-background spec §4; generalises briefingUsed). Stored
+  // plaintext on the summary row like PersonaSource, and shown to the host.
+  const contextUsed = {
+    background: Boolean(background),
+    setNote: Boolean(String(questionSetAiContext || '').trim()),
+    eventDetails: Boolean(String(eventDetails || '').trim()),
+    hostInstructions: Boolean(String(gameAiContext || '').trim()),
+    briefing: Boolean(briefingLayer),
+  };
 
   // THE PROMPT IS NEVER LOGGED. It embeds every answer verbatim, the question
   // and the host's brief — all ciphertext at rest on an org's session. To see
@@ -2718,7 +3099,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     outputShape: describeOutputShape(promptData),
     outputShapeSource: customShape ? 'prompt' : 'system-default',
     promptName: promptData.name,
-    promptSource: promptProvenance.source
+    promptSource: promptProvenance.source,
+    angle,
+    anglesAvailable,
+    isFinalRound,
   };
 
   // Haiku 4.5 is the single fast model in the hot path. It finishes in ~3–8s,
@@ -2746,7 +3130,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     modelId: haikuModelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: 1024,     // content is ~600–1000 tok; caps tail latency (bump to 1536 only if stop_reason:"max_tokens")
+      // 2048, up from 1024: a Workie may declare its own sections, and dev's
+      // five-section "Leadership Principals" Workie hit 1024 in 2 of 3 runs
+      // and lost its Next Steps (tests/ai-summary-reply-cap.js). The cap only
+      // costs time when a reply actually runs that long.
+      max_tokens: 2048,
       // 0.7, up from 0.5. Every fact the reply may state is IN the prompt and
       // fenced by the material-only rules, so temperature buys phrasing
       // variety, not hallucination risk — and 0.5 flattened exactly the
@@ -2782,6 +3170,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // answers and stored sealed (ENCRYPTED_FIELDS.aiSummary). A stop_reason of
     // max_tokens is the one thing here worth an alert.
     console.log(`✅ CLAUDE SUCCESS: AI response received, ${aiResponse.length} chars, stop_reason ${responseBody.stop_reason || 'not given'}`);
+    if (responseBody.stop_reason === 'max_tokens') {
+      console.warn(`⚠️ BEDROCK: reply cut off at max_tokens after ${aiResponse.length} chars — the last section may be missing`);
+    }
 
     // Parse the structured response
     const parsed = parseAIResponse(aiResponse, { customShape });
@@ -2801,7 +3192,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       ...personaAttribution(persona),
       // Whether THIS summary was written with the briefing. A flag, never the
       // text: the report says which rounds were briefed (RATIONALE §f Q1).
-      briefingUsed: Boolean(briefingLayer)
+      briefingUsed: Boolean(briefingLayer),
+      // Which context the model had — flags only. The data-driven fallback
+      // below carries none: it never read the context.
+      contextUsed,
+      // The round's angle: vocabulary, stored plaintext like PersonaSource, and
+      // read back by the next round so race/event/fact never run twice in a row.
+      ...(angle ? { angle } : {}),
     };
 
     // Include debug information if in debug mode

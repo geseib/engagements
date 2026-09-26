@@ -222,6 +222,22 @@ describe('the flat pairings this surface paints', () => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
   });
 
+  test('the workbench\'s "where it gets fixed" line is painted only with pairings measured above', () => {
+    // rejects: the one new colour on the workbench (2026-09-25) reaching for a
+    // token this table has not measured in a dialog — the line sits on
+    // --pc-card inside the editor, so link and silent on CARD are its pairs.
+    const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    const colourOf = (selector) => {
+      const rule = new RegExp(`${selector.replace(/[.-]/g, (c) => `\\${c}`)}\\s*\\{([^}]*)\\}`).exec(stripped);
+      return rule && /(?:^|;|\s)color:\s*([^;]+);/.exec(rule[1])[1].trim();
+    };
+    expect(colourOf('.pmgr .pmgr-wb-where--improve')).toBe('var(--pc-link)');
+    expect(colourOf('.pmgr .pmgr-wb-where--editor')).toBe('var(--pc-silent)');
+    expect(colourOf('.pmgr .pmgr-wb-where')).toBe('var(--pc-muted)');
+    expect(on(T.link, CARD)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.silent, CARD)).toBeGreaterThanOrEqual(AA);
+  });
+
   test('a form control is legible in its own hole', () => {
     // rejects: `--pc-field` drifting off `--bg`. An input is one step DOWN from
     // its card here, and the text in it is --pc-ink; a field lightened towards

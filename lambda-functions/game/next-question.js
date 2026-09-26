@@ -5,7 +5,9 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
+const { endSession } = require('./session-end');
 const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
+const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -1108,34 +1110,14 @@ exports.handler = async (event) => {
     }
 
     if (!nextQuestion) {
-      // Game is finished - update state to ENDED and broadcast
+      // Game is finished - update state to ENDED and broadcast. THE SHARED
+      // HELPER: end-session.js's own host-triggered POST /end must write and
+      // broadcast identically, so both doors call session-end.js rather than
+      // each carrying its own copy of the UpdateCommand and the broadcast.
       console.log(`🏁 Game ${gameId} has ended - no more questions available`);
-      
-      const now = new Date().toISOString();
-      
-      // Update game state to ENDED
-      await db.send(new UpdateCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-        UpdateExpression: 'SET #state = :state, #updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-          '#state': 'State',
-          '#updatedAt': 'UpdatedAt'
-        },
-        ExpressionAttributeValues: {
-          ':state': 'ENDED',
-          ':updatedAt': now
-        }
-      }));
 
-      // Broadcast game ended to all connected players
-      await broadcastToGame(gameId, {
-        type: 'hostMessage',
-        messageType: 'END',
-        gameId: gameId,
-        state: `GAME#${gameId} ENDED`,
-        timestamp: now,
-        message: 'All questions have been completed'
+      await endSession(db, process.env.TABLE_NAME, gameId, {
+        currentState, broadcastToGame,
       });
 
       console.log(`✅ Game ${gameId} ended successfully - final report should be generated`);
@@ -1165,10 +1147,13 @@ exports.handler = async (event) => {
       and a session that is already started keeps its StartedAt and its expiry
       through every later round.
     */
+    // The session's expiry, which the REF row below shares: STATE's own, or
+    // the one startSession has just stamped on it.
+    let sessionTtl = gameState.Item.ttl;
     if (currentState === 'CREATED') {
-      await startSession(db, process.env.TABLE_NAME, gameId, {
+      ({ ttl: sessionTtl } = await startSession(db, process.env.TABLE_NAME, gameId, {
         orgId: (ownerRead.Item && ownerRead.Item.orgId) || ''
-      });
+      }));
     }
 
     // CREATE QUESTION REFERENCE (as per game flow specification)
@@ -1201,7 +1186,17 @@ exports.handler = async (event) => {
         ...(resolvedSet.version !== null ? { SetVersion: resolvedSet.version } : {}),
         QuestionNumber: questionNumber,
         StartedAt: now,
-        ttl: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+        /*
+          THE SESSION'S EXPIRY, NOT A CLOCK OF ITS OWN. This row is the only
+          record of which question the round is asking — get-question.js and
+          get-game-state.js find the question through it — and it used to
+          carry `now + 24 hours` inside a session that lives seven days. A
+          room left open overnight woke up still ASK#001 with the pointer
+          gone: a blank wall and "Nothing to do here." on every phone
+          (tests/round-ref-lives-with-session.js). A session with no ttl
+          (one that predates session-ttl.js) gives its REF none either.
+        */
+        ...(sessionTtl !== undefined ? { ttl: sessionTtl } : {})
       }
     }));
 
@@ -1288,6 +1283,29 @@ exports.handler = async (event) => {
     // Decrement category count when question is asked (not when results are calculated)
     console.log(`🔢 Calling decrementCategoryCount for asked question ${questionNumber} in game ${gameId}`);
     await decrementCategoryCount(gameId, questionNumber, nextQuestion.categoryId, setPk);
+
+    /*
+      THE SCOREBOARD STEPS ASIDE FOR THE QUESTION. Owner, 2026-09-25: "yes,
+      auto close" (docs/superpowers/specs/2026-09-25-scoreboard-design.md §3).
+      Here, in the one writer that opens a round, so the dock, the remote,
+      auto mode, "Choose next question" and skip all agree — and so a reload
+      and the phone's /state poll see it closed too. Only an OPEN board is
+      written: the look is kept, and the revision counts up like any other
+      write (scoreboard-state.js). Told before questionStarted, so the board
+      is down when the question lands. A failure here must not cost the room
+      its question: the host can still press S.
+    */
+    const boardWas = gameState.Item && gameState.Item.Scoreboard;
+    if (boardWas && boardWas.open === true) {
+      try {
+        const board = { ...normaliseScoreboard(boardWas), open: false };
+        const written = await db.send(new UpdateCommand(scoreboardWrite(process.env.TABLE_NAME, gameId, board)));
+        board.rev = revAfter(written);
+        await broadcastToGame(gameId, scoreboardFrame(gameId, board));
+      } catch (error) {
+        console.error(`❌ Could not put the scoreboard away for ${gameId}:`, error?.message);
+      }
+    }
 
     // Send simplified WebSocket notification to all connected players
     await broadcastToGame(gameId, {

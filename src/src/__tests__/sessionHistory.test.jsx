@@ -346,6 +346,34 @@ describe('reopening one round', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  // rejects: the "Workie had" hint over the projected stage. PastRound is only
+  //          ever mounted as a modal over the host page (GameHostPage.jsx, from
+  //          the session sidebar's rounds list), and question-background spec
+  //          §4 says the hint is never shown on the host page — the room may be
+  //          watching it. The host reads the hint on the remote instead
+  //          (hostRemoteSession.test.jsx); feedbackRoundPanel.test.jsx holds the
+  //          same line for the participant's copy of this renderer.
+  test('never shows what Workie had, even when the round carries the flags', () => {
+    const roundsWithContext = roundsFrom(report([
+      q('1', {
+        questionData: { title: 'First question', detail: 'Some context' },
+        aiSummary: {
+          summaryText: 'The room agreed.',
+          contextUsed: {
+            background: true, setNote: true, eventDetails: true,
+            hostInstructions: true, briefing: true,
+          },
+        },
+      }),
+    ]));
+    mount({ rounds: roundsWithContext });
+    // The summary itself IS there, so the absence below is the hint's alone and
+    // not a round that failed to render.
+    expect(screen.getByText('The room agreed.')).toBeInTheDocument();
+    expect(screen.queryByTestId('workie-context-hint')).toBeNull();
+    expect(screen.queryByText(/Workie had:/)).toBeNull();
+  });
+
   // rejects: an empty round rendering as a blank panel, which reads as a failed
   //          load and sends the host hunting for a bug that is not there.
   test('a round nobody answered says so', () => {

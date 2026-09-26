@@ -4,6 +4,7 @@ const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/l
 const { currentRoundNumber } = require('./round-key');
 const { isRemoved } = require('./player-presence');
 const { publicHandoverState } = require('./handover');
+const { computeStandings } = require('./standings');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -33,6 +34,14 @@ const db = DynamoDBDocumentClient.from(client);
  *
  *   `handover` says whether a name is unlocked and whether somebody has asked
  *   for it. Booleans and a timestamp only.
+ *
+ *   `rank`, `movement` and `previousScore` on every player, and `afterRound`
+ *   beside them, are the SCOREBOARD's (standings.js;
+ *   docs/superpowers/specs/2026-09-25-scoreboard-design.md §4): a place in
+ *   competition ranking over the room as it is now, the change since the
+ *   round before, and the total the tote board replays from. Totals were
+ *   already public here; these are arithmetic on them. The older `ranking`
+ *   object (top three only) stays for the readers that use it.
  */
 
 exports.handler = async (event) => {
@@ -156,7 +165,8 @@ exports.handler = async (event) => {
 
     // Calculate actual scores from all question results
     console.log(`🧮 About to calculate scores for players:`, players.map(p => ({ name: p.PlayerName || p.playerName, currentScore: p.TotalScore })));
-    const actualScores = await calculatePlayerScores(gameId, players.map(p => p.PlayerName || p.playerName));
+    const scoreRows = new Map();
+    const actualScores = await calculatePlayerScores(gameId, players.map(p => p.PlayerName || p.playerName), scoreRows);
     
     // WHO IS STILL IN THE ROOM. Split before formatting so that everything
     // downstream — the ranking, the stats, the percentage — is computed over
@@ -164,6 +174,24 @@ exports.handler = async (event) => {
     // `player-presence.js` records which counts drop them and which keep them.
     const presentPlayers = players.filter(player => !isRemoved(player));
     const departedPlayers = players.filter(player => isRemoved(player));
+
+    // THE BOARD: places over the room as it is now, movement since the round
+    // before. Every row goes in (removed players' too — they still date when
+    // the previous round was scored); only present players are placed.
+    const board = computeStandings({
+      players: presentPlayers.map(player => ({
+        name: player.PlayerName || player.playerName,
+        joinedAt: player.JoinedAt || player.joinedAt,
+      })),
+      rows: Object.fromEntries(scoreRows),
+      // get-results.js's record of the round it last counted — the only thing
+      // that knows about a round in which nobody scored.
+      marker: {
+        round: gameState.Item?.ScoresAfterRound ?? null,
+        at: gameState.Item?.ScoresAt ?? null,
+        prevAt: gameState.Item?.PrevScoresAt ?? null,
+      },
+    });
 
     // Format player data with enhanced information
     const formattedPlayers = presentPlayers.map(player => {
@@ -186,10 +214,15 @@ exports.handler = async (event) => {
         readinessType = 'viewing_results';
       }
 
+      const standing = board.standings.get(playerName) || { rank: null, movement: 0, previousScore: null };
+
       return {
         playerId: player.PlayerId || player.playerId,
         playerName: playerName,
         totalScore: totalScore,
+        rank: standing.rank,
+        movement: standing.movement,
+        previousScore: standing.previousScore,
         joinedAt: player.JoinedAt || player.joinedAt || new Date().toISOString(),
         isConnected: player.isConnected || false,
         readiness: {
@@ -285,6 +318,9 @@ exports.handler = async (event) => {
         // the two were conflated here and that was the readiness bug.
         currentQuestionId: gameState.Item?.CurrentQuestionId,
         currentRound: currentRound,
+        // The last fully scored round, as a number, or null before any —
+        // the scoreboard's "After round N" (standings.js).
+        afterRound: board.afterRound,
         timestamp: new Date().toISOString()
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
@@ -301,7 +337,10 @@ exports.handler = async (event) => {
 };
 
 // Calculate player scores from consolidated PLAYER#{playerName}#SCORE records
-async function calculatePlayerScores(gameId, playerNames) {
+// `rowSink`, when given, receives each player's whole score row by name — the
+// scoreboard needs `prevScore` / `afterRound` / `updatedAt`, and these are the
+// same reads, so it costs nothing extra.
+async function calculatePlayerScores(gameId, playerNames, rowSink = null) {
   try {
     console.log(`🧮 Calculating scores from simplified score records for ${playerNames.length} players in game ${gameId}`);
     
@@ -323,6 +362,7 @@ async function calculatePlayerScores(gameId, playerNames) {
         }));
 
         if (scoreRecord.Item) {
+          if (rowSink) rowSink.set(playerName, scoreRecord.Item);
           const score = scoreRecord.Item.score || 0;
           const afterRound = scoreRecord.Item.afterRound;
           playerScores[playerName] = score;

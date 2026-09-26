@@ -198,10 +198,25 @@ function reset() {
   bedrockHandler = null;
 }
 
+const { createJob } = require(path.join(REPO, 'lambda-functions/admin/shared/generation-jobs.js'));
+
+/**
+ * Run a worker the way Lambda's Event invoke does: AFTER the POST has written
+ * its job row. The worker reads who asked off that row and generates nothing
+ * without it (shared/generation-jobs.js, workerCaller), so the row is seeded
+ * with the real createJob, for the admin in `adminContext`, in no organisation.
+ */
+async function runWorker(handler, jobId, payload) {
+  await createJob(docClient, 'engage-test', {
+    jobId, kind: 'test', requested: 1, caller: { userId: 'sub-ada', username: 'ada' },
+  });
+  await handler({ __workerMode: true, jobId, payload }, ctx());
+}
+
 /** Run the worker directly and return the prompt of its first Bedrock call. */
 async function promptFor(payload) {
   reset();
-  await scenarios.handler({ __workerMode: true, jobId: 'job-1', payload }, ctx());
+  await runWorker(scenarios.handler, 'job-1', payload);
   assert.ok(bedrockCalls.length > 0, 'the worker made no Bedrock call');
   return bedrockCalls[0];
 }
@@ -346,11 +361,8 @@ async function promptFor(payload) {
     // stored set produce Produce questions for a year without anyone noticing.
     // The worker cannot 400 — it is already off the request — so it warns.
     reset();
-    await scenarios.handler({
-      __workerMode: true,
-      jobId: 'job-warn',
-      payload: { scenarioType: 'custom', engagementType: 'call-and-answer', count: 1, roundKind: 'reflect' },
-    }, ctx());
+    await runWorker(scenarios.handler, 'job-warn',
+      { scenarioType: 'custom', engagementType: 'call-and-answer', count: 1, roundKind: 'reflect' });
     const job = ddb.get(rowKey('AIJOBS', 'AIJOB#job-warn'));
     assert.ok(job, 'no job row was written');
     assert.ok((job.warnings || []).some((w) => /not a round kind/.test(w)),
@@ -396,11 +408,7 @@ async function promptFor(payload) {
     // direction the questions were never given.
     const polls = require(path.join(REPO, 'lambda-functions/admin/ai-generate-polls.js'));
     reset();
-    await polls.handler({
-      __workerMode: true,
-      jobId: 'job-poll',
-      payload: { topic: 'release readiness', count: 2, roundKind: 'judge' },
-    }, ctx());
+    await runWorker(polls.handler, 'job-poll', { topic: 'release readiness', count: 2, roundKind: 'judge' });
     assert.ok(bedrockCalls.length > 0, 'the poll worker made no Bedrock call');
     const prompt = bedrockCalls[0].prompt;
     assert.match(prompt, /ROUND KIND: JUDGE/, 'no direction reached the poll prompt');
@@ -419,11 +427,8 @@ async function promptFor(payload) {
     // fit in `detail`.
     const polls = require(path.join(REPO, 'lambda-functions/admin/ai-generate-polls.js'));
     reset();
-    await polls.handler({
-      __workerMode: true,
-      jobId: 'job-poll-2',
-      payload: { topic: 'a rival post-incident review', count: 1, roundKind: 'apply' },
-    }, ctx());
+    await runWorker(polls.handler, 'job-poll-2',
+      { topic: 'a rival post-incident review', count: 1, roundKind: 'apply' });
     assert.match(bedrockCalls[0].prompt, /detail: 3-8 sentences, 900 characters maximum/);
     const detail = bedrockCalls[0].tools[0].input_schema.properties.items.items.properties.detail.description;
     assert.match(detail, /900 characters maximum/, `poll schema still says: ${detail}`);

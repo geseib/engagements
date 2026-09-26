@@ -1,11 +1,13 @@
 /**
  * ANYONE WHO KNOWS A FOUR-DIGIT CODE CAN DRIVE SOMEBODY ELSE'S LIVE SESSION.
  *
- * Eight routes carry no authorizer in template-clean.yaml:
+ * Eight routes carried no authorizer in template-clean.yaml:
  *
  *   POST /games                              create a session
  *   POST /games/{gameId}/start               open it for joining
- *   POST /games/{gameId}/start-question      -- no frontend caller
+ *   POST /games/{gameId}/start-question      -- no frontend caller; since
+ *                                               deleted with its handler
+ *                                               (tests/state-row-never-replaced.js)
  *   POST /games/{gameId}/start-vote          move the room to voting
  *   POST /games/{gameId}/next-question       advance the round
  *   POST /games/{gameId}/toggle-category     change what gets asked
@@ -84,7 +86,6 @@ function check(label, fn) {
 const MUST_BE_CLOSED = [
   ['POST', '/games'],
   ['POST', '/games/{gameId}/start'],
-  ['POST', '/games/{gameId}/start-question'],
   ['POST', '/games/{gameId}/start-vote'],
   ['POST', '/games/{gameId}/next-question'],
   ['POST', '/games/{gameId}/toggle-category'],
@@ -119,6 +120,18 @@ const MUST_BE_CLOSED = [
   // socket HOST, and a HOST socket receives the host-only frames — names as
   // they join, vote and survey progress (tests/websocket-host-ticket.js).
   ['POST', '/games/{gameId}/host-ticket'],
+  // THE SCOREBOARD (game/scoreboard.js): every name in the room, with its
+  // total, full-screen on the wall. Born closed, like /stage-focus.
+  ['POST', '/games/{gameId}/scoreboard'],
+  // THE AI SUMMARY'S HOST DOOR (game/get-ai-summary.js): the only route that
+  // generates a round's summary or returns its prompt and template variables —
+  // the reveal, a trivia answer, every participant's words. The public read
+  // below refuses those parameters (tests/ai-summary-host-only-params.js).
+  ['GET', '/games/{gameId}/ai-summary/host'],
+  // THE SESSION BRIEF'S HOST DOOR (game/get-game.js): the edit prefill, with
+  // the session's Workie context and briefing decrypted. The public brief
+  // below no longer returns either to `?role=host` (tests/get-game-host-details.js).
+  ['GET', '/games/{gameId}/host-details'],
 ];
 
 // The participant journey. None of these carries a token, ever.

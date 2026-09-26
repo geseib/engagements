@@ -2,13 +2,24 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, DeleteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
 const { GAMES_RESERVATION_PK, gamesIndexPk } = require('./shared/tenant');
+const { callerUserId } = require('./shared/question-set-access');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
 const TABLE_NAME = process.env.TABLE_NAME;
 
 exports.handler = async (event) => {
-  console.log('Delete game request:', JSON.stringify(event, null, 2));
+  /*
+    THIS USED TO PRINT THE WHOLE EVENT — every header, the bearer JWT in
+    Authorization among them, and any body. Trace the request, not quote it
+    (tests/lambda-event-not-logged.js).
+  */
+  console.log('Delete game request', JSON.stringify({
+    method: event.requestContext?.http?.method,
+    path: event.requestContext?.http?.path,
+    gameId: event.pathParameters?.gameId || null,
+    sub: callerUserId(event) || null,
+  }));
 
   const headers = {
     'Access-Control-Allow-Origin': '*',

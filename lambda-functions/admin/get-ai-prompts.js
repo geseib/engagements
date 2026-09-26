@@ -111,8 +111,16 @@ exports.handler = async (event) => {
 
     const refs = readablePromptRefs(event, '');
     const perScope = await Promise.all(refs.map(async (ref) => {
-      const res = await dynamodb.send(new QueryCommand(buildQuery(promptKey(ref).PK)));
-      const items = (res && res.Items) || [];
+      // Every page, not the first: a Query stops at 1 MB and the Filter runs
+      // after each read, so a page can come back empty with more to follow.
+      // tests/library-reads-paged.js.
+      const items = [];
+      let ExclusiveStartKey;
+      do {
+        const res = await dynamodb.send(new QueryCommand({ ...buildQuery(promptKey(ref).PK), ExclusiveStartKey }));
+        items.push(...((res && res.Items) || []));
+        ExclusiveStartKey = res && res.LastEvaluatedKey;
+      } while (ExclusiveStartKey);
       /*
         DECRYPT PER SCOPE, BEFORE ANYTHING PROJECTS A FIELD.
 

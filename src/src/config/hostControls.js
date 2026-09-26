@@ -262,6 +262,13 @@ export const HOST_INTENTS = {
   PAGE: 'notes-page',  // turn to the next page of the read-back, not a new round
   REPORT: 'report',    // open the session report
   LEAVE: 'leave',      // leave this session and go back to the host menu
+  // The settings panel's own control, not the round dock's — a trivia, poll,
+  // call-and-answer or wavelength session ends on the host's own say-so
+  // rather than only when the question pool runs dry (Task 4, 2026-09-26 bug
+  // sweep). POST /games/{id}/end (utils/endSession.js). A survey never
+  // carries this intent — it ends through its own four below, and the
+  // backend route refuses a survey outright.
+  END: 'end',
   // A survey's four (surveyHostClient.js, and POST /start for the first):
   OPEN_SURVEY: 'open-survey',   // CREATED → SURVEY#OPEN; phones may answer
   CLOSE_SURVEY: 'close-survey', // SURVEY#OPEN → SURVEY#CLOSED; counts freeze
@@ -295,6 +302,56 @@ export function surveyCloseConfirm(counts) {
     confirmText: 'Close the survey',
     irreversible: true,
   };
+}
+
+/**
+ * WHAT "END SESSION" ASKS — the settings panel's own confirm, built the same
+ * way `surveyCloseConfirm` above is: plain words, the consequence named
+ * before the host commits (hard rules §12). This control is not one of
+ * `hostControlsFor`'s per-phase primaries or secondaries — it lives in the
+ * settings panel, reachable at any point in a live round — but the confirm
+ * travels on the SAME `action.confirm` field runHostAction already honours
+ * on every control, so asking here costs no new mechanism.
+ *
+ * `irreversible: true` makes the dialog refuse → as yes (ConfirmDialog
+ * `arrowConfirms`), since → may just have been the key that advanced the
+ * round the host is standing on when they open the panel.
+ *
+ * FIX ROUND 1, ITEM 2 — "THIS CANNOT BE UNDONE" WAS NOT TRUE, so it is not
+ * said. next-question.js's own state-validity guard (~826) lets `skip`,
+ * `select_specific` and `skip_to_specific` through from ANY state, ENDED
+ * included — the check is `!isValidState && action !== 'skip' && ...`, so an
+ * action in that list short-circuits it — and the question browser's "Ask
+ * next" / "Ask again" is not gated on `gameState !== 'ENDED'` either. That is
+ * a separate, pre-existing gap (out of scope here; the controller is
+ * recording it), but a confirm dialog cannot claim a guarantee the rest of
+ * the product does not keep. `irreversible: true` still stands — it is about
+ * how the dialog treats →, not a claim about what happens after.
+ */
+export function endSessionConfirm() {
+  return {
+    title: 'End this session?',
+    message: 'Ending closes the session for every phone, laptop or tablet in the room, right now.',
+    confirmText: 'End session',
+    irreversible: true,
+  };
+}
+
+/**
+ * May the host end this session from the settings panel right now?
+ *
+ * A survey has its own way out — CLOSED's own primary, SURVEY#CLOSED ->
+ * ENDED only — so offering this control on a survey would either duplicate
+ * that route or contradict its rule; the backend route (end-session.js)
+ * refuses a survey outright, 400, pointed at survey/end. Before the session
+ * has started there is nothing running to stop (Back to Menu already leaves
+ * a CREATED session untouched), and once it is ENDED the stage's own primary
+ * — Open Session Report — is the way on.
+ */
+export function canEndSession(gameType, gameState) {
+  if (isSurveyType(gameType)) return false;
+  if (gameState === 'ENDED') return false;
+  return !isLobbyState(gameState);
 }
 
 function primaryFor(phase, {

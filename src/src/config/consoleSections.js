@@ -29,8 +29,8 @@
  *               control that refuses them.
  *   PERSONAL  — the auto-provisioned home. **No Members section**, because
  *               there is nobody to manage and a section that exists only to say
- *               "just you" is a section you stop looking at. No Prompts either:
- *               mockup 12's nav is the authority and it lists three places.
+ *               "just you" is a section you stop looking at. Prompts is here,
+ *               read-only (see `promptsReadOnlyFor` and the note below).
  *
  * AND A FIFTH STATE THAT IS NOT AN EDGE CASE: an approved account with no
  * organisation at all gets NO sections (mockup 09). Every section is a place
@@ -321,6 +321,10 @@ export function sectionsFor({
       SECTION.planrequests,
       SECTION.discountcodes,
       SECTION.platformsets,
+      /* Engage's prompt library, and the ONE place a prompt is changed
+         (owner, 2026-09-24). Beside the Shared library because it is the
+         same kind of thing: Engage's own content, read by every org. */
+      SECTION.prompts,
       SECTION.publiclibrary,
       SECTION.moderation,
       SECTION.accounts,
@@ -359,14 +363,20 @@ export function sectionsFor({
     ];
   }
 
+  const isTeamAdmin = ADMIN_ROLES.includes(role);
+  /*
+    PROMPTS, READ-ONLY, FOR THE PEOPLE WHO RUN THE TEAM (owner, 2026-09-24:
+    "team admins could view them"). A member does not get the section; hosts
+    still choose a Workie in session setup, which reads the same library.
+  */
   const content = group('org', orgName || 'Your organisation', [
     SECTION.questionsets,
     SECTION.games,
     SECTION.library,
-    SECTION.prompts,
+    ...(isTeamAdmin ? [SECTION.prompts] : []),
   ]);
 
-  if (!ADMIN_ROLES.includes(role)) {
+  if (!isTeamAdmin) {
     /* A member sees who else is here and nothing that would refuse them. */
     return [content, group('team', 'Team', [SECTION.members])];
   }
@@ -375,6 +385,25 @@ export function sectionsFor({
     content,
     group('team', 'Team', [SECTION.members, SECTION.billing, SECTION.privacy]),
   ];
+}
+
+/**
+ * WHETHER THE PROMPT SCREENS ARE READ-ONLY for this person in this console.
+ *
+ * Prompts and the Workie advisor are changed in Engage mode only (owner,
+ * 2026-09-24): "the workie advisor and ai prompts should be only in the engage
+ * mode for now. team admins could view them. perhaps later we let them copy
+ * and create them." Everywhere else the library is a view — including an
+ * Engage admin's own personal space, where every prompt write was refused
+ * anyway (a platform prompt is changed only by staff acting for no org).
+ *
+ * The server is the authority (admin/shared/prompt-access.js
+ * `canAuthorPrompts`); this only keeps the screen from offering a Save the
+ * server will refuse.
+ */
+export function promptsReadOnlyFor({ groups = [], mode = '' } = {}) {
+  const isStaff = Array.isArray(groups) && groups.includes(PLATFORM_GROUP);
+  return !(isStaff && mode === PLATFORM_MODE);
 }
 
 /**

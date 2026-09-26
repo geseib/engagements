@@ -16,9 +16,12 @@
  *     POST /games/{gameId}/queue           …and reorders it
  *     GET  /games/{gameId}/exclusions      the disabled questions
  *     POST /games/{gameId}/exclusions      …and disables more
- *     POST /games/{gameId}/start-question  moves the room into ASK
  *     POST /games/{gameId}/start-vote      moves it into VOTE, and answers
  *                                          with every author's name
+ *
+ * The seventh, POST /games/{gameId}/start-question, had no caller and PUT the
+ * whole STATE row; it was deleted with its route
+ * (tests/state-row-never-replaced.js).
  *
  * All of them carry the Cognito authorizer, so the boundary was "any `hosts`
  * account", and not one compared the caller's organisation to the session's.
@@ -202,7 +205,6 @@ const { handler: upNext } = require(path.join(REPO, 'lambda-functions/game/up-ne
 const { handler: stageFocus } = require(path.join(REPO, 'lambda-functions/game/stage-focus.js'));
 const { handler: questionQueue } = require(path.join(REPO, 'lambda-functions/game/question-queue.js'));
 const { handler: questionExclusions } = require(path.join(REPO, 'lambda-functions/game/question-exclusions.js'));
-const { handler: startQuestion } = require(path.join(REPO, 'lambda-functions/websocket/start-question.js'));
 const { handler: startVote } = require(path.join(REPO, 'lambda-functions/websocket/start-vote.js'));
 
 // ---- Harness ---------------------------------------------------------------
@@ -235,7 +237,7 @@ const host = (orgId, method = 'POST') => ({
 /**
  * One live session owned by ORG_A, mid-round, with a queue, an exclusion list,
  * a set to draw from and two named participants who have already answered.
- * Everything the seven routes read, so that "the owning org is unaffected"
+ * Everything these routes read, so that "the owning org is unaffected"
  * is a real 200 and not an accident of a thin fixture.
  */
 function seedGame({ orgId = ORG_A, state = 'ASK#001', gameType = 'trivia' } = {}) {
@@ -524,48 +526,7 @@ const closeRound = (event) => getResults({
     assert.strictEqual(ownExclWrite.statusCode, 200,
       `got ${ownExclWrite.statusCode}: ${ownExclWrite.body}`));
 
-  console.log('\n7. POST /start-question is scoped (it moves the room into ASK)');
-
-  seedGame();
-  const foreignAsk = await startQuestion({
-    ...host(ORG_B), pathParameters: { gameId: GAME },
-    body: JSON.stringify({
-      questionNumber: '002', questionRef: `${SETPK}/QUESTION#c001#002`,
-      setId: SET, category: 'Pricing',
-    }),
-  });
-  // rejects: THE HOLE.
-  check('a rival organisation is refused', () =>
-    assert.strictEqual(foreignAsk.statusCode, 404,
-      `got ${foreignAsk.statusCode}: ${foreignAsk.body}`));
-
-  check('the room is NOT moved', () =>
-    assert.strictEqual(at('STATE').State, 'ASK#001',
-      `the refused call still drove the room to ${at('STATE').State}`));
-
-  check('no question pointer is written', () =>
-    assert.strictEqual(at('QUESTION#002'), undefined,
-      'the refused call still started a question in somebody else\'s session'));
-
-  check('the room is told nothing', () =>
-    assert.strictEqual(sent.length, 0, `broadcast ${sent.length} frame(s) on a refused call`));
-
-  seedGame();
-  const ownAsk = await startQuestion({
-    ...host(ORG_A), pathParameters: { gameId: GAME },
-    body: JSON.stringify({
-      questionNumber: '002', questionRef: `${SETPK}/QUESTION#c001#002`,
-      setId: SET, category: 'Pricing',
-    }),
-  });
-  // rejects: closing the hole by breaking the feature.
-  check('its own host still starts the question', () =>
-    assert.strictEqual(ownAsk.statusCode, 200, `got ${ownAsk.statusCode}: ${ownAsk.body}`));
-
-  check('and the pointer lands', () =>
-    assert.ok(at('QUESTION#002'), 'the question was never started'));
-
-  console.log('\n8. POST /start-vote is scoped (it answers WITH THE NAMES)');
+  console.log('\n7. POST /start-vote is scoped (it answers WITH THE NAMES)');
 
   seedGame();
   const foreignVote = await startVote({
@@ -606,7 +567,7 @@ const closeRound = (event) => getResults({
   check('and the ballot still carries the names', () =>
     assert.ok(namesLeaked(ownVote), 'the owning host was not given the ballot'));
 
-  console.log('\n9. what this deliberately does NOT refuse');
+  console.log('\n8. what this deliberately does NOT refuse');
 
   /*
     A session with no orgId predates tenancy or was created by an orgless host.

@@ -182,8 +182,45 @@ function describeOutputShape(prompt) {
   return resolveOutputSections(prompt).map((s) => s.heading).join(' · ');
 }
 
+/**
+ * A Workie's own round-angle weights (docs/superpowers/specs/
+ * 2026-09-24-workie-round-angles-design.md): `{ question, race, event, fact }`,
+ * each a whole number 0-100. A key left out takes the house weight when the
+ * angle is drawn (game/round-angles.js), so a partial override is legitimate.
+ *
+ * Returns `{ ok: true, weights }` — `weights: null` meaning "use the house
+ * mix" (absent, null or {}) — or `{ ok: false, error }`. Refused rather than
+ * coerced: a weight someone typed as "20" or 1.5 is a mistake to report, not a
+ * value to guess at.
+ */
+const ANGLE_KEYS = ['question', 'race', 'event', 'fact'];
+function normalizeAngleWeights(raw) {
+  if (raw === undefined || raw === null) return { ok: true, weights: null };
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'angleWeights must be an object of { question, race, event, fact }' };
+  }
+  const keys = Object.keys(raw);
+  if (keys.length === 0) return { ok: true, weights: null };
+  const weights = {};
+  for (const k of keys) {
+    if (!ANGLE_KEYS.includes(k)) {
+      return { ok: false, error: `angleWeights has an unknown angle "${k}" (allowed: ${ANGLE_KEYS.join(', ')})` };
+    }
+    const v = raw[k];
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 100) {
+      return { ok: false, error: `angleWeights.${k} must be a whole number from 0 to 100` };
+    }
+    weights[k] = v;
+  }
+  return { ok: true, weights };
+}
+
 module.exports = {
   isUsableSummaryPrompt, summaryPromptDefect, inferPromptType,
   DEFAULT_OUTPUT_SECTIONS, normalizeOutputSections, resolveOutputSections,
-  hasCustomOutputShape, describeOutputShape,
+  hasCustomOutputShape, describeOutputShape, normalizeAngleWeights,
+  // The limits themselves, so a surface that DESCRIBES the rules (the
+  // workbench's export, admin/shared/workie-reference.js) quotes these numbers
+  // rather than retyping them.
+  MAX_SECTIONS, MAX_HEADING_CHARS, MAX_GUIDANCE_CHARS,
 };

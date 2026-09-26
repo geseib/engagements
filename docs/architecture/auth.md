@@ -122,7 +122,7 @@ with the org-scoping work of 2026-08-26 to 08-28. Of 105 routes in the API,
 through `/games`:
 
 - **Host actions are authenticated**: creating and listing sessions, `start`,
-  `next-question`, `start-question`, `start-vote`, `close-round`, `stage-beat`,
+  `next-question`, `start-vote`, `close-round`, `stage-beat`,
   `stage-focus`, `reveal-authors`, `report`, `queue`, `exclusions`, `up-next`,
   `persona`, `handover`, `remove`, and `PUT /games/{gameId}`.
 - **The participant journey stays public** by design: joining, answering,

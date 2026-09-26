@@ -87,13 +87,17 @@ console.log('\n3. the concrete jobId form the rawPath fallback produces');
 check('a real job id polls the same as the template', () =>
   openToHosts('GET', 'admin/ai-generate-trivia/mt5t6yreeiwar2rt'));
 
-console.log('\n4. and now MAY create one, but nothing wider');
+console.log('\n4. may read the library, and change nothing in it');
 
-// rejects: opening the whole prompt library to hosts by prefix rather than by
-// exact pair — PUT and DELETE must stay Engage's until copy-on-write lands.
-check('a host may CREATE a Workie', () =>
-  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-prompts').sort(),
-    ['admins', 'hosts']));
+// The owner, 2026-09-24: "the workie advisor and ai prompts should be only in
+// the engage mode for now. team admins could view them. perhaps later we let
+// them copy and create them." Hosts had CREATE since the org library opened;
+// it closes again until team copy/create is designed. The handler refuses too
+// (prompt-access.js canAuthorPrompts) — this is the outer door.
+// rejects: a host reaching the prompt-create handler at all.
+check('a host may NOT create a Workie (Engage mode only, for now)', () =>
+  assert.deepStrictEqual(requiredGroupsForRoute('POST', 'admin/ai-prompts'),
+    ['admins']));
 check('…and may still read the library', () =>
   assert.deepStrictEqual(requiredGroupsForRoute('GET', 'admin/ai-prompts').sort(),
     ['admins', 'hosts']));

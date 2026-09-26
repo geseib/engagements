@@ -184,13 +184,19 @@ const NAMES_SHOWN = 8;
  * round's comments (the owner, 2026-09-22: "a way to get that info up on the
  * screen … click on those would allow everyone to see them").
  *
- * The last three comments as they land, newest first and brightest, each
- * saying WHAT it is about and never WHO wrote it — the mockup's "Response 31"
- * is a position, not a person. Each is a button: the host presses one to put
- * it up for the room (`onPick(commentId)`), and the one that is up is marked
- * (`featuredId`). The waiting list and the arrivals never share a meter;
- * arrivals win, because two lists in one column is the reflow the earlier
- * "no text on the wall" ruling feared.
+ * The last three comments as they land, newest first and brightest, and never
+ * WHO wrote them. Each is a button: the host presses one to put it up for the
+ * room (`onPick(commentId)`).
+ *
+ * THE CARDS ARE THE COMMENTS AND NOTHING ELSE. The owner, 2026-09-24: "the
+ * small type is not needed and it doesnt seem like a designer put this part
+ * together." The "Arriving" label and each card's small uppercase "On …" line
+ * are gone; what the featured one was about is said once, at a readable size,
+ * on the wall (FeedbackWall.jsx). The featured one (`featuredId`) leaves the
+ * list — it is on the wall, and the same words twice in one viewport breaks
+ * the stage's own rule. The waiting list and the arrivals never share a
+ * meter; arrivals win, because two lists in one column is the reflow the
+ * earlier "no text on the wall" ruling feared.
  */
 const ARRIVALS_SHOWN = 3;
 const AGE_CLASS = ['', ' older', ' oldest'];
@@ -212,7 +218,10 @@ const AGE_CLASS = ['', ' older', ' oldest'];
 export default function RoomMeter({
   phase, heading, body, complete = false, waiting = null, arrivals = null, rows = null,
 }) {
-  const arriving = (arrivals && Array.isArray(arrivals.items) ? arrivals.items : []).slice(-ARRIVALS_SHOWN).reverse();
+  const featuredId = arrivals && arrivals.featuredId;
+  const arriving = (arrivals && Array.isArray(arrivals.items) ? arrivals.items : [])
+    .filter((item) => !featuredId || item.commentId !== featuredId)
+    .slice(-ARRIVALS_SHOWN).reverse();
   const names = arriving.length ? [] : (waiting && waiting.names) || [];
   /*
     A LIST MAY BE OFFERED BEFORE IT IS KNOWN. A collecting survey knows HOW
@@ -312,29 +321,19 @@ export default function RoomMeter({
           completion cue on the profile that loses the most. */}
       {complete && <CompletionFlag />}
       {arriving.length > 0 && (
-        <>
-          <h5>Arriving</h5>
-          <div className="arrivals-list">
-            {arriving.map((item, i) => {
-              const id = item.commentId;
-              const featured = Boolean(arrivals.featuredId) && arrivals.featuredId === id;
-              return (
-                <button
-                  key={id || i}
-                  type="button"
-                  className={`arr${AGE_CLASS[i] || ''}`}
-                  aria-pressed={featured}
-                  {...(featured ? { 'data-featured': '' } : {})}
-                  title={featured ? 'On the wall — press to take it down' : 'Put this on the wall'}
-                  onClick={() => arrivals.onPick?.(id)}
-                >
-                  <p className="ans">{item.text}</p>
-                  {item.anchorLabel && <span className="n">{`On ${item.anchorLabel}`}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </>
+        <div className="arrivals-list">
+          {arriving.map((item, i) => (
+            <button
+              key={item.commentId || i}
+              type="button"
+              className={`arr${AGE_CLASS[i] || ''}`}
+              title="Put this on the wall"
+              onClick={() => arrivals.onPick?.(item.commentId)}
+            >
+              <p className="ans">{item.text}</p>
+            </button>
+          ))}
+        </div>
       )}
       {progressRows.length > 0 && (
         <div className="sprog" data-survey-progress="">

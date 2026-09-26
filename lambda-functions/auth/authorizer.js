@@ -331,21 +331,16 @@ const HOST_ADMIN_ROUTES = new Set([
   // would reach one. `tests/parse-document-host-route.js` pins all of that; if
   // the handler ever reads tenant data, this entry needs revisiting with it.
   'POST admin/parse-document',
-  // THIS WAS "READ ONLY" UNTIL NOW: an org may now CREATE its own prompt too.
-  // The reason POST was excluded was that a prompt write "shapes what the AI
-  // does for everybody" — true of the one partition that existed when that
-  // line was written. An organisation's prompt now lands in
-  // `ORG#<org>#AIPROMPTS`, is invisible to every other tenant, and can never
-  // become a default — so it shapes what the AI does for THAT organisation
-  // and nobody else. The same expiry the job routes above went through, for
-  // the same reason. Approved by the owner.
-  //
-  // STILL AN EXACT PAIR: PUT/DELETE admin/ai-prompts/{promptId} are
-  // deliberately still absent. Editing a Workie you do not own needs
-  // copy-on-write, which is not built — a host may author one and read the
-  // library, not yet change or retire one.
+  // READ ONLY AGAIN (owner, 2026-09-24): "the workie advisor and ai prompts
+  // should be only in the engage mode for now. team admins could view them.
+  // perhaps later we let them copy and create them." POST was opened when org
+  // libraries arrived (an org's Workie lands in `ORG#<org>#AIPROMPTS` and
+  // shapes nobody else's AI); it is closed until team copy/create is designed.
+  // The handler refuses a non-Engage author too (admin/shared/prompt-access.js
+  // `canAuthorPrompts`, behind the TEAM_WORKIE_AUTHORING switch) — this is the
+  // outer door, that is the authority. Existing team Workies keep running,
+  // frozen. PUT/DELETE admin/ai-prompts/{promptId} were never a host's.
   'GET admin/ai-prompts',
-  'POST admin/ai-prompts',
   'POST admin/question-sets/{setId}/media/uploads',
   'GET admin/question-sets/{setId}/media',
   // Put a set on the quickstart shelf, or take it off. Ownership-guarded by
@@ -648,6 +643,30 @@ function requiredGroupsForRoute(method, path) {
   // no authorizer) and every participant GET must not be caught.
   // tests/get-report-authorization.js.
   if (method === 'GET' && (path === 'games/{gameId}/report' || /^games\/[^/]+\/report$/.test(path))) {
+    return ['hosts', 'admins'];
+  }
+  // THE AI SUMMARY'S HOST DOOR, `GET /games/{gameId}/ai-summary/host`. The only
+  // route that starts a round's generation or returns the prompt and template
+  // variables behind it — the question's reveal, a trivia round's correct
+  // answer, every participant's words. Its public sibling
+  // `GET /games/{gameId}/ai-summary` refuses those parameters
+  // (game/get-ai-summary.js) and must stay `[]`. Named for the report's reason:
+  // "GET + games is public" would otherwise pass any account, `pending`
+  // included, and callerMayDriveSession reads an account in no group as a
+  // participant. Anchored; the class matches the template and a concrete id.
+  // tests/ai-summary-host-only-params.js.
+  if (method === 'GET' && /^games\/[^/]+\/ai-summary\/host$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
+  // THE SESSION BRIEF'S HOST DOOR, `GET /games/{gameId}/host-details`. The edit
+  // prefill: the session's Workie context and its Call & Answer briefing,
+  // decrypted — the host's own writing, which the public `GET /games/{gameId}`
+  // no longer returns to a typed `?role=host`. Named for the report's reason:
+  // "GET + games is public" would otherwise pass any account, `pending`
+  // included, and callerMayDriveSession reads an account in no group as a
+  // participant. Anchored, so the public brief itself stays `[]`; the class
+  // matches the template and a concrete id. tests/get-game-host-details.js.
+  if (method === 'GET' && /^games\/[^/]+\/host-details$/.test(path)) {
     return ['hosts', 'admins'];
   }
   // Game creation/management requires host or admin group

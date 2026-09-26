@@ -611,11 +611,12 @@ const metadataOf = (gameId) => store.get(key(`GAME#${gameId}`, 'METADATA'));
     // Position IS the fix, the second time: between template and contract the
     // directive lost to the contract's "supersedes any instruction that
     // appeared earlier" opener. Last is the only spot nothing else claims to
-    // supersede.
+    // supersede. The voice's required addition sits between the two
+    // (tests/persona-required-addition.js), so the host's stays the last word.
     assert(/hostInstructions: gameAiContext/.test(summarySrc));
     assert(/eventDetails,/.test(summarySrc));
-    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData, \{ openingMove \}\)\}\$\{hostLayer\}/.test(summarySrc),
-      'the assembled prompt must read template → contract (with the round\'s opening move) → host additions');
+    assert(/\$\{contextLayer\}\$\{templateBody\}\\n\\n\$\{buildOutputContract\(promptData, \{ openingMove \}\)\}\$\{angleLayer\}\$\{voiceLayer\}\$\{hostLayer\}/.test(summarySrc),
+      'the assembled prompt must read template → contract (with the round\'s opening move) → voice addition → host additions');
   });
 
   console.log('\nthe reply is prefilled with its own first heading\n');

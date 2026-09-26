@@ -32,16 +32,25 @@ const json = (statusCode, body) => ({ statusCode, headers: cors, body: JSON.stri
 /**
  * The three shapes of §3.2, and the ref each names. Anything else is refused.
  *
- * `#v([1-9]\d*)` and NOT `#v(\d+)`: a version is one-based, and `v0` would
- * parse to `setPartition(ref, 0)`, which `set-version.js` resolves to the
- * LEGACY UNVERSIONED partition — a different set's content read under a
- * version-shaped key. `v01` is refused on the same reasoning: one spelling per
- * version, so two queue skus cannot name one row.
+ * `#v(0|[1-9]\d*)`: a version is one-based, but `v0` is the one reserved
+ * spelling for "no version" — moderation-queue.js's `queueSk` writes exactly
+ * `#v0` for an unversioned org set (a legacy set with no `#v<n>` partition —
+ * set-version.js's permanently supported, never-migrated read state), and
+ * `setPartition(ref, null)`, which `toVersion(0)` resolves to below, is that
+ * same LEGACY UNVERSIONED partition. `v01` is refused on the same reasoning:
+ * one spelling per version (and per "no version" — `v0`, not `v00`), so two
+ * queue skus cannot name one row.
+ *
+ * A set that has SINCE been versioned still answers a `v0` request: the legacy
+ * partition is a distinct, permanently addressable location that coexists
+ * with any numbered version added later (set-version.js never deletes or
+ * migrates it), so `v0` keeps naming exactly that row and never a numbered
+ * one — resolved, not refused, and never confused with `v1`/`v2`/….
  */
 function parseSk(raw) {
   const sk = String(raw || '').trim();
-  let m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v([1-9]\d*)$/.exec(sk);
-  if (m) return { sk, ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: Number(m[3]) };
+  let m = /^([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)#v(0|[1-9]\d*)$/.exec(sk);
+  if (m) return { sk, ref: { scope: 'org', orgId: m[1], setId: m[2] }, version: m[3] === '0' ? null : Number(m[3]) };
   m = /^PUBLIC#([A-Za-z0-9_-]+)$/.exec(sk);
   if (m) return { sk, ref: { scope: 'public', orgId: '', setId: m[1] }, version: 0 };
   m = /^PLATFORM#([A-Za-z0-9_-]+)$/.exec(sk);

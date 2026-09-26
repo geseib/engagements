@@ -8,7 +8,7 @@ harness.install();                                     // MUST precede the requi
 const { handler } = require(path.join(REPO, 'lambda-functions/admin/ai-generate-polls.js'));
 
 const { state, reset, toolResponse, test, summary } = harness;
-const { postEvent, ctx, runJob } = harness.makeRunner(handler, 'engagedev-admin-ai-generate-polls');
+const { postEvent, pollEvent, ctx, runJob } = harness.makeRunner(handler, 'engagedev-admin-ai-generate-polls');
 
 const SUBJECTS = [
   'hybrid work schedules', 'meeting-free Fridays', 'open plan offices', 'annual review cadence',
@@ -68,7 +68,7 @@ const BASE = { topic: 'workplace preferences', difficulty: 'medium', allowMultip
     const res = await handler(postEvent({ ...BASE, count: 5 }), ctx());
     assert.strictEqual(res.statusCode, 500);
     const { jobId } = JSON.parse(res.body);
-    const polled = await handler({ requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
+    const polled = await handler(pollEvent(jobId), ctx());
     const job = JSON.parse(polled.body);
     assert.strictEqual(job.status, 'error');
     assert.match(job.error, /Could not start generation worker/);

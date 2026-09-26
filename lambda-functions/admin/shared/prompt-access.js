@@ -42,6 +42,64 @@ const { callerUserId } = require('./question-set-access');
 
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 
+/*
+  PROMPTS ARE CHANGED IN ENGAGE MODE — docs/superpowers/specs/
+  2026-09-24-prompt-admin-engage-mode-design.md. The owner, 2026-09-24: "the
+  workie advisor and ai prompts should be only in the engage mode for now. team
+  admins could view them. perhaps later we let them copy and create them."
+
+  `TEAM_WORKIE_AUTHORING` is that "later". Off (the default, and what every
+  deployed stack runs): only an Engage admin acting for no organisation may
+  create, change, retire, advise on or generate a prompt, and every team
+  Workie is FROZEN — it still drives its team's sessions, and nobody may change
+  it. The team-authoring path below is kept rather than deleted, and the suites
+  that pin how it works (org-authored-prompts.js and its neighbours) turn the
+  switch on, so it is proven the day the owner asks for it back.
+
+  Read at call time, not load time, so a test can set it before a call.
+*/
+const teamWorkieAuthoringOn = () => clean(process.env.TEAM_WORKIE_AUTHORING).toLowerCase() === 'on';
+
+/**
+ * A script or a worker: no groups and no organisation. The same seam
+ * `createPromptRef` has always had — the seeder and the suites' direct calls
+ * wrote platform content before any of this existed. Every HTTP route here
+ * sits behind the Cognito authorizer, whose context always carries groups, so
+ * a request from a browser is never "internal".
+ */
+const isInternalCall = (event) => callerGroups(event).length === 0 && !tenant.callerOrgId(event);
+
+/**
+ * May this caller author prompts at all — create one, run the advisor or the
+ * generator? An Engage admin acting for no organisation, always; a team's
+ * own admins only while team authoring is on.
+ */
+function canAuthorPrompts(event) {
+  if (isInternalCall(event)) return true;
+  if (tenant.canManageScope(event, tenant.PLATFORM, '')) return true;
+  if (!teamWorkieAuthoringOn()) return false;
+  const orgId = tenant.callerOrgId(event);
+  return Boolean(orgId) && tenant.canManageScope(event, tenant.ORG, orgId);
+}
+
+/**
+ * The sentence a refused prompt write answers with — which rule, and what to
+ * do about it. `item` is the Workie being changed, or null for a create or an
+ * advisor/generator call. The owner's own save failed with "This Workie
+ * belongs to someone else", which named neither the rule nor the fix.
+ */
+function promptRefusalMessage(event, item) {
+  const staff = tenant.isPlatformAdmin(event);
+  const orgId = clean(item && item.orgId);
+  const scope = item ? (clean(item.scope) || (orgId ? tenant.ORG : tenant.PLATFORM)) : tenant.PLATFORM;
+  if (scope === tenant.ORG && !teamWorkieAuthoringOn()) {
+    return "Your team's Workies are read-only for now. Engage staff change prompts in Engage mode.";
+  }
+  if (scope === tenant.ORG) return 'This Workie belongs to someone else. You can only change Workies you created.';
+  if (staff) return 'Prompts are changed in Engage mode. Switch to Engage in the top bar, then try again.';
+  return "Only Engage staff can change Engage's prompts.";
+}
+
 /** `{scope, orgId, promptId}`, normalised, with platform as the default scope. */
 function promptRef(ref) {
   if (typeof ref === 'string') return { scope: tenant.PLATFORM, orgId: '', promptId: ref };
@@ -115,6 +173,8 @@ function createPromptRef(event, promptId, requestedScope) {
 
   for (const c of candidates) {
     if (c.scope === tenant.ORG && !c.orgId) continue;
+    // Team Workies are frozen while team authoring is off: never offered.
+    if (c.scope === tenant.ORG && !teamWorkieAuthoringOn()) continue;
     if (tenant.canManageScope(event, c.scope, c.orgId)) return promptRef({ ...c, promptId });
   }
   return null;
@@ -139,6 +199,8 @@ function canManagePrompt(event, item) {
 
   if (!tenant.canManageScope(event, scope, orgId)) return false;
   if (scope === tenant.PLATFORM) return true;
+  // FROZEN while team authoring is off — its own team and its creator included.
+  if (!teamWorkieAuthoringOn()) return false;
 
   const me = callerUserId(event);
   if (me && item.createdBy && me === item.createdBy) return true;
@@ -189,6 +251,10 @@ module.exports = {
   readablePromptRefs,
   createPromptRef,
   canManagePrompt,
+  canAuthorPrompts,
+  isInternalCall,
+  promptRefusalMessage,
+  teamWorkieAuthoringOn,
   findPromptForCaller,
   promptOwnerStamp,
 };

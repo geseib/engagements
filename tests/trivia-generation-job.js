@@ -8,7 +8,7 @@ harness.install();                                     // MUST precede the requi
 const { handler } = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js'));
 
 const { state, reset, toolResponse, test, summary } = harness;
-const { postEvent, ctx, runJob } = harness.makeRunner(handler, 'engagedev-admin-ai-generate-trivia');
+const { postEvent, pollEvent, ctx, runJob } = harness.makeRunner(handler, 'engagedev-admin-ai-generate-trivia');
 
 const TOPICS = [
   'photosynthesis', 'the Bretton Woods system', 'plate tectonics', 'the Silk Road',
@@ -69,7 +69,7 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     const res = await handler(postEvent({ ...BASE, count: 5 }), ctx());
     assert.strictEqual(res.statusCode, 500);
     const { jobId } = JSON.parse(res.body);
-    const polled = await handler({ requestContext: { http: { method: 'GET' } }, pathParameters: { jobId } }, ctx());
+    const polled = await handler(pollEvent(jobId), ctx());
     const job = JSON.parse(polled.body);
     assert.strictEqual(job.status, 'error');
     assert.match(job.error, /Could not start generation worker/);

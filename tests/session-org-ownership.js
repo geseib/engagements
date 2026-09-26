@@ -172,7 +172,6 @@ for (const rel of [
   'lambda-functions/game/stage-focus.js',
   'lambda-functions/game/question-queue.js',
   'lambda-functions/game/question-exclusions.js',
-  'lambda-functions/websocket/start-question.js',
   'lambda-functions/websocket/start-vote.js',
   // The SECOND writer of PersonaId. update-game.js has asked since 2026-08-27;
   // this route writes the same attribute through PUT /games/{gameId}/persona and
@@ -193,6 +192,8 @@ for (const rel of [
   'lambda-functions/game/toggle-category.js',
   'lambda-functions/game/grant-handover.js',
   'lambda-functions/game/remove-player.js',
+  // The scoreboard: puts the whole room's totals on the wall. Born asking.
+  'lambda-functions/game/scoreboard.js',
 ]) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')

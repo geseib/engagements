@@ -65,9 +65,16 @@ const CATEGORIES = [
  * get-game-state.js (state, incl. `categoryCounts` / `categoryState` /
  * `gameMetadata.questionSetId`), get-players.js, get-categories.js and
  * admin/get-question-set-questions.js.
+ *
+ * `stateDelayMs` holds the `/state` reply back on a real timer. Every other
+ * reply here settles in a microtask, which is not how a network behaves — see
+ * the late-reply test below for what that hid.
  */
-function serve({ state = 'ASK#003', live = true, questions = [TRIVIA] } = {}) {
+function serve({ state = 'ASK#003', live = true, questions = [TRIVIA], stateDelayMs = 0 } = {}) {
   const posts = [];
+  const later = (reply) => (stateDelayMs
+    ? new Promise((resolve) => { setTimeout(() => resolve(reply), stateDelayMs); })
+    : Promise.resolve(reply));
   global.fetch = jest.fn((url, init) => {
     const href = String(url);
 
@@ -76,7 +83,7 @@ function serve({ state = 'ASK#003', live = true, questions = [TRIVIA] } = {}) {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ state }) });
     }
     if (href.includes('/state')) {
-      return Promise.resolve({
+      return later({
         ok: true,
         json: async () => ({
           gameId: '4821',
@@ -111,11 +118,25 @@ function serve({ state = 'ASK#003', live = true, questions = [TRIVIA] } = {}) {
   return posts;
 }
 
+/*
+  CONNECTED MEANS THE FIRST REPLY IS ON SCREEN, not that the code box has gone.
+
+  The box goes the moment the code is submitted; the session's first `/state`
+  reply lands a timer tick or more later. Until it does, every control that
+  needs the session is disabled (`blocked` and `!setId` in HostRemote.jsx) and
+  a tap on it does nothing — see the late-reply test below. `Live` in the bar is
+  set in the same render as that reply, so it is the one signal every test here
+  can wait on.
+
+  The word is resolved ONCE and asserted on in place: it relabels from Offline
+  to Live while we wait, and a query by that text would miss on every poll.
+*/
 async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument());
+  const status = screen.getByText(/^(Live|Offline)$/);
+  await waitFor(() => expect(status).toHaveTextContent(/^Live$/));
 }
 
 beforeEach(() => {
@@ -278,6 +299,35 @@ describe('the phone question browser', () => {
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
+  });
+
+  /*
+    THE FIRST TAP WAITS FOR THE FIRST REPLY.
+
+    `Choose next question` is `disabled={!setId}`, and `setId` comes from the
+    first `/state` reply, so until that reply is on screen a tap on it is
+    swallowed and the browser never opens — however long anything waits
+    afterwards. The dev build of 616c0bd1 (2026-09-25) failed on exactly that:
+    its DOM dump shows the round view with the button ENABLED and the browser
+    shut, and the only two ways shut are "Ask this next" and the back arrow,
+    neither of which the test touches. The reply had simply landed after the
+    click. Locally the same ordering held by about 2.5ms, with nothing but
+    jsdom's zero-delay timers deciding it.
+
+    A 5000ms findBy (95875026) could not have saved it: with the reply held back
+    by 5ms the title is still missing after five full seconds, because the tap
+    it is waiting on never happened. The wait belongs BEFORE the tap, in
+    connect().
+
+    Rejects: a connect() that returns once the code box is gone.
+  */
+  it('opens the set even when the first state reply is late', async () => {
+    serve({ stateDelayMs: 20 });
+    await connect();
+
+    fireEvent.click(screen.getByRole('button', { name: /choose next question/i }));
+
+    expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
   });
 
   /*

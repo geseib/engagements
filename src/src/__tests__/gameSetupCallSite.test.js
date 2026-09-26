@@ -68,7 +68,25 @@ describe('the edit flow is wired, not just built', () => {
   // way the OAuth return-path change was.
   test('the history panel\'s Edit is wired to a handler that fetches the host prefill', () => {
     expect(host).toMatch(/onEdit=\{editGameFromHistory\}/);
-    expect(host).toMatch(/games\/\$\{selectedGameId\}\?role=host/);
+  });
+
+  /*
+    THE PREFILL COMES FROM THE HOST'S DOOR, `GET /games/{id}/host-details`,
+    which carries the Cognito authorizer (get-game.js asks
+    callerMayDriveSession). The public `?role=host` branch no longer returns
+    aiContext or the briefing: `role` is a query parameter anyone can type
+    (tests/get-game-host-details.js).
+  */
+  // rejects: the read going back to `?role=host`, where both fields are now
+  // absent — the dialog would open with them blank, and Save sends what the
+  // dialog holds, so an edit would erase them. And rejects reaching the door
+  // with bare fetch, which is a 401: no Authorization header.
+  test('the prefill is read on the host-details route, with authFetch', () => {
+    const start = host.indexOf('const editGameFromHistory = async');
+    expect(start).toBeGreaterThan(-1);
+    const body = host.slice(start, host.indexOf('\n  };', start));
+    expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{selectedGameId\}\/host-details`\)/);
+    expect(body).not.toMatch(/role=host/);
   });
 
   test('the dialog is mounted in edit mode from the fetched values', () => {

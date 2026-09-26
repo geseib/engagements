@@ -57,6 +57,9 @@ const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/l
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const { normalizeOutputSections } = require('./shared/prompt-shape');
+const tenant = require('./shared/tenant');
+const { promptRefusalMessage, isInternalCall } = require('./shared/prompt-access');
+const { callerUserId } = require('./shared/question-set-access');
 const defaultPrompts = require('./default-ai-prompts.json');
 
 // Generate unique ID for prompts (same as other admin functions)
@@ -78,7 +81,18 @@ const s3Client = new S3Client({});
 
 
 exports.handler = async (event) => {
-  console.log('🚀 Populate Default AI Prompts - Event:', JSON.stringify(event, null, 2));
+  /*
+    THIS USED TO PRINT THE WHOLE EVENT — every header, the bearer JWT in
+    Authorization among them — and then the body twice more, raw and parsed.
+    The one thing the body says that matters, the overwrite flag, is logged
+    below on its own. Trace the request, not quote it
+    (tests/lambda-event-not-logged.js).
+  */
+  console.log('🚀 Populate Default AI Prompts', JSON.stringify({
+    method: event.requestContext?.http?.method,
+    path: event.requestContext?.http?.path,
+    sub: callerUserId(event) || null,
+  }));
 
   try {
     // Handle CORS preflight
@@ -94,13 +108,28 @@ exports.handler = async (event) => {
       };
     }
 
+    /*
+      ENGAGE MODE ONLY — docs/superpowers/specs/2026-09-24-prompt-admin-engage-mode-design.md.
+      The authorizer checks the group, not the mode, so this handler checks
+      the mode itself. This writes Engage's own library — with overwrite, over every default — and it had no check at all: any admin, acting for any team, could run it. Engage mode, never team authoring.
+    */
+    if (!isInternalCall(event) && !tenant.canManageScope(event, tenant.PLATFORM, '')) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS'
+        },
+        body: JSON.stringify({ error: promptRefusalMessage(event, null) })
+      };
+    }
+
     console.log('🔄 Starting default AI prompts population...');
     
     // Check for overwrite parameter
-    console.log('📋 Raw event body:', event.body);
     const body = event.body ? JSON.parse(event.body) : {};
     const overwrite = body.overwrite || false;
-    console.log(`📋 Parsed body:`, body);
     console.log(`🔄 Overwrite mode: ${overwrite}`);
     
     const results = {
@@ -119,15 +148,25 @@ exports.handler = async (event) => {
     // fresh promptId for the same prompt. That is how seven call-and-answer
     // prompts all ended up flagged isDefault (D17). Query the key we actually
     // write.
+    //
+    // Every page, too: a prompt past the first 1 MB would read as missing and
+    // be minted again. tests/library-reads-paged.js.
     console.log('📋 Checking existing prompts...');
-    const existingPrompts = await dynamodb.send(new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: {
-        ':pk': 'AIPROMPTS',
-        ':sk': 'AIPROMPT#'
-      }
-    }));
+    const existingPrompts = { Items: [] };
+    let ExclusiveStartKey;
+    do {
+      const page = await dynamodb.send(new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: {
+          ':pk': 'AIPROMPTS',
+          ':sk': 'AIPROMPT#'
+        },
+        ExclusiveStartKey,
+      }));
+      existingPrompts.Items.push(...(page.Items || []));
+      ExclusiveStartKey = page.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
 
     console.log(`📊 Found ${existingPrompts.Items?.length || 0} existing prompts`);
 

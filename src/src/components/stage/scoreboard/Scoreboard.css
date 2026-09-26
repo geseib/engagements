@@ -1,0 +1,353 @@
+/* ===========================================================================
+   THE SCOREBOARD — a full-screen standings moment on the stage, in three looks.
+
+   docs/superpowers/specs/2026-09-25-scoreboard-design.md; ported from the
+   approved mockups, docs/design/scoreboard-2026-09-25/:
+
+     A  .sb--departure   a-departure-board.html   split-flap modules
+     B  .sb--olympic     b-olympic-board.html     lanes with medal rank blocks
+     C  .sb--tote        c-tote-board.html        5x7 bulb figures that ride
+
+   Every selector is rooted at `.sb`, and every class is `sb-` prefixed, so
+   nothing here collides with styles.css or stage.css (`.chip`, `.rail`, `.t`,
+   `.nm` are all taken there). Every keyframe is `sb-` prefixed too: keyframe
+   names are global.
+
+   WHERE IT SITS. Inside `.stage`, as a grid item across the rail, bar and main
+   rows (grid-row 1 / 4), so the dock stays live below it — the mockups' "host
+   strip" stood in for the dock. It is NOT inside `.content`, so the stage's
+   fitter never measures it; its density is the per-profile page size
+   (config/scoreboard.js placesPerPage) and its own fit loops.
+
+   UNITS. The mockups draw in a 16:9 frame with container units (cqh/cqw); the
+   stage IS the viewport, so they are vh/vw here, which is what stage.css does.
+   The type reads the profile ladders (--L-*) the stage already declares on
+   :root for all four profiles.
+
+   THE FONT is the app's display token, --font-display, with the mockups'
+   font-stretch:125% — so the boards pick up the Archivo fix a separate task is
+   making to public/index.html, and are harmless until it lands.
+
+   TOKENS. The stage's dusk tokens (.stage in stage.css) plus the medal tokens
+   from styles.css. The board's own are declared on `.sb` below:
+     --sb-new        #A7C3EF   NEW. The mockups' contrast fix: --secondary is
+                               3.93:1 lifted on a flap; this is 5.40.
+     --sb-bronze     #D39A6A   the THIRD medal block. --bronze (#B4794A) under
+                               dark ink is 3.35:1 once the projector lifts the
+                               ink — the fix the spec names. 4.99 lifted, 7.12
+                               flat. --bronze itself is unchanged.
+
+   CONTRAST, measured (flat / after the stage's projector black-lift model,
+   host-redesign/audit.js A9), and pinned by __tests__/scoreboardPalette.test.js:
+     A  name, points #F4EDE4 on flap #1B2942          12.53 / 8.34
+        place        #F6A94C on flap                   7.42 / 4.94
+        ▲            #6FD0A4 on flap                   7.79 / 5.18
+        ▼ / –        #B6C2D4 on flap                   8.08 / 5.38
+        NEW          #A7C3EF on flap                   8.11 / 5.40
+     B  rank ink #0F1A2E on gold 8.86/6.21, silver 10.13/7.10, --sb-bronze 7.12/4.99
+     C  names #F4EDE4 on row #131E33 14.34 / 9.87; points lamps #F6A94C 8.48 / 5.84
+
+   MOTION (src/src/__tests__/stageMotion.test.js reads this file too): keyframes
+   touch only transform, opacity, border-color and visibility, and every
+   animated selector is stilled under prefers-reduced-motion, where the JS
+   also paints the final state at once — a page change becomes a swap.
+   =========================================================================== */
+
+.sb{
+  /* one opening, one layer: above the rail, bar and main; the dock stays */
+  grid-column:1; grid-row:1 / 4;
+  position:relative; z-index:6; min-height:0; min-width:0; overflow:hidden;
+  display:grid; grid-template-rows:auto minmax(0,1fr); grid-template-columns:minmax(0,1fr);
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-ui); font-variant-numeric:tabular-nums;
+  --sb-new:#A7C3EF;
+  --sb-bronze:#D39A6A;
+  --sb-housing:#0A1322;
+  --sb-flap-top:var(--surface);
+  --sb-flap-bot:var(--ridge-front);
+  --sb-lane-a:rgba(27,41,66,.9);
+  --sb-lane-b:rgba(37,55,90,.5);
+  --sb-tag:rgba(155,168,190,.14);
+  --sb-tote-board:#0A1120;
+  --sb-tote-row:#131E33;
+  --sb-bulb-amber:radial-gradient(circle at 50% 45%, #FFE6BF 0 22%, var(--primary) 46%, #D98A2E 72%, rgba(217,138,46,0) 74%);
+  --sb-bulb-white:radial-gradient(circle at 50% 45%, #FFFFFF 0 22%, var(--text) 46%, #CFC6BA 72%, rgba(207,198,186,0) 74%);
+}
+.sb .sb-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* the field, as stage.css draws it — the board has its own, since it covers
+   the stage's */
+.sb .sb-field{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    radial-gradient(120% 78% at 50% 112%, rgba(246,169,76,.10) 0%, transparent 62%),
+    linear-gradient(180deg,#0C1526 0%, #12203A 46%, #1B2C4A 78%, #2A3A57 100%)}
+.sb .sb-field::after{content:"";position:absolute;left:-4%;right:-4%;bottom:-2%;height:44%;
+  background:linear-gradient(180deg,#17253C 0%, #0E1828 100%);
+  clip-path:polygon(0 62%, 13% 34%, 25% 55%, 38% 22%, 52% 48%, 63% 30%, 78% 58%, 89% 38%, 100% 60%, 100% 100%, 0 100%);
+  opacity:.85}
+:root.d-call .sb .sb-field{background:var(--bg)}
+:root.d-call .sb .sb-field::after{display:none}
+
+/* ------------------------------------------------------------------ RAIL
+   The stage's rail with a Standings chip and the page on the right. Its own
+   classes, not `.rail`: the stage's fitter queries `.rail`. */
+.sb .sb-rail{position:relative;z-index:2;min-width:0;display:flex;align-items:center;
+  gap:calc(1.2vw + 8px);padding:calc(1.1vh + 6px) calc(2.4vw + 10px)}
+.sb .sb-chip{flex:none;display:inline-flex;align-items:center;gap:.5em;
+  font-family:var(--font-display);font-stretch:125%;font-weight:800;
+  font-size:var(--L-meta);letter-spacing:.13em;text-transform:uppercase;
+  padding:.34em .8em;border-radius:999px;border:2px solid currentColor;color:var(--primary)}
+.sb .sb-chip-dot{width:.6em;height:.6em;border-radius:50%;background:currentColor}
+/* Wraps rather than truncating: nothing on the board is ever cut off. */
+.sb .sb-title{flex:0 1 auto;min-width:0;font-size:var(--L-meta);font-weight:700;letter-spacing:.02em;
+  color:var(--text);overflow-wrap:anywhere}
+.sb .sb-ctx{flex:none;font-size:var(--L-meta);color:var(--muted);font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.sb .sb-ctx b{color:var(--text);font-weight:700}
+.sb .sb-ctx b.sb-was{color:var(--muted)}
+.sb .sb-page{flex:none;margin-left:auto;display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+  font-size:var(--L-meta);color:var(--muted);font-weight:600}
+/* the widest range, so the rail never reflows between pages */
+.sb .sb-page b{font-family:var(--font-display);font-stretch:125%;font-weight:800;color:var(--text);
+  font-size:calc(var(--L-meta) * 1.3);letter-spacing:.02em;
+  display:inline-block;min-width:5.4ch;text-align:right}
+
+.sb .sb-body{position:relative;z-index:2;min-height:0;display:flex;flex-direction:column}
+.sb .sb-note{margin:auto;font-size:var(--L-body);color:var(--muted);font-weight:600}
+
+/* ================================================== A · THE DEPARTURE BOARD */
+.sb .sb-sfb{position:relative;flex:1;min-height:0;margin:0 calc(2.4vw + 10px) calc(1.2vh + 6px);
+  background:var(--sb-housing);border:var(--hair) solid var(--rule);border-radius:12px;
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.04), 0 18px 48px rgba(0,0,0,.35);
+  padding:calc(1.4vh + 6px) calc(1.6vw + 8px);display:flex;flex-direction:column}
+.sb .sb-sfb-body{flex:1;min-height:0;display:flex;justify-content:center}
+.sb .sb-sfb-inner{display:flex;flex-direction:column;gap:calc(.8vh + 4px)}
+.sb .sb-sfb-heads{display:flex;align-items:flex-start;gap:var(--colgap)}
+.sb .sb-sfb-heads span{font-size:var(--L-meta);font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap}
+.sb .sb-sfb-heads .sb-h-r{text-align:right}
+.sb .sb-sfb-grid{display:flex;flex-direction:column;gap:var(--lgap)}
+.sb .sb-sfb-ln{display:flex;align-items:flex-start;gap:var(--colgap)}
+.sb .sb-cg{display:flex;gap:var(--cgap)}
+
+/* ONE FLAP. Two static halves (the new character's top, the old character's
+   bottom) and two leaves (the old top, which falls; the new bottom, which
+   rises). */
+.sb .sb-fl{position:relative;width:var(--cw);height:var(--ch);flex:none;
+  perspective:calc(var(--ch) * 3.2);font-weight:800;font-size:var(--fs);
+  font-family:var(--font-ui);letter-spacing:0}
+.sb .sb-fh{position:absolute;left:0;right:0;height:calc(50% - .5px);overflow:hidden;backface-visibility:hidden}
+.sb .sb-ft,.sb .sb-flt{top:0;background:var(--sb-flap-top);border-radius:4px 4px 1px 1px;transform-origin:50% 100%}
+.sb .sb-fb,.sb .sb-flb{bottom:0;background:var(--sb-flap-bot);border-radius:1px 1px 4px 4px;transform-origin:50% 0%}
+.sb .sb-fh b{position:absolute;left:0;right:0;height:var(--ch);line-height:var(--ch);text-align:center;font-weight:inherit}
+.sb .sb-ft b,.sb .sb-flt b{top:0}
+.sb .sb-fb b,.sb .sb-flb b{bottom:0}
+.sb .sb-lf{visibility:hidden;z-index:2}
+.sb .sb-lf::after{content:"";position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+/* the axle */
+.sb .sb-fl::before{content:"";position:absolute;left:-1px;right:-1px;top:calc(50% - .5px);height:1px;
+  background:rgba(0,0,0,.45);z-index:3}
+
+/* ink, by column and by movement */
+.sb .sb-k-pos{color:var(--primary)}
+.sb .sb-k-nm,.sb .sb-k-pts{color:var(--text)}
+.sb .sb-k-up{color:var(--success-text)}
+.sb .sb-k-dn,.sb .sb-k-eq{color:var(--muted)}
+.sb .sb-k-new{color:var(--sb-new)}
+
+/* A flip step. Two parity classes with twin keyframes, so the engine restarts
+   a flap by swapping the class — no forced reflow per flap. */
+.sb .sb-fl.sb-p0 .sb-lf,.sb .sb-fl.sb-p1 .sb-lf{visibility:visible}
+.sb .sb-fl.sb-p0 .sb-flt{animation:sb-ft0 calc(var(--st) / 2) cubic-bezier(.55,0,1,.45) both}
+.sb .sb-fl.sb-p1 .sb-flt{animation:sb-ft1 calc(var(--st) / 2) cubic-bezier(.55,0,1,.45) both}
+.sb .sb-fl.sb-p0 .sb-flb{animation:sb-fb0 calc(var(--st) / 2) cubic-bezier(0,.55,.45,1.25) calc(var(--st) / 2) both}
+.sb .sb-fl.sb-p1 .sb-flb{animation:sb-fb1 calc(var(--st) / 2) cubic-bezier(0,.55,.45,1.25) calc(var(--st) / 2) both}
+.sb .sb-fl.sb-p0 .sb-flt::after{animation:sb-fs0 calc(var(--st) / 2) linear both}
+.sb .sb-fl.sb-p1 .sb-flt::after{animation:sb-fs1 calc(var(--st) / 2) linear both}
+.sb .sb-fl.sb-p0 .sb-flb::after{animation:sb-fr0 calc(var(--st) / 2) linear calc(var(--st) / 2) both}
+.sb .sb-fl.sb-p1 .sb-flb::after{animation:sb-fr1 calc(var(--st) / 2) linear calc(var(--st) / 2) both}
+@keyframes sb-ft0{from{transform:rotateX(0deg)}to{transform:rotateX(-90deg)}}
+@keyframes sb-ft1{from{transform:rotateX(0deg)}to{transform:rotateX(-90deg)}}
+@keyframes sb-fb0{from{transform:rotateX(90deg)}to{transform:rotateX(0deg)}}
+@keyframes sb-fb1{from{transform:rotateX(90deg)}to{transform:rotateX(0deg)}}
+@keyframes sb-fs0{from{opacity:0}to{opacity:.5}}
+@keyframes sb-fs1{from{opacity:0}to{opacity:.5}}
+@keyframes sb-fr0{from{opacity:.4}to{opacity:0}}
+@keyframes sb-fr1{from{opacity:.4}to{opacity:0}}
+
+/* ===================================================== B · THE OLYMPIC BOARD */
+.sb .sb-olb{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;
+  padding:0 calc(2.4vw + 10px) calc(.6vh + 2px);gap:calc(.6vh + 3px);--fit:1;
+  --rk-fs:max(var(--floor),calc(var(--L-primary) * var(--fit)));
+  --nm-fs:max(var(--floor),calc(var(--L-primary) * .92 * var(--fit)));
+  --pt-fs:max(var(--floor),calc(var(--L-hero) * .78 * var(--fit)));
+  --mv-fs:max(var(--floor),calc(var(--L-secondary) * var(--fit)));
+  --tg-fs:var(--L-body);
+  --c-rk:calc(var(--rk-fs) * 2.7); --c-tg:calc(var(--tg-fs) * 4.1);
+  --c-mv:calc(var(--mv-fs) * 3.3); --c-pt:calc(var(--pt-fs) * 2.1)}
+.sb .sb-olb-cols{display:grid;align-items:center;column-gap:calc(1.1vw + 6px);
+  grid-template-columns:var(--c-rk) var(--c-tg) minmax(0,1fr) var(--c-mv) var(--c-pt)}
+.sb .sb-olb-heads span{font-size:var(--L-meta);font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap}
+.sb .sb-olb-heads .sb-h-rk{text-align:center}
+.sb .sb-olb-heads .sb-h-pt{text-align:right}
+.sb .sb-olb-heads .sb-h-nm{grid-column:3}
+.sb .sb-olb-rows{flex:1;min-height:0;display:flex;flex-direction:column;gap:calc(.55vh + 2px);overflow:hidden;
+  margin:0;padding:0;list-style:none}
+
+/* ONE LANE. The band is a pseudo-element so it can wipe in by scaleX without
+   touching the text on top of it. */
+.sb .sb-orow{position:relative;flex:none;min-height:calc(var(--nm-fs) * 1.42);padding-right:calc(1.1vw + 6px)}
+.sb .sb-orow::before{content:"";position:absolute;inset:0;z-index:0;background:var(--sb-lane-a);
+  border:2px solid transparent;border-radius:4px;transform-origin:0 50%}
+.sb .sb-orow:nth-child(even)::before{background:var(--sb-lane-b)}
+.sb .sb-orow > *{position:relative;z-index:1}
+.sb .sb-rk{align-self:stretch;display:grid;place-items:center;
+  font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--rk-fs);line-height:1;
+  background:var(--surface-2);color:var(--text);
+  clip-path:polygon(0 0, 100% 0, 84% 100%, 0 100%);border-radius:4px 0 0 4px;padding-right:8%}
+.sb .sb-rk.sb-m1{background:var(--gold);color:var(--bg)}
+.sb .sb-rk.sb-m2{background:var(--silver);color:var(--bg)}
+.sb .sb-rk.sb-m3{background:var(--sb-bronze);color:var(--bg)}
+.sb .sb-tg{justify-self:start;font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--tg-fs);
+  letter-spacing:.08em;background:var(--sb-tag);border:var(--hair) solid var(--rule);border-radius:4px;
+  padding:.18em .42em;line-height:1.1}
+.sb .sb-onm{font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--nm-fs);
+  line-height:1.08;text-transform:uppercase;letter-spacing:.01em;padding:calc(.35vh + 2px) 0;
+  overflow-wrap:anywhere;hyphens:manual}
+.sb .sb-mv{font-weight:800;font-size:var(--mv-fs);white-space:nowrap}
+.sb .sb-mv.sb-up{color:var(--success-text)}
+.sb .sb-mv.sb-dn,.sb .sb-mv.sb-eq{color:var(--muted)}
+.sb .sb-mv.sb-new{color:var(--sb-new);font-size:calc(var(--mv-fs) * .72);letter-spacing:.1em;
+  border:2px solid var(--secondary);border-radius:999px;padding:.12em .55em}
+.sb .sb-pt{justify-self:end;font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--pt-fs);
+  line-height:1;letter-spacing:.01em}
+
+/* THE LEADER'S LANE: taller, a gold keyline, the mark in gold. */
+.sb .sb-orow.sb-lead{min-height:calc(var(--nm-fs) * 1.8)}
+.sb .sb-orow.sb-lead::before{border-color:var(--gold)}
+.sb .sb-orow.sb-lead .sb-onm{font-size:max(var(--floor),calc(var(--L-primary) * 1.06 * var(--fit)))}
+.sb .sb-orow.sb-lead .sb-pt{color:var(--primary)}
+.sb .sb-sweep{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;border-radius:4px}
+.sb .sb-sweep::after{content:"";position:absolute;top:0;bottom:0;left:0;width:22%;
+  background:linear-gradient(90deg,transparent,rgba(246,169,76,.28),transparent);opacity:0;transform:translateX(-120%)}
+
+/* POSTING: the old list clears to the right, then each lane wipes in from the
+   left, its rank block dropping in first and its mark landing last. */
+.sb .sb-orow.sb-post::before{animation:sb-lane .34s cubic-bezier(.16,1,.3,1) var(--d) both}
+.sb .sb-orow.sb-post .sb-rk{animation:sb-drop .32s cubic-bezier(.16,1,.3,1) calc(var(--d) + .08s) both}
+.sb .sb-orow.sb-post .sb-tg{animation:sb-slide .3s cubic-bezier(.16,1,.3,1) calc(var(--d) + .16s) both}
+.sb .sb-orow.sb-post .sb-onm{animation:sb-slide .3s cubic-bezier(.16,1,.3,1) calc(var(--d) + .16s) both}
+.sb .sb-orow.sb-post .sb-mv{animation:sb-slide .3s cubic-bezier(.16,1,.3,1) calc(var(--d) + .16s) both}
+.sb .sb-orow.sb-post .sb-pt{animation:sb-mark .36s cubic-bezier(.16,1,.3,1) calc(var(--d) + .3s) both}
+.sb .sb-orow.sb-lead.sb-post::before{animation:sb-lane .34s cubic-bezier(.16,1,.3,1) var(--d) both, sb-key .6s ease-out calc(var(--d) + .3s) both}
+.sb .sb-orow.sb-lead.sb-post .sb-sweep::after{animation:sb-sweep .9s cubic-bezier(.45,0,.2,1) calc(var(--d) + .7s) both}
+.sb .sb-orow.sb-clear{animation:sb-clear .22s cubic-bezier(.4,0,1,1) var(--d) both}
+@keyframes sb-lane{from{transform:scaleX(0)}to{transform:none}}
+@keyframes sb-drop{from{transform:translateY(-35%);opacity:0}to{transform:none;opacity:1}}
+@keyframes sb-slide{from{transform:translateX(-.6em);opacity:0}to{transform:none;opacity:1}}
+@keyframes sb-mark{from{transform:scale(1.18);opacity:0}to{transform:none;opacity:1}}
+@keyframes sb-key{from{border-color:transparent}to{border-color:var(--gold)}}
+@keyframes sb-sweep{0%{transform:translateX(-120%);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateX(480%);opacity:0}}
+@keyframes sb-clear{from{transform:none;opacity:1}to{transform:translateX(2.5%);opacity:0}}
+
+/* ======================================================== C · THE TOTE BOARD */
+.sb .sb-tote{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;
+  margin:0 calc(2.4vw + 10px) calc(1.2vh + 6px);
+  background:var(--sb-tote-board);border:3px solid var(--surface-2);border-radius:10px;
+  box-shadow:0 18px 48px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.6);
+  padding:0 calc(1.2vw + 6px) calc(1vh + 4px);--fit:1;
+  --pitch:calc(var(--L-primary) * .16 * var(--fit));
+  --dot:calc(var(--pitch) * .84); --dg:calc(var(--pitch) * .16);
+  --glyph-w:calc(var(--pitch) * 5 - var(--dg)); --glyph-gap:var(--pitch);
+  --nm-fs:max(var(--floor),calc(var(--L-primary) * .8 * var(--fit)));
+  --mv-fs:max(var(--floor),calc(var(--L-secondary) * .95 * var(--fit)));
+  /* a figure is 2 glyphs until a place (=10) or a total (100) needs 3; the
+     engine sets --lamp-pos-n / --lamp-pts-n from the whole field, so the
+     columns never change width between pages */
+  --c-lamp-pos:calc(var(--glyph-w) * var(--lamp-pos-n, 2) + var(--glyph-gap) * (var(--lamp-pos-n, 2) - 1));
+  --c-lamp-pts:calc(var(--glyph-w) * var(--lamp-pts-n, 2) + var(--glyph-gap) * (var(--lamp-pts-n, 2) - 1));
+  --c-mv:calc(var(--mv-fs) * 3.3)}
+.sb .sb-tote-cols{display:grid;align-items:center;column-gap:calc(1.4vw + 8px);
+  grid-template-columns:var(--c-lamp-pos) minmax(0,1fr) var(--c-mv) var(--c-lamp-pts)}
+/* painted heads on a header plate */
+.sb .sb-tote-heads{margin:0 calc(-1.2vw - 6px) calc(.8vh + 3px);padding:calc(.7vh + 3px) calc(1.2vw + 6px);
+  background:var(--surface);border-bottom:3px solid var(--surface-2);border-radius:7px 7px 0 0}
+.sb .sb-tote-heads span{font-family:var(--font-display);font-stretch:125%;font-size:var(--L-meta);font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.sb .sb-tote-heads .sb-h-r{text-align:right}
+.sb .sb-tote-win{position:relative;flex:1;min-height:0;overflow:hidden}
+.sb .sb-tote-rows{position:relative;margin:0;padding:0;list-style:none;display:flex;flex-direction:column;
+  gap:calc(var(--pitch) * .9)}
+/* the finish post, standing just before the points */
+.sb .sb-tote-win::after{content:"";position:absolute;top:0;bottom:0;z-index:3;pointer-events:none;
+  right:calc(var(--c-lamp-pts) + (1.4vw + 8px) / 2 + 2px);width:calc(var(--pitch) * .9);
+  background:repeating-linear-gradient(180deg,var(--text) 0 calc(var(--pitch) * .9),var(--sb-tote-board) calc(var(--pitch) * .9) calc(var(--pitch) * 1.8));
+  opacity:.16}
+
+.sb .sb-trow{position:relative;flex:none;min-height:calc(var(--pitch) * 8.4);
+  padding:calc(var(--pitch) * .7) 0;background:var(--sb-tote-row);border-radius:4px;z-index:1}
+.sb .sb-trow.sb-climb{z-index:2}
+.sb .sb-trow.sb-ghost{position:absolute;left:0;right:0}
+.sb .sb-tnm{font-family:var(--font-display);font-stretch:125%;font-weight:800;font-size:var(--nm-fs);
+  line-height:1.08;text-transform:uppercase;overflow-wrap:anywhere;padding-left:calc(var(--pitch) * .5)}
+.sb .sb-mvk{font-weight:800;font-size:var(--mv-fs);white-space:nowrap;justify-self:start}
+.sb .sb-mvk.sb-up{color:var(--success-text)}
+.sb .sb-mvk.sb-dn,.sb .sb-mvk.sb-eq{color:var(--muted)}
+.sb .sb-mvk.sb-new{color:var(--sb-new);font-size:calc(var(--mv-fs) * .72);letter-spacing:.1em;
+  border:2px solid var(--secondary);border-radius:999px;padding:.12em .55em}
+.sb .sb-trow.sb-pre .sb-mvk{visibility:hidden}
+
+/* LAMPS: a figure is a row of 5x7 bulb matrices. */
+.sb .sb-lamps{display:flex;gap:var(--glyph-gap);justify-content:flex-end}
+.sb .sb-lg{display:grid;grid-template-columns:repeat(5,var(--dot));grid-auto-rows:var(--dot);gap:var(--dg)}
+.sb .sb-lg i{display:block;border-radius:50%;background:var(--sb-bulb-amber);opacity:.08}
+.sb .sb-lamps.sb-wht .sb-lg i{background:var(--sb-bulb-white)}
+.sb .sb-lg i.sb-on{opacity:1}
+
+.sb .sb-trow.sb-enter{animation:sb-rise .52s cubic-bezier(.16,1,.3,1) var(--rd) both}
+.sb .sb-trow.sb-leave{animation:sb-exit .34s cubic-bezier(.5,0,.9,.4) var(--rd) both}
+.sb .sb-trow.sb-ride{animation:sb-ride var(--dur) cubic-bezier(.55,0,.2,1) var(--rd) both}
+.sb .sb-trow.sb-ghost.sb-ride{animation:sb-rideout var(--dur) cubic-bezier(.55,0,.2,1) var(--rd) both}
+.sb .sb-trow.sb-lit .sb-mvk{animation:sb-light .34s cubic-bezier(.16,1,.3,1) var(--md) both}
+.sb .sb-lg i.sb-up{animation:sb-lampon .36s linear var(--ld) both}
+.sb .sb-lg i.sb-dn{animation:sb-lampoff .3s ease-in var(--ld) both}
+@keyframes sb-rise{from{transform:translateY(110%);opacity:0}to{transform:none;opacity:1}}
+@keyframes sb-exit{from{transform:none;opacity:1}to{transform:translateY(-70%);opacity:0}}
+@keyframes sb-ride{from{transform:translateY(var(--dy))}to{transform:none}}
+@keyframes sb-rideout{from{transform:none}to{transform:translateY(var(--dy))}}
+@keyframes sb-light{from{transform:scale(.5);opacity:0}to{transform:none;opacity:1}}
+@keyframes sb-lampon{0%{opacity:.08}35%{opacity:1}50%{opacity:.45}100%{opacity:1}}
+@keyframes sb-lampoff{from{opacity:1}to{opacity:.08}}
+
+/* ------------------------------------------------------- REDUCED MOTION
+   The final state, immediately: the engines paint the result with no replay
+   and no clear-out, and nothing here animates. One selector per line, the
+   same selectors as above, so stageMotion.test.js can match them exactly. */
+@media (prefers-reduced-motion: reduce){
+  .sb .sb-fl.sb-p0 .sb-flt,
+  .sb .sb-fl.sb-p1 .sb-flt,
+  .sb .sb-fl.sb-p0 .sb-flb,
+  .sb .sb-fl.sb-p1 .sb-flb,
+  .sb .sb-fl.sb-p0 .sb-flt::after,
+  .sb .sb-fl.sb-p1 .sb-flt::after,
+  .sb .sb-fl.sb-p0 .sb-flb::after,
+  .sb .sb-fl.sb-p1 .sb-flb::after,
+  .sb .sb-orow.sb-post::before,
+  .sb .sb-orow.sb-post .sb-rk,
+  .sb .sb-orow.sb-post .sb-tg,
+  .sb .sb-orow.sb-post .sb-onm,
+  .sb .sb-orow.sb-post .sb-mv,
+  .sb .sb-orow.sb-post .sb-pt,
+  .sb .sb-orow.sb-lead.sb-post::before,
+  .sb .sb-orow.sb-lead.sb-post .sb-sweep::after,
+  .sb .sb-orow.sb-clear,
+  .sb .sb-trow.sb-enter,
+  .sb .sb-trow.sb-leave,
+  .sb .sb-trow.sb-ride,
+  .sb .sb-trow.sb-ghost.sb-ride,
+  .sb .sb-trow.sb-lit .sb-mvk,
+  .sb .sb-lg i.sb-up,
+  .sb .sb-lg i.sb-dn{animation:none;transition:none}
+  .sb .sb-fl.sb-p0 .sb-lf,.sb .sb-fl.sb-p1 .sb-lf{visibility:hidden}
+}

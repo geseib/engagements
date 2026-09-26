@@ -36,6 +36,7 @@ const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } = requ
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const { callerMayDriveSession } = require('./tenant');
+const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -115,14 +116,21 @@ exports.handler = async (event) => {
     }
 
     // Idempotent by construction: an unconditional SET to true.
+    //
+    // #ttl = if_not_exists(#ttl, :ttl) (bug sweep Task 2, fix round 1): this
+    // row carried no ttl at all until now — see get-results.js's
+    // enterResultsState for the full story of why that matters since a fresh
+    // draw started treating any row in GAME#<id> as "taken". Whichever of
+    // this handler, enterResultsState, stage-beat.js or stage-focus.js
+    // touches a round FIRST stamps the 30-day clock and the rest leave it.
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
-      UpdateExpression: 'SET #revealed = :true, #updatedAt = :now, #qn = :qn',
+      UpdateExpression: 'SET #revealed = :true, #updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl)',
       ExpressionAttributeNames: {
-        '#revealed': 'AuthorsRevealed', '#updatedAt': 'UpdatedAt', '#qn': 'QuestionNumber'
+        '#revealed': 'AuthorsRevealed', '#updatedAt': 'UpdatedAt', '#qn': 'QuestionNumber', '#ttl': 'ttl'
       },
-      ExpressionAttributeValues: { ':true': true, ':now': now, ':qn': padded }
+      ExpressionAttributeValues: { ':true': true, ':now': now, ':qn': padded, ':ttl': ttlFrom(null, ROUND_RECORD_DAYS) }
     }));
 
     const answersRes = await db.send(new QueryCommand({

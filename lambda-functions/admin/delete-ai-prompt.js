@@ -2,7 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const {
-  findPromptForCaller, canManagePrompt, promptKey, promptBodyKey,
+  findPromptForCaller, canManagePrompt, promptRefusalMessage, promptKey, promptBodyKey,
 } = require('./shared/prompt-access');
 const { requestedScope, callerUserId } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
@@ -151,9 +151,7 @@ exports.handler = async (event) => {
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Allow-Methods': 'DELETE, OPTIONS'
         },
-        body: JSON.stringify({
-          error: 'This Workie belongs to someone else. You can only delete Workies you created.'
-        })
+        body: JSON.stringify({ error: promptRefusalMessage(event, currentPrompt) })
       };
     }
 

@@ -223,3 +223,4 @@ config/prod.json
 
 # Playwright run artefacts
 test-results/
+.playwright-mcp/
