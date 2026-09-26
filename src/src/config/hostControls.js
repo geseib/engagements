@@ -483,10 +483,17 @@ function primaryFor(phase, {
       };
     case 'ENDED':
       /*
-        A survey has no session report to open — create-report.js reads
-        rounds, and a survey has none. Its results are phase 3's
-        (SURVEY#RESULTS), so the only honest act on the last screen is the way
-        out, which the round types carry as their secondary.
+        A closed survey DOES have a session report now — create-report.js
+        reuses survey-host.js's surveyResultsPayload (Task 4, 2026-09-26
+        feature sweep; I-2, the same sweep's final review), so the saved
+        document carries every chart and every open answer, not just phase
+        3's live SURVEY#RESULTS. That report is not opened from this live
+        dock's primary/secondary pair for ANY session type, survey or not —
+        it is reached from the Sessions list (SessionHistoryPanel's Report,
+        now offered alongside Results for a closed survey) or, for a live
+        session, from Settings → Rounds. So the honest primary on the last
+        screen stays the way out, exactly as before; only the reasoning here
+        was stale.
       */
       if (isSurvey) {
         return {

@@ -81,12 +81,18 @@ describe('§1 the pure rules', () => {
   });
 });
 
-describe('§1b a closed survey offers Results instead of Report — Task 3 fix round 1', () => {
+describe('§1b a closed survey offers Results AND Report — I-2, 2026-09-26 final review', () => {
   /*
-    A survey has no session report to open (create-report.js reads rounds; a
-    survey has none — hostControls.js's own ENDED-survey comment). So `report`
-    is never true for a survey; `results` takes its slot in the same 2×2
-    grid instead, once GET /games/{id}/survey-results has something to show.
+    Task 3 fix round 1 had `results` REPLACE `report` in a closed survey's
+    row, on the premise that "a survey has no session report to open at
+    all" — false once Task 4 shipped: create-report.js reuses
+    survey-host.js's surveyResultsPayload, so a closed survey's report is a
+    real document with every chart and every open answer. `results` is the
+    lightweight modal (GET /games/{id}/survey-results, Task 3); `report` is
+    the full saved document (Task 4). They show different things and a host
+    coming back for either one should find it. So both are true for a closed
+    survey now, alongside `continue` — see the JSX comment by `.shist__acts`
+    for how the fixed 2-column grid holds a third verb button.
     `session.surveyClosed` (get-games-list.js) is the ONLY thing this reads —
     the flag already means "SURVEY#CLOSED or ENDED", so rowActions asks
     nothing else about state.
@@ -98,9 +104,9 @@ describe('§1b a closed survey offers Results instead of Report — Task 3 fix r
     ...started, gameId: '5002', title: 'Still open', gameType: 'survey', surveyClosed: false,
   };
 
-  test('a closed survey: Continue and Results, never Report, Start or Edit', () => {
+  test('a closed survey: Continue, Results and Report — never Start or Edit', () => {
     expect(rowActions(closedSurvey)).toEqual({
-      start: false, continue: true, report: false, edit: false, results: true,
+      start: false, continue: true, report: true, edit: false, results: true,
     });
   });
 
@@ -329,6 +335,17 @@ describe('§4b Results, rendered — Task 3 fix round 1', () => {
   test('a survey still collecting offers no Results button', () => {
     mount({ sessions: [collectingSurvey] });
     expect(within(rowFor('Still open')).queryByRole('button', { name: /Results/i })).toBeNull();
+  });
+
+  // I-2 (2026-09-26 final review): Results replacing Report entirely hid
+  // Task 4's saved document from a host who came back for it later — the
+  // row must offer both, wired to the same two independent handlers.
+  test('a closed survey row ALSO offers Report, wired to the same report path other sessions use', () => {
+    const { onReport } = mount({ sessions: [closedSurvey] });
+    const btn = within(rowFor('Pulse check')).getByRole('button', { name: /Report/i });
+    expect(btn).toHaveAttribute('title', expect.stringContaining('Pulse check'));
+    fireEvent.click(btn);
+    expect(onReport).toHaveBeenCalledWith('5001', 'Pulse check');
   });
 
   test('an ordinary (non-survey) closed session offers no Results button', () => {
