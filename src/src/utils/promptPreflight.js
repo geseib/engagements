@@ -1179,6 +1179,54 @@ export function preflightPrompt(input = {}) {
     }
   }
 
+  /*
+    BUGSWEEP 5c — A HEADING TYPED INTO THE PROMPT'S OWN TEXT, WITH NO
+    outputSections DECLARED. buildOutputContract (personas.js:447-473) always
+    closes the assembled prompt with a FORMAT block stating plainly that it
+    "supersedes any formatting or output-structure instruction that appeared
+    earlier in this prompt", and prints the headings from
+    resolveOutputSections (prompt-shape.js:161-164) — DEFAULT_OUTPUT_SECTIONS
+    whenever outputSections is absent or empty, exactly the case this check
+    runs in. An author who writes "## My Heading" into instructions or
+    outputFormat, expecting it to become a section, gets the default Summary /
+    Discussion Questions / Next Steps triad instead, with no error anywhere:
+    it saves, it runs, and the heading is silently thrown away.
+
+    Scoped to declared.length === 0 rather than to "no VALID declared shape":
+    an invalid declaration is already reported in full by
+    output-shape-discarded above, and this check would only repeat it.
+  */
+  if (declared.length === 0) {
+    const headingLines = [];
+    for (const source of sources) {
+      for (const m of source.text.matchAll(/^[ \t]{0,3}(#{1,6})[ \t]+(.+)$/gm)) {
+        headingLines.push({ field: source.field, marker: m[1], text: m[2].trim() });
+      }
+    }
+    if (headingLines.length > 0) {
+      const evidence = headingLines
+        .slice(0, 5)
+        .map((h) => `${h.field}: ${h.marker} ${h.text}`)
+        .join('\n');
+      silent.push(finding(
+        'prose-heading-overridden',
+        `${plural(headingLines.length, 'heading', 'headings')} written into the prompt text, like `
+          + `"${headingLines[0].text}", will be replaced: no outputSections are declared.`,
+        'buildOutputContract (personas.js:447-473) appends a FORMAT block stating that it '
+          + '"supersedes any formatting or output-structure instruction that appeared earlier in '
+          + 'this prompt", and prints the headings from resolveOutputSections (prompt-shape.js:'
+          + '161-164) — DEFAULT_OUTPUT_SECTIONS, because outputSections is absent or empty here. '
+          + 'The text above still reaches the model, but only as prose ahead of the real '
+          + 'instruction; the reply comes back under Summary, Discussion Questions and Next Steps '
+          + 'regardless of what this heading said.',
+        evidence,
+        'Declare the sections you want instead of writing them into the text: outputSections is a '
+          + 'list of { heading, guidance } entries, and a declared shape is what '
+          + 'resolveOutputSections honours.'
+      ));
+    }
+  }
+
   /* ISDEFAULT — THE FLAG THAT IS NOT ABOUT THIS QUESTION SET. */
   if (input.isDefault === true) {
     const canonical = gameType || 'this game type';

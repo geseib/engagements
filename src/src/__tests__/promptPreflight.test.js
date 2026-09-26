@@ -401,6 +401,66 @@ describe('tier two — saves, runs, says nothing', () => {
     expect(codes(preflightPrompt(ok()).silent)).not.toContain('default-blast-radius');
     expect(codes(preflightPrompt(ok({ isDefault: false })).silent)).not.toContain('default-blast-radius');
   });
+
+  /*
+    BUGSWEEP 5c. buildOutputContract (personas.js:447-473) always closes the
+    assembled prompt with a FORMAT block that "supersedes any formatting or
+    output-structure instruction that appeared earlier in this prompt", and
+    prints the headings from resolveOutputSections (prompt-shape.js:161-164) —
+    DEFAULT_OUTPUT_SECTIONS whenever outputSections is absent. An author who
+    types "## My Heading" into instructions or outputFormat, expecting it to
+    become a section, gets Summary / Discussion Questions / Next Steps
+    instead, with no error anywhere.
+  */
+  test('a markdown heading typed into the prompt text is flagged when no outputSections are declared', () => {
+    // rejects: only inspecting DECLARED headings (outputSectionDefects and the
+    // structured-fields-empty check above), which is the shipped behaviour —
+    // a heading written straight into prose was invisible to both.
+    const report = preflightPrompt(ok({
+      instructions: '## Room Verdict\nSay what the room decided.',
+    }));
+    const found = byCode(report.silent, 'prose-heading-overridden');
+    expect(found).toHaveLength(1);
+    // Says plainly that the heading will be replaced.
+    expect(found[0].title).toMatch(/Room Verdict/);
+    expect(found[0].title).toMatch(/replaced/);
+    // And how to declare it instead.
+    expect(found[0].fix).toMatch(/outputSections/);
+    expect(found[0].evidence).toMatch(/instructions.*Room Verdict/);
+  });
+
+  test('a single "#" heading is caught too, not only "##"', () => {
+    const report = preflightPrompt(ok({ outputFormat: '# Summary\nWrite it up.' }));
+    expect(byCode(report.silent, 'prose-heading-overridden')).toHaveLength(1);
+  });
+
+  test('several headings across fields are one finding, not one per heading', () => {
+    // One warning naming the problem, not wallpaper — the same discipline
+    // structured-fields-empty and output-shape-discarded already follow.
+    const report = preflightPrompt(ok({
+      instructions: '## Room Verdict\nSay what happened.',
+      outputFormat: '## Next Steps\nList three.',
+    }));
+    expect(byCode(report.silent, 'prose-heading-overridden')).toHaveLength(1);
+  });
+
+  test('declaring outputSections silences the warning, even with a heading still in the text', () => {
+    // rejects: firing regardless of outputSections, which would warn about a
+    // prompt whose headings the FORMAT block genuinely does honour.
+    const report = preflightPrompt(ok({
+      instructions: '## Room Verdict\nSay what happened.',
+      outputSections: [
+        { heading: 'Room Verdict', guidance: 'a' },
+        { heading: 'Discussion topics', guidance: 'b' },
+        { heading: 'Next steps', guidance: 'c' },
+      ],
+    }));
+    expect(byCode(report.silent, 'prose-heading-overridden')).toEqual([]);
+  });
+
+  test('a prompt with no heading-looking lines is silent about this, on the ordinary fixture', () => {
+    expect(codes(preflightPrompt(ok()).silent)).not.toContain('prose-heading-overridden');
+  });
 });
 
 /* ============================================================== ADVISORY == */
