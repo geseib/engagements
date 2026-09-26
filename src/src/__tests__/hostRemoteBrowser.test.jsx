@@ -82,7 +82,7 @@ function serve({ state = 'ASK#003', live = true, questions = [TRIVIA], stateDela
       posts.push({ url: href, body: JSON.parse(init.body || '{}') });
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ state }) });
     }
-    if (href.includes('/state')) {
+    if (href.includes('/host-state')) {
       return later({
         ok: true,
         json: async () => ({

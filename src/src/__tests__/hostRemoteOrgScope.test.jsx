@@ -73,7 +73,7 @@ function serve({ orgs = [] } = {}) {
     const href = String(url);
     if (init?.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
     if (href.includes('/orgs')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ orgs }) });
-    if (href.includes('/state')) {
+    if (href.includes('/host-state')) {
       return Promise.resolve({
         ok: true,
         status: 200,

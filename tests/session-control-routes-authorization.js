@@ -132,6 +132,19 @@ const MUST_BE_CLOSED = [
   // the session's Workie context and briefing decrypted. The public brief
   // below no longer returns either to `?role=host` (tests/get-game-host-details.js).
   ['GET', '/games/{gameId}/host-details'],
+  // THE ROUND'S HOST DOOR (game/get-game-state.js): the running order, the
+  // category counts and masks, and who has answered or voted. The public
+  // round below no longer returns any of it to `?includeHostData=true`
+  // (tests/get-game-host-state.js).
+  ['GET', '/games/{gameId}/host-state'],
+  // THE ANSWERS' HOST DOOR (game/get-answers.js): every answer to a round, at
+  // any phase, with its author on a named round. The phone's read below
+  // answers `?role=host` as it answers a player (tests/get-answers-host.js).
+  ['GET', '/games/{gameId}/answers/host'],
+  // THE BALLOTS' HOST DOOR (game/get-votes.js): every ballot in a round,
+  // decrypted, with its voter. The public count below answers `?role=host`
+  // with a count (tests/get-votes-host.js).
+  ['GET', '/games/{gameId}/votes/host'],
 ];
 
 // The participant journey. None of these carries a token, ever.

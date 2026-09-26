@@ -1,33 +1,45 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { decryptItems } = require('./tenant-crypto');
+const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
-/**
- * WHOSE SESSION IS THIS? — off the row, because this route is PUBLIC.
- *
- * `GET /games/{gameId}/votes` takes a four-digit id and no identity, so
- * `tenant.callerOrgId(event)` is '' for every real caller, and a blank orgId
- * THROWS in tenant-crypto rather than quietly decrypting nothing. The session's
- * own METADATA row is the authority (schema-compliant-manager.js:164).
- */
-async function sessionOrgId(gameId) {
-  const res = await db.send(new GetCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-    ProjectionExpression: 'orgId'
-  }));
-  const raw = res && res.Item && res.Item.orgId;
-  return typeof raw === 'string' ? raw.trim() : '';
-}
+/*
+  THE HOST'S DOOR, `GET /games/{gameId}/votes/host`: a second event on this
+  function (template-clean.yaml, GetVotesHostEvent), the way /host-details is
+  on get-game.js. It returns every ballot in a round, decrypted, with its
+  voter: what the stage reads to show who has voted.
+
+  The public route used to return exactly that to a typed `?role=host`. A
+  query parameter is a claim, not an identity, and a ballot ranks the round's
+  answers by position, so who voted for what was one join away from who wrote
+  what, for anyone holding the code. The public route now answers `role=host`
+  with the count it gives everyone.
+
+  Cognito in front, hosts|admins named in authorizer.js, and
+  callerMayDriveSession here. NO IDENTITY IS REFUSED OUTRIGHT, before any read:
+  callerMayDriveSession passes a caller with no groups, so on its own it would
+  hand an orgless session's ballots to anyone the day this route lost its
+  authorizer. The owner is checked on the RAW row, before the round is read or
+  anything decrypted. Every refusal is the same "Game not found" as a code
+  that names nothing. tests/get-votes-host.js.
+*/
+const HOST_VOTES_ROUTE = /\/votes\/host$/;
+
+const gameNotFound = () => ({
+  statusCode: 404,
+  body: JSON.stringify({ error: 'Game not found' }),
+  headers: { 'Access-Control-Allow-Origin': '*' }
+});
 
 exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const queryParams = event.queryStringParameters || {};
-    const { role, questionNumber } = queryParams; // 'host' or 'player'
+    // `role` is logged and nothing more: the ROUTE decides who is the host.
+    const { role, questionNumber } = queryParams;
     
     if (!gameId) {
       return {
@@ -37,7 +49,28 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`🗳️ Getting votes for game ${gameId}, role: ${role || 'unspecified'}, questionNumber: ${questionNumber || 'current'}`);
+    // Which door: API Gateway sets routeKey; rawPath is the fallback.
+    const rc = event.requestContext || {};
+    const onHostDoor = HOST_VOTES_ROUTE.test(rc.routeKey || event.routeKey || event.rawPath || '');
+
+    console.log(`🗳️ Getting votes for game ${gameId}, ${onHostDoor ? 'host door' : `role: ${role || 'unspecified'}`}, questionNumber: ${questionNumber || 'current'}`);
+
+    // The host's door: an identity, then the session's owner, on the raw row,
+    // before the round is read. The row's orgId is kept for the decrypt: WHOSE
+    // SESSION IS THIS is answered off the row, never off the caller, the same
+    // rule every session read here follows (schema-compliant-manager.js:164).
+    let hostOrgId = '';
+    if (onHostDoor) {
+      const authorizer = rc.authorizer || {};
+      const identity = (authorizer.jwt && authorizer.jwt.claims) || authorizer.lambda;
+      if (!identity) return gameNotFound();
+      const metaRes = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+      }));
+      if (!metaRes.Item || !callerMayDriveSession(event, metaRes.Item)) return gameNotFound();
+      hostOrgId = typeof metaRes.Item.orgId === 'string' ? metaRes.Item.orgId.trim() : '';
+    }
 
     let targetQuestionNumber = questionNumber;
     
@@ -93,8 +126,8 @@ exports.handler = async (event) => {
     const rawVotes = votesQuery.Items || [];
     console.log(`📊 Found ${rawVotes.length} votes for question ${paddedQuestionNumber}`);
 
-    // Role-specific information
-    if (role === 'host') {
+    // Which payload: the ROUTE decides, never `role`.
+    if (onHostDoor) {
       // Unwrapped ONLY on the branch that actually reads a ballot. The player
       // branch below returns a count and nothing else, and `rawVotes.length` is
       // the same number whether the rows are envelopes or not — so an anonymous
@@ -102,8 +135,8 @@ exports.handler = async (event) => {
       // not merely a saving: every decrypt is a logged, attributed act against
       // the organisation, and a vote meter ticking on a phone is not one worth
       // writing into the customer's "who read your data" record.
-      const orgId = rawVotes.length ? await sessionOrgId(gameId) : '';
-      const votes = orgId ? await decryptItems(orgId, 'vote', rawVotes) : rawVotes;
+      // The door already read the session row; no second read for its org.
+      const votes = hostOrgId && rawVotes.length ? await decryptItems(hostOrgId, 'vote', rawVotes) : rawVotes;
 
       // Format votes for host consumption
       const formattedVotes = votes.map(vote => ({

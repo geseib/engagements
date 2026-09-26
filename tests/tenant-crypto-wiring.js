@@ -419,10 +419,18 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
     assert.ok(answerRow.SubmittedAt);
   });
 
+  // The room reads the answers on the voting screen, with no identity. (The
+  // host's whole board at any phase is GET /answers/host since 2026-09-26, and
+  // a typed `role=host` here now gets exactly what a phone gets:
+  // tests/get-answers-host.js.)
+  put({
+    PK: `GAME#${GAME_ID}`, SK: 'STATE', State: 'VOTE#001',
+    LessonNumber: 1, CurrentQuestionId: 'QUESTION#c001#001',
+  });
   const board = await getAnswers({
     pathParameters: { gameId: GAME_ID },
-    queryStringParameters: { role: 'host', question: '001' },
-    // again: no authorizer context. `role` is a claim, not an identity.
+    queryStringParameters: { question: '001' },
+    // again: no authorizer context. The org comes off the row.
   });
   await check('get-answers returns 200 with no identity', () =>
     assert.strictEqual(board.statusCode, 200, board.body));
@@ -519,9 +527,14 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
     assert.strictEqual(parse(res).setCustomInstruction, 'Answer in one sentence.');
   });
   await check('an old plaintext answer is served, not rejected', async () => {
+    // On the voting screen, the anonymous read that returns answer text.
+    put({
+      PK: `GAME#${GAME_ID}`, SK: 'STATE', State: 'VOTE#001',
+      LessonNumber: 1, CurrentQuestionId: 'QUESTION#c001#001',
+    });
     const res = await getAnswers({
       pathParameters: { gameId: GAME_ID },
-      queryStringParameters: { role: 'host', question: '001' },
+      queryStringParameters: { question: '001' },
     });
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual((parse(res).answers || [])[0].answer, 'An answer from before the change.');

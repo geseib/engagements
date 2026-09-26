@@ -8,7 +8,8 @@
  * every button was a no-op with no feedback. See HostRemote.jsx for the history.)
  *
  * All of the decision-making lives here, as pure functions over the
- * `GET /games/{id}/state?includeHostData=true` payload, because the two things
+ * `GET /games/{id}/host-state` payload (the host's door onto the game state;
+ * until 2026-09-26 the public `/state?includeHostData=true`), because the two things
  * that make a remote dangerous are both decisions, not rendering:
  *
  *   1. offering the WRONG advance for the phase — "Start Voting" on a trivia

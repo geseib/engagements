@@ -272,14 +272,30 @@ const ACCESS_CODE_KEY = /access[\s_-]*code/i;
 
   // ------------------------------------------------------------------------
   say('\n2. the host payload still carries what GameHostPage actually reads');
-  // REJECTS: "fixing" the leak by gutting the host branch, or by deleting the
-  // branch outright. Each field below has a named call site; losing one is a
-  // silent behaviour change that surfaces mid-session, not at deploy.
+  // REJECTS: "fixing" the leak by gutting the host payload. Each field below
+  // has a named call site; losing one is a silent behaviour change that
+  // surfaces mid-session, not at deploy.
+  //
+  // THE HOST PAYLOAD IS ON THE HOST'S DOOR, GET /games/{gameId}/host-details,
+  // since 2026-09-26: the public route ignores `role` (the category masks it
+  // still carried are the host masks the public /state stopped returning;
+  // tests/get-game-host-state.js). The session here has no org, so any
+  // signed-in host may read the door. `started` is the one field GameHostPage
+  // still reads off the PUBLIC route (checkGameStatus), from the player view.
 
   {
-    const { body } = await fetchGame(asRole(PRIVATE_GAME, 'host'));
+    const { body } = await fetchGame({
+      ...getEvent(PRIVATE_GAME),
+      routeKey: 'GET /games/{gameId}/host-details',
+      rawPath: `/games/${PRIVATE_GAME}/host-details`,
+      requestContext: {
+        http: { method: 'GET', path: `/games/${PRIVATE_GAME}/host-details` },
+        routeKey: 'GET /games/{gameId}/host-details',
+        authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } },
+      },
+    });
 
-    await check('started — GameHostPage.jsx:448 checkGameStatus', () =>
+    await check('started, on the door as well', () =>
       assert.strictEqual(body.started, true));
     await check('anonymousUntilReveal — GameHostPage.jsx:1700, restore-from-game', () =>
       assert.strictEqual(body.anonymousUntilReveal, false,
@@ -294,6 +310,18 @@ const ACCESS_CODE_KEY = /access[\s_-]*code/i;
       assert.strictEqual(body.questionSetId, 'set-strategy');
       assert.deepStrictEqual(body.usedQuestions, ['001', '002']);
       assert.deepStrictEqual(body.playedQuestions, ['001', '002']);
+    });
+  }
+
+  {
+    const { body } = await fetchGame(noRole(PRIVATE_GAME));
+    await check('started, on the public route — GameHostPage checkGameStatus', () =>
+      assert.strictEqual(body.started, true));
+    const claimed = await fetchGame(asRole(PRIVATE_GAME, 'host'));
+    await check('and a typed ?role=host gets the player view, category masks and all gone', () => {
+      assert.strictEqual(claimed.body.categoryState, undefined);
+      assert.strictEqual(claimed.body.questionSetId, undefined);
+      assert.strictEqual(claimed.body.engagementInfo, 'Bring last quarter’s numbers.');
     });
   }
 

@@ -661,19 +661,23 @@ const selectNextQuestion = async (gameId, categoryState, setPk, isRandomized = t
   };
 };
 
-// Efficient WebSocket broadcasting
-const broadcastToGame = async (gameId, message) => {
+// Efficient WebSocket broadcasting. `hostsOnly` narrows it to the HOST
+// connections (`ConnectionType = 'HOST'`, the filter host-notify.js and
+// survey-broadcast.js use), for a frame no phone may see.
+const broadcastToGame = async (gameId, message, { hostsOnly = false } = {}) => {
   try {
-    console.log(`🔔 WEBSOCKET DEBUG: broadcastToGame called for game ${gameId}`);
+    console.log(`🔔 WEBSOCKET DEBUG: broadcastToGame called for game ${gameId}${hostsOnly ? ' (host screens only)' : ''}`);
     console.log(`🔔 WEBSOCKET DEBUG: Environment WEBSOCKET_API_ENDPOINT: ${process.env.WEBSOCKET_API_ENDPOINT}`);
     console.log(`🔔 WEBSOCKET DEBUG: Message to broadcast:`, JSON.stringify(message, null, 2));
     
     const connectionsResult = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ...(hostsOnly ? { FilterExpression: 'ConnectionType = :type' } : {}),
       ExpressionAttributeValues: {
         ':pk': `GAME#${gameId}`,
-        ':sk': 'CONNECTION#'
+        ':sk': 'CONNECTION#',
+        ...(hostsOnly ? { ':type': 'HOST' } : {})
       }
     }));
     
@@ -1318,9 +1322,15 @@ exports.handler = async (event) => {
     });
 
     // The list is one shorter than it was. Told separately, and never folded
-    // into questionStarted, because the phone remote's queue panel and the
-    // stage's are the same fact on two devices — and the phone would otherwise
-    // go on drawing the served question as still queued until its next 2s poll.
+    // into questionStarted: the stage's queue panel must follow it now, not at
+    // its next resync.
+    //
+    // TO THE HOST'S SCREENS ONLY. The frame is the whole remaining running
+    // order, the questions the room has not been asked yet, and anyone holding
+    // the code can open a PLAYER socket; every connection used to get it,
+    // which walked round the lock on GET /queue and /host-state. The phone
+    // remote holds no socket and reads the queue off its /host-state poll.
+    // tests/question-queue-drain.js.
     if (queueOutcome && queueOutcome.queue) {
       await broadcastToGame(gameId, {
         type: 'questionQueueChanged',
@@ -1328,7 +1338,7 @@ exports.handler = async (event) => {
         version: queueOutcome.version,
         queue: queueOutcome.queue,
         timestamp: now
-      });
+      }, { hostsOnly: true });
     }
 
     console.log(`✅ Next question selected for game ${gameId}: ${nextQuestion.questionId}`);

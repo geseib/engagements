@@ -303,11 +303,14 @@ const askForMyAnswer = (gameId, query) =>
     assert.strictEqual(body(anonymous).answer, undefined,
       `omitting clientId returned "${body(anonymous).answer}"`));
 
-  // Deliberately still true: GET /state already publishes
-  // answerProgress.answererIds — the whole list of who has answered — to any
-  // caller with no identity. Withholding it here would protect nothing and
-  // would break recovery for a legacy row join-game has not claimed.
-  check('but hasAnswer stays truthful — it is already public via /state', () =>
+  // Deliberately still true: GET /players publishes each player's
+  // `readiness.hasAnswered` — who has answered, by name — to any caller with no
+  // identity (the "who has not acted" half of the anonymity split). The public
+  // /state carried the same list as answerProgress.answererIds until
+  // 2026-09-26; that moved to the host's door, the roster did not.
+  // Withholding it here would protect nothing and would break recovery for a
+  // legacy row join-game has not claimed.
+  check('but hasAnswer stays truthful — it is already public via /players', () =>
     assert.strictEqual(body(anonymous).hasAnswer, true));
 
   // ---------- 4. the round-key padding ----------
@@ -352,9 +355,17 @@ const askForMyAnswer = (gameId, query) =>
   await answerOverSocket('3005', 'Ada', 'ANSWER#001', { answer: 'a boat', answerType: 'text' });
   await answerOverSocket('3005', 'Grace', 'ANSWER#001', { answer: 'a bug', answerType: 'text' });
 
+  // The host's list, through the host's door (GET /games/{gameId}/answers/host
+  // since 2026-09-26; tests/get-answers-host.js). The session is orgless, so
+  // any signed-in host may read it.
   const list = await getAnswers({
+    routeKey: 'GET /games/{gameId}/answers/host',
+    requestContext: {
+      routeKey: 'GET /games/{gameId}/answers/host',
+      authorizer: { lambda: { userId: 'host-1', groups: 'hosts' } },
+    },
     pathParameters: { gameId: '3005' },
-    queryStringParameters: { role: 'host', questionId: '001' },
+    queryStringParameters: { questionId: '001' },
   });
 
   check('a call with no `player` still returns the list', () => {

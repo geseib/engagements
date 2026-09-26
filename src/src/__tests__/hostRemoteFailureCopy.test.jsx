@@ -64,7 +64,7 @@ function serve({ questions = [TRIVIA], questionsThen = null, dispatch = null, ca
     if (href.includes('/orgs')) {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ orgs: [] }) });
     }
-    if (href.includes('/state')) {
+    if (href.includes('/host-state')) {
       return Promise.resolve({
         ok: true,
         status: 200,

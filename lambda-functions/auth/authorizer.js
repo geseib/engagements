@@ -669,6 +669,36 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && /^games\/[^/]+\/host-details$/.test(path)) {
     return ['hosts', 'admins'];
   }
+  // THE ROUND'S HOST DOOR, `GET /games/{gameId}/host-state`. The running order
+  // (the questions the room has not been asked yet), the category counts and
+  // masks, and who has answered or voted, by name. The public
+  // `GET /games/{gameId}/state` no longer returns any of it to a typed
+  // `?includeHostData=true`. Named for the report's reason: "GET + games is
+  // public" would otherwise pass any account, `pending` included. Anchored, so
+  // `/state` and `/state/{playerId}` stay `[]`; the class matches the template
+  // and a concrete id. tests/get-game-host-state.js.
+  if (method === 'GET' && /^games\/[^/]+\/host-state$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
+  // THE ANSWERS' HOST DOOR, `GET /games/{gameId}/answers/host`. Every answer to
+  // a round, at any phase, with its author on a round that is not anonymous.
+  // The public `GET /games/{gameId}/answers` no longer returns it to a typed
+  // `?role=host`. Named HERE, before the generic rules below, for two of their
+  // reasons at once: "GET + games is public", and `path.includes('answer')`,
+  // which this path contains. Anchored, so the phone's `/answers` stays `[]`.
+  // tests/get-answers-host.js.
+  if (method === 'GET' && /^games\/[^/]+\/answers\/host$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
+  // THE BALLOTS' HOST DOOR, `GET /games/{gameId}/votes/host`. Every ballot in a
+  // round, decrypted, with its voter. The public `GET /games/{gameId}/votes`
+  // no longer returns it to a typed `?role=host`. Named here for the answers
+  // door's two reasons: "GET + games is public", and `path.includes('vote')`,
+  // which this path contains. Anchored, so the public count stays `[]`.
+  // tests/get-votes-host.js.
+  if (method === 'GET' && /^games\/[^/]+\/votes\/host$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // Game creation/management requires host or admin group
   if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && path.includes('games')) {
     return ['hosts', 'admins'];

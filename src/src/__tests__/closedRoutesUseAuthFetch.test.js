@@ -67,6 +67,14 @@ describe('the closed routes are never called with bare fetch', () => {
     // decrypted (get-game.js). The public brief, `games/{id}` with no
     // `/host-details`, is a participant route and stays fetch.
     'host-details',
+    // The host's views of a live round (get-game-state.js, get-answers.js,
+    // get-votes.js): the running order and who has answered, every answer by
+    // name, every ballot by voter. Their public siblings — `/state`,
+    // `/answers`, `/votes` — are participant routes and stay fetch; they
+    // ignore `includeHostData` and `role=host` since 2026-09-26. Two of the
+    // stage's callers build the URL into a variable first, which this scan
+    // cannot see; hostReadsUseHostDoors.test.js pins those.
+    'host-state', 'answers/host', 'votes/host',
   ];
 
   // rejects: a closed route called through the bare global, which is a 401 in

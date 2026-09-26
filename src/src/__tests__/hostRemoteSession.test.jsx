@@ -108,7 +108,7 @@ function serve({ state = 'STARTED', players = [], report = REPORT, progress = {}
       }
       return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
     }
-    if (href.includes('/state')) {
+    if (href.includes('/host-state')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({

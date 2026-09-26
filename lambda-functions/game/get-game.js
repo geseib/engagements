@@ -10,13 +10,15 @@ const db = DynamoDBDocumentClient.from(client);
 /*
   THE HOST'S DOOR, `GET /games/{gameId}/host-details`: a second event on this
   function (template-clean.yaml, GetGameHostDetailsEvent), the way
-  /ai-summary/host is on get-ai-summary.js. It returns everything the public
-  `?role=host` branch does, plus the two fields that branch must not carry:
-  the session's Workie context (`AIContext`) and its Call & Answer briefing,
-  both DECRYPTED. They are the host's own writing about their organisation
-  and a customer's document, ciphertext at rest per org, and no phone, laptop
-  or tablet in the room is ever shown them. The edit dialog's prefill is their
-  only reader (GameHostPage.jsx editGameFromHistory).
+  /ai-summary/host is on get-ai-summary.js. It returns the host's view of the
+  session: the settings the edit dialog seeds from, the category masks, and
+  two fields no phone, laptop or tablet in the room is ever shown, both
+  DECRYPTED: the session's Workie context (`AIContext`) and its Call & Answer
+  briefing. Those two are the host's own writing about their organisation and
+  a customer's document, ciphertext at rest per org. Its readers are the edit
+  dialog's prefill (GameHostPage.jsx editGameFromHistory) and the category
+  restore. The public route below answers `?role=host` with the player's
+  view; it stopped honouring the claim on 2026-09-26.
 
   Cognito in front, hosts|admins named in authorizer.js, and
   callerMayDriveSession here. NO IDENTITY IS REFUSED OUTRIGHT, before any
@@ -40,7 +42,8 @@ exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
     const queryParams = event.queryStringParameters || {};
-    const { role } = queryParams; // 'host' or 'player'
+    // `role` is logged and nothing more: the ROUTE decides who is the host.
+    const { role } = queryParams;
     
     if (!gameId) {
       return {
@@ -97,11 +100,14 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
     }));
 
-    // Get category state
-    const categoryState = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
-    }));
+    // The category masks are the host's door's alone (see below), so the
+    // public brief every phone reads does not fetch them.
+    const categoryState = onHostDoor
+      ? await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
+      }))
+      : {};
 
     // Same default-ON rule as the anonymity gate (game/anonymity.js:isHidden):
     // only an explicit `false` turns it off, so a game with no HostPreferences
@@ -148,8 +154,8 @@ exports.handler = async (event) => {
     // any unauthenticated caller who knew — or walked — the four-digit id.
     // DELETED, not gated: no caller ever read it. `attemptAutoJoin` and the
     // access-code form in PlayerPage.jsx supply the code from what the player
-    // typed; GameHostPage's two `?role=host` reads take `started`,
-    // `anonymousUntilReveal` and `categoryState`; the host already holds the
+    // typed; the host page reads `started` off the player view and its
+    // category restore off the host's door; the host already holds the
     // code because the create form chose it (`create-game.js:9`). Re-adding it
     // behind an `Authorization` check would mean this handler verifying a JWT
     // itself — the route carries no authorizer — to restore a field with no
@@ -158,15 +164,19 @@ exports.handler = async (event) => {
     //
     // `aiContext` and `briefing` LEFT THIS BRANCH ON 2026-09-26 for the same
     // reason, and went to a route that IS authorized: the host's door at the
-    // top of this file. What is still here is either shown to every phone
-    // anyway (the title, the host's name, and `details`, which the player
-    // branch returns as `engagementInfo`) or settings, not writing: the set's
-    // id and library, the voice and the summary approach (all four also on
-    // the public GET /games/{id}/state), the shuffle flag, the category masks,
-    // and two question lists nothing ever writes. The host page's two public
-    // reads still use this branch for `started`, `anonymousUntilReveal` and
-    // `categoryState`.
-    if (onHostDoor || role === 'host') {
+    // top of this file.
+    //
+    // AND LATER THE SAME DAY THE WHOLE BRANCH WENT THERE. `?role=host` is no
+    // longer honoured on the public route at all: a typed claim gets the
+    // player's view below. What had stayed was mostly shown to every phone
+    // anyway or settings, but it included the category masks, the same host
+    // masks the public GET /games/{id}/state stopped returning under
+    // `?includeHostData=true` (get-game-state.js): leaving them here would
+    // have left that lock with a way round it. The host page reads its
+    // category restore on the door now, and `started` (checkGameStatus) off
+    // the player view, which has always carried it.
+    // tests/get-game-host-details.js §3.
+    if (onHostDoor) {
       // Host gets additional administrative information
       const result = {
         ...baseGameInfo,
@@ -203,19 +213,16 @@ exports.handler = async (event) => {
           availMask1_8: categoryState.Item['AvailMask1-8'],
           availMask9_16: categoryState.Item['AvailMask9-16'],
           availMask17_24: categoryState.Item['AvailMask17-24']
-        } : null
+        } : null,
+        // THE HOST'S OWN WRITING, DECRYPTED, for the edit prefill (see the top
+        // of this file). The Workie context is what they told the AI about
+        // their organisation; the briefing is a summary of a customer's
+        // document, its file name riding inside.
+        aiContext: sessionMeta.AIContext,
+        briefing: sessionMeta.Briefing || null
       };
 
-      if (onHostDoor) {
-        // THE HOST'S OWN WRITING, DECRYPTED, for the edit prefill — on the
-        // host's door only (see the top of this file). The Workie context is
-        // what they told the AI about their organisation; the briefing is a
-        // summary of a customer's document, its file name riding inside.
-        result.aiContext = sessionMeta.AIContext;
-        result.briefing = sessionMeta.Briefing || null;
-      }
-
-      console.log(`✅ Returning ${onHostDoor ? 'host details' : 'host game info'} for ${gameId}`);
+      console.log(`✅ Returning host details for ${gameId}`);
       return {
         statusCode: 200,
         body: JSON.stringify(result),

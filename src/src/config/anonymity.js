@@ -122,14 +122,15 @@ export function answeredNamesFrom(answers) {
 }
 
 /**
- * The server's participation list, out of a `/games/{id}/state` payload.
+ * The server's participation list, out of a `/games/{id}/host-state` payload.
  *
- * `answerProgress.answererIds` is the authoritative answer to "who has acted",
- * and it is deliberately public — get-answers.js:216 spells out why: "who has
- * not acted yet is a different fact from who wrote what". get-game-state.js
- * emits it only under `?includeHostData=true` and only while the round is in
- * `ASK#`, so a payload without it is not "nobody has answered" — it is "this
- * payload says nothing about participation".
+ * `answerProgress.answererIds` is the authoritative answer to "who has acted".
+ * "Who has not acted yet is a different fact from who wrote what", which is
+ * why it carries names on an anonymous round too. get-game-state.js emits it
+ * only on the host's door, `/host-state` (the public `/state` stopped carrying
+ * it on 2026-09-26), and only while the round is in `ASK#`, so a payload
+ * without it is not "nobody has answered" — it is "this payload says nothing
+ * about participation".
  *
  * RETURNS null FOR THAT CASE, and a list otherwise. The distinction is the
  * whole reason this is a function: a caller that read a missing `answerProgress`
