@@ -97,6 +97,29 @@ describe('SurveyResultsPanel', () => {
     });
   });
 
+  // Task 8, 2026-09-26 feature sweep: "walk the room through survey results,
+  // one question at a time, full size." The action lives beside "See the
+  // results" — here, "Back to session" — and reuses the SAME already-fetched
+  // `results`, so it is a callback, never a fetch of its own.
+  describe('the "Walk through" action', () => {
+    it('calls onPresent once results are ready', () => {
+      const onPresent = jest.fn();
+      render(<SurveyResultsPanel results={results} status="ready" onClose={() => {}} onPresent={onPresent} />);
+      fireEvent.click(screen.getByRole('button', { name: /Walk through/ }));
+      expect(onPresent).toHaveBeenCalledTimes(1);
+    });
+
+    it('is absent while loading or on error — there is nothing to walk through yet', () => {
+      render(<SurveyResultsPanel results={null} status="loading" onClose={() => {}} onPresent={() => {}} />);
+      expect(screen.queryByRole('button', { name: /Walk through/ })).not.toBeInTheDocument();
+    });
+
+    it('is absent when the caller gives no onPresent — an optional entry point, not a required one', () => {
+      render(<SurveyResultsPanel results={results} status="ready" onClose={() => {}} />);
+      expect(screen.queryByRole('button', { name: /Walk through/ })).not.toBeInTheDocument();
+    });
+  });
+
   it('renders one KindResult card per question, and the Names mode', () => {
     render(<SurveyResultsPanel results={results} status="ready" onClose={() => {}} />);
     expect(screen.getByText('How useful was today?')).toBeInTheDocument();

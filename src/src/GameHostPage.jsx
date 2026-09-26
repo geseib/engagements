@@ -23,6 +23,7 @@ import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
 import SurveyResultsPanel from './components/SurveyResultsPanel';
+import SurveyWalkthrough from './components/stage/SurveyWalkthrough';
 import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
@@ -379,6 +380,23 @@ function GameHostPage() {
    * list, so Retry must name the session it fetched rather than the stage's.
    */
   const [surveyResultsTarget, setSurveyResultsTarget] = useState(null);
+
+  /*
+    THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep, "walk the room
+    through survey results, one question at a time, full size." One flag,
+    reusing the THREE states just above (`surveyResultsData/Status/Error`)
+    and `surveyResultsTarget`: the brief's own words are "the same
+    surveyResultsTarget / fetched payload as the cut sheet, with no new
+    route," so there is no separate data/target pair to keep in step with
+    these. Checked BEFORE `showSurveyResults` in the render below, on
+    purpose: pressing "Walk through" from an already-open cut sheet leaves
+    `showSurveyResults` true underneath, so leaving the walk-through
+    (`onLeave` clears only this flag) falls straight back through to the cut
+    sheet still showing the same data — "leaving returns to where the host
+    came from," for free, with no third state recording which surface asked
+    for it.
+  */
+  const [showSurveyWalkthrough, setShowSurveyWalkthrough] = useState(false);
 
   /**
    * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
@@ -1174,6 +1192,7 @@ function GameHostPage() {
     surveyResultsStatus: setSurveyResultsStatus,
     surveyResultsError: setSurveyResultsError,
     surveyResultsTarget: setSurveyResultsTarget,
+    showSurveyWalkthrough: setShowSurveyWalkthrough,
     eventTitle: setEventTitle,
     gameCreatedAt: setGameCreatedAt,
     lessonExpanded: setLessonExpanded,
@@ -4974,6 +4993,45 @@ Focus on actionable business strategy insights.`;
   };
 
   /**
+   * THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep. Same fetch as
+   * `loadSurveyResults` just above, into the SAME three states — "the same
+   * surveyResultsTarget / fetched payload as the cut sheet, with no new
+   * route" is the brief's own requirement — and it exists as its own
+   * function rather than a flag on that one only because the two set
+   * DIFFERENT flags: this sets `showSurveyWalkthrough` and leaves
+   * `showSurveyResults` false, so the render below goes straight to the
+   * full-stage presenter instead of the cut sheet, and leaving it (the
+   * presenter's `onLeave`) returns to the STAGE rather than the cut sheet —
+   * see `showSurveyWalkthrough`'s own declaration for why that distinction is
+   * what makes "leaving returns to where the host came from" work with no
+   * third piece of state. The cut sheet's OWN "Walk through" button does not
+   * call this at all: its data is already loaded, so it only has to flip the
+   * flag (see the `onPresent` prop below).
+   */
+  const presentSurveyResults = async (targetGameId, targetTitle = '') => {
+    setShowReportsModal(false);
+    setSurveyResultsTarget({ gameId: targetGameId, title: targetTitle });
+    setSurveyResultsData(null);
+    setSurveyResultsError(null);
+    setSurveyResultsStatus('loading');
+    setShowSurveyResults(false);
+    setShowSurveyWalkthrough(true);
+    try {
+      const res = await authFetch(`${API_BASE}games/${targetGameId}/survey-results`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `The survey results could not be loaded (${res.status}).`);
+      }
+      setSurveyResultsData(data);
+      setSurveyResultsStatus('ready');
+    } catch (error) {
+      console.error('Error loading survey results to present:', error);
+      setSurveyResultsError(error.message || 'The survey results could not be loaded.');
+      setSurveyResultsStatus('error');
+    }
+  };
+
+  /**
    * THE REPORT BUTTON OPENS THE REPORT.
    *
    * It used to open the games-history list, from which the host picked the
@@ -5264,7 +5322,7 @@ Focus on actionable business strategy insights.`;
   useEffect(() => {
     if (!autoMode) return undefined;
     if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
-        || showReport || showSurveyResults || showReportsModal || editTarget) return undefined;
+        || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
       lessonExpanded, isLoadingData, qrMode,
@@ -5327,7 +5385,7 @@ Focus on actionable business strategy insights.`;
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
-    showNewGameDialog, showReport, showSurveyResults, showReportsModal, editTarget,
+    showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open]);
 
@@ -5356,7 +5414,8 @@ Focus on actionable business strategy insights.`;
     // ...and never over a surface that replaced the stage — there is no stage
     // for the board to cover.
     enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
-      && !showNewGameDialog && !showReport && !showSurveyResults && !editTarget && Boolean(gameId),
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && Boolean(gameId),
     open: scoreboard.open,
     canOpen: scoreboardAvail.enabled,
     onOpen: () => publishScoreboard({ open: true }),
@@ -5453,6 +5512,49 @@ Focus on actionable business strategy insights.`;
     );
   }
 
+  /*
+    THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep, "walk the room
+    through survey results, one question at a time, full size." CHECKED
+    BEFORE `showSurveyResults` BELOW, deliberately: pressing "Walk through"
+    from an already-open cut sheet leaves that flag true underneath, so this
+    branch winning here — and `onLeave` clearing only `showSurveyWalkthrough`
+    — is what sends the host back to the cut sheet once they leave, with no
+    extra state recording which surface asked for it. Opened directly from
+    the live stage's dock, `showSurveyResults` is false throughout (
+    `presentSurveyResults` sets it so), so leaving falls through everything
+    here and lands back on the stage itself.
+
+    Loading or a failed fetch reuses the cut sheet's OWN shell rather than
+    growing a second one: there is no stage to draw before the numbers land,
+    and `SurveyResultsPanel` already knows how to say so and offers Retry.
+    Only once `status` is 'ready' does the actual presenter mount.
+  */
+  if (showSurveyWalkthrough) {
+    if (surveyResultsStatus === 'ready' && surveyResultsData) {
+      return (
+        <SurveyWalkthrough
+          results={surveyResultsData}
+          title={surveyResultsTarget ? surveyResultsTarget.title : ''}
+          profile={profile}
+          gameId={surveyResultsTarget ? surveyResultsTarget.gameId : ''}
+          onLeave={() => setShowSurveyWalkthrough(false)}
+        />
+      );
+    }
+    return (
+      <SurveyResultsPanel
+        results={surveyResultsData}
+        status={surveyResultsStatus}
+        error={surveyResultsError}
+        title={surveyResultsTarget ? surveyResultsTarget.title : ''}
+        onClose={() => { setShowSurveyWalkthrough(false); setSurveyResultsStatus('idle'); }}
+        onRetry={surveyResultsTarget
+          ? () => presentSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title)
+          : null}
+      />
+    );
+  }
+
   // Same reasoning as `showReport` just above: gated on the flag alone, never
   // `&& surveyResultsData`, so the window between "See the results" and the
   // fetch landing shows the panel's own loading state rather than falling
@@ -5468,6 +5570,7 @@ Focus on actionable business strategy insights.`;
         onRetry={surveyResultsTarget
           ? () => loadSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title)
           : null}
+        onPresent={() => setShowSurveyWalkthrough(true)}
       />
     );
   }
@@ -5870,6 +5973,9 @@ Focus on actionable business strategy insights.`;
         break;
       case HOST_INTENTS.SURVEY_RESULTS:
         loadSurveyResults(gameId, eventTitle);
+        break;
+      case HOST_INTENTS.SURVEY_PRESENT:
+        presentSurveyResults(gameId, eventTitle);
         break;
       case HOST_INTENTS.LEAVE:
         /*

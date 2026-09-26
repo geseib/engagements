@@ -203,6 +203,17 @@ export function initialGameSession() {
       a pre-existing gap this fix does not extend) tracks the report's.
     */
     surveyResultsTarget: null,
+    /*
+      THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep. Same reasoning
+      as `showSurveyResults` just above and the same fix-round-1 bug it would
+      otherwise repeat: left off this list, switching sessions away from an
+      open walk-through would carry it — full-screen, over the NEW session's
+      stage — into the next game. It reads the SAME `surveyResultsData` /
+      `surveyResultsTarget` above, so those two resets already cover the
+      payload; this only has to cover the flag that decides which of the two
+      survey-results surfaces (the cut sheet or the walk-through) is on top.
+    */
+    showSurveyWalkthrough: false,
 
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',

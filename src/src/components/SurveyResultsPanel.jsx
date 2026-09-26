@@ -41,6 +41,7 @@ export default function SurveyResultsPanel({
   title = '',
   onClose,
   onRetry = null,
+  onPresent = null,
 }) {
   const [openQid, setOpenQid] = useState(null);
 
@@ -64,6 +65,21 @@ export default function SurveyResultsPanel({
           <Icon name="ArrowLeft" weight="bold" size={16} /> Back to session
         </button>
         {title ? <span className="svrp-toolbar-title">{title}</span> : null}
+        {/*
+          THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep. `onPresent`
+          is a callback, not a route: the SAME `results` this panel already
+          holds is what SurveyWalkthrough.jsx draws, so there is nothing to
+          fetch here. Ready-only — there is nothing to walk through while
+          loading or after a failed fetch — and optional, so a caller with
+          nowhere to send it (there is none today, but Task 4's paper report
+          reuses this shell too) simply leaves it off rather than wiring a
+          dead button.
+        */}
+        {ready && onPresent && (
+          <button type="button" className="svrp-tool" onClick={onPresent}>
+            <Icon name="Monitor" weight="bold" size={16} /> Walk through
+          </button>
+        )}
       </div>
 
       {status === 'loading' && (

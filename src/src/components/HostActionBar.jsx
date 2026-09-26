@@ -69,6 +69,12 @@ export default function HostActionBar({
 }) {
   const primary = controls?.primary || null;
   const secondary = controls?.secondary || null;
+  // Task 8, 2026-09-26 feature sweep: a THIRD, optional slot, beside
+  // `secondary` — config/hostControls.js sets it only for the two survey
+  // phases where a second button already exists and a room is not watching
+  // (CLOSED and a survey's own ENDED), so every other phase's "at most one
+  // secondary" shape is unchanged.
+  const tertiary = controls?.tertiary || null;
 
   const primaryId = primary?.id;
   const primaryDisabled = Boolean(primary?.disabled);
@@ -164,6 +170,16 @@ export default function HostActionBar({
             >
               <Icon name={secondary.icon} weight="bold" size={18} />
               <span>{secondary.label}</span>
+            </button>
+          )}
+          {tertiary && (
+            <button
+              type="button"
+              className="btn-secondary host-action-bar__tertiary"
+              onClick={() => onAction(tertiary)}
+            >
+              <Icon name={tertiary.icon} weight="bold" size={18} />
+              <span>{tertiary.label}</span>
             </button>
           )}
           <button

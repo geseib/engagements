@@ -419,6 +419,76 @@ body, .stage-ladder-table{
   line-height:1.05;margin:0;max-width:var(--measure);color:var(--text)}
 .ssub{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;max-width:44ch;line-height:1.3}
 
+/* ---------------------------------------------- THE WALL WALK-THROUGH (s-02
+   through s-06) — Task 8, 2026-09-26 feature sweep, "walk the room through
+   survey results, one question at a time, full size."
+
+   THIS RE-SKINS, IT NEVER RE-IMPLEMENTS. Choice/Rating/YesNo/Rank/Text (the
+   `.svr-*` classes, components/survey/results/SurveyResults.css) are the SAME
+   markup the console cut sheet and the paper report mount — no bar, mean or
+   histogram math lives here or anywhere in this file. What that stylesheet's
+   own rules read is five custom properties (`--svr-t-floor` / `-label` /
+   `-body` / `-head` / `-numeral`, declared on `.svr-card`) plus one literal
+   (`--svr-on-accent`). `.svr-card` is the CONSOLE's own card chrome — a
+   bordered box with a header this presenter does not draw, one question at a
+   time already being the header — so `.svw` re-declares the five properties
+   on ITS OWN scope instead, this time from the STAGE's `--t-*` tokens rather
+   than console pixels. Nothing downstream cares which ancestor supplied them;
+   custom properties inherit either way, which is the whole point of writing
+   the shared stylesheet against custom properties in the first place.
+
+   THE LADDER, ROLE BY ROLE (surveyWalkthroughPalette.test.js holds this):
+     numeral -> --t-hero      the mean / recommend score (SurveyResults.css's
+                               own `.svr-mean b`, no different from `.hero`
+                               above reading the same token for the same job)
+     head    -> --t-secondary (unused today — nothing under `.svw` reads
+                               `.svr-card-title` — kept so a later reuse of
+                               KindResult's own header inside `.svw` is not a
+                               second decision)
+     body    -> --t-secondary the option/answer text itself: `.svr-bar-l`,
+                               `.svr-rank-l`, `.svr-quotes li` etc. carry NO
+                               font-size of their own and inherit this — the
+                               console's identical structure (`.svr-card-body`
+                               as the read-content default) is why `.svw`
+                               declares `font-size` on itself the same way
+     label   -> --t-body      the split bar's own printed share ("Yes 63%"),
+                               the legend, the "N answers" line
+     floor   -> --t-meta      axis numbers, scale-end labels, the "Most
+                               picked" tag — the label tier, which never
+                               scales with `--fit` on this stage either
+
+   `--svr-on-accent` IS THE SAME LITERAL, NOT A NEW DECISION. `.stage{--surface:
+   #1B2942}` two sections above is byte-identical to the value SurveyResults.css
+   already measured its on-accent text against (surveyResultsPalette.test.js);
+   this is that same colour by the same name, not a second one that happens to
+   match today.
+
+   BARE, NOT CARDED. The console wraps every renderer in `.svr-card`
+   (background: --surface); this presenter does not — one question already
+   fills the stage, and a bordered box around it would be the mockups'
+   `.recap` treatment fighting its own chrome. So `.svr-bar-l` / `.svr-rank-l`
+   / the mean and split labels sit directly on the stage's own dusk field
+   (`--bg`) instead of the console's `--surface`, which is DARKER than the
+   card they were measured against — every ratio in
+   surveyWalkthroughPalette.test.js is re-measured against the field this
+   presenter actually paints on, on both the dusk field and the
+   projector-lifted one, never assumed from the console's own numbers. The
+   OPAQUE fills — the split bars' segments, the "Most picked" tag, a quote's
+   `--surface-2` chip — are unaffected either way: an opaque layer hides
+   whatever is behind it, so those three pairs are the same numbers
+   SurveyResults.css already proved. */
+.svw{
+  font-size:var(--svr-t-body);
+  color:var(--text);
+  display:flex;flex-direction:column;gap:calc(1.2vh + 6px);min-width:0;
+  --svr-t-floor:var(--t-meta);
+  --svr-t-label:var(--t-body);
+  --svr-t-body:var(--t-secondary);
+  --svr-t-head:var(--t-secondary);
+  --svr-t-numeral:var(--t-hero);
+  --svr-on-accent:#1B2942;
+}
+
 /* ------------------------------------------------------------------- DOCK */
 .dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
   display:flex;align-items:center;gap:calc(1.2vw + 8px);

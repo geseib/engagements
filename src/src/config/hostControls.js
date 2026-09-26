@@ -278,6 +278,10 @@ export const HOST_INTENTS = {
   // closed. Offered as CLOSED's and a survey's ENDED's secondary — the
   // results are already frozen the instant CLOSE_SURVEY lands.
   SURVEY_RESULTS: 'survey-results',
+  // Task 8, 2026-09-26 feature sweep: the same frozen results, one question
+  // at a time, full size — SurveyWalkthrough.jsx. Offered beside
+  // SURVEY_RESULTS, as CLOSED's and a survey's ENDED's tertiary.
+  SURVEY_PRESENT: 'survey-present',
 };
 
 /**
@@ -668,6 +672,15 @@ export function hostControlsFor({
     menu."
   */
   let secondary = null;
+  // Task 8, 2026-09-26 feature sweep: "walk the room through survey results,
+  // one question at a time, full size" — beside `secondary` (SURVEY_RESULTS)
+  // below, on the same two phases, never anywhere else. A THIRD slot rather
+  // than a replacement, because both of CLOSED's and a survey's ENDED's two
+  // slots are already spoken for. The "another control is just another thing
+  // to aim at while a room watches" rule that keeps every mid-round phase to
+  // one button does not apply here: nothing is live on either phase — the
+  // same reasoning ENDED's own "Back to Menu" secondary already rests on.
+  let tertiary = null;
   if (resolvedPhase === 'COLLECTING') {
     /*
       THE TWO-MINUTE WARNING — s-01-collecting's second button. It moves
@@ -696,6 +709,9 @@ export function hostControlsFor({
     */
     secondary = {
       id: 'survey-results', label: 'See the results', icon: 'ChartBar', intent: HOST_INTENTS.SURVEY_RESULTS, disabled: false, hint: '',
+    };
+    tertiary = {
+      id: 'survey-present', label: 'Walk through', icon: 'Monitor', intent: HOST_INTENTS.SURVEY_PRESENT, disabled: false, hint: '',
     };
   } else if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
@@ -784,6 +800,7 @@ export function hostControlsFor({
     phase: resolvedPhase,
     primary,
     secondary,
+    tertiary,
     status: { text, tone: statusTone(text) },
   };
 }

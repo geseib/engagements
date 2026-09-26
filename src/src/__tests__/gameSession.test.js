@@ -249,8 +249,20 @@ describe('the survey results panel retries the SESSION IT IS SHOWING, not the st
     expect(body).not.toMatch(/setSurveyResultsTarget\([^)]*\bgameId\b(?!:\s*targetGameId)/);
   });
 
+  /*
+    Anchored at `if (showSurveyResults) {`, not the bare `<SurveyResultsPanel`
+    text — Task 8, 2026-09-26 feature sweep, gave the walk-through's own
+    loading/error fallback a SECOND `<SurveyResultsPanel>` mount (inside
+    `if (showSurveyWalkthrough) {`, textually earlier in the file), which is
+    correct on its own terms (its retry is `presentSurveyResults`, closing
+    over the same `surveyResultsTarget`) but would otherwise make a bare
+    `indexOf('<SurveyResultsPanel')` find THAT one first and read this test's
+    assertions against the wrong mount.
+  */
   it('the retry reads surveyResultsTarget, never the bare page gameId', () => {
-    const start = source.indexOf('<SurveyResultsPanel');
+    const cutSheetAt = source.indexOf('if (showSurveyResults) {');
+    expect(cutSheetAt).toBeGreaterThan(-1);
+    const start = source.indexOf('<SurveyResultsPanel', cutSheetAt);
     expect(start).toBeGreaterThan(-1);
     const block = source.slice(start, source.indexOf('/>', start));
     expect(block).toMatch(/onRetry=\{surveyResultsTarget/);
@@ -260,7 +272,7 @@ describe('the survey results panel retries the SESSION IT IS SHOWING, not the st
   });
 
   it('the panel is told the session\'s title, so a wrong retry could never look right', () => {
-    const start = source.indexOf('<SurveyResultsPanel');
+    const start = source.indexOf('<SurveyResultsPanel', source.indexOf('if (showSurveyResults) {'));
     const block = source.slice(start, source.indexOf('/>', start));
     expect(block).toMatch(/title=\{surveyResultsTarget/);
   });
