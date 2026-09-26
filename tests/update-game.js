@@ -410,6 +410,72 @@ const writesIn = (cmds) => cmds.filter((c) => ['put', 'update', 'delete', 'batch
     assert.strictEqual(listRowOf(gameId).Visibility, 'public', 'Visibility was not mirrored onto the GAMES row');
   });
 
+  await acheck('switching to private with no access code on the row is refused', async () => {
+    // This handler never accepts a new AccessCode (the header explains why:
+    // rotating it silently strands players who already hold the old one), so a
+    // session with none can never GET one through an edit. Letting the switch
+    // through anyway is exactly the session-gate.js 500 this test exists to
+    // keep unreachable: a private session join answers "Game configuration
+    // error" instead of ever refusing 400 up front.
+    quiet();
+    const noCode = await createGame({
+      eventTitle: 'No code at birth', gameType: 'call-and-answer', questionSetId: 'set-a',
+    });
+    const gameId = noCode.body.gameId;
+    const before = structuredClone(metadataOf(gameId));
+    const m = mark();
+    const res = await putGame(gameId, { visibility: 'private' });
+    loud();
+    assert.strictEqual(res.status, 400, `expected 400, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.deepStrictEqual(writesIn(sentSince(m)), [], 'a refused edit must not have written anything');
+    assert.strictEqual(metadataOf(gameId).Visibility, before.Visibility, 'Visibility changed despite the refusal');
+  });
+
+  await acheck('switching to private is allowed when the row already carries a code', async () => {
+    // The mirror case: a session born private (accessCode at creation) may be
+    // toggled public and back — this is not a blanket refusal of visibility
+    // edits, only of the specific state a private session with no code.
+    quiet();
+    const withCode = await createGame({
+      eventTitle: 'Born with a code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private', accessCode: '1357',
+    });
+    const gameId = withCode.body.gameId;
+    const toPublic = await putGame(gameId, { visibility: 'public' });
+    const backToPrivate = await putGame(gameId, { visibility: 'private' });
+    loud();
+    assert.strictEqual(toPublic.status, 200);
+    assert.strictEqual(backToPrivate.status, 200, `expected 200, got ${backToPrivate.status}: ${JSON.stringify(backToPrivate.body)}`);
+    assert.strictEqual(metadataOf(gameId).Visibility, 'private');
+    assert.strictEqual(metadataOf(gameId).AccessCode, '1357', 'the original access code must survive both edits');
+  });
+
+  await acheck('create refuses a private session with no access code', async () => {
+    // The create path's mirror image of the two tests above: session-gate.js
+    // answers a join to a private/no-code session with a 500 "Game
+    // configuration error", so the state must never be reachable at all — not
+    // through an edit (above) and not at birth (here).
+    quiet();
+    const res = await createGame({
+      eventTitle: 'Private with no code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private',
+    });
+    loud();
+    assert.strictEqual(res.status, 400, `expected 400, got ${res.status}: ${JSON.stringify(res.body)}`);
+
+    const res2 = await createGame({
+      eventTitle: 'Private with a blank code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private', accessCode: '   ',
+    });
+    assert.strictEqual(res2.status, 400, `a whitespace-only code must not count as one, got ${res2.status}`);
+
+    const ok = await createGame({
+      eventTitle: 'Private with a real code', gameType: 'call-and-answer', questionSetId: 'set-a',
+      visibility: 'private', accessCode: '2468',
+    });
+    assert.strictEqual(ok.status, 201, `a private session WITH a code must still be created, got ${ok.status}`);
+  });
+
   console.log('\nthe whitelist\n');
 
   await acheck('fields off the whitelist are ignored even when sent', async () => {

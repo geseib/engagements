@@ -226,6 +226,355 @@ describe('GameHostPage survives every screen change', () => {
   });
 });
 
+/**
+ * CONTINUE, TYPED, ON A SESSION THAT HAS NOT STARTED.
+ *
+ * `handleContinueGame` (the "Continue" box on the welcome screen) called
+ * `switchToGame` unconditionally — straight onto the live stage, whatever
+ * state the session was in. An unstarted session lands there with "Start
+ * First Round" disabled until a player joins, and a join is refused before
+ * start (session-gate.js), so the host is stranded on a screen with no way
+ * to move — a dead end reachable only by typing a code, never by the
+ * `?gameId=` URL loader a few hundred lines up, which already runs this same
+ * `checkGameStatus` check and, for an unstarted session, sends the host to
+ * game history instead (where Start is one click away).
+ *
+ * The fix makes Continue take that identical route for that identical case,
+ * so this test's destination is the same screen the URL loader reaches: the
+ * session history list, showing this session "Not started" with the button
+ * that actually starts it — not the live stage.
+ */
+describe('Continue on an unstarted session', () => {
+  let errors;
+
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.pushState({}, '', '/host');
+    errors = captureRenderErrors();
+  });
+
+  afterEach(() => {
+    errors.restore();
+    jest.restoreAllMocks();
+  });
+
+  test('takes the link path\'s route (game history), not the live stage', async () => {
+    const UNSTARTED = '3210';
+    global.fetch = jest.fn(async (url, options) => {
+      const u = String(url);
+      const method = options?.method || 'GET';
+      // checkGameStatus's read — must be checked before the bare /games match
+      // below, which would otherwise swallow it too.
+      if (u.includes(`games/${UNSTARTED}?role=host`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ gameId: UNSTARTED, started: false }),
+          text: async () => '{}',
+        };
+      }
+      if (method === 'GET' && u.endsWith('/games')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            games: [{
+              gameId: UNSTARTED, title: 'Waiting to start', started: false,
+              gameType: 'call-and-answer', createdAt: '2026-09-26T00:00:00.000Z',
+            }],
+          }),
+          text: async () => '{}',
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    render(<GameHostPage />);
+
+    const code = await screen.findByLabelText(/session code, 4 digits/i);
+    await act(async () => { fireEvent.change(code, { target: { value: UNSTARTED } }); });
+
+    const continueBtn = screen.getByRole('button', { name: /^continue$/i });
+    expect(continueBtn).not.toBeDisabled();
+    await act(async () => { fireEvent.click(continueBtn); });
+
+    // THE REGRESSION: the old code jumped straight to the live stage here —
+    // no session history, no "Not started" row, no way back to Start.
+    await waitFor(
+      () => expect(screen.getByText(/waiting to start/i)).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+    expect(screen.getByText(/not started/i)).toBeInTheDocument();
+    expect(errors.hookOrderFailures()).toEqual([]);
+  });
+});
+
+/**
+ * A SET-LEVEL INSTRUCTION, ON THE STAGE, WHEN THE CATALOGUE HAS NOTHING TO
+ * SAY ABOUT IT (GitHub #18).
+ *
+ * The stage found its instruction by fetching `GET /question-sets` — the
+ * WHOLE catalogue — and searching it for the id/scope pair the session pinned
+ * (`fetchQuestionSetInstruction`, GameHostPage.jsx). That list drops a
+ * deactivated set (get-question-sets.js), and any fetch error sets the
+ * instruction to null — so a session on a set that later got deactivated (or
+ * a slow/failed catalogue read) went instruction-less on the projector for
+ * the rest of its life, even while every phone kept showing it correctly.
+ *
+ * PlayerPage never had this problem: get-question.js resolves the set by the
+ * PINNED PARTITION, not by searching a list, and projects
+ * `setCustomInstruction`/`setRoundNoun` straight onto the question payload it
+ * already serves. The fix makes the host read the same two fields off that
+ * same payload — the one `games/{id}/question?role=host` already returns
+ * every time a round loads — instead of trusting the catalogue search alone.
+ *
+ * So this test makes the catalogue search come back EMPTY (the exact
+ * deactivated-set shape) and asserts the instruction still reaches the stage,
+ * because it rode in on the question.
+ */
+describe('the stage takes a set instruction from the question, not only the catalogue', () => {
+  test('an empty question-sets list does not blank the instruction on ASK', async () => {
+    const LIVE = '5678';
+    const INSTRUCTION = 'Answer honestly, in your own words.';
+
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      // Most specific patterns first — every one of these contains `games/`.
+      if (u.includes(`games/${LIVE}/question?role=host`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            id: 1, questionNumber: 1, setId: 'setA', setScope: 'platform',
+            title: 'Q1', questionDetail: 'D1', detail: 'D1',
+            // No `customInstructions` of its own — this is the SET's voice,
+            // not the question's, so resolveInstruction only reaches it when
+            // the set-level value is actually populated from here.
+            setCustomInstruction: INSTRUCTION,
+            setRoundNoun: 'Prompt',
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}/state`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            state: 'ASK#001',
+            currentQuestion: 1,
+            gameMetadata: {
+              title: 'Live game', gameType: 'call-and-answer',
+              questionSetId: 'setA', questionSetScope: 'platform',
+            },
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}?role=host`)) {
+        return { ok: true, status: 200, json: async () => ({ gameId: LIVE, started: true }), text: async () => '{}' };
+      }
+      // THE BUG SCENARIO: the catalogue search finds nothing — a deactivated
+      // set, or any other reason `GET /question-sets` came back empty.
+      if (u.includes('question-sets')) {
+        return { ok: true, status: 200, json: async () => ({ sets: [] }), text: async () => '{}' };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    window.history.pushState({}, '', `/host?gameId=${LIVE}`);
+    render(<GameHostPage />);
+
+    // THE REGRESSION: with the old lookup alone, this stays blank forever —
+    // the catalogue search found no set to read from, and nothing else ever
+    // corrected it.
+    await waitFor(
+      () => expect(screen.getByText(INSTRUCTION)).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+  });
+
+  /**
+   * FIX-ROUND 1: the reload path raced the very lookup it was meant to
+   * supersede.
+   *
+   * `fetchQuestionSetInstruction(restoredSetId, restoredSetScope)` used to
+   * fire unconditionally and fire-and-forget while restoring gameMetadata,
+   * BEFORE the code even knows whether it is about to branch into the
+   * `currentQuestionData` case or the one that awaits `/question` and applies
+   * the fields off that response instead. Both write `customInstruction` /
+   * `setRoundNoun` with no ordering between them, so a slow catalogue
+   * response landing AFTER the question fetch had already rendered the right
+   * answer would blank it right back out — GitHub #18 again, on the very path
+   * this task fixed. The previous test's mock resolved both fetches
+   * synchronously, so it only ever proved the favourable ordering.
+   *
+   * The fix confines the catalogue lookup to the one branch that still needs
+   * it (get-game-state's `currentQuestionData` carries neither field) and
+   * removes it from the branch that reads the question's own response — so
+   * there is no second call left here to race at all. This test proves that:
+   * the ONLY call to the bare `question-sets` catalogue is `fetchQuestionSets`'s
+   * own (unrelated) call, and even a slow second response — the shape the old
+   * code would have produced — cannot overwrite the instruction once it has
+   * arrived on the question.
+   */
+  test('a slow catalogue response cannot overwrite the instruction that already arrived on the question', async () => {
+    const LIVE = '5679';
+    const INSTRUCTION = 'Answer honestly, in your own words.';
+    const STALE = 'Stale catalogue text — must never win the race.';
+
+    let resolveSecondCatalogueCall = null;
+    let catalogueCalls = 0;
+
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      if (u.includes(`games/${LIVE}/question?role=host`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            id: 1, questionNumber: 1, setId: 'setA', setScope: 'platform',
+            title: 'Q1', questionDetail: 'D1', detail: 'D1',
+            setCustomInstruction: INSTRUCTION, setRoundNoun: 'Prompt',
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}/state`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            state: 'ASK#001',
+            currentQuestion: 1,
+            gameMetadata: {
+              title: 'Live game', gameType: 'call-and-answer',
+              questionSetId: 'setA', questionSetScope: 'platform',
+            },
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LIVE}?role=host`)) {
+        return { ok: true, status: 200, json: async () => ({ gameId: LIVE, started: true }), text: async () => '{}' };
+      }
+      // THE BARE CATALOGUE ROUTE ONLY — `question-sets/{id}/categories` (fetchCategories)
+      // must not be caught by this branch, or the round-trip below never fires.
+      if (/\/question-sets(\?|$)/.test(u)) {
+        catalogueCalls += 1;
+        if (catalogueCalls === 1) {
+          // `fetchQuestionSets(true)`'s own, necessary call — resolves at once,
+          // as it always has, so the restore is not held up by it.
+          return { ok: true, status: 200, json: async () => ({ sets: [] }), text: async () => '{}' };
+        }
+        // A SECOND call to this route is exactly what the old, unconditional
+        // `fetchQuestionSetInstruction` call produced. It resolves only when
+        // this test says so — deliberately after the question's own answer
+        // has already rendered — with a WRONG instruction, so a test that
+        // still allowed this call to win the race would see the stale text.
+        return new Promise((resolve) => {
+          resolveSecondCatalogueCall = () => resolve({
+            ok: true, status: 200,
+            json: async () => ({ sets: [{ id: 'setA', scope: 'platform', customInstruction: STALE, roundNoun: 'Stale', active: true }] }),
+            text: async () => '{}',
+          });
+        });
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    window.history.pushState({}, '', `/host?gameId=${LIVE}`);
+    render(<GameHostPage />);
+
+    // The question's own answer must land first.
+    await waitFor(
+      () => expect(screen.getByText(INSTRUCTION)).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+
+    // NOW let a slow second catalogue response land, if the code ever made
+    // one. Under the fix it never did — `resolveSecondCatalogueCall` stays
+    // null — and that is itself part of what this test is proving.
+    if (resolveSecondCatalogueCall) {
+      await act(async () => { resolveSecondCatalogueCall(); await Promise.resolve(); await Promise.resolve(); });
+    }
+
+    // THE REGRESSION: the old unawaited call, once it finally resolved,
+    // overwrote customInstruction with the catalogue's answer — even a wrong
+    // one — blanking or replacing the field the question fetch had already
+    // filled in correctly.
+    expect(screen.getByText(INSTRUCTION)).toBeInTheDocument();
+    expect(screen.queryByText(STALE)).not.toBeInTheDocument();
+    // THE STRUCTURAL PROOF: no second call to the bare catalogue route was
+    // ever made on this path at all — the race is closed, not just won.
+    expect(catalogueCalls).toBe(1);
+  });
+
+  /**
+   * FIX-ROUND 2: closing the race in fix round 1 broke the LOBBY.
+   *
+   * Fix round 1 moved the catalogue lookup into
+   * `if (questionNumber > 0) { if (gameStateData.currentQuestionData) { ... } }`
+   * — which never runs at all when `questionNumber` is 0: an open lobby
+   * before round 1 has started, or an ended session with zero rounds. With no
+   * question ever loaded, the `/question`-response path (which now supplies
+   * the fields in every other case) never runs either, so `setRoundNoun`
+   * stayed null. `getHostRoundNoun()` feeds the LOBBY primary CTA's label —
+   * `Start First ${roundNoun}` (config/hostControls.js) — so a host who
+   * reloaded the host page while still in the lobby saw the generic
+   * "Start First Round" instead of the set's own noun (e.g. "Start First
+   * Lesson"), even though the set names one, until the first round actually
+   * started.
+   *
+   * The fix restores the old catalogue lookup on every reload path that does
+   * not itself read these fields off a `/question` response — the lobby
+   * included — while keeping it OUT of the one path that does (proven by the
+   * previous test, which must stay green alongside this one).
+   */
+  test('a lobby reload still shows the set\'s own round noun on the primary CTA', async () => {
+    const LOBBY_GAME = '5680';
+
+    global.fetch = jest.fn(async (url) => {
+      const u = String(url);
+      if (u.includes(`games/${LOBBY_GAME}/state`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            // No question at all yet — the exact case fix round 1 broke.
+            state: 'CREATED',
+            currentQuestion: 0,
+            gameMetadata: {
+              title: 'Lobby game', gameType: 'call-and-answer',
+              questionSetId: 'setA', questionSetScope: 'platform',
+            },
+          }),
+          text: async () => '{}',
+        };
+      }
+      if (u.includes(`games/${LOBBY_GAME}?role=host`)) {
+        return { ok: true, status: 200, json: async () => ({ gameId: LOBBY_GAME, started: true }), text: async () => '{}' };
+      }
+      // The bare catalogue route only — this IS reached on a lobby reload,
+      // unlike the previous test's scenario.
+      if (/\/question-sets(\?|$)/.test(u)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            sets: [{ id: 'setA', scope: 'platform', roundNoun: 'Lesson', customInstruction: 'Read the prompt aloud.', active: true }],
+          }),
+          text: async () => '{}',
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    window.history.pushState({}, '', `/host?gameId=${LOBBY_GAME}`);
+    render(<GameHostPage />);
+
+    // THE REGRESSION: fix round 1 left this reading "Start First Round" —
+    // the generic default — forever, because the lookup that would have
+    // supplied "Lesson" was never called on this path.
+    await waitFor(
+      () => expect(screen.getByText('Start First Lesson')).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+  });
+});
+
 /*
  * THE ROUNDS TAB, AGAINST THE PAYLOAD THE SERVER ACTUALLY SENDS.
  *

@@ -1240,6 +1240,35 @@ function GameHostPage() {
     }
   };
 
+  /**
+   * Apply the set's instruction and round noun the moment a QUESTION response
+   * carries them (GitHub #18).
+   *
+   * `fetchQuestionSetInstruction` above finds the set by fetching the WHOLE
+   * catalogue (`GET /question-sets`) and searching it — the same list
+   * get-question-sets.js drops a deactivated set from, and any fetch error
+   * leaves it null. A deactivated set is exactly the case that matters here:
+   * the session still plays it (the round pins a partition, not a catalogue
+   * membership), so every phone kept showing its instruction — PlayerPage
+   * reads `setCustomInstruction`/`setRoundNoun` straight off get-question.js's
+   * response (PlayerPage.jsx `applyQuestionSetInstruction`), which resolves
+   * the set by the PINNED PARTITION and never searches a list — while the
+   * stage, whose only source was the catalogue search, went blank and stayed
+   * that way for the rest of the session.
+   *
+   * `games/{gameId}/question?role=host` already projects both fields; this
+   * mirrors PlayerPage's reader exactly, guarded the same way: on `setId`,
+   * not called unconditionally, because a RESULTS payload built elsewhere in
+   * this file carries no set fields and must not blank an instruction the
+   * room is still looking at.
+   */
+  const applyQuestionSetInstruction = (questionData) => {
+    const setId = questionData?.setId || questionData?.questionSetId;
+    if (!setId) return;
+    setCustomInstruction(questionData.setCustomInstruction ?? null);
+    setSetRoundNoun(questionData.setRoundNoun ?? null);
+  };
+
   // Instruction hierarchy lives in config/instructions.js so the host and the
   // player screen cannot drift apart (they had, on Art Title rounds).
   const getHostInstructionText = (currentQuestion, gameType = currentGameType) =>
@@ -2401,7 +2430,51 @@ Focus on actionable business strategy insights.`;
         await fetchQuestionSets(true); // true = during restoration, no auto-selection
         if (superseded()) return false;
 
+        // Parse and restore game state. MOVED UP FROM BELOW (fix round 2): the
+        // metadata block right after this needs `questionNumber` and
+        // `gameStateData.currentQuestionData` in hand to decide whether the old
+        // catalogue lookup would race an upcoming `/question` read — see the
+        // note beside that call. Nothing here reads anything the metadata block
+        // sets, so moving it earlier changes nothing else.
+        const currentState = gameStateData.state || 'LOBBY';
+        let questionNumber = gameStateData.currentQuestion || 0;
+
+        // Trust the currentQuestion from backend - don't override it by parsing state
+        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
+
+        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
+        if (questionNumber === 0 && (currentState.includes('#'))) {
+          const stateQuestionMatch = currentState.match(/#(\d+)/);
+          if (stateQuestionMatch) {
+            questionNumber = parseInt(stateQuestionMatch[1], 10);
+            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
+          }
+        }
+
+        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
+
+        // Use server state directly instead of mapping to legacy format
+        setGameState(currentState);
+        console.log(`🎮 HOST: Set game state to ${currentState}`);
+
+        // The durable fact, read straight from the ROUND# record (get-game-state
+        // .js now includes it) rather than inferred from the state string. An
+        // early reveal — the override for a host who reveals before closing the
+        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
+        // questionStarted, votingStarted) that runs before RESULTS; deriving
+        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
+        // that case, since none of those events are RESULTS transitions.
+        setAuthorsRevealed(!!gameStateData.authorsRevealed);
+        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
+
         // Restore basic game metadata
+        //
+        // `restoredSetId`/`restoredSetScope` are declared out here, not `const`
+        // inside the block below, because they used to be needed further down
+        // too. Left hoisted rather than folded back — a smaller diff for the
+        // next reviewer to compare against fix round 1.
+        let restoredSetId = '';
+        let restoredSetScope = DEFAULT_SCOPE;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
@@ -2423,16 +2496,35 @@ Focus on actionable business strategy insights.`;
           */
           setSurveyNames(namesMode(gameStateData.names ?? gameStateData.gameMetadata.names).id);
           setSurveyWarnedAt(gameStateData.warnedAt ?? gameStateData.gameMetadata.warnedAt ?? null);
-          const restoredSetId = gameStateData.gameMetadata.questionSetId || '';
+          restoredSetId = gameStateData.gameMetadata.questionSetId || '';
           // The scope the SESSION pinned, not a fresh search. A session plays
           // one partition for its whole life; reloading the host screen must
           // read that one.
-          const restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
+          restoredSetScope = gameStateData.gameMetadata.questionSetScope || DEFAULT_SCOPE;
           setSelectedSetId(restoredSetId);
           setSelectedSetScope(restoredSetScope);
-          fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+          // THE OLD CATALOGUE LOOKUP MUST COVER EVERY PATH EXCEPT THE ONE THAT
+          // READS THESE FIELDS OFF ITS OWN /question RESPONSE (fix round 2,
+          // GitHub #18). That excluded path is exactly `questionNumber > 0 AND
+          // no currentQuestionData` — the branch below that awaits `/question`
+          // and calls `applyQuestionSetInstruction` with what it gets back.
+          //
+          // Fix round 1 confined this call to the `currentQuestionData` branch
+          // ALONE, nested inside `if (questionNumber > 0)` — which never runs
+          // at all when questionNumber is 0: an open lobby before round 1, or
+          // an ended session with zero rounds. `setRoundNoun` feeds the LOBBY
+          // primary CTA (~getHostRoundNoun below), so that regression showed up
+          // as "Start First Round" instead of the set's own noun (e.g. "Start
+          // First Lesson") on a lobby reload, until round 1 actually started.
+          //
+          // This still closes the race fix round 1 fixed: the excluded branch
+          // is the ONLY writer of these fields on its path, so nothing here
+          // competes with it.
+          if (!(questionNumber > 0 && !gameStateData.currentQuestionData)) {
+            fetchQuestionSetInstruction(restoredSetId, restoredSetScope);
+          }
           console.log(`🎮 HOST: Restored game metadata`);
-          
+
           // Restore categories from bitmask if we have a question set
           if (restoredSetId) {
             await fetchCategories(restoredSetId, true, restoredSetScope); // true = restore from game bitmask
@@ -2440,38 +2532,6 @@ Focus on actionable business strategy insights.`;
           }
         }
 
-        // Parse and restore game state
-        const currentState = gameStateData.state || 'LOBBY';
-        let questionNumber = gameStateData.currentQuestion || 0;
-        
-        // Trust the currentQuestion from backend - don't override it by parsing state
-        console.log(`🔄 HOST: Using lesson number ${questionNumber} from backend (state: ${currentState})`);
-        
-        // Only extract from state if backend didn't provide currentQuestion (legacy fallback)
-        if (questionNumber === 0 && (currentState.includes('#'))) {
-          const stateQuestionMatch = currentState.match(/#(\d+)/);
-          if (stateQuestionMatch) {
-            questionNumber = parseInt(stateQuestionMatch[1], 10);
-            console.log(`🔄 HOST: Fallback: Extracted question number ${questionNumber} from state ${currentState}`);
-          }
-        }
-        
-        console.log(`📊 HOST: Current state: ${currentState}, Question: ${questionNumber}`);
-        
-        // Use server state directly instead of mapping to legacy format
-        setGameState(currentState);
-        console.log(`🎮 HOST: Set game state to ${currentState}`);
-
-        // The durable fact, read straight from the ROUND# record (get-game-state
-        // .js now includes it) rather than inferred from the state string. An
-        // early reveal — the override for a host who reveals before closing the
-        // vote — must survive an ordinary re-sync (reconnect, gameStateChanged,
-        // questionStarted, votingStarted) that runs before RESULTS; deriving
-        // from `currentState.startsWith('RESULTS#')` silently reverted exactly
-        // that case, since none of those events are RESULTS transitions.
-        setAuthorsRevealed(!!gameStateData.authorsRevealed);
-        console.log(`🔍 HOST: Questions array length: ${questions.length}`);
-        
         // If we have a current question, set it up
         if (questionNumber > 0) {
           setCurrentQuestionIndex(questionNumber - 1); // Convert to 0-based index
@@ -2485,6 +2545,9 @@ Focus on actionable business strategy insights.`;
             // instruction resolver falls all the way through to the generic
             // call-and-answer default — even on an Art Title round.
             setCurrentQuestionId(gameStateData.currentQuestionData.id);
+            // The catalogue lookup for this case already ran above, in the
+            // metadata block — see the note there for why this branch is the
+            // one path that still needs it.
             console.log(`📝 HOST: Loaded question ${questionNumber} from game state:`, gameStateData.currentQuestionData.title);
           } else {
             // Try to fetch question data with question number
@@ -2496,6 +2559,7 @@ Focus on actionable business strategy insights.`;
                 const questionData = await questionRes.json();
                 setQuestions([questionData]);
                 setCurrentQuestionId(questionData.id);
+                applyQuestionSetInstruction(questionData);
                 console.log(`📝 HOST: Loaded question ${questionNumber}:`, questionData.title);
                 console.log('🔍 HOST: Question data keys:', Object.keys(questionData));
                 console.log('🔍 HOST: Updated questions array:', [questionData]);
@@ -3611,6 +3675,7 @@ Focus on actionable business strategy insights.`;
       setManualStateChange(true);
       setGameState(newState);
       setQuestions([questionData]);
+      applyQuestionSetInstruction(questionData);
       setLessonNumber(lessonNumber);
       setAuthorsRevealed(false); // A new round starts anonymous, not the last one's reveal
 
@@ -3826,10 +3891,11 @@ Focus on actionable business strategy insights.`;
       // the outer catch told the host "the round moved on, but this screen could
       // not refresh". Which was true, and was this line.
       setCurrentQuestionId(questionId);
-      
+
       // Set the questions array
       setQuestions([questionData]);
-      
+      applyQuestionSetInstruction(questionData);
+
       // WebSocket notification is handled automatically by the backend
       console.log(`✅ HOST: Question ${lessonNumber} started successfully`);
       
@@ -4394,13 +4460,30 @@ Focus on actionable business strategy insights.`;
       return;
     }
 
-    switchToGame(gameIdToUse);
+    // THE SAME CHECK THE `?gameId=` URL LOADER RUNS (a few hundred lines up).
+    // Typing a code was the one door onto the live stage that skipped it: an
+    // unstarted session lands with "Start First Round" disabled until a
+    // player joins, and a join is refused before start (session-gate.js) —
+    // a dead end. Route an unstarted session the way the URL loader already
+    // does, into game history, where Start is one click away; anything else
+    // (started, or the status check itself failing) goes straight to the
+    // stage as before.
+    checkGameStatus(gameIdToUse).then((gameStatus) => {
+      if (gameStatus.exists && !gameStatus.started) {
+        console.log(`⚠️ HOST: Game ${gameIdToUse} exists but not started — showing game history`);
+        setShowWelcomeScreen(true);
+        setTimeout(() => handleViewGameHistory(), 500);
+        return;
+      }
 
-    // Update URL
-    const url = new URL(window.location);
-    url.searchParams.set('gameId', gameIdToUse);
-    window.history.replaceState(null, '', url);
-    console.log(`🔗 HOST: Continuing game ${gameIdToUse}`);
+      switchToGame(gameIdToUse);
+
+      // Update URL
+      const url = new URL(window.location);
+      url.searchParams.set('gameId', gameIdToUse);
+      window.history.replaceState(null, '', url);
+      console.log(`🔗 HOST: Continuing game ${gameIdToUse}`);
+    });
   };
 
   const handleViewGameHistory = async () => {

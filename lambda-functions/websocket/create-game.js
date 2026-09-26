@@ -97,6 +97,22 @@ exports.handler = async (event) => {
   const isSurvey = gameType === 'survey';
 
   /*
+    A PRIVATE SESSION WITH NO ACCESS CODE IS UNJOINABLE. session-gate.js is the
+    gate every join runs through, and a private session with nothing to check
+    the phone's code against answers 500 ("Game configuration error") rather
+    than let anyone in. Refused here, at birth, rather than left for that gate
+    to discover mid-join — update-game.js refuses the mirror-image edit the
+    same way.
+  */
+  if (visibility === 'private' && !String(accessCode || '').trim()) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'A private session needs an access code' }),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+  }
+
+  /*
     THE BRIEFING (session-setup-redesign Phase 3): a Call & Answer session's
     host-checked document summary for Workie. Validated BEFORE anything is
     written — over its cap, or on another format, is refused out loud rather

@@ -735,9 +735,9 @@ const broadcastToGame = async (gameId, message, targetType = 'ALL') => {
     // Filter connections based on target type
     let targetConnections = connections;
     if (targetType === 'HOST') {
-      targetConnections = connections.filter(conn => conn.IsHost === true);
+      targetConnections = connections.filter(conn => conn.ConnectionType === 'HOST');
     } else if (targetType === 'PARTICIPANTS') {
-      targetConnections = connections.filter(conn => conn.IsHost !== true);
+      targetConnections = connections.filter(conn => conn.ConnectionType !== 'HOST');
     }
     
     const broadcastPromises = targetConnections.map(async (connection) => {
