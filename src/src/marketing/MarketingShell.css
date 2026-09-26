@@ -218,18 +218,52 @@
 .mk-failed { padding-block: 96px; }
 
 /* ================================================================ responsive
-   The nav's narrow-width collapse, ported from mk.css's ≤860px block. The
-   mockup never shows the OPEN state of a collapsed nav (it is a static
-   export, not a running page), so `.mk-nav-links.mk-nav--open` is this
-   file's own addition: it is what MarketingShell.jsx toggles via the burger
-   button's `aria-expanded` state. mk.css also hides just the primary button
-   inside `.mk-nav-acts` at this width — that rule does not carry over
-   because Sign in / Create a host account now live inside `.mk-nav-links`
-   (so the nav element can contain both, per the behavioural contract), not
-   inside `.mk-nav-acts` alongside the burger. */
-@media (max-width: 860px) {
+   The nav gives up room in two steps: first the register door leaves the
+   row (the mockup's own choice of what goes first), then the links collapse
+   behind the burger.
+
+   mk.css makes both moves at one width, ≤860px (it hides `.mk-nav-acts
+   .mk-btn-primary` and `.mk-nav-links` together). That width never fitted
+   the full row: the mockup's own row needs 978px in the system fonts mk.css
+   falls back to (it loads no web font) and 1036px with Archivo loaded, so
+   861px up to there wrapped "How it works", "Use cases", "Sign in" and
+   "Create a host account" onto two lines. Measured in Chromium, 2026-09-25,
+   with Archivo and Inter loaded
+   (marketingNavFit.test.js holds the numbers and the method):
+
+     signed out, full row ......................... 1035px
+     signed out, without Create a host account ...  805px
+     signed in (four links + Open the app) ........  860px
+
+   Each breakpoint adds 17px for a classic scrollbar (a media query counts it
+   as viewport; the layout does not get it) and 16px for text shaping in the
+   engines that were not measured: 1035 + 33 = 1068, so the full row returns
+   at 1080px; 860 + 33 = 893, so the links collapse at 900px, not 860px.
+
+   Why the register door and not Sign in: the mockup keeps Sign in and drops
+   Create a host account when the row gets tight (RATIONALE: nobody fills in a
+   registration form standing in a corridor, and the hero's first button is
+   that same action). Every page but Help carries it in its hero or CTA band,
+   and the sign-in screen links to it. Raising the collapse to 1080px instead
+   would put all four page links and Sign in behind a burger at 1024px (iPad
+   landscape), and do it to signed-in hosts, whose row fits. */
+@media (max-width: 1079px) {
+  .mk-nav-register { display: none; }
+}
+
+/* The collapse itself. The mockup never shows the OPEN state of a collapsed
+   nav (it is a static export, not a running page), so
+   `.mk-nav-links.mk-nav--open` is this file's own addition: it is what
+   MarketingShell.jsx toggles via the burger button's `aria-expanded` state.
+   Sign in / Create a host account live inside `.mk-nav-links` (so the nav
+   element can contain both, per the behavioural contract), not inside
+   `.mk-nav-acts` alongside the burger, so the open menu is the one place in
+   the nav the register door stays at this width. `inline-flex` is `.mk-btn`'s
+   own value, restored over the hide above. */
+@media (max-width: 900px) {
   .mk-nav-links { display: none; }
   .mk-nav-links.mk-nav--open { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+  .mk-nav-links.mk-nav--open .mk-nav-register { display: inline-flex; }
   .mk-nav-burger {
     display: inline-grid; place-items: center; width: var(--mk-tap); height: var(--mk-tap);
     border-radius: var(--mk-radius-sm); background: transparent; color: var(--mk-text);
