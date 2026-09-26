@@ -251,6 +251,14 @@ function assertNothingPrivate(r) {
       });
     }
   }
+  // The masks are the door's alone, so the public brief, which every phone
+  // and the join field read, has no reason to fetch them.
+  // rejects: reading STATE#CATS on every public call and throwing it away.
+  for (const query of [{ role: 'host' }, { role: 'player' }, null]) {
+    const r = await call(PUBLIC_ROUTE, ORG_GAME, query);
+    await check(`the public brief, ${query ? `?role=${query.role}` : 'no query'}: no read of the category masks`, () =>
+      assert.ok(!r.read.includes('STATE#CATS'), `read ${r.read.join(', ')}`));
+  }
   const hostView = await call(PUBLIC_ROUTE, ORG_GAME, { role: 'host' });
   await check('and that view still carries what the host page\'s public read uses (started)', () => {
     assert.strictEqual(hostView.body.started, false);
@@ -268,6 +276,8 @@ function assertNothingPrivate(r) {
     assert.strictEqual(own.body.briefing.source.name, BRIEF_FILE);
     assert.strictEqual(own.body.briefing.namesRemoved, 2);
   });
+  await check('the door does read the masks', () =>
+    assert.ok(own.read.includes('STATE#CATS'), `read ${own.read.join(', ')}`));
   await check('and everything else the edit dialog seeds from, in one read', () => {
     const b = own.body;
     assert.strictEqual(b.gameId, ORG_GAME);

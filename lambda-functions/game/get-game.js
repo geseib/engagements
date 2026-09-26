@@ -100,11 +100,14 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
     }));
 
-    // Get category state
-    const categoryState = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
-    }));
+    // The category masks are the host's door's alone (see below), so the
+    // public brief every phone reads does not fetch them.
+    const categoryState = onHostDoor
+      ? await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE#CATS' }
+      }))
+      : {};
 
     // Same default-ON rule as the anonymity gate (game/anonymity.js:isHidden):
     // only an explicit `false` turns it off, so a game with no HostPreferences
@@ -210,19 +213,16 @@ exports.handler = async (event) => {
           availMask1_8: categoryState.Item['AvailMask1-8'],
           availMask9_16: categoryState.Item['AvailMask9-16'],
           availMask17_24: categoryState.Item['AvailMask17-24']
-        } : null
+        } : null,
+        // THE HOST'S OWN WRITING, DECRYPTED, for the edit prefill (see the top
+        // of this file). The Workie context is what they told the AI about
+        // their organisation; the briefing is a summary of a customer's
+        // document, its file name riding inside.
+        aiContext: sessionMeta.AIContext,
+        briefing: sessionMeta.Briefing || null
       };
 
-      if (onHostDoor) {
-        // THE HOST'S OWN WRITING, DECRYPTED, for the edit prefill — on the
-        // host's door only (see the top of this file). The Workie context is
-        // what they told the AI about their organisation; the briefing is a
-        // summary of a customer's document, its file name riding inside.
-        result.aiContext = sessionMeta.AIContext;
-        result.briefing = sessionMeta.Briefing || null;
-      }
-
-      console.log(`✅ Returning ${onHostDoor ? 'host details' : 'host game info'} for ${gameId}`);
+      console.log(`✅ Returning host details for ${gameId}`);
       return {
         statusCode: 200,
         body: JSON.stringify(result),
