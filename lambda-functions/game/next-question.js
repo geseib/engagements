@@ -5,6 +5,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
+const { endSession } = require('./session-end');
 const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
 
@@ -1109,34 +1110,14 @@ exports.handler = async (event) => {
     }
 
     if (!nextQuestion) {
-      // Game is finished - update state to ENDED and broadcast
+      // Game is finished - update state to ENDED and broadcast. THE SHARED
+      // HELPER: end-session.js's own host-triggered POST /end must write and
+      // broadcast identically, so both doors call session-end.js rather than
+      // each carrying its own copy of the UpdateCommand and the broadcast.
       console.log(`🏁 Game ${gameId} has ended - no more questions available`);
-      
-      const now = new Date().toISOString();
-      
-      // Update game state to ENDED
-      await db.send(new UpdateCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-        UpdateExpression: 'SET #state = :state, #updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-          '#state': 'State',
-          '#updatedAt': 'UpdatedAt'
-        },
-        ExpressionAttributeValues: {
-          ':state': 'ENDED',
-          ':updatedAt': now
-        }
-      }));
 
-      // Broadcast game ended to all connected players
-      await broadcastToGame(gameId, {
-        type: 'hostMessage',
-        messageType: 'END',
-        gameId: gameId,
-        state: `GAME#${gameId} ENDED`,
-        timestamp: now,
-        message: 'All questions have been completed'
+      await endSession(db, process.env.TABLE_NAME, gameId, {
+        currentState, broadcastToGame,
       });
 
       console.log(`✅ Game ${gameId} ended successfully - final report should be generated`);

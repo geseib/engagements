@@ -12,6 +12,7 @@ import {
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { queuePosition } from '../../config/questionQueue';
 import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
+import { canEndSession } from '../../config/hostControls';
 import QueueList from './QueueList';
 import HelpButton from '../HelpButton';
 import BrandMark from '../BrandMark';
@@ -199,6 +200,13 @@ export default function SessionSetupPanel({
   onViewReports = () => {},
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
+  // Task 4, 2026-09-26 bug sweep: what pressing "End session" does. Whether
+  // it is offered at all is `canEndSession(gameType, gameState)` below, from
+  // the two props this panel already carries — the same pattern
+  // `anonymityActive` and `hasScoreboard` use elsewhere in this file. The
+  // confirm lives on the action the page builds, not here — this panel stays
+  // presentational.
+  onEndSession = () => {},
   onSignOut = () => {},
   // Whether to offer the Admin link at all. Derived by the page from the
   // signed-in user's Cognito groups, not read here, so the panel stays a
@@ -1135,6 +1143,21 @@ export default function SessionSetupPanel({
                   because it is the same act on all three.
                 */}
                 <button type="button" onClick={onSwitchGame}>Back to Menu</button>
+                {/*
+                  "END SESSION", AND UNLIKE ITS NEIGHBOUR, THIS ONE DOES WRITE
+                  ENDED. Task 4, 2026-09-26 bug sweep: before this, a trivia,
+                  poll, call-and-answer or wavelength session reached ENDED
+                  only when the question pool ran dry — a host who wanted to
+                  stop after round 4 of 10 had no way to. `canEndSession`
+                  (config/hostControls.js) keeps this off a survey (its own
+                  CLOSED phase carries the equivalent control), the lobby
+                  (nothing running to stop), and an already-ENDED session (the
+                  stage's own primary is the way on). The confirm is on the
+                  action `onEndSession` builds, not here.
+                */}
+                {canEndSession(gameType, gameState) && (
+                  <button type="button" className="btn-danger" onClick={onEndSession}>End session</button>
+                )}
                 {/*
                   ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
 

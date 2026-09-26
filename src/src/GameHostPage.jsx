@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
+import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
@@ -62,7 +63,7 @@ import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
-  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType,
+  stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
 } from './config/hostControls';
 import { stageAnswersKey, stageAnswersReady, askFetchStillCurrent } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
@@ -5532,6 +5533,21 @@ Focus on actionable business strategy insights.`;
     setGameState('ENDED');
   };
 
+  /*
+    END SESSION — once the confirm (config/hostControls.js endSessionConfirm,
+    carried on the action runHostAction was given) has already said yes. The
+    ask is not here, the same reason closeSurveyNow's own note gives: two asks
+    would be one too many. Task 4, 2026-09-26 bug sweep.
+  */
+  const endSessionNow = async () => {
+    const result = await requestEndSession({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (!result.ended) {
+      alert(`The session did not end: ${result.error}`);
+      return;
+    }
+    setGameState('ENDED');
+  };
+
   const runHostAction = async (action) => {
     if (!action) return;
     /*
@@ -5598,6 +5614,13 @@ Focus on actionable business strategy insights.`;
         // pointing ENDED's primary at it would have made the one control on
         // the last screen of the session do nothing at all.
         generateReportForGame(gameId, eventTitle);
+        break;
+      case HOST_INTENTS.END:
+        // Task 4, 2026-09-26 bug sweep. The settings panel's own control, not
+        // the dock's — see canEndSession (config/hostControls.js) for why it
+        // is never offered on a survey, the lobby, or an already-ENDED
+        // session.
+        endSessionNow();
         break;
       case HOST_INTENTS.OPEN_SURVEY:
         // A survey still in CREATED — its create-time open was refused, or it
@@ -7034,6 +7057,12 @@ Focus on actionable business strategy insights.`;
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
           onSwitchGame={requestLeave}
+          // Task 4, 2026-09-26 bug sweep. Built the same way the dock's own
+          // controls are: the intent AND its confirm travel together into
+          // runHostAction, so the generic "the dock asks before it dispatches
+          // any control that carries confirm" gate covers this one too — no
+          // second ask needed here or in endSessionNow.
+          onEndSession={() => runHostAction({ intent: HOST_INTENTS.END, confirm: endSessionConfirm() })}
           onSignOut={handleSignOut}
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.

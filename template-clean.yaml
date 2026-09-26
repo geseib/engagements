@@ -2270,6 +2270,49 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # POST /games/{gameId}/end — THE HOST STOPS A NON-SURVEY SESSION EARLY
+  # (Task 4, 2026-09-26 bug sweep). Before this a trivia, poll, call-and-answer
+  # or wavelength session reached ENDED only when next-question.js's pool-dry
+  # path ran out of questions to serve; a host who wanted to stop after round
+  # 4 of 10 had no way to. Cognito here, and `callerMayDriveSession` on the
+  # session's own org inside the handler (end-session.js) — the same pair
+  # next-question.js and the comment-feature route pay. The write and the
+  # broadcast are session-end.js's shared `endSession`, the same helper
+  # next-question.js's own pool-dry path now calls, so a host's early end and
+  # a pool running dry look identical on the wire. A survey is refused here,
+  # 400, and points at its own survey/end.
+  EndSessionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-end-session'
+      CodeUri: lambda-functions/game/
+      Handler: end-session.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # The ENDED broadcast reaches every phone, laptop and tablet in the
+        # room. Without this it is a silent AccessDenied and nothing tells
+        # them the session is over.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        EndSessionEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/end
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   ToggleCategoryFunction:
     Type: AWS::Serverless::Function
     Properties:
