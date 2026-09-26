@@ -368,6 +368,62 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  GetEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-events'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/get-events.handler
+      Events:
+        GetEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Opens the event names on the organisation's list.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  GetEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-event'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/get-event.handler
+      Events:
+        GetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Opens the event, its items and an org set's name.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   StartVoteFunction:
     Type: AWS::Serverless::Function
     Properties:
