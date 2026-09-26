@@ -284,9 +284,13 @@ describe('the front page, refreshed (2026-09-22)', () => {
     for (const bar of bars) expect(bar.style.width).toBe('');
     const counts = [...tally.querySelectorAll('[data-count]')];
     expect(counts.map((c) => Number(c.dataset.count))).toEqual(HOME.room.tally.rows.map((r) => r.points));
+    // A REAL CLOCK, so its own budget: useCountUp (marketing/useInViewOnce.js)
+    // runs 700ms of wall time on requestAnimationFrame from the render above.
+    // Measured at ~550ms of this wait at any load — a margin, not a guarantee,
+    // on Testing Library's 1000ms default (see asyncWaitBudget.test.js).
     await waitFor(() => {
       expect(counts.map((c) => c.textContent)).toEqual(HOME.room.tally.rows.map((r) => String(r.points)));
-    });
+    }, { timeout: 3000 });
     // Points, not votes: each player ranks a top three, scored 3/2/1
     // (game/get-results.js). Twenty ballots hand out 120, and the rows add up.
     expect(HOME.room.tally.unit).toBe('points');

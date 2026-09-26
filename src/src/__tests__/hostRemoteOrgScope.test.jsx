@@ -68,12 +68,6 @@ jest.mock('../auth/authFetch', () => ({
 }));
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
 
-// CodeBuild runs this suite on Node 18 on a slower, shared machine than a
-// laptop; Testing Library's default 1000ms timeout has been seen to trip
-// there on a mocked fetch that does resolve, just not inside that window.
-// Every find/waitFor below waits on one, so they all get the same margin.
-const ASYNC_TIMEOUT = { timeout: 5000 };
-
 function serve({ orgs = [] } = {}) {
   global.fetch = jest.fn((url, init) => {
     const href = String(url);
@@ -104,11 +98,16 @@ function serve({ orgs = [] } = {}) {
   });
 }
 
+// Connected means the session's first `/state` reply is on screen, not that the
+// code box has gone: until that reply lands the remote's controls are disabled
+// and a tap on one is swallowed. The full account, and the test that pins it,
+// are at connect() in hostRemoteBrowser.test.jsx.
 async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument(), ASYNC_TIMEOUT);
+  const status = screen.getByText(/^(Live|Offline)$/);
+  await waitFor(() => expect(status).toHaveTextContent(/^Live$/));
 }
 
 beforeEach(() => {
@@ -134,7 +133,7 @@ describe('the remote resolves an organisation', () => {
 
     await waitFor(() => {
       expect(window.localStorage.getItem(ACTIVE_ORG_STORAGE_KEY)).toBe('org_personal');
-    }, ASYNC_TIMEOUT);
+    });
   });
 
   // Rejects: leaving the platform sentinel in place. `~platform` can never
@@ -148,7 +147,7 @@ describe('the remote resolves an organisation', () => {
 
     await waitFor(() => {
       expect(window.localStorage.getItem(ACTIVE_ORG_STORAGE_KEY)).toBe('org_teamg');
-    }, ASYNC_TIMEOUT);
+    });
   });
 
   // Rejects: resolving an organisation silently and giving a host in two teams
@@ -164,7 +163,7 @@ describe('the remote resolves an organisation', () => {
     });
     await connect();
 
-    expect(await screen.findByTestId('orgsw-chip', {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByTestId('orgsw-chip')).toBeInTheDocument();
   });
 
   // Rejects: drawing a chip for a host with nothing to switch between. The
@@ -174,7 +173,7 @@ describe('the remote resolves an organisation', () => {
     serve({ orgs: [] });
     await connect();
 
-    await waitFor(() => expect(screen.getByLabelText(/^Session$/)).toBeInTheDocument(), ASYNC_TIMEOUT);
+    await waitFor(() => expect(screen.getByLabelText(/^Session$/)).toBeInTheDocument());
     expect(screen.queryByTestId('orgsw-chip')).not.toBeInTheDocument();
   });
 });

@@ -39,12 +39,6 @@ const TRIVIA = {
   correctAnswer: 'OptionA',
 };
 
-// CodeBuild runs this suite on Node 18 on a slower, shared machine than a
-// laptop; Testing Library's default 1000ms timeout has been seen to trip
-// there on a mocked fetch that does resolve, just not inside that window.
-// Every find/waitFor below waits on one, so they all get the same margin.
-const ASYNC_TIMEOUT = { timeout: 5000 };
-
 /**
  * Route every request the remote makes, with the question-set route and the
  * dispatch route independently breakable. Shapes are the real handlers'.
@@ -108,20 +102,25 @@ function serve({ questions = [TRIVIA], questionsThen = null, dispatch = null, ca
   });
 }
 
+// Connected means the session's first `/state` reply is on screen, not that the
+// code box has gone: until that reply lands the remote's controls are disabled
+// and a tap on one is swallowed. The full account, and the test that pins it,
+// are at connect() in hostRemoteBrowser.test.jsx.
 async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument(), ASYNC_TIMEOUT);
+  const status = screen.getByText(/^(Live|Offline)$/);
+  await waitFor(() => expect(status).toHaveTextContent(/^Live$/));
 }
 
 async function openQuestions() {
   // Held until the state poll lands: the control is `disabled={!setId}` and a
   // click on a disabled button is silently nothing.
-  const open = await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT);
-  await waitFor(() => expect(open).not.toBeDisabled(), ASYNC_TIMEOUT);
+  const open = await screen.findByRole('button', { name: /choose next question/i });
+  await waitFor(() => expect(open).not.toBeDisabled());
   fireEvent.click(open);
-  await screen.findByRole('tab', { name: /^questions$/i }, ASYNC_TIMEOUT);
+  await screen.findByRole('tab', { name: /^questions$/i });
 }
 
 beforeEach(() => {
@@ -182,9 +181,9 @@ describe('the Questions tab says which failure it had, and offers a way out', ()
     await connect();
     await openQuestions();
 
-    fireEvent.click(await screen.findByRole('button', { name: /try again/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
 
-    expect(await screen.findByText(TRIVIA.title, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /^questions$/i, selected: true })).toBeInTheDocument();
   });
 
@@ -193,7 +192,7 @@ describe('the Questions tab says which failure it had, and offers a way out', ()
     await connect();
     await openQuestions();
 
-    const flash = await screen.findByRole('alert', {}, ASYNC_TIMEOUT);
+    const flash = await screen.findByRole('alert');
     expect(flash.textContent).toMatch(/sign(ed)? in/i);
   });
 
@@ -202,7 +201,7 @@ describe('the Questions tab says which failure it had, and offers a way out', ()
     await connect();
     await openQuestions();
 
-    expect(await screen.findByRole('button', { name: /try again/i }, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
   // Rejects: leaving a stale failure on screen while the retry is in the air.
@@ -211,7 +210,7 @@ describe('the Questions tab says which failure it had, and offers a way out', ()
     await connect();
     await openQuestions();
 
-    fireEvent.click(await screen.findByRole('button', { name: /try again/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
@@ -229,8 +228,8 @@ describe('the category list', () => {
     serve({ categories: { status: 404 } });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /categories/i }, ASYNC_TIMEOUT));
-    const flash = await screen.findByRole('alert', {}, ASYNC_TIMEOUT);
+    fireEvent.click(await screen.findByRole('button', { name: /categories/i }));
+    const flash = await screen.findByRole('alert');
     expect(flash.textContent).toMatch(/team/i);
   });
 });
@@ -290,9 +289,9 @@ describe('the round controls', () => {
     serve({ dispatch: { status: 404, error: 'Game not found' } });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /start first round/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /start first round/i }));
 
-    const flash = await screen.findByRole('alert', {}, ASYNC_TIMEOUT);
+    const flash = await screen.findByRole('alert');
     expect(flash.textContent).toMatch(/team/i);
     expect(flash.textContent).not.toMatch(/game not found/i);
   });

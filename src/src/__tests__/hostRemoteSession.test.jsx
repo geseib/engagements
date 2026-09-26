@@ -97,12 +97,6 @@ const REPORT = {
   },
 };
 
-// CodeBuild runs this suite on Node 18 on a slower, shared machine than a
-// laptop; Testing Library's default 1000ms timeout has been seen to trip
-// there on a mocked fetch that does resolve, just not inside that window.
-// Every find/waitFor below that waits on one gets the same margin.
-const ASYNC_TIMEOUT = { timeout: 5000 };
-
 function serve({ state = 'STARTED', players = [], report = REPORT, progress = {} } = {}) {
   const posts = [];
   global.fetch = jest.fn((url, init) => {
@@ -151,16 +145,21 @@ function serve({ state = 'STARTED', players = [], report = REPORT, progress = {}
   return posts;
 }
 
+// Connected means the session's first `/state` reply is on screen, not that the
+// code box has gone: until that reply lands the remote's controls are disabled
+// and a tap on one is swallowed. The full account, and the test that pins it,
+// are at connect() in hostRemoteBrowser.test.jsx.
 async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument(), ASYNC_TIMEOUT);
+  const status = screen.getByText(/^(Live|Offline)$/);
+  await waitFor(() => expect(status).toHaveTextContent(/^Live$/));
 }
 
 const openPanel = async () => {
-  fireEvent.click(await screen.findByRole('button', { name: /players & rounds/i }, ASYNC_TIMEOUT));
-  return screen.findByRole('tablist', { name: /session/i }, ASYNC_TIMEOUT);
+  fireEvent.click(await screen.findByRole('button', { name: /players & rounds/i }));
+  return screen.findByRole('tablist', { name: /session/i });
 };
 
 beforeEach(() => {
@@ -238,7 +237,7 @@ describe('the rounds list', () => {
     await openPanel();
     fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
 
-    await screen.findByText('Where does time go?', {}, ASYNC_TIMEOUT);
+    await screen.findByText('Where does time go?');
     expect(posts).toContain('https://api.test/games/4821/report');
 
     // Round 1 before round 2, though the payload lists them the other way —
@@ -259,7 +258,7 @@ describe('the rounds list', () => {
     await openPanel();
     fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
 
-    const row = await screen.findByRole('button', { name: /what would you stop doing/i }, ASYNC_TIMEOUT);
+    const row = await screen.findByRole('button', { name: /what would you stop doing/i });
     expect(row).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(row);
 
@@ -277,7 +276,7 @@ describe('the rounds list', () => {
     await connect();
     await openPanel();
     fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /what would you stop doing/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /what would you stop doing/i }));
 
     const redacted = screen.getByText('The Tuesday sync').closest('li');
     expect(within(redacted).getByText('Response 2')).toBeInTheDocument();
@@ -343,7 +342,7 @@ describe('the rounds list', () => {
     await connect();
     await openPanel();
     fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
-    expect(await screen.findByText(/no rounds yet/i, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText(/no rounds yet/i)).toBeInTheDocument();
   });
 });
 
@@ -356,7 +355,7 @@ describe('the questions tab is the browser that already existed', () => {
     await openPanel();
     fireEvent.click(screen.getByRole('tab', { name: /questions/i }));
 
-    expect(await screen.findByText('Which pricing change?', {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText('Which pricing change?')).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
   });
 
@@ -366,9 +365,9 @@ describe('the questions tab is the browser that already existed', () => {
   it('is where Choose next question lands', async () => {
     serve({ state: 'ASK#002' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
 
-    const tabs = await screen.findByRole('tablist', { name: /session/i }, ASYNC_TIMEOUT);
+    const tabs = await screen.findByRole('tablist', { name: /session/i });
     expect(within(tabs).getByRole('tab', { name: /questions/i }))
       .toHaveAttribute('aria-selected', 'true');
   });
@@ -386,7 +385,7 @@ describe('the primary action survives a list being open', () => {
   it('keeps the advance in the dock while the panel is open', async () => {
     serve({ state: 'RESULTS#002' });
     await connect();
-    await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT);
+    await screen.findByRole('button', { name: /what we heard/i });
 
     await openPanel();
     expect(screen.getByRole('button', { name: /what we heard/i })).toBeInTheDocument();
@@ -414,13 +413,13 @@ describe('the primary action survives a list being open', () => {
   it('closes itself when a question is asked from the Questions tab', async () => {
     serve({ state: 'ASK#002' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }, ASYNC_TIMEOUT));
-    await screen.findByText('Which pricing change?', {}, ASYNC_TIMEOUT);
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    await screen.findByText('Which pricing change?');
 
     fireEvent.click(screen.getByRole('button', { name: /ask this next/i }));
 
     await waitFor(() =>
-      expect(screen.queryByRole('tablist', { name: /session/i })).not.toBeInTheDocument(), ASYNC_TIMEOUT);
+      expect(screen.queryByRole('tablist', { name: /session/i })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /back to the round/i })).not.toBeInTheDocument();
   });
 });
@@ -444,7 +443,7 @@ describe('the remote paints dusk, not the document\'s paper', () => {
 
     fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
     fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-    await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument(), ASYNC_TIMEOUT);
+    await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument());
     expect(document.querySelector('.hr')).toHaveAttribute('data-theme', 'dark');
   });
 

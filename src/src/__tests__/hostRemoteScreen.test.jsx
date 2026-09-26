@@ -92,23 +92,22 @@ function serve({
   });
 }
 
-// CodeBuild runs this suite on Node 18 on a slower, shared machine than a
-// laptop; Testing Library's default 1000ms timeout has been seen to trip
-// there on a mocked fetch that does resolve, just not inside that window.
-// Every find/waitFor below that waits on one gets the same margin.
-const ASYNC_TIMEOUT = { timeout: 5000 };
-
 const person = (playerName, readiness) => ({
   playerName, totalScore: 0, isConnected: true,
   readiness: { isReady: false, type: 'answered', ...readiness },
 });
 
 /** Enter the session the way the entry card does — no window.location needed. */
+// Connected means the session's first `/state` reply is on screen, not that the
+// code box has gone: until that reply lands the remote's controls are disabled
+// and a tap on one is swallowed. The full account, and the test that pins it,
+// are at connect() in hostRemoteBrowser.test.jsx.
 async function connect() {
   render(<HostRemote />);
   fireEvent.change(screen.getByLabelText(/session code/i), { target: { value: '4821' } });
   fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-  await waitFor(() => expect(screen.queryByLabelText(/session code/i)).not.toBeInTheDocument(), ASYNC_TIMEOUT);
+  const status = screen.getByText(/^(Live|Offline)$/);
+  await waitFor(() => expect(status).toHaveTextContent(/^Live$/));
 }
 
 beforeEach(() => {
@@ -124,7 +123,7 @@ describe('the RESULTS two-step reaches the button', () => {
     serve({ state: 'RESULTS#003', stageBeat: 'results' });
     await connect();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /what we heard/i })).toBeInTheDocument(), ASYNC_TIMEOUT);
+      expect(screen.getByRole('button', { name: /what we heard/i })).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /next round/i })).not.toBeInTheDocument();
   });
 
@@ -132,7 +131,7 @@ describe('the RESULTS two-step reaches the button', () => {
     serve({ state: 'RESULTS#003', stageBeat: 'field-notes' });
     await connect();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /next round/i })).toBeInTheDocument(), ASYNC_TIMEOUT);
+      expect(screen.getByRole('button', { name: /next round/i })).toBeInTheDocument());
   });
 
   it('posts the beat to stage-beat, addressed to the round on screen', async () => {
@@ -140,14 +139,14 @@ describe('the RESULTS two-step reaches the button', () => {
     // new action id, or if the button is wired to next-question instead.
     serve({ state: 'RESULTS#003', stageBeat: 'results' });
     await connect();
-    const button = await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT);
+    const button = await screen.findByRole('button', { name: /what we heard/i });
     fireEvent.click(button);
 
     // THE POSTS, not every call on the module. `HostRemote` mounts
     // `ActiveOrgSwitcher`, whose GET /orgs also goes through `authFetch`, so
     // `calls[0]` is no longer the dispatch. Naming the dispatch is what this
     // assertion always meant.
-    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1), ASYNC_TIMEOUT);
+    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1));
     const [url, options] = postsTo(authFetch)[0];
     expect(url).toBe('https://api.test/games/4821/stage-beat');
     expect(options.method).toBe('POST');
@@ -161,9 +160,9 @@ describe('the RESULTS two-step reaches the button', () => {
     // agrees.
     serve({ state: 'RESULTS#003', stageBeat: 'results' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: /what we heard/i }));
     // ONE DISPATCH, counted as dispatches rather than as calls — see postsTo.
-    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1), ASYNC_TIMEOUT);
+    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1));
   });
 });
 
@@ -182,7 +181,7 @@ describe('the waiting list', () => {
     });
     await connect();
 
-    const block = await screen.findByRole('group', { name: /still to answer/i }, ASYNC_TIMEOUT);
+    const block = await screen.findByRole('group', { name: /still to answer/i });
     expect(within(block).getByText('Dana')).toBeInTheDocument();
     expect(within(block).getByText('Tomás')).toBeInTheDocument();
     expect(within(block).queryByText('Ada')).not.toBeInTheDocument();
@@ -201,7 +200,7 @@ describe('the waiting list', () => {
     });
     await connect();
 
-    const block = await screen.findByRole('group', { name: /still to vote/i }, ASYNC_TIMEOUT);
+    const block = await screen.findByRole('group', { name: /still to vote/i });
     expect(within(block).getByText('Dana')).toBeInTheDocument();
     expect(within(block).queryByText('Ada')).not.toBeInTheDocument();
   });
@@ -218,7 +217,7 @@ describe('the waiting list', () => {
     });
     await connect();
 
-    const block = await screen.findByRole('group', { name: /still to answer/i }, ASYNC_TIMEOUT);
+    const block = await screen.findByRole('group', { name: /still to answer/i });
     expect(within(block).getByText(/Private/)).toBeInTheDocument();
     expect(within(block).getByText(/different fact from who wrote what/i)).toBeInTheDocument();
   });
@@ -230,7 +229,7 @@ describe('the waiting list', () => {
       players: [person('Ada', { hasAnswered: true })],
     });
     await connect();
-    await screen.findByText(/Everyone is in/i, {}, ASYNC_TIMEOUT);
+    await screen.findByText(/Everyone is in/i);
     expect(screen.queryByRole('group', { name: /still to/i })).not.toBeInTheDocument();
   });
 
@@ -243,7 +242,7 @@ describe('the waiting list', () => {
       players: [person('Dana', { hasAnswered: true, hasVoted: false })],
     });
     await connect();
-    await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT);
+    await screen.findByRole('button', { name: /what we heard/i });
     expect(screen.queryByRole('group', { name: /still to/i })).not.toBeInTheDocument();
   });
 });
@@ -262,7 +261,7 @@ describe('the AI read-back on the phone', () => {
     serve({ state: 'RESULTS#003', stageBeat: 'field-notes', aiSummary: summary });
     await connect();
 
-    expect(await screen.findByText(/nobody proposed telling a customer why/i, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText(/nobody proposed telling a customer why/i)).toBeInTheDocument();
     expect(screen.getByText(/Who are we prepared to let go\?/)).toBeInTheDocument();
     expect(screen.getByText(/Name one segment before the next session\./)).toBeInTheDocument();
   });
@@ -273,7 +272,7 @@ describe('the AI read-back on the phone', () => {
     // is a request per poll for a screen nobody has asked for.
     serve({ state: 'RESULTS#003', stageBeat: 'results', aiSummary: summary });
     await connect();
-    await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT);
+    await screen.findByRole('button', { name: /what we heard/i });
     expect(global.fetch.mock.calls.some(([u]) => String(u).includes('ai-summary'))).toBe(false);
   });
 
@@ -283,7 +282,7 @@ describe('the AI read-back on the phone', () => {
     // tell it apart from a broken one.
     serve({ state: 'RESULTS#003', stageBeat: 'field-notes', aiSummary: null });
     await connect();
-    expect(await screen.findByText(/reading the responses/i, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText(/reading the responses/i)).toBeInTheDocument();
   });
 });
 
@@ -303,13 +302,13 @@ describe('the feedback round on the phone', () => {
   it('shows the round is open once the beat moves to feedback', async () => {
     serve({ state: 'RESULTS#003', stageBeat: 'feedback', comments: [] });
     await connect();
-    expect(await screen.findByText(/feedback round/i, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText(/feedback round/i)).toBeInTheDocument();
   });
 
   it('is not shown while the round is still on its tally beat', async () => {
     serve({ state: 'RESULTS#003', stageBeat: 'results', comments: [] });
     await connect();
-    await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT);
+    await screen.findByRole('button', { name: /what we heard/i });
     expect(screen.queryByText(/feedback round/i)).not.toBeInTheDocument();
   });
 
@@ -323,7 +322,7 @@ describe('the feedback round on the phone', () => {
       ],
     });
     await connect();
-    expect(await screen.findByText(/2 comments so far/i, {}, ASYNC_TIMEOUT)).toBeInTheDocument();
+    expect(await screen.findByText(/2 comments so far/i)).toBeInTheDocument();
   });
 
   it('says nothing about a count when nobody has commented yet', async () => {
@@ -332,14 +331,14 @@ describe('the feedback round on the phone', () => {
     // done the thing it was asked to do. Silence on the count, not a zero.
     serve({ state: 'RESULTS#003', stageBeat: 'feedback', comments: [] });
     await connect();
-    await screen.findByText(/feedback round/i, {}, ASYNC_TIMEOUT);
+    await screen.findByText(/feedback round/i);
     expect(screen.queryByText(/comments? so far/i)).not.toBeInTheDocument();
   });
 
   it('does not fetch comments while the round is still on its tally beat', async () => {
     serve({ state: 'RESULTS#003', stageBeat: 'results', comments: [{ commentId: 'c1' }] });
     await connect();
-    await screen.findByRole('button', { name: /what we heard/i }, ASYNC_TIMEOUT);
+    await screen.findByRole('button', { name: /what we heard/i });
     expect(global.fetch.mock.calls.some(([u]) => String(u).includes('/comments'))).toBe(false);
   });
 });
