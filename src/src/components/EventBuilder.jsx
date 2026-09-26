@@ -141,22 +141,27 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
   useEffect(() => () => { mountedRef.current = false; }, []);
   const codeRef = useRef(code);
   codeRef.current = code;
+  /* Lifted out of load() (Fix round 2 #1): move() and pinLatest() call
+     load() on a refusal too, and then unconditionally set the server's error
+     message — the same "not for here any more" gap load() itself used to
+     have. `forCode` is always `code` captured before the first `await` in
+     whichever function calls this. */
+  const stillCurrent = (forCode) => mountedRef.current && codeRef.current === forCode;
 
   const load = useCallback(async () => {
     const forCode = code;
-    const stillCurrent = () => mountedRef.current && codeRef.current === forCode;
     try {
       const body = await getEvent(code);
-      if (!stillCurrent()) return;
+      if (!stillCurrent(forCode)) return;
       setEvent(body.event);
       setItems(Array.isArray(body.items) ? body.items : []);
       setError('');
       if (titleRef.current && body.event) titleRef.current(body.event.title);
     } catch (err) {
-      if (!stillCurrent()) return;
+      if (!stillCurrent(forCode)) return;
       setError(err.message || 'Could not load the event.');
     } finally {
-      if (stillCurrent()) setLoading(false);
+      if (stillCurrent(forCode)) setLoading(false);
     }
   }, [code]);
 
@@ -198,6 +203,7 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
   const move = async (from, to, opts = {}) => {
     if (savingRef.current) return;
     if (to < 0 || to >= items.length || from === to) return;
+    const forCode = code;
     const next = items.slice();
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
@@ -215,6 +221,11 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
     } catch (err) {
       const message = err.message || 'The new order was not saved.';
       await load();
+      // Fix round 2 #1: load() already no-ops on a gone/stale instance, but
+      // this line ran unconditionally regardless — a builder left behind
+      // (unmounted while the reorder was still in flight) took the refusal
+      // message anyway.
+      if (!stillCurrent(forCode)) return;
       setError(message);
     } finally {
       savingRef.current = false;
@@ -225,12 +236,15 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
     if (pinningRef.current) return;
     pinningRef.current = item.itemId;
     setPinningId(item.itemId);
+    const forCode = code;
     try {
       await updateItem(code, item.itemId, { version: item.set.latestVersion });
       await load();
     } catch (err) {
       const message = err.message || 'The version was not changed.';
       await load();
+      // Fix round 2 #1: same gap as move()'s catch above.
+      if (!stillCurrent(forCode)) return;
       setError(message);
     } finally {
       pinningRef.current = null;

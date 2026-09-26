@@ -356,7 +356,7 @@ describe('who can join', () => {
   });
 });
 
-describe('unmount safety (Fix round 1 #1)', () => {
+describe('unmount safety (Fix round 1 #1, round 2 #1)', () => {
   // rejects: a load already in flight when the place is left calling onTitle
   // or touching state after this instance is gone — the caller's onTitle is
   // AdminPage.jsx's own setEventPlace, which does not know or care whether
@@ -373,5 +373,68 @@ describe('unmount safety (Fix round 1 #1)', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(onTitle).not.toHaveBeenCalled();
+  });
+
+  /*
+    Fix round 2 #1: move() and pinLatest() called load() on a refusal (which
+    already no-ops once the instance is gone) and then set the server's error
+    message UNCONDITIONALLY — the same gap load() itself used to have.
+
+    Two signals, since `error` itself is internal state with nothing left to
+    read once the instance is unmounted (React 18 does not warn on a setState
+    call against an unmounted component, so that alone proves nothing):
+      - onTitle IS observable — move()/pinLatest()'s catch calls load(), and
+        load() calls onTitle on a successful reload. serve()'s default mock
+        makes that reload succeed, so onTitle fires here UNLESS load()'s own
+        mountedRef guard (Fix round 1 #1) holds through this call path too —
+        which round 1 only ever exercised via the mount effect, never via
+        move()/pinLatest() calling it from a catch block. This IS genuine
+        coverage of that path, even though it does not by itself prove the
+        NEW `stillCurrent` check added below.
+      - a console.error spy, the most sensitive instrument black-box RTL has
+        left for "something about this state update was not clean".
+  */
+  it('a reorder refusal that resolves after unmount logs nothing, throws nothing, and does not call onTitle', async () => {
+    let rejectReorder;
+    api.reorderItems.mockImplementation(() => new Promise((_resolve, reject) => { rejectReorder = reject; }));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const onTitle = jest.fn();
+    const { unmount } = render(<EventBuilder code="5307" sets={[]} onTitle={onTitle} />);
+    await waitFor(() => expect(screen.getAllByTestId('agenda-row').length).toBeGreaterThan(0));
+    onTitle.mockClear(); // drop the initial load()'s own call, made while still mounted
+    fireEvent.click(screen.getByRole('button', { name: 'Move FY26 in one word up' }));
+    await waitFor(() => expect(api.reorderItems).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => {
+      rejectReorder(new Error('The new order was not saved.'));
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(onTitle).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('a pin refusal that resolves after unmount logs nothing, throws nothing, and does not call onTitle', async () => {
+    let rejectUpdate;
+    api.updateItem.mockImplementation(() => new Promise((_resolve, reject) => { rejectUpdate = reject; }));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const onTitle = jest.fn();
+    const { unmount } = render(<EventBuilder code="5307" sets={[]} onTitle={onTitle} />);
+    await waitFor(() => expect(screen.getAllByTestId('agenda-row').length).toBeGreaterThan(0));
+    onTitle.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Use v3' }));
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => {
+      rejectUpdate(new Error('That item has already started.'));
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(onTitle).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
