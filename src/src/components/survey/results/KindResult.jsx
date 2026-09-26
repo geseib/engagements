@@ -29,6 +29,14 @@ import './SurveyResults.css';
  * (survey-aggregate.js's per-kind shape) and `texts` (its open answers,
  * write-ins or whys). `onOpenAnswers(qid)`, if given, is offered only to a
  * text question, wired to SurveyOpenAnswersPanel by the console.
+ *
+ * `full`, if true, is offered only to a text question too (the other four
+ * kinds already list everything unconditionally). It overrides TextResult's
+ * console `previewCount = 3` to "every answer" — the owner's binding ruling
+ * (2026-09-26 final review, I-1) that the saved report and the share link
+ * show every open answer, not a preview. The console leaves `full` unset and
+ * keeps its preview + "Read all" click-through; only a document with nowhere
+ * to click through to (GameReport.jsx) passes it.
  */
 const RENDERERS = {
   rating: RatingResult,
@@ -38,7 +46,7 @@ const RENDERERS = {
   text: TextResult,
 };
 
-export default function KindResult({ question, onOpenAnswers }) {
+export default function KindResult({ question, onOpenAnswers, full = false }) {
   if (!question) return null;
   const kind = question.kind;
   const Renderer = RENDERERS[kind];
@@ -64,7 +72,11 @@ export default function KindResult({ question, onOpenAnswers }) {
         {n === 0 || !Renderer ? (
           <p className="svr-empty">No answers yet.</p>
         ) : (
-          <Renderer question={question} onOpenAnswers={kind === 'text' ? onOpenAnswers : undefined} />
+          <Renderer
+            question={question}
+            onOpenAnswers={kind === 'text' ? onOpenAnswers : undefined}
+            {...(kind === 'text' && full ? { previewCount: Infinity } : {})}
+          />
         )}
       </div>
     </section>

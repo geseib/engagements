@@ -551,12 +551,15 @@ function ReportDocument({ reportData }) {
             "props in, markup out" (KindResult's own contract) is exactly
             what lets the identical component render correctly under this
             document's data-theme="light" with no code of its own. No
-            `onOpenAnswers` is passed: a text question shows its preview and
-            its count with no "Read all N" link, which is the right shape
-            for a document rather than a console with a place to click
-            through to. `null` — a survey that has not closed yet — renders
-            nothing further; the front matter above is still a complete
-            document as far as it goes.
+            `onOpenAnswers` is passed: a text question has no "Read all N"
+            link, which is the right shape for a document rather than a
+            console with a place to click through to. `full` IS passed
+            (fix I-1, 2026-09-26 final review): the owner's binding ruling is
+            that the saved report shows every open answer, even under 5, so
+            this document cannot inherit TextResult's console preview of 3 —
+            it has no click-through to see the rest. `null` — a survey that
+            has not closed yet — renders nothing further; the front matter
+            above is still a complete document as far as it goes.
           */
           surveyResults && surveyResults.questions.length > 0 && (
             <section className="report-question report-survey-results">
@@ -569,7 +572,7 @@ function ReportDocument({ reportData }) {
               <div className="report-survey-grid">
                 {surveyResults.questions.map((q) => (
                   <div key={q.qid} className="report-keep report-survey-card">
-                    <KindResult question={q} />
+                    <KindResult question={q} full />
                   </div>
                 ))}
               </div>

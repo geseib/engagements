@@ -841,11 +841,18 @@ const surveyReportData = {
         texts: [],
       },
       {
+        // 5 open answers, deliberately past TextResult's console `previewCount
+        // = 3` default — this is the fixture I-1 (2026-09-26 final review)
+        // needed: the old 2-text fixture could not tell "shows a preview" from
+        // "shows everything" apart.
         qid: 'c001#002', n: 2, kind: 'text', title: 'What would you change?', required: false,
-        result: { kind: 'text', n: 2 },
+        result: { kind: 'text', n: 5 },
         texts: [
           { id: 'c001#002:0', text: 'More time for questions' },
           { id: 'c001#002:1', text: 'Nothing, it was great' },
+          { id: 'c001#002:2', text: 'A shorter opening' },
+          { id: 'c001#002:3', text: 'Smaller breakout groups' },
+          { id: 'c001#002:4', text: 'More snacks next time' },
         ],
       },
     ],
@@ -862,6 +869,23 @@ describe('Survey results in the report', () => {
     expect(screen.getByText('Nothing, it was great')).toBeInTheDocument();
     // KindResult's own card, mounted unchanged (svr-card), not redrawn.
     expect(container.querySelectorAll('.svr-card')).toHaveLength(2);
+  });
+
+  // I-1 (2026-09-26 final review): the owner's ruling is that "the console,
+  // the saved report and the share link show every chart and every open
+  // answer, even under 5 answers." TextResult's console `previewCount = 3`
+  // must not leak into the report — every one of the 5 seeded answers has to
+  // render, not just the first three.
+  test('every open answer renders in the report, not just the first three', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    const items = [...container.querySelectorAll('.svr-textlist li')].map((li) => li.textContent);
+    expect(items).toEqual([
+      'More time for questions',
+      'Nothing, it was great',
+      'A shorter opening',
+      'Smaller breakout groups',
+      'More snacks next time',
+    ]);
   });
 
   // rejects: a text card offering a console-only "Read all N" link on a
