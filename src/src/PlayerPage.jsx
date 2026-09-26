@@ -237,6 +237,10 @@ function PlayerPage() {
   const feedbackNumberRef = useRef(null);
   /** The pending debounce timer for a burst of `commentPosted` frames. */
   const commentRefetchRef = useRef(null);
+  /** The same mirror, for the player's own panel (minor, fix round 1): the
+   *  `commentPosted` handler is registered once, so it reads this rather than
+   *  the `myFeedbackNumber` state it closed over on its first render. */
+  const myFeedbackNumberRef = useRef(null);
   const [feedbackNumber, setFeedbackNumber] = useState(null);
   const [feedbackComments, setFeedbackComments] = useState([]);
   /*
@@ -257,6 +261,10 @@ function PlayerPage() {
   const [myFeedbackSnapshot, setMyFeedbackSnapshot] = useState(null);
   const [myFeedbackComments, setMyFeedbackComments] = useState([]);
   const [myFeedbackSummary, setMyFeedbackSummary] = useState(null);
+  /** Lifted out of FeedbackRoundPanel (fix round 1, item 6) — whether the
+   *  composer currently holds unsent text, so this page can decide whether
+   *  it is safe to follow the room automatically once the round moves on. */
+  const [myFeedbackHasDraft, setMyFeedbackHasDraft] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -1169,18 +1177,33 @@ function PlayerPage() {
     setFeedbackComments((result.round && result.round.comments) || []);
   };
 
-  /** Just the comments — what a `commentPosted` frame triggers. Re-reading the
-   *  whole round to pick up one new comment would make a busy room re-read its
-   *  own report dozens of times a minute. */
+  /**
+   * Just the comments — what a `commentPosted` frame triggers. Re-reading the
+   * whole round to pick up one new comment would make a busy room re-read its
+   * own report dozens of times a minute.
+   *
+   * REFRESHES BOTH LISTS (minor, fix round 1): the host-triggered
+   * `feedbackComments` AND the player's own `myFeedbackComments`, whichever
+   * is actually open — a comment from someone else lands here exactly the
+   * same way whether the room is in a host-opened feedback round or a player
+   * is reading their own panel on an ordinary RESULTS phase.
+   */
   const loadComments = async () => {
-    if (!feedbackNumberRef.current) return;
-    const result = await fetchComments({
-      apiBase: API_BASE, gameId, questionNumber: feedbackNumberRef.current,
-    });
-    // Only on success: "there are no comments" and "I could not read them" look
-    // identical if a failure also sets an empty list, and the second must not
-    // wipe what the room can already see.
-    if (result.ok) setFeedbackComments(result.comments);
+    if (feedbackNumberRef.current) {
+      const result = await fetchComments({
+        apiBase: API_BASE, gameId, questionNumber: feedbackNumberRef.current,
+      });
+      // Only on success: "there are no comments" and "I could not read them"
+      // look identical if a failure also sets an empty list, and the second
+      // must not wipe what the room can already see.
+      if (result.ok) setFeedbackComments(result.comments);
+    }
+    if (myFeedbackNumberRef.current) {
+      const result = await fetchComments({
+        apiBase: API_BASE, gameId, questionNumber: myFeedbackNumberRef.current,
+      });
+      if (result.ok) setMyFeedbackComments(result.comments);
+    }
   };
 
   /**
@@ -1301,22 +1324,47 @@ function PlayerPage() {
     });
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
+    setMyFeedbackHasDraft(false);
     setMyFeedbackOpen(true);
     loadMyFeedbackComments(padded);
     loadMyFeedbackSummary(padded);
     loadMyFeedbackAnswers(padded);
   };
 
-  /** Closing returns the player to the results screen. Nothing is posted for
+  /** Closing returns the player to the results screen — or, once the round
+   *  has moved on, to whatever the room is doing now. Nothing is posted for
    *  them — an unsent draft is simply dropped, the same as closing any other
-   *  composer without pressing Post. */
+   *  composer without pressing Post. This is also "Go to the question" (fix
+   *  round 1, item 6): the same action, the label just says where it goes
+   *  when there was something to leave behind. */
   const closeMyFeedback = () => {
     setMyFeedbackOpen(false);
     setMyFeedbackNumber(null);
     setMyFeedbackSnapshot(null);
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
+    setMyFeedbackHasDraft(false);
   };
+
+  /**
+   * FOLLOW THE ROOM ONCE THERE IS NOTHING TO LOSE — fix round 1, item 6.
+   *
+   * A player who opened their own panel just to read (never typed anything)
+   * used to stay stuck on it even once the next question went live, because
+   * the render branch above kept winning regardless of a draft. With no
+   * draft, staying there serves nobody — the panel closes itself and the
+   * player lands on whatever the room is actually doing now, same as if they
+   * had pressed Close themselves. With a draft, this does nothing: the render
+   * branch's own `myFeedbackHasDraft` check keeps the panel (and the
+   * "go to the question" banner) up until the player acts.
+   */
+  useEffect(() => {
+    if (myFeedbackOpen && myFeedbackNumber
+      && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft) {
+      closeMyFeedback();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber]);
 
   /** Post one comment from the player's OWN panel — the same shape as
    *  `submitComment` above, kept separate because it writes to
@@ -1355,6 +1403,11 @@ function PlayerPage() {
   // The ref exists so the once-registered socket handler can read the CURRENT
   // round number; this is the only thing that keeps the two in step.
   useEffect(() => { feedbackNumberRef.current = feedbackNumber; }, [feedbackNumber]);
+  // Same reason, for the player's own panel: null while it is closed, so the
+  // socket handler below knows not to refresh a list nobody is looking at.
+  useEffect(() => {
+    myFeedbackNumberRef.current = myFeedbackOpen ? myFeedbackNumber : null;
+  }, [myFeedbackOpen, myFeedbackNumber]);
 
   // A pending refetch must not fire into an unmounted page.
   useEffect(() => () => {
@@ -2773,27 +2826,50 @@ function PlayerPage() {
 
   /* ------------------------------------------------ PLAYER-OWN FEEDBACK --
      CHECKED FIRST, ahead of every gameState branch below — including ENDED —
-     and that is deliberate. The round can leave RESULTS (the host advances)
-     while the player is still writing, and the composer's own draft text
-     lives inside `FeedbackRoundPanel`'s local state: it only survives if that
-     component stays mounted. Falling through to whatever `gameState` says
-     next would unmount it and silently throw the draft away — exactly what
-     the owner's ruling forbids ("it never silently discards a comment"). So
-     this stays up until the PLAYER closes it, never until the game moves on
-     under them.
+     while there is a reason to. The round can leave RESULTS (the host
+     advances) while the player is still writing, and the composer's own
+     draft text lives inside `FeedbackRoundPanel`'s local state: it only
+     survives if that component stays mounted. Falling through to whatever
+     `gameState` says next would unmount it and silently throw the draft
+     away — exactly what the owner's ruling forbids ("it never silently
+     discards a comment").
+
+     FIX ROUND 1, ITEM 6 refines WHEN "there is a reason to": with nothing
+     typed (`myFeedbackHasDraft` — lifted out of FeedbackRoundPanel, which is
+     the only place the draft text itself lives), a player who is only
+     reading has nothing to lose, and stayed stuck on the old round's panel
+     even once the next question was live. So this branch now only wins the
+     chain while the round it opened on is still showing, OR there is
+     something unsent — the effect just below closes it out from under
+     nobody once neither holds; render checks the same pair so nothing
+     flashes on the frame before that effect runs.
 
      Independent of `feedbackRound`/the branch below that reads it: that one is
      the host-triggered, whole-room switch and is unaffected by any of this. */
-  if (myFeedbackOpen) {
+  const myFeedbackStillOpen = myFeedbackOpen && gameState === `RESULTS#${myFeedbackNumber}`;
+  const myFeedbackShowing = myFeedbackOpen && (myFeedbackStillOpen || myFeedbackHasDraft);
+
+  if (myFeedbackShowing) {
     volume = 'act';
     ctx = position ? `${position} · Feedback` : 'Feedback';
-    const stillOpen = gameState === `RESULTS#${myFeedbackNumber}`;
     body = (
       <>
-        {!stillOpen && (
+        {/* A TOP EXIT, NOT ONLY A BOTTOM ONE (minor, fix round 1) — the report
+            can run long (the question, every response, Workie's read), and on
+            a phone the bottom button is a long scroll away. Same handler, same
+            destination, as the button at the foot of the panel. */}
+        <button
+          type="button"
+          className="plr-feedback-top-close"
+          onClick={closeMyFeedback}
+          aria-label={myFeedbackStillOpen ? 'Close' : 'Go to the question'}
+        >
+          <Icon name="X" size={20} />
+        </button>
+        {!myFeedbackStillOpen && (
           <p className="plr-lede plr-muted" role="status">
-            This round has moved on. What you have written is still here — post it, or close
-            this to go back.
+            The next question is live. What you have written is still here — you can copy it,
+            or go to the question.
           </p>
         )}
         <FeedbackRoundPanel
@@ -2801,9 +2877,10 @@ function PlayerPage() {
           questionNumber={myFeedbackNumber}
           comments={myFeedbackComments}
           onSubmit={submitMyFeedbackComment}
+          onDraftChange={setMyFeedbackHasDraft}
         />
         <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
-          Close
+          {myFeedbackStillOpen ? 'Close' : 'Go to the question'}
         </button>
       </>
     );

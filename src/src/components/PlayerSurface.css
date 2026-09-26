@@ -533,6 +533,37 @@
   outline-offset: 2px;
 }
 
+/* THE FEEDBACK BUTTON, appended after whichever RESULTS body a round type
+   built — always straight after a LookUpCue or the score rows, neither of
+   which is a `.plr-btn`, so the `.plr-btn + .plr-btn` rule two lines up never
+   applies to it and it sat flush against the cue above with no rule of its
+   own. 26px, matching `.plr-lookup`'s own top margin — the same section-break
+   spacing, not the tighter 10px two stacked buttons use. */
+.plr-feedback-btn { margin-top: 26px; }
+
+/* THE TOP EXIT ON THE PLAYER'S OWN FEEDBACK PANEL — a phone-sized escape hatch
+   for a report that can run to the length of the whole round: the question,
+   every response, Workie's read. The bottom Close/Go-to-the-question button
+   is still there; this is the one that does not need a full scroll first. */
+.plr-feedback-top-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--plr-tap);
+  height: var(--plr-tap);
+  margin: 0 0 12px auto;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.plr-feedback-top-close:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
 .plr-field { margin: 0 0 20px; }
 
 /* EVERY INPUT RENDERS AT --plr-t-secondary (19px on a phone) AND NEVER SMALLER.

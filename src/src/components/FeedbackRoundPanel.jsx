@@ -58,6 +58,17 @@ export default function FeedbackRoundPanel({
    * throw here would take the participant's words with it.
    */
   onSubmit,
+  /**
+   * LIFTED "HAS A DRAFT" FLAG — fix round 1, item 6. Called with `true`
+   * whenever the composer holds unsent text, `false` once it is empty again
+   * (sent, cancelled, or never typed into). This component owns the draft
+   * text itself — it is the one place it exists — but a container that needs
+   * to decide something ABOUT the draft (PlayerPage.jsx: auto-close the
+   * panel and follow the room once the round moves on, but only when there
+   * is nothing to lose) cannot see inside without this. Optional and
+   * side-effect free on the host-triggered caller, which does not pass it.
+   */
+  onDraftChange,
 }) {
   /** The section being commented on, or null when the composer is closed. */
   const [anchor, setAnchor] = useState(null);
@@ -72,6 +83,13 @@ export default function FeedbackRoundPanel({
   useEffect(() => {
     if (anchor && boxRef.current) boxRef.current.focus();
   }, [anchor]);
+
+  // Reported on every change to `text`, not only at send/cancel: a container
+  // deciding "is it safe to close this out from under them right now" needs
+  // the CURRENT answer, not the answer as of the last open/close.
+  useEffect(() => {
+    onDraftChange?.(Boolean(text.trim()));
+  }, [text, onDraftChange]);
 
   const open = useCallback((next) => {
     setAnchor(next);

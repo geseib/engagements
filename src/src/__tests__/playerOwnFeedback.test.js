@@ -4,12 +4,19 @@
  * without the host opening feedback mode. Host-triggered feedback mode stays
  * exactly as it is."*
  *
- * `PlayerPage.jsx` does not mount under jsdom (it dies on the auth provider —
- * see `feedbackRoundCallSite.test.js` and `FeedbackRoundPanel.jsx`'s own
- * doc-block), so this file asserts against the source the same way that one
- * does: read the file, strip comments, and check the shape of the wiring.
- * Comments are stripped because a previous agent's test in this repo passed
- * against a comment rather than code.
+ * `PlayerPage.jsx` mounts successfully elsewhere in this suite with the right
+ * mocks (voteSwitching.test.jsx, PlayerPage.test.jsx) — the "does not mount
+ * under jsdom" claim in `FeedbackRoundPanel.jsx`'s doc-block does not hold for
+ * every scenario. The full mount harness those files build (WebSocketClient,
+ * fetch, the join flow) is disproportionate for exercising this feature's
+ * orchestration specifically, so THIS file still asserts against the source —
+ * read the file, strip comments, and check the shape of the wiring — while
+ * the parts of this feature that ARE cheaply testable behaviourally live
+ * elsewhere: `rankedResultsFrom.test.js` (a pure function, imported directly,
+ * no mount needed) and `feedbackRoundPanel.test.jsx`'s "lifted draft flag"
+ * tests (FeedbackRoundPanel mounts trivially on its own, no auth or socket
+ * mocking required). Comments are stripped here because a previous agent's
+ * test in this repo passed against a comment rather than code.
  */
 const fs = require('fs');
 const path = require('path');
@@ -117,40 +124,77 @@ describe('opening the player\'s own panel', () => {
 
 describe('while the panel is open', () => {
   test('the branch is checked before every gameState branch, including ENDED', () => {
-    // `if (myFeedbackOpen)` has to be the FIRST condition in the chain: the
+    // `if (myFeedbackShowing)` has to be the FIRST condition in the chain: the
     // round can leave RESULTS while the player is mid-comment, and falling
     // through to whatever `gameState` says next would unmount the composer
     // and throw the draft away.
     const chainStart = player.indexOf('let body = null;');
-    const openAt = player.indexOf('if (myFeedbackOpen) {', chainStart);
+    const openAt = player.indexOf('if (myFeedbackShowing) {', chainStart);
     const endedAt = player.indexOf("gameState === 'ENDED'", chainStart);
     expect(openAt).toBeGreaterThan(chainStart);
     expect(openAt).toBeLessThan(endedAt);
   });
 
-  test('posts a comment through the same FeedbackRoundPanel the host-triggered mode uses', () => {
-    const branch = sliceFrom(player, 'if (myFeedbackOpen) {', "gameState === 'ENDED'");
+  test('shows while the round it opened on is still showing, OR there is an unsent draft (fix round 1, item 6)', () => {
+    // Reading only, no draft, round moved on: this must be FALSE so the chain
+    // falls through to whatever gameState now calls for, rather than
+    // stranding a player with nothing to lose on a dead panel.
+    const def = sliceFrom(player, 'const myFeedbackShowing =', ';');
+    expect(def).toMatch(/myFeedbackOpen && \(myFeedbackStillOpen \|\| myFeedbackHasDraft\)/);
+  });
+
+  test('posts a comment through the same FeedbackRoundPanel the host-triggered mode uses, and lifts the draft flag', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
     expect(branch).toMatch(/<FeedbackRoundPanel/);
     expect(branch).toMatch(/round=\{myFeedbackRoundData\}/);
     expect(branch).toMatch(/onSubmit=\{submitMyFeedbackComment\}/);
+    expect(branch).toMatch(/onDraftChange=\{setMyFeedbackHasDraft\}/);
   });
 
-  test('says plainly when the round has moved on, and keeps the draft up rather than unmounting it', () => {
-    const branch = sliceFrom(player, 'if (myFeedbackOpen) {', "gameState === 'ENDED'");
-    // The panel itself always renders — only the banner is conditional — so a
-    // draft mid-typing in FeedbackRoundPanel's own local state is never torn
-    // down by this branch.
-    expect(branch).toMatch(/const stillOpen = gameState === `RESULTS#\$\{myFeedbackNumber\}`/);
-    expect(branch).toMatch(/moved on/i);
+  test('says plainly the next question is live once the round has moved on, and offers to copy — never "post it"', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
+    // The panel itself always renders here — only the banner is conditional —
+    // so a draft mid-typing in FeedbackRoundPanel's own local state is never
+    // torn down by this branch.
+    expect(branch).toMatch(/!myFeedbackStillOpen/);
+    expect(branch).toMatch(/next question is live/i);
+    expect(branch).toMatch(/copy it/i);
+    // A post would be refused once the round has moved on (comments.js's
+    // state check) — the banner must not invite one.
+    expect(branch).not.toMatch(/post it/i);
     expect(branch).toMatch(/<FeedbackRoundPanel/);
   });
 
-  test('closing calls a dedicated close handler that posts nothing', () => {
-    const branch = sliceFrom(player, 'if (myFeedbackOpen) {', "gameState === 'ENDED'");
+  test('the button reads "Go to the question" once moved on, "Close" while still on the same round', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
     expect(branch).toMatch(/onClick=\{closeMyFeedback\}/);
+    expect(branch).toMatch(/myFeedbackStillOpen \? 'Close' : 'Go to the question'/);
+  });
+
+  test('closing (or "going to the question") calls a dedicated handler that posts nothing', () => {
     const fn = sliceFrom(player, 'const closeMyFeedback = () => {', '\n  };');
     expect(fn).toMatch(/setMyFeedbackOpen\(false\)/);
+    expect(fn).toMatch(/setMyFeedbackHasDraft\(false\)/);
     expect(fn).not.toMatch(/postComment/);
+  });
+});
+
+describe('following the room once there is nothing to lose (fix round 1, item 6)', () => {
+  test('an effect auto-closes the panel once the round has moved on AND there is no draft', () => {
+    const fn = sliceFrom(
+      player,
+      'useEffect(() => {\n    if (myFeedbackOpen && myFeedbackNumber',
+      '}, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber]);',
+    );
+    expect(fn).toMatch(/gameState !== `RESULTS#\$\{myFeedbackNumber\}`/);
+    expect(fn).toMatch(/!myFeedbackHasDraft/);
+    expect(fn).toMatch(/closeMyFeedback\(\)/);
+  });
+
+  test('the effect is keyed on gameState, so it actually re-runs as the room moves', () => {
+    expect(player).toMatch(
+      /\}, \[gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber\]\);/,
+    );
   });
 });
 
@@ -185,6 +229,36 @@ describe('the host-triggered composer sends the same membership proof', () => {
     const fn = sliceFrom(player, 'const submitComment = async (draft) => {', '\n  };');
     expect(fn).toMatch(/postComment\(\{/);
     expect(fn).toMatch(/clientId:\s*getClientId\(gameId\)/);
+  });
+});
+
+describe('minors folded into fix round 1', () => {
+  test('a top exit sits above the panel, for a phone that would otherwise scroll a long report to find the bottom one', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
+    expect(branch).toMatch(/plr-feedback-top-close/);
+    expect(branch).toMatch(/onClick=\{closeMyFeedback\}/g);
+    // Two exits, not one relabelled: the top one and the bottom one both call
+    // the same handler, so `closeMyFeedback` must appear at least twice here.
+    const closeCalls = branch.match(/onClick=\{closeMyFeedback\}/g) || [];
+    expect(closeCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('the Feedback button on the ordinary results screen carries a class with an actual CSS rule', () => {
+    expect(player).toMatch(/plr-feedback-btn/);
+    const css = fs.readFileSync(src('components', 'PlayerSurface.css'), 'utf8');
+    expect(css).toMatch(/\.plr-feedback-btn\s*\{[^}]*margin-top/);
+  });
+
+  test('loadComments (the commentPosted handler) refreshes the player\'s own panel too, not only the host-triggered one', () => {
+    const fn = sliceFrom(player, 'const loadComments = async () => {', '\n  };');
+    expect(fn).toMatch(/setFeedbackComments/);
+    expect(fn).toMatch(/myFeedbackNumberRef\.current/);
+    expect(fn).toMatch(/setMyFeedbackComments/);
+  });
+
+  test('myFeedbackNumberRef is kept current, and cleared once the panel closes', () => {
+    const fn = sliceFrom(player, 'myFeedbackNumberRef.current = myFeedbackOpen', '\n  }, [myFeedbackOpen, myFeedbackNumber]);');
+    expect(fn).toMatch(/myFeedbackOpen \? myFeedbackNumber : null/);
   });
 });
 

@@ -205,6 +205,62 @@ describe('the composer', () => {
   });
 });
 
+describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
+  // PlayerPage.jsx needs to know whether the composer holds unsent text to
+  // decide whether it is safe to auto-close the player's own panel when the
+  // round moves on. This component still owns the draft text itself — the
+  // callback only reports true/false, never the prose.
+  test('reports false while the composer is closed', () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    expect(onDraftChange).toHaveBeenCalledWith(false);
+  });
+
+  test('reports true the moment something is typed', () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
+    expect(onDraftChange).toHaveBeenLastCalledWith(true);
+  });
+
+  test('reports false again once the draft is sent', async () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
+    await waitFor(() => expect(onDraftChange).toHaveBeenLastCalledWith(false));
+  });
+
+  test('reports false again once the draft is cancelled', () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/ }));
+    expect(onDraftChange).toHaveBeenLastCalledWith(false);
+  });
+
+  test('whitespace-only text is not a draft', () => {
+    // Matches `send()`'s own rule (`text.trim()`) — a container must not be
+    // told there is something worth keeping when there is nothing to post.
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
+    expect(onDraftChange).toHaveBeenLastCalledWith(false);
+  });
+
+  test('the host-triggered caller, which passes no onDraftChange, is unaffected', () => {
+    // No prop at all — must not throw when the composer opens or types.
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    expect(() => fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } }))
+      .not.toThrow();
+  });
+});
+
 describe('what everyone has already said', () => {
   test('comments already on the round are shown', () => {
     // "the comments now can be seen in the resulting round of feedback".
