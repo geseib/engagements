@@ -49,6 +49,10 @@
  */
 const { GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { setPartition } = require('./set-version');
+// Only for the one subject name `writeReview`'s cap must never drop — see
+// OBSERVED_CAP's own comment. No cycle: content-guardrail.js requires nothing
+// from this file.
+const { SET_SUBJECT } = require('./content-guardrail');
 
 /** The state machine. `UNREVIEWED` is the absence of a row, never a stored value. */
 const STATUS = Object.freeze({
@@ -143,6 +147,17 @@ const REVIEW_FIELDS = Object.freeze([
  * un-truncated `observed` array) — so a row capped here still tells the truth
  * about what every category saw; only the per-item detail underneath it is
  * cut, and `observedTruncated` says so.
+ *
+ * THE CUT NEVER TOUCHES `(set)` — set-check-worker.js appends the set's own
+ * text LAST (`observed = [...result.observed, ...setResult.observed]`), so a
+ * blind prefix cut drops it FIRST on any large set: `reviewMeasurement.js`'s
+ * `setTextClean` reads `observed` for exactly that subject, and a set whose
+ * own title or description held a LOW/MEDIUM would then read "all clean in
+ * every category" on the score card — the opposite of what the check saw.
+ * `(set)` has at most one row per judged category (five, at most) whatever the
+ * question count, so keeping every one of them and capping only the
+ * per-question entries to fill what room remains never meaningfully shrinks
+ * the cap.
  */
 const OBSERVED_CAP = 300;
 
@@ -200,11 +215,23 @@ async function writeReview(db, tableName, ref, version, { status, ...facts } = {
   // passed in, so cutting the per-item detail here loses nothing a reader
   // depends on for its counts, only the entries themselves.
   const observedList = Array.isArray(facts.observed) ? facts.observed : undefined;
-  const observedTruncated = Boolean(observedList && observedList.length > OBSERVED_CAP);
+  let observedStored = observedList;
+  let observedTruncated = false;
+  if (observedList && observedList.length > OBSERVED_CAP) {
+    // Every `(set)`-subject row survives the cut (OBSERVED_CAP's own comment
+    // says why); only the per-question rows are trimmed, to fill whatever room
+    // is left. `.filter` preserves each group's own relative order, so the
+    // stored list still reads question-order-then-set-text, same as before.
+    const setSubject = observedList.filter((o) => o && o.questionId === SET_SUBJECT);
+    const perQuestion = observedList.filter((o) => !(o && o.questionId === SET_SUBJECT));
+    const roomForQuestions = Math.max(0, OBSERVED_CAP - setSubject.length);
+    observedStored = [...perQuestion.slice(0, roomForQuestions), ...setSubject];
+    observedTruncated = true;
+  }
   const bag = {
     ...facts,
     findings: Array.isArray(facts.findings) ? facts.findings : undefined,
-    observed: observedList ? observedList.slice(0, OBSERVED_CAP) : undefined,
+    observed: observedStored,
     observedTruncated: observedTruncated || undefined,
   };
   const kept = Object.fromEntries(

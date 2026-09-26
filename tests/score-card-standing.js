@@ -155,6 +155,29 @@ async function shareJob(version) {
     assert.strictEqual(card.review.status, 'passed');
     assert.strictEqual(card.review.note, 'Historical, not gratuitous.');
   });
+  /*
+    ROUND 1 REVIEW, IMPORTANT #2(b): set-review.js's writeReview caps a large
+    `observed` list and records `observedTruncated`, but measurementOf
+    (shared/review-card.js) used to project only `{tally, observed}` — the
+    flag never reached this card, or the client that reads it, so nobody was
+    ever told the list on screen was partial.
+  */
+  await H.test('a truncated observed list tells the card so, and how many are shown', async () => {
+    const perQuestion = Array.from({ length: R.OBSERVED_CAP + 20 }, (_, i) => ({
+      questionId: `c001#${String(i).padStart(3, '0')}`, category: 'VIOLENCE', band: 'LOW', intervened: false,
+    }));
+    await seedApproved({ observed: [...perQuestion, { questionId: '(set)', category: 'VIOLENCE', band: 'LOW', intervened: false }] });
+    const card = await get();
+    assert.strictEqual(card.review.observedTruncated, true);
+    assert.strictEqual(card.review.observedCap, R.OBSERVED_CAP, 'the cap constant must reach the card, not a copy of the number');
+    assert.ok(card.review.observed.some((o) => o.questionId === '(set)'), 'the (set) entry did not reach the card');
+  });
+  await H.test('a whole observed list carries no truncation flag or cap', async () => {
+    await seedApproved();
+    const card = await get();
+    assert.strictEqual(card.review.observedTruncated, undefined);
+    assert.strictEqual(card.review.observedCap, undefined);
+  });
   // rejects: naming a question by its id, by the organisation's edited row,
   // or by an older public version's wording.
   await H.test('each observation carries its question\'s text from the active public copy, matched by id', async () => {

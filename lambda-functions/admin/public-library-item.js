@@ -59,7 +59,7 @@ const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('./shared/tenant');
 const { setMetadataKey, setPartition, toVersion } = require('./shared/set-version');
 const { unpublishSet } = require('./shared/publish-set');
-const { readReview } = require('./shared/set-review');
+const { readReview, OBSERVED_CAP } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { queueSk, queueKey, deleteQueueRow } = require('./shared/moderation-queue');
@@ -160,6 +160,12 @@ async function standing(meta, publicSetId) {
       // and nothing seen" (content-guardrail.js tallyOf, `scope: 'full'`).
       tally: measured.tally,
       observed,
+      // Absent, never false, on a row whose list needed no cutting — the same
+      // convention as everything else optional on this response. `observedCap`
+      // travels beside the flag so a caller with something to say about it
+      // (the card, below) reuses set-review.js's own number rather than a
+      // second copy of it (round 1 review, Important #2c).
+      ...(measured.observedTruncated ? { observedTruncated: true, observedCap: OBSERVED_CAP } : {}),
     },
     // The row itself is never sent — the card needs the key it answers on, and
     // whether this is a re-check's row (which is what "Leave it serving"
