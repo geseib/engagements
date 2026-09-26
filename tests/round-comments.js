@@ -222,31 +222,76 @@ const aComment = (over = {}) => ({
   });
 
   // ---------- 2. the gate ----------
-  console.log('\n2. a comment can only be written into an open feedback round');
+  console.log('\n2. a comment can be written on any beat of the round\'s RESULTS');
 
+  /*
+    THE OWNER'S RULING, 26 SEP 2026: a player's own "Feedback" button (the
+    ordinary RESULTS# screen, PlayerPage.jsx) posts a comment without the host
+    ever opening a feedback round. So a beat OTHER than 'feedback' is no
+    longer a refusal — the session being on THIS round's RESULTS is enough by
+    itself. The three checks below (field-notes, the tally, and feedback
+    itself) are the exhaustive set: BEATS is a closed three-value enum
+    (stage-beats.js), and all three must now accept a comment.
+  */
   seedGame('4002', { beat: 'field-notes' });
-  const notOpen = await post('4002', aComment());
-  check('refused when the host has not opened a feedback round', () => {
-    // Otherwise a phone left on the previous beat keeps writing into a round
-    // the room has finished with, and the comments appear in a report nobody
-    // was invited to comment on.
-    assert.strictEqual(notOpen.statusCode, 409, `got ${notOpen.statusCode}`);
-    assert.strictEqual(rows('4002', 'COMMENT#').length, 0);
+  const onFieldNotes = await post('4002', aComment());
+  check('accepted on field-notes — no feedback round was ever opened', () => {
+    assert.strictEqual(onFieldNotes.statusCode, 201, `got ${onFieldNotes.statusCode}: ${onFieldNotes.body}`);
+    assert.strictEqual(rows('4002', 'COMMENT#').length, 1);
+  });
+
+  seedGame('4002b', { beat: 'results' });
+  const onTally = await post('4002b', aComment());
+  check('accepted on the tally beat too — same round, same rule', () => {
+    assert.strictEqual(onTally.statusCode, 201, `got ${onTally.statusCode}: ${onTally.body}`);
+    assert.strictEqual(rows('4002b', 'COMMENT#').length, 1);
+  });
+
+  seedGame('4002c'); // seedGame's default beat is 'feedback'.
+  const onFeedbackBeat = await post('4002c', aComment());
+  check('the feedback-beat path still works — unchanged, not merely still passing', () => {
+    assert.strictEqual(onFeedbackBeat.statusCode, 201, `got ${onFeedbackBeat.statusCode}`);
+    assert.strictEqual(rows('4002c', 'COMMENT#').length, 1);
   });
 
   seedGame('4003', { lessonNumber: 4 });
   const wrongRound = await post('4003', aComment({ questionNumber: 3 }));
   check('refused when the session has moved on to another round', () => {
     // The stale-phone case. Round 3's composer is still on screen while the
-    // room is on round 4.
+    // room is on round 4. Still refused: this is fact (1) in the header, and
+    // the ruling above never touched it.
     assert.strictEqual(wrongRound.statusCode, 409, `got ${wrongRound.statusCode}`);
     assert.strictEqual(rows('4003', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4003a');
+  put({ PK: 'GAME#4003a', SK: 'STATE', State: 'ASK#003', LessonNumber: 3 });
+  const onAsk = await post('4003a', aComment());
+  check('refused while the session is on ASK', () => {
+    assert.strictEqual(onAsk.statusCode, 409, `got ${onAsk.statusCode}`);
+    assert.strictEqual(rows('4003a', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4003b');
+  put({ PK: 'GAME#4003b', SK: 'STATE', State: 'VOTE#003', LessonNumber: 3 });
+  const onVote = await post('4003b', aComment());
+  check('refused while the session is on VOTE', () => {
+    assert.strictEqual(onVote.statusCode, 409, `got ${onVote.statusCode}`);
+    assert.strictEqual(rows('4003b', 'COMMENT#').length, 0);
   });
 
   seedGame('4004');
   const noGame = await post('9999', aComment());
   check('a session that does not exist is a 404, not a silent write', () =>
     assert.strictEqual(noGame.statusCode, 404, `got ${noGame.statusCode}`));
+
+  seedGame('4004b');
+  store.delete(key('GAME#4004b', 'ROUND#003'));
+  const noRoundRecord = await post('4004b', aComment());
+  check('refused when the round record itself does not exist — a defensive check, not the dropped beat requirement', () => {
+    assert.strictEqual(noRoundRecord.statusCode, 409, `got ${noRoundRecord.statusCode}`);
+    assert.strictEqual(rows('4004b', 'COMMENT#').length, 0);
+  });
 
   // ---------- 3. what the handler refuses ----------
   console.log('\n3. nothing malformed becomes a sort key or a row');

@@ -14,29 +14,33 @@
  * ids are four digits (create-game.js:191), so the whole id space is 9,000
  * values and a rival's live session is found by walking it.
  *
- * ── WHY THE BEAT IS THE SHARP ONE ──────────────────────────────────────────
+ * ── WHY THE BEAT WAS THE SHARP ONE, UNTIL 26 SEP 2026 ───────────────────────
  *
  * The beat was reversible and idempotent, so on its own it read as a prank —
  * somebody else's projector jumping between the tally and the read-back. The
- * round-feedback feature made it a WRITE GRANT.
+ * round-feedback feature made it a WRITE GRANT: until that date, a comment
+ * required BOTH `STATE === RESULTS#nnn` AND `ROUND#nnn.StageBeat ===
+ * 'feedback'`, so an unscoped `stage-beat` handed a stranger the second half
+ * of a gate the comment route trusted. Section 2 below used to assert exactly
+ * that chain, and it is why this file exists rather than one more line in
+ * `session-org-ownership.js`: the source scan there proves the guard is
+ * CALLED, and this proved the write never landed.
  *
- * `comments.js` is deliberately public, because participants hold no Cognito
- * identity, and its own header explains that the thing which is NOT public is
- * OPENING a feedback round — `stage-beat`, "which carries the Cognito
- * authorizer". The comment write gate is exactly two table facts:
+ * ── WHAT CHANGED, AND WHY THIS FILE STILL EXISTS ────────────────────────────
  *
- *     STATE === `RESULTS#nnn`  AND  ROUND#nnn.StageBeat === 'feedback'
- *
- * So an unscoped `stage-beat` hands a stranger the second half of a gate the
- * comment route trusts. Post `{beat:'feedback'}` at a rival's live session and
- * anyone holding that code may write comments into their round — comments that
- * are stored ENCRYPTED UNDER THE VICTIM ORGANISATION'S KEY and that flow into
- * their round report and their session report. The beat is reversible; those
- * rows are not.
- *
- * That chain is what section 2 asserts, and it is why this file exists rather
- * than one more line in `session-org-ownership.js`: the source scan there
- * proves the guard is CALLED, and this proves the write never lands.
+ * The owner's ruling that day (see `comments.js`'s header) dropped the beat
+ * requirement entirely: a player's own "Feedback" button posts a comment on
+ * ANY beat of RESULTS, with no host action and no identity at all. That makes
+ * the beat-hijack chain moot for comments specifically — a comment was never
+ * going to need a hijacked beat again, because it needs no beat at all — but
+ * it does NOT reopen the actual hole this file was written to close: a rival
+ * org's HOST still cannot move this room's stage, reveal its authors, or make
+ * this session's projector do anything (sections 1, 3, 4, 5, unchanged). What
+ * section 2 asserts now is the piece that WAS always doing real work
+ * underneath the old chain and still is: a comment lands encrypted under the
+ * ROOM's own organisation no matter who posts it, because the public route
+ * reads the org off the session row and never off the caller — there was
+ * never an identity to read it from.
  *
  * // rejects: a cross-org caller opening a feedback round, revealing a rival's
  * //          authors, or either handler calling the guard and ignoring it.
@@ -148,12 +152,54 @@ stub('@aws-sdk/client-apigatewaymanagementapi', {
   PostToConnectionCommand,
 });
 
+/*
+  A KMS THAT BEHAVES THE WAY THE KEY POLICY WILL — needed as of the 26 Sep
+  2026 ruling below, which is the first time this file's comment write
+  actually REACHES `encryptItem` rather than being refused before it. Copied
+  from `ai-summary-briefing.js`, the established pattern for this repo.
+*/
+const nodeCrypto = require('crypto');
+class GenerateDataKeyCommand { constructor(i) { this.input = i; } }
+class DecryptCommand { constructor(i) { this.input = i; } }
+const wrapKey = (orgId, k) => Buffer.from(JSON.stringify({ orgId, key: k.toString('base64') }), 'utf8');
+stub('@aws-sdk/client-kms', {
+  KMSClient: class {
+    async send(command) {
+      if (command instanceof GenerateDataKeyCommand) {
+        const orgId = command.input.EncryptionContext?.orgId;
+        assert.ok(orgId, 'GenerateDataKey must bind an orgId');
+        const k = nodeCrypto.randomBytes(32);
+        return { Plaintext: k, CiphertextBlob: wrapKey(orgId, k) };
+      }
+      if (command instanceof DecryptCommand) {
+        const ctx = command.input.EncryptionContext?.orgId;
+        if (!ctx) throw new Error('AccessDeniedException: no orgId in encryption context');
+        const blob = JSON.parse(Buffer.from(command.input.CiphertextBlob).toString('utf8'));
+        if (blob.orgId !== ctx) throw new Error('InvalidCiphertextException: encryption context mismatch');
+        return { Plaintext: Buffer.from(blob.key, 'base64') };
+      }
+      throw new Error('unexpected KMS command');
+    }
+  },
+  GenerateDataKeyCommand,
+  DecryptCommand,
+});
+
 process.env.TABLE_NAME = 'test-table';
 process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
+process.env.TENANT_KMS_KEY_ID = 'alias/engage-tenant';
 
 const { handler: stageBeat } = require(path.join(REPO, 'lambda-functions/game/stage-beat.js'));
 const { handler: revealAuthors } = require(path.join(REPO, 'lambda-functions/game/reveal-authors.js'));
 const { handler: comments } = require(path.join(REPO, 'lambda-functions/game/comments.js'));
+const tenantCrypto = require(path.join(REPO, 'lambda-functions/game/tenant-crypto.js'));
+
+/** Give an org a real data key, the way `create-org` does. */
+async function mintOrg(orgId) {
+  const blob = await tenantCrypto.createOrgDataKey(orgId);
+  put({ PK: `ORG#${orgId}`, SK: 'METADATA', orgId, dataKeyCiphertext: blob });
+  tenantCrypto.forgetOrg(orgId);
+}
 
 // ---- Harness ---------------------------------------------------------------
 let pass = 0; let fail = 0;
@@ -243,22 +289,67 @@ const COMMENT = {
   check('the room is told nothing', () =>
     assert.strictEqual(sent.length, 0, `broadcast ${sent.length} frame(s) on a refused call`));
 
-  console.log('\n2. …so the public comment route never opens (the chain)');
+  console.log('\n2. the public comment route: what the 26 Sep 2026 ruling changed here, and what it did not');
 
   /*
-    The point of the whole file. `comments.js` is public by design and gates on
-    two table facts, the second of which is the beat this route writes. With the
-    beat refused above, the write window was never opened — so the rival cannot
-    reach the victim's round even though the comment route asks them for nothing.
+    UNTIL 26 SEP 2026 this section asserted the opposite of what follows: with
+    the beat refused above, `comments.js`'s second gate fact
+    (`ROUND#nnn.StageBeat === 'feedback'`) meant the write window was never
+    opened, so a rival's hijacked beat was the ONLY door in and closing that
+    door (section 1) closed this one too.
+
+    The owner's ruling that day removed that second fact entirely — see
+    comments.js's header. A player's own "Feedback" button posts here with NO
+    host action and no identity at all, on ANY beat of RESULTS, which is
+    exactly how "a stranger" reaches this route too: `comments.js` has never
+    checked who is asking, only whether the room is on this round's results
+    right now (fact (1), unaffected by any of this). So a comment from anybody
+    holding the four-digit code now succeeds the moment results are showing —
+    which is no more than a real participant in ORG_A's own room could already
+    do, and was always the point of the player-initiated button.
+
+    WHAT IS STILL TRUE, and is what this section asserts now instead:
+
+      - stage-beat and reveal-authors are still scoped to the owning org
+        (sections 1 and 4) — a rival's HOST still cannot force this room's
+        stage, and that was always the actual hole this file exists to close.
+      - a comment always lands encrypted under the ROOM'S OWN organisation,
+        never the caller's — `orgOf(meta)` reads it off the session row, which
+        a public, identity-less route cannot do any other way.
+      - fact (1) is untouched: a comment for a round the session is not
+        currently showing is still refused, cross-org or not (section 2b).
   */
+  await mintOrg(ORG_A);
   const strangerComment = await postComment('4242', COMMENT);
-  // rejects: a cross-org beat becoming a write grant on somebody else's round.
-  check('a stranger cannot comment into the round', () =>
-    assert.strictEqual(strangerComment.statusCode, 409,
+  check('anyone holding the code may comment once results are showing — the beat is no longer the gate', () =>
+    assert.strictEqual(strangerComment.statusCode, 201,
       `got ${strangerComment.statusCode}: ${strangerComment.body}`));
 
-  check('...because no feedback round was ever opened', () =>
-    assert.match(JSON.parse(strangerComment.body).error || '', /has not opened a feedback round/));
+  const writtenRow = [...store.values()]
+    .find((i) => i.PK === 'GAME#4242' && String(i.SK).startsWith('COMMENT#'));
+  check('the row exists and is not stored as plaintext', () => {
+    assert.ok(writtenRow, 'no comment row was written');
+    assert.notStrictEqual(writtenRow.Text, COMMENT.text, 'the comment was stored unencrypted');
+  });
+
+  const decryptedForOwner = await tenantCrypto.decryptItem(ORG_A, 'comment', writtenRow);
+  check('it decrypts cleanly under the ROOM\'S OWN organisation', () =>
+    assert.strictEqual(decryptedForOwner.Text, COMMENT.text));
+
+  let rivalDecryptFailed = false;
+  try { await tenantCrypto.decryptItem(ORG_B, 'comment', writtenRow); } catch { rivalDecryptFailed = true; }
+  check('but never under the rival organisation\'s key', () =>
+    assert.ok(rivalDecryptFailed, 'the rival org could read a comment it never wrote into'));
+
+  console.log('\n2b. …and fact (1) — the state check — is unaffected by any of this');
+
+  seedGame('4243');
+  await mintOrg(ORG_A);
+  put({ PK: 'GAME#4243', SK: 'STATE', State: 'RESULTS#002', LessonNumber: 2 });
+  const wrongRoundComment = await postComment('4243', COMMENT);
+  check('a comment for a round the session is not showing is still refused', () =>
+    assert.strictEqual(wrongRoundComment.statusCode, 409,
+      `got ${wrongRoundComment.statusCode}: ${wrongRoundComment.body}`));
 
   console.log('\n3. the owning organisation is unaffected');
 

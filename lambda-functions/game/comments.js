@@ -66,18 +66,53 @@
  * was ever guarded.
  *
  * So the gate here is not "who are you" but "is the room actually doing this
- * right now", and it is two facts read from the table, not one:
+ * right now", and — AS OF 26 SEP 2026, THE OWNER'S RULING BELOW — it is ONE
+ * fact read from the table, not two:
  *
- *   1. the session's STATE is `RESULTS#<the round being commented on>`, and
- *   2. that round's ROUND# record is on the `feedback` beat.
+ *   1. the session's STATE is `RESULTS#<the round being commented on>`.
  *
- * BOTH, because either alone leaves a hole. Without (1) a phone still showing
- * round 3's composer writes into round 3 while the room is on round 4 — the
- * comment then appears in a report against material the room has moved past.
- * Without (2) anyone holding the four-digit code can write comments into a
- * session that never opened a feedback round at all. Neither is a security
- * boundary — the code is on the projector — but both are correctness
- * boundaries, and the failure they prevent is silent.
+ * Without it a phone still showing round 3's composer writes into round 3
+ * while the room is on round 4 — the comment then appears in a report against
+ * material the room has moved past. Not a security boundary — the code is on
+ * the projector — but a correctness one, and the failure it prevents is
+ * silent.
+ *
+ * ── THE SECOND FACT, AND WHY IT IS GONE FROM THIS HALF OF THE GATE ─────────
+ *
+ * Until 26 Sep 2026 a write ALSO required the round's ROUND# record to be on
+ * the `feedback` beat — the host's "Request feedback" was the only door in.
+ * The owner's ruling that day: *"the player's own Feedback button works on
+ * any round whose results are showing, without the host opening feedback
+ * mode."* A player-initiated comment button on the ORDINARY results screen
+ * (`PlayerPage.jsx`'s RESULTS# arm) cannot depend on the host ever pressing
+ * anything, so `writeComment` below drops the beat requirement: fact (1) is
+ * now sufficient on its own, and posting a comment therefore no longer cares
+ * which of `results` / `field-notes` / `feedback` the round is on. The round
+ * record itself must still exist — `roundRecord()` below still reads it —
+ * which is a defensive check on data integrity, not a reintroduction of the
+ * beat requirement.
+ *
+ * THIS WIDENS *WHEN*, NOT *WHO*. The route was already public and already had
+ * no identity check (see below) — a legitimate participant and a stranger who
+ * merely guessed the four-digit code were always indistinguishable to it. What
+ * changes is that a round the host never opens for feedback is no longer
+ * permanently closed to comments once it is over: it is open for exactly as
+ * long as the room is looking at its results, the same window every other
+ * public participant write (a vote, an answer) already uses. That is the
+ * deliberate point of the ruling, not a side effect of it — see
+ * `tests/session-beat-org-scope.js` for what stays scoped by organisation
+ * regardless (stage-beat, reveal-authors) and what does not change here
+ * (a comment is still encrypted under the ROOM's own org, never the caller's).
+ *
+ * `readFeedbackRound` (`GET /feedback-round`, further down) is UNCHANGED and
+ * still requires the `feedback` beat. It is the host-triggered, WHOLE-ROOM
+ * switch — the one that pulls every phone in the session into
+ * `FeedbackRoundPanel` at once — and the owner was explicit that mode "stays
+ * exactly as it is." A player's own button opens the same panel for
+ * themselves alone, by a different route entirely (PlayerPage.jsx builds the
+ * round from data it already has, plus the public `GET /ai-summary`, never
+ * from `GET /feedback-round`), so loosening the WRITE gate here does not touch
+ * the whole-room switch at all.
  *
  * ── HTTP, NOT THE WEBSOCKET ANSWER PATH ────────────────────────────────────
  *
@@ -281,10 +316,21 @@ async function writeComment(gameId, body) {
   }
 
   /*
-    THE GATE. Both halves — see the header. `409` rather than `400`: nothing
-    about the request is malformed, the room has simply moved, and a composer
-    that gets a 409 can say "the host has closed this round" instead of "bad
-    request".
+    THE GATE — see the header. `409` rather than `400`: nothing about the
+    request is malformed, the room has simply moved, and a composer that gets
+    a 409 can say "this round is no longer open" instead of "bad request".
+
+    OWNER'S RULING, 26 SEP 2026: this is now the WHOLE gate. Until this date a
+    second check followed — `round.StageBeat !== 'feedback'` — refusing a
+    comment unless the host had opened a feedback round. It is gone: the
+    player's own "Feedback" button (PlayerPage.jsx's RESULTS# arm) posts here
+    with no host action at all, on any beat of RESULTS. The state check below
+    already establishes the one fact that still matters — the room is
+    currently on THIS round's results — so it is sufficient by itself. The
+    feedback-beat path (`stage-beat.js` opening `feedback`, the host's
+    "Request feedback") is UNCHANGED: it always satisfied this same state
+    check, and nothing here treats it any differently from a comment posted
+    while the round is on its tally or its AI read-back.
   */
   if (String(state.State) !== `RESULTS#${padded}`) {
     return respond(409, {
@@ -292,9 +338,14 @@ async function writeComment(gameId, body) {
       currentState: state.State,
     });
   }
+  // The round record itself must still exist — a defensive data-integrity
+  // check, not a reintroduction of the beat requirement dropped above.
   const round = await roundRecord(gameId, padded);
-  if (!round || round.StageBeat !== 'feedback') {
-    return respond(409, { error: 'the host has not opened a feedback round' });
+  if (!round) {
+    return respond(409, {
+      error: 'this round is no longer open for comments',
+      currentState: state.State,
+    });
   }
 
   const now = new Date().toISOString();
@@ -478,6 +529,17 @@ async function readComments(gameId, query) {
  * beat; a phone that arrives between those two calls gets a 409 that says the
  * report is not ready, which is a state the composer can render as "the host is
  * preparing this" rather than an error a participant has to interpret.
+ *
+ * UNCHANGED BY THE 26 SEP 2026 RULING ABOVE, deliberately. `writeComment`
+ * dropped its beat requirement that day; this function still has one, because
+ * it does two things the owner said should stay exactly as they were: it is
+ * the HOST'S whole-room switch (nobody's phone jumps into `FeedbackRoundPanel`
+ * until the host opens `feedback`), and it reads the snapshot the host built,
+ * which a player pressing their own button has no way to have caused to
+ * exist. The player's own button never calls this route at all — it builds
+ * its round from data the page already has plus the public
+ * `GET /games/{id}/ai-summary`, so it needs neither the beat nor the REPORT
+ * row this function depends on.
  */
 async function readFeedbackRound(gameId) {
   const { meta, state } = await readSession(gameId);
