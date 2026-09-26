@@ -119,14 +119,10 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
     LISTING instead.
 
     That key earns its place twice more. It is the one a takedown already clears
-    (public-library-item.js), and it used to be the only shape that could name a
-    LEGACY entry at all: `queueSk` counted a null version as v0, and
-    moderation-get.js and moderation-decide.js both refused a `v0` key on
-    purpose, so the row three of the four entries on dev would raise used to
-    list without opening. `queueSk` now gives an unversioned org set its own
-    bare (no `#v`) key instead, which both readers accept — this listing path
-    is unchanged by that and still keys every re-check by the LISTING, legacy
-    or not, for the first reason above.
+    (public-library-item.js), and it is the only shape that can name a LEGACY
+    entry at all: `queueSk` counts a null version as v0, and moderation-get.js
+    and moderation-decide.js both refuse a `v0` key on purpose, so the row three
+    of the four entries on dev would raise used to list without opening.
   */
   const listingRef = recheck && request.publicSetId
     ? setRef({ scope: tenant.PUBLIC, orgId: '', setId: String(request.publicSetId) })

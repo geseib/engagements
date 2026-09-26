@@ -333,11 +333,19 @@ const rowsUnder = (pk) => H.rowsWhere((r) => r.PK === pk);
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v2', decision: 'maybe' })).statusCode, 400);
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v2', decision: 'approve', note: 'x'.repeat(501) })).statusCode, 400);
     assert.strictEqual((await decide({ sk: 'PUBLIC#orgacme-safety', decision: 'approve' })).statusCode, 400, 'reported rows are decided in Stage 3');
-    // rejects: `#v(\d+)`, which admits v0 — and setPartition(ref, 0) resolves
-    // to the LEGACY UNVERSIONED partition, so `v0` would have published,
-    // stamped and logged against a different set's content than any queue row
-    // can name. `v01` goes with it: one spelling per version.
-    assert.strictEqual((await decide({ sk: 'org_acme#safety#v0', decision: 'approve' })).statusCode, 400, 'v0 reached the unversioned partition');
+    /*
+      v0 IS THE RESERVED SPELLING FOR "NO VERSION" (round 1 controller ruling):
+      queueSk has always written `#v0` for an unversioned org set, so this
+      resolves — never refuses — to `setPartition(ref, null)`, the LEGACY
+      partition. `seed()` here escalated v2 and wrote no v0 queue row, so v0 is
+      a well-formed key with nothing waiting: 404, not 400 — sensible, since
+      the legacy partition is a distinct row that coexists with v2 rather than
+      colliding with it (tests/moderation-unversioned-set.js proves the same
+      set can hold both a queued legacy row and a queued v1 row at once,
+      decided independently). `v01` is still not a version: one spelling per
+      version (and per "no version"), so two skus cannot name one row.
+    */
+    assert.strictEqual((await decide({ sk: 'org_acme#safety#v0', decision: 'approve' })).statusCode, 404, 'v0 must resolve, not refuse, even on a versioned set');
     assert.strictEqual((await decide({ sk: 'org_acme#safety#v01', decision: 'approve' })).statusCode, 400, 'two spellings of one version');
     // Minor #4: a non-string note (e.g. an object) is refused rather than
     // coerced to the string '[object Object]'.

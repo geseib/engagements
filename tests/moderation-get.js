@@ -105,12 +105,21 @@ const get = (sk) => handler(H.platformEvent({ method: 'GET', path: { sk: encodeU
     assert.strictEqual(body.log[0].version, 2, 'the event data itself survives');
     assert.ok(body.log[0].at, 'and so does its time');
   });
-  // rejects: `#v(\d+)`, which admits v0 — and setPartition(ref, 0) is the
-  // LEGACY UNVERSIONED partition, a different set's content under a
-  // version-shaped key.
-  await H.test('v0 is not a version, and neither is v01', async () => {
+  /*
+    v0 IS THE RESERVED SPELLING FOR "NO VERSION" (round 1 controller ruling):
+    moderation-queue.js's queueSk has always written `#v0` for an unversioned
+    org set, so the readers now accept it rather than the writer being made to
+    spell it some other way — no existing row needs migrating. `v0` resolves
+    (never refuses) to `setPartition(ref, null)`, the LEGACY partition, which
+    is a distinct row from any numbered version and coexists with one: `seed()`
+    escalated v2 here, wrote no v0 queue row, so v0 is a well-formed key with
+    nothing waiting under it — 404, not 400. `v01` is still not a version:
+    one spelling per version (and per "no version"), so two skus cannot name
+    one row.
+  */
+  await H.test('v0 resolves to the legacy partition (404, nothing queued there on a versioned set); v01 is still not a version', async () => {
     await seed();
-    assert.strictEqual((await get('org_acme#safety#v0')).statusCode, 400, 'v0 resolved to the unversioned partition');
+    assert.strictEqual((await get('org_acme#safety#v0')).statusCode, 404, 'v0 must resolve, not refuse, even on a versioned set');
     assert.strictEqual((await get('org_acme#safety#v01')).statusCode, 400, 'two spellings of one version');
   });
   await H.test('a snapshot that is gone reads as null and the rest still answers', async () => {

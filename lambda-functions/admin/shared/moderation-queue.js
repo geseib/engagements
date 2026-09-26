@@ -35,18 +35,7 @@ function queueSk(ref, version) {
   if (scope === 'org') {
     const orgId = clean(ref && ref.orgId);
     if (!orgId) throw new Error('moderation-queue: scope "org" requires an orgId');
-    const v = versionOf(version);
-    /*
-      UNVERSIONED (v === 0 here: a legacy set with no `#v<n>` partition —
-      set-version.js's permanently supported, never-migrated read state) has no
-      version to name, so the key names none. This used to write `#v0`, and
-      both readers refuse to parse it (moderation-get.js `parseSk`,
-      moderation-decide.js `parseOrgSk`: `#v([1-9]\d*)` only, deliberately,
-      since a version is one-based and `v0` is not a real one) — so the row
-      listed in the queue but could be neither opened nor decided. The bare
-      two-segment form below is the one spelling both readers now accept.
-    */
-    return v ? `${orgId}#${setId}#v${v}` : `${orgId}#${setId}`;
+    return `${orgId}#${setId}#v${versionOf(version)}`;
   }
   if (scope === 'public') return `PUBLIC#${setId}`;
   return `PLATFORM#${setId}`;
