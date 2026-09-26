@@ -226,6 +226,87 @@ describe('GameHostPage survives every screen change', () => {
   });
 });
 
+/**
+ * CONTINUE, TYPED, ON A SESSION THAT HAS NOT STARTED.
+ *
+ * `handleContinueGame` (the "Continue" box on the welcome screen) called
+ * `switchToGame` unconditionally — straight onto the live stage, whatever
+ * state the session was in. An unstarted session lands there with "Start
+ * First Round" disabled until a player joins, and a join is refused before
+ * start (session-gate.js), so the host is stranded on a screen with no way
+ * to move — a dead end reachable only by typing a code, never by the
+ * `?gameId=` URL loader a few hundred lines up, which already runs this same
+ * `checkGameStatus` check and, for an unstarted session, sends the host to
+ * game history instead (where Start is one click away).
+ *
+ * The fix makes Continue take that identical route for that identical case,
+ * so this test's destination is the same screen the URL loader reaches: the
+ * session history list, showing this session "Not started" with the button
+ * that actually starts it — not the live stage.
+ */
+describe('Continue on an unstarted session', () => {
+  let errors;
+
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.pushState({}, '', '/host');
+    errors = captureRenderErrors();
+  });
+
+  afterEach(() => {
+    errors.restore();
+    jest.restoreAllMocks();
+  });
+
+  test('takes the link path\'s route (game history), not the live stage', async () => {
+    const UNSTARTED = '3210';
+    global.fetch = jest.fn(async (url, options) => {
+      const u = String(url);
+      const method = options?.method || 'GET';
+      // checkGameStatus's read — must be checked before the bare /games match
+      // below, which would otherwise swallow it too.
+      if (u.includes(`games/${UNSTARTED}?role=host`)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ gameId: UNSTARTED, started: false }),
+          text: async () => '{}',
+        };
+      }
+      if (method === 'GET' && u.endsWith('/games')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            games: [{
+              gameId: UNSTARTED, title: 'Waiting to start', started: false,
+              gameType: 'call-and-answer', createdAt: '2026-09-26T00:00:00.000Z',
+            }],
+          }),
+          text: async () => '{}',
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+    });
+
+    render(<GameHostPage />);
+
+    const code = await screen.findByLabelText(/session code, 4 digits/i);
+    await act(async () => { fireEvent.change(code, { target: { value: UNSTARTED } }); });
+
+    const continueBtn = screen.getByRole('button', { name: /^continue$/i });
+    expect(continueBtn).not.toBeDisabled();
+    await act(async () => { fireEvent.click(continueBtn); });
+
+    // THE REGRESSION: the old code jumped straight to the live stage here —
+    // no session history, no "Not started" row, no way back to Start.
+    await waitFor(
+      () => expect(screen.getByText(/waiting to start/i)).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+    expect(screen.getByText(/not started/i)).toBeInTheDocument();
+    expect(errors.hookOrderFailures()).toEqual([]);
+  });
+});
+
 /*
  * THE ROUNDS TAB, AGAINST THE PAYLOAD THE SERVER ACTUALLY SENDS.
  *

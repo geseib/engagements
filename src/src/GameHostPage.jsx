@@ -4394,13 +4394,30 @@ Focus on actionable business strategy insights.`;
       return;
     }
 
-    switchToGame(gameIdToUse);
+    // THE SAME CHECK THE `?gameId=` URL LOADER RUNS (a few hundred lines up).
+    // Typing a code was the one door onto the live stage that skipped it: an
+    // unstarted session lands with "Start First Round" disabled until a
+    // player joins, and a join is refused before start (session-gate.js) —
+    // a dead end. Route an unstarted session the way the URL loader already
+    // does, into game history, where Start is one click away; anything else
+    // (started, or the status check itself failing) goes straight to the
+    // stage as before.
+    checkGameStatus(gameIdToUse).then((gameStatus) => {
+      if (gameStatus.exists && !gameStatus.started) {
+        console.log(`⚠️ HOST: Game ${gameIdToUse} exists but not started — showing game history`);
+        setShowWelcomeScreen(true);
+        setTimeout(() => handleViewGameHistory(), 500);
+        return;
+      }
 
-    // Update URL
-    const url = new URL(window.location);
-    url.searchParams.set('gameId', gameIdToUse);
-    window.history.replaceState(null, '', url);
-    console.log(`🔗 HOST: Continuing game ${gameIdToUse}`);
+      switchToGame(gameIdToUse);
+
+      // Update URL
+      const url = new URL(window.location);
+      url.searchParams.set('gameId', gameIdToUse);
+      window.history.replaceState(null, '', url);
+      console.log(`🔗 HOST: Continuing game ${gameIdToUse}`);
+    });
   };
 
   const handleViewGameHistory = async () => {
