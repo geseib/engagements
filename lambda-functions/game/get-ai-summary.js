@@ -408,13 +408,29 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
     const promptRecord = isOrgRow
       ? await decryptItem(orgId, 'prompt', dbResult.Item)
       : dbResult.Item;
+
+    /*
+      BUGSWEEP 5b. `delete-ai-prompt.js`'s soft delete only sets `status:
+      'archived'` on this DynamoDB row — it never touches the S3 body, so a
+      stale 'active' status can sit in the object this function is about to
+      fetch. The row is the authoritative copy, and checking it here (rather
+      than the fetched `promptData`) is what lets an archive survive even
+      though the S3 read below would otherwise happily return a fully usable,
+      long-out-of-date template. Treated as if the row does not exist, so the
+      caller's existing "missing" recovery — the game-type default — runs.
+    */
+    if (promptRecord.status === 'archived') {
+      console.warn(`⚠️ Prompt ${promptId} is archived — not used to drive a summary`);
+      return null;
+    }
+
     const s3Key = promptRecord.s3Key;
-    
+
     if (!s3Key) {
       console.error(`❌ No S3 key found in prompt record for ${promptId}`);
       return null;
     }
-    
+
     console.log(`📄 Using S3 Key from DB record: ${s3Key}`);
     
     const response = await s3.send(new GetObjectCommand({
@@ -447,8 +463,12 @@ const fetchPromptFromS3 = async (promptId, orgId = '') => {
           Key: { PK: pk, SK: `AIPROMPT#${promptId}` }
         }));
         if (!hit.Item) continue;
+        const record = pk === 'AIPROMPTS' ? hit.Item : await decryptItem(orgId, 'prompt', hit.Item);
+        // Same archived check as the primary path above — this fallback must
+        // not resurrect an archived prompt just because S3 failed to serve it.
+        if (record.status === 'archived') continue;
         console.log(`✅ Using DynamoDB record as fallback for prompt ${promptId}`);
-        return pk === 'AIPROMPTS' ? hit.Item : await decryptItem(orgId, 'prompt', hit.Item);
+        return record;
       }
     } catch (dbError) {
       console.error(`❌ DynamoDB fallback also failed:`, dbError);
@@ -590,8 +610,13 @@ const findDefaultPromptId = async (gameType) => {
       ExclusiveStartKey = page.LastEvaluatedKey;
     } while (ExclusiveStartKey);
 
+    // BUGSWEEP 5b: an archived prompt must not keep running just because it
+    // was never unmarked as the game-type default. `item.status` here is
+    // straight off the DynamoDB row this Query just read, which is exactly
+    // what delete-ai-prompt.js's soft delete updates.
     const candidates = defaults.filter(item =>
-      item.promptId && normalizeGameType(item.gameType) === canonical);
+      item.promptId && normalizeGameType(item.gameType) === canonical
+      && item.status !== 'archived');
 
     if (candidates.length > 0) {
       if (candidates.length > 1) {

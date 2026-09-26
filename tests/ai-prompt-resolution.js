@@ -87,6 +87,10 @@ const DANGLING_PROMPT_ID = 'mdaikmsyh34dwoqayi';
 // path does not read.
 const TRIVIA_PROMPT_ID = 'quiz-recap';
 const PUBLIC_PROMPT_ID = 'open-mic';
+// BUGSWEEP 5b: an archived-but-otherwise-fine prompt, and an archived prompt
+// that also still claims to be a game type's default.
+const ARCHIVED_PROMPT_ID = 'stale-recap';
+const ARCHIVED_DEFAULT_ID = 'stale-wavelength-default';
 
 /* The partition names come from tenant.js rather than from string literals, so
    a partition that is renamed there cannot leave this test quietly probing the
@@ -118,6 +122,26 @@ const ddbItems = new Map([
     promptId: PUBLIC_PROMPT_ID, name: 'Open Mic',
     gameType: 'call-and-answer', category: 'callandanswer',
     s3Key: `prompts/public/${PUBLIC_PROMPT_ID}/v1.json`,
+  }],
+  // ARCHIVED but otherwise a perfectly well-formed, fetchable, usable summary
+  // prompt — proving that existence and a usable body are not enough.
+  // `delete-ai-prompt.js`'s soft delete only ever touches this row's
+  // `status`, never the S3 body, which is exactly why the check has to read
+  // THIS record rather than the fetched prompt content.
+  [`${PLATFORM_PROMPTS_PK}|AIPROMPT#${ARCHIVED_PROMPT_ID}`, {
+    PK: PLATFORM_PROMPTS_PK, SK: `AIPROMPT#${ARCHIVED_PROMPT_ID}`,
+    promptId: ARCHIVED_PROMPT_ID, name: 'Stale Recap',
+    gameType: 'call-and-answer', category: 'callandanswer', status: 'archived',
+    s3Key: `prompts/callandanswer/${ARCHIVED_PROMPT_ID}/v1.json`,
+  }],
+  // Still claims isDefault for wavelength, and is the ONLY wavelength default
+  // on the table — so if findDefaultPromptId does not check status, this is
+  // exactly what it would return.
+  [`${PLATFORM_PROMPTS_PK}|AIPROMPT#${ARCHIVED_DEFAULT_ID}`, {
+    PK: PLATFORM_PROMPTS_PK, SK: `AIPROMPT#${ARCHIVED_DEFAULT_ID}`,
+    promptId: ARCHIVED_DEFAULT_ID, name: 'Stale Wavelength Default',
+    gameType: 'wavelength', isDefault: true, status: 'archived',
+    s3Key: `prompts/wavelength/${ARCHIVED_DEFAULT_ID}/v1.json`,
   }],
   // NOTE: no record for DANGLING_PROMPT_ID — that is the whole point.
 ]);
@@ -178,6 +202,12 @@ const s3Bodies = new Map([
     name: 'Open Mic',
     instructions: 'Read the room.',
     outputFormat: '## Open\n{responsesText}',
+  }],
+  // Fully usable — this is what would run if archiving were not checked.
+  [`prompts/callandanswer/${ARCHIVED_PROMPT_ID}/v1.json`, {
+    name: 'Stale Recap',
+    instructions: 'This must never be read aloud again.',
+    outputFormat: '## Stale\n{responsesText}',
   }],
 ]);
 
@@ -325,6 +355,40 @@ function check(label, fn) {
       assert(!s3Fetches.includes(`prompts/public/${PUBLIC_PROMPT_ID}/v1.json`),
         'S3 was asked for the public body, so the row was found first'));
   }
+
+  // ── BUGSWEEP 5b: AN ARCHIVED PROMPT STILL RAN ───────────────────────────
+  // `delete-ai-prompt.js`'s soft delete sets `status: 'archived'` on the
+  // DynamoDB row and nothing else; nothing downstream ever read that field.
+  // A session or set naming an archived prompt must fall through to the
+  // game-type default exactly as if it named none — even though the row
+  // exists and its body is entirely usable.
+  console.log('\nan archived prompt is skipped, not run\n');
+
+  // 8. An explicit id that names an archived (but otherwise fine) prompt.
+  s3Fetches.length = 0;
+  const archived = await mod.resolvePromptTemplate(ARCHIVED_PROMPT_ID, 'call-and-answer');
+  check('an archived prompt is not returned as-is', () =>
+    assert(archived && archived.promptId !== ARCHIVED_PROMPT_ID,
+      'the archived prompt was used to drive the summary'));
+  check('…it falls back to the game-type default instead', () =>
+    assert.strictEqual(archived.promptId, DEFAULT_PROMPT_ID));
+  check('…the recovery is reported exactly as a missing prompt would be', () => {
+    assert.strictEqual(archived.recoveredFrom, ARCHIVED_PROMPT_ID);
+    assert.strictEqual(archived.recoveryReason, 'missing');
+  });
+  check('…its S3 body — fully usable — was never even fetched', () =>
+    assert(!s3Fetches.includes(`prompts/callandanswer/${ARCHIVED_PROMPT_ID}/v1.json`),
+      'the archived body was read, so status was checked too late (or not at all)'));
+
+  // 9. findDefaultPromptId itself: an archived prompt cannot BE the default,
+  //    even when it is the only row claiming isDefault for that game type.
+  check('findDefaultPromptId is exported for direct testing', () =>
+    assert.strictEqual(typeof mod.findDefaultPromptId, 'function'));
+  const wavelengthDefault = await mod.findDefaultPromptId('wavelength');
+  check('an archived isDefault prompt is skipped as a candidate default', () =>
+    assert.notStrictEqual(wavelengthDefault, ARCHIVED_DEFAULT_ID));
+  check('…the hardcoded fallback is used, since nothing else claims default for wavelength', () =>
+    assert.strictEqual(wavelengthDefault, 'lessons-learned'));
 
   /* ── WHICH promptId THE ROUND STARTS FROM ─────────────────────────────────
      The session's pick (METADATA.PromptId, from setup or the mid-round switch)
