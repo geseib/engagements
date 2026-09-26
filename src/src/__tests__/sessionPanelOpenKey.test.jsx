@@ -29,8 +29,9 @@
  * with `flushSync`, the same synchronous flush a browser's own scheduling
  * effectively produced. Before `useSessionPanelKey.js` moved its listener
  * from `window` to `document` (this round's fix), this exact harness with
- * this exact `onClose` failed on every `Host`-based test below — see
- * backslash-report.md's "Fix round 1" section for the recorded RED.
+ * this exact `onClose` failed "a second \ closes it" below — the one test
+ * here that closes through `flushSync` — reading "open" where "closed" was
+ * expected.
  */
 import React, { useState } from 'react';
 import fs from 'fs';
