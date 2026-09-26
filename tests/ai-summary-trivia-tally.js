@@ -68,7 +68,7 @@ stub('@aws-sdk/client-apigatewaymanagementapi', {
 
 process.env.TABLE_NAME = 'test-table';
 
-const { tallyTriviaCorrectness, describeCorrectAnswer } =
+const { tallyTriviaCorrectness, describeCorrectAnswer, triviaWinnerInfo, triviaResultsSummary } =
   require(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'));
 
 let pass = 0, fail = 0;
@@ -220,6 +220,40 @@ check('no code path in get-ai-summary.js still decodes the answer by hand', () =
     require('path').join(__dirname, '../lambda-functions/game/get-ai-summary.js'), 'utf8');
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.ok(!/startsWith\('Option'\)/.test(code), "a hand-rolled startsWith('Option') reader remains");
+});
+
+console.log('\n5. the round\'s winner, not the game\'s — BUGSWEEP 5d, GitHub #3 residue');
+
+// GitHub #3: the AI took a round's points for the room's running total. A bare
+// "Winner: Ada ... (12 points)" on a summary that runs after every single
+// question reads exactly like a final score, not this round's.
+check('winnerInfo says "this round", not a bare "Winner"', () => {
+  assert.strictEqual(
+    triviaWinnerInfo([{ playerName: 'Ada', answerText: 'Mercury', score: 12 }]),
+    'Winner this round: Ada with "Mercury" (12 points)');
+});
+
+check('winnerInfo with nobody correct is unchanged', () => {
+  assert.strictEqual(triviaWinnerInfo([]), 'No clear winner');
+});
+
+check('resultsSummary says "this round" for a single winner', () => {
+  assert.strictEqual(
+    triviaResultsSummary([{ playerName: 'Ada', answerText: 'Mercury', score: 12 }]),
+    'Clear winner this round with 12 points');
+});
+
+check('a tie is left as it was — it never said "winner" ambiguously', () => {
+  assert.strictEqual(
+    triviaResultsSummary([
+      { playerName: 'Ada', answerText: 'Mercury', score: 12 },
+      { playerName: 'Bob', answerText: 'Mercury', score: 12 },
+    ]),
+    '2-way tie for first place with 12 points each');
+});
+
+check('nobody correct is unchanged', () => {
+  assert.strictEqual(triviaResultsSummary([]), 'No correct answers');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

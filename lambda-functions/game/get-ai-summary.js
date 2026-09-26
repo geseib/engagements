@@ -1787,6 +1787,31 @@ function describeCorrectAnswer(question) {
 exports.describeCorrectAnswer = describeCorrectAnswer;
 
 /**
+ * BUGSWEEP 5d, GitHub #3 residue: the trivia winner line, isolated so its
+ * wording can be tested directly.
+ *
+ * "Winner: Ada with \"Mercury\" (12 points)" runs after EVERY question, and
+ * reads exactly like a final-score claim — the same shape as the bug GitHub
+ * #3 reported, where the AI took a round's points for the room's running
+ * total. Both this and `triviaResultsSummary` below now say "this round".
+ */
+function triviaWinnerInfo(winners) {
+  if (!winners.length) return 'No clear winner';
+  return `Winner this round: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)`;
+}
+exports.triviaWinnerInfo = triviaWinnerInfo;
+
+/** Sibling of `triviaWinnerInfo` — see its comment. The tie and no-answer
+ *  cases never said "winner" ambiguously, so only the single-winner line
+ *  changes. */
+function triviaResultsSummary(winners) {
+  if (winners.length === 1) return `Clear winner this round with ${winners[0].score} points`;
+  if (winners.length > 1) return `${winners.length}-way tie for first place with ${winners[0].score} points each`;
+  return 'No correct answers';
+}
+exports.triviaResultsSummary = triviaResultsSummary;
+
+/**
  * A POLL'S OPTIONS, as the prompt reads them: "Option 1: …, Option 2: …".
  *
  * From the question's `options` ARRAY, which is the only attribute
@@ -2287,21 +2312,18 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       return `${emoji} ${data.answerText} (${data.totalScore} votes)`;
     }).join(', ');
   
-  // Winner info (different format for trivia vs voting)
-  const winnerInfo = winners.length > 0 ? 
-    gameType === 'trivia' ?
-      `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} points)` :
-      `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} vote points)` : 
-    'No clear winner';
-  
+  // Winner info (different format for trivia vs voting). Trivia's wording is
+  // BUGSWEEP 5d's triviaWinnerInfo — see its comment above.
+  const winnerInfo = gameType === 'trivia'
+    ? triviaWinnerInfo(winners)
+    : winners.length > 0
+      ? `Winner: ${winners[0].playerName} with "${winners[0].answerText}" (${winners[0].score} vote points)`
+      : 'No clear winner';
+
   // Results summary (different for trivia vs wavelength vs voting) - wavelength will be updated later
   let resultsSummary = '';
   if (gameType === 'trivia') {
-    resultsSummary = winners.length === 1 ? 
-      `Clear winner with ${winners[0].score} points` :
-      winners.length > 1 ? 
-      `${winners.length}-way tie for first place with ${winners[0].score} points each` :
-      'No correct answers';
+    resultsSummary = triviaResultsSummary(winners);
   } else if (gameType === 'wavelength') {
     // Provisional — the wavelength branch below overwrites this once the real
     // analysis is in hand. Kept in the new vocabulary so a future refactor
