@@ -19,31 +19,55 @@
  * carries the Cognito authorizer, because it moves what the whole room is
  * looking at.
  *
- * ── THAT SENTENCE IS LOAD-BEARING, AND IT WAS ONCE FALSE ───────────────────
+ * ── THAT SENTENCE WAS LOAD-BEARING, AND IT WAS ONCE FALSE ──────────────────
  *
  * "Carries the Cognito authorizer" was true and not sufficient. Until
  * 2026-08-27 `stage-beat` checked only that the caller was *a* host, never that
  * they were THIS session's host — so a host in any organisation, holding one of
  * the 9,000 four-digit ids, could open a feedback round on a room they had
  * nothing to do with, and the write gate below would then admit anyone with the
- * code. The resulting comments are encrypted under the VICTIM org's key and
- * flow into their round report and session report; the beat undoes, they do
- * not.
- *
- * So THIS ROUTE'S safety is borrowed, not owned: it holds exactly as long as
- * `stage-beat` refuses a caller from another organisation
+ * code. That was fixed in `stage-beat.js` itself
  * (`tenant.callerMayDriveSession`, asserted end-to-end by
- * `tests/session-beat-org-scope.js`). Anything that widens who may write the
- * `feedback` beat widens who may write here, silently. Do not weaken that route
- * without reading this one.
+ * `tests/session-beat-org-scope.js`), and it stays fixed regardless of
+ * anything below — a rival org's host still cannot move this room's stage,
+ * reveal its authors, or open anything on its behalf.
  *
- * WHAT IS DELIBERATELY *NOT* ADDED HERE. Not an identity check — participants
- * have no identity, and requiring one ends the participant journey. Not a
- * roster check on `playerName` either: it is unverified, exactly as it is in
- * `submit-vote.js`, and singling out comments would leave the same trust in
- * every other participant write while implying it had been dealt with. If that
- * posture should change it is one deliberate piece of work across all of them,
- * not a patch here.
+ * ── WHAT PROTECTS THIS ROUTE NOW: MEMBERSHIP, OWNED HERE, NOT BORROWED ─────
+ *
+ * Until 26 Sep 2026 this section said the route's safety was "borrowed, not
+ * owned" from `stage-beat`'s org check, because the write gate's second fact
+ * was `ROUND#nnn.StageBeat === 'feedback'` — a value only a host could set, so
+ * refusing a hijacked beat also refused every comment on that round. That
+ * reasoning stopped being true the moment the beat requirement was dropped
+ * (below): a comment no longer needs the beat, so refusing it upstream no
+ * longer refuses anything here. Review of that change (26 Sep 2026, fix round
+ * 1) found the gap directly: with no beat and no identity check, ANYONE
+ * holding the four-digit code could post arbitrary text under an arbitrary
+ * name, and that text reaches the projector's arrivals (`RoomMeter`) and both
+ * reports. The owner's ruling: add membership.
+ *
+ * So `writeComment` now asks the table one more thing, itself, before it ever
+ * looks at the round: is this playerName actually `PLAYER#<name>` in THIS
+ * game? A name with no such row is refused outright. And where the codebase
+ * already has a way to prove a claimed name is the same browser that claimed
+ * it — `join-game.js` stamps a client-minted `ClientId` on the row, and
+ * `get-answers.js`'s `getOwnAnswer` (`identityProven`) is the existing reader
+ * of that stamp — this route asks the same question: if the row carries a
+ * `ClientId`, the request must present the same one, or it is refused exactly
+ * as a non-member is. A row with no stamped `ClientId` (joined before this
+ * existed, or by a client that could not mint one) proves nothing either way,
+ * so it is treated as the pre-existing rows in `get-answers.js` are: allowed
+ * once membership itself is established, with nothing stronger claimed. THIS
+ * is now the route's own, owned protection — it does not depend on
+ * `stage-beat`, `feedback`, or any other route staying correct.
+ *
+ * WHAT IS DELIBERATELY *NOT* ADDED HERE, still. Not full participant identity
+ * verification — a player who has never left the room and whose browser holds
+ * no stamped `ClientId` is still trusted on their claimed name, exactly as
+ * `submit-vote.js` trusts it, and singling comments out for more would leave
+ * every other participant write with the same trust while implying it had
+ * been dealt with everywhere. If that posture should change it is one
+ * deliberate piece of work across all of them, not a patch here.
  *
  * THE READ ADDITIONALLY REQUIRES A ROUND, which is stricter than the key
  * format allows: `commentPrefix({})` (comment-keys.js) happily returns the
@@ -92,17 +116,15 @@
  * which is a defensive check on data integrity, not a reintroduction of the
  * beat requirement.
  *
- * THIS WIDENS *WHEN*, NOT *WHO*. The route was already public and already had
- * no identity check (see below) — a legitimate participant and a stranger who
- * merely guessed the four-digit code were always indistinguishable to it. What
- * changes is that a round the host never opens for feedback is no longer
- * permanently closed to comments once it is over: it is open for exactly as
- * long as the room is looking at its results, the same window every other
- * public participant write (a vote, an answer) already uses. That is the
- * deliberate point of the ruling, not a side effect of it — see
+ * THIS WIDENS *WHEN*, FOR A MEMBER — the membership check above is what still
+ * answers *who*. A round the host never opens for feedback is no longer
+ * permanently closed to comments once it is over: for a joined player, it is
+ * open for exactly as long as the room is looking at its results, the same
+ * window every other participant write (a vote, an answer) already uses. That
+ * is the deliberate point of the ruling, not a side effect of it — see
  * `tests/session-beat-org-scope.js` for what stays scoped by organisation
- * regardless (stage-beat, reveal-authors) and what does not change here
- * (a comment is still encrypted under the ROOM's own org, never the caller's).
+ * regardless (stage-beat, reveal-authors) and for the membership check's own
+ * coverage in `tests/round-comments.js`.
  *
  * `readFeedbackRound` (`GET /feedback-round`, further down) is UNCHANGED and
  * still requires the `feedback` beat. It is the host-triggered, WHOLE-ROOM
@@ -313,6 +335,36 @@ async function writeComment(gameId, body) {
   const { meta, state } = await readSession(gameId);
   if (!meta || !state) {
     return respond(404, { error: 'Game not found' });
+  }
+
+  /*
+    MEMBERSHIP — see the header's "WHAT PROTECTS THIS ROUTE NOW". Read once the
+    game is known to exist, and checked BEFORE the round/state gate below: a
+    name that never joined this session is refused regardless of what round or
+    state the room is in, the same as it would be on any other round.
+
+    A missing PLAYER# row is a straightforward refusal. A row that DOES carry
+    a `ClientId` (join-game.js stamps one when the joining client minted one)
+    additionally requires the request to present that same id — the identical
+    check `get-answers.js`'s `getOwnAnswer` already makes (`identityProven`) —
+    so typing somebody else's already-claimed name is refused too. A row with
+    no stamped `ClientId` (joined before this existed) proves nothing either
+    way and is treated as `get-answers.js` treats it: membership alone is
+    enough, exactly as before this check existed for everyone.
+  */
+  const playerRow = (await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${author}` },
+  }))).Item;
+  if (!playerRow) {
+    return respond(409, { error: 'you have not joined this session' });
+  }
+  const storedClientId = playerRow.ClientId || null;
+  if (storedClientId) {
+    const suppliedClientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
+    if (!suppliedClientId || suppliedClientId !== storedClientId) {
+      return respond(409, { error: 'you have not joined this session' });
+    }
   }
 
   /*

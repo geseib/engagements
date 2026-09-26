@@ -42,10 +42,18 @@ async function describeFailure(response) {
  * is never re-derived here: on a round with tied scores two rows print the same
  * rank, so a position recomputed at send time can attach a comment to the wrong
  * response.
+ *
+ * `clientId` — MEMBERSHIP (comments.js, fix round 1, item 1). The server
+ * refuses a `playerName` with no `PLAYER#` row in this game, and where that
+ * row carries a `ClientId` (join-game.js stamps one whenever the joining
+ * client minted one) it requires this same id back, the same proof
+ * `get-answers.js`'s own-answer lookup already asks for. Both call sites in
+ * PlayerPage.jsx pass `getClientId(gameId)` — the identical value the join
+ * request itself sent — so a real player is never refused by their own check.
  */
 export async function postComment({
   fetchFn = fetch, apiBase, gameId,
-  questionNumber, playerName,
+  questionNumber, playerName, clientId,
   anchorKind, anchorRef, anchorLabel, anchorExcerpt, text,
 }) {
   let response;
@@ -54,7 +62,7 @@ export async function postComment({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        questionNumber, playerName,
+        questionNumber, playerName, clientId,
         anchorKind, anchorRef, anchorLabel, anchorExcerpt, text,
       }),
     });

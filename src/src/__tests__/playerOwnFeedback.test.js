@@ -147,6 +147,29 @@ describe('posting from the player\'s own panel', () => {
     expect(fn).toMatch(/setMyFeedbackComments/);
     expect(fn).not.toMatch(/setFeedbackComments/);
   });
+
+  test('sends the membership proof (comments.js\'s PLAYER# check, fix round 1 item 1)', () => {
+    // The server refuses a playerName with no PLAYER# row in this game, and
+    // where that row carries a ClientId it requires this same one back. Both
+    // composers must send the identical value the join request itself sent —
+    // getClientId(gameId) reads the same localStorage-backed id every time —
+    // or a legitimate player's own comment would be refused by their own
+    // check.
+    const fn = sliceFrom(player, 'const submitMyFeedbackComment = async (draft) => {', '\n  };');
+    expect(fn).toMatch(/clientId:\s*getClientId\(gameId\)/);
+  });
+});
+
+describe('the host-triggered composer sends the same membership proof', () => {
+  // `submitComment` (feedbackRound, the host-triggered whole-room switch) is
+  // untouched in every other respect by this feature, but it posts through
+  // the same comments.js route and needs the same clientId or a real
+  // participant in an OPENED feedback round would be refused too.
+  test('submitComment also sends getClientId(gameId)', () => {
+    const fn = sliceFrom(player, 'const submitComment = async (draft) => {', '\n  };');
+    expect(fn).toMatch(/postComment\(\{/);
+    expect(fn).toMatch(/clientId:\s*getClientId\(gameId\)/);
+  });
 });
 
 describe('the player page still registers and removes its sockets symmetrically', () => {

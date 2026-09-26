@@ -125,7 +125,9 @@ const get = (gameId, qs) => handler({
 });
 
 /** A session on round 3, results shown, feedback round open. */
-function seedGame(gameId, { lessonNumber = 3, beat = 'feedback', revealed = true } = {}) {
+function seedGame(gameId, {
+  lessonNumber = 3, beat = 'feedback', revealed = true, clientId = undefined,
+} = {}) {
   store.clear();
   sent = [];
   const padded = String(lessonNumber).padStart(3, '0');
@@ -137,6 +139,14 @@ function seedGame(gameId, { lessonNumber = 3, beat = 'feedback', revealed = true
   });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#p-1', ConnectionId: 'p-1', ConnectionType: 'PLAYER', PlayerName: 'Ada' });
+  // A joined player, matching aComment()'s default author — MEMBERSHIP (fix
+  // round 1, item 1): every test below that posts as 'Ada Lovelace' needs this
+  // row to exist, or comments.js's new PLAYER# check refuses it before the
+  // behaviour the test is actually about is ever reached.
+  put({
+    PK: `GAME#${gameId}`, SK: 'PLAYER#Ada Lovelace', PlayerName: 'Ada Lovelace',
+    ...(clientId ? { ClientId: clientId } : {}),
+  });
 }
 
 const aComment = (over = {}) => ({
@@ -220,6 +230,55 @@ const aComment = (over = {}) => ({
     assert.strictEqual(frame.text, undefined, 'the comment text was broadcast');
     assert.strictEqual(frame.playerName, undefined, 'the author was broadcast');
   });
+
+  // ---------- 1b. membership (fix round 1, item 1) ----------
+  console.log('\n1b. only a name that actually joined this session may comment');
+
+  /*
+    Review of the RESULTS-beat loosening above found the gap this section
+    covers: with the beat gone, anyone holding the four-digit code could post
+    arbitrary text under an arbitrary name and have it reach the projector's
+    arrivals (RoomMeter) on every results screen. The owner's ruling: require
+    the commenter to be `PLAYER#<name>` in this game, and — where the codebase
+    already proves a claimed name belongs to the browser that claimed it
+    (join-game.js's `ClientId`, read the identical way
+    get-answers.js's `getOwnAnswer` reads it) — require that same proof.
+  */
+  seedGame('4013');
+  const notJoined = await post('4013', aComment({ playerName: 'A Stranger' }));
+  check('a name with no PLAYER# row in this game is refused', () => {
+    assert.strictEqual(notJoined.statusCode, 409, `got ${notJoined.statusCode}: ${notJoined.body}`);
+    assert.strictEqual(rows('4013', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4014');
+  const joined = await post('4014', aComment());
+  check('a name that IS a joined player (seedGame\'s default PLAYER# row) is accepted', () =>
+    assert.strictEqual(joined.statusCode, 201, `got ${joined.statusCode}: ${joined.body}`));
+
+  seedGame('4015', { clientId: 'real-browser-id' });
+  const noProof = await post('4015', aComment());
+  check('refused with no clientId at all, once the row has one to check against', () => {
+    assert.strictEqual(noProof.statusCode, 409, `got ${noProof.statusCode}: ${noProof.body}`);
+    assert.strictEqual(rows('4015', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4016', { clientId: 'real-browser-id' });
+  const wrongProof = await post('4016', aComment({ clientId: 'a-different-browser-id' }));
+  check('refused when the supplied clientId does not match the one the row was joined with', () => {
+    assert.strictEqual(wrongProof.statusCode, 409, `got ${wrongProof.statusCode}: ${wrongProof.body}`);
+    assert.strictEqual(rows('4016', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4017', { clientId: 'real-browser-id' });
+  const rightProof = await post('4017', aComment({ clientId: 'real-browser-id' }));
+  check('accepted when the supplied clientId matches', () =>
+    assert.strictEqual(rightProof.statusCode, 201, `got ${rightProof.statusCode}: ${rightProof.body}`));
+
+  seedGame('4018'); // PLAYER# row has no ClientId at all — joined before the field existed.
+  const legacyNoProof = await post('4018', aComment());
+  check('a row with no stamped ClientId proves nothing either way, so membership alone is enough', () =>
+    assert.strictEqual(legacyNoProof.statusCode, 201, `got ${legacyNoProof.statusCode}: ${legacyNoProof.body}`));
 
   // ---------- 2. the gate ----------
   console.log('\n2. a comment can be written on any beat of the round\'s RESULTS');
