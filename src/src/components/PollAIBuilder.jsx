@@ -382,6 +382,15 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
     && (interpreted.outcome === 'complete'
       || (interpreted.outcome === 'partial' && reviewingPartial));
 
+  /** See TriviaAIBuilder.requestClose — same contract, same reasons. */
+  const requestClose = () => {
+    if (isAppend(appendTo) && reviewing && keptPolls.length > 0
+      && !window.confirm('Close without adding these poll questions? They have not been added and will be lost.')) {
+      return;
+    }
+    onClose();
+  };
+
   /**
    * A poll with fewer than two options is unplayable — there is nothing to
    * choose between. Real: the importer stores whatever it is given, and the
@@ -398,11 +407,11 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
 
   return (
     <div className="poll-ai-builder-modal">
-      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-overlay" onClick={requestClose}></div>
       <div className="modal-content poll-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add polls to “${appendTo.setName}”` : 'AI Poll Builder'}</h2>
-          <button className="close-button" onClick={onClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
+          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
         <div className="modal-body">
@@ -810,7 +819,7 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
               <button className="btn-secondary" onClick={backToConfiguration}>
                 <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
               </button>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={requestClose}>
                 Cancel
               </button>
             </>
