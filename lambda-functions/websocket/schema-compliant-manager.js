@@ -71,6 +71,67 @@ const createGame = async (gameId, gameData) => {
 
     console.log(`🎮 Creating game ${gameId} for org ${orgId || '(none)'} with schema compliance`);
 
+    /*
+      0. IS THIS CODE ALREADY SPOKEN FOR — by ANY row, not just the reservation?
+      (bug sweep Task 2, 2026-09-26)
+
+      The reservation row below is not the only thing a session leaves in this
+      partition, and it is not the longest-lived: it carries the 90-day-from-
+      creation / 7-day-from-start ttl (session-ttl.js), but a `PLAYER#x#SCORE`
+      row and a `QUESTION#nnn#AISummary` row both carry their OWN 30-day ttl,
+      written straight onto `GAME#<id>` with no reference back to the
+      reservation. Once the reservation expires and is swept, a fresh draw of
+      the same 4-digit code sailed straight through `attribute_not_exists(PK)`
+      on the reservation — that condition only ever looked at the `GAMES`
+      partition — and inherited whatever the last session left in `GAME#<id>`:
+      its leaderboard, its cached Workie summaries, its report rounds.
+
+      So before the reservation Put, ask the partition itself. Strongly
+      consistent, because the failure mode this guards against IS "a lazily-
+      deleted row DynamoDB has not swept yet" (below) — an eventually
+      consistent read could report a partition empty that a stale row is still
+      sitting in.
+
+      An item whose `ttl` has already passed but which DynamoDB has not yet
+      reaped STILL COUNTS AS TAKEN. DynamoDB deletes expired items within
+      about 48 hours of expiry, not at the instant they expire, and until it
+      does the row is live data — exactly the row this bug hands to a stranger.
+      There is no attribute to filter it out by, and filtering it out would BE
+      the bug: "already past its ttl" is precisely the window Task 2 exists
+      for.
+
+      ORDER: this runs BEFORE the conditional `GAMES` Put, not atomically with
+      it, and that is safe rather than merely convenient. A session's
+      `GAME#<id>` rows are never written until its creator has already WON
+      that Put — it is the first of the nine writes (the header above). So if
+      this Query sees an empty partition, no concurrent creator can be
+      mid-write on this same id without having already taken the reservation;
+      and if one has, THIS attempt's own reservation Put (right below) fails
+      on the very same `ConditionalCheckFailedException` the retry loop in
+      create-game.js already treats as "drawn again". A race can only make
+      this check too CAUTIOUS (seeing rows for an id someone else just won and
+      is mid-write on, which the reservation Put would have refused anyway),
+      never too permissive.
+
+      Thrown with the reservation's own error name so create-game.js's
+      existing retry loop — "on ConditionalCheckFailedException, draw again" —
+      handles this exactly like a reservation collision, with no change there.
+      `reserved` is still false here, so the failure cleanup below correctly
+      does nothing: there is nothing yet to release.
+    */
+    const stillHeld = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}` },
+      ConsistentRead: true,
+      Limit: 1
+    }));
+    if (stillHeld.Items && stillHeld.Items.length > 0) {
+      const err = new Error(`GAME#${gameId} still holds rows from a previous session`);
+      err.name = 'ConditionalCheckFailedException';
+      throw err;
+    }
+
     // Resolve — and then PIN — the question-set version this game plays.
     //
     // Resolution is the shared 1-2-3: an explicit pin from the caller, else the
