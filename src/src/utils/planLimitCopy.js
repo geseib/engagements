@@ -105,7 +105,22 @@ export function planLimitCopy(refusal, options = {}) {
 
   const day = formatDay((resolve && resolve.resetsOn) || nextFirst());
   const waiting = resolve && resolve.request;
-  const price = (r.upgrade && r.upgrade.priceDisplay) ? `${r.upgrade.priceDisplay} a month, never refused. ` : '';
+  // THE PLAN THE REFUSAL OFFERS (pricing.js upgradeRequired): Standard to a
+  // person's own space, the Organisation plan to a team — never "the Team
+  // plan" to an individual (27 Sep 2026). A body from an older server names
+  // none, and the copy says "a paid plan".
+  // The body's own name, else its plan id, else who is asking: the resolve
+  // block says whether this is a person's space or a team.
+  const BY_ID = { standard: 'Standard plan', team: 'Organisation plan' };
+  let upgradeName = (r.upgrade && (r.upgrade.name || BY_ID[r.upgrade.planId])) || '';
+  if (!upgradeName && resolve && resolve.orgType) upgradeName = resolve.orgType === 'team' ? BY_ID.team : BY_ID.standard;
+  const planName = upgradeName ? `the ${upgradeName}` : 'a paid plan';
+  let price = '';
+  if (r.upgrade && Number(r.upgrade.priceCents) > 0 && r.upgrade.priceDisplay) {
+    price = `${r.upgrade.priceDisplay} a month, never refused. `;
+  } else if (r.upgrade && r.upgrade.priceDisplay) {
+    price = 'No monthly fee — pay per use, never refused. ';
+  }
 
   const out = {
     icon: waiting ? 'Clock' : 'Warning',
@@ -128,7 +143,7 @@ export function planLimitCopy(refusal, options = {}) {
 
   if (resolve.role === 'owner') {
     if (waiting) {
-      out.why = `Your request for the Team plan is with Engage — sent ${sent}, usually decided within a day.`;
+      out.why = `Your request for ${planName} is with Engage — sent ${sent}, usually decided within a day.`;
       out.action = { label: 'See your request', href: billingHref, primary: false };
       out.alternative = sets ? 'or delete a set you no longer use.' : `or wait until ${day}.`;
       return out;
@@ -136,7 +151,7 @@ export function planLimitCopy(refusal, options = {}) {
     out.why = sets
       ? 'A set counts while you keep it. Delete one you no longer use and its place is free straight away.'
       : 'A session counts once two of its questions have been answered. A room you already have open keeps going.';
-    out.action = { label: 'Request the Team plan', href: requestHref, primary: true };
+    out.action = { label: `Request ${planName}`, href: requestHref, primary: true };
     if (options.compact) {
       out.alternative = sets ? 'or delete a set you no longer use.' : `or wait until ${day}.`;
     } else {
@@ -147,14 +162,14 @@ export function planLimitCopy(refusal, options = {}) {
     return out;
   }
 
-  const asked = waiting ? `${waiting.requestedBy || 'An owner'} asked Engage for the Team plan on ${sent}.` : '';
+  const asked = waiting ? `${waiting.requestedBy || 'An owner'} asked Engage for ${planName} on ${sent}.` : '';
 
   if (resolve.role === 'admin') {
     out.why = waiting
       ? asked
       : sets
-        ? `Only the owner can move ${orgName} to the Team plan. Deleting a set frees its place straight away.`
-        : `Only the owner can move ${orgName} to the Team plan.`;
+        ? `Only the owner can move ${orgName} to ${planName}. Deleting a set frees its place straight away.`
+        : `Only the owner can move ${orgName} to ${planName}.`;
     out.contacts = waiting ? [] : resolve.contacts;
     out.action = resolve.canViewBilling ? { label: 'See Plan & usage', href: billingHref, primary: false } : null;
     out.alternative = sets ? '' : `or wait until ${day}.`;
@@ -165,8 +180,8 @@ export function planLimitCopy(refusal, options = {}) {
   out.why = waiting
     ? asked
     : sets
-      ? `Ask an owner or admin to move ${orgName} to the Team plan.`
-      : `Ask an owner or admin to move ${orgName} to the Team plan. A room already open keeps going.`;
+      ? `Ask an owner or admin to move ${orgName} to ${planName}.`
+      : `Ask an owner or admin to move ${orgName} to ${planName}. A room already open keeps going.`;
   out.contacts = waiting ? [] : resolve.contacts;
   out.alternative = sets
     ? 'Or delete a set of yours you no longer use.'

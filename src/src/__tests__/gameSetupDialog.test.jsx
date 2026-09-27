@@ -971,7 +971,7 @@ describe('a refused Create lands in the dialog, not in a browser alert', () => {
     expect(screen.queryByTestId('gsd-refusal')).toBeNull();
     const box = screen.getByTestId('plan-limit-notice');
     expect(box).toHaveTextContent('You’ve used the 5 sessions included this month. Nothing was created.');
-    expect(within(box).getByRole('link', { name: 'Request the Team plan' }))
+    expect(within(box).getByRole('link', { name: 'Request the Standard plan' }))
       .toHaveAttribute('href', '/admin?section=billing&request=team');
   });
 
@@ -982,7 +982,7 @@ describe('a refused Create lands in the dialog, not in a browser alert', () => {
       resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' },
     }) });
     const box = screen.getByTestId('plan-limit-notice');
-    expect(box).toHaveTextContent('Ask an owner or admin to move Northwind to the Team plan.');
+    expect(box).toHaveTextContent('Ask an owner or admin to move Northwind to the Organisation plan.');
     expect(within(box).getByRole('link', { name: /Dana Whitfield/ })).toHaveAttribute('href', 'mailto:dana@x.example');
     expect(within(box).queryByRole('link', { name: /Request/ })).toBeNull();
   });

@@ -510,9 +510,10 @@ const evt = (orgId, pathOrg) => ({
 // it used to hard-code TEAM_PLAN, so a free org's history read "$5.00".
 const setPlan = (org, plan) => store.set(key(`ORG#${org}`, 'METADATA'), { PK: `ORG#${org}`, SK: 'METADATA', orgId: org, plan });
 
+// The mockup was drawn on the $5 plan, which is Standard since 27 Sep 2026.
 async function mockupFixture() {
   reset();
-  setPlan(ORG, 'team');
+  setPlan(ORG, 'standard');
   setRow(ORG, 'teamretro'); setRow(ORG, 'onboarding');
   await streamHandler.handler({ Records: [streamRecord(`ORG#${ORG}#SETS`, 'SET#teamretro')] });
   for (let i = 0; i < 20; i++) {
@@ -536,14 +537,15 @@ check('it carries both allowances and both overages', async () => {
   assert.deepStrictEqual(body.overage, { sessions: 15, sets: 0 });
 });
 
-check('and the three lines the screen prints, worded as it words them', async () => {
+check('and the lines the screen prints, worded as it words them — events last', async () => {
   const body = JSON.parse((await getUsage.handler(evt(ORG))).body);
   assert.deepStrictEqual(
     body.lines.map((l) => [l.label, l.detail, l.amountDisplay]),
     [
-      ['Team plan', 'the monthly subscription', '$5.00'],
+      ['Standard plan', 'the monthly subscription', '$5.00'],
       ['Question sets', '2 stored, 5 included', '$0.00'],
       ['Sessions', '15 over the included 5, at $0.25', '$3.75'],
+      ['Events', '0 run, at $2.00 each', '$0.00'],
     ]);
 });
 
@@ -566,9 +568,20 @@ check('a FREE org is priced as free: $0.00 now and in every history row, and it 
   assert.strictEqual(body.period.resetsOn, '2026-09-01');
 });
 
-check('a period nobody used is a zeroed $5.00, not a 404', async () => {
-  reset();
+check('an Organisation-plan period is pay per use: 2 sets, 20 sessions, 1 event = $7.50', async () => {
+  await mockupFixture();
   setPlan(ORG, 'team');
+  await usage.recordBillableEvent(ORG, '4821', { now: AUG });
+  await usage.recordBillableEvent(ORG, '4821', { now: AUG }); // once, ever
+  const body = JSON.parse((await getUsage.handler(evt(ORG))).body);
+  assert.strictEqual(body.usage.eventsRun, 1);
+  assert.strictEqual(body.totalIfPeriodEndedTodayCents, 50 + 500 + 200);
+  assert.strictEqual(body.lines[0].detail, 'no monthly fee — you pay for what you use');
+});
+
+check('a period nobody used is a zeroed $5.00 on Standard, not a 404', async () => {
+  reset();
+  setPlan(ORG, 'standard');
   const response = await getUsage.handler(evt(ORG));
   assert.strictEqual(response.statusCode, 200);
   const body = JSON.parse(response.body);
@@ -578,7 +591,7 @@ check('a period nobody used is a zeroed $5.00, not a 404', async () => {
 
 check('recent periods are listed newest first, priced by the same function', async () => {
   reset();
-  setPlan(ORG, 'team');
+  setPlan(ORG, 'standard');
   for (const [p, sessions, peak] of [['2026-07', 11, 2], ['2026-06', 4, 1]]) {
     store.set(key(`ORG#${ORG}`, `USAGE#${p}`), {
       PK: `ORG#${ORG}`, SK: `USAGE#${p}`, sessionsRun: sessions, setsPeak: peak, setsCurrent: peak,

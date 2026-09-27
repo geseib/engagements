@@ -4,11 +4,16 @@ import EventDetailsDialog from './EventDetailsDialog';
 import { PlanRequestStrip } from './PlanRequestDialog';
 import { listEvents } from '../utils/eventsApi';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
+import pricing from '../../../lambda-functions/game/pricing';
 import './EventsPanel.css';
 
+const { upgradePlanFor, formatCents } = pricing;
+
 /**
- * EVENTS — the list (01-events.html), or, for a space not on the Team plan,
- * what an event is and the one way in (01b-events-personal.html).
+ * EVENTS — the list (01-events.html), or, for a space on Free, what an event
+ * is and the one way in (01b-events-personal.html). Events come with either
+ * paid plan (27 Sep 2026): Standard for a person's own space, the
+ * Organisation plan for a team — each event $2.00, counted when it goes live.
  *
  * A place with a table, not a dialog: an event is an agenda, and the builder
  * it opens is a place too (EventBuilder.jsx, with a breadcrumb back here).
@@ -19,17 +24,19 @@ import './EventsPanel.css';
  * Mountable on its own, like every console panel (AdminPage cannot be
  * mounted in jsdom): props in, calls through utils/eventsApi.js.
  *
- * @param {boolean}  teamPlan          the active organisation is on the Team plan
+ * @param {boolean}  teamPlan          the active organisation may run events (a
+ *                                     paid plan; the name predates Standard)
+ * @param {string}   [orgType]         'personal' | 'team' — which plan to offer
  * @param {boolean}  creating          the new-event dialog is open
  * @param {Function} onCreatingChange  (open: boolean) => void
  * @param {Function} onOpen            (code, title) => void — open the builder
- * @param {object}   [planRequest]     the org's latest Team-plan request (Billing's
+ * @param {object}   [planRequest]     the org's latest plan request (Billing's
  *                                     own state, reused here, Fix round 1 #5) — while
  *                                     it is `status: 'requested'` the button below
  *                                     is replaced by the same strip Billing shows,
  *                                     so this page never offers a request that
  *                                     would 409
- * @param {Function} [onRequestPlan]   opens "Request the Team plan"; absent for
+ * @param {Function} [onRequestPlan]   opens the plan request; absent for
  *                                     someone who may not ask (not the owner)
  * @param {Function} [onShowPlan]      opens Plan & usage; absent when this
  *                                     person has no such section
@@ -55,33 +62,43 @@ export function NewEventButton({ onClick }) {
   );
 }
 
-function TeamPlanOnly({ onRequestPlan, onShowPlan, planRequest }) {
+function TeamPlanOnly({ onRequestPlan, onShowPlan, planRequest, orgType = '' }) {
   // Reads Billing's own state (Fix round 1 #5, ruling): a request already
   // sitting with Engage must read as pending here too, not offer a button
   // that would 409. Same `status === 'requested'` guard AdminPage's own
   // `?request=team` handling and BillingPanel already use.
   const pending = Boolean(planRequest && planRequest.status === 'requested');
+  // What this space would move to: Standard for a person's own space, the
+  // Organisation plan for a team. Never a team plan for an individual.
+  const plan = upgradePlanFor({ type: orgType });
+  const isTeam = plan.id === 'team';
   return (
     <div className="evts">
       <div className="evts-empty" data-testid="events-team-only">
         <Icon name="CalendarBlank" weight="duotone" size={40} color="var(--primary)" />
-        <h3>Events are part of the Team plan</h3>
+        <h3>{`Events come with the ${plan.name}`}</h3>
         <p>
           An event puts a whole agenda behind one code — quizzes, Call &amp; Answer, polls and breaks, in the
-          order you run them. This space is on the Personal plan.
+          order you run them.{' '}
+          {isTeam
+            ? 'This team is on Free until Engage approves its Organisation plan.'
+            : 'This space is on Free.'}
+          {` Each event is ${formatCents(plan.perEvent)}, counted when it first goes live — any host here can run one.`}
         </p>
         {pending && <PlanRequestStrip request={planRequest} />}
         <div className="evts-acts">
           {!pending && onRequestPlan && (
             <button type="button" className="evts-btn evts-btn--primary evts-btn--lg" onClick={onRequestPlan}>
-              Request the Team plan
+              {`Request the ${plan.name}`}
             </button>
           )}
           {onShowPlan && (
-            <button type="button" className="evts-btn evts-btn--lg" onClick={onShowPlan}>What the Team plan adds</button>
+            <button type="button" className="evts-btn evts-btn--lg" onClick={onShowPlan}>{`What the ${plan.name} adds`}</button>
           )}
         </div>
-        {!onRequestPlan && !pending && <p className="evts-hint">Only an owner of this organisation can request the Team plan.</p>}
+        {!onRequestPlan && !pending && (
+          <p className="evts-hint">{`Only an owner of this organisation can request the ${plan.name}.`}</p>
+        )}
         <p className="evts-hint">Until then, <b>Sessions</b> runs one engagement at a time, exactly as today.</p>
       </div>
     </div>
@@ -89,7 +106,7 @@ function TeamPlanOnly({ onRequestPlan, onShowPlan, planRequest }) {
 }
 
 export default function EventsPanel({
-  teamPlan, creating = false, onCreatingChange, onOpen, onRequestPlan, onShowPlan, planRequest,
+  teamPlan, orgType = '', creating = false, onCreatingChange, onOpen, onRequestPlan, onShowPlan, planRequest,
 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(Boolean(teamPlan));
@@ -113,7 +130,9 @@ export default function EventsPanel({
     if (teamPlan) load();
   }, [teamPlan, load]);
 
-  if (!teamPlan) return <TeamPlanOnly onRequestPlan={onRequestPlan} onShowPlan={onShowPlan} planRequest={planRequest} />;
+  if (!teamPlan) {
+    return <TeamPlanOnly onRequestPlan={onRequestPlan} onShowPlan={onShowPlan} planRequest={planRequest} orgType={orgType} />;
+  }
 
   const today = todayIso();
   const upcoming = events.filter((e) => isUpcoming(e, today));

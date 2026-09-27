@@ -35,6 +35,7 @@ const { suggestSetTopic } = require('./topic-suggestion');
 const { publishSnapshot, platformPromptExists } = require('./publish-set');
 const { writeShareStamp } = require('./share-stamp');
 const { appendReviewEvent } = require('./review-log');
+const { settleHeldSet } = require('./public-hold');
 const { upsertQueueRow } = require('./moderation-queue');
 const { recordUnits } = require('./check-quota');
 const { getJob, updateJobProgress, completeJob, failJob } = require('./generation-jobs');
@@ -416,8 +417,19 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       await appendReviewEvent(db, tableName, source, 'published', {
         version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash, promptDropped,
       });
+      await settleHold(db, tableName, source, { outcome: 'published', version });
     } else {
       await writeShareStamp(db, tableName, source, { version, status, contentHash: snapshot.contentHash, jobId });
+      // FLAGGED is the library saying no, automatically: a set held for it
+      // (shared/public-hold.js) is released and counts again, with the reason
+      // on its row. Nothing is released for `escalated` above — that is a
+      // person still deciding, and the hold is exactly what waits for them.
+      if (status === STATUS.FLAGGED) {
+        await settleHold(db, tableName, source, {
+          outcome: 'declined', version, reason: 'flagged',
+          note: 'The content check flagged it, so it was not made public.',
+        });
+      }
     }
 
     await completeJob(db, tableName, jobId, {
@@ -483,6 +495,20 @@ async function runSetCheck({ db, tableName, s3, bucket, bedrock }, { jobId }, co
       console.error(`❌ and could not record the failure: ${inner.message}`);
     }
     await failJob(db, tableName, jobId, `The check could not finish: ${error.message}`);
+  }
+}
+/**
+ * Settle a held set — AFTER the outcome it answers has landed, and never able
+ * to turn a finished check into a failed one: the publish or the flag is
+ * already recorded, and a throw here would reach the catch below and re-mark
+ * the version `escalated` over a result that stands. A settle that fails
+ * leaves the set held, which "Make public" again finishes.
+ */
+async function settleHold(db, tableName, source, opts) {
+  try {
+    await settleHeldSet(db, tableName, source, opts);
+  } catch (error) {
+    console.error(`⚠️ ${source.orgId}/${source.setId}: the ${opts.outcome} outcome is recorded, but its hold could not be settled:`, error);
   }
 }
 async function orgName(db, tableName, orgId) {

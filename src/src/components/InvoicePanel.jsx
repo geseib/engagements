@@ -6,7 +6,7 @@ import Icon from './Icon';
 import pricing from '../../../lambda-functions/game/pricing';
 import './InvoicePanel.css';
 
-const { formatCents } = pricing;
+const { formatCents, planById } = pricing;
 
 /**
  * THE SIMULATED INVOICE and BILLING HISTORY — mockups 20 and 21.
@@ -135,7 +135,7 @@ export function Invoice({ orgId, period, onBack }) {
       </div>
       <article className="inv-doc" aria-labelledby="inv-h" data-testid="invoice">
         <div className="inv-head">
-          <div><h2 id="inv-h">{inv.orgName || orgId}</h2><div className="inv-meta">{inv.planId === 'personal' ? 'Free' : 'Team plan'} · {inv.periodBounds ? `${inv.periodBounds.start} to ${inv.periodBounds.end}` : periodLabel(inv.period)} · closed {when(inv.closedAt)}</div></div>
+          <div><h2 id="inv-h">{inv.orgName || orgId}</h2><div className="inv-meta">{planById(inv.planId).name} · {inv.periodBounds ? `${inv.periodBounds.start} to ${inv.periodBounds.end}` : periodLabel(inv.period)} · closed {when(inv.closedAt)}</div></div>
           <div className="inv-numblock">Invoice<b>{inv.number}</b>{simulated ? 'Simulated · not a receipt' : 'Paid'}</div>
         </div>
         {simulated && (

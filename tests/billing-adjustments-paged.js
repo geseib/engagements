@@ -61,7 +61,8 @@ async function check(label, fn) {
 function seedLedger() {
   table.store.clear();
   table.log.length = 0;
-  table.put({ PK: `ORG#${ORG}`, SK: 'METADATA', orgId: ORG, plan: 'team' });
+  // The $5 plan — Standard since 27 Sep 2026 — so "$5.00 list" holds.
+  table.put({ PK: `ORG#${ORG}`, SK: 'METADATA', orgId: ORG, plan: 'standard' });
   for (let n = 1; n <= 9; n++) {
     const day = String(n).padStart(2, '0');
     table.put({

@@ -8,7 +8,7 @@ import './BillingPanel.css';
  * console can import the same arithmetic the API bills from. Two
  * implementations of one invoice will disagree eventually, and the one the
  * customer believes is the one on this screen — so nothing here re-computes a
- * line, a total or a price. Even `$0.25` is `formatCents(TEAM_PLAN.perSession)`.
+ * line, a total or a price. Even `$0.25` is `formatCents(STANDARD_PLAN.perSession)`.
  *
  * IT IS IMPORTED AS A DEFAULT AND DESTRUCTURED, not as named imports. The file
  * is CommonJS (`module.exports = { ... }`) because a Lambda requires it, and
@@ -22,7 +22,7 @@ import { PlanRequestStrip } from './PlanRequestDialog';
 import AdjustmentsLedger, { AdjustedBill } from './AdjustmentsLedger';
 
 const {
-  TEAM_PLAN, planFor, projectInvoice, allowanceState, formatCents,
+  planFor, upgradePlanFor, projectInvoice, allowanceState, formatCents,
 } = pricing;
 
 /**
@@ -75,6 +75,9 @@ export function formatResetsOn(value) {
 
 export default function BillingPanel({
   planId = 'personal',
+  /** 'personal' | 'team' — decides the plan offered: Standard to a person's
+   *  own space, the Organisation plan to a team (27 Sep 2026). */
+  orgType = '',
   usage = {},
   period = {},
   passedAllowanceOn = '',
@@ -102,11 +105,23 @@ export default function BillingPanel({
   adjustments = null,
   onBillingHistory,
   onInvoice,
+  /**
+   * LEAVING A PAID PLAN (components/LeavePlanDialog.jsx). The caller passes it
+   * only to someone who may manage billing; the control is drawn only on a
+   * paid plan. Absent, nothing is drawn.
+   */
+  onLeavePlan,
   theme = 'dark',
   className = '',
 }) {
   const plan = planFor({ plan: planId });
   const metered = plan.metersOverage === true;
+  // Pay per use (the Organisation plan): nothing included, so there is no
+  // allowance to draw a meter against — the counts and the arithmetic say it.
+  const payPerUse = metered && plan.includedSessions === 0 && plan.includedSets === 0;
+  const upgrade = upgradePlanFor({ type: orgType });
+  const isTeam = orgType === 'team';
+  const eventsRun = Math.max(0, Math.trunc(Number(usage && usage.eventsRun) || 0));
 
   /* The invoice bills the PEAK number of sets held; the gate reads what is held
      RIGHT NOW. Two numbers, two jobs — conflating them either over-bills or
@@ -130,11 +145,20 @@ export default function BillingPanel({
     },
   ];
 
-  const teamPrice = formatCents(TEAM_PLAN.base);
-  const teamOverage = formatCents(TEAM_PLAN.perSession);
+  /* The offered plan's terms, in one sentence and from pricing.js alone. */
+  const upgradeTerms = upgrade.base > 0
+    ? `${formatCents(upgrade.base)} a month and includes ${upgrade.includedSessions} sessions `
+      + `and ${upgrade.includedSets} sets — then ${formatCents(upgrade.perSession)} each beyond, and `
+      + `${formatCents(upgrade.perEvent)} an event`
+    : `no monthly fee — ${formatCents(upgrade.perSession)} a session or a stored set as you use them, `
+      + `and ${formatCents(upgrade.perEvent)} an event`;
+  const requestLabel = `Request the ${upgrade.name}`;
   /* `parseUpgradeRequired` lifts kind to the top level; the raw 402 body keeps
      it under `limit`. Read both rather than making the call site convert. */
-  const refusedKind = (refusal && (refusal.kind || (refusal.limit && refusal.limit.kind))) || '';
+  const refusedKind = (refusal && (refusal.kind || (refusal.limit && refusal.limit.kind)))
+    // No refusal in hand: name the limit that is actually reached. Sets full
+    // and sessions not was read as "Your next session needs…".
+    || (state.mustUpgradeForSet && !state.mustUpgradeForSession ? 'sets' : '');
 
   /* ------------------------------------------------------------ the head -- */
 
@@ -144,7 +168,12 @@ export default function BillingPanel({
       period.label ? `billing period ${period.label}` : '',
       Number.isFinite(Number(period.daysLeft)) ? `${Number(period.daysLeft)} days left` : '',
     ].filter(Boolean).join(' · ')
-    : ['Your own space', 'free', period.label].filter(Boolean).join(' · ');
+    : [isTeam ? 'A team' : 'Your own space',
+      // Only while a request is actually with Engage — a team that has left
+      // the Organisation plan is simply on Free.
+      isTeam && planRequest && planRequest.status === 'requested'
+        ? 'free until Engage approves the Organisation plan' : 'free',
+      period.label].filter(Boolean).join(' · ');
 
   /* ------------------------------------------ the sentence about the limit --
      Written out rather than assembled from `state.reason`, because the API's
@@ -158,7 +187,7 @@ export default function BillingPanel({
   } else if (state.mustUpgradeForSession) {
     limitLead = `You have used all ${state.sessionsIncluded} sessions this month.`;
   } else if (state.mustUpgradeForSet) {
-    limitLead = `You are holding all ${state.setsIncluded} question sets a personal space includes.`;
+    limitLead = `You are holding all ${state.setsIncluded} question sets the free plan includes.`;
   }
 
   return (
@@ -174,13 +203,18 @@ export default function BillingPanel({
           {!metered && onBillingHistory && (
             <button type="button" className="bill-btn" onClick={onBillingHistory}>Billing history</button>
           )}
+          {metered && onLeavePlan ? (
+            <button type="button" className="bill-btn" onClick={onLeavePlan} data-testid="bill-leave-plan">
+              {`Leave the ${/\bplan$/i.test(plan.name) ? plan.name : `${plan.name} plan`}`}
+            </button>
+          ) : null}
           {metered ? (
             <button type="button" className="bill-btn" onClick={onBillingHistory}>
               Billing history
             </button>
           ) : onRequestPlan && (!planRequest || planRequest.status !== 'requested') ? (
             <button type="button" className="bill-btn bill-btn--primary" onClick={onRequestPlan} data-testid="bill-request-plan">
-              Request the Team plan
+              {requestLabel}
             </button>
           ) : onUpgrade ? (
             <button type="button" className="bill-btn bill-btn--primary" onClick={onUpgrade}>
@@ -193,7 +227,11 @@ export default function BillingPanel({
       {/* The request's state, above the meters — mockup 14. Shown for a free
           org with any request on record; a metered org sees only an approval
           (the others would be history it has already acted on). */}
-      {planRequest && (!metered || planRequest.status === 'approved') && (
+      {/* An APPROVED request is only news while the plan it granted is the
+          plan: after leaving it (LeavePlanDialog), the newest row on record is
+          still that approval, and "You are on the Organisation plan" over a
+          free screen was the reverse of true (seen in Chromium, 27 Sep 2026). */}
+      {planRequest && (metered ? planRequest.status === 'approved' : planRequest.status !== 'approved') && (
         <PlanRequestStrip
           request={planRequest}
           onWithdraw={onWithdrawRequest}
@@ -215,11 +253,24 @@ export default function BillingPanel({
             <p className="bill-note">
               {metered
                 ? 'Updated as sessions run. Nothing here is a forecast.'
-                : 'A space of your own is free. These are its limits.'}
+                : (isTeam ? 'This team is on the free plan. These are its limits.' : 'A space of your own is free. These are its limits.')}
             </p>
           </div>
           <div className="bill-panel-body">
-            <UsageMeter rows={meterRows} theme={theme} />
+            {payPerUse ? (
+              <dl className="bill-kv" data-testid="bill-per-use">
+                <dt>Sessions run</dt><dd>{state.sessionsUsed}</dd>
+                <dt>Question sets stored</dt><dd>{state.setsUsed}</dd>
+                <dt>Events run</dt><dd>{eventsRun}</dd>
+              </dl>
+            ) : (
+              <UsageMeter rows={meterRows} theme={theme} />
+            )}
+            {!payPerUse && plan.allowsEvents ? (
+              <p className="bill-note bill-note--after" data-testid="bill-events-run">
+                {`Events run this period: ${eventsRun}, at ${formatCents(plan.perEvent)} each — counted when an event first goes live.`}
+              </p>
+            ) : null}
 
             {/* WHAT "SESSIONS RUN" COUNTS — the owner's rule, 2026-09-23, stated
                 where the number is (websocket/session-count.js). */}
@@ -229,7 +280,15 @@ export default function BillingPanel({
               <a href="/help/host-plan">How sessions are counted</a>
             </p>
 
-            {metered && state.sessionsUsed > state.sessionsIncluded ? (
+            {payPerUse ? (
+              <p className="bill-notebox bill-notebox--top">
+                <b>Pay per use, and nothing is ever blocked.</b>
+                {` Every session and every stored set is ${formatCents(plan.perSession)}, and every event `}
+                {`${formatCents(plan.perEvent)}. There is no monthly fee and no allowance to run out of.`}
+              </p>
+            ) : null}
+
+            {metered && !payPerUse && state.sessionsUsed > state.sessionsIncluded ? (
               <p className="bill-notebox bill-notebox--warn bill-notebox--top">
                 <b>
                   {`You passed the included ${state.sessionsIncluded} sessions`}
@@ -241,7 +300,7 @@ export default function BillingPanel({
               </p>
             ) : null}
 
-            {metered && state.sessionsUsed <= state.sessionsIncluded ? (
+            {metered && !payPerUse && state.sessionsUsed <= state.sessionsIncluded ? (
               <p className="bill-notebox bill-notebox--top">
                 <b>Nothing here is ever blocked.</b>
                 {` Past the included allowance a session or a stored set is ${formatCents(plan.perSession)}`}
@@ -255,11 +314,9 @@ export default function BillingPanel({
                 <p style={{ margin: 0 }}>
                   <b>{limitLead}</b>
                   {refusedKind === 'sets'
-                    ? ' The next set you store needs a Team, '
-                    : ' Your next session needs a Team, '}
-                  {`which is ${teamPrice} a month and includes ${TEAM_PLAN.includedSessions} sessions `}
-                  {`and ${TEAM_PLAN.includedSets} sets — then ${teamOverage} each beyond, with nothing `}
-                  ever cut off mid-session.
+                    ? ` The next set you store needs the ${upgrade.name}, `
+                    : ` Your next session needs the ${upgrade.name}, `}
+                  {`which is ${upgradeTerms}, with nothing ever cut off mid-session.`}
                 </p>
                 {/* Two exits, side by side. A limit with exactly one exit reads
                     as a toll gate — and waiting really is an exit here, because
@@ -267,7 +324,7 @@ export default function BillingPanel({
                 <div className="bill-exits">
                   {onRequestPlan && (!planRequest || planRequest.status !== 'requested') ? (
                     <button type="button" className="bill-btn bill-btn--sm bill-btn--primary" onClick={onRequestPlan}>
-                      Request the Team plan
+                      {requestLabel}
                     </button>
                   ) : onUpgrade ? (
                     <button
@@ -347,16 +404,31 @@ export default function BillingPanel({
           </section>
         ) : (
           <section className="bill-panel" aria-labelledby="bill-team-h">
-            <div className="bill-panel-head"><h2 id="bill-team-h">What a team adds</h2></div>
+            <div className="bill-panel-head"><h2 id="bill-team-h">{`What the ${upgrade.name} adds`}</h2></div>
             <div className="bill-panel-body">
               <dl className="bill-kv">
-                <dt>People</dt>
-                <dd>Invite colleagues. They can run your sets and build their own.</dd>
-                <dt>More of everything</dt>
+                <dt>Events</dt>
                 <dd>
-                  {`${TEAM_PLAN.includedSessions} sessions and ${TEAM_PLAN.includedSets} sets `}
-                  {`included, then ${teamOverage} each. Nothing is ever blocked once you are paying.`}
+                  {`A whole agenda behind one code, run by any host here — ${formatCents(upgrade.perEvent)} an event, `}
+                  counted when it first goes live.
                 </dd>
+                {isTeam ? (
+                  <>
+                    <dt>Pay per use</dt>
+                    <dd>
+                      {`No monthly fee. ${formatCents(upgrade.perSession)} a session and a stored set, as you use them. `}
+                      Nothing is ever blocked once Engage has approved it.
+                    </dd>
+                  </>
+                ) : (
+                  <>
+                    <dt>More of everything</dt>
+                    <dd>
+                      {`${upgrade.includedSessions} sessions and ${upgrade.includedSets} sets `}
+                      {`included, then ${formatCents(upgrade.perSession)} each. Nothing is ever blocked once you are paying.`}
+                    </dd>
+                  </>
+                )}
                 <dt>Your work comes with you</dt>
                 <dd>
                   {`The ${state.setsUsed} sets you already have stay yours. `}
@@ -364,7 +436,9 @@ export default function BillingPanel({
                 </dd>
               </dl>
               <p className="bill-note bill-note--after">
-                {`${teamPrice} a month. Cancel whenever — your sets and reports stay, and export `}
+                {upgrade.base > 0
+                  ? `${formatCents(upgrade.base)} a month. Leave whenever — your sets and reports stay, and export `
+                  : 'No monthly fee. Leave whenever — your sets and reports stay, and export '}
                 needs no conversation.
               </p>
             </div>

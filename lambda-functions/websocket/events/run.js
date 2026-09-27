@@ -54,6 +54,7 @@
 const { GetCommand, TransactWriteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../tenant');
 const { endSession } = require('../session-end');
+const { recordBillableEvent } = require('../usage');
 const rules = require('./agenda-rules');
 const { json, readBody } = require('./event-http');
 const S = require('./event-store');
@@ -232,7 +233,14 @@ async function start(db, tableName, { meta, code, row, itemId }) {
     throw error;
   }
 
-  if (meta.State !== 'LIVE') await markList(db, tableName, meta, code, 'LIVE');
+  if (meta.State !== 'LIVE') {
+    await markList(db, tableName, meta, code, 'LIVE');
+    // THE EVENT'S $2.00, counted once, the first time it goes live (the owner,
+    // 27 Sep 2026: "all events cost money" — calculated, not charged). A
+    // preview (Open) never gets here, so an agenda drafted and never run costs
+    // nothing. It never throws: a meter must not stop a room.
+    await recordBillableEvent(meta.orgId, code, { db, tableName });
+  }
 
   // The rows are written; now the rooms. The item that was live hears that
   // it paused AND what started, so its phones can follow at once.

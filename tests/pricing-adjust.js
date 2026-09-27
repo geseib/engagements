@@ -1,5 +1,6 @@
 /**
- * pricing-adjust.js — the order of application, pinned.
+ * pricing-adjust.js — the order of application, pinned, on the $5 Standard plan
+ * (the mockup's arithmetic; the Team plan carried these terms until 27 Sep 2026).
  * rejects: two percents stacking; a bill below $0.00; a credit spent twice;
  * a revoked or out-of-window row applying; a fractional cent; the two copies
  * drifting.
@@ -9,7 +10,7 @@ const fs = require('fs');
 const assert = require('assert');
 const REPO = path.join(__dirname, '..');
 const A = require(path.join(REPO, 'lambda-functions/admin/shared/pricing-adjust.js'));
-const { TEAM_PLAN } = require(path.join(REPO, 'lambda-functions/admin/shared/pricing.js'));
+const { STANDARD_PLAN } = require(path.join(REPO, 'lambda-functions/admin/shared/pricing.js'));
 
 let pass = 0, fail = 0;
 function check(label, fn) {
@@ -23,7 +24,7 @@ const credit10 = { adjId: 'k1', kind: 'CREDIT_CENTS', amountCents: 1000, remaini
 
 console.log('\n1. the mockup arithmetic (16/19): $8.75 → 30% → $10 credit → $3.50');
 {
-  const r = A.applyAdjustments(TEAM_PLAN, USAGE, [code30, credit10], P);
+  const r = A.applyAdjustments(STANDARD_PLAN, USAGE, [code30, credit10], P);
   check('list is $8.75', () => assert.strictEqual(r.listCents, 875));
   check('30% takes $2.63 (rounded to the cent)', () => assert.strictEqual(r.discounts[0].amountCents, 263));
   check('the credit takes what is left after the percent ($6.12) and carries $3.88', () => {
@@ -42,7 +43,7 @@ console.log('\n2. the rule: one percent, the largest; fixed after; credits last;
 {
   const code50 = { ...code30, adjId: 'c2', percentOff: 50, source: { type: 'code', code: 'EDU50' } };
   const fixed = { adjId: 'f1', kind: 'OFFER', fixedOffCents: 500, validFrom: P, validTo: P, source: { type: 'platform_admin' }, createdAt: '2026-09-02T00:00:00Z' };
-  const r = A.applyAdjustments(TEAM_PLAN, USAGE, [code30, code50, fixed], P);
+  const r = A.applyAdjustments(STANDARD_PLAN, USAGE, [code30, code50, fixed], P);
   check('only the larger percent applies; the other is listed as not applied', () => {
     const applied = r.discounts.filter((d) => d.amountCents > 0 && d.percent);
     assert.strictEqual(applied.length, 1);
@@ -57,18 +58,18 @@ console.log('\n2. the rule: one percent, the largest; fixed after; credits last;
   });
   check('a $50 credit against $8.75 carries $41.25', () => {
     const big = { ...credit10, adjId: 'k2', amountCents: 5000, remainingCents: 5000 };
-    const s = A.applyAdjustments(TEAM_PLAN, USAGE, [big], P);
+    const s = A.applyAdjustments(STANDARD_PLAN, USAGE, [big], P);
     assert.strictEqual(s.totalCents, 0);
     assert.strictEqual(s.creditsRemaining.k2, 4125);
   });
   check('a credit already partly spent applies only its remainder', () => {
     const half = { ...credit10, remainingCents: 100 };
-    const s = A.applyAdjustments(TEAM_PLAN, USAGE, [half], P);
+    const s = A.applyAdjustments(STANDARD_PLAN, USAGE, [half], P);
     assert.strictEqual(s.credits[0].appliedCents, 100);
     assert.strictEqual(s.totalCents, 775);
   });
   check('never a fractional cent', () => {
-    const s = A.applyAdjustments(TEAM_PLAN, { sessionsRun: 7, setsPeak: 1 }, [{ ...code30, percentOff: 33 }], P);
+    const s = A.applyAdjustments(STANDARD_PLAN, { sessionsRun: 7, setsPeak: 1 }, [{ ...code30, percentOff: 33 }], P);
     [s.listCents, s.totalCents, ...s.discounts.map((d) => d.amountCents)].forEach((n) => assert.ok(Number.isInteger(n), `${n}`));
   });
 }
@@ -83,7 +84,7 @@ console.log('\n3. windows and revocation');
   });
   check('a revoked row never applies, whatever its dates', () => {
     assert.strictEqual(A.isActive({ ...code30, revokedAt: '2026-09-24T00:00:00Z' }, P), false);
-    const r = A.applyAdjustments(TEAM_PLAN, USAGE, [{ ...code30, revokedAt: 'x' }], P);
+    const r = A.applyAdjustments(STANDARD_PLAN, USAGE, [{ ...code30, revokedAt: 'x' }], P);
     assert.strictEqual(r.totalCents, 875);
   });
   check('"3 months" from September ends in November', () => assert.deepStrictEqual(A.offerWindow('2026-09', 3), { validFrom: '2026-09', validTo: '2026-11' }));
@@ -94,7 +95,7 @@ console.log('\n4. the effective plan: a special rate and extra allowance change 
 {
   const rate = { adjId: 'r1', kind: 'RATE_OVERRIDE', rate: { baseCents: 400 }, validFrom: P, validTo: P, source: { type: 'platform_admin' } };
   const units = { adjId: 'u1', kind: 'CREDIT_UNITS', units: { sessions: 10 }, validFrom: P, validTo: P, source: { type: 'platform_admin' } };
-  const r = A.applyAdjustments(TEAM_PLAN, USAGE, [rate, units], P);
+  const r = A.applyAdjustments(STANDARD_PLAN, USAGE, [rate, units], P);
   check('base $4.00 and 15 included sessions → 5 over × 25¢ = $1.25 → list $5.25', () => {
     assert.strictEqual(r.plan.base, 400);
     assert.strictEqual(r.plan.includedSessions, 15);

@@ -173,7 +173,7 @@ describe('platform mode', () => {
   });
 
   it.each([
-    ['planrequests', /Teams asking for the Team plan/],
+    ['planrequests', /New organisations, and people asking for the Standard plan/],
     ['discountcodes', /redeemed by a team owner/],
   ])('%s is headed with its own sentence, not Question sets\'', async (id, sentence) => {
     mockActiveOrg = PLATFORM_MODE;
@@ -349,7 +349,7 @@ describe('Events (roadmap M1), behind the switch', () => {
     expect(screen.queryByRole('button', { name: /^events$/i })).toBeNull();
   });
 
-  it('a Personal space gets the page that explains the Team plan, and no New event', async () => {
+  it('a Personal space on Free gets the page that explains the Standard plan, and no New event', async () => {
     mockGroups = ['hosts'];
     mockActiveOrg = HOME.orgId;
     window.history.pushState({}, '', '/admin?section=events');
@@ -466,7 +466,7 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
   // Item 5 (ruling): the page reuses Billing's own request/state — wired
   // end to end from AdminPage, not just the component in isolation
   // (eventsPanel.test.jsx covers the component's own two states).
-  it('a Personal space with a pending Team-plan request shows it as pending, not a button', async () => {
+  it('a Personal space with a pending Standard-plan request shows it as pending, not a button', async () => {
     mockGroups = ['hosts'];
     mockActiveOrg = HOME.orgId;
     window.history.pushState({}, '', '/admin?section=events');
@@ -475,7 +475,7 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
       if (u.includes('/plan-requests')) {
         return {
           ok: true, status: 200, text: async () => '{}',
-          json: async () => ({ requests: [{ status: 'requested', requestedAt: '2026-09-20T10:00:00Z', reqId: 'req_1' }] }),
+          json: async () => ({ requests: [{ status: 'requested', toPlan: 'standard', requestedAt: '2026-09-20T10:00:00Z', reqId: 'req_1' }] }),
         };
       }
       if (u.includes('/orgs')) {
@@ -490,14 +490,14 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     render(<AdminPage />);
     await settle();
     await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
-    expect(await screen.findByTestId('preq-strip')).toHaveTextContent('Team plan requested');
-    expect(screen.queryByRole('button', { name: /request the team plan/i })).toBeNull();
+    expect(await screen.findByTestId('preq-strip')).toHaveTextContent('Standard plan requested');
+    expect(screen.queryByRole('button', { name: /request the standard plan/i })).toBeNull();
   });
 
   // Fix round 2 #4: proves the button actually opens AdminPage's real
   // PlanRequestDialog, not merely that a mock onRequestPlan callback fired
   // (eventsPanel.test.jsx already covers that in isolation).
-  it('"Request the Team plan" on Events opens the real PlanRequestDialog', async () => {
+  it('"Request the Standard plan" on Events opens the real PlanRequestDialog', async () => {
     mockGroups = ['hosts'];
     mockActiveOrg = HOME.orgId;
     window.history.pushState({}, '', '/admin?section=events');
@@ -505,8 +505,9 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     render(<AdminPage />);
     await settle();
     await waitFor(() => expect(screen.getByTestId('events-team-only')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Request the Team plan' }));
-    expect(await screen.findByRole('heading', { name: 'Request the Team plan', level: 2 })).toBeInTheDocument();
+    // rejects: a person's own space offered a team plan (27 Sep 2026).
+    fireEvent.click(screen.getByRole('button', { name: 'Request the Standard plan' }));
+    expect(await screen.findByRole('heading', { name: 'Request the Standard plan', level: 2 })).toBeInTheDocument();
     expect(screen.getByTestId('preq-sum')).toBeInTheDocument();
   });
 

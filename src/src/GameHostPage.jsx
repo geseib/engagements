@@ -2779,6 +2779,10 @@ Focus on actionable business strategy insights.`;
               // hostControls enables it from `answers.length`.
               console.log('🧹 HOST: no answers in for this round yet — clearing the previous round\'s');
               showAnswersFor([], currentState);
+              // "Not yet" was true when /host-state was read; an answer may
+              // have landed since, and the reset made its refetch stale. Ask
+              // once more (the same race as the next-question path's note).
+              fetchAnswersForQuestion(questionNumber);
             }
           }
           
@@ -4095,6 +4099,13 @@ Focus on actionable business strategy insights.`;
       console.log(`🧹 HOST: Clearing state for new question - resetting answers and players`);
       showAnswersFor([], newState);
       setWavelengthAnalysis(null);
+      // ANSWERS THAT BEAT THIS PAGE TO THE ROUND (27 Sep 2026, seen in
+      // Chromium on a typed poll): a phone can answer while the host is still
+      // loading the round above, and the reset just made that answer's
+      // refetch stale — so the stage read "Nobody has answered yet" beside a
+      // meter saying 2 / 2, with Show Results disabled, until another answer
+      // happened to arrive. Ask once more, now that the round is the stage's.
+      fetchAnswersForQuestion(lessonNumber);
       setPlayersWhoAnswered([]);
       setVotes([]);
       setPlayersWhoVoted([]);

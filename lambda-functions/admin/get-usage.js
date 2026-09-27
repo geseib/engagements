@@ -84,11 +84,13 @@ async function recentPeriods(orgId, currentPeriod, plan, limit = 12) {
     const usage = {
       sessionsRun: Math.max(0, Math.trunc(Number(item.sessionsRun) || 0)),
       setsPeak: Math.max(0, Math.trunc(Number(item.setsPeak) || 0)),
+      eventsRun: Math.max(0, Math.trunc(Number(item.eventsRun) || 0)),
     };
     const invoice = projectInvoice(plan, usage);
     return {
       period,
       sessionsRun: usage.sessionsRun,
+      eventsRun: usage.eventsRun,
       // The column is headed "Sets held", not "sets stored", because what was
       // charged is the peak — same word as the sentence under the invoice.
       setsHeld: usage.setsPeak,
@@ -195,7 +197,9 @@ exports.handler = async (event) => {
         baseCents: plan.base,
         perSessionCents: plan.perSession,
         perSetCents: plan.perSet,
+        perEventCents: plan.perEvent || 0,
         metersOverage: plan.metersOverage === true,
+        allowsEvents: plan.allowsEvents === true,
       },
       period: { ...bounds, resetsOn },
       // Both counters. `setsCurrent` is what the "2 of 5" meter shows; setsPeak
@@ -206,6 +210,7 @@ exports.handler = async (event) => {
         sessionsRun: usage.sessionsRun,
         setsCurrent: usage.setsCurrent,
         setsPeak: usage.setsPeak,
+        eventsRun: usage.eventsRun,
         updatedAt: usage.updatedAt,
       },
       allowances: {

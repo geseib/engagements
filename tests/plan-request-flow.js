@@ -275,13 +275,13 @@ function reset() {
 
 /** Seed an organisation directly, bypassing the handlers, so that a test of
  *  (say) removal does not depend on creation passing. */
-function seedOrg(orgId, name, members) {
+function seedOrg(orgId, name, members, { type = 'team' } = {}) {
   store.set(key(`ORG#${orgId}`, 'METADATA'), {
-    PK: `ORG#${orgId}`, SK: 'METADATA', orgId, name, plan: 'free', status: 'active',
+    PK: `ORG#${orgId}`, SK: 'METADATA', orgId, name, plan: 'free', status: 'active', type,
     createdAt: '2026-02-01T00:00:00.000Z', createdBy: members[0].sub,
   });
   store.set(key('ORGS', `ORG#${orgId}`), {
-    PK: 'ORGS', SK: `ORG#${orgId}`, orgId, name, plan: 'free', status: 'active',
+    PK: 'ORGS', SK: `ORG#${orgId}`, orgId, name, plan: 'free', status: 'active', type,
   });
   for (const m of members) {
     store.set(key(`ORG#${orgId}`, `MEMBER#${m.sub}`), {
@@ -337,6 +337,35 @@ const ORG_B = 'org_2222222222222222222222';
 
   await check('a second open request is refused with 409', async () => {
     assert.strictEqual((await ask(OWNER, { toPlan: 'team' })).statusCode, 409);
+  });
+
+  // THE PLAN FOLLOWS WHO IS ASKING (the owner, 27 Sep 2026: the individual
+  // tier "should not be team plan"). rejects: a person's own space put on the
+  // Organisation plan, a team on Standard, or either defaulting to the other.
+  await check('a team may not ask for Standard; it is told the Organisation plan is its way', async () => {
+    const res = await ask(OWNER, { toPlan: 'standard' });
+    assert.strictEqual(res.statusCode, 400);
+    assert.match(bodyOf(res).error, /A team moves to the Organisation plan/);
+  });
+  await check('a personal space asks for Standard by default, and may not ask for the Organisation plan', async () => {
+    const SOLO_ORG = 'org_3333333333333333333333';
+    seedOrg(SOLO_ORG, 'Ada', [OWNER], { type: 'personal' });
+    const askSolo = (body) => planRequests(evt({
+      method: 'POST', sub: OWNER.sub, email: OWNER.email, orgId: SOLO_ORG, role: 'owner', groups: 'hosts', pathParams: { orgId: SOLO_ORG }, body,
+    }));
+    const crossed = await askSolo({ toPlan: 'team' });
+    assert.strictEqual(crossed.statusCode, 400);
+    assert.match(bodyOf(crossed).error, /moves to the Standard plan/);
+    const res = await askSolo({});
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.strictEqual(bodyOf(res).request.toPlan, 'standard');
+    assert.strictEqual(bodyOf(res).request.kind, 'upgrade');
+    // Out of the shared queue again, so the checks below count only Northwind.
+    const gone = await planRequests(evt({
+      method: 'DELETE', sub: OWNER.sub, email: OWNER.email, orgId: SOLO_ORG, role: 'owner', groups: 'hosts',
+      pathParams: { orgId: SOLO_ORG, reqId: bodyOf(res).request.reqId },
+    }));
+    assert.strictEqual(gone.statusCode, 200, gone.body);
   });
 
   await check('an admin can read the history; a member cannot', async () => {

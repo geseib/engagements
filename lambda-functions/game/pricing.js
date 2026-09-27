@@ -36,40 +36,83 @@
  */
 
 /**
- * The one plan that exists in this phase. Frozen because a caller that mutates
- * the shared plan object changes what every other invoice in that Lambda
- * container costs — a bug that only appears under load, on a warm container.
+ * THREE PLANS (the owner, 27 Sep 2026): "there is the free tier and the
+ * standard tier for individuals (should not be team plan) and there is create
+ * an organization and thats where you should also get approval with assuming
+ * in the future a pay per usage billing capacity" — and "all events cost money
+ * (for now this is just calcuated and not actually billed)".
+ *
+ *   FREE          a person's own space, capped: PERSONAL_PLAN below.
+ *   STANDARD      a person's own space, paid: $5 a month, five and five
+ *                 included, $0.25 a unit past them. These are the numbers the
+ *                 Team plan carried until today — the upgrade a person makes
+ *                 is to Standard, never to a team plan.
+ *   ORGANISATION  a team, approved by Engage when it is created, and pure pay
+ *                 per use: no monthly fee, nothing included, $0.25 every
+ *                 session and every stored set. Stored as `plan: 'team'` —
+ *                 rows and requests already carry that id, so it stays; only
+ *                 the name and the arithmetic changed.
+ *
+ * AN EVENT IS $2.00 on either paid plan, and Free cannot run one. It is
+ * counted once, when the event first goes live (websocket/events/run.js), so
+ * an agenda drafted and never run costs nothing. Every amount is simulated.
+ *
+ * Frozen because a caller that mutates the shared plan object changes what
+ * every other invoice in that Lambda container costs — a bug that only appears
+ * under load, on a warm container.
  *
  * `perSession` and `perSet` are charged on EVERY unit past the allowance; the
  * allowance itself is free rather than discounted, which is why the included
  * units are subtracted from the count instead of the amount.
  */
-const TEAM_PLAN = Object.freeze({
-  id: 'team',
-  name: 'Team plan',
+const PER_EVENT_CENTS = 200;  // $2.00 an event, on every paid plan
+
+const STANDARD_PLAN = Object.freeze({
+  id: 'standard',
+  name: 'Standard plan',
   currency: 'USD',
   base: 500,              // $5.00/month
   includedSessions: 5,
   includedSets: 5,
   perSession: 25,         // $0.25 per session past the allowance
   perSet: 25,             // $0.25 per stored set past the allowance, per month
-  // METERED. A Team org is never refused anything; it is billed for it. This
+  includedEvents: 0,
+  perEvent: PER_EVENT_CENTS,
+  // METERED. A paid space is never refused anything; it is billed for it. This
   // flag is the ONE difference that decides whether a handler may say no —
   // see allowanceState below, and PERSONAL_PLAN immediately after it.
   metersOverage: true,
+  allowsEvents: true,
+});
+
+const TEAM_PLAN = Object.freeze({
+  id: 'team',
+  name: 'Organisation plan',
+  currency: 'USD',
+  base: 0,                // no monthly fee: pay for what you use
+  includedSessions: 0,
+  includedSets: 0,
+  perSession: 25,         // $0.25 every session
+  perSet: 25,             // $0.25 every stored set, per month
+  includedEvents: 0,
+  perEvent: PER_EVENT_CENTS,
+  metersOverage: true,
+  allowsEvents: true,
 });
 
 /**
  * The plan every account starts on, and the only one that can REFUSE anything.
  *
- * `09-first-run.html` prices exactly two things: "Free while you are the only
- * member", and Team at $5 a month. This is the first half, and the arithmetic
- * of it is not "cheap" — it is a CAP:
+ * The arithmetic of Free is not "cheap" — it is a CAP:
  *
- *   TEAM      past the allowance, you are charged $0.25 a unit. Never blocked.
- *   PERSONAL  past the allowance, there is nothing to charge, because there is
+ *   PAID      past the allowance, you are charged $0.25 a unit. Never blocked.
+ *   FREE      past the allowance, there is nothing to charge, because there is
  *             no payment method and no invoice. So the 6th session is refused
  *             with an upgrade path instead of being silently given away.
+ *
+ * A TEAM IS ON FREE TOO until Engage approves its Organisation plan: creating
+ * an organisation files that request (orgs/create-org.js), and the team works
+ * inside these limits meanwhile.
  *
  * `perSession` and `perSet` are 0 rather than absent, so `projectInvoice` on a
  * personal org produces a $0.00 invoice with honest line items instead of NaN.
@@ -77,34 +120,56 @@ const TEAM_PLAN = Object.freeze({
  * meter — and setting them to 25 without flipping that flag would bill a
  * customer who never agreed to be billed.
  *
- * THE ALLOWANCES ARE THE SAME FIVE AND FIVE AS TEAM, deliberately. The upgrade
- * buys metering and members, not a bigger free tier, so a person who upgrades
- * mid-month is not told their first five sessions have moved.
+ * THE ALLOWANCES ARE THE SAME FIVE AND FIVE AS STANDARD, deliberately. The
+ * upgrade buys metering and events, not a bigger free tier, so a person who
+ * upgrades mid-month is not told their first five sessions have moved.
  */
 const PERSONAL_PLAN = Object.freeze({
   id: 'personal',
-  name: 'Personal',
+  name: 'Free',
   currency: 'USD',
   base: 0,                // free
   includedSessions: 5,
   includedSets: 5,
   perSession: 0,
   perSet: 0,
+  includedEvents: 0,
+  perEvent: 0,
   metersOverage: false,   // <- the flag that makes a refusal possible
+  allowsEvents: false,    // events are a paid feature (create-event.js refuses)
 });
 
 /**
  * Which plan an organisation row is on. Pure — it takes the row, not an id.
  *
- * ANYTHING UNRECOGNISED IS PERSONAL, INCLUDING ABSENT. `create-org.js` writes
+ * ANYTHING UNRECOGNISED IS FREE, INCLUDING ABSENT. `create-org.js` writes
  * `plan: 'free'` and rows written before plans existed carry nothing at all;
  * both are free accounts and both must be capped. Defaulting the other way —
- * treating an unreadable plan as Team — would hand unlimited metered usage to
- * every row with a typo in it, and there is nobody to send the invoice to.
+ * treating an unreadable plan as a paid one — would hand unlimited metered
+ * usage to every row with a typo in it, and there is nobody to send the
+ * invoice to.
  */
 function planFor(org) {
   const raw = org && typeof org.plan === 'string' ? org.plan.trim().toLowerCase() : '';
-  return raw === 'team' ? TEAM_PLAN : PERSONAL_PLAN;
+  if (raw === 'team') return TEAM_PLAN;
+  if (raw === 'standard') return STANDARD_PLAN;
+  return PERSONAL_PLAN;
+}
+
+/**
+ * THE PAID PLAN THIS ORGANISATION WOULD MOVE TO. A person's own space upgrades
+ * to Standard; a team to the Organisation plan. Read off the row's `type`,
+ * because a free team and a free personal space are on the same plan and are
+ * offered different ones.
+ */
+function upgradePlanFor(org) {
+  const type = org && typeof org.type === 'string' ? org.type.trim().toLowerCase() : '';
+  return type === 'team' ? TEAM_PLAN : STANDARD_PLAN;
+}
+
+/** A plan by its stored id — 'team', 'standard', anything else is Free. */
+function planById(id) {
+  return planFor({ plan: id });
 }
 
 /**
@@ -150,12 +215,16 @@ function meteredLine(key, label, noun, count, included, unitCents) {
   const free = toCount(included);
   const unit = toCount(unitCents);
   const billable = Math.max(0, used - free);
+  // Nothing included (the Organisation plan, and every event): each unit is
+  // charged, so "over the included 0" would be arithmetic nobody asked for.
+  let detail;
+  if (free === 0 && unit > 0) detail = `${used} ${noun}, at ${formatCents(unit)} each`;
+  else if (billable > 0) detail = `${billable} over the included ${free}, at ${formatCents(unit)}`;
+  else detail = `${used} ${noun}, ${free} included`;
   return {
     key,
     label,
-    detail: billable > 0
-      ? `${billable} over the included ${free}, at ${formatCents(unit)}`
-      : `${used} ${noun}, ${free} included`,
+    detail,
     quantity: used,
     included: free,
     billable,
@@ -167,8 +236,11 @@ function meteredLine(key, label, noun, count, included, unitCents) {
 /**
  * The invoice for a period, as the billing screen draws it.
  *
- * @param {object} plan   TEAM_PLAN, or a plan shaped like it.
- * @param {object} usage  { sessionsRun, setsPeak } — see usage.js.
+ * @param {object} plan   STANDARD_PLAN, TEAM_PLAN, or a plan shaped like them.
+ * @param {object} usage  { sessionsRun, setsPeak, eventsRun } — see usage.js.
+ *
+ * AN EVENTS LINE on every plan that allows events, even at none run: the
+ * screen says what an event costs before the first one is on the bill.
  *
  * SETS ARE BILLED ON THE PEAK, NOT THE CURRENT COUNT. "Storage is charged on
  * the highest number of sets you held at once this period, not the number at
@@ -178,17 +250,19 @@ function meteredLine(key, label, noun, count, included, unitCents) {
  * contradict a promise already made in writing to the customer.
  *
  * The mockup's worked example — 2 sets, 20 sessions — must come to exactly
- * 875 cents: 500 + 0 + 15*25. tests/pricing.js pins that number.
+ * 875 cents: 500 + 0 + 15*25. It was drawn for the $5 plan, which is Standard
+ * now; tests/pricing.js pins that number on STANDARD_PLAN.
  */
 function projectInvoice(plan, usage) {
-  const p = plan || TEAM_PLAN;
+  const p = plan || STANDARD_PLAN;
   const u = usage || {};
+  const payPerUse = p.metersOverage === true && toCount(p.base) === 0;
 
   const lines = [
     {
       key: 'base',
-      label: p.name || 'Team plan',
-      detail: 'the monthly subscription',
+      label: p.name || 'Standard plan',
+      detail: payPerUse ? 'no monthly fee — you pay for what you use' : 'the monthly subscription',
       quantity: 1,
       included: 0,
       billable: 1,
@@ -199,13 +273,16 @@ function projectInvoice(plan, usage) {
       u.setsPeak, p.includedSets, p.perSet),
     meteredLine('sessions', 'Sessions', 'run',
       u.sessionsRun, p.includedSessions, p.perSession),
+    ...(p.allowsEvents === true
+      ? [meteredLine('events', 'Events', 'run', u.eventsRun, p.includedEvents, p.perEvent)]
+      : []),
   ];
 
   // Integers all the way down, so the sum is exact rather than nearly exact.
   const totalCents = lines.reduce((sum, line) => sum + line.amountCents, 0);
 
   return {
-    planId: p.id || 'team',
+    planId: p.id || 'standard',
     currency: p.currency || 'USD',
     lines: lines.map((line) => ({ ...line, amountDisplay: formatCents(line.amountCents) })),
     totalCents,
@@ -216,7 +293,7 @@ function projectInvoice(plan, usage) {
 /**
  * WHAT IS LEFT, AND WHETHER ANYTHING MUST BE REFUSED.
  *
- * @param {object} plan   PERSONAL_PLAN or TEAM_PLAN — `planFor(orgRow)`.
+ * @param {object} plan   PERSONAL_PLAN, STANDARD_PLAN or TEAM_PLAN — `planFor(orgRow)`.
  * @param {object} usage  a `readUsage()` record: { sessionsRun, setsCurrent }.
  *
  * ── SESSIONS ARE COUNTED ON THE LEDGER, SETS ON WHAT IS HELD RIGHT NOW ─────
@@ -234,7 +311,7 @@ function projectInvoice(plan, usage) {
  *
  * ── `null` MEANS UNLIMITED, AND IS NOT A NUMBER TO COMPARE ─────────────────
  *
- * On a metered plan `sessionsLeft` and `setsLeft` are `null`, because a Team
+ * On a metered plan `sessionsLeft` and `setsLeft` are `null`, because a paid
  * org has no cap and `0` is a very different statement from "no limit". The
  * numbers are for the screen. HANDLERS MUST BRANCH ON `mustUpgradeForSession` /
  * `mustUpgradeForSet`, which are false on every metered plan by construction.
@@ -260,20 +337,21 @@ function allowanceState(plan, usage) {
   // two: the reader is being told to upgrade once.
   let reason = '';
   if (mustUpgradeForSession && mustUpgradeForSet) {
-    reason = `A personal organisation includes ${sessionsIncluded} sessions and `
+    reason = `The free plan includes ${sessionsIncluded} sessions and `
       + `${setsIncluded} stored question sets, and both are used up.`;
   } else if (mustUpgradeForSession) {
-    reason = `A personal organisation includes ${sessionsIncluded} sessions, `
+    reason = `The free plan includes ${sessionsIncluded} sessions, `
       + `and ${sessionsUsed} have been run this month.`;
   } else if (mustUpgradeForSet) {
-    reason = `A personal organisation includes ${setsIncluded} stored question sets, `
+    reason = `The free plan includes ${setsIncluded} stored question sets, `
       + `and ${setsUsed} are stored.`;
   }
 
   return {
     planId: p.id || 'personal',
-    planName: p.name || 'Personal',
+    planName: p.name || 'Free',
     metersOverage: meters,
+    allowsEvents: p.allowsEvents === true,
     sessionsUsed,
     sessionsIncluded,
     sessionsLeft,
@@ -308,27 +386,41 @@ const UPGRADE_REQUIRED_STATUS = 402;
  * reads `body.error` and shows it; a refusal that renders as "undefined" while
  * carrying a beautiful machine-readable payload is still a broken screen.
  *
- * @param {'sessions'|'sets'} kind
+ * WHICH PLAN IS OFFERED: the caller's `upgradePlan`, else the state's
+ * `upgradePlanId` (usage.js readAllowance sets it from the org's type — a
+ * person's space is offered Standard, a team the Organisation plan), else
+ * Standard.
+ *
+ * @param {'sessions'|'sets'|'events'} kind
  */
+function priceSentence(up) {
+  const base = toCount(up.base);
+  return base > 0
+    ? `${formatCents(base)} a month`
+    : `no monthly fee, ${formatCents(toCount(up.perSession))} a session`;
+}
+
 function upgradeRequired(kind, state, upgradePlan) {
   const s = state || {};
-  const up = upgradePlan || TEAM_PLAN;
+  const up = upgradePlan || (s.upgradePlanId ? planById(s.upgradePlanId) : null) || STANDARD_PLAN;
   const isSets = kind === 'sets';
-  const action = isSets
-    ? 'This organisation cannot store another question set yet.'
-    : 'This organisation cannot start another session yet.';
+  const isEvents = kind === 'events';
+  let action = 'This organisation cannot start another session yet.';
+  if (isSets) action = 'This organisation cannot store another question set yet.';
+  if (isEvents) action = 'Events are part of the paid plans, and this space is on Free.';
+  const why = isEvents ? '' : (s.reason || '');
   return {
     // An UPGRADE, not a failure — said in the first sentence, because the
     // sentence is what the person reads.
-    error: `${action} ${s.reason || ''} Upgrade to the ${up.name} `
-      + `(${formatCents(toCount(up.base))} a month) to keep going.`.replace(/\s+/g, ' ').trim(),
+    error: (`${action} ${why} Upgrade to the ${up.name} `
+      + `(${priceSentence(up)}) to keep going.`).replace(/\s+/g, ' ').trim(),
     code: 'upgrade_required',
     upgradeRequired: true,
     limit: {
-      kind: isSets ? 'sets' : 'sessions',
+      kind: isEvents ? 'events' : (isSets ? 'sets' : 'sessions'),
       planId: s.planId || PERSONAL_PLAN.id,
-      used: isSets ? toCount(s.setsUsed) : toCount(s.sessionsUsed),
-      included: isSets ? toCount(s.setsIncluded) : toCount(s.sessionsIncluded),
+      used: isEvents ? 0 : (isSets ? toCount(s.setsUsed) : toCount(s.sessionsUsed)),
+      included: isEvents ? 0 : (isSets ? toCount(s.setsIncluded) : toCount(s.sessionsIncluded)),
     },
     upgrade: {
       planId: up.id,
@@ -339,12 +431,14 @@ function upgradeRequired(kind, state, upgradePlan) {
       includedSets: toCount(up.includedSets),
       overageCents: toCount(up.perSession),
       overageDisplay: formatCents(toCount(up.perSession)),
+      perEventCents: toCount(up.perEvent),
+      perEventDisplay: formatCents(toCount(up.perEvent)),
     },
   };
 }
 
 module.exports = {
-  TEAM_PLAN, PERSONAL_PLAN, planFor,
+  TEAM_PLAN, STANDARD_PLAN, PERSONAL_PLAN, PER_EVENT_CENTS, planFor, planById, upgradePlanFor,
   projectInvoice, allowanceState, upgradeRequired, UPGRADE_REQUIRED_STATUS,
   formatCents, toCount,
 };

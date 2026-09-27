@@ -16,6 +16,7 @@ import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
 import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
 import PlanRequestDialog from './components/PlanRequestDialog';
+import LeavePlanDialog from './components/LeavePlanDialog';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
 import PublicLibraryPanel from './components/PublicLibraryPanel';
@@ -231,6 +232,10 @@ function AdminPage() {
   const [showPlanRequest, setShowPlanRequest] = useState(false);
   const [planRequestBusy, setPlanRequestBusy] = useState(false);
   const [planRequestCount, setPlanRequestCount] = useState(null);
+  // Leaving a paid plan (components/LeavePlanDialog.jsx), and the nudge that
+  // re-reads usage once it has happened.
+  const [showLeavePlan, setShowLeavePlan] = useState(false);
+  const [usageNonce, setUsageNonce] = useState(0);
   const [orgAdjustments, setOrgAdjustments] = useState(null);
   // BILLING STEP 4 — a PLACE inside the Billing section: '' = Plan & usage,
   // 'history' = Billing history, 'yyyy-mm' = that month's invoice.
@@ -395,9 +400,12 @@ function AdminPage() {
     mode: onPlatform ? PLATFORM_MODE : '',
     eventsEnabled: features.events === true,
   };
-  /* The Team plan by the same rule the server gates on (pricing.js planFor):
-     anything but an explicit 'team' plan is not the Team plan. */
-  const eventsTeamPlan = Boolean(activeOrg) && pricing.planFor(activeOrg).id === 'team';
+  /* A paid plan by the same rule the server gates on (pricing.js planFor):
+     anything but an explicit 'standard' or 'team' plan is Free. */
+  /* Events come with either paid plan — Standard for a person's own space,
+     Organisation for a team (27 Sep 2026). The name is kept for the props and
+     effects that read it; what it means is "this space may run events". */
+  const eventsTeamPlan = Boolean(activeOrg) && pricing.planFor(activeOrg).allowsEvents === true;
 
   // Usage is fetched only when the Plan & usage section is actually open —
   // it is a per-org read nobody needs while looking at question sets.
@@ -428,7 +436,7 @@ function AdminPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, activeOrgId]);
+  }, [activeTab, activeOrgId, usageNonce]);
 
   /* The latest plan request, read with the Billing section for the same
      reasons as usage above. Admins may read it; a member's 403 is not an
@@ -467,11 +475,12 @@ function AdminPage() {
         } catch { setOrgAdjustments(null); }
       })();
     } else if (activeTab === 'events' && !eventsTeamPlan) {
-      /* EVENTS' Team-plan page (TeamPlanOnly) offers "Request the Team plan" —
+      /* EVENTS' plan page (TeamPlanOnly) offers "Request the Standard plan" or
+         "…the Organisation plan" —
          the SAME request Billing tracks, read through the SAME fetch/state
          rather than a second route, so a request already pending reads as
          pending here too instead of offering a button that would 409
-         (Fix round 1 #5, ruling). Skipped once the org IS on the Team plan:
+         (Fix round 1 #5, ruling). Skipped once the org IS on a paid plan:
          nothing there ever shows the button this is for. */
       loadPlanRequest();
     }
@@ -1931,6 +1940,7 @@ function AdminPage() {
           ) : (
             <EventsPanel
               teamPlan={eventsTeamPlan}
+              orgType={activeOrg.type || ''}
               creating={creatingEvent}
               onCreatingChange={setCreatingEvent}
               onOpen={(code, title) => setEventPlace({ code, title })}
@@ -1947,10 +1957,24 @@ function AdminPage() {
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
           {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 
+          {showLeavePlan && activeOrg && (
+            <LeavePlanDialog
+              orgId={activeOrgId}
+              orgName={activeOrg.name || activeOrgId}
+              onClose={() => setShowLeavePlan(false)}
+              onSetsChanged={fetchQuestionSets}
+              /* The plan and any withdrawn request are re-read from the
+                 server (loadPlanRequest answers with the plan as it is now),
+                 and usage is fetched again, so the panel redraws as free. */
+              onLeft={() => { setShowLeavePlan(false); loadPlanRequest(); setUsageNonce((n) => n + 1); }}
+            />
+          )}
+
           {showPlanRequest && activeOrg && (
             <PlanRequestDialog
               orgId={activeOrgId}
               orgName={activeOrg.name || activeOrgId}
+              orgType={activeOrg.type || ''}
               onClose={() => setShowPlanRequest(false)}
               onRequested={(req) => { setShowPlanRequest(false); setPlanRequest(req); setNotice({ text: 'Your request is with Engage. You will see the decision here.', tone: 'success' }); }}
             />
@@ -2034,7 +2058,10 @@ function AdminPage() {
           )}
           {resolvedTab === 'billing' && activeOrg && !billingPlace && (
             <BillingPanel
-              planId={activeOrg.plan || (activeOrg.type === 'personal' ? 'personal' : 'team')}
+              /* A row with no plan is Free, whatever its type — a team is paid
+                 only once Engage approves its Organisation plan. */
+              planId={activeOrg.plan || 'free'}
+              orgType={activeOrg.type || ''}
               usage={orgUsage?.usage}
               period={orgUsage?.period}
               history={orgUsage?.history}
@@ -2050,6 +2077,10 @@ function AdminPage() {
               onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}
               onWithdrawRequest={withdrawPlanRequest}
               requestBusy={planRequestBusy}
+              /* Owner or admin — whoever sees Billing may manage it; a
+                 personal space's owner is its owner. The panel draws the
+                 control only on a paid plan. */
+              onLeavePlan={orgRole === 'owner' || orgRole === 'admin' || activeOrg.type === 'personal' ? () => setShowLeavePlan(true) : undefined}
               /*
                 NO `onUpgrade` — deliberately. It opened "Create a team", which
                 creates ANOTHER FREE organisation and upgrades nothing; a

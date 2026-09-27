@@ -8,7 +8,7 @@ import pricing from '../../../lambda-functions/game/pricing';
 import './OrgBillingDrawer.css';
 
 const { applyAdjustments, simulationSentence, offerWindow } = pricingAdjust;
-const { TEAM_PLAN, PERSONAL_PLAN, formatCents } = pricing;
+const { planFor, formatCents } = pricing;
 
 /**
  * AN ORGANISATION'S BILLING, AS ENGAGE SEES IT — mockups 16 and 17.
@@ -49,7 +49,7 @@ export default function OrgBillingDrawer({ org, onClose }) {
   }, [org.orgId]);
   useEffect(() => { load(); }, [load]);
 
-  const plan = org.plan === 'team' ? TEAM_PLAN : PERSONAL_PLAN;
+  const plan = planFor(org);
   const usage = org.usage || { sessionsRun: 0, setsPeak: 0, setsCurrent: 0 };
   const adjusted = period ? applyAdjustments(plan, usage, rows, period) : null;
   if (adjusted) adjusted.sentence = simulationSentence(adjusted);
@@ -66,7 +66,7 @@ export default function OrgBillingDrawer({ org, onClose }) {
       <header className="obill-head">
         <div className="obill-grow">
           <h2 id="obill-title">{org.name} — billing</h2>
-          <p className="obill-dim">{org.plan === 'team' ? 'Team plan' : 'Free'}{org.ownerEmail ? ` · owner ${org.ownerEmail}` : ''} · every number here is a row you can open.</p>
+          <p className="obill-dim">{plan.name}{org.ownerEmail ? ` · owner ${org.ownerEmail}` : ''} · every number here is a row you can open.</p>
         </div>
         <button type="button" className="obill-x" onClick={onClose} aria-label="Close" title="Close">×</button>
       </header>

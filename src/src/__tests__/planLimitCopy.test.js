@@ -22,7 +22,11 @@ function refusal(kind, resolve, { used = 5, included = 5 } = {}) {
     upgradeRequired: true,
     error: 'The server sentence.',
     limit: { kind, planId: 'personal', used, included },
-    upgrade: { planId: 'team', priceCents: 500, priceDisplay: '$5.00' },
+    // What the server offers (pricing.js upgradeRequired, 27 Sep 2026): the
+    // Standard plan to a person's own space, the Organisation plan to a team.
+    upgrade: resolve && resolve.org && resolve.org.type === 'team'
+      ? { planId: 'team', name: 'Organisation plan', priceCents: 0, priceDisplay: '$0.00' }
+      : { planId: 'standard', name: 'Standard plan', priceCents: 500, priceDisplay: '$5.00' },
     ...(resolve ? { resolve } : {}),
   });
 }
@@ -74,7 +78,7 @@ describe('the owner', () => {
     // rejects: a count nobody can explain — the owner's 2026-09-23 rule, stated where it bites
     expect(c.why).toBe('A session counts once two of its questions have been answered. A room you already have open keeps going.');
     // rejects: sending the owner to read Plan & usage instead of straight to the request
-    expect(c.action).toEqual({ label: 'Request the Team plan', href: REQUEST_HREF, primary: true });
+    expect(c.action).toEqual({ label: 'Request the Standard plan', href: REQUEST_HREF, primary: true });
     expect(c.alternative).toBe('$5.00 a month, never refused. Or wait until 1 October, when your 5 sessions start again.');
     expect(c.contacts).toEqual([]);
   });
@@ -88,7 +92,7 @@ describe('the owner', () => {
     expect(c.headline).toBe('Your space holds 5 of the 5 question sets it includes.');
     expect(c.outcome).toBe('Nothing was saved.');
     expect(c.why).toBe('A set counts while you keep it. Delete one you no longer use and its place is free straight away.');
-    expect(c.action.label).toBe('Request the Team plan');
+    expect(c.action.label).toBe('Request the Standard plan');
     // rejects: telling somebody to "wait for the reset" for a level that never resets
     expect(c.alternative).toBe('$5.00 a month, never refused. Or delete a set you no longer use.');
   });
@@ -102,7 +106,7 @@ describe('the owner', () => {
   test('a request already waiting: see it, do not send another', () => {
     const c = planLimitCopy(refusal('sessions', own({ request: WAITING })));
     expect(c.icon).toBe('Clock');
-    expect(c.why).toBe('Your request for the Team plan is with Engage — sent 22 Sep, usually decided within a day.');
+    expect(c.why).toBe('Your request for the Standard plan is with Engage — sent 22 Sep, usually decided within a day.');
     expect(c.action).toEqual({ label: 'See your request', href: BILLING_HREF, primary: false });
     expect(c.alternative).toBe('or wait until 1 October.');
   });
@@ -117,7 +121,7 @@ describe('an admin', () => {
   test('sessions: only the owner can, named; Plan & usage to read', () => {
     const c = planLimitCopy(refusal('sessions', team('admin')));
     expect(c.headline).toBe('Northwind Learning has used the 5 sessions included this month.');
-    expect(c.why).toBe('Only the owner can move Northwind Learning to the Team plan.');
+    expect(c.why).toBe('Only the owner can move Northwind Learning to the Organisation plan.');
     expect(c.contacts).toEqual([DANA]);
     expect(c.action).toEqual({ label: 'See Plan & usage', href: BILLING_HREF, primary: false });
     expect(c.alternative).toBe('or wait until 1 October.');
@@ -126,7 +130,7 @@ describe('an admin', () => {
   test('sets', () => {
     const c = planLimitCopy(refusal('sets', team('admin')));
     expect(c.headline).toBe('Northwind Learning holds 5 of the 5 question sets it includes.');
-    expect(c.why).toBe('Only the owner can move Northwind Learning to the Team plan. Deleting a set frees its place straight away.');
+    expect(c.why).toBe('Only the owner can move Northwind Learning to the Organisation plan. Deleting a set frees its place straight away.');
     expect(c.alternative).toBe('');
   });
 });
@@ -135,7 +139,7 @@ describe('a host or member', () => {
   // rejects: "contact your admin" with no names, or a billing link to a section they do not have
   test('sessions: whom to ask, by name, and no button', () => {
     const c = planLimitCopy(refusal('sessions', team('member')));
-    expect(c.why).toBe('Ask an owner or admin to move Northwind Learning to the Team plan. A room already open keeps going.');
+    expect(c.why).toBe('Ask an owner or admin to move Northwind Learning to the Organisation plan. A room already open keeps going.');
     expect(c.contacts).toEqual([DANA, TOMAS]);
     expect(c.action).toBeNull();
     expect(c.alternative).toBe('Or wait until 1 October, when Northwind Learning’s 5 sessions start again.');
@@ -143,7 +147,7 @@ describe('a host or member', () => {
 
   test('sets', () => {
     const c = planLimitCopy(refusal('sets', team('member')));
-    expect(c.why).toBe('Ask an owner or admin to move Northwind Learning to the Team plan.');
+    expect(c.why).toBe('Ask an owner or admin to move Northwind Learning to the Organisation plan.');
     expect(c.alternative).toBe('Or delete a set of yours you no longer use.');
   });
 
@@ -151,7 +155,7 @@ describe('a host or member', () => {
   test('a request already waiting replaces the ask', () => {
     const c = planLimitCopy(refusal('sessions', team('member', { request: WAITING })));
     expect(c.icon).toBe('Clock');
-    expect(c.why).toBe('Dana Whitfield asked Engage for the Team plan on 22 Sep.');
+    expect(c.why).toBe('Dana Whitfield asked Engage for the Organisation plan on 22 Sep.');
     expect(c.contacts).toEqual([]);
   });
 });

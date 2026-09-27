@@ -97,41 +97,53 @@ describe('a Team-plan organisation (01)', () => {
   });
 });
 
-describe('a space not on the Team plan (01b)', () => {
-  it('explains the Team plan and never asks for events', () => {
-    const p = props({ teamPlan: false });
+describe('a space on Free (01b): events come with a paid plan (27 Sep 2026)', () => {
+  it('explains the Standard plan to a person\'s own space, with the event price, and never asks for events', () => {
+    const p = props({ teamPlan: false, orgType: 'personal' });
     render(<EventsPanel {...p} />);
-    expect(screen.getByTestId('events-team-only')).toHaveTextContent('Events are part of the Team plan');
+    const page = screen.getByTestId('events-team-only');
+    expect(page).toHaveTextContent('Events come with the Standard plan');
+    expect(page).toHaveTextContent('Each event is $2.00, counted when it first goes live — any host here can run one.');
+    // rejects: a person's own space offered a team plan.
+    expect(page.textContent).not.toMatch(/Team plan|Organisation plan/);
     expect(api.listEvents).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Request the Team plan' }));
-    fireEvent.click(screen.getByRole('button', { name: 'What the Team plan adds' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request the Standard plan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'What the Standard plan adds' }));
     expect(p.onRequestPlan).toHaveBeenCalled();
     expect(p.onShowPlan).toHaveBeenCalled();
   });
 
+  it('a team not yet approved is offered the Organisation plan', () => {
+    render(<EventsPanel {...props({ teamPlan: false, orgType: 'team' })} />);
+    const page = screen.getByTestId('events-team-only');
+    expect(page).toHaveTextContent('Events come with the Organisation plan');
+    expect(page).toHaveTextContent('This team is on Free until Engage approves its Organisation plan.');
+    expect(screen.getByRole('button', { name: 'Request the Organisation plan' })).toBeInTheDocument();
+  });
+
   it('offers the request only to someone who may make it', () => {
     render(<EventsPanel {...props({ teamPlan: false, onRequestPlan: undefined })} />);
-    expect(screen.queryByRole('button', { name: 'Request the Team plan' })).toBeNull();
-    expect(screen.getByTestId('events-team-only')).toHaveTextContent('Only an owner of this organisation can request the Team plan.');
+    expect(screen.queryByRole('button', { name: 'Request the Standard plan' })).toBeNull();
+    expect(screen.getByTestId('events-team-only')).toHaveTextContent('Only an owner of this organisation can request the Standard plan.');
   });
 
   // Fix round 1 #5 (ruling): Billing's own plan-request state, reused here —
   // a request already pending must read as pending, not offer a button that
   // would 409.
-  it('no request yet: "Request the Team plan" shows as it always has', () => {
+  it('no request yet: the request button shows', () => {
     render(<EventsPanel {...props({ teamPlan: false, planRequest: null })} />);
-    expect(screen.getByRole('button', { name: 'Request the Team plan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request the Standard plan' })).toBeInTheDocument();
     expect(screen.queryByTestId('preq-strip')).toBeNull();
   });
 
   it('a pending request reads as pending, with no button that would 409', () => {
-    const planRequest = { status: 'requested', requestedAt: '2026-09-20T10:00:00Z', reqId: 'req_1' };
+    const planRequest = { status: 'requested', toPlan: 'standard', requestedAt: '2026-09-20T10:00:00Z', reqId: 'req_1' };
     render(<EventsPanel {...props({ teamPlan: false, planRequest })} />);
-    expect(screen.getByTestId('preq-strip')).toHaveTextContent('Team plan requested');
-    expect(screen.queryByRole('button', { name: 'Request the Team plan' })).toBeNull();
+    expect(screen.getByTestId('preq-strip')).toHaveTextContent('Standard plan requested');
+    expect(screen.queryByRole('button', { name: 'Request the Standard plan' })).toBeNull();
     // Still says what the plan adds, and never wrongly tells an owner they may not ask.
-    expect(screen.getByRole('button', { name: 'What the Team plan adds' })).toBeInTheDocument();
-    expect(screen.queryByText('Only an owner of this organisation can request the Team plan.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'What the Standard plan adds' })).toBeInTheDocument();
+    expect(screen.queryByText('Only an owner of this organisation can request the Standard plan.')).toBeNull();
   });
 });
 
@@ -191,13 +203,13 @@ describe('New event (05)', () => {
   });
 
   it('a refusal keeps the dialog open with the server\'s sentence and what was typed', async () => {
-    api.createEvent.mockRejectedValue(new Error('Events are part of the Team plan, and this space is on the Personal plan.'));
+    api.createEvent.mockRejectedValue(new Error('Events are part of the paid plans, and this space is on Free.'));
     const p = await openDialog();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Q4 Kickoff' } });
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: dayFromNow(30) } });
     fireEvent.change(screen.getByLabelText('Time zone'), { target: { value: 'Europe/London' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create event' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Events are part of the Team plan');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Events are part of the paid plans');
     expect(screen.getByLabelText('Name')).toHaveValue('Q4 Kickoff');
     expect(p.onOpen).not.toHaveBeenCalled();
   });

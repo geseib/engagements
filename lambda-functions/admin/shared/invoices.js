@@ -87,7 +87,7 @@ async function buildInvoice({ db, tableName, orgId, period, now }) {
     plan: adjusted.plan,
     planId: plan.id,
     orgName: orgRow.name || '',
-    usage: { sessionsRun: usage.sessionsRun, setsPeak: usage.setsPeak, setsCurrent: usage.setsCurrent },
+    usage: { sessionsRun: usage.sessionsRun, setsPeak: usage.setsPeak, setsCurrent: usage.setsCurrent, eventsRun: usage.eventsRun },
     lines: list.lines,
     listCents: adjusted.listCents, listDisplay: adjusted.listDisplay,
     discounts: adjusted.discounts,

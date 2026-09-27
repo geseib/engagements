@@ -47,6 +47,16 @@ describe('the dialog', () => {
 
   // rejects: posting an empty or whitespace name, which the server refuses with
   // a 400 the person then has to interpret.
+  // rejects: a team created with no word that Engage must approve it, or what
+  // the Organisation plan costs, or what it can do while it waits (27 Sep 2026).
+  it('says, before the button, that Engage approves it and what happens meanwhile', () => {
+    render(<CreateOrgDialog onClose={jest.fn()} />);
+    const note = screen.getByTestId('corg-approval');
+    expect(note).toHaveTextContent('Engage approves new organisations by hand');
+    expect(note).toHaveTextContent('Organisation plan is pay per use — no monthly fee, $0.25 a session or stored set and $2.00 an event');
+    expect(note).toHaveTextContent('Until it is approved the team runs on Free: 5 sessions, 5 sets, no events.');
+  });
+
   it('will not submit an empty name', () => {
     global.fetch = jest.fn();
     render(<CreateOrgDialog onClose={jest.fn()} />);

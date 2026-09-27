@@ -45,6 +45,7 @@ const { TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../shared/tenant');
 const { createOrgDataKey } = require('../shared/tenant-crypto');
 const G = require('./shared/org-guards');
+const { fileRequest } = require('./plan-requests');
 
 // Plans a customer may put themselves on. `09-first-run.html` prices exactly
 // two: free while you are the only member, and Team at $5 a month. Anything
@@ -66,8 +67,9 @@ async function createOrg(event) {
     A PLAN IS GRANTED, NEVER CHOSEN HERE. This used to read `body.plan` and
     accept 'team', so any signed-in caller could POST themselves onto the
     metered plan with no payment and no record. The dialog never sent it; the
-    route allowed it. Every organisation starts free; the Team plan arrives by
-    an approved plan request (docs/handoff/billing-experience-2026-09-22.md).
+    route allowed it. Every organisation starts free; the Organisation plan
+    arrives by an approved plan request — filed below, as the team is made
+    (docs/handoff/billing-experience-2026-09-22.md).
   */
   if (body.plan !== undefined && G.clean(body.plan).toLowerCase() !== 'free') {
     return G.fail(400, 'A plan cannot be chosen when creating an organisation. Every organisation starts free.');
@@ -220,9 +222,32 @@ async function createOrg(event) {
     return G.fail(500, `Could not create that organisation: ${error.message}`);
   }
 
+  /*
+    THE APPROVAL IS ASKED FOR HERE (the owner, 27 Sep 2026: "create an
+    organization and thats where you should also get approval with assuming in
+    the future a pay per usage billing capacity"). A team is created at once,
+    on Free — five sessions, five sets, no events — and an Organisation-plan
+    request is filed for it in the same breath, so Engage's queue shows every
+    new team without the owner having to find the Billing screen. Approving it
+    is what puts the team on pay per use. A failure to file is logged, not
+    fatal: the team exists, and its owner can ask from Billing.
+  */
+  let planRequest = null;
+  try {
+    const filed = await fileRequest({
+      org, orgId, toPlan: 'team', kind: 'new-organisation',
+      note: 'A new organisation, asking for the Organisation plan.', by: sub, byEmail: email,
+    });
+    if (filed.statusCode === 201) planRequest = JSON.parse(filed.body).request;
+    else console.error(`create-org: the Organisation-plan request for ${orgId} was not filed:`, filed.body);
+  } catch (error) {
+    console.error(`create-org: could not file the Organisation-plan request for ${orgId}:`, error);
+  }
+
   return G.json(201, {
     org: G.publicOrg(org),
     membership: G.publicMember(member),
+    planRequest,
   });
 }
 

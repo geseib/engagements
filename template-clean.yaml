@@ -61,8 +61,6 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  # Events (roadmap D6): switched on for dev only. See EVENTS_ENABLED in Globals.
-  IsDev: !Equals [!Ref Environment, "dev"]
   # True when the deploy passes Google credentials, fetched from
   # /<stack>/google/* SSM parameters by all three buildspecs.
   #
@@ -138,12 +136,14 @@ Globals:
         # is a fact that can be recorded beside the outcome.
         CONTENT_GUARDRAIL_VERSION: !GetAtt ContentGuardrailVersion.Version
         # EVENTS (roadmap D6, docs/superpowers/plans/2026-09-26-events-roadmap.md).
-        # On for dev only, so each milestone can land on dev as it is finished
-        # without showing half a feature on test or prod. Read at call time by
-        # websocket/events/event-http.js `eventsEnabled` (POST /events refuses
-        # while it is off) and by admin/orgs/list-my-orgs.js (the console hides
-        # Events). Turned on for test when the owner asks (roadmap M6).
-        EVENTS_ENABLED: !If [IsDev, 'on', 'off']
+        # On for dev and test, off for prod. It was dev-only so each milestone
+        # could land without showing half a feature; the owner asked for it on
+        # test on 27 Sep 2026 ("i dont see how to create an event in test").
+        # Read at call time by websocket/events/event-http.js `eventsEnabled`
+        # (POST /events refuses while it is off) and by
+        # admin/orgs/list-my-orgs.js (the console hides Events). Prod follows
+        # when the owner says so (roadmap M6).
+        EVENTS_ENABLED: !If [IsProd, 'off', 'on']
 
 Resources:
 
@@ -1361,9 +1361,28 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # Leaving a plan: "Make public" on a set whose version has not passed
+          # the content check yet sends it there (orgs/leave-plan.js).
+          CHECK_FUNCTION_NAME: !Sub '${StackName}-check-question-set'
       Policies:
-        # NO kms:Decrypt: a request carries a plan name, a code and a note the
-        # customer wrote for Engage to read — none of it tenant content.
+        # A plan REQUEST carries a plan name, a code and a note the customer
+        # wrote for Engage to read — none of it tenant content. LEAVING a plan
+        # (orgs/leave-plan.js, same function) is different: it lists the
+        # organisation's sets by name, and "Make public" publishes one from the
+        # org's own rows, which decrypts on the way out exactly as
+        # PublishQuestionSetFunction does. Decrypt only — it never mints a key.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+            # "Make public" on a version the content check has not passed yet
+            # re-enters the check route by its ordinary HTTP entry point
+            # (RequestResponse — its answer decides what the dialog says), the
+            # pattern shared/house-check.js set. The one function, by name.
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -1404,6 +1423,32 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /platform/plan-requests/{orgId}/{reqId}/decide
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Leaving a paid plan, self-serve (orgs/leave-plan.js): the preview,
+        # the leave itself, and "Make public" on a set on the way out.
+        LeavePlanPreview:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan/leave
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        LeavePlan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan/leave
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        LeavePlanHold:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan/leave/hold
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer

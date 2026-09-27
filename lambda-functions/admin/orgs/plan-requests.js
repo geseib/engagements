@@ -46,9 +46,23 @@ const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { periodOf } = require('../shared/usage');
 const { redeemCodeItems } = require('./adjustments');
+const leavePlan = require('./leave-plan');
 
 const STATUSES = ['requested', 'approved', 'declined', 'withdrawn'];
-const PLANS = ['free', 'team'];
+/*
+ * THE PLANS A REQUEST MAY ASK FOR, BY WHO IS ASKING (the owner, 27 Sep 2026:
+ * "there is the free tier and the standard tier for individuals (should not be
+ * team plan) and there is create an organization and thats where you should
+ * also get approval"). A person's own space moves to Standard; a team to the
+ * Organisation plan (stored as 'team'). Either may ask for Free. A request
+ * that crosses them is refused with the way that does exist.
+ */
+const PLANS = ['free', 'standard', 'team'];
+const targetsFor = (org) => (org && org.type === 'team' ? ['team', 'free'] : ['standard', 'free']);
+const defaultTargetFor = (org) => targetsFor(org)[0];
+const crossedPlan = (org, toPlan) => (org && org.type === 'team'
+  ? 'A team moves to the Organisation plan. The Standard plan is for a person\'s own space.'
+  : `A person's own space moves to the Standard plan. The Organisation plan is for a team — create an organisation to ask for it.`);
 const NOTE_MAX = 600;
 const CODE_RE = /^[A-Z0-9][A-Z0-9-]{2,31}$/;
 
@@ -68,6 +82,8 @@ function publicRequest(row) {
     orgId: row.orgId,
     fromPlan: row.fromPlan,
     toPlan: row.toPlan,
+    // 'new-organisation' when create-org.js filed it for a team just made.
+    kind: row.kind || 'upgrade',
     status: row.status,
     note: row.note || '',
     code: row.code || '',
@@ -115,14 +131,29 @@ async function createRequest(event, orgId) {
 
   const org = await G.getOrgMetadata(orgId);
   if (!org) return G.fail(404, 'No such organisation.');
-  const fromPlan = PLANS.includes(org.plan) ? org.plan : 'free';
-  const toPlan = G.clean(body.toPlan).toLowerCase() || 'team';
+  const toPlan = G.clean(body.toPlan).toLowerCase() || defaultTargetFor(org);
   if (!PLANS.includes(toPlan)) return G.fail(400, `Plan must be one of: ${PLANS.join(', ')}.`);
-  if (toPlan === fromPlan) return G.fail(400, `This organisation is already on the ${toPlan} plan.`);
+  if (!targetsFor(org).includes(toPlan)) return G.fail(400, crossedPlan(org, toPlan));
 
   const note = G.clean(body.note).slice(0, NOTE_MAX);
   const code = G.clean(body.code).toUpperCase();
   if (code && !CODE_RE.test(code)) return G.fail(400, 'That does not look like a discount code.');
+
+  return fileRequest({
+    org, orgId, toPlan, note, code, kind: 'upgrade', by: G.callerSub(event), byEmail: G.callerEmail(event),
+  });
+}
+
+/**
+ * WRITE ONE REQUEST, for the owner's route above and for create-org.js, which
+ * files an Organisation-plan request for every team it makes — that request is
+ * the approval (the owner, 27 Sep 2026). Returns the route's response; the
+ * org's current plan, the one-open-request rule and the queue pointer are
+ * decided here so the two callers cannot differ.
+ */
+async function fileRequest({ org, orgId, toPlan, note = '', code = '', kind = 'upgrade', by = '', byEmail = '' }) {
+  const fromPlan = PLANS.includes(org.plan) ? org.plan : 'free';
+  if (toPlan === fromPlan) return G.fail(400, `This organisation is already on the ${toPlan} plan.`);
 
   // ONE OPEN REQUEST AT A TIME. A second row would be two things for staff to
   // decide about one org, and two answers to reconcile.
@@ -131,16 +162,15 @@ async function createRequest(event, orgId) {
 
   const now = new Date().toISOString();
   const reqId = G.randomBase58(10);
-  const sub = G.callerSub(event);
   const row = {
     PK: tenant.orgPk(orgId),
     SK: reqSk(now, reqId),
     RecordType: 'PLANREQ',
-    reqId, orgId, fromPlan, toPlan,
+    reqId, orgId, fromPlan, toPlan, kind,
     status: 'requested',
     note, code,
-    requestedBy: sub,
-    requestedByEmail: G.callerEmail(event),
+    requestedBy: by,
+    requestedByEmail: byEmail,
     requestedAt: now,
   };
   await G.db.send(new TransactWriteCommand({
@@ -151,7 +181,7 @@ async function createRequest(event, orgId) {
           TableName: G.tableName(),
           Item: {
             PK: tenant.ORGS_INDEX_PK, SK: queueSk('requested', now, orgId),
-            RecordType: 'PLANREQ_QUEUE', orgId, reqId, orgName: org.name || '', toPlan, code, requestedAt: now,
+            RecordType: 'PLANREQ_QUEUE', orgId, reqId, orgName: org.name || '', toPlan, kind, code, requestedAt: now,
           },
         },
       },
@@ -198,7 +228,7 @@ async function moveRequest(row, patch, extraItems = []) {
           TableName: G.tableName(),
           Item: {
             PK: tenant.ORGS_INDEX_PK, SK: queueSk(patch.status, row.requestedAt, row.orgId),
-            RecordType: 'PLANREQ_QUEUE', orgId: row.orgId, reqId: row.reqId, toPlan: row.toPlan, code: row.code || '',
+            RecordType: 'PLANREQ_QUEUE', orgId: row.orgId, reqId: row.reqId, toPlan: row.toPlan, kind: row.kind || 'upgrade', code: row.code || '',
             requestedAt: row.requestedAt, decidedAt: patch.decidedAt || patch.withdrawnAt || '',
           },
         },
@@ -332,6 +362,8 @@ exports.handler = async (event) => {
       if (method === 'POST' && p.orgId && p.reqId) return await decide(event, p.orgId, p.reqId);
       return G.fail(404, 'Endpoint not found');
     }
+    // Leaving a paid plan, and "Make public" on the way out: orgs/leave-plan.js.
+    if (/\/plan\/leave(?:\/|$)/.test(path)) return await leavePlan.route(event, p.orgId, method, path);
     if (!p.orgId) return G.fail(400, 'orgId is required.');
     if (method === 'POST') return await createRequest(event, p.orgId);
     if (method === 'GET') return await listMine(event, p.orgId);
@@ -344,4 +376,5 @@ exports.handler = async (event) => {
 };
 
 exports.STATUSES = STATUSES;
+exports.fileRequest = fileRequest;
 exports.publicRequest = publicRequest;

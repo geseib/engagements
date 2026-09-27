@@ -41,10 +41,29 @@ describe('the request dialog (mockup 13)', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('sends toPlan team, the upper-cased code and the note, and hands back the request', async () => {
+  // rejects: a person's own space asking for a team plan (27 Sep 2026: the
+  // individual tier "should not be team plan").
+  it('a personal space asks for the Standard plan', async () => {
+    authFetch.mockImplementation(() => respond({ request: { ...REQ, toPlan: 'standard' } }, true, 201));
+    render(<PlanRequestDialog orgId="org_x" orgName="Amara" orgType="personal" onClose={jest.fn()} onRequested={jest.fn()} />);
+    expect(screen.getByRole('heading', { name: 'Request the Standard plan', level: 2 })).toBeInTheDocument();
+    expect(screen.getByTestId('preq-sum')).toHaveTextContent('events $2.00 each');
+    fireEvent.click(screen.getByTestId('preq-send'));
+    await waitFor(() => expect(authFetch).toHaveBeenCalled());
+    expect(JSON.parse(authFetch.mock.calls[0][1].body).toPlan).toBe('standard');
+  });
+
+  it('a team asks for the Organisation plan: no monthly fee, pay per use', () => {
+    render(<PlanRequestDialog orgId="org_x" orgName="Northwind" orgType="team" onClose={jest.fn()} onRequested={jest.fn()} />);
+    expect(screen.getByRole('heading', { name: 'Request the Organisation plan', level: 2 })).toBeInTheDocument();
+    expect(screen.getByTestId('preq-sum')).toHaveTextContent('No monthly fee');
+    expect(screen.getByTestId('preq-sum')).toHaveTextContent('Pay per use: $0.25 a session · $0.25 a stored set a month · $2.00 an event');
+  });
+
+  it('sends toPlan team for a team, the upper-cased code and the note, and hands back the request', async () => {
     const onRequested = jest.fn();
     authFetch.mockImplementation(() => respond({ request: REQ }, true, 201));
-    render(<PlanRequestDialog orgId="org_x" orgName="Northwind" onClose={jest.fn()} onRequested={onRequested} />);
+    render(<PlanRequestDialog orgId="org_x" orgName="Northwind" orgType="team" onClose={jest.fn()} onRequested={onRequested} />);
     fireEvent.change(screen.getByPlaceholderText('e.g. WELCOME30'), { target: { value: 'welcome30' } });
     fireEvent.click(screen.getByTestId('preq-send'));
     await waitFor(() => expect(onRequested).toHaveBeenCalledWith(REQ));
@@ -63,10 +82,10 @@ describe('the request dialog (mockup 13)', () => {
 
 describe('the strip (mockup 14): four states, told apart by the first word', () => {
   it.each([
-    ['requested', /^Team plan requested/, 'Withdraw'],
-    ['approved', /^You are on the team plan/, null],
+    ['requested', /^Organisation plan requested/, 'Withdraw'],
+    ['approved', /^You are on the Organisation plan/, null],
     ['declined', /^Not this time\./, 'Request again'],
-    ['withdrawn', /^Request withdrawn/, 'Request the Team plan'],
+    ['withdrawn', /^Request withdrawn/, 'Request the Organisation plan'],
   ])('%s', (status, lead, button) => {
     render(<PlanRequestStrip request={{ ...REQ, status, decidedAt: '2026-09-23T09:00:00Z', withdrawnAt: '2026-09-22T12:00:00Z', decisionNote: 'Welcome aboard' }} onWithdraw={jest.fn()} onRequestAgain={jest.fn()} />);
     const strip = screen.getByTestId('preq-strip');
@@ -76,6 +95,15 @@ describe('the strip (mockup 14): four states, told apart by the first word', () 
     else expect(within(strip).queryByRole('button')).toBeNull();
   });
 
+  // rejects: a new team's automatic request reading like one its owner made
+  // later, with no word on what the team can do while it waits.
+  it('a new organisation\'s own request says so, and what Free allows meanwhile', () => {
+    render(<PlanRequestStrip request={{ ...REQ, kind: 'new-organisation' }} onWithdraw={jest.fn()} />);
+    const strip = screen.getByTestId('preq-strip');
+    expect(strip.textContent).toMatch(/^Organisation plan requested with this team/);
+    expect(strip).toHaveTextContent('Until then it runs on Free: 5 sessions, 5 sets, no events.');
+  });
+
   it('quotes the reviewer\'s note verbatim on a decision', () => {
     render(<PlanRequestStrip request={{ ...REQ, status: 'declined', decidedAt: '2026-09-23T09:00:00Z', decisionNote: 'That code expired in August.' }} />);
     expect(screen.getByTestId('preq-strip').querySelector('q')).toHaveTextContent('That code expired in August.');
@@ -83,7 +111,7 @@ describe('the strip (mockup 14): four states, told apart by the first word', () 
 });
 
 describe('Plan & usage offers the request, and never the old Create a team', () => {
-  it('free org, owner: Request the Team plan; waiting: the button gives way to the strip', () => {
+  it('free org, owner: Request the plan; waiting: the button gives way to the strip', () => {
     const onRequestPlan = jest.fn();
     const { rerender } = render(<BillingPanel planId="personal" usage={{ sessionsRun: 5, setsCurrent: 3, setsPeak: 3 }} period={{ label: 'September', resetsOn: '2026-10-01' }} onRequestPlan={onRequestPlan} />);
     fireEvent.click(screen.getByTestId('bill-request-plan'));

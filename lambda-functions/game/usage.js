@@ -81,7 +81,7 @@ const {
   DynamoDBDocumentClient, PutCommand, UpdateCommand, GetCommand, QueryCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const { orgPk, setsMetadataPk, ORG } = require('./tenant');
-const { planFor, allowanceState, TEAM_PLAN } = require('./pricing');
+const { planFor, allowanceState, upgradePlanFor, TEAM_PLAN } = require('./pricing');
 const { effectivePlan } = require('./pricing-adjust');
 
 const client = new DynamoDBClient({});
@@ -143,7 +143,7 @@ const ledgerSk = (period, kind, id) => `LEDGER#${period}#${kind}#${id}`;
 /** Every ledger row for a period, whatever kind — the reconciler's query. */
 const ledgerPrefix = (period, kind) => (kind ? `LEDGER#${period}#${kind}#` : `LEDGER#${period}#`);
 
-const ZERO = Object.freeze({ sessionsRun: 0, setsCurrent: 0, setsPeak: 0 });
+const ZERO = Object.freeze({ sessionsRun: 0, setsCurrent: 0, setsPeak: 0, eventsRun: 0 });
 
 /**
  * Bill one session, once, ever.
@@ -218,6 +218,67 @@ async function recordBillableSession(orgId, gameId, opts = {}) {
 }
 
 /**
+ * Bill one EVENT, once, ever — $2.00 on a paid plan (pricing.js
+ * PER_EVENT_CENTS; the owner, 27 Sep 2026: "all events cost money (for now
+ * this is just calcuated and not actually billed)").
+ *
+ * Called by websocket/events/run.js when an event first goes live, so an
+ * agenda drafted and never run costs nothing. The same shape and the same
+ * promises as recordBillableSession above: a conditional ledger row makes any
+ * repeat a no-op, the counter is raised only after it, and it NEVER THROWS —
+ * a meter must not be able to stop a host taking an event live.
+ */
+async function recordBillableEvent(orgId, eventCode, opts = {}) {
+  const { db, tableName, now } = ctx(opts);
+  const org = String(orgId || '').trim();
+  const code = String(eventCode || '').trim();
+  if (!org || !code) return { billed: false, reason: 'unscoped', period: periodOf(now) };
+
+  const period = periodOf(now);
+  try {
+    await db.send(new PutCommand({
+      TableName: tableName,
+      Item: {
+        PK: orgPk(org),
+        SK: ledgerSk(period, 'EVENT', code),
+        RecordType: 'LEDGER',
+        kind: 'EVENT',
+        orgId: org,
+        period,
+        eventCode: code,
+        unitCents: 1,          // one billable unit; the price is applied by pricing.js
+        createdAt: now.toISOString(),
+        // NO ttl. This is a financial record — see the header.
+      },
+      ConditionExpression: 'attribute_not_exists(SK)',
+    }));
+  } catch (error) {
+    if (error && error.name === 'ConditionalCheckFailedException') {
+      return { billed: false, reason: 'already', period };
+    }
+    console.error(`⚠️ usage: could not write event ledger row for ${org}/${code}:`, error);
+    return { billed: false, reason: 'error', period };
+  }
+
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: { PK: orgPk(org), SK: usageSk(period) },
+      UpdateExpression: 'ADD #run :one SET #org = :org, #period = :p, #updated = :t',
+      ExpressionAttributeNames: {
+        '#run': 'eventsRun', '#org': 'orgId', '#period': 'period', '#updated': 'updatedAt',
+      },
+      ExpressionAttributeValues: {
+        ':one': 1, ':org': org, ':p': period, ':t': now.toISOString(),
+      },
+    }));
+  } catch (error) {
+    console.error(`⚠️ usage: event ${code} billed but counter not raised for ${org}:`, error);
+  }
+  return { billed: true, reason: 'first', period };
+}
+
+/**
  * Record how many sets an org holds right now, and ratchet the period's peak.
  *
  * `count` must be a FRESH COUNT of the partition, never a delta — see the
@@ -277,7 +338,15 @@ async function recordSetCount(orgId, count, opts = {}) {
 }
 
 /** How many sets this org holds, counted from the rows. Paginates: an org with
- *  more than one page of sets is exactly the org whose peak matters. */
+ *  more than one page of sets is exactly the org whose peak matters.
+ *
+ *  A SET HELD FOR THE PUBLIC LIBRARY IS NOT COUNTED (admin/shared/public-hold.js,
+ *  `publicHold` on its metadata row). The owner, 27 Sep 2026: it is removed
+ *  once the library accepts a copy, so it is already on its way out. Released
+ *  — unticked, or declined — the attribute is gone and the set counts again,
+ *  which is what lets the free-tier gate refuse a NEW set until the org is back
+ *  at its allowance. `Select: 'COUNT'` counts AFTER the filter, so this stays
+ *  one cheap Query per page. */
 async function countSets(orgId, opts = {}) {
   const { db, tableName } = ctx(opts);
   const org = String(orgId || '').trim();
@@ -288,6 +357,8 @@ async function countSets(orgId, opts = {}) {
     const page = await db.send(new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      FilterExpression: 'attribute_not_exists(#hold)',
+      ExpressionAttributeNames: { '#hold': 'publicHold' },
       ExpressionAttributeValues: { ':pk': setsMetadataPk(ORG, org), ':sk': 'SET#' },
       Select: 'COUNT',
       ExclusiveStartKey,
@@ -346,7 +417,7 @@ async function setSessionsRun(orgId, period, count, opts = {}) {
 /**
  * The counters for a period. A period nobody used has no row, and that is a
  * zeroed period rather than an error — a new org opening the billing screen on
- * the 1st must see "$5.00 so far", not a 404.
+ * the 1st must see its base ("$5.00 so far" on Standard), not a 404.
  */
 async function readUsage(orgId, period, opts = {}) {
   const { db, tableName, now } = ctx(opts);
@@ -368,6 +439,7 @@ async function readUsage(orgId, period, opts = {}) {
     // through recordSetCount, possible through a hand-edited row) still bills
     // on at least what is held now.
     setsPeak: Math.max(int(item.setsPeak), int(item.setsCurrent)),
+    eventsRun: int(item.eventsRun),
     updatedAt: item.updatedAt || null,
   };
 }
@@ -491,11 +563,14 @@ async function readAllowance(orgId, opts = {}) {
     period,
     org: orgRow,
     ...allowanceState(effectivePlan(planFor(orgRow), adjustments, period), usage),
+    // What a refusal offers: Standard to a person's own space, the
+    // Organisation plan to a team (pricing.js upgradePlanFor/upgradeRequired).
+    upgradePlanId: upgradePlanFor(orgRow).id,
   };
 }
 
 module.exports = {
-  recordBillableSession, recordSetCount, readUsage, readAllowance,
+  recordBillableSession, recordBillableEvent, recordSetCount, readUsage, readAllowance,
   countSets, countBilledSessions, setSessionsRun,
   periodOf, periodBounds, usageSk, ledgerSk, ledgerPrefix,
 };

@@ -1,0 +1,158 @@
+/* ==========================================================================
+   LEAVE THE PLAN — components/LeavePlanDialog.jsx, opened from Plan & usage
+   (BillingPanel.jsx). One dialog: a sentence, the organisation's sets as a
+   table, and the Leave button with its reason.
+
+   Scoped under `.lvp`. The ladder, the rules and the tints are BillingPanel's
+   and PlanRequests.css's, restated as locals because an undefined custom
+   property invalidates the whole declaration. The dialog declares
+   `data-theme="dark"` on its own scrim (Modal's `theme`), so it never inherits
+   a polarity from whatever it is mounted under.
+
+   THE LADDER: 12 floor / 13 label / 15 body / 19 head. Rows are 36px.
+
+   Measured on --surface #1B2942, the card (leavePlanPalette.test.js composites
+   every tint up the real stack — card over scrim over the dusk field):
+     --text        #F4EDE4 on --surface          12.53:1  names, the sentence
+     --muted       #9BA8BE on --surface           6.06:1  the sub line, labels
+     --danger-text #EF8C86 on --surface           6.08:1  Delete, a failed row
+     --text / --muted on the held tint   10.91 / 5.27:1  a set held for the library
+     --text / --muted on the danger tint 11.21 / 5.42:1  the delete confirmation
+     --text / --muted on the ok tint     10.61 / 5.13:1  "the public copy is live"
+     #1B2942 on --primary                         7.42:1  ink on Leave
+     #FFFFFF on --danger-deep #B03A34             6.00:1  "Delete it"
+
+   `--danger` is never text here: 4.38:1 on --surface, under AA. It keeps
+   borders and tints; `--danger-text` carries the copy.
+   ========================================================================== */
+.lvp {
+  --lvp-t-floor: 12px;
+  --lvp-t-label: 13px;
+  --lvp-t-body: 15px;
+  --lvp-t-head: 19px;
+  --lvp-row-h: 36px;
+  --lvp-rule: rgba(155, 168, 190, .20);
+  --lvp-rule-strong: rgba(155, 168, 190, .34);
+  --lvp-row-hover: rgba(155, 168, 190, .055);
+  --lvp-tint-note: rgba(155, 168, 190, .06);
+  --lvp-tint-held: rgba(124, 167, 230, .08);
+  --lvp-tint-ok: rgba(79, 178, 134, .10);
+  --lvp-tint-bad: rgba(229, 100, 94, .10);
+  --lvp-on-accent: #1B2942;
+  --lvp-on-danger: #FFFFFF;
+  color: var(--text);
+  font: 400 var(--lvp-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.lvp *, .lvp *::before, .lvp *::after { box-sizing: border-box; }
+.lvp :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+.lvp-grow { flex: 1 1 auto; min-width: 0; }
+.lvp-dim { color: var(--muted); }
+.lvp-lab { font-size: var(--lvp-t-label); font-weight: 700; color: var(--muted); }
+
+/* ---------------------------------------------------------------- dialog -- */
+/* Hard rule 10: the scrim scrolls and does not centre with flex; the card
+   centres with margin auto, so a long list is reachable at both ends. */
+.lvp-scrim {
+  position: fixed; inset: 0; z-index: 10001;
+  background: rgba(6, 11, 22, .72);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto; padding: 24px;
+}
+.lvp-modal {
+  margin: auto; width: min(760px, 100%);
+  background: var(--surface); border: 1px solid var(--lvp-rule-strong); border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .5); overflow-wrap: anywhere;
+}
+.lvp-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.lvp-head h2 { margin: 0; font: 800 var(--lvp-t-head)/1.2 var(--font-display); }
+.lvp-head .lvp-dim { margin: 4px 0 0; font-size: var(--lvp-t-label); }
+.lvp-body { padding: 4px 18px 6px; display: flex; flex-direction: column; gap: 12px; }
+.lvp-foot {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  padding: 14px 18px 16px; border-top: 1px solid var(--lvp-rule); margin-top: 8px;
+}
+/* The reason sits beside the disabled button it explains, and pushes the
+   buttons right with margin-left auto — never justify-content: flex-end
+   (hard rule 9). Without a reason the first button takes the auto margin. */
+.lvp-why { margin-right: auto; font-size: var(--lvp-t-label); color: var(--muted); min-width: 0; }
+.lvp-foot > .lvp-btn:first-child { margin-left: auto; }
+
+.lvp-x { flex: 0 0 auto; background: none; border: 0; cursor: pointer; font-size: 1.6rem; line-height: 1; padding: 0 4px; color: var(--muted); min-width: 44px; min-height: 44px; }
+.lvp-x:hover:not(:disabled) { color: var(--text); }
+.lvp-x:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ------------------------------------------------------------- the words -- */
+.lvp-lead { margin: 0; font-size: var(--lvp-t-body); font-weight: 600; line-height: 1.5; }
+.lvp-note {
+  margin: 0; padding: 10px 13px; border-left: 3px solid var(--muted); border-radius: 0 6px 6px 0;
+  background: var(--lvp-tint-note); font-size: var(--lvp-t-label); color: var(--text); line-height: 1.5;
+}
+.lvp-fine { margin: 0; font-size: var(--lvp-t-label); color: var(--muted); line-height: 1.5; }
+.lvp-alert {
+  margin: 0; padding: 9px 12px;
+  border: 1px solid rgba(229, 100, 94, .5); border-left-width: 3px; border-radius: 0 6px 6px 0;
+  background: var(--lvp-tint-bad); color: var(--danger-text); font-size: var(--lvp-t-label);
+}
+.lvp-gone {
+  margin: 0; padding: 9px 12px 9px 30px;
+  border: 1px solid rgba(79, 178, 134, .5); border-left-width: 3px; border-radius: 0 6px 6px 0;
+  background: var(--lvp-tint-ok); color: var(--text); font-size: var(--lvp-t-label); line-height: 1.5;
+}
+
+/* --------------------------------------------------------------- buttons -- */
+.lvp-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px;
+  border-radius: 6px; border: 1px solid var(--lvp-rule-strong); background: transparent;
+  color: var(--text); font: 600 var(--lvp-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.lvp-btn:hover:not(:disabled) { background: var(--lvp-row-hover); border-color: var(--muted); }
+.lvp-btn:disabled { opacity: .42; cursor: not-allowed; }
+.lvp-btn--sm { min-height: 26px; padding: 0 9px; font-size: var(--lvp-t-floor); }
+.lvp-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--lvp-on-accent); font-weight: 700; }
+.lvp-btn--primary:hover:not(:disabled) { background: var(--primary); filter: brightness(1.05); }
+.lvp-btn--ghostdanger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
+.lvp-btn--ghostdanger:hover:not(:disabled) { background: var(--lvp-tint-bad); }
+.lvp-btn--dangersolid { background: var(--danger-deep); border-color: var(--danger-deep); color: var(--lvp-on-danger); }
+
+/* ----------------------------------------------------------------- table -- */
+.lvp-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--lvp-t-body); }
+.lvp-tbl th {
+  text-align: left; font-size: var(--lvp-t-floor); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 0 10px 6px; border-bottom: 1px solid var(--lvp-rule); font-weight: 700;
+}
+.lvp-tbl td { padding: 0 10px; height: var(--lvp-row-h); border-bottom: 1px solid var(--lvp-rule); vertical-align: middle; overflow: hidden; }
+.lvp-tbl td.lvp-cell-set { padding-top: 6px; padding-bottom: 6px; height: auto; }
+.lvp-tbl tbody tr:hover td { background: var(--lvp-row-hover); }
+.lvp-tbl tbody tr.lvp-row--held td { background: var(--lvp-tint-held); }
+.lvp-col-set { width: 64%; }
+.lvp-col-pub { width: 18%; }
+.lvp-col-acts { width: 18%; }
+
+/* A truncating element is ONE text node with min-width 0 (hard rule 8), and
+   it carries the whole name in `title=` so nothing is lost (hard rule 7). */
+.lvp-nm { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.lvp-sub { display: block; min-width: 0; font-size: var(--lvp-t-label); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvp-held, .lvp-released, .lvp-rownote {
+  display: block; margin-top: 4px; font-size: var(--lvp-t-label); line-height: 1.45; white-space: normal; color: var(--text);
+}
+.lvp-released { color: var(--muted); }
+.lvp-rownote--bad { color: var(--danger-text); }
+.lvp-topic, .lvp-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; white-space: normal; }
+.lvp-confirm {
+  padding: 8px 10px; border: 1px solid rgba(229, 100, 94, .5); border-radius: 6px;
+  background: var(--lvp-tint-bad); font-size: var(--lvp-t-label); color: var(--text);
+}
+.lvp-confirm > span { flex: 1 1 260px; min-width: 0; }
+.lvp-select {
+  min-height: 30px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--lvp-rule-strong);
+  background: var(--bg); color: var(--text); font: 400 var(--lvp-t-body)/1 var(--font-ui);
+}
+.lvp-toggle { display: inline-flex; gap: 8px; align-items: center; min-height: 24px; cursor: pointer; font-size: var(--lvp-t-label); color: var(--muted); }
+.lvp-toggle input { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+.lvp-toggle input:disabled { cursor: not-allowed; }
+/* Hard rule 9: margin-left auto on the first child, and wrap — never
+   justify-content: flex-end inside an overflow: hidden cell. */
+.lvp-rowact { display: flex; flex-wrap: wrap; gap: 5px; }
+.lvp-rowact > :first-child { margin-left: auto; }
