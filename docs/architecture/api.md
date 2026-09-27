@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-163 routes across 9 groups. 140 carry the Cognito authorizer; 23 are public.
+164 routes across 9 groups. 141 carry the Cognito authorizer; 23 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -23,6 +23,7 @@ on `requestContext.routeKey`.
 |---|---|---|---|
 | GET | `/events` | **Cognito** | `lambda-functions/websocket/events/get-events.js` |
 | POST | `/events` | **Cognito** | `lambda-functions/websocket/events/create-event.js` |
+| DELETE | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/update-event.js` |
 | GET | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/get-event.js` |
 | PUT | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/update-event.js` |
 | GET | `/events/{code}/agenda` | public | `lambda-functions/websocket/events/get-agenda.js` |

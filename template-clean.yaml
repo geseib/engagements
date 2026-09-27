@@ -439,8 +439,22 @@ Resources:
             Method: put
             Auth:
               Authorizer: CognitoAuthorizer
+        # DELETE rides on this function (update-event.js hands it to
+        # delete-event.js) rather than on a new one: the stack is near
+        # CloudFormation's 500-resource limit, and a function costs a role
+        # and a permission besides itself. EVENT_HOST_ROUTE already answers
+        # hosts|admins for any method on events/{code}.
+        DeleteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
-        # Opens and re-seals the event's name and place.
+        # Opens and re-seals the event's name and place; deletes an event's
+        # rows and its code's reservation.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow

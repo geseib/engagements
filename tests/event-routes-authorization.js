@@ -33,6 +33,7 @@ const create = load('create-event.js');
 const HANDLERS = {
   'GET /events/{code}': load('get-event.js'),
   'PUT /events/{code}': load('update-event.js'),
+  'DELETE /events/{code}': load('update-event.js'),
   'POST /events/{code}/items': load('items.js'),
   'PUT /events/{code}/items': load('items.js'),
   'PUT /events/{code}/items/{itemId}': load('items.js'),
@@ -48,7 +49,7 @@ async function check(label, fn) {
 
 const HOST_ROUTES = [
   ['POST', '/events'], ['GET', '/events'],
-  ['GET', '/events/{code}'], ['PUT', '/events/{code}'],
+  ['GET', '/events/{code}'], ['PUT', '/events/{code}'], ['DELETE', '/events/{code}'],
   ['POST', '/events/{code}/items'], ['PUT', '/events/{code}/items'],
   ['PUT', '/events/{code}/items/{itemId}'], ['DELETE', '/events/{code}/items/{itemId}'],
 ];

@@ -44,14 +44,15 @@ const { DynamoDBDocumentClient, TransactWriteCommand } = require('@aws-sdk/lib-d
 const tenant = require('../tenant');
 const { encryptItem } = require('../tenant-crypto');
 const rules = require('./agenda-rules');
-const { json, notFound, readBody, trace } = require('./event-http');
+const { json, notFound, readBody, trace, methodOf } = require('./event-http');
 const S = require('./event-store');
+const { deleteEvent } = require('./delete-event');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
-exports.handler = async (request) => {
+async function updateEvent(request) {
   trace('update-event', request);
   const code = String((request.pathParameters || {}).code || '');
   try {
@@ -185,4 +186,14 @@ exports.handler = async (request) => {
     console.error('❌ update-event failed:', error && error.message);
     return json(500, { error: 'Could not save the event. Nothing was changed; try again.' });
   }
-};
+}
+
+/**
+ * THE FUNCTION BEHIND /events/{code}'s HOST WRITES. PUT edits the details
+ * (above); DELETE deletes the event (delete-event.js, final review I1). One
+ * function for both: the stack is near CloudFormation's resource limit, and
+ * a route is an event on an existing function, not a new one.
+ */
+exports.handler = async (request) => (methodOf(request) === 'DELETE'
+  ? deleteEvent(db, TABLE(), request)
+  : updateEvent(request));
