@@ -1923,6 +1923,10 @@ function AdminPage() {
                   place && place.code === forCode && place.title !== title ? { ...place, title } : place
                 ));
               }}
+              /* Deleted: back to the list, which mounts afresh and reads
+                 GET /events again, so the event is gone from it. Only if this
+                 place is still the one deleted (the same guard as onTitle). */
+              onDeleted={(code) => setEventPlace((place) => (place && place.code === code ? null : place))}
             />
           ) : (
             <EventsPanel

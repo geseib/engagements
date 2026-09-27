@@ -16,6 +16,9 @@
      --text / --muted on the cap's reason (amber @8%)    10.84 / 5.24
      --primary on --surface (the code, "the most…")            7.42
      #0F1A2E on --primary (a filled button)                    8.86
+     --danger-text on the field / on its tint (delete event)   7.26 / 6.59
+     --text on the danger tint over the field (the confirm)       13.60
+     --danger-text, a hovered button inside the confirm            5.90
    ========================================================================== */
 .evb {
   --evb-t-floor: 12px;
@@ -212,6 +215,11 @@
 .evb-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
 .evb-rowact > :first-child { margin-left: auto; }
 .evb-foot { padding: 11px 14px; font-size: var(--evb-t-label); color: var(--muted); }
+/* Delete the event (final review I1): below the agenda, on the work field.
+   The button is the ghost-danger one the item dialog's Remove uses, and its
+   confirm is the same inline .evb-confirm — never a second dialog. */
+.evb-endzone { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+.evb-endzone .evb-error { margin: 0; }
 .evb-foot b { color: var(--text); }
 .evb-warn { margin-left: 6px; font-size: var(--evb-t-floor); font-weight: 700; color: var(--primary); }
 

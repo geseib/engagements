@@ -161,6 +161,23 @@ describe('the agenda place (02, 02b)', () => {
     expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-tint-brk')])).toBeGreaterThanOrEqual(AA);
     expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-row-hover'), tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
   });
+  // "Delete event…" and its inline confirm sit on the work field below the
+  // agenda panel (final review I1): the ghost-danger button idle and hovered,
+  // the confirm's words on its danger tint, and the button hovered inside it.
+  test('deleting the event: --danger-text and --text on the field and on the danger tint', () => {
+    const FIELD = [T.bg];
+    const TINT = [T.bg, tint('--evb-tint-danger')];
+    expect(on(T.dangerText, FIELD)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, TINT)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, TINT)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [...TINT, tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
+  });
+  test('the delete zone uses the existing destructive idiom and no new colour', () => {
+    const css = stripped(MY_CSS);
+    const zone = css.match(/\.evb-endzone\s*\{([^}]*)\}/);
+    expect(zone).not.toBeNull();
+    expect(zone[1]).not.toMatch(/color|background|#|rgba/);
+  });
   test('the cap\'s reason is never drawn at the disabled opacity', () => {
     const note = stripped(MY_CSS).match(/\.evb-capnote\s*\{([^}]*)\}/)[1];
     expect(note).not.toMatch(/opacity/);

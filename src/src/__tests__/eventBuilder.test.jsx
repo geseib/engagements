@@ -19,6 +19,7 @@ import EventBuilder from '../components/EventBuilder';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 
 jest.mock('../utils/eventsApi', () => ({
+  deleteEvent: jest.fn(),
   getEvent: jest.fn(),
   reorderItems: jest.fn(),
   updateItem: jest.fn(),
@@ -484,6 +485,64 @@ describe('edit details (final review M3)', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('Renamed');
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.updateEvent).toHaveBeenLastCalledWith('5307', { title: 'Renamed' }));
+  });
+});
+
+describe('deleting the event (final review I1)', () => {
+  const startDelete = () => fireEvent.click(screen.getByRole('button', { name: 'Delete event…' }));
+
+  it('asks inline — never a second dialog — saying what goes and that it cannot be undone; Keep it does nothing', async () => {
+    const onDeleted = jest.fn();
+    await mount({ onDeleted });
+    startDelete();
+    const confirm = screen.getByTestId('delete-confirm');
+    expect(confirm).toHaveTextContent('Delete “Q4 Kickoff”? Its agenda and its join code, 5307, go with it. This cannot be undone.');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Delete event…' })).toBeInTheDocument();
+    expect(api.deleteEvent).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  it('Delete event calls deleteEvent and hands the place back to the list', async () => {
+    api.deleteEvent.mockResolvedValue({ deleted: '5307' });
+    const onDeleted = jest.fn();
+    await mount({ onDeleted });
+    startDelete();
+    fireEvent.click(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Delete event' }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('5307'));
+    expect(api.deleteEvent).toHaveBeenCalledWith('5307');
+  });
+
+  it('a refusal shows the server\'s own sentence where the host acted, and reloads the agenda', async () => {
+    api.deleteEvent.mockRejectedValue(Object.assign(
+      new Error('This event has an item that has started, so it cannot be deleted.'),
+      { status: 409, body: { code: 'not_planned' } },
+    ));
+    const onDeleted = jest.fn();
+    await mount({ onDeleted });
+    startDelete();
+    fireEvent.click(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Delete event' }));
+    const zone = screen.getByTestId('event-delete');
+    expect(await within(zone).findByRole('alert')).toHaveTextContent('This event has an item that has started, so it cannot be deleted.');
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
+  });
+
+  it('while the delete is out, neither button can fire it again', async () => {
+    let resolveDelete;
+    api.deleteEvent.mockImplementation(() => new Promise((resolve) => { resolveDelete = resolve; }));
+    await mount({ onDeleted: jest.fn() });
+    startDelete();
+    const go = within(screen.getByTestId('delete-confirm')).getByRole('button', { name: /Delet/ });
+    fireEvent.click(go);
+    expect(go).toBeDisabled();
+    expect(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Keep it' })).toBeDisabled();
+    fireEvent.click(go);
+    expect(api.deleteEvent).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveDelete({ deleted: '5307' }); });
   });
 });
 

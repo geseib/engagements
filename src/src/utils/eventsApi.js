@@ -55,6 +55,12 @@ export async function updateEvent(code, fields) {
   return (await call(`events/${enc(code)}`, { method: 'PUT', body: fields })).event;
 }
 
+/**
+ * `{ deleted }` — the event, its agenda and its join code, in one step.
+ * Refused (409, the server's sentence) unless every item is still planned.
+ */
+export const deleteEvent = (code) => call(`events/${enc(code)}`, { method: 'DELETE' });
+
 /** `{ item }`. `item` is `{ type, title, description, minutes, position, setRef? }`. */
 export const addItem = (code, item) => call(`events/${enc(code)}/items`, { method: 'POST', body: item });
 

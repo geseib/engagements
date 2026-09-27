@@ -8,7 +8,7 @@
  */
 import {
   EventsApiError, listEvents, getEvent, createEvent, updateEvent,
-  addItem, updateItem, removeItem, reorderItems,
+  addItem, updateItem, removeItem, reorderItems, deleteEvent,
 } from '../utils/eventsApi';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
@@ -28,6 +28,7 @@ describe('each call goes where the route is, through authFetch', () => {
     ['updateItem', () => updateItem('5307', 'it_0a1b2c3d', { version: 3 }), 'PUT', 'events/5307/items/it_0a1b2c3d', { version: 3 }, { item: {} }],
     ['removeItem', () => removeItem('5307', 'it_0a1b2c3d'), 'DELETE', 'events/5307/items/it_0a1b2c3d', undefined, { removed: 'it_0a1b2c3d' }],
     ['reorderItems', () => reorderItems('5307', ['a', 'b']), 'PUT', 'events/5307/items', { order: ['a', 'b'] }, { order: ['a', 'b'] }],
+    ['deleteEvent', () => deleteEvent('5307'), 'DELETE', 'events/5307', undefined, { deleted: '5307' }],
   ])('%s', async (_name, run, method, path, body, reply) => {
     authFetch.mockImplementation(() => answer(reply));
     await run();

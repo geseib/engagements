@@ -77,6 +77,7 @@ jest.mock('../utils/eventsApi', () => ({
   removeItem: jest.fn(),
   updateItem: jest.fn(),
   reorderItems: jest.fn(),
+  deleteEvent: jest.fn(),
 }));
 const eventsApi = require('../utils/eventsApi');
 
@@ -405,6 +406,22 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     fireEvent.click(document.querySelector('.adm-back'));
     await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
     expect(screen.getAllByTestId('event-row')).toHaveLength(1);
+  });
+
+  // Final review I1: a deleted event takes the host back to the list, which
+  // is read again and no longer has it.
+  it('deleting the event returns to the Events list, with the event gone', async () => {
+    eventsApi.getEvent.mockResolvedValue({ event: ROW_A, items: [] });
+    eventsApi.deleteEvent.mockResolvedValue({ deleted: 'AAAA' });
+    await openEventsSection([ROW_A, ROW_B]);
+    await openRow('Event A');
+    eventsApi.listEvents.mockResolvedValue([ROW_B]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete event…' }));
+    fireEvent.click(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Delete event' }));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
+    await waitFor(() => expect(screen.getAllByTestId('event-row')).toHaveLength(1));
+    expect(screen.getByTestId('event-row')).toHaveTextContent('Event B');
+    expect(eventsApi.deleteEvent).toHaveBeenCalledWith('AAAA');
   });
 
   // Item 4: handleNavigate (another section) closes the place.

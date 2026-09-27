@@ -3,7 +3,7 @@ import Icon from './Icon';
 import EventDetailsDialog from './EventDetailsDialog';
 import EventItemDialog from './EventItemDialog';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
-import { getEvent, reorderItems, updateItem } from '../utils/eventsApi';
+import { deleteEvent, getEvent, reorderItems, updateItem } from '../utils/eventsApi';
 import './EventBuilder.css';
 
 /**
@@ -49,6 +49,13 @@ import './EventBuilder.css';
  *     or "Add item" if it was the last row. A polite live region announces
  *     where a moved row landed.
  *
+ *   - "Delete event…" at the foot of the place (final review I1): it asks
+ *     INLINE — the item dialog is the one modal here, and a delete must never
+ *     be a modal from a modal — naming what goes (the agenda and the join
+ *     code) and that it cannot be undone. Done, it hands the place back to
+ *     the list (`onDeleted`); refused, it says the server's sentence where
+ *     the host acted and reloads the agenda.
+ *
  * NOT HERE YET, and why: the Invitations and Reports tabs (PLAN Phases 3 and
  * 5) — a tab strip with one tab is a control people learn to ignore — and
  * "Rehearse on the stage" (roadmap M3).
@@ -56,6 +63,7 @@ import './EventBuilder.css';
  * @param {string}   code     the event
  * @param {object[]} sets     the console's question sets, for the set picker
  * @param {Function} [onTitle] (title) => void — the place's heading follows a rename
+ * @param {Function} [onDeleted] (code) => void — the event is gone; show the list
  */
 const TYPE_ICONS = {
   trivia: 'Brain',
@@ -104,7 +112,7 @@ function sourceLine(item, until) {
   return { text: `${item.set.name || 'Question set'}${version} · ${item.set.questionCount} questions`, bad: false };
 }
 
-export default function EventBuilder({ code, sets = [], onTitle }) {
+export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
   const [event, setEvent] = useState(null);
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
@@ -115,6 +123,12 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dragFrom, setDragFrom] = useState(null);
   const [pinningId, setPinningId] = useState(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  /* One delete in flight, read synchronously (as savingRef is): a second
+     click before React re-renders must not send a second DELETE. */
+  const deletingRef = useRef(false);
   const rowRefs = useRef({});
   const addBtnRef = useRef(null);
   /* Where focus should land after the NEXT render that can show it — an
@@ -139,6 +153,8 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
      on every render. */
   const titleRef = useRef(onTitle);
   titleRef.current = onTitle;
+  const deletedRef = useRef(onDeleted);
+  deletedRef.current = onDeleted;
   /* A SLOW getEvent MUST NOT LAND ON THE WRONG PLACE. Going back to the list
      and opening a different event fully unmounts this component and mounts a
      fresh one — but a `load()` already in flight for the OLD event keeps
@@ -259,6 +275,26 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
     } finally {
       pinningRef.current = null;
       setPinningId(null);
+    }
+  };
+
+  const removeEvent = async () => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setDeleteError('');
+    const forCode = code;
+    try {
+      await deleteEvent(code);
+      if (stillCurrent(forCode) && deletedRef.current) deletedRef.current(forCode);
+    } catch (err) {
+      if (!stillCurrent(forCode)) return;
+      setDeleteError(err.message || 'The event was not deleted.');
+      setConfirmingDelete(false);
+      load();
+    } finally {
+      deletingRef.current = false;
+      if (stillCurrent(forCode)) setDeleting(false);
     }
   };
 
@@ -531,6 +567,29 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
           {counts.breaks > 0 && <> · {counts.breaks} break{counts.breaks === 1 ? '' : 's'} <span className="evb-dim">(not counted)</span></>}
         </p>
       </section>
+
+      <div className="evb-endzone" data-testid="event-delete">
+        {confirmingDelete ? (
+          <div className="evb-confirm" data-testid="delete-confirm">
+            <p>
+              Delete “{event.title}”? Its agenda and its join code, {event.code}, go with it. This cannot be undone.
+            </p>
+            <button type="button" className="evb-btn" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</button>
+            <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={removeEvent} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete event'}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="evb-btn evb-btn--ghostdanger"
+            onClick={() => { setDeleteError(''); setConfirmingDelete(true); }}
+          >
+            <Icon name="Trash" weight="bold" size={14} color="currentColor" /> Delete event…
+          </button>
+        )}
+        {deleteError && <p className="evb-error" role="alert">{deleteError}</p>}
+      </div>
 
       {dialog && (
         <EventItemDialog
