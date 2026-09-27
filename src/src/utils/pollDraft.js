@@ -20,7 +20,7 @@
  */
 import { toRow, rowsToCsv, rowProblems } from './questionRows';
 import { normalizeTags } from './tags';
-import { SURVEY_KINDS, previewLine } from '../config/surveyKinds';
+import { SURVEY_KINDS, previewLine, POLL_KINDS as CONTRACT_POLL_KINDS } from '../config/surveyKinds';
 
 /**
  * The four kinds a poll may be, in the contract's POLL_KINDS order and named as
@@ -28,12 +28,15 @@ import { SURVEY_KINDS, previewLine } from '../config/surveyKinds';
  * glance. Icons are the survey kinds' own, so a kind looks the same wherever it
  * appears.
  */
-export const POLL_KINDS = [
-  { id: 'choice', label: 'Pick from choices', icon: 'ListBullets', blurb: 'Two to five short options. Pick one, or several.' },
-  { id: 'rating', label: 'Rate', icon: 'Star', blurb: 'A scale, with words at both ends that mean something.' },
-  { id: 'yesno', label: 'Yes / No', icon: 'ToggleLeft', blurb: 'Two buttons: Yes / No, or a pair that fits — Approve / Decline, True / False.' },
-  { id: 'text', label: 'Open answer', icon: 'TextAlignLeft', blurb: 'A few words in their own voice. Used sparingly.' },
-];
+const BUILDER_WORDS = {
+  choice: { label: 'Pick from choices', icon: 'ListBullets', blurb: 'Two to five short options. Pick one, or several.' },
+  rating: { label: 'Rate', icon: 'Star', blurb: 'A scale, with words at both ends that mean something.' },
+  yesno: { label: 'Yes / No', icon: 'ToggleLeft', blurb: 'Two buttons: Yes / No, or a pair that fits — Approve / Decline, True / False.' },
+  text: { label: 'Open answer', icon: 'TextAlignLeft', blurb: 'A few words in their own voice. Used sparingly.' },
+};
+// The list itself is config/surveyKinds.js's (the contract's twin), so the
+// builder, the editor and the importer can never disagree on what a poll may be.
+export const POLL_KINDS = CONTRACT_POLL_KINDS.map((id) => ({ id, ...BUILDER_WORDS[id] }));
 
 export const POLL_KIND_IDS = POLL_KINDS.map((k) => k.id);
 

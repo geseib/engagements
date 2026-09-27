@@ -740,6 +740,7 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                         draft={{ ...currentPoll, kind: pollKindOf(currentPoll) }}
                         onChange={(next) => handleQuestionChange(currentPollIndex, next)}
                         idOf={(field) => `pab-${currentPollIndex}-${field}`}
+                        kinds={POLL_KIND_IDS}
                       />
                       {refusedKind && (
                         <p className="pab-note" role="status">

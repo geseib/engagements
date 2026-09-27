@@ -165,14 +165,11 @@ describe('editing a poll uses the set editor\'s question form', () => {
     expect(questions[1]).toMatchObject({ kind: 'yesno', yesLabel: 'Ship it', noLabel: 'Decline' });
   });
 
-  test('Ranking is refused and said, and the poll keeps its kind', async () => {
+  test('Ranking is not offered: the form shows the four poll kinds only, and the poll keeps its kind', async () => {
     await openEditor(1);
-    fireEvent.click(screen.getByRole('button', { name: /Ranking/ }));
-    // The form asks first when a switch would lose something; say yes.
-    const confirmSwitch = screen.queryByRole('button', { name: /Switch and lose/ });
-    if (confirmSwitch) fireEvent.click(confirmSwitch);
-
-    expect(screen.getByText(/A poll can’t be a ranking/)).toBeInTheDocument();
+    // The question form's `kinds` prop (SurveyQuestionFields) limits it to
+    // POLL_KINDS, so a ranking cannot even be picked.
+    expect(screen.queryByRole('button', { name: /Ranking/ })).toBeNull();
     expect(screen.getByRole('button', { name: /Yes \/ No/, pressed: true })).toBeInTheDocument();
     expect(screen.getByLabelText('Yes reads')).toHaveValue('Approve');
   });
