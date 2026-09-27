@@ -519,6 +519,10 @@ body, .stage-ladder-table{
    track (3:1, non-text) — a colour question this only restates, never
    changes. */
 .svw .svr-bar-t{height:calc(var(--bar-h) * 2)}
+/* The value column sizes to its figure on the wall: the console's fixed 70px
+   cut "50% 12" off at the stage ladder's size (a typed poll's live board,
+   27 Sep 2026 — the survey walk-through carried the same clip). */
+.svw .svr-bar{grid-template-columns:minmax(0,1fr) minmax(80px,2fr) auto}
 .svw .svr-rank-strip{height:calc(var(--bar-h) * 2)}
 
 /* ------------------------------------------------------------------- DOCK */
