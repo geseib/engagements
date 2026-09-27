@@ -220,9 +220,11 @@ check('the session row and the report row agree about the same two strings', () 
 // to anyone, so encrypting it would break the comparison and protect nothing.
 check('AccessCode is deliberately NOT encrypted', () =>
   assert.ok(!C.ENCRYPTED_FIELDS.session.includes('AccessCode')));
+// `PollValue` since typed polls (27 Sep 2026): the same answer, structured for
+// the tally — a write-in or a "why" is the participant's words too.
 check('an answer row encrypts what the participant wrote', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.answer].sort(),
-    ['Answer', 'ProcessedWords'].sort()));
+    ['Answer', 'PollValue', 'ProcessedWords'].sort()));
 // THE DERIVED TALLY QUOTES THE ANSWERS BACK. Encrypting the answer row and
 // leaving this one alone protects nothing — the same sentence is one Query
 // away, in `answers[].answer` on the wavelength results row.
