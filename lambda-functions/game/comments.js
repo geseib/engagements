@@ -628,6 +628,9 @@ function surveyFeedbackRound(report) {
     return { answerIndex: i, answer: text, answerText: text };
   });
   return {
+    // Rows are questions, not people's responses: RoundReport.jsx titles the
+    // list by question and prints no "Response 1" author beside each.
+    kind: 'survey',
     questionNumber: SURVEY_ROUND,
     number: SURVEY_ROUND,
     ordinal: 0,

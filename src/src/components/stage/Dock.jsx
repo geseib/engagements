@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import CompletionFlag from './CompletionFlag';
 
 /**
@@ -69,11 +69,38 @@ import CompletionFlag from './CompletionFlag';
  * the selector.
  * ---------------------------------------------------------------------------
  */
+/**
+ * THE LAST RESORT WHEN THE DOCK IS CROWDED. The key hints give way first, by
+ * width, in ../../styles/stage.css; an event's AGENDA chip adds a 94px target,
+ * so they give way sooner there (`data-agenda`). If the row still runs past the
+ * edge, the dock takes a second line — the portrait tablet's layout — rather
+ * than clipping SESSION off the screen, which is what it did at 1280x720 on a
+ * closed survey's feedback beat in an event (measured in Chromium, 27 Sep
+ * 2026). Measured, not guessed from a breakpoint, because the labels change
+ * with every beat: the attribute is cleared, the row measured unwrapped, and
+ * set again only if it overflows — so it can never hold itself in place.
+ */
+function useCrowded(ref, deps) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const fit = () => {
+      el.removeAttribute('data-crowded');
+      if (el.scrollWidth > el.clientWidth + 1) el.setAttribute('data-crowded', '');
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, complete = false, progress = null, children,
 }) {
+  const ref = useRef(null);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, progress, children]);
   return (
-    <footer className="dock">
+    <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined}>
       {status && <span className={`status${complete ? ' go' : ''}`} aria-live="polite">{status}</span>}
       {progress && (progress.heading || progress.body) && (
         <span

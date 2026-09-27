@@ -149,6 +149,30 @@ describe('the composer', () => {
     expect(screen.queryByText('Your name will be shown with this comment.')).toBeNull();
   });
 
+  test('a survey\'s rows are its questions: titled by question, with no author beside them', () => {
+    /*
+      27 Sep 2026, seen in Chromium: a closed survey's round (comments.js
+      surveyFeedbackRound, kind 'survey') has one row per question — its result
+      in words — and RoundReport printed "Response 1" beside each under
+      "Responses", naming respondents who do not exist. rejects: the survey's
+      rows labelled as people's responses.
+    */
+    const survey = {
+      ...ROUND,
+      kind: 'survey',
+      answers: [
+        { answer: '1. How useful was today overall? (a rating) 2 answered.' },
+        { answer: '2. Which part helped most? (multiple choice) 2 answered.' },
+      ],
+    };
+    mount({ round: survey, namesShown: false });
+    expect(screen.getByRole('heading', { name: 'Results by question' })).toBeInTheDocument();
+    expect(screen.queryByText('Responses')).toBeNull();
+    expect(screen.queryByText(/^Response \d/)).toBeNull();
+    expect(screen.getByRole('button', { name: "Read question 2's result in full" })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comment on question 1' })).toBeInTheDocument();
+  });
+
   test('will not send an empty comment', () => {
     const { props } = mount();
     fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));

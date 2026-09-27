@@ -443,6 +443,10 @@ const feedbackRound = (gameId) => comments({
       assert.ok(frBody.round.answers[0].answer.includes(QUESTIONS[0].Title), frBody.round.answers[0].answer);
       assert.ok(frBody.round.answers[2].answer.includes(WRITTEN), 'the open answers are not on the row');
     });
+    // rejects: rows read as people's responses — RoundReport printed "Response 3"
+    // beside question 3's result (seen in Chromium, 27 Sep 2026).
+    await check('...marked as a survey, so the phone titles the rows by question', () =>
+      assert.strictEqual(frBody.round.kind, 'survey'));
     await check('...with the Workie\'s read and the comments on it', () => {
       assert.ok(String(frBody.round.aiSummary && frBody.round.aiSummary.markdownResponse).includes('Session lead'));
       assert.strictEqual(frBody.round.comments.length, 1);

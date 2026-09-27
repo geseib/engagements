@@ -212,6 +212,7 @@ export default function RoundReport({
   const showSummary = hasSummary(round);
   const podium = podiumAnswers(round);
   const answers = Array.isArray(round.answers) ? round.answers : [];
+  const byQuestion = round.kind === 'survey';
   const options = Array.isArray(round.options) ? round.options : [];
 
   /*
@@ -259,10 +260,14 @@ export default function RoundReport({
         {round.answerDetails && <p className="past-round__answer-detail">{round.answerDetails}</p>}
       </section>
 
-      {/* WHAT THE ROOM SAID. */}
+      {/* WHAT THE ROOM SAID. A closed survey's feedback round (comments.js
+          surveyFeedbackRound, kind 'survey') has one row per QUESTION — its
+          result in words — so the list is titled by question and no row
+          carries an author: "Response 3" beside a question's result named a
+          respondent who does not exist. */}
       <section className="past-round__results">
         <div className="rr-c__section-head">
-          <h4>Responses</h4>
+          <h4>{byQuestion ? 'Results by question' : 'Responses'}</h4>
           {onComment && (
             <CommentButton
               label="the results"
@@ -311,19 +316,21 @@ export default function RoundReport({
           */
           <ol className="past-round__answers">
             {answers.map((answer, i) => {
-              const who = displayLabelFor(answer, i);
+              const who = byQuestion ? null : displayLabelFor(answer, i);
               return (
                 <li key={i} className={answer.rank === 1 ? 'is-lead' : ''}>
                   <button
                     type="button"
                     className={`past-round__rank${i < podium.length ? ' is-podium' : ''}`}
                     onClick={() => onSpotlight(i)}
-                    aria-label={`Read response ${i + 1} in full, by ${who}`}
+                    aria-label={byQuestion
+                      ? `Read question ${i + 1}'s result in full`
+                      : `Read response ${i + 1} in full, by ${who}`}
                   >
                     {answer.rank || i + 1}
                   </button>
                   <span className="past-round__answer">{snippetOf(answer.answer)}</span>
-                  <span className="past-round__who">{who}</span>
+                  {who && <span className="past-round__who">{who}</span>}
                   {/*
                     THE ANCHOR IS THE ROW'S POSITION `i`, never the rank printed
                     on the badge beside it. Equal scores get equal ranks
@@ -333,7 +340,7 @@ export default function RoundReport({
                   */}
                   {onComment && (
                     <CommentButton
-                      label={`response ${i + 1}`}
+                      label={byQuestion ? `question ${i + 1}` : `response ${i + 1}`}
                       onClick={() => onComment(anchorFor('response', String(i), answer.answer))}
                     />
                   )}
@@ -359,11 +366,11 @@ export default function RoundReport({
           index={spotlight}
           onIndex={onSpotlight}
           onClose={() => onSpotlight(null)}
-          labelFor={displayLabelFor}
+          labelFor={byQuestion ? (_answer, i) => `Question ${i + 1}` : displayLabelFor}
           showPoints={roundIsAttributed(round)}
           closeOnKey
           onJump={onSpotlight}
-          title={`Round ${round.ordinal} response`}
+          title={byQuestion ? 'Survey result' : `Round ${round.ordinal} response`}
         />
       </section>
 

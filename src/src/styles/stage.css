@@ -579,6 +579,12 @@ body, .stage-ladder-table{
 .dock .host-action-bar__keyhint{max-width:24ch}
 @media (max-width:1200px){.dock .host-action-bar__keyhint{display:none}}
 @media (max-width:1100px){.dock .kbd{display:none}}
+/* AN EVENT'S ITEM carries AGENDA beside SESSION (Dock.jsx), 94px more, so the
+   hints go sooner: measured on a closed survey's feedback beat, the widest
+   dock there is, the row ran 12-148px past the edge at every width from 1150
+   to 1440. What still does not fit wraps (`.dock[data-crowded]`, below). */
+@media (max-width:1599px){.dock[data-agenda] .host-action-bar__keyhint{display:none}}
+@media (max-width:1279px){.dock[data-agenda] .kbd{display:none}}
 /* A PORTRAIT TABLET. The measurements above stop at 1000 wide; at 768 the
    dock ran 200px past the right edge, so the primary and SESSION were not
    scrolled to but unreachable, and the lobby cut its session code to "482"
@@ -592,6 +598,10 @@ body, .stage-ladder-table{
   .dock{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
   .dock .status{flex:1 1 100%;max-width:none}
 }
+/* The same second line wherever the row measures too wide (Dock.jsx
+   useCrowded) — never a button past the edge. */
+.dock[data-crowded]{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
+.dock[data-crowded] .status{flex:1 1 100%;max-width:none}
 
 /* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
    THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter
