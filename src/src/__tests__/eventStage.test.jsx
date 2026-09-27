@@ -178,6 +178,32 @@ test('the join QR opens large for latecomers, and closes', async () => {
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
 
+// rejects: a run sheet with no times — the event API sends none, and the stage
+// printed a field nothing filled (seen in Chromium, 27 Sep 2026).
+test('the board works the planned times out itself when the agenda arrives without them', async () => {
+  const bare = DAY.map(({ at, until, ...rest }) => rest);
+  api.getEvent.mockResolvedValue(view({}, bare));
+  render(<EventStage code={CODE} />);
+  await screen.findByText('FY26 in review');
+  const times = [...document.querySelectorAll('.ag-r-at')].map((n) => n.textContent);
+  expect(times).toEqual(['9:00', '9:15', '9:30', '9:45']);
+});
+
+// rejects: a host with no way from the stage to the agenda but the console
+// (27 Sep 2026: "there is still no way to create an agenda for the host").
+test('EDIT AGENDA goes to the agenda on the host\'s side; an ended event goes back to it too', async () => {
+  api.getEvent.mockResolvedValue(view());
+  const { unmount } = render(<EventStage code={CODE} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit the agenda' }));
+  expect(navigateTo).toHaveBeenCalledWith(`/host/event/${CODE}/agenda`);
+  unmount();
+  navigateTo.mockClear();
+  api.getEvent.mockResolvedValue(view({ state: 'ENDED' }, DAY.map((i) => ({ ...i, state: 'done' }))));
+  render(<EventStage code={CODE} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Back to the agenda' }));
+  expect(navigateTo).toHaveBeenCalledWith(`/host/event/${CODE}/agenda`);
+});
+
 test('ending the event asks first, and says what it does', async () => {
   api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, DAY.map((i) => ({ ...i, state: 'done' }))));
   api.runEvent.mockResolvedValue(view({ state: 'ENDED' }, DAY.map((i) => ({ ...i, state: 'done' }))));

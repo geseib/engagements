@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { listEvents } from '../utils/eventsApi';
+import { readEventsAccess } from '../utils/eventsAccess';
 import { navigateTo } from '../auth/navigate';
+import EventDetailsDialog from './EventDetailsDialog';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
+import pricing from '../../../lambda-functions/game/pricing';
 
 /**
  * YOUR EVENTS, FROM THE HOST'S MAIN SCREEN (the owner, 27 Sep 2026: "a host
@@ -15,10 +18,16 @@ import rules from '../../../lambda-functions/websocket/events/agenda-rules';
  * scrolling (the owner, same day: "They should not have to scroll"), and
  * four rows pushed the page past it.
  *
- * DRAWS NOTHING when there is nothing to open: no events, a Personal space
- * (events are Team-plan), a tier with events switched off, or a list that
- * could not be read. The welcome screen is exactly as it was for every host
- * who has never made an event.
+ * AND A HOST MAKES ONE HERE (the owner, 27 Sep 2026: "there is still no way
+ * to create an agenda for the host. only the admin"). On a paid plan the block
+ * carries "New event": the same new-event dialog the console uses, and then
+ * the agenda — the console's own builder, on the host's side
+ * (/host/event/<code>/agenda, components/event/HostEventAgenda.jsx). Any
+ * member may, host or admin (create-event.js). On Free the block says which
+ * plan brings events, once, with the way to it.
+ *
+ * DRAWS NOTHING while Events is switched off for the tier, or when GET /orgs
+ * cannot be read — the welcome screen is then exactly as it was.
  */
 const SHOWN = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -34,6 +43,14 @@ function stillOn(event, nowMs) {
 
 export default function WelcomeEvents({ nowMs }) {
   const [events, setEvents] = useState([]);
+  const [access, setAccess] = useState(null);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    readEventsAccess().then((a) => { if (!cancelled) setAccess(a); });
+    return () => { cancelled = true; };
+  }, []);
 
   /*
     READ ONCE PER MOUNT. `nowMs` is a prop only so a test can fix the clock;
@@ -58,38 +75,75 @@ export default function WelcomeEvents({ nowMs }) {
     return () => { cancelled = true; };
   }, [nowMs]);
 
-  if (!events.length) return null;
+  // Switched off, or not yet known: nothing — unless events already exist
+  // (they were listed before this read existed, and still open).
+  const enabled = Boolean(access && access.enabled);
+  if (!enabled && !events.length) return null;
+  const canCreate = Boolean(access && access.canCreate);
   const shown = events.slice(0, SHOWN);
   return (
     <section className="wel-events" aria-labelledby="wel-events-title">
       <p className="wel-kicker">Events</p>
-      <h2 id="wel-events-title">Run an event</h2>
-      <ul className="wel-evlist">
-        {shown.map((event) => (
-          <li key={event.code} className="wel-ev">
-            <span className="wel-ev-main">
-              <span className="wel-ev-name" title={event.title}>{event.title || 'Untitled event'}</span>
-              <span className="wel-ev-meta">
-                {event.state === 'LIVE' ? <b className="wel-ev-live">Running</b> : rules.formatEventWhen(event.startsAt)}
-                {` · ${event.itemCount || 0} item${event.itemCount === 1 ? '' : 's'}`}
-                {Number(event.attendeeCount) > 0 ? ` · ${event.attendeeCount} joined` : ''}
+      <div className="wel-evhead">
+        <h2 id="wel-events-title">Run an event</h2>
+        {canCreate && (
+          <button type="button" className="wel-btn wel-btn-line" onClick={() => setCreating(true)}>
+            New event
+          </button>
+        )}
+      </div>
+      {!events.length && canCreate && (
+        <p className="wel-meta wel-ev-more">
+          {`A whole agenda behind one code — quizzes, polls, talks and breaks, in the order you run them. `}
+          {`${pricing.formatCents(pricing.PER_EVENT_CENTS)} an event, counted when it first goes live.`}
+        </p>
+      )}
+      {!canCreate && enabled && access.offerPlanName && (
+        <p className="wel-meta wel-ev-more">
+          {`Events come with the ${access.offerPlanName}: a whole agenda behind one code. `}
+          <button type="button" className="wel-btn wel-btn-quiet wel-ev-plan" onClick={() => navigateTo('/admin?section=events')}>
+            See how
+          </button>
+        </p>
+      )}
+      {events.length > 0 && (
+        <ul className="wel-evlist">
+          {shown.map((event) => (
+            <li key={event.code} className="wel-ev">
+              <span className="wel-ev-main">
+                <span className="wel-ev-name" title={event.title}>{event.title || 'Untitled event'}</span>
+                <span className="wel-ev-meta">
+                  {event.state === 'LIVE' ? <b className="wel-ev-live">Running</b> : rules.formatEventWhen(event.startsAt)}
+                  {` · ${event.itemCount || 0} item${event.itemCount === 1 ? '' : 's'}`}
+                  {Number(event.attendeeCount) > 0 ? ` · ${event.attendeeCount} joined` : ''}
+                </span>
               </span>
-            </span>
-            <button
-              type="button"
-              className="wel-btn wel-btn-line"
-              onClick={() => navigateTo(`/host/event/${encodeURIComponent(event.code)}`)}
-              aria-label={`Open ${event.title || 'the event'}: its agenda and stage`}
-            >
-              Open
-            </button>
-          </li>
-        ))}
-      </ul>
+              <button
+                type="button"
+                className="wel-btn wel-btn-line"
+                onClick={() => navigateTo(`/host/event/${encodeURIComponent(event.code)}`)}
+                aria-label={`Open ${event.title || 'the event'}: its agenda and stage`}
+              >
+                Open
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {events.length > SHOWN && (
         <p className="wel-meta wel-ev-more">
           {`${events.length - SHOWN} more in the console's Events list.`}
         </p>
+      )}
+      {creating && (
+        <EventDetailsDialog
+          onClose={() => setCreating(false)}
+          /* Made: straight to its agenda, on the host's side. */
+          onSaved={(event) => {
+            setCreating(false);
+            navigateTo(`/host/event/${encodeURIComponent(event.code)}/agenda`);
+          }}
+        />
       )}
     </section>
   );

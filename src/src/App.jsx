@@ -9,6 +9,7 @@ import InviteAcceptPage from './components/InviteAcceptPage';
 import PlayerPage from './PlayerPage';
 import EventAttendeePage from './components/event/EventAttendeePage';
 import EventStage from './components/event/EventStage';
+import HostEventAgenda from './components/event/HostEventAgenda';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
@@ -394,6 +395,17 @@ function AppRouter() {
 
   // AN EVENT ON THE WALL (events M3): the agenda between items, breaks and
   // talks, and the doors into each item's own stage. A host's page.
+  // AN EVENT'S AGENDA, built by the host on the host's side (27 Sep 2026: "there
+  // is still no way to create an agenda for the host. only the admin").
+  const eventAgenda = /^\/host\/event\/(\d{4})\/agenda\/?$/.exec(path);
+  if (eventAgenda) {
+    return (
+      <ProtectedRoute>
+        <HostEventAgenda code={eventAgenda[1]} />
+      </ProtectedRoute>
+    );
+  }
+
   const eventStage = /^\/host\/event\/(\d{4})\/?$/.exec(path);
   if (eventStage) {
     return (
