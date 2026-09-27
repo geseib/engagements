@@ -220,6 +220,10 @@ export default function SessionSetupPanel({
   rounds = [],
   historyLoading = false,
   onOpenRound = () => {},
+  /* THE GOAL (events M1b): session-goal.js goalProgress for the live round,
+     or null. The Questions tab says "Question 3 of 5" — the host's, not
+     the room's, which is why it is here and not on the rail. */
+  goal = null,
 }) {
   const [tab, setTab] = useState('players');
   const [search, setSearch] = useState('');
@@ -608,6 +612,11 @@ export default function SessionSetupPanel({
               <p className="setup-note" data-testid="questions-remaining">
                 {`${remaining} questions remaining`}
               </p>
+              {goal && goal.progress && (
+                <p className="setup-note" data-testid="goal-progress">
+                  {goal.reached ? `${goal.progress} · goal reached` : goal.progress}
+                </p>
+              )}
               {/* The bitmask arithmetic behind these numbers is
                   config/setupPanel.js's, ported from the shipped panel where it
                   existed twice, byte for byte. The mockup drew `7 left · on` as

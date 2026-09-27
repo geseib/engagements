@@ -171,6 +171,10 @@ export function initialGameSession() {
     promptSwitchStatus: '',
     // --- and whether it carries a briefing (the stage's "Briefing on") ----
     sessionBriefed: false,
+    // --- and its goal (events M1b): how many questions the host plans to
+    //     ask, or null. Per-game like the rest of this block — the last
+    //     session's goal must never follow the host into the next one.
+    sessionTarget: null,
 
     // --- AI summaries ---------------------------------------------------
     aiSummaries: {},

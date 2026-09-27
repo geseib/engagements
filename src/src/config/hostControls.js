@@ -572,7 +572,7 @@ function surveyStatusLine(survey) {
 }
 
 function statusTextFor(phase, {
-  isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+  isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages, goalLine = '',
 }) {
   switch (phase) {
     case 'LOBBY':
@@ -598,7 +598,7 @@ function statusTextFor(phase, {
       // about to skip something the room has not read?"
       return Number(notesPages) > 1
         ? `Reading page ${Number(notesPage) + 1} of ${notesPages}`
-        : 'Discussion prompt on screen';
+        : (goalLine || 'Discussion prompt on screen');
     // `survey` is { finished, partway, notStarted } from the page's own
     // /progress read (hooks/useSurveyProgress.js: surveyRoomCounts). Until the
     // first read lands there is nothing to count, and the lobby's "Waiting for
@@ -611,9 +611,11 @@ function statusTextFor(phase, {
         : 'The survey is closed';
     case 'ENDED':
       return isSurvey ? 'The session is over' : 'All rounds played';
+    // The goal's own round, its results up (events M1b): the line that tells
+    // the host the plan is met. Next stays live — it is words, not a stop.
     case 'RESULTS':
     default:
-      return 'Results are on screen';
+      return goalLine || 'Results are on screen';
   }
 }
 
@@ -643,6 +645,9 @@ export function hostControlsFor({
   // A collecting survey's room, { finished, partway, notStarted }, or null
   // before the first /progress read. Only the survey phases read it.
   survey = null,
+  // The goal's notice (session-goal.js goalReachedLine), '' when there is
+  // nothing to say. It takes the status line on the goal round's results.
+  goalLine = '',
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const runsVote = hostRunsVotePhase(gameType);
@@ -793,7 +798,7 @@ export function hostControlsFor({
   }
 
   const text = statusTextFor(resolvedPhase, {
-    isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+    isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages, goalLine,
   });
 
   return {

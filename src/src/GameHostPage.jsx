@@ -63,6 +63,7 @@ import {
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
+import goalRules from '../../lambda-functions/websocket/session-goal';
 import { fetchComments, featureComment } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
@@ -720,6 +721,9 @@ function GameHostPage() {
   // Whether the live session carries a Call & Answer briefing. Shown as
   // "Briefing on" beside the voice and the approach — never its text.
   const [sessionBriefed, setSessionBriefed] = useState(false);
+  // The live session's goal (events M1b, session-goal.js): how many questions
+  // the host plans to ask, or null. The host's alone — the rail never shows it.
+  const [sessionTarget, setSessionTarget] = useState(null);
 
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -1190,6 +1194,7 @@ function GameHostPage() {
     gamePromptId: setGamePromptId,
     promptSwitchStatus: setPromptSwitchStatus,
     sessionBriefed: setSessionBriefed,
+    sessionTarget: setSessionTarget,
     aiSummaries: setAiSummaries,
     currentAIInsights: setCurrentAIInsights,
     loadingAIInsights: setLoadingAIInsights,
@@ -2562,6 +2567,8 @@ Focus on actionable business strategy insights.`;
           // And the approach, for the same reason.
           setGamePromptId(gameStateData.gameMetadata.promptId || '');
           setSessionBriefed(gameStateData.gameMetadata.briefed === true);
+          // The goal rides at host-state's top level (get-game-state.js).
+          setSessionTarget(Number.isInteger(gameStateData.target) ? gameStateData.target : null);
           /*
             A SURVEY'S NAMES AND ITS WARNING, so a reload comes back up on the
             promise the phones were given and still says the warning went out.
@@ -4762,6 +4769,7 @@ Focus on actionable business strategy insights.`;
       // The edited session may be the one on stage — keep the stage's own
       // title in step rather than showing the old name until the next load.
       if (targetId === gameId) setEventTitle(form.title);
+      if (targetId === gameId && 'target' in form) setSessionTarget(Number.isInteger(form.target) ? form.target : null);
       localStorage.setItem(`game_${targetId}_title`, form.title);
       // The history table reads the GAMES index row the backend just
       // mirrored onto; refetch so the list shows what actually landed.
@@ -4917,6 +4925,7 @@ Focus on actionable business strategy insights.`;
     setPersonaSwitchStatus('');
     setGamePromptId(form.promptId || '');
     setPromptSwitchStatus('');
+    setSessionTarget(Number.isInteger(form.target) ? form.target : null);
   };
 
   const updateGameTitle = async (gameId, title) => {
@@ -5803,6 +5812,16 @@ Focus on actionable business strategy insights.`;
     ? surveyRoomCounts({ progress: survey.progress, joined: players.length })
     : null;
 
+  /*
+    THE GOAL (events M1b, session-goal.js): "Question 3 of 5" for the host's
+    SESSION panel and, on the goal's own round once its results are up, the
+    dock's line — "That's your 5. Keep going if there's time, or end the
+    session." Never the rail: the room sees the round, not the plan.
+  */
+  const goal = isSurvey
+    ? { progress: '', reached: false, line: '' }
+    : goalRules.goalProgress({ target: sessionTarget, round: lessonNumber, phase: hostPhase });
+
   const hostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
@@ -5813,6 +5832,7 @@ Focus on actionable business strategy insights.`;
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
     survey: surveyCounts,
+    goalLine: goal.line,
     notesPage,
     notesPages,
   });
@@ -7461,6 +7481,7 @@ Focus on actionable business strategy insights.`;
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}
+          goal={goal}
           joinLinkCopied={sidebarCopyMessage}
           onCopyJoinLink={() => copyUrlToClipboard(playUrl, 'sidebar')}
           onInvite={() => setInviteTarget({
