@@ -50,7 +50,7 @@ test('a refused save shows the notice, in the reader\'s voice, and keeps the set
 
   const box = await screen.findByTestId('plan-limit-notice');
   expect(box).toHaveTextContent('Northwind holds 5 of the 5 question sets it includes. Nothing was saved.');
-  expect(box).toHaveTextContent('Only the owner can move Northwind to the Team plan.');
+  expect(box).toHaveTextContent('Only the owner can move Northwind to the Organisation plan.');
   // the white page takes the paper tint, not the dusk one
   expect(box.className).toMatch(/plim--paper/);
   // rejects: the fault string for a plan fact

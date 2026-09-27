@@ -61,8 +61,6 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  # Events (roadmap D6): switched on for dev only. See EVENTS_ENABLED in Globals.
-  IsDev: !Equals [!Ref Environment, "dev"]
   # True when the deploy passes Google credentials, fetched from
   # /<stack>/google/* SSM parameters by all three buildspecs.
   #
@@ -138,12 +136,14 @@ Globals:
         # is a fact that can be recorded beside the outcome.
         CONTENT_GUARDRAIL_VERSION: !GetAtt ContentGuardrailVersion.Version
         # EVENTS (roadmap D6, docs/superpowers/plans/2026-09-26-events-roadmap.md).
-        # On for dev only, so each milestone can land on dev as it is finished
-        # without showing half a feature on test or prod. Read at call time by
-        # websocket/events/event-http.js `eventsEnabled` (POST /events refuses
-        # while it is off) and by admin/orgs/list-my-orgs.js (the console hides
-        # Events). Turned on for test when the owner asks (roadmap M6).
-        EVENTS_ENABLED: !If [IsDev, 'on', 'off']
+        # On for dev and test, off for prod. It was dev-only so each milestone
+        # could land without showing half a feature; the owner asked for it on
+        # test on 27 Sep 2026 ("i dont see how to create an event in test").
+        # Read at call time by websocket/events/event-http.js `eventsEnabled`
+        # (POST /events refuses while it is off) and by
+        # admin/orgs/list-my-orgs.js (the console hides Events). Prod follows
+        # when the owner says so (roadmap M6).
+        EVENTS_ENABLED: !If [IsProd, 'off', 'on']
 
 Resources:
 

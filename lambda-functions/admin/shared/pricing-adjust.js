@@ -171,7 +171,7 @@ function applyAdjustments(plan, usage, adjustments, period) {
   const savingsCents = listCents - totalCents;
   return {
     period,
-    plan: { id: eff.id, name: eff.name, base: eff.base, perSession: eff.perSession, perSet: eff.perSet, includedSessions: eff.includedSessions, includedSets: eff.includedSets },
+    plan: { id: eff.id, name: eff.name, base: eff.base, perSession: eff.perSession, perSet: eff.perSet, perEvent: eff.perEvent, includedSessions: eff.includedSessions, includedSets: eff.includedSets },
     lines: invoice.lines,
     listCents,
     listDisplay: formatCents(listCents),

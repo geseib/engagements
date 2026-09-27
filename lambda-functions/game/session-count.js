@@ -60,14 +60,15 @@ const { recordBillableSession } = require('./usage');
 const COUNT_PROJECTION = 'orgId, FirstAnsweredRound, CountedAt, EventRef';
 
 /**
- * AN EVENT IS ONE SESSION (RATIONALE decision 1, events M3). Each engagement
- * on an event's agenda is a session of its own (websocket/events/run.js), and
- * each still counts at its own second answered question — but they are all
- * billed under ONE ledger key, the event's, so the ledger's conditional put
- * charges the first to count and makes every later one "already". The key
- * stays a SESSION ledger row (`LEDGER#<period>#SESSION#EVENT#<code>`), so the
- * reconciler, which counts SESSION rows, counts the event as the one session
- * it is.
+ * AN EVENT'S SESSIONS ARE NOT BILLED AS SESSIONS (27 Sep 2026). An event is
+ * billed as an EVENT — $2.00, once, when it first goes live
+ * (websocket/events/run.js, usage.recordBillableEvent; the owner: "all events
+ * cost money") — and that covers every engagement on its agenda. Until then
+ * an event counted as one session (RATIONALE decision 1, events M3), under
+ * `LEDGER#<period>#SESSION#EVENT#<code>`; charging that as well would bill one
+ * event twice. So a session with an EventRef is marked counted, so it stops
+ * asking, and writes no ledger row. `billableIdOf` keeps the event's key for
+ * the rows written before this change.
  */
 const billableIdOf = (gameId, meta) => (meta && meta.EventRef ? `EVENT#${meta.EventRef}` : gameId);
 
@@ -114,7 +115,10 @@ async function countAnsweredQuestion(db, tableName, gameId, round, meta = {}, op
     }
     if (!first || first === round) return { counted: false, reason: 'same-question' };
 
-    const charge = await recordBillableSession(meta.orgId, billableIdOf(gameId, meta), { db, tableName, now });
+    // An event's session: the event's own charge covers it (see above).
+    const charge = meta.EventRef
+      ? { reason: 'covered-by-event' }
+      : await recordBillableSession(meta.orgId, billableIdOf(gameId, meta), { db, tableName, now });
     if (charge.reason === 'error') return { counted: false, reason: 'meter-error' };
 
     await db.send(new UpdateCommand({
@@ -123,7 +127,7 @@ async function countAnsweredQuestion(db, tableName, gameId, round, meta = {}, op
       UpdateExpression: 'SET CountedAt = :at',
       ExpressionAttributeValues: { ':at': now.toISOString() },
     }));
-    return { counted: true, reason: charge.reason };
+    return { counted: charge.reason !== 'covered-by-event', reason: charge.reason };
   } catch (error) {
     console.error(`⚠️ session-count: could not count ${gameId} at round ${round} — the next answer retries:`, error);
     return { counted: false, reason: 'error' };

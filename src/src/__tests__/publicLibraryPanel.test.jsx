@@ -303,7 +303,7 @@ describe('what a copy from the library says back', () => {
     render(<PublicLibraryPanel questionSets={ROWS} mode="org" onCopy={() => {}} onPreview={() => {}} notice={{ limit, outcome: 'Nothing was copied.' }} onDismissNotice={() => {}} />);
     const box = screen.getByTestId('plan-limit-notice');
     expect(box).toHaveTextContent('Your space holds 5 of the 5 question sets it includes. Nothing was copied.');
-    expect(within(box).getByRole('link', { name: 'Request the Team plan' })).toBeInTheDocument();
+    expect(within(box).getByRole('link', { name: 'Request the Standard plan' })).toBeInTheDocument();
   });
 
   test('and a copy that worked says so', () => {

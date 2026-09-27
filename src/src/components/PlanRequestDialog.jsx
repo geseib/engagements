@@ -6,10 +6,37 @@ import pricing from '../../../lambda-functions/game/pricing';
 import { formatWhen } from '../config/tableCells';
 import './PlanRequests.css';
 
-const { TEAM_PLAN, formatCents } = pricing;
+const { upgradePlanFor, planById, formatCents, PERSONAL_PLAN } = pricing;
+
+/** "Standard plan", "Organisation plan", "Free" — for a stored plan id. */
+export const planNameOf = (planId) => planById(planId).name;
 
 /**
- * "REQUEST THE TEAM PLAN" — docs/design/tenancy-redesign/13-plan-request.html.
+ * The terms, in the dialog's two summary rows. Standard has a monthly price
+ * and an allowance; the Organisation plan is pay per use, with neither.
+ */
+export function planTerms(plan) {
+  const each = formatCents(plan.perSession);
+  const event = formatCents(plan.perEvent);
+  if (plan.base > 0) {
+    return {
+      price: <>{formatCents(plan.base)} <small>a month</small></>,
+      includes: `${plan.includedSessions} sessions · ${plan.includedSets} stored sets · then ${each} each · events ${event} each`,
+    };
+  }
+  return {
+    price: <>No monthly fee</>,
+    includes: `Pay per use: ${each} a session · ${formatCents(plan.perSet)} a stored set a month · ${event} an event`,
+  };
+}
+
+/**
+ * "REQUEST THE PLAN" — docs/design/tenancy-redesign/13-plan-request.html.
+ *
+ * WHICH PLAN (the owner, 27 Sep 2026): a person's own space asks for
+ * STANDARD — "the standard tier for individuals (should not be team plan)" —
+ * and a team for the ORGANISATION plan, the request create-org files for it
+ * when it is made. `orgType` decides; the server refuses a crossed request.
  *
  * The upgrade is a request Engage decides by hand. It is drawn as a real
  * checkout — list price, what is included, a code — because the simulated
@@ -22,7 +49,9 @@ const { TEAM_PLAN, formatCents } = pricing;
  * ledger; until codes exist server-side it is shown back, not priced. The
  * dialog says so rather than inventing a discount it cannot promise.
  */
-export default function PlanRequestDialog({ orgId, orgName, onClose, onRequested }) {
+export default function PlanRequestDialog({ orgId, orgName, orgType = '', onClose, onRequested }) {
+  const plan = upgradePlanFor({ type: orgType });
+  const terms = planTerms(plan);
   const [code, setCode] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,7 +70,7 @@ export default function PlanRequestDialog({ orgId, orgName, onClose, onRequested
       const res = await authFetch(adminApiUrl(`orgs/${encodeURIComponent(orgId)}/plan-requests`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toPlan: 'team', note: note.trim(), code: code.trim().toUpperCase() }),
+        body: JSON.stringify({ toPlan: plan.id, note: note.trim(), code: code.trim().toUpperCase() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -63,17 +92,17 @@ export default function PlanRequestDialog({ orgId, orgName, onClose, onRequested
     >
       <header className="preq-modal-head">
         <div className="preq-grow">
-          <h2 id="preq-ask-title">Request the Team plan</h2>
+          <h2 id="preq-ask-title">{`Request the ${plan.name}`}</h2>
           <p className="preq-dim">For <b>{orgName}</b>. Engage reviews requests by hand for now — usually within a day.</p>
         </div>
         <button type="button" className="preq-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
       </header>
       <div className="preq-modal-body">
         <div className="preq-sum" data-testid="preq-sum">
-          <div className="preq-sum-row"><span>Team plan, list price</span><b>{formatCents(TEAM_PLAN.base)} <small>a month</small></b></div>
+          <div className="preq-sum-row"><span>{`${plan.name}, list price`}</span><b>{terms.price}</b></div>
           <div className="preq-sum-row">
-            <span>Includes</span>
-            <span>{TEAM_PLAN.includedSessions} sessions · {TEAM_PLAN.includedSets} stored sets · then {formatCents(TEAM_PLAN.perSession)} each</span>
+            <span>{plan.base > 0 ? 'Includes' : 'Charges'}</span>
+            <span>{terms.includes}</span>
           </div>
         </div>
 
@@ -126,20 +155,25 @@ export default function PlanRequestDialog({ orgId, orgName, onClose, onRequested
  */
 export function PlanRequestStrip({ request, onWithdraw, onRequestAgain, busy = false }) {
   if (!request) return null;
-  const { status, decisionNote, decidedAt, requestedAt, withdrawnAt, code, toPlan } = request;
+  const { status, decisionNote, decidedAt, requestedAt, withdrawnAt, code, toPlan, kind } = request;
+  // A row always names its plan; one that somehow does not still reads as a
+  // paid plan, never as "Free requested".
+  const name = toPlan ? planNameOf(toPlan) : 'Paid plan';
   const tone = status === 'approved' ? 'ok' : status === 'declined' ? 'no' : '';
   return (
     <div className={`preq-strip${tone ? ` preq-strip--${tone}` : ''}`} data-testid="preq-strip" data-status={status}>
       <div className="preq-grow">
         {status === 'requested' && (
           <>
-            <b>Team plan requested</b> — waiting for Engage.
+            {kind === 'new-organisation'
+              ? <><b>{`${name} requested with this team`}</b> — waiting for Engage to approve it. {`Until then it runs on Free: ${PERSONAL_PLAN.includedSessions} sessions, ${PERSONAL_PLAN.includedSets} sets, no events.`}</>
+              : <><b>{`${name} requested`}</b> — waiting for Engage.</>}
             <div className="preq-who">Sent {formatWhen(requestedAt)}{code ? ` · code ${code}` : ''} · usually decided within a day.</div>
           </>
         )}
         {status === 'approved' && (
           <>
-            <b>You are on the {toPlan} plan</b> from {formatWhen(decidedAt)}.{decisionNote ? <> <q>{decisionNote}</q></> : null}
+            <b>{`You are on the ${name}`}</b> from {formatWhen(decidedAt)}.{decisionNote ? <> <q>{decisionNote}</q></> : null}
             <div className="preq-who">Approved {formatWhen(decidedAt)} by Engage.</div>
           </>
         )}
@@ -161,7 +195,7 @@ export function PlanRequestStrip({ request, onWithdraw, onRequestAgain, busy = f
       )}
       {(status === 'declined' || status === 'withdrawn') && onRequestAgain && (
         <button type="button" className="preq-btn preq-btn--sm preq-btn--primary" onClick={onRequestAgain} disabled={busy}>
-          {status === 'declined' ? 'Request again' : 'Request the Team plan'}
+          {status === 'declined' ? 'Request again' : `Request the ${name}`}
         </button>
       )}
     </div>

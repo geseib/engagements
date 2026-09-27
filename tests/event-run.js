@@ -163,8 +163,17 @@ async function makeEvent() {
     assert.strictEqual(gameState(trivia).State, 'STARTED');
     assert.ok(table.get(`ORG#${NW}#GAMES`, `GAME#${trivia}`), 'the org\'s session list row');
   });
-  await check('starting bills nothing and asks no gate', () => {
-    assert.strictEqual([...table.store.values()].filter((r) => String(r.SK).startsWith('LEDGER#')).length, ledgerBefore);
+  // rejects: an event that runs without its $2.00, or one billed per session
+  // (the owner, 27 Sep 2026: "all events cost money").
+  await check('the first go-live bills the EVENT once, as an event, and asks no gate', () => {
+    const rows = [...table.store.values()].filter((r) => String(r.SK).startsWith('LEDGER#'));
+    assert.strictEqual(rows.length, ledgerBefore + 1);
+    const row = rows.find((r) => r.kind === 'EVENT');
+    assert.ok(row, 'an EVENT ledger row');
+    assert.match(row.SK, new RegExp(`^LEDGER#\\d{4}-\\d{2}#EVENT#${code}$`));
+    assert.strictEqual(row.PK, `ORG#${NW}`);
+    const usageRow = [...table.store.values()].find((r) => r.PK === `ORG#${NW}` && String(r.SK).startsWith('USAGE#'));
+    assert.strictEqual(usageRow && usageRow.eventsRun, 1);
   });
   await check('GET /events/{code} says the same: the live item and its session', async () => {
     const res = await getEvent(request({ method: 'GET', path: `/events/${code}`, pathParameters: { code }, requestContext: host() }));
@@ -382,18 +391,21 @@ async function makeEvent() {
   });
   void livingId;
 
-  console.log('\n8. an event is billed once');
-  await check('the first item to count bills the event; the second is "already"', async () => {
+  console.log('\n8. an event is billed once, as an event');
+  // rejects: an event's sessions charged on top of the event's $2.00.
+  await check('its sessions add nothing to the one EVENT row going live wrote', async () => {
     const db = table.doc;
     const orgPk = `ORG#${NW}`;
+    const ledgerOf = () => [...table.store.values()].filter((r) => r.PK === orgPk && String(r.SK).startsWith('LEDGER#'));
     const first = await count.countAnsweredQuestion(db, 'test-table', trivia, '002', { ...gameMeta(trivia), FirstAnsweredRound: '001' });
-    assert.strictEqual(first.counted, true);
-    const ledger = [...table.store.values()].filter((r) => r.PK === orgPk && String(r.SK).startsWith('LEDGER#'));
-    assert.strictEqual(ledger.length, 1);
-    assert.match(ledger[0].SK, new RegExp(`^LEDGER#\\d{4}-\\d{2}#SESSION#EVENT#${code}$`));
+    assert.strictEqual(first.reason, 'covered-by-event');
+    assert.strictEqual(first.counted, false);
     const second = await count.countAnsweredQuestion(db, 'test-table', pulse, 'c002', { ...gameMeta(pulse), FirstAnsweredRound: 'c001' });
-    assert.strictEqual(second.reason, 'already');
-    assert.strictEqual([...table.store.values()].filter((r) => r.PK === orgPk && String(r.SK).startsWith('LEDGER#')).length, 1);
+    assert.ok(['covered-by-event', 'already'].includes(second.reason), second.reason);
+    const ledger = ledgerOf();
+    assert.strictEqual(ledger.length, 1);
+    assert.match(ledger[0].SK, new RegExp(`^LEDGER#\\d{4}-\\d{2}#EVENT#${code}$`));
+    assert.ok(gameMeta(trivia).CountedAt, 'the session is marked counted, so it stops asking');
   });
 
   console.log('\n9. the end of the day');

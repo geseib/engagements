@@ -4,7 +4,11 @@ import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
 import Icon from './Icon';
 import { formatWhen } from '../config/tableCells';
+import { planNameOf } from './PlanRequestDialog';
 import './PlanRequests.css';
+
+/** "Free → Standard plan", in the plans' own names rather than stored ids. */
+const planMove = (r) => `${planNameOf(r.fromPlan)} → ${planNameOf(r.toPlan)}`;
 
 /**
  * THE PLATFORM QUEUE — docs/design/tenancy-redesign/15-platform-plan-requests.html.
@@ -85,7 +89,7 @@ export default function PlanRequestsPanel({ onCountChange }) {
         <div className="preq-empty" data-testid="preq-empty">
           <h3>{status === 'requested' ? 'Nothing waiting' : 'Nothing here'}</h3>
           <p>{status === 'requested'
-            ? 'When a team owner asks for the Team plan, the request appears here with their note and any code they named.'
+            ? 'A new organisation, or a person asking for the Standard plan, appears here with their note and any code they named.'
             : 'No requests in this state.'}</p>
         </div>
       )}
@@ -107,10 +111,12 @@ export default function PlanRequestsPanel({ onCountChange }) {
               <tr key={`${r.orgId}:${r.reqId}`} data-testid="preq-row">
                 <td>
                   <span className="preq-name" title={r.orgName}>{r.orgName}</span>
-                  <span className="preq-sub">{r.orgType || 'org'} · {r.requestedByEmail || r.requestedBy}</span>
+                  <span className="preq-sub">
+                    {r.kind === 'new-organisation' ? 'new organisation' : (r.orgType || 'org')} · {r.requestedByEmail || r.requestedBy}
+                  </span>
                 </td>
                 <td className="preq-when">{formatWhen(r.requestedAt)}</td>
-                <td>{r.fromPlan} → <b>{r.toPlan}</b></td>
+                <td>{planNameOf(r.fromPlan)} → <b>{planNameOf(r.toPlan)}</b></td>
                 <td>{r.code ? <code className="preq-code">{r.code}</code> : <span className="preq-dim">—</span>}</td>
                 <td className="preq-wrap">{r.status === 'requested'
                   ? (r.note || <span className="preq-dim">(no note)</span>)
@@ -190,7 +196,7 @@ export function DecideRequestDialog({ request, onCancel, onDecided }) {
         <div className="preq-grow">
           <h2 id="preq-decide-title">Decide: {request.orgName}</h2>
           <p className="preq-dim">
-            Asked {formatWhen(request.requestedAt)}{request.code ? ` with code ${request.code}` : ''} · {request.fromPlan} → {request.toPlan}
+            Asked {formatWhen(request.requestedAt)}{request.code ? ` with code ${request.code}` : ''} · {planMove(request)}
           </p>
         </div>
         <button type="button" className="preq-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>

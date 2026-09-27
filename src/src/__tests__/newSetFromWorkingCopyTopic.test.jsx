@@ -276,7 +276,7 @@ describe('a new set refused at the stored-set allowance', () => {
 
     const box = await within(dialog()).findByTestId('plan-limit-notice');
     expect(box).toHaveTextContent('Northwind holds 5 of the 5 question sets it includes. Nothing was created.');
-    expect(box).toHaveTextContent('Only the owner can move Northwind to the Team plan.');
+    expect(box).toHaveTextContent('Only the owner can move Northwind to the Organisation plan.');
     // rejects: the plan fact reported as "Could not create …"
     expect(within(dialog()).queryByText(/Could not create/)).toBeNull();
     expect(screen.getByLabelText(/Name the new set/i)).toHaveValue('Openers');

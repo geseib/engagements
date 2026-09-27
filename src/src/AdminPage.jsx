@@ -395,9 +395,12 @@ function AdminPage() {
     mode: onPlatform ? PLATFORM_MODE : '',
     eventsEnabled: features.events === true,
   };
-  /* The Team plan by the same rule the server gates on (pricing.js planFor):
-     anything but an explicit 'team' plan is not the Team plan. */
-  const eventsTeamPlan = Boolean(activeOrg) && pricing.planFor(activeOrg).id === 'team';
+  /* A paid plan by the same rule the server gates on (pricing.js planFor):
+     anything but an explicit 'standard' or 'team' plan is Free. */
+  /* Events come with either paid plan — Standard for a person's own space,
+     Organisation for a team (27 Sep 2026). The name is kept for the props and
+     effects that read it; what it means is "this space may run events". */
+  const eventsTeamPlan = Boolean(activeOrg) && pricing.planFor(activeOrg).allowsEvents === true;
 
   // Usage is fetched only when the Plan & usage section is actually open —
   // it is a per-org read nobody needs while looking at question sets.
@@ -467,11 +470,12 @@ function AdminPage() {
         } catch { setOrgAdjustments(null); }
       })();
     } else if (activeTab === 'events' && !eventsTeamPlan) {
-      /* EVENTS' Team-plan page (TeamPlanOnly) offers "Request the Team plan" —
+      /* EVENTS' plan page (TeamPlanOnly) offers "Request the Standard plan" or
+         "…the Organisation plan" —
          the SAME request Billing tracks, read through the SAME fetch/state
          rather than a second route, so a request already pending reads as
          pending here too instead of offering a button that would 409
-         (Fix round 1 #5, ruling). Skipped once the org IS on the Team plan:
+         (Fix round 1 #5, ruling). Skipped once the org IS on a paid plan:
          nothing there ever shows the button this is for. */
       loadPlanRequest();
     }
@@ -1931,6 +1935,7 @@ function AdminPage() {
           ) : (
             <EventsPanel
               teamPlan={eventsTeamPlan}
+              orgType={activeOrg.type || ''}
               creating={creatingEvent}
               onCreatingChange={setCreatingEvent}
               onOpen={(code, title) => setEventPlace({ code, title })}
@@ -1951,6 +1956,7 @@ function AdminPage() {
             <PlanRequestDialog
               orgId={activeOrgId}
               orgName={activeOrg.name || activeOrgId}
+              orgType={activeOrg.type || ''}
               onClose={() => setShowPlanRequest(false)}
               onRequested={(req) => { setShowPlanRequest(false); setPlanRequest(req); setNotice({ text: 'Your request is with Engage. You will see the decision here.', tone: 'success' }); }}
             />
@@ -2034,7 +2040,10 @@ function AdminPage() {
           )}
           {resolvedTab === 'billing' && activeOrg && !billingPlace && (
             <BillingPanel
-              planId={activeOrg.plan || (activeOrg.type === 'personal' ? 'personal' : 'team')}
+              /* A row with no plan is Free, whatever its type — a team is paid
+                 only once Engage approves its Organisation plan. */
+              planId={activeOrg.plan || 'free'}
+              orgType={activeOrg.type || ''}
               usage={orgUsage?.usage}
               period={orgUsage?.period}
               history={orgUsage?.history}

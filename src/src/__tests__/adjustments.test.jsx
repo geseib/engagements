@@ -22,7 +22,7 @@ const USAGE = { sessionsRun: 20, setsPeak: 2, setsCurrent: 2 };
 const CODE = { adjId: 'c1', kind: 'CODE_REDEMPTION', percentOff: 30, validFrom: '2026-09', validTo: '2026-11', source: { type: 'code', code: 'WELCOME30' }, createdAt: '2026-09-23T09:00:00Z', status: 'active' };
 const CREDIT = { adjId: 'k1', kind: 'CREDIT_CENTS', amountCents: 1000, remainingCents: 1000, note: 'pilot goodwill', source: { type: 'platform_admin' }, createdAt: '2026-09-01T09:00:00Z', createdByEmail: 'm.okafor@engage.example', status: 'active' };
 const REVOKED = { adjId: 'o1', kind: 'OFFER', percentOff: 100, validFrom: '2026-07', validTo: '2026-08', note: 'two months free', source: { type: 'platform_admin' }, createdAt: '2026-07-01T09:00:00Z', revokedAt: '2026-07-10T09:00:00Z', revokeNote: 'granted to the wrong org', status: 'revoked' };
-const adjusted = () => { const r = pricingAdjust.applyAdjustments(pricing.TEAM_PLAN, USAGE, [CODE, CREDIT], '2026-09'); r.sentence = pricingAdjust.simulationSentence(r); return r; };
+const adjusted = () => { const r = pricingAdjust.applyAdjustments(pricing.STANDARD_PLAN, USAGE, [CODE, CREDIT], '2026-09'); r.sentence = pricingAdjust.simulationSentence(r); return r; };
 
 describe('the ledger — one list for both sides (mockups 16 and 19)', () => {
   it('lists every row with its words, amount and status; a revoked row stays, marked', () => {
@@ -68,7 +68,7 @@ describe('Plan & usage carries the adjusted bill and the ledger (mockup 19)', ()
     expect(screen.getByTestId('bill-adjustments')).toBeInTheDocument();
   });
   it('says nothing extra when nothing adjusts the bill', () => {
-    const plain = pricingAdjust.applyAdjustments(pricing.TEAM_PLAN, USAGE, [], '2026-09');
+    const plain = pricingAdjust.applyAdjustments(pricing.STANDARD_PLAN, USAGE, [], '2026-09');
     render(<BillingPanel planId="team" usage={USAGE} period={{ label: 'September' }} adjusted={plain} adjustments={[]} />);
     expect(screen.queryByTestId('bill-adjusted')).toBeNull();
     expect(screen.queryByTestId('bill-adjustments')).toBeNull();
@@ -78,7 +78,7 @@ describe('Plan & usage carries the adjusted bill and the ledger (mockup 19)', ()
 describe('the grant dialog (mockup 17)', () => {
   const org = { orgId: 'org_x', name: 'Northwind', plan: 'team', usage: USAGE };
   it('previews this period with the grant before anything is written, and names the grant on the button', () => {
-    render(<GrantAdjustmentDialog org={org} plan={pricing.TEAM_PLAN} usage={USAGE} rows={[CODE]} period="2026-09" onCancel={jest.fn()} onGranted={jest.fn()} />);
+    render(<GrantAdjustmentDialog org={org} plan={pricing.STANDARD_PLAN} usage={USAGE} rows={[CODE]} period="2026-09" onCancel={jest.fn()} onGranted={jest.fn()} />);
     expect(screen.getByTestId('obill-grant-submit')).toHaveTextContent('Grant $10.00 credit');
     const preview = screen.getByTestId('obill-preview');
     expect(preview).toHaveTextContent('List$8.75');
@@ -90,7 +90,7 @@ describe('the grant dialog (mockup 17)', () => {
   it('a reason is required, then the body is the ledger\'s shape', async () => {
     const onGranted = jest.fn();
     authFetch.mockImplementation(() => respond({ adjustment: CREDIT }, true, 201));
-    render(<GrantAdjustmentDialog org={org} plan={pricing.TEAM_PLAN} usage={USAGE} rows={[]} period="2026-09" onCancel={jest.fn()} onGranted={onGranted} />);
+    render(<GrantAdjustmentDialog org={org} plan={pricing.STANDARD_PLAN} usage={USAGE} rows={[]} period="2026-09" onCancel={jest.fn()} onGranted={onGranted} />);
     fireEvent.click(screen.getByTestId('obill-grant-submit'));
     expect(screen.getByRole('alert')).toHaveTextContent(/reason is required/i);
     fireEvent.change(screen.getByTestId('obill-reason'), { target: { value: 'pilot goodwill' } });
@@ -109,7 +109,7 @@ describe('the grant dialog (mockup 17)', () => {
   });
   it('X and Cancel share one close; a typed reason is confirmed first', () => {
     const onCancel = jest.fn();
-    render(<GrantAdjustmentDialog org={org} plan={pricing.TEAM_PLAN} usage={USAGE} rows={[]} period="2026-09" onCancel={onCancel} onGranted={jest.fn()} />);
+    render(<GrantAdjustmentDialog org={org} plan={pricing.STANDARD_PLAN} usage={USAGE} rows={[]} period="2026-09" onCancel={onCancel} onGranted={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledTimes(2);

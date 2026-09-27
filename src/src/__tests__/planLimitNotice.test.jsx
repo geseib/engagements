@@ -38,7 +38,7 @@ test('it is announced, and says what ran out and what did not happen', () => {
 
 test('the owner gets one button, straight to the request', () => {
   render(<PlanLimitNotice refusal={refusal('sessions', OWNER)} />);
-  const link = screen.getByRole('link', { name: 'Request the Team plan' });
+  const link = screen.getByRole('link', { name: 'Request the Standard plan' });
   // rejects: a button to Plan & usage that leaves the owner to find the request themselves
   expect(link).toHaveAttribute('href', REQUEST_HREF);
   expect(link.className).toMatch(/plim-btn--primary/);

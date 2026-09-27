@@ -570,7 +570,7 @@ describe('an upload refused at the stored-set allowance', () => {
 
     const box = await screen.findByTestId('plan-limit-notice');
     expect(box).toHaveTextContent('Your space holds 5 of the 5 question sets it includes. Nothing was saved.');
-    expect(screen.getByRole('link', { name: 'Request the Team plan' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Request the Standard plan' })).toBeInTheDocument();
     // rejects: the fault banner reporting a plan fact as a failed upload
     expect(screen.queryByText(/Upload failed/)).toBeNull();
     expect(onUploaded).not.toHaveBeenCalled();

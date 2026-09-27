@@ -6,15 +6,20 @@
  *   - while EVENTS_ENABLED is off on this tier (404, roadmap D6);
  *   - with no organisation to act for (403, tenant.requireOrg);
  *   - details that do not check out (400, agenda-rules.checkEventFields);
- *   - from a Personal-plan organisation (402 plus the upgrade body session
- *     creation uses): events are Team-plan only (RATIONALE decision 1, drawn
- *     as 01b). An organisation whose plan cannot be read is NOT refused —
- *     `readAllowance` fails open for sessions and this follows it: a DynamoDB
- *     blip must not read as "you are on the wrong plan".
+ *   - from an organisation on Free (402 plus the upgrade body session
+ *     creation uses). Events are a paid feature: the Standard plan (a
+ *     person's own space) or the Organisation plan (a team), and ANY member
+ *     may create one there — a host as much as an admin (the owner, 27 Sep
+ *     2026: "the host should be able to create events as well, if they are on
+ *     a pay plan"). Each event costs $2.00, counted when it first goes live
+ *     (run.js, usage.recordBillableEvent). An organisation whose plan cannot
+ *     be read is NOT refused — `readAllowance` fails open for sessions and
+ *     this follows it: a DynamoDB blip must not read as "you are on the wrong
+ *     plan".
  *
- * The session create gate (mustUpgradeForSession) is not asked separately: a
- * Team plan meters and is never gated (pricing.js metersOverage), and every
- * other plan is refused above.
+ * The session create gate (mustUpgradeForSession) is not asked separately:
+ * both paid plans meter and are never gated (pricing.js metersOverage), and
+ * Free is refused above.
  *
  * WRITES, in order: the code (code-reservation.js, `Kind: "event"`), the
  * organisation's list row, the METADATA row. Title and Place are sealed on
@@ -37,8 +42,6 @@ const { META_SK, indexSk, projectEvent } = require('./event-store');
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
 
-const TEAM_ONLY = 'Events are part of the Team plan, and this space is on the Personal plan.';
-
 exports.handler = async (request) => {
   trace('create-event', request);
   if (!eventsEnabled()) {
@@ -57,11 +60,9 @@ exports.handler = async (request) => {
 
   try {
     const allowance = await readAllowance(orgId);
-    if (allowance.planId === 'personal') {
+    if (allowance.allowsEvents === false) {
       return json(UPGRADE_REQUIRED_STATUS, {
-        ...upgradeRequired('sessions', allowance),
-        error: TEAM_ONLY,
-        limit: { kind: 'events', planId: allowance.planId, used: 0, included: 0 },
+        ...upgradeRequired('events', allowance),
         resolve: await planLimitResolve(request, allowance),
       });
     }

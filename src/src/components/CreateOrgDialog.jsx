@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
 import { authFetch, setActiveOrgId } from '../auth/authFetch';
+import pricing from '../../../lambda-functions/game/pricing';
 import './CreateOrgDialog.css';
+
+const { TEAM_PLAN, PERSONAL_PLAN, formatCents } = pricing;
 
 /**
  * MAKE A TEAM.
@@ -99,6 +102,15 @@ export default function CreateOrgDialog({ onClose, onCreated }) {
         <p className="corg-sub">
           A team has its own question sets, sessions and members. Your own space stays
           exactly as it is — nothing moves.
+        </p>
+        {/* THE APPROVAL, said before the button (the owner, 27 Sep 2026:
+            "create an organization and thats where you should also get
+            approval"). create-org.js files the request itself. */}
+        <p className="corg-sub" data-testid="corg-approval">
+          {`Engage approves new organisations by hand, usually within a day. Creating one sends the request: the `}
+          {`${TEAM_PLAN.name} is pay per use — no monthly fee, ${formatCents(TEAM_PLAN.perSession)} a session or `}
+          {`stored set and ${formatCents(TEAM_PLAN.perEvent)} an event, simulated for now and never charged. Until it is `}
+          {`approved the team runs on Free: ${PERSONAL_PLAN.includedSessions} sessions, ${PERSONAL_PLAN.includedSets} sets, no events.`}
         </p>
 
         <label className="corg-label" htmlFor="corg-name">Name</label>

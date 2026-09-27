@@ -125,8 +125,8 @@ const SECTION = {
     whole agenda. Under Sessions, because every engagement in an event runs as
     a session. Shown only while the tier has the feature switched on
     (`eventsEnabled`, from GET /orgs `features.events`, roadmap D6). A space
-    not on the Team plan still gets the item, so the feature can be found: its
-    page explains the plan (01b) rather than hiding the door.
+    on Free still gets the item, so the feature can be found: its page names
+    the paid plan that brings events (01b) rather than hiding the door.
   */
   events: {
     id: 'events',
@@ -240,7 +240,7 @@ const SECTION = {
     label: 'Plan requests',
     icon: 'CreditCard',
     title: 'Plan requests',
-    subtitle: 'Teams asking for the Team plan. A decision needs a note — the customer reads it.',
+    subtitle: 'New organisations, and people asking for the Standard plan. A decision needs a note — the customer reads it.',
     contentTheme: 'dark',
   },
   /*

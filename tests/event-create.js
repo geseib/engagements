@@ -1,14 +1,17 @@
 /**
  * POST /events — lambda-functions/websocket/events/create-event.js.
  *
- * A Team-plan organisation makes an event: its code reserved in the one code
- * space (Kind "event"), its list row and its METADATA written with the name
- * and place sealed, every row kept until 90 days after the event's day. The
- * route is behind EVENTS_ENABLED (roadmap D6) and the Team plan (decision 1).
+ * An organisation on a paid plan makes an event: its code reserved in the one
+ * code space (Kind "event"), its list row and its METADATA written with the
+ * name and place sealed, every row kept until 90 days after the event's day.
+ * The route is behind EVENTS_ENABLED (roadmap D6: dev and test, not prod) and
+ * a paid plan — Standard for a person's space, Organisation for a team (the
+ * owner, 27 Sep 2026), any member of it, host or admin.
  *
- * rejects: the route answering while the switch is off; the switch on for any
- * tier but dev; a Personal space getting an event, or getting a bare 403 where
- * the upgrade body belongs; plaintext names at rest; rows kept on different
+ * rejects: the route answering while the switch is off; the switch on for
+ * prod; a Free space or a not-yet-approved team getting an event, or getting a
+ * bare 403 where the upgrade body belongs, or being offered the wrong plan; a
+ * Standard space or a host refused; plaintext names at rest; rows kept on different
  * clocks; a failed create leaving a reserved code or a listed half-event;
  * a full code space answered with anything but a 503.
  */
@@ -62,24 +65,41 @@ function reset() {
       assert.strictEqual(rowsIn('GAMES').length, 0);
     } finally { process.env.EVENTS_ENABLED = 'on'; }
   });
-  await check('the template switches it on for dev and off everywhere else', () => {
+  await check('the template switches it on for dev and test, and off for prod', () => {
     const template = fs.readFileSync(path.join(h.REPO, 'template-clean.yaml'), 'utf8');
-    assert.match(template, /IsDev: !Equals \[!Ref Environment, "dev"\]/);
-    assert.match(template, /EVENTS_ENABLED: !If \[IsDev, 'on', 'off'\]/);
+    assert.match(template, /IsProd: !Equals \[!Ref Environment, "prod"\]/);
+    assert.match(template, /EVENTS_ENABLED: !If \[IsProd, 'off', 'on'\]/);
   });
 
-  console.log('\n2. Team-plan organisations only (decision 1)');
+  console.log('\n2. paid plans only: Standard or Organisation, any member');
   reset();
-  await check('a Personal space gets 402 with the upgrade body, and nothing is written', async () => {
+  await check('a Free personal space gets 402 offering Standard, and nothing is written', async () => {
     const res = await post(DETAILS, SOLO);
     assert.strictEqual(res.statusCode, 402, res.body);
     const body = bodyOf(res);
     assert.strictEqual(body.code, 'upgrade_required');
     assert.strictEqual(body.limit.kind, 'events');
-    assert.match(body.error, /Events are part of the Team plan/);
-    assert.ok(body.upgrade && body.upgrade.planId === 'team');
+    assert.match(body.error, /Events are part of the paid plans/);
+    // rejects: a person's own space offered a team plan (the owner: the
+    // individual tier "should not be team plan").
+    assert.ok(body.upgrade && body.upgrade.planId === 'standard', JSON.stringify(body.upgrade));
     assert.ok(body.resolve && body.resolve.role);
     assert.strictEqual(rowsIn('GAMES').length, 0);
+  });
+  await check('a team not yet approved (Free) gets 402 offering the Organisation plan', async () => {
+    seedOrg(table, 'org_new_team', { plan: 'free', type: 'team' });
+    const res = await post(DETAILS, 'org_new_team');
+    assert.strictEqual(res.statusCode, 402, res.body);
+    assert.strictEqual(bodyOf(res).upgrade.planId, 'team');
+  });
+  await check('a Standard personal space makes an event', async () => {
+    seedOrg(table, 'org_standard', { plan: 'standard', type: 'personal' });
+    const res = await post(DETAILS, 'org_standard');
+    assert.strictEqual(res.statusCode, 201, res.body);
+  });
+  await check('a host (a plain member) on the Organisation plan makes an event', async () => {
+    const res = await post(DETAILS, TEAM, asHost(TEAM, { orgRole: 'member' }));
+    assert.strictEqual(res.statusCode, 201, res.body);
   });
   await check('an organisation whose plan cannot be read is not refused', async () => {
     const res = await post(DETAILS, 'org_unlisted');

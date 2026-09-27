@@ -208,7 +208,7 @@ describe('a set that is not yours, when there is no room for the copy', () => {
     serve();
     draw(ENGAGE_SET, { setAllowance: { ...FULL, resolve: { role: 'member', org: { name: 'Northwind', type: 'team' }, contacts: [{ name: 'Dana Whitfield', email: 'dana@x.example', role: 'owner' }], resetsOn: '2026-10-01' } } });
     const notice = screen.getByTestId('no-room-notice');
-    expect(notice).toHaveTextContent('Ask an owner or admin to move Northwind to the Team plan.');
+    expect(notice).toHaveTextContent('Ask an owner or admin to move Northwind to the Organisation plan.');
     expect(within(notice).getByRole('link', { name: /Dana Whitfield/ })).toHaveAttribute('href', 'mailto:dana@x.example');
     expect(within(notice).queryByRole('link', { name: /Request/ })).toBeNull();
   });

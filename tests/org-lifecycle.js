@@ -331,9 +331,30 @@ const ORG_B = 'org_2222222222222222222222';
     assert.ok(store.get(key(`ORG#${org.orgId}`, 'MEMBER#u_amara')), 'no MEMBER row');
     assert.ok(store.get(key('USER#u_amara', `ORG#${org.orgId}`)), 'no USER reverse row');
     assert.ok(store.get(key('USER#u_amara', 'PROFILE')), 'no PROFILE row');
-    // rejects: replacing the transaction with five sequential writes.
-    assert.strictEqual(counts.transactWrite, 1, 'expected exactly one transaction');
+    // rejects: replacing the transaction with five sequential writes. The
+    // second transaction is the approval request (below), filed only after
+    // the organisation has committed.
+    assert.strictEqual(counts.transactWrite, 2, 'expected the org transaction and the request transaction');
     assert.strictEqual(counts.put, 0, 'a bare Put escaped the transaction');
+  });
+
+  // THE APPROVAL (the owner, 27 Sep 2026: "create an organization and thats
+  // where you should also get approval"). rejects: a new team with no request
+  // in Engage's queue, a team created already on the paid plan, or a request
+  // for any plan but the Organisation plan.
+  await check('creating a team files its Organisation-plan request, and the team starts on Free', async () => {
+    reset();
+    const res = await createOrg(evt({ sub: 'u_amara', email: 'a@x.example', body: { name: 'Northwind' } }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const { org, planRequest } = bodyOf(res);
+    assert.strictEqual(store.get(key(`ORG#${org.orgId}`, 'METADATA')).plan, 'free');
+    assert.ok(planRequest, 'the response carries the request');
+    assert.deepStrictEqual([planRequest.toPlan, planRequest.kind, planRequest.status], ['team', 'new-organisation', 'requested']);
+    const rows = [...store.values()].filter((r) => r.PK === `ORG#${org.orgId}` && r.RecordType === 'PLANREQ');
+    assert.strictEqual(rows.length, 1);
+    const queued = [...store.values()].filter((r) => r.PK === 'ORGS' && r.RecordType === 'PLANREQ_QUEUE' && r.orgId === org.orgId);
+    assert.strictEqual(queued.length, 1, 'a pointer in the platform queue');
+    assert.strictEqual(queued[0].kind, 'new-organisation');
   });
 
   await check('the creator is an OWNER, in both rows', async () => {

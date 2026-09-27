@@ -5,7 +5,9 @@ import Modal from './Modal';
 import pricing from '../../../lambda-functions/game/pricing';
 import './DiscountCodes.css';
 
-const { TEAM_PLAN, formatCents } = pricing;
+// A percentage is previewed against Standard's $5 base — the only plan with a
+// monthly fee since the Organisation plan became pay per use (27 Sep 2026).
+const { STANDARD_PLAN, formatCents } = pricing;
 
 /**
  * DISCOUNT CODES — mockup 18. Platform rows with terms and a use counter;
@@ -100,7 +102,7 @@ export function NewCodeDialog({ onCancel, onCreated }) {
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
   const dirty = f.code.length > 0 || f.note.length > 0;
   const n = Number(f.amount) || 0;
-  const listCents = TEAM_PLAN.base;
+  const listCents = STANDARD_PLAN.base;
   const offCents = f.unit === 'percent' ? Math.round(listCents * Math.min(100, n) / 100) : Math.min(listCents, Math.round(n * 100));
 
   const requestClose = () => {
