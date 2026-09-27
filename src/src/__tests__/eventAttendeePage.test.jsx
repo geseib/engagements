@@ -7,7 +7,11 @@
  * item; a token kept after the event said it does not know it; a live
  * engagement that does not open by itself, or opens without the attendee's
  * token; a paused item left on the item's screens; "Agenda" that unmounts the
- * live session (answers lost by looking away); "Not you?" that keeps the old
+ * live session (answers lost by looking away) — or REMOUNTS it, which joins
+ * again, opens a second socket and misses what the room was sent meanwhile
+ * (the switch beat → play → agenda → back each did, until 27 Sep 2026);
+ * the item's own end screen ("the next item starts by itself") left up after
+ * the host ends the whole day; "Not you?" that keeps the old
  * token; an unknown code answered with a name form.
  */
 import React from 'react';
@@ -18,6 +22,8 @@ jest.mock('../PlayerPage', () => {
   const ReactInner = require('react');
   return function PlayerPageStub({ event }) {
     global.__playerEvent = event;
+    // Counts MOUNTS: every mount of the real page joins and opens a socket.
+    ReactInner.useEffect(() => { global.__playerMounts += 1; }, []);
     return ReactInner.createElement('div', { 'data-testid': 'player' }, `session ${event && event.gameId}`);
   };
 });
@@ -54,6 +60,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   window.localStorage.clear();
   global.__playerEvent = null;
+  global.__playerMounts = 0;
   api.getNow.mockResolvedValue({ code: CODE, state: 'SCHEDULED', liveItemId: '', live: null, rev: 'r0' });
 });
 
@@ -148,6 +155,7 @@ describe('following the day', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Back to live/ }));
     expect(screen.getByTestId('player').closest('[hidden]')).toBeNull();
+    expect(global.__playerMounts).toBe(1);
   });
 
   test('the host pauses the item: the paused screen, answers kept, the agenda one tap away', async () => {
@@ -164,6 +172,7 @@ describe('following the day', () => {
     expect(screen.getByRole('button', { name: 'Open the agenda' })).toBeInTheDocument();
     // Still mounted, behind the paused screen: nothing is lost.
     expect(screen.getByTestId('player').closest('[hidden]')).not.toBeNull();
+    expect(global.__playerMounts).toBe(1);
   });
 
   test('when the host starts an item, the page switches by itself after one beat', async () => {
@@ -184,9 +193,27 @@ describe('following the day', () => {
       expect(await screen.findByText('You’re in as Priya Raman. No code needed.')).toBeInTheDocument();
       await act(async () => { jest.advanceTimersByTime(1300); });
       expect(screen.getByTestId('player').closest('[hidden]')).toBeNull();
+      // Mounted under the beat, and the SAME page once the beat lifts.
+      expect(global.__playerMounts).toBe(1);
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test('the host ends the day mid-item: the phone shows the day\'s end, not "the next item starts by itself"', async () => {
+    joined();
+    api.whoAmI.mockResolvedValue({ attendee: { name: 'Priya Raman' } });
+    api.getAgenda.mockResolvedValueOnce(agenda({ state: 'LIVE', liveItemId: liveTrivia.itemId }, [DAY[0], DAY[1], liveTrivia, DAY[3]]));
+    render(<EventAttendeePage code={CODE} />);
+    await screen.findByTestId('player');
+
+    api.getAgenda.mockResolvedValue(agenda({ state: 'ENDED', liveItemId: '', rev: 'r9' }, [DAY[0], DAY[1], { ...liveTrivia, state: 'done' }, DAY[3]]));
+    await act(async () => { await global.__playerEvent.onFrame('eventEnded', {}); });
+
+    expect(await screen.findByText('That’s the day.')).toBeInTheDocument();
+    // The finished item's screen is not drawn over it (hidden, or let go).
+    const player = screen.queryByTestId('player');
+    expect(player === null || player.closest('[hidden]') !== null).toBe(true);
   });
 
   test('a live break says when to be back and what is next', async () => {

@@ -7,7 +7,8 @@
  * a refused token that strands the attendee instead of sending them back to
  * the event's name step; the event's frames dropped on the floor; an end
  * screen with no way back to the agenda; an Agenda door drawn outside an
- * event.
+ * event; "if you lose this page" pointing at the item's code, which asks for
+ * a name and seats a stranger, instead of the event's.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -75,6 +76,9 @@ test('joins the item with the attendee\'s token and no form: nothing to type', a
     expect(body.playerName).toBe('');
   });
   await waitFor(() => expect(localStorage.getItem(`playerName_${GAME}`)).toBe('Priya Raman'));
+  // The way back is the EVENT's code (no name asked), never the item's.
+  await waitFor(() => expect(document.body.textContent).toMatch(/enter 5307 again/));
+  expect(document.body.textContent).not.toMatch(/enter 4821/);
 });
 
 test('a token the event does not know sends the attendee back to the event\'s name step', async () => {

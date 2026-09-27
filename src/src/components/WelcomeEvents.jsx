@@ -32,15 +32,24 @@ function stillOn(event, nowMs) {
   return Date.UTC(s.y, s.mo - 1, s.d) >= nowMs - 2 * DAY_MS;
 }
 
-export default function WelcomeEvents({ nowMs = Date.now() }) {
+export default function WelcomeEvents({ nowMs }) {
   const [events, setEvents] = useState([]);
 
+  /*
+    READ ONCE PER MOUNT. `nowMs` is a prop only so a test can fix the clock;
+    it used to DEFAULT to Date.now() in the signature, which is a new value on
+    every render — so every render of the welcome screen re-ran this effect,
+    cancelled the request in flight and sent another. The list never landed
+    and GET /events went out in a loop (found driving the real handlers in
+    Chromium, 27 Sep 2026). The clock is read inside the effect instead.
+  */
   useEffect(() => {
     let cancelled = false;
+    const at = typeof nowMs === 'number' ? nowMs : Date.now();
     listEvents()
       .then((all) => {
         if (cancelled) return;
-        const on = (all || []).filter((e) => stillOn(e, nowMs));
+        const on = (all || []).filter((e) => stillOn(e, at));
         on.sort((a, b) => (a.state === 'LIVE' ? 0 : 1) - (b.state === 'LIVE' ? 0 : 1)
           || String(a.startsAt).localeCompare(String(b.startsAt)));
         setEvents(on);

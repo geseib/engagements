@@ -5,7 +5,9 @@
  *
  * rejects: an event that is running now or still to come missing from the
  * list, or one that has ended on it; a running event not first; more than
- * two rows (the page must fit a laptop) with the rest uncounted; Open going
+ * two rows (the page must fit a laptop) with the rest uncounted; a list
+ * asked for again on every render of the page around it (it never landed, and
+ * GET /events went out in a loop); Open going
  * anywhere but the event's stage; anything drawn for a host with no events,
  * or when the list cannot be read.
  */
@@ -67,4 +69,13 @@ test('nothing at all for a host with no events, or when the list cannot be read'
   const again = render(<WelcomeEvents nowMs={NOW} />);
   await waitFor(() => expect(listEvents).toHaveBeenCalledTimes(2));
   expect(again.container).toBeEmptyDOMElement();
+});
+
+test('asked for once, however often the page around it renders — and it lands', async () => {
+  listEvents.mockResolvedValue([ev('1002', 'Q4 Kickoff', '2099-10-09T09:00')]);
+  // No nowMs: the production call. A parent re-rendering must not re-ask.
+  const { rerender } = render(<WelcomeEvents />);
+  for (let i = 0; i < 5; i += 1) rerender(<WelcomeEvents />);
+  expect(await screen.findByText('Q4 Kickoff')).toBeInTheDocument();
+  expect(listEvents).toHaveBeenCalledTimes(1);
 });

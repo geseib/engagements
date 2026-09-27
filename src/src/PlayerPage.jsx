@@ -3999,10 +3999,20 @@ function PlayerPage({ event = null } = {}) {
 
         <div className="plr-card">
           <p className="plr-lab">If you lose this page</p>
-          <p className="plr-quote">
-            Go back to the join screen, enter <b>{gameId}</b> and the same name. Your
-            answers and your score come back with you.
-          </p>
+          {/* IN AN EVENT the way back is the EVENT's code, which knows this
+              phone without a name; the item's own code would ask for one and
+              seat a stranger (found driving the day in Chromium, 27 Sep 2026). */}
+          {inEvent ? (
+            <p className="plr-quote">
+              Open the join screen and enter <b>{event.code}</b> again. This phone is
+              remembered, so no name is needed, and your answers come back with you.
+            </p>
+          ) : (
+            <p className="plr-quote">
+              Go back to the join screen, enter <b>{gameId}</b> and the same name. Your
+              answers and your score come back with you.
+            </p>
+          )}
         </div>
 
         <LookUpCue>

@@ -244,6 +244,11 @@ export default function EventAttendeePage({ code }) {
   // ── What to draw ──────────────────────────────────────────────────────────
   const event = (agenda && agenda.event) || {};
   const items = (agenda && agenda.items) || [];
+  // THE DAY IS OVER: the agenda's "That's the day", whatever item the phone
+  // was in. The item's own end screen says the next item starts by itself,
+  // which is false once the host has ended the event (the session stays
+  // mounted, hidden, like any other look at the agenda).
+  const shownView = event.state === 'ENDED' ? 'agenda' : view;
   const title = event.title || 'The event';
   const liveId = event.liveItemId || '';
   const liveItem = items.find((i) => i.itemId === liveId) || null;
@@ -258,8 +263,8 @@ export default function EventAttendeePage({ code }) {
   // ends until the attendee leaves its end screen. Hidden, never unmounted,
   // while they look at the agenda — nothing is lost by looking (D3).
   const playing = current && isEngagement(current.type) && current.gameId
-    && (current.state !== 'done' || view === 'item') ? current : null;
-  const showPlaying = Boolean(playing && view === 'item' && !beat && playing.state !== 'paused');
+    && (current.state !== 'done' || shownView === 'item') ? current : null;
+  const showPlaying = Boolean(playing && shownView === 'item' && !beat && playing.state !== 'paused');
   const sessionEvent = useMemo(() => (playing && attendee ? {
     code, token: attendee.token, gameId: playing.gameId, onAgenda: toAgenda, onFrame, onNotJoined,
   } : null), [playing && playing.gameId, attendee && attendee.token, code, toAgenda, onFrame, onNotJoined]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -271,6 +276,23 @@ export default function EventAttendeePage({ code }) {
       </EventBarContext.Provider>
     </div>
   ) : null;
+  /*
+    ONE PLACE IN THE TREE FOR THE SESSION, whatever screen is over it. Each
+    screen below used to put `session` wherever it ended — beside the switch
+    beat, beside the agenda, or as the whole page while playing — and React
+    treats a new parent as a new component: every beat → play → agenda → back
+    UNMOUNTED PlayerPage and mounted another, which joined again, opened a
+    second socket, and missed whatever the room was sent in between (the
+    first question, driving the real handlers in Chromium, 27 Sep 2026).
+    Every screen now returns through this: the screen first, the session
+    second, always the same shape.
+  */
+  const withSession = (screenEl) => (
+    <>
+      {screenEl}
+      {session}
+    </>
+  );
 
   if (phase === 'loading') {
     return (
@@ -364,31 +386,28 @@ export default function EventAttendeePage({ code }) {
   const returnAtOf = (item) => wallClock(item && item.endsAt, event.timeZone) || (item && item.until) || '';
 
   // THE SWITCH (p-07): one still beat that names the item, then the item.
-  if (view === 'item' && beat && current && current.itemId === beat) {
+  if (shownView === 'item' && beat && current && current.itemId === beat) {
     const pos = positionOf(items, current.itemId);
-    return (
-      <>
-        <PlayerShell phase="ask" volume="watch" ctx={barCtx(current)} who={who} online={online} centre>
-          <div className="evp evp-beat">
-            <p className="evp-kick">
-              <ItemTypeIcon type={current.type} />
-              {typeLabel(current.type)}{pos ? ` · ${pos.n} of ${pos.of}` : ''}
+    return withSession(
+      <PlayerShell phase="ask" volume="watch" ctx={barCtx(current)} who={who} online={online} centre>
+        <div className="evp evp-beat">
+          <p className="evp-kick">
+            <ItemTypeIcon type={current.type} />
+            {typeLabel(current.type)}{pos ? ` · ${pos.n} of ${pos.of}` : ''}
+          </p>
+          <h1 className="plr-h1">{current.title}</h1>
+          {attendee && (
+            <p className="evp-in">
+              <span className="evp-dot" aria-hidden="true" />
+              {`You’re in as ${attendee.name}. No code needed.`}
             </p>
-            <h1 className="plr-h1">{current.title}</h1>
-            {attendee && (
-              <p className="evp-in">
-                <span className="evp-dot" aria-hidden="true" />
-                {`You’re in as ${attendee.name}. No code needed.`}
-              </p>
-            )}
-          </div>
-        </PlayerShell>
-        {session}
-      </>
+          )}
+        </div>
+      </PlayerShell>
     );
   }
 
-  if (view === 'item' && current) {
+  if (shownView === 'item' && current) {
     const state = current.state || 'planned';
     const next = nextAfter(items, current.itemId);
     // p-06 / p-09: an engagement is named by its kind ("Trivia · How well…"),
@@ -405,50 +424,47 @@ export default function EventAttendeePage({ code }) {
 
     // PAUSED (D1): the host went back to the agenda; answers are kept.
     if (state === 'paused') {
-      return (
-        <>
-          <PlayerShell
-            phase="rest"
-            volume="rest"
-            ctx={barCtx(current)}
-            who={who}
-            online={online}
-            centre
-            dock={(
-              <button type="button" className="plr-btn" onClick={toAgenda}>Open the agenda</button>
-            )}
-          >
-            <div className="evp">
-              <p className="evp-when">Paused · {current.title}</p>
-              <h1 className="plr-h1">The host will be back.</h1>
-              <p className="plr-lede plr-muted">
-                Anything you have already sent is kept. This page picks up where it left off when the
-                host resumes.
-              </p>
-            </div>
-          </PlayerShell>
-          {session}
-        </>
+      return withSession(
+        <PlayerShell
+          phase="rest"
+          volume="rest"
+          ctx={barCtx(current)}
+          who={who}
+          online={online}
+          centre
+          dock={(
+            <button type="button" className="plr-btn" onClick={toAgenda}>Open the agenda</button>
+          )}
+        >
+          <div className="evp">
+            <p className="evp-when">Paused · {current.title}</p>
+            <h1 className="plr-h1">The host will be back.</h1>
+            <p className="plr-lede plr-muted">
+              Anything you have already sent is kept. This page picks up where it left off when the
+              host resumes.
+            </p>
+          </div>
+        </PlayerShell>
       );
     }
 
     if (isEngagement(current.type) && current.gameId && (state === 'live' || state === 'done')) {
-      return session;
+      return withSession(null);
     }
 
     // A BREAK (p-09): when to be back.
     if (state === 'live' && isBreak(current.type)) {
-      return (
+      return withSession(
         <PlayerShell phase="rest" volume="rest" ctx={title} who={who} online={online} centre>
-          <div className="evp">
-            <p className="evp-when">Break</p>
-            <h1 className="plr-h1">Back at {returnAtOf(current)}</h1>
-            <p className="plr-lede plr-muted">
-              {current.description ? `${current.description} ` : ''}
-              This page switches by itself when the next item starts.
-            </p>
-            {nextLine}
-          </div>
+        <div className="evp">
+          <p className="evp-when">Break</p>
+          <h1 className="plr-h1">Back at {returnAtOf(current)}</h1>
+          <p className="plr-lede plr-muted">
+            {current.description ? `${current.description} ` : ''}
+            This page switches by itself when the next item starts.
+          </p>
+          {nextLine}
+        </div>
         </PlayerShell>
       );
     }
@@ -460,20 +476,20 @@ export default function EventAttendeePage({ code }) {
       const lead = current.ledBy
         ? (talk ? `${current.ledBy} is presenting.` : `Led by ${current.ledBy}.`)
         : '';
-      return (
+      return withSession(
         <PlayerShell phase="rest" volume="watch" ctx={title} who={who} online={online}>
-          <div className="evp">
-            <p className="evp-when">
-              Now{pos ? ` · ${pos.n} of ${pos.of}` : ''} · {talk ? 'A talk' : typeLabel(current.type)}
-            </p>
-            <h1 className="plr-h1">{current.title}</h1>
-            <p className="plr-lede plr-muted">
-              {lead ? `${lead} ` : ''}
-              <b>Look up</b> — this page switches by itself when there is something to answer.
-            </p>
-            {current.description && <p className="evp-desc">{current.description}</p>}
-            {nextLine}
-          </div>
+        <div className="evp">
+          <p className="evp-when">
+            Now{pos ? ` · ${pos.n} of ${pos.of}` : ''} · {talk ? 'A talk' : typeLabel(current.type)}
+          </p>
+          <h1 className="plr-h1">{current.title}</h1>
+          <p className="plr-lede plr-muted">
+            {lead ? `${lead} ` : ''}
+            <b>Look up</b> — this page switches by itself when there is something to answer.
+          </p>
+          {current.description && <p className="evp-desc">{current.description}</p>}
+          {nextLine}
+        </div>
         </PlayerShell>
       );
     }
@@ -491,59 +507,56 @@ export default function EventAttendeePage({ code }) {
   else if (backToLive) lede = 'Something is live now. Go back to it whenever you are ready.';
   else lede = 'This page switches by itself when the host starts the next item.';
 
-  return (
-    <>
-      <PlayerShell
-        phase={ended ? 'done' : 'rest'}
-        volume="rest"
-        ctx={title}
-        who={who}
-        online={online}
-        dock={backToLive ? (
-          <button type="button" className="plr-btn" onClick={() => { setFollowed(backToLive.itemId); setView('item'); }}>
-            Back to live · {backToLive.title}
-          </button>
-        ) : null}
-      >
-        <div className="evp">
-          <p className="evp-when">{kicker}</p>
-          <h1 className="plr-h1">{heading}</h1>
-          <p className="plr-lede plr-muted">{lede}</p>
-          <ol className="evp-list">
-            {items.map((item) => {
-              const word = stateWord(item, { started, nextId });
-              const state = item.state || 'planned';
-              const cls = [
-                'evp-it',
-                state === 'done' ? 'evp-it--done' : '',
-                state === 'live' ? 'evp-it--now' : '',
-                isBreak(item.type) ? 'evp-it--brk' : '',
-              ].filter(Boolean).join(' ');
-              return (
-                <li key={item.itemId} className={cls}>
-                  <span className="evp-at">{item.at}</span>
-                  <div className="evp-body">
-                    <span className="evp-tt">{item.title || typeLabel(item.type)}</span>
-                    <span className="evp-ty">
-                      <ItemTypeIcon type={item.type} />
-                      <span className="evp-tl">{typeLine(item, { returnAt: state === 'live' ? returnAtOf(item) : '' })}</span>
-                      {word && <span className={`evp-st evp-st--${word.tone}`}>{word.word}</span>}
-                    </span>
-                    {!started && item.description && <p className="evp-desc">{item.description}</p>}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-          {attendee && (
-            <p className="evp-foot">
-              {`In as ${attendee.name}. `}
-              <button type="button" className="plr-linkish" onClick={notYou}>Not you?</button>
-            </p>
-          )}
-        </div>
-      </PlayerShell>
-      {session}
-    </>
+  return withSession(
+    <PlayerShell
+      phase={ended ? 'done' : 'rest'}
+      volume="rest"
+      ctx={title}
+      who={who}
+      online={online}
+      dock={backToLive ? (
+        <button type="button" className="plr-btn" onClick={() => { setFollowed(backToLive.itemId); setView('item'); }}>
+          Back to live · {backToLive.title}
+        </button>
+      ) : null}
+    >
+      <div className="evp">
+        <p className="evp-when">{kicker}</p>
+        <h1 className="plr-h1">{heading}</h1>
+        <p className="plr-lede plr-muted">{lede}</p>
+        <ol className="evp-list">
+          {items.map((item) => {
+            const word = stateWord(item, { started, nextId });
+            const state = item.state || 'planned';
+            const cls = [
+              'evp-it',
+              state === 'done' ? 'evp-it--done' : '',
+              state === 'live' ? 'evp-it--now' : '',
+              isBreak(item.type) ? 'evp-it--brk' : '',
+            ].filter(Boolean).join(' ');
+            return (
+              <li key={item.itemId} className={cls}>
+                <span className="evp-at">{item.at}</span>
+                <div className="evp-body">
+                  <span className="evp-tt">{item.title || typeLabel(item.type)}</span>
+                  <span className="evp-ty">
+                    <ItemTypeIcon type={item.type} />
+                    <span className="evp-tl">{typeLine(item, { returnAt: state === 'live' ? returnAtOf(item) : '' })}</span>
+                    {word && <span className={`evp-st evp-st--${word.tone}`}>{word.word}</span>}
+                  </span>
+                  {!started && item.description && <p className="evp-desc">{item.description}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {attendee && (
+          <p className="evp-foot">
+            {`In as ${attendee.name}. `}
+            <button type="button" className="plr-linkish" onClick={notYou}>Not you?</button>
+          </p>
+        )}
+      </div>
+    </PlayerShell>
   );
 }
