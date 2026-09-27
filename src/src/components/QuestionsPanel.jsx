@@ -26,7 +26,7 @@ import AIScenarioBuilder from './AIScenarioBuilder';
 import SurveyQuestionFields, {
   SurveyAddMenu, SurveyKindChip, SurveyPreviewLine, SurveyRequiredMark,
 } from './SurveyQuestionFields';
-import { SURVEY_CATEGORY } from '../config/surveyKinds';
+import { SURVEY_CATEGORY, POLL_KINDS } from '../config/surveyKinds';
 import {
   ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
 } from '../utils/addQuestions';
@@ -34,6 +34,7 @@ import { briefFromSet } from '../utils/appendMode';
 import {
   editableRows,
   blankRow,
+  pollRow,
   moveRow,
   rowsToCsv,
   rowProblems,
@@ -193,6 +194,11 @@ export default function QuestionsPanel({
   // form switches its fields by kind (components/SurveyQuestionFields.jsx,
   // docs/design/survey-redesign/04–06). Every other path below is shared.
   const isSurvey = engagementType === 'survey';
+  // A POLL QUESTION IS A SURVEY QUESTION THE HOST ASKS (the owner, 27 Sep
+  // 2026), one of four kinds. Its form keeps everything a poll question had —
+  // category, siblings, the AI draft, instruction, picture — and trades the
+  // options box for the survey's kind bar and kind fields.
+  const isPoll = engagementType === 'poll';
   // The server's answer to "may this caller write to this set", never ours.
   // Absent means an older payload: assume the historical behaviour (replace)
   // and let the handler refuse, which the 403 path below turns into a fork.
@@ -365,7 +371,7 @@ export default function QuestionsPanel({
         return;
       }
       const json = await response.json();
-      const loaded = editableRows(json);
+      const loaded = editableRows(json, engagementType);
       setRows(loaded);
       setBaseline(loaded);
       setBaselineOrder(loaded.map((r) => r.uid));
@@ -386,7 +392,9 @@ export default function QuestionsPanel({
       setLoadState('error');
       setLoadError(`Could not load the questions: ${error.message}`);
     }
-  }, [setId]);
+    // engagementType decides how a row is read (a poll's through pollRow). It
+    // is the set's own type and does not change under a loaded set.
+  }, [setId, engagementType]);
 
   const closeForm = useCallback(() => {
     setDraft(null);
@@ -573,6 +581,9 @@ export default function QuestionsPanel({
     setStatus({ text: '', tone: '' });
   };
 
+  /** A new question in this category: for a poll, a multiple choice — the kind a poll question starts as. */
+  const blankQuestion = (category) => blankRow(isPoll ? { category, kind: 'choice' } : { category });
+
   const startAdd = () => {
     // A survey question is a kind before it is anything else. Reached here
     // only from Add questions → "write one", which names no kind, so it starts
@@ -583,13 +594,15 @@ export default function QuestionsPanel({
     // category of the last row, so adding a run of questions to one category
     // does not mean retyping its name every time.
     const seedCategory = activeCategory || rows[rows.length - 1]?.category || '';
-    openForm(blankRow({ category: seedCategory }), 'add');
+    openForm(blankQuestion(seedCategory), 'add');
   };
 
   /** The Add question menu's choice: a new survey question of that kind, filed under Survey. */
   const startAddKind = (kind) => openForm(blankRow({ kind }), 'add');
 
-  const startEdit = (row) => openForm({ ...row }, 'edit');
+  // A poll question copied or generated without a kind opens as the kind it
+  // reads as (a choice, or an open answer), never with no kind selected.
+  const startEdit = (row) => openForm({ ...(isPoll ? pollRow(row) : row) }, 'edit');
 
   /** Is this an add in progress, or an edit of a row? By how it was opened. */
   const isAdding = Boolean(draft) && draftKind === 'add';
@@ -760,7 +773,7 @@ export default function QuestionsPanel({
     setShowAdd(false);
     // New-category mode opens the form with the category EMPTY, so the picker's
     // "+ New category" is the first thing reached; existing mode seeds as usual.
-    if (mode === ADD_MODES.NEW) openForm(blankRow({ category: '' }), 'add');
+    if (mode === ADD_MODES.NEW) openForm(blankQuestion(''), 'add');
     else startAdd();
   };
 
@@ -834,7 +847,9 @@ export default function QuestionsPanel({
    */
   const applyGenerated = (item) => {
     const { id, active, ...fields } = item || {};
-    const generated = toRow(fields);
+    // A drafted poll question lands as the kind it reads as, so the form
+    // never loses its kind to a draft that did not name one.
+    const generated = isPoll ? pollRow(toRow(fields)) : toRow(fields);
     setDraft((current) => ({
       ...generated,
       // Identity, provenance and everything this form never renders belong to
@@ -1453,6 +1468,7 @@ export default function QuestionsPanel({
                   )}
                   {/* A survey row's Kind column (mockup 04). */}
                   {isSurvey && <SurveyKindChip row={row} />}
+                  {isPoll && <SurveyKindChip row={pollRow(row)} />}
                   <div className="qs-question-text">
                     <div className="qs-question-title">
                       <strong>{row.title || <em>Untitled question</em>}</strong>
@@ -2085,34 +2101,13 @@ function QuestionForm({
         </>
       )}
 
+      {/* A POLL QUESTION'S KIND AND ITS FIELDS — the survey's own form
+          (components/SurveyQuestionFields.jsx), limited to the four kinds a
+          poll may be. This form already draws the question and its detail,
+          so the survey form's own two are left out. It replaces the options
+          box and the "Answers allowed" select, which only a choice has. */}
       {engagementType === 'poll' && (
-        <div className="qs-form-grid">
-          <div className="form-group">
-            <label htmlFor={id('options')}>Options (one per line)</label>
-            <textarea
-              id={id('options')}
-              className="form-textarea"
-              rows="4"
-              value={(draft.options || []).join('\n')}
-              onChange={(e) => onChange({
-                ...draft,
-                options: e.target.value.split('\n').map((o) => o.trim()).filter(Boolean),
-              })}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor={id('allowMultiple')}>Answers allowed</label>
-            <select
-              id={id('allowMultiple')}
-              className="form-select"
-              value={draft.allowMultiple ? 'many' : 'one'}
-              onChange={(e) => onChange({ ...draft, allowMultiple: e.target.value === 'many' })}
-            >
-              <option value="one">Pick one</option>
-              <option value="many">Pick as many as apply</option>
-            </select>
-          </div>
-        </div>
+        <SurveyQuestionFields draft={draft} onChange={onChange} idOf={id} kinds={POLL_KINDS} textFields={false} />
       )}
 
       {showKind && (

@@ -4,7 +4,9 @@
    components/SurveyQuestionFields.jsx: the Kind chip, the answer preview and
    Required / Optional on a survey question's row, the Add question menu of the
    five kinds, and the question dialog's kind bar and each kind's fields.
-   Mounted only by components/QuestionsPanel.jsx, for a survey set.
+   Mounted only by components/QuestionsPanel.jsx: for a survey set, and — the
+   kind bar and the kind's fields alone — for a poll question, which is a
+   survey question of one of four kinds that the host asks.
 
    DERIVED FROM docs/design/survey-redesign/04-editor.html, 05-edit-question.html
    and 06-kind-fields.html (their `sv-kind`, `sv-kindbar`, `sv-opt`, `sv-optlist`,
@@ -47,6 +49,9 @@
   --sqf-t-body: 15px;
   --sqf-t-head: 19px;
   --sqf-row-h: 36px;
+  /* A control someone must hit with intent, not scan past: the binary
+     question's named answer pairs. */
+  --sqf-target: 44px;
 
   --sqf-rule: rgba(155, 168, 190, .20);
   --sqf-rule-strong: rgba(155, 168, 190, .34);
@@ -322,6 +327,15 @@
 .sqf-seg button[aria-pressed="true"] {
   background: var(--sqf-row-sel);
   color: var(--text);
+}
+
+/* The yes/no question's named answer pairs (Yes / No, Approve / Decline…): a
+   segment like the others, painted by the rules above, at the full target
+   height because each press rewrites both labels. None is lit while the
+   labels are the author's own words. */
+.sqf-seg.sqf-presets button {
+  height: var(--sqf-target);
+  padding: 0 14px;
 }
 
 .sqf-line {

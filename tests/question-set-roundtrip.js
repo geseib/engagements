@@ -289,6 +289,34 @@ function assertSameQuestions(before, after) {
 }
 
 /**
+ * THE SAME POLL QUESTIONS, READ AS THEIR KINDS. A poll set stored before polls
+ * had kinds carries `options` / `allowMultiple` and no `kind`; its download is
+ * the contract CSV (a poll question is a survey question the host asks), so the
+ * re-import stores the SAME question typed — `kind: 'choice'`, `required:
+ * false` and the rest. So the kind fields are compared as the readers read them
+ * (`pollFieldsOf`, the one normalisation every poll reader uses) and every
+ * other attribute field for field. A typed set compares equal both ways.
+ */
+const { SURVEY_CSV_COLUMNS: KIND_COLUMNS, pollFieldsOf } = require(
+  path.join(REPO, 'lambda-functions', 'admin', 'shared', 'survey-kinds.js'));
+const KIND_FIELDS = KIND_COLUMNS.map((c) => c[0].toLowerCase() + c.slice(1));
+function assertSamePollQuestions(before, after) {
+  assert.strictEqual(after.length, before.length,
+    `question count changed: ${before.length} -> ${after.length}`);
+  const rest = (r) => {
+    const { PK, ...others } = r;
+    for (const f of KIND_FIELDS) delete others[f];
+    return others;
+  };
+  for (let i = 0; i < before.length; i++) {
+    assert.deepStrictEqual(rest(after[i]), rest(before[i]),
+      `question ${i + 1} (${before[i].SK}) changed across the round trip`);
+    assert.deepStrictEqual(pollFieldsOf(after[i]), pollFieldsOf(before[i]),
+      `question ${i + 1} (${before[i].SK}) came back as a different question`);
+  }
+}
+
+/**
  * Guard against a vacuous pass. deepStrictEqual over two rows that are equally
  * EMPTY would be green while every answer was destroyed, so the fields the
  * defect eats are asserted present on the `before` side first.
@@ -325,6 +353,19 @@ const POLL_CSV = [
     + '"Pick as many as apply.","Email|Slack|Teams|Phone|Video","true","tools"',
   '"Culture",1,"WHAT DO WE REWARD","Incentives beat intentions.","Business School",'
     + '"Pick one.","Speed|Quality|Novelty","false","culture"',
+].join('\n');
+
+// A TYPED POLL — the contract CSV, every kind a poll may be, each row keeping
+// its own Category (a survey forces 'Survey'). Row 3 renames its two answers
+// Approve / Decline; row 1 lets people pick up to two.
+const TYPED_POLL_CSV = [
+  'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,'
+    + 'AllowMultiple,MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,'
+    + 'FollowUpWhen,FollowUpPrompt,RankTop,TextLength,MaxLength,Placeholder,Themes,Tags',
+  '"Workplace",1,"WHICH TOOLS","Tool choice varies by team.","Business School","","choice","false","Email|Slack|Teams|Phone","true","2","true","false","","","","","","false","","","","","","","false","tools"',
+  '"Workplace",2,"HOW USEFUL WAS STANDUP","","","","rating","true","","false","","false","false","1-5","A waste","Worth it","","","false","","","","","","","false",""',
+  '"Decisions",1,"SHIP ON THURSDAY","QA gets one more day.","","","yesno","false","","false","","false","false","","","","Approve","Decline","true","no","What would change your mind?","","","","","false","release"',
+  '"Ideas",1,"WHAT SHOULD WE STOP","","","","text","false","","false","","false","false","","","","","","false","","","","short","280","One thing","true",""',
 ].join('\n');
 
 // Every survey kind and the settings that change its row (surveys phase 1,
@@ -462,7 +503,12 @@ const WAVELENGTH_CSV = [
   }
 
   // ==== poll ===============================================================
-  say('\n  -- poll --');
+  //
+  // A POLL QUESTION IS A SURVEY QUESTION THE HOST ASKS (the owner, 27 Sep
+  // 2026), so a poll set downloads as the contract CSV. A set stored before
+  // polls had kinds is the legacy block below: it imports as it always did, and
+  // its download types it as the question it always was.
+  say('\n  -- poll: a legacy set (Options, AllowMultiple, no Kind) --');
   resetDb();
   {
     const t = await roundTrip('Roundtrip Poll', 'poll', POLL_CSV);
@@ -471,6 +517,14 @@ const WAVELENGTH_CSV = [
     // writing poll options at all.
     check('the seeded poll set really carries options', () =>
       assertCarries(t.before, ['options']));
+    // rejects: the legacy reader changing — "legacy poll CSVs keep importing
+    // exactly as today".
+    check('a legacy poll CSV still imports as options and allowMultiple, with no kind', () => {
+      for (const r of t.before) {
+        assert.ok(!('kind' in r), `a legacy row was stored with a kind: ${JSON.stringify(r.kind)}`);
+        assert.strictEqual(typeof r.allowMultiple, 'boolean');
+      }
+    });
 
     // rejects: reading the capitalised `q.Options`, which the importer never
     // writes — the attribute is lower-case `options`. That read produced a
@@ -484,9 +538,16 @@ const WAVELENGTH_CSV = [
           `a poll row exported with no options: ${row}`);
       }
     });
+    // rejects: the old Options,AllowMultiple header — a typed rating or yes/no
+    // written in it comes back from its own download with no answers at all.
+    check('the exported header is the contract\'s', () =>
+      assert.strictEqual(t.header, SURVEY_HEADER));
+    check('a legacy row downloads as the choice it always was', () =>
+      assert.deepStrictEqual(t.csv.trim().split('\n').slice(1).map((row) => row.split(',"')[5]),
+        ['choice"', 'choice"', 'choice"']));
 
-    check('every poll question survives the round trip field for field', () =>
-      assertSameQuestions(t.before, t.after));
+    check('every poll question survives the round trip as the same question', () =>
+      assertSamePollQuestions(t.before, t.after));
     check('poll options come back as the same arrays', () =>
       assert.deepStrictEqual(t.after.map((r) => r.options), [
         ['Office', 'Remote', 'Hybrid', 'Co-working'],
@@ -495,6 +556,85 @@ const WAVELENGTH_CSV = [
       ]));
     check('allowMultiple is preserved per question', () =>
       assert.deepStrictEqual(t.after.map((r) => r.allowMultiple), [false, true, false]));
+    check('the re-import is typed: every row a choice', () =>
+      assert.deepStrictEqual(t.after.map((r) => r.kind), ['choice', 'choice', 'choice']));
+    check('categories are the rows\' own, never Survey', () =>
+      assert.deepStrictEqual(t.after.map((r) => r.Category), ['Workplace', 'Workplace', 'Culture']));
+
+    // A second trip changes nothing at all: the first typed the set, and a
+    // typed set round-trips field for field.
+    const again = await download({ ...adminContext(), pathParameters: { setId: t.setId }, queryStringParameters: {} });
+    check('downloading the typed set again gives the same bytes', () =>
+      assert.strictEqual(parse(again).content, t.csv));
+  }
+
+  say('\n  -- poll: a typed set, every kind a poll may be --');
+  resetDb();
+  {
+    const t = await roundTrip('Typed Poll', 'poll', TYPED_POLL_CSV);
+
+    check('the seeded poll carries every poll kind, in order', () =>
+      assert.deepStrictEqual(t.before.map((r) => r.kind), ['choice', 'rating', 'yesno', 'text']));
+    check('each row keeps its own category', () =>
+      assert.deepStrictEqual(t.before.map((r) => r.Category), ['Workplace', 'Workplace', 'Decisions', 'Ideas']));
+    check('the exported header is the contract\'s', () =>
+      assert.strictEqual(t.header, SURVEY_HEADER));
+    // rejects: any field-level loss across the round trip — a label, a scale,
+    // a pick limit, a follow-up.
+    check('every typed poll question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+    check('the download is the file that was imported, byte for byte', () =>
+      assert.strictEqual(t.csv, `${TYPED_POLL_CSV}\n`));
+    check('each kind keeps its own settings', () => {
+      assert.deepStrictEqual(
+        { allowMultiple: t.after[0].allowMultiple, maxPicks: t.after[0].maxPicks, allowOther: t.after[0].allowOther },
+        { allowMultiple: true, maxPicks: 2, allowOther: true });
+      assert.deepStrictEqual(
+        { scale: t.after[1].scale, lowLabel: t.after[1].lowLabel, highLabel: t.after[1].highLabel, required: t.after[1].required },
+        { scale: '1-5', lowLabel: 'A waste', highLabel: 'Worth it', required: true });
+      assert.deepStrictEqual(
+        { yesLabel: t.after[2].yesLabel, noLabel: t.after[2].noLabel, unsure: t.after[2].unsure, followUpWhen: t.after[2].followUpWhen },
+        { yesLabel: 'Approve', noLabel: 'Decline', unsure: true, followUpWhen: 'no' });
+      assert.deepStrictEqual(
+        { textLength: t.after[3].textLength, maxLength: t.after[3].maxLength, themes: t.after[3].themes },
+        { textLength: 'short', maxLength: 280, themes: true });
+    });
+    check('a question stores only its own kind\'s settings', () => {
+      assert.ok(!('options' in t.after[1]), 'a rating row stored options');
+      assert.ok(!('scale' in t.after[2]), 'a yes/no row stored a scale');
+      assert.ok(!('yesLabel' in t.after[0]), 'a choice row stored a yes label');
+    });
+    // rejects: the Kind column being claimed by the loose RoundKind fallback,
+    // which would 400 a typed poll file as "unrecognised round kinds".
+    check('the Kind column is not read as a RoundKind override', () =>
+      assert.ok(t.before.every((r) => !('RoundKind' in r))));
+    check('an org poll\'s labels are envelopes at rest', () => {
+      const raw = [...store.values()].filter((i) => i.PK === `ORG#org_nw#SET#${t.setId}#v1`
+        && String(i.SK).startsWith('QUESTION#')).sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+      const isEnvelope = (v) => v && typeof v === 'object' && !Array.isArray(v) && 'ct' in v;
+      const yesno = raw.find((r) => r.kind === 'yesno');
+      assert.ok(isEnvelope(yesno.yesLabel) && isEnvelope(yesno.noLabel), 'yes/no labels stored in the clear');
+      assert.ok(isEnvelope(yesno.followUpPrompt), 'a follow-up prompt stored in the clear');
+    });
+  }
+
+  resetDb();
+  {
+    // A rank row in a poll file: skipped with its reason, the rest import.
+    const withRank = TYPED_POLL_CSV + '\n'
+      + '"Ideas",2,"RANK THESE","","","","rank","false","A|B|C","false","","false","false","","","","","","false","","","2","","","","false",""';
+    const res = await upload({
+      ...adminContext(),
+      body: JSON.stringify({
+        fileName: 'ranked.csv', fileContent: withRank, customTitle: 'Ranked Poll', engagementType: 'poll', topic: 'business-work',
+      }),
+    });
+    check('a rank row in a poll file is skipped with its reason, and the rest import', () => {
+      assert.strictEqual(res.statusCode, 200, res.body);
+      const body = parse(res);
+      assert.strictEqual(body.questionCount, 4);
+      assert.deepStrictEqual(body.skippedRows, [{ row: 6, reason: "a poll can't be a rank question" }]);
+    });
   }
 
   // ==== call-and-answer, carrying the art-title columns ====================
@@ -658,10 +798,10 @@ const WAVELENGTH_CSV = [
   say('\n  -- the console editor: working copy -> CSV -> replace --');
 
   /** The editor's load: the real endpoint, then the real row mapper. */
-  async function workingCopy(setId) {
+  async function workingCopy(setId, engagementType) {
     const res = await getQuestions({ ...adminContext(), pathParameters: { setId }, queryStringParameters: {} });
     assert.strictEqual(res.statusCode, 200, `questions read failed: ${res.body}`);
-    return editableRows(JSON.parse(res.body));
+    return editableRows(JSON.parse(res.body), engagementType);
   }
 
   /** The editor's Save: one replace, one version, carrying the version note. */
@@ -942,6 +1082,62 @@ const WAVELENGTH_CSV = [
     });
   }
 
+  // ==== poll: the console editor ===========================================
+  //
+  // The editor's Save is the second writer of a poll CSV, held to the
+  // exporter's bytes like every other type's. Both shapes of stored row: a
+  // LEGACY set the editor opens before anything has typed it (its rows are read
+  // as the kind they always meant, on both sides), and a typed one.
+  say('\n  -- poll: the console editor --');
+  resetDb();
+  {
+    const created = await upload({
+      ...adminContext(),
+      body: JSON.stringify({
+        fileName: 'legacy.csv', fileContent: POLL_CSV, customTitle: 'Legacy Poll', engagementType: 'poll', topic: 'business-work',
+      }),
+    });
+    assert.strictEqual(created.statusCode, 200, created.body);
+    const setId = parse(created).setId;
+    const exported = parse(await download({ ...adminContext(), pathParameters: { setId }, queryStringParameters: {} })).content;
+    const rows = await workingCopy(setId, 'poll');
+
+    check('the editor reads a legacy poll row as the choice it always was', () =>
+      assert.deepStrictEqual(rows.map((r) => [r.kind, r.options.length, r.allowMultiple]),
+        [['choice', 4, false], ['choice', 5, true], ['choice', 3, false]]));
+    check('the console serialises a legacy poll byte-identically to download-question-set.js', () =>
+      assert.strictEqual(rowsToCsv(rows, 'poll'), exported));
+    // rejects: a writer that normalises only rows the editor loaded, so a row
+    // read without the set's type (the pull dialog's) was written kindless.
+    const untyped = await workingCopy(setId);
+    check('…and so it does for rows read without knowing the set is a poll', () =>
+      assert.strictEqual(rowsToCsv(untyped, 'poll'), exported));
+  }
+  resetDb();
+  {
+    const t = await roundTrip('Console Poll', 'poll', TYPED_POLL_CSV);
+    const rows = await workingCopy(t.setId, 'poll');
+    check('the console serialises a typed poll byte-identically to download-question-set.js', () =>
+      assert.strictEqual(rowsToCsv(rows, 'poll'), t.csv));
+    check('no row of a typed poll has a problem the importer would skip it for', () =>
+      assert.deepStrictEqual(rows.map((r) => rowProblems(r, 'poll')), [[], [], [], []]));
+    const untouched = await saveWorkingCopy(t.setId, rows, 'poll', rows.map((r) => r.uid));
+    check('saving an untouched poll working copy changes no question at all', () =>
+      assertSameQuestions(t.after, untouched.rows));
+
+    // A question the author made a yes/no and relabelled, through the editor.
+    const edited = rows.map((r) => (r.title === 'WHICH TOOLS'
+      ? { ...r, kind: 'yesno', yesLabel: 'True', noLabel: 'False', unsure: false, followUpWhen: '', edited: true }
+      : r));
+    const saved = await saveWorkingCopy(t.setId, edited, 'poll', rows.map((r) => r.uid));
+    check('a question switched to a relabelled yes/no in the editor is stored as one', () => {
+      const row = saved.rows.find((r) => r.Title === 'WHICH TOOLS');
+      assert.deepStrictEqual(
+        { kind: row.kind, yesLabel: row.yesLabel, noLabel: row.noLabel, options: row.options, Category: row.Category },
+        { kind: 'yesno', yesLabel: 'True', noLabel: 'False', options: undefined, Category: 'Workplace' });
+    });
+  }
+
   say('\n  -- pulling a question from another set --');
   resetDb();
   {
@@ -1176,9 +1372,11 @@ const WAVELENGTH_CSV = [
     check('the worker\'s poll CSV really carries options', () =>
       assertCarries(t.before, ['options']));
     // rejects: restoring Option1..Option5 in the worker's writer, which is how
-    // every AI-generated poll set once imported with zero options.
-    check('every worker-built poll question survives the round trip field for field', () =>
-      assertSameQuestions(t.before, t.after));
+    // every AI-generated poll set once imported with zero options. Compared as
+    // the kinds the rows read as, because the download is the contract CSV:
+    // a worker CSV without a Kind column is typed by its first round trip.
+    check('every worker-built poll question survives the round trip as the same question', () =>
+      assertSamePollQuestions(t.before, t.after));
     // rejects: passing a literal `|` through. The importer splits on it with no
     // escape, so an unfolded pipe silently becomes two options.
     check('a pipe inside an option is folded, not allowed to split the option', () =>

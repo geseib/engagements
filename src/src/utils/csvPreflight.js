@@ -120,8 +120,16 @@ const FOLLOW_UPS = ['', 'yes', 'no', 'any'];
 /** A whole number written as digits, or null for anything else. */
 const wholeNumber = (raw) => (/^\d+$/.test(raw) ? Number(raw) : null);
 
-/** What would stop one survey row importing, in the contract's words. */
-function surveyRowProblems(row, columns) {
+/**
+ * The kinds a poll question may be (shared/survey-kinds.js POLL_KINDS). A poll
+ * question is a survey question the host asks, so a typed poll row is checked
+ * exactly as a survey row is — the importer's `validatePoll` — and a kind a
+ * poll cannot be is refused in its one sentence.
+ */
+const POLL_KIND_IDS = ['choice', 'rating', 'yesno', 'text'];
+
+/** What would stop one survey (or typed poll) row importing, in the contract's words. */
+function surveyRowProblems(row, columns, { poll = false } = {}) {
   const get = (name) => cell(row, columns[name]);
   const problems = [];
 
@@ -130,6 +138,7 @@ function surveyRowProblems(row, columns) {
   const folded = rawKind.toLowerCase();
   const kind = SURVEY_KIND_IDS.includes(folded) ? folded : LEGACY_KINDS[folded];
   if (!kind) return [`unknown kind '${rawKind}'`];
+  if (poll && !POLL_KIND_IDS.includes(kind)) return [`a poll can't be a ${kind} question`];
 
   const options = get('Options').split('|').map((o) => o.trim()).filter(Boolean);
 
@@ -382,6 +391,12 @@ export function preflight(text, engagementType, meta = {}) {
   // A survey row says what kind of question it is. With no Kind column every
   // row is "needs a kind" and the importer answers "No valid questions".
   const surveyWithoutKind = type === 'survey' && col.survey.Kind === -1;
+  // A POLL WITH A KIND COLUMN is the contract's typed poll, and its rows are
+  // checked as a survey's are (upload-questions.js reads it with the survey's
+  // reader). Without one it is the Options / AllowMultiple poll every older
+  // file is, read exactly as before — so no Kind column is not a problem here.
+  const typedPoll = type === 'poll' && col.survey.Kind !== -1;
+  const checksKinds = (type === 'survey' && !surveyWithoutKind) || typedPoll;
   if (surveyWithoutKind) {
     blocking.push({
       code: 'survey-no-kind',
@@ -441,8 +456,8 @@ export function preflight(text, engagementType, meta = {}) {
       return;
     }
 
-    if (type === 'survey' && !surveyWithoutKind) {
-      const problems = surveyRowProblems(row, col.survey);
+    if (checksKinds) {
+      const problems = surveyRowProblems(row, col.survey, { poll: typedPoll });
       if (problems.length) {
         skipped.push({
           row: reportedRow,
@@ -489,7 +504,10 @@ export function preflight(text, engagementType, meta = {}) {
 
   /* ------------------------------------------------------------- tier three */
 
-  if (type === 'poll' && importedCount) {
+  // Only a legacy poll can lose its options this way: a typed poll's rows were
+  // each checked for their kind above, and a choice with no options is a
+  // skipped row there, not a silent gap here.
+  if (type === 'poll' && !typedPoll && importedCount) {
     const numbered = col.optionNumbers.filter((i) => i >= 0).length;
     if (col.options === -1) {
       gaps.push({
@@ -499,9 +517,10 @@ export function preflight(text, engagementType, meta = {}) {
           ? `This file has Option1…Option${numbered} columns. The importer reads a single `
             + 'Options column with values separated by |, and ignores the numbered ones. '
             + `All ${importedCount} poll questions would import with no options at all.`
-          : 'There is no Options column. The importer reads a single Options column with '
-            + `values separated by |, so all ${importedCount} poll questions would import `
-            + 'with nothing to vote on.',
+          : 'There is no Options column and no Kind column. The importer reads a single Options '
+            + `column with values separated by |, so all ${importedCount} poll questions would import `
+            + 'as open questions, with nothing to pick from. To make each question a choice, a '
+            + 'rating or a yes/no, add a Kind column — the poll template shows every column.',
       });
     }
   }
