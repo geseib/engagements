@@ -26,7 +26,7 @@ const Module = require('module');
 const {
   createTable,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-  BatchGetCommand, TransactWriteCommand,
+  BatchGetCommand, TransactWriteCommand, BatchWriteCommand,
 } = require('./player-table');
 const kmsStubs = require('./tenant-crypto-stub');
 
@@ -45,7 +45,7 @@ function installEventHarness({ eventsEnabled = 'on' } = {}) {
     ['@aws-sdk/lib-dynamodb', {
       DynamoDBDocumentClient: { from: () => table.doc },
       GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-      BatchGetCommand, TransactWriteCommand,
+      BatchGetCommand, TransactWriteCommand, BatchWriteCommand,
     }],
     ['@aws-sdk/client-kms', kmsStubs.makeKmsStub().exports],
     ['@aws-sdk/client-apigatewaymanagementapi', {

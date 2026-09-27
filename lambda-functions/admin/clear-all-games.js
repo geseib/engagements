@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { batchDeleteKeys } = require('./shared/ddb-delete');
 const {
   GAMES_RESERVATION_PK, gamesIndexPk, callerOrgId,
@@ -29,7 +29,8 @@ const {
  *
  * Queries the caller's own `ORG#{orgId}#GAMES` index and deletes exactly those
  * sessions: the index rows, each `GAME#{id}` partition, and each four-digit
- * `GAMES` reservation so the code returns to the pool. A Query is
+ * `GAMES` reservation so the code returns to the pool — except a reservation
+ * that has since become an event's (`Kind: event`), which is kept. A Query is
  * single-partition by definition, so another tenant's rows are not filtered
  * out — they are unreachable, which is the property the rest of the tenancy
  * work rests on.
@@ -65,6 +66,16 @@ async function partitionKeys(pk) {
   return keys;
 }
 
+/** Is this code's reservation an event's? Read strongly: the answer decides a delete. */
+async function isEventReservation(gameId) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` },
+    ConsistentRead: true,
+  }));
+  return Boolean(res && res.Item && res.Item.Kind === 'event');
+}
+
 exports.handler = async (event) => {
   if (event?.requestContext?.http?.method === 'OPTIONS') {
     return { statusCode: 204, headers: cors, body: '' };
@@ -98,7 +109,19 @@ exports.handler = async (event) => {
       // eslint-disable-next-line no-await-in-loop
       keys.push(...await partitionKeys(`GAME#${gameId}`));
       /* And the four-digit reservation, so the code goes back into a pool of
-         only 10,000. Leaving these behind is how the space leaks. */
+         only 10,000. Leaving these behind is how the space leaks.
+
+         NEVER AN EVENT'S (final review M7). This org's index row can outlive
+         its session's partition and reservation by DynamoDB's lazy ~48h, and
+         in that gap another organisation can draw the code for an EVENT.
+         BatchWriteItem carries no condition, so the reservation is READ first
+         and one marked `Kind: event` is left alone: releasing it would break
+         that event's /join and every date move. */
+      // eslint-disable-next-line no-await-in-loop
+      if (await isEventReservation(gameId)) {
+        console.warn(`⚠️ clear-all-games: GAME#${gameId} is now an event's code; its reservation is kept`);
+        continue;
+      }
       keys.push({ PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` });
     }
 

@@ -25,6 +25,7 @@ const { table } = h;
 const R = h.load('lambda-functions/websocket/code-reservation.js');
 const createGame = h.load('lambda-functions/websocket/create-game.js').handler;
 const deleteGame = h.load('lambda-functions/admin/delete-game.js').handler;
+const clearAllGames = h.load('lambda-functions/admin/clear-all-games.js').handler;
 
 let pass = 0; let fail = 0;
 async function check(label, fn) {
@@ -142,6 +143,37 @@ const newSession = () => createGame({
     });
     assert.strictEqual(res.statusCode, 404, res.body);
     assert.ok(reservation('5307'), 'the event\'s code was released');
+  });
+
+  // rejects: staff "Delete all sessions" releasing an event's code (final
+  // review M7). A lapsed session's ORG#A#GAMES/GAME#<code> index row can
+  // outlive its GAME# partition and reservation by DynamoDB's lazy ~48h; org
+  // B can draw that code for an EVENT in the gap. Clearing org A's sessions
+  // then batch-deleted B's event reservation — BatchWriteItem carries no
+  // condition — and B's /join and every date move broke.
+  await check('"Delete all sessions" for one org leaves another org\'s event reservation in place', async () => {
+    table.clear();
+    const EVENT_CODE = '5307';
+    const OWN_CODE = '6120';
+    table.put({ PK: 'ORG#org_a#GAMES', SK: `GAME#${EVENT_CODE}`, orgId: 'org_a', ttl: 1 });   // lapsed, not yet reaped
+    table.put({ PK: 'GAMES', SK: `GAME#${EVENT_CODE}`, orgId: 'org_b', Kind: 'event', ttl: 2000000000 });
+    table.put({ PK: `EVENT#${EVENT_CODE}`, SK: 'METADATA', orgId: 'org_b' });
+    // And org A's own live session, which must still go — so the test cannot
+    // pass by clearing nothing.
+    table.put({ PK: 'ORG#org_a#GAMES', SK: `GAME#${OWN_CODE}`, orgId: 'org_a', ttl: 2000000000 });
+    table.put({ PK: 'GAMES', SK: `GAME#${OWN_CODE}`, orgId: 'org_a', ttl: 2000000000 });
+    table.put({ PK: `GAME#${OWN_CODE}`, SK: 'METADATA', orgId: 'org_a' });
+    const res = await clearAllGames({
+      requestContext: { ...asHost('org_a', { groups: 'admins' }), http: { method: 'DELETE', path: '/admin/clear-all-games' } },
+    });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(reservation(EVENT_CODE), { PK: 'GAMES', SK: `GAME#${EVENT_CODE}`, orgId: 'org_b', Kind: 'event', ttl: 2000000000 },
+      'the event\'s reservation was released');
+    assert.ok(table.get(`EVENT#${EVENT_CODE}`, 'METADATA'), 'the event itself was touched');
+    assert.strictEqual(table.get('ORG#org_a#GAMES', `GAME#${EVENT_CODE}`), undefined, 'org A\'s stale index row stayed');
+    assert.strictEqual(reservation(OWN_CODE), undefined, 'org A\'s own session code was not released');
+    assert.strictEqual(table.get(`GAME#${OWN_CODE}`, 'METADATA'), undefined);
+    assert.strictEqual(table.get('ORG#org_a#GAMES', `GAME#${OWN_CODE}`), undefined);
   });
 
   console.log('\n6. the final delete refuses an event\'s code too, not only the read');
