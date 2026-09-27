@@ -1,40 +1,39 @@
 /* ===========================================================================
-   EventStage.css — the event on the wall (events M3), and the host's agenda
-   panel over it.
+   EventStage.css — the event's stage (events M3, reworked 27 Sep 2026): the
+   host's agenda BOARD, a talk's or a break's own screen, the join QR and the
+   end-of-event confirm.
 
-   THE WALL is docs/design/agenda-redesign/_src/agenda-stage.css, carried over
-   as a DIFF against the shipped stage (styles/stage.css): every size reads
-   the profile ladder (--t-*, --hair), so Room, TV, Call and Table each get
-   their own literal numbers; every colour is a Warm Summit token or the
-   stage's own (--rule, --success-text); the way in is the lobby's
-   .joinblock / .qr / .joininfo, reused; the trigger is the stage's own .wipe.
-   New classes are prefixed ag-. Nothing loops.
+   ONE LADDER: THE STAGE'S. The board is on the room's screen as often as on
+   the host's laptop, so every size reads the profile ladder (--t-body,
+   --t-meta, --hair, declared on <body> by styles/stage.css), and Room, TV,
+   Call and Table each get their own literal numbers. Nothing here is under
+   the profile's floor, because --t-meta IS the floor.
 
-   THE PANEL AND THE CONFIRM are laptop surfaces over the stage — the host at
-   the lectern, not the room — so they take the console's ladder
-   (12/13/15/19/24px, RATIONALE §3), not the wall's, declared locally as
-   --ag-t-*. Rows are 44px: the panel is pressed on a touchscreen as often as
-   clicked.
+   IT NEVER SCROLLS. The board's rows are one line each (the title truncates,
+   and says itself in full on hover); EventStage.jsx's useBoardFit measures
+   one row against the board's height and lays the rows into as many columns
+   as the agenda needs (--ag-cols, --ag-rows). Past the widest the screen
+   allows, the board goes dense: tighter rows, the kind line dropped, the
+   title at the label size.
 
-   MEASURED on the stage's lifted stack (#2A3550, agenda-stage.css):
-     --text on lifted                 10.49:1  agenda titles
-     --muted on lifted                 6.76:1  times, type lines
-     --success-text on lifted          6.52:1  "Done"
-     --primary on lifted               6.21:1  "Next", "Now", the kicker
-   On the panel (--surface #1B2942):
-     --text                           13.01:1
-     --muted #9BA8BE                   6.47:1
-     --primary                         7.43:1  "Live", "Paused"
-     --danger-text #EF8C86             5.34:1  "End the event…"
-     --bg #0F1A2E on --primary         8.86:1  the Start button
+   THE WALL SCREENS (a talk, a break) are docs/design/agenda-redesign/_src/
+   agenda-stage.css, carried over as a diff against the shipped stage: the
+   lobby's .joinblock / .qr / .joininfo reused, the stage's own .wipe for the
+   trigger. New classes are prefixed ag-.
+
+   MEASURED (the stage's --bg #0F1A2E; the board is not lifted):
+     --text on --bg                    15.43:1  titles
+     --muted #9BA8BE on --bg            7.50:1  times, kind lines
+     --success-text #6FD0A4 on --bg     9.58:1  "Done"
+     --primary #F6A94C on --bg          8.86:1  "Live", "Paused", Live now
+     --bg on --primary                  8.86:1  Go live, Resume
+     --danger-text #EF8C86 on --bg      7.10:1  END EVENT
+     a live row's tint (--ag-now-tint over --bg): --text 13.3, --muted 6.5
+   On a dialog (--surface #1B2942): --text 13.01, --muted 6.47, --danger-text
+   5.34.
    ======================================================================== */
 
 .ag-stage-root {
-  --ag-t-floor: 12px;
-  --ag-t-label: 13px;
-  --ag-t-body: 15px;
-  --ag-t-head: 19px;
-  --ag-t-title: 24px;
   --ag-rule: rgba(155, 168, 190, .22);
   --ag-now-tint: rgba(246, 169, 76, .10);
   --ag-scrim: rgba(6, 11, 22, .72);
@@ -66,9 +65,243 @@
   font-size: 15px;
 }
 
-/* ----------------------------------------------------- the wall agenda --
-   Every item, in order, its state said in a WORD. Done items step back;
-   the live or first one carries the amber edge. Titles wrap. */
+/* ------------------------------------------------------------ the board --
+   The host's agenda: fills .main, and its rows fill what is left under the
+   head. The grid clips rather than scrolls; useBoardFit makes sure there is
+   nothing to clip. */
+.ag-board {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(1vh + 4px);
+}
+
+.ag-board-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: .25em;
+  min-width: 0;
+}
+
+.ag-when {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.ag-live {
+  margin: 0;
+  font-size: var(--t-body);
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.ag-live b {
+  color: var(--primary);
+}
+
+.ag-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(var(--ag-cols, 1), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--ag-rows, 1), max-content);
+  align-content: start;
+  column-gap: calc(1.6vw + 12px);
+  row-gap: 0;
+}
+
+.ag-r {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0 calc(.8vw + 8px);
+  min-width: 0;
+  min-height: 48px;
+  padding: calc(.4vh + 2px) calc(.5vw + 6px);
+  border-bottom: var(--hair) solid var(--rule);
+}
+
+.ag-r-at {
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-r-main {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+}
+
+.ag-r-main svg {
+  flex: none;
+}
+
+/* Each truncating piece is ONE text node with min-width:0 — the skill's
+   text-overflow rule; the row's title attribute carries the whole of both. */
+.ag-r-tt {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-body);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ag-r-sub {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-meta);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ag-r-st {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.ag-r-st--live,
+.ag-r-st--paused {
+  color: var(--primary);
+}
+
+.ag-r-st--done {
+  color: var(--success-text);
+}
+
+.ag-r--live {
+  background: var(--ag-now-tint);
+  box-shadow: inset calc(var(--hair) * 3) 0 0 var(--primary);
+}
+
+.ag-r--done .ag-r-tt,
+.ag-r--brk .ag-r-tt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* The row's buttons: its own auto track, never pushed out of the row. */
+.ag-r-go {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .4em;
+}
+
+.ag-b {
+  font-family: inherit;
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1;
+  min-height: 44px;
+  padding: 0 .8em;
+  border-radius: 9px;
+  border: var(--hair) solid var(--rule);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ag-b--go {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--bg);
+}
+
+.ag-b:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.ag-grid[data-dense] .ag-r {
+  min-height: 44px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.ag-grid[data-dense] .ag-r-tt {
+  font-size: var(--t-meta);
+}
+
+.ag-grid[data-dense] .ag-r-sub {
+  display: none;
+}
+
+.ag-grid[data-dense] .ag-b {
+  min-height: 40px;
+  padding: 0 .6em;
+}
+
+/* NARROW: a dense column under MIN_DENSE_COLUMN_PX (a long day on a portrait
+   tablet, 343px at 768 wide). The buttons are what a column cannot give up,
+   so the kind icon goes and the gaps close, and the title keeps the rest —
+   "W…" is what it had before (measured in Chromium, 27 Sep 2026). */
+.ag-grid[data-narrow] .ag-r {
+  grid-template-columns: 2.9em minmax(0, 1fr) auto auto;
+  gap: 0 .45em;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.ag-grid[data-narrow] .ag-r-main svg {
+  display: none;
+}
+
+.ag-grid[data-narrow] .ag-r-go {
+  gap: .25em;
+}
+
+.ag-grid[data-narrow] .ag-b {
+  padding: 0 .5em;
+}
+
+/* END EVENT in the dock: the stage's own .dock-more, in the destructive
+   copy colour — the reversible neighbour (Pause, End item) is on the rows. */
+.ag-dock-end {
+  border-color: var(--danger-deep);
+  color: var(--danger-text);
+}
+
+/* A preview is not the room's (session-setup's Preview marks, reused): a
+   dashed chip, "not yet", without a fifth phase colour. */
+.chip.ag-preview {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.chip.ag-preview .dot {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+
+/* ------------------------------------------------ a talk, a break ------ */
 .ag-wall {
   min-width: 0;
   display: flex;
@@ -76,7 +309,7 @@
   gap: calc(.6vh + 2px);
   border-left: var(--hair) solid var(--rule);
   padding-left: calc(1.4vw + 10px);
-  width: clamp(420px, 38vw, 760px);
+  width: clamp(360px, 34vw, 700px);
   align-self: start;
   max-height: 100%;
   overflow: hidden;
@@ -104,7 +337,7 @@
   grid-template-columns: 4.2em minmax(0, 1fr) auto;
   gap: .1em calc(.7vw + 8px);
   align-items: baseline;
-  padding: calc(.7vh + 4px) calc(.6vw + 6px);
+  padding: calc(.6vh + 3px) calc(.6vw + 6px);
   border-bottom: var(--hair) solid var(--rule);
   min-width: 0;
 }
@@ -144,17 +377,8 @@
   font-size: var(--t-meta);
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--primary);
   white-space: nowrap;
-}
-
-.ag-wl li.done .tt {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.ag-wl li.done .st {
-  color: var(--success-text);
 }
 
 .ag-wl li.now {
@@ -164,15 +388,6 @@
   border-bottom-color: transparent;
 }
 
-.ag-wl li.now .st {
-  color: var(--primary);
-}
-
-.ag-wl li.now .tt {
-  font-size: var(--t-secondary);
-  line-height: 1.1;
-}
-
 .ag-wl li.more .tt {
   font-size: var(--t-meta);
   color: var(--muted);
@@ -180,7 +395,6 @@
   letter-spacing: .04em;
 }
 
-/* ------------------------------------------------------------ up next --- */
 .ag-up {
   display: flex;
   flex-direction: column;
@@ -221,26 +435,8 @@
 }
 
 .ag-up .qr {
-  width: clamp(220px, 26vh, 320px);
-  height: clamp(220px, 26vh, 320px);
-}
-
-.ag-title {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: var(--t-hero);
-  line-height: .98;
-  letter-spacing: -.01em;
-  margin: 0;
-  max-width: 16ch;
-  color: var(--text);
-}
-
-.ag-date {
-  font-size: var(--t-secondary);
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
+  width: clamp(180px, 24vh, 300px);
+  height: clamp(180px, 24vh, 300px);
 }
 
 .ag-who {
@@ -267,7 +463,7 @@
   color: var(--primary);
 }
 
-/* ------------------------------------------------ the host's agenda panel -- */
+/* ------------------------------------------------ the join QR, the confirm -- */
 .ag-scrim {
   position: fixed;
   inset: 0;
@@ -284,192 +480,56 @@
   margin: auto;
 }
 
-.ag-panel,
+.ag-qrcard,
 .ag-confirm {
-  width: min(720px, calc(100vw - 32px));
   padding: 20px 24px;
   border: 1px solid var(--ag-rule);
   border-radius: 14px;
   background: var(--surface);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: var(--ag-t-body);
+}
+
+.ag-qrcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+}
+
+/* The QR at the size the room can scan, and never taller than the screen. */
+.ag-qrcard .ag-qr {
+  width: min(60vh, 520px);
+  height: min(60vh, 520px);
+}
+
+.ag-qr-url {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-secondary);
+}
+
+.ag-qr-code {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-hero);
+  line-height: 1;
+  letter-spacing: .06em;
+  color: var(--primary);
 }
 
 .ag-confirm {
   width: min(460px, calc(100vw - 32px));
+  font-size: 15px;
 }
 
-.ag-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.ag-panel-head h2,
 .ag-confirm h2 {
   margin: 0;
-  font-size: var(--ag-t-head);
+  font-size: 19px;
   font-weight: 700;
-}
-
-.ag-x {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.ag-x:hover {
-  color: var(--text);
-}
-
-.ag-refusal {
-  margin: 0 0 8px;
-  color: var(--primary);
-  font-size: var(--ag-t-label);
-}
-
-.ag-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.ag-row {
-  display: grid;
-  grid-template-columns: 3.4em minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  align-items: center;
-  min-height: 44px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--ag-rule);
-}
-
-.ag-row:last-child {
-  border-bottom: 0;
-}
-
-.ag-row--live {
-  background: var(--ag-now-tint);
-}
-
-.ag-row-at {
-  color: var(--muted);
-  font-size: var(--ag-t-label);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.ag-row-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ag-row-tt {
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.ag-row--done .ag-row-tt {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.ag-row-ty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: var(--ag-t-label);
-}
-
-.ag-row-st {
-  font-size: var(--ag-t-floor);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.ag-row-st--live,
-.ag-row-st--paused {
-  color: var(--primary);
-}
-
-.ag-row-st--done {
-  color: var(--success-text);
-}
-
-/* The row's own actions, on its right. Not justify-content:flex-end — that
-   overflows toward the start, where nothing can reach it (the skill's rule
-   9); the group is its own auto track, and wraps. */
-.ag-row-go {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.ag-row-go > :first-child {
-  margin-left: auto;
-}
-
-.ag-act {
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--primary);
-  border-radius: 9px;
-  background: var(--primary);
-  color: var(--bg);
-  font-family: inherit;
-  font-size: var(--ag-t-label);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.ag-act--quiet {
-  border-color: var(--ag-rule);
-  background: none;
-  color: var(--text);
-}
-
-.ag-act:disabled,
-.ag-end:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-.ag-panel-foot,
-.ag-confirm-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--ag-rule);
-}
-
-.ag-joined {
-  margin-right: auto;
-  color: var(--muted);
-  font-size: var(--ag-t-label);
-  overflow-wrap: anywhere;
-}
-
-.ag-confirm-foot {
-  justify-content: flex-end;
 }
 
 .ag-confirm p {
@@ -478,13 +538,24 @@
   line-height: 1.5;
 }
 
+.ag-confirm-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ag-rule);
+}
+
 .ag-close,
 .ag-end {
   min-height: 44px;
   padding: 0 16px;
   border-radius: 10px;
   font-family: inherit;
-  font-size: var(--ag-t-body);
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -499,4 +570,9 @@
   border: 1px solid var(--danger-deep);
   background: none;
   color: var(--danger-text);
+}
+
+.ag-end:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }

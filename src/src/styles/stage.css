@@ -575,6 +575,19 @@ body, .stage-ladder-table{
 .dock .host-action-bar__keyhint{max-width:24ch}
 @media (max-width:1200px){.dock .host-action-bar__keyhint{display:none}}
 @media (max-width:1100px){.dock .kbd{display:none}}
+/* A PORTRAIT TABLET. The measurements above stop at 1000 wide; at 768 the
+   dock ran 200px past the right edge, so the primary and SESSION were not
+   scrolled to but unreachable, and the lobby cut its session code to "482"
+   (measured in Chromium, 27 Sep 2026). Below 900px the dock takes a second
+   line — the status on its own, the buttons under it at the right, wrapping
+   again rather than leaving the screen — and the join block stacks, QR over
+   the code (below, after the join block's own rules, which it must follow).
+   The dock row of the stage's grid is sized by its content, so the main area
+   gives up the height; nothing scrolls. */
+@media (max-width:900px){
+  .dock{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
+  .dock .status{flex:1 1 100%;max-width:none}
+}
 
 /* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
    THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter
@@ -972,6 +985,9 @@ body, .stage-ladder-table{
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .joininfo .code{font-family:var(--font-display);font-weight:800;color:var(--primary);
   font-size:var(--t-hero);line-height:1;letter-spacing:.06em}
+/* A portrait tablet: QR over the address and code, all flush left under the
+   kicker. Side by side at 768 the code was cut to "482" (see the dock's note). */
+@media (max-width:900px){.joinblock{flex-direction:column;align-items:flex-start}}
 
 /* wavelength — a ranked, weighted, wrapped flow rather than a packed cloud.
    A packed cloud needs collision detection to be legible and still cannot

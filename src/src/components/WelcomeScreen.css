@@ -230,6 +230,27 @@
   }
 }
 
+/* A PORTRAIT TABLET GETS THE TWO COLUMNS TOO. Stacked, 768×1024 ran to
+   1417px — the library most of a screen below the fold — and side by side it
+   fits with room to spare (measured in Chromium, 27 Sep 2026). Tighter gaps
+   than the laptop's; the same DOM order, so tab and reading order hold. */
+@media (min-width: 740px) and (max-width: 899.98px) {
+  .wel-main { display: flex; align-items: center; }
+  .wel-split {
+    grid-template-columns: minmax(0, 1.4fr) minmax(15rem, 1fr);
+    gap: 0 28px;
+    align-items: stretch;
+    padding-block: 18px;
+  }
+  .wel-start { padding-block: 0; }
+  .wel-resume {
+    padding-block: 0;
+    border-top: 0;
+    border-left: 1px solid var(--wel-rule);
+    padding-left: 24px;
+  }
+}
+
 /* ------------------------------------------------------- the two actions -- */
 /* Not four equal full-width buttons. The old card gave Quick Start, Create,
    Continue and History the same weight and the same shape, so a host read all
@@ -453,3 +474,83 @@
   }
 }
 
+/* --------------------------------------------------------------- events ---
+   The organisation's events, under the two ways to start a session: one row
+   each — its name, when (or Running), and Open, which goes to its agenda
+   (components/WelcomeEvents.jsx). The rule and rhythm are .wel-aside-more's.
+   The name truncates as one text node with min-width:0 (the skill's rule),
+   and says itself in full on hover. */
+.wel-events {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--wel-rule);
+}
+
+.wel-evlist {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.wel-ev {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--wel-rule);
+}
+
+.wel-ev:last-child {
+  border-bottom: 0;
+}
+
+.wel-ev-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wel-ev-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: var(--wel-t-body);
+  color: var(--text);
+}
+
+.wel-ev-meta {
+  font-size: var(--wel-t-meta);
+  color: var(--muted);
+}
+
+.wel-ev-live {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.wel-ev .wel-btn-line {
+  flex: none;
+}
+
+.wel-ev-more {
+  margin-top: 8px;
+}
+
+/* A LAPTOP'S SHORT SCREEN HOLDS THE WHOLE PAGE. At 1280×720 the library
+   column ran 46px past the fold before the events block existed, and the
+   block made the left column longer still (measured in Chromium, 27 Sep
+   2026). The two-column layout's vertical rhythm tightens here instead of
+   the page scrolling; nothing is dropped and no size changes. */
+@media (min-width: 900px) and (max-height: 820px) {
+  .wel-top { padding-block: 10px; }
+  .wel-split { padding-block: 10px; }
+  .wel-stack { margin-top: 18px; }
+  .wel-events,
+  .wel-aside-more { margin-top: 18px; padding-top: 14px; }
+  .wel-links { gap: 12px; }
+}

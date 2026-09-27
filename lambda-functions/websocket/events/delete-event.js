@@ -60,6 +60,7 @@ const tenant = require('../tenant');
 const { json, notFound, trace, eventsEnabled } = require('./event-http');
 const S = require('./event-store');
 const { deleteAttendees } = require('./attendee-store');
+const { discardChildSession } = require('./child-session');
 
 const PLANNED = 'planned';
 const TRANSACTION_LIMIT = 100;
@@ -142,6 +143,11 @@ async function deleteEvent(db, tableName, request) {
     } catch (error) {
       if (!S.isCancelled(error)) throw error;
       return json(409, { error: CHANGED, code: 'agenda_changed' });
+    }
+    // Previewed items' unopened sessions (run.js `prepare`) go with the
+    // event: nobody could ever join them, and each holds a code.
+    for (const row of items) {
+      if (row.GameId) await discardChildSession(db, tableName, String(row.GameId), meta.orgId);
     }
     let attendees = 0;
     try {

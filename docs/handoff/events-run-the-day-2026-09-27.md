@@ -43,15 +43,16 @@ the owner has not answered them, and each is a small change if overruled (see be
   step freezes its results.
 - Billing: an event's sessions bill under one ledger key (`LEDGER#<period>#SESSION#EVENT#<code>`),
   so a whole event is one session (decision 1), and the reconciler still counts it.
-- **The stage:**
-  - `/host/event/<code>` → `components/event/EventStage.jsx`: before the day (s-01), between items
-    (s-03), a break with countdown and +5 min (s-05), a talk or an activity (s-02). The dock's
-    primary button is the next obvious step, and SPACE presses it. **AGENDA** opens every item with
-    its own Start / Resume / Pause / End, plus "End the event…".
-  - Starting an engagement runs the wipe and navigates to `/host?gameId=<child>&event=<code>`: today's
-    host stage, plus an **AGENDA** dock door (pauses the item, or ends it if the session has ENDED).
-    The lobby QR and code are the event's. "Back to Menu" goes to the agenda instead.
-  - If another screen moves the day on, the item's stage goes back to the wall.
+- **The stage** (reworked the same day — see "Second round" below for why):
+  - `/host/event/<code>` → `components/event/EventStage.jsx` is the **agenda board**: every item on one
+    line with **Open** (the host's screen only) and **Go live** (the host's screen AND everyone's
+    phones), plus Resume / Pause / End where the item's state allows. The dock's primary is the next
+    obvious step (SPACE presses it), with QR and END EVENT beside it.
+  - Open on a talk or a break shows its screen (s-02, s-05 with countdown and +5 min) as a preview.
+    Open on an engagement goes to `/host?gameId=<child>&event=<code>`: today's host stage, plus an
+    **AGENDA** dock door. The lobby QR and code are the event's.
+  - Every item screen that is not live carries **Bring everyone here** (Bring everyone back, if
+    paused) as its primary. AGENDA only navigates; it never pauses anything.
 - Builder: **Run the event** (opens the stage in a new tab), Live/Paused/Done chips on started items,
   and Edit disabled on them.
 
@@ -73,16 +74,54 @@ the owner has not answered them, and each is a small change if overruled (see be
 - `WebSocketClient.disconnect()` now detaches the old socket's handlers. Before this, its late close
   killed the next socket's heartbeat, which bit every item change.
 
+## Second round, same day: preview, go live, fits every screen
+
+The owner, testing: *"a host should be able to launch these if they exist from their main screen …
+move back and forth between them … a host may bring up the agenda and switch to the second agenda item
+but that doesn't open it for the players. Instead a different button … would switch to the host screen
+and trigger the players as well. That way host can rehearse, preview etc. … this button on the bottom
+of the screen … Finally need to make sure everything fits on the host's laptop/tablet/room screen.
+They should not have to scroll."*
+
+- **Launch from the main screen:** `components/WelcomeEvents.jsx`, under "Start an engagement": the
+  org's running and upcoming events (running first, two at most so the page fits a laptop, the rest
+  counted), each with Open → its board. Nothing is drawn for a host with no events.
+- **Preview (backend):** `run.js` `prepare` makes an engagement's session in CREATED — unjoinable
+  (session-gate: "Game not started"), no public link — and records `GameId` on the item, which stays
+  `planned`. Go live (`start`) OPENS that same session (`child-session.js openChildSession`) instead
+  of making another. Editing or removing the item, deleting the event, or ending the day with it
+  still planned discards a prepared session, and its code with it.
+  Talks refuse `prepare` (`not_an_engagement`); their preview is client-side only.
+- **Go live after a finished item:** if the previous live item's session has ENDED, starting the next
+  marks it done (`eventItemEnded`) instead of pausing it.
+- **Fit, measured in Chromium** (a headless build against a local mock API, 27 Sep): welcome, the
+  board at 9 and 18 items, talk and break screens, and the item lobby, at 1280×720, 1366×768,
+  1024×768, 768×1024, 1180×820 and 1920×1080 — no page scroll, no dock button off-screen, no agenda
+  row or "Coming up" row cut off, in all 54 combinations. What that took:
+  - The board fits by measuring (`fitBoard`): as many columns as the height needs; dense rows past
+    520px columns; `data-narrow` (no kind icon, closer gaps) under 440px. It is written to the DOM,
+    not React state: the state version **crashed the page** ("Maximum update depth exceeded") on a
+    1280→1366 resize.
+  - "Coming up" gives rows to its "and N more" line until every row it shows is whole.
+  - `styles/stage.css`: below 900px the dock wraps and the lobby's join block stacks. This was a
+    **pre-existing** fault for every session: at 768 wide the dock ran 200px off-screen and the code
+    was cut to "482".
+  - Welcome: a two-column layout from 740px (portrait tablet) and tighter rhythm on short laptops. The
+    library column overflowed 1280×720 before the Events block existed.
+  - In an event, "Back to Menu" is gone from the item's dock: it duplicated AGENDA, and pushed SESSION
+    off a 1024 dock.
+
 ## Decisions taken on the owner's behalf (each is small to change)
 
 | # | Taken | To change |
 |---|---|---|
-| D1 | Agenda mid-item pauses it; phones show "Paused". | `GameHostPage.goToAgenda` → `end` instead of `pause`. |
+| D1 | ~~Agenda mid-item pauses it.~~ **Superseded by the owner's second round:** AGENDA only navigates; Pause is its own button on the board row. | — |
 | D2 | One live item, any number paused. | `run.js start` → refuse while one is live. |
 | D3 | Attendees may browse the agenda mid-item, with "Back to live". | Drop `plr-agenda` from PlayerShell. |
 | D5 | Host agenda on the wall (AGENDA panel). No remote Agenda tab yet — see below. | — |
-| — | A live talk's "Next:" ends the talk, then starts the next item. | `EventStage.plan`. |
-| — | Dock labels follow the mockups: "Start trivia", "Start the survey", "Start The FY27 plan". | `startWords`. |
+| — | A live talk's "Go live: <next>" ends the talk, then starts the next item. | `EventStage.plan`. |
+| — | Dock labels: "Go live: trivia", "Go live: the survey", "Go live: The FY27 plan". | `startWords`. |
+| — | Arriving at the board while an engagement is live does NOT jump to it; the row says Live. | `EventStage` load. |
 
 ## Not built (next, in order of value)
 
@@ -99,17 +138,22 @@ the owner has not answered them, and each is a small change if overruled (see be
 
 ## Verify on dev (walk it)
 
-1. Console → Events → an event → **Run the event**. The wall should say Starting soon, show the
-   event code and QR, and read "N joined".
+1. The host's main screen shows the event under **Run an event**; Open goes to its board. (Console →
+   Events → **Run the event** still works too.) The board says Starting soon and "N joined".
 2. On a phone, a laptop and a tablet, open `/play?event=<code>`, type a name once, and check that the
    agenda reads "Not started".
-3. Start the first engagement on the wall. The phones switch by themselves with "You're in as …".
-4. Mid-round press **AGENDA**. The phones say Paused. Start a talk: the phones say "Look up". Resume
-   the engagement from the AGENDA panel: the phones return to the same round.
-5. Reload a phone mid-item. It should land back in the item with the same name and score.
-6. End the item, then the event.
+3. **Open** the second item. The host's screen shows it with "Preview — the phones are not here yet";
+   the phones do not move. **AGENDA** returns to the board.
+4. **Go live** on the first engagement (or "Bring everyone here" on its preview). The phones switch by
+   themselves with "You're in as …".
+5. Mid-round press **AGENDA**: nothing pauses, the row says Live. Press **Pause** on the row: the
+   phones say Paused. **Resume**: they return to the same round.
+6. Reload a phone mid-item. It should land back in the item with the same name and score.
+7. End the item, then the event. Try each host screen on a laptop, a tablet (both ways) and the room
+   screen: nothing should scroll.
 
 ## Gate at this commit
 
-Backend 265 suites, 0 failed · frontend 393 suites, 9,498 tests · lint 0 errors (10 warnings,
-baseline) · build passes · api.md 167 routes.
+Backend 265 suites, 0 failed (`tests/verify-question-set-ui.spec.js` is a Playwright spec, not a node
+suite) · frontend 395 suites, 9,521 tests · lint 0 errors (10 warnings, baseline) · build passes ·
+api.md 167 routes.

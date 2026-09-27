@@ -282,6 +282,11 @@ export const HOST_INTENTS = {
   // at a time, full size — SurveyWalkthrough.jsx. Offered beside
   // SURVEY_RESULTS, as CLOSED's and a survey's ENDED's tertiary.
   SURVEY_PRESENT: 'survey-present',
+  // AN EVENT'S ITEM, NOT LIVE YET (events, 27 Sep 2026): the host is looking
+  // at it — a preview, or a paused item — and this brings everyone to it:
+  // POST /events/{code}/run start|resume, then the stage carries on here.
+  // GameHostPage swaps it in as the primary; hostControlsFor never offers it.
+  EVENT_GO_LIVE: 'event-go-live',
 };
 
 /**

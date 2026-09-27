@@ -1,11 +1,15 @@
 /**
  * POST /events/{code}/run — THE HOST RUNS THE DAY (events M3).
  *
- *   { action: 'start',     itemId }  planned → live; paused → live (a resume)
+ *   { action: 'prepare',   itemId }  an engagement's session, made but NOT
+ *                                    opened, so the host can preview its
+ *                                    stage; the item stays planned and the
+ *                                    phones stay where they are
+ *   { action: 'start',     itemId }  planned → live ("Go live"); paused → live
  *   { action: 'resume',    itemId }  paused → live (the same as start)
- *   { action: 'pause',     itemId }  live → paused: the host went back to the
- *                                    agenda part-way (roadmap D1). A break is
- *                                    never paused; it ends.
+ *   { action: 'pause',     itemId }  live → paused. A break is never paused;
+ *                                    it ends. Going back to the agenda is the
+ *                                    host looking, not a pause (27 Sep 2026).
  *   { action: 'end',       itemId }  live | paused → done
  *   { action: 'extend',    itemId }  a live break: back five minutes later
  *   { action: 'end-event' }          every live or paused item ends, and the
@@ -55,7 +59,7 @@ const { json, readBody } = require('./event-http');
 const S = require('./event-store');
 const C = require('./child-session');
 
-const ACTIONS = Object.freeze(['start', 'resume', 'pause', 'end', 'extend', 'end-event']);
+const ACTIONS = Object.freeze(['prepare', 'start', 'resume', 'pause', 'end', 'extend', 'end-event']);
 const EXTEND_MINUTES = 5;
 const MINUTE_MS = 60 * 1000;
 
@@ -86,19 +90,82 @@ const breakEndsAt = (row, nowMs) => new Date(nowMs + (Number(row.Minutes) || 0) 
 
 /**
  * The update that takes the item that WAS live out of the way of a new one:
- * a break ends (it is never paused, decision 7), anything else pauses.
+ * a break ends (it is never paused, decision 7), and so does an engagement
+ * whose session has already ENDED (all its rounds played, or the host ended
+ * it on its stage) — there is nothing left in it to resume. Anything else
+ * pauses.
  */
-function stepAside(code, prev, now) {
-  const isBreak = prev.Type === rules.BREAK;
+function stepAside(code, prev, now, { finished = false } = {}) {
+  const ends = prev.Type === rules.BREAK || finished;
   return {
     Update: {
       Key: itemKey(code, S.itemIdOf(prev)),
-      UpdateExpression: isBreak ? 'SET #s = :done, EndedAt = :now' : 'SET #s = :paused, PausedAt = :now',
+      UpdateExpression: ends ? 'SET #s = :done, EndedAt = :now' : 'SET #s = :paused, PausedAt = :now',
       ConditionExpression: '#s = :live',
       ExpressionAttributeNames: { '#s': 'State' },
-      ExpressionAttributeValues: { ':live': 'live', ':now': now, ...(isBreak ? { ':done': 'done' } : { ':paused': 'paused' }) },
+      ExpressionAttributeValues: { ':live': 'live', ':now': now, ...(ends ? { ':done': 'done' } : { ':paused': 'paused' }) },
     },
   };
+}
+
+/**
+ * An engagement item as its session will be made from it, or a refusal:
+ * RATIONALE (agenda-rules.sessionFormOf) — a row whose words could not be
+ * opened carries blank settings that look like none at all. Never guess.
+ */
+async function playableItem(meta, row) {
+  const item = S.projectItem(await S.openItemRow(meta.orgId, row, 'run'));
+  if (item.decryptFailed) {
+    return { refusal: refuse('This item could not be read, so it cannot start. Remove it and add it again.', 'item_unreadable') };
+  }
+  if (!item.setRef || !item.setRef.setId) {
+    return { refusal: refuse('This engagement has no question set to play.', 'item_no_set') };
+  }
+  return { item };
+}
+
+/**
+ * PREVIEW — the host opens an engagement's own stage without taking it live
+ * (the owner, 27 Sep 2026: "a host may bring up the agenda and switch to the
+ * second agenda item but that doesn't open it for the players ... That way
+ * host can rehearse, preview etc."). The item's session is made now, but not
+ * opened: it is CREATED, so nobody can join it (session-gate.js), the agenda
+ * never links it (get-agenda.js links live, paused and done items only), and
+ * the phones stay wherever the event is. The item stays `planned`. Going live
+ * later opens this same session (start, below) rather than making another.
+ *
+ * An item that already has a session answers with it, whatever its state:
+ * opening a live, paused or finished engagement's stage is just looking.
+ * Two screens previewing at once: the second's session is discarded and both
+ * get the one that landed.
+ */
+async function prepare(db, tableName, { meta, code, row, itemId }) {
+  if (!rules.isEngagement(row.Type)) {
+    return { refusal: refuse('Only an engagement has a stage of its own. Open this one on the agenda.', 'not_an_engagement') };
+  }
+  if (row.GameId) return { gameId: String(row.GameId) };
+  if (stateOf(row) !== 'planned') return { refusal: raced() };
+  const { item, refusal } = await playableItem(meta, row);
+  if (refusal) return { refusal };
+  const gameId = await C.createChildSession(db, tableName, { item, orgId: meta.orgId, code, itemId, open: false });
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: itemKey(code, itemId),
+      UpdateExpression: 'SET GameId = :gid, PreparedAt = :now',
+      ConditionExpression: 'attribute_exists(SK) AND attribute_not_exists(GameId) AND (attribute_not_exists(#s) OR #s = :planned)',
+      ExpressionAttributeNames: { '#s': 'State' },
+      ExpressionAttributeValues: { ':gid': gameId, ':now': new Date().toISOString(), ':planned': 'planned' },
+    }));
+  } catch (error) {
+    await C.discardChildSession(db, tableName, gameId, meta.orgId);
+    if (!(error && error.name === 'ConditionalCheckFailedException')) throw error;
+    const again = await readItem(db, tableName, code, itemId);
+    if (again && again.GameId) return { gameId: String(again.GameId) };
+    return { refusal: raced() };
+  }
+  console.log(`👁️ run: EVENT#${code} ${itemId} prepared for preview as ${gameId}`);
+  return { gameId };
 }
 
 /** start and resume. */
@@ -115,18 +182,21 @@ async function start(db, tableName, { meta, code, row, itemId }) {
   let gameId = row.GameId ? String(row.GameId) : null;
   let created = false;
   if (was === 'planned' && rules.isEngagement(row.Type)) {
-    const item = S.projectItem(await S.openItemRow(meta.orgId, row, 'run'));
-    // RATIONALE (agenda-rules.sessionFormOf): a row whose words could not be
-    // opened carries blank settings that look like none at all. Never guess.
-    if (item.decryptFailed) {
-      return { refusal: refuse('This item could not be read, so it cannot start. Remove it and add it again.', 'item_unreadable') };
+    if (gameId) {
+      // PREVIEWED (prepare, above): its session exists, CREATED. Open it now,
+      // the same session the host has been looking at.
+      await C.openChildSession(db, tableName, { gameId, orgId: meta.orgId, type: row.Type, now });
+    } else {
+      const { item, refusal } = await playableItem(meta, row);
+      if (refusal) return { refusal };
+      gameId = await C.createChildSession(db, tableName, { item, orgId: meta.orgId, code, itemId, now });
+      created = true;
     }
-    if (!item.setRef || !item.setRef.setId) {
-      return { refusal: refuse('This engagement has no question set to play.', 'item_no_set') };
-    }
-    gameId = await C.createChildSession(db, tableName, { item, orgId: meta.orgId, code, itemId, now });
-    created = true;
   }
+  // Is the item that was live an engagement whose session has finished? Then
+  // it ends rather than pauses (stepAside).
+  const prevFinished = Boolean(prev && prev.GameId
+    && ((await readSessionState(db, tableName, String(prev.GameId))) || {}).State === 'ENDED');
 
   const itemSets = ['#s = :live'];
   const values = { ':live': 'live', ':was': was };
@@ -152,7 +222,7 @@ async function start(db, tableName, { meta, code, row, itemId }) {
       },
     },
   }];
-  if (prev) tx.push(stepAside(code, prev, now));
+  if (prev) tx.push(stepAside(code, prev, now, { finished: prevFinished }));
 
   try {
     await db.send(new TransactWriteCommand({ TransactItems: tx.map((t) => ({ Update: { TableName: tableName, ...t.Update } })) }));
@@ -167,8 +237,12 @@ async function start(db, tableName, { meta, code, row, itemId }) {
   // The rows are written; now the rooms. The item that was live hears that
   // it paused AND what started, so its phones can follow at once.
   if (prev && prev.GameId) {
-    await C.setPaused(db, tableName, prev.GameId, true);
-    await C.toSession(db, tableName, prev.GameId, { type: 'eventItemPaused', event: code, itemId: prevId });
+    if (prevFinished) {
+      await C.toSession(db, tableName, prev.GameId, { type: 'eventItemEnded', event: code, itemId: prevId });
+    } else {
+      await C.setPaused(db, tableName, prev.GameId, true);
+      await C.toSession(db, tableName, prev.GameId, { type: 'eventItemPaused', event: code, itemId: prevId });
+    }
     await C.toSession(db, tableName, prev.GameId, {
       type: 'eventItemStarted', event: code, itemId, itemType: row.Type || '', ...(gameId ? { gameId } : {}),
     });
@@ -356,10 +430,40 @@ async function endEvent(db, tableName, { meta, code }) {
   }
   await markList(db, tableName, meta, code, 'ENDED');
   for (const row of rows) {
-    if (row.GameId) await C.toSession(db, tableName, row.GameId, { type: 'eventEnded', event: code });
+    if (!row.GameId) continue;
+    if (stateOf(row) === 'planned') {
+      await letPreviewGo(db, tableName, meta, code, row);
+    } else {
+      await C.toSession(db, tableName, row.GameId, { type: 'eventEnded', event: code });
+    }
   }
   console.log(`🏁 run: EVENT#${code} ended`);
   return {};
+}
+
+/**
+ * A PREVIEW NOBODY TOOK LIVE, at the end of the day (prepare): its session
+ * was never opened and now never will be, so it goes — and its code with it,
+ * rather than being held for the unstarted TTL's ninety days — and the item
+ * forgets it, so the host's board cannot open a session that is gone. Both
+ * best effort: discardChildSession never throws, and a pointer left behind
+ * costs one "not found" on a board whose day is over.
+ */
+async function letPreviewGo(db, tableName, meta, code, row) {
+  const gameId = String(row.GameId);
+  await C.discardChildSession(db, tableName, gameId, meta.orgId);
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: itemKey(code, S.itemIdOf(row)),
+      UpdateExpression: 'REMOVE GameId, PreparedAt',
+      ConditionExpression: 'GameId = :gid AND (attribute_not_exists(#s) OR #s = :planned)',
+      ExpressionAttributeNames: { '#s': 'State' },
+      ExpressionAttributeValues: { ':gid': gameId, ':planned': 'planned' },
+    }));
+  } catch (error) {
+    console.warn(`⚠️ run: EVENT#${code} kept a pointer to its discarded preview ${gameId}: ${error && error.name}`);
+  }
 }
 
 /**
@@ -419,7 +523,9 @@ async function runEvent(db, tableName, request, meta, code) {
     const row = await readItem(db, tableName, code, itemId);
     if (!row) return itemGone();
     const ctx = { meta, code, row, itemId };
-    if (action === 'start' || action === 'resume') {
+    if (action === 'prepare') {
+      outcome = await prepare(db, tableName, ctx);
+    } else if (action === 'start' || action === 'resume') {
       if (action === 'resume' && stateOf(row) !== 'paused' && stateOf(row) !== 'live') {
         return refuse('Only a paused item can be resumed.', 'item_not_paused');
       }

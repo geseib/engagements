@@ -94,13 +94,15 @@ describe('the wall and the host\'s panel', () => {
     ['wall "Now", "First", the kicker', T.primary, T.bg],
     ['the wall\'s live row: its title', T.text, over(nowTint.rgb, nowTint.a, T.bg)],
     ['the wall\'s live row: its word', T.primary, over(nowTint.rgb, nowTint.a, T.bg)],
-    ['panel titles', T.text, surfaceOnBg],
-    ['panel times and type lines', T.muted, surfaceOnBg],
-    ['panel "Live" and "Paused"', T.primary, surfaceOnBg],
-    ['"End the event…"', T.dangerText, surfaceOnBg],
-    ['a Start button\'s ink on amber', T.bg, T.primary],
-    ['a live panel row\'s title on its tint', T.text, over(nowTint.rgb, nowTint.a, surfaceOnBg)],
-    ['a live panel row\'s type line on its tint', T.muted, over(nowTint.rgb, nowTint.a, surfaceOnBg)],
+    ['board titles on the stage', T.text, T.bg],
+    ['board times and kind lines', T.muted, T.bg],
+    ['board "Live" and "Paused"', T.primary, T.bg],
+    ['END EVENT in the dock', T.dangerText, T.bg],
+    ['a Go live button\'s ink on amber', T.bg, T.primary],
+    ['a live board row\'s title on its tint', T.text, over(nowTint.rgb, nowTint.a, T.bg)],
+    ['a live board row\'s kind line on its tint', T.muted, over(nowTint.rgb, nowTint.a, T.bg)],
+    ['the confirm\'s copy on its dialog', T.text, surfaceOnBg],
+    ['"End the event" on its dialog', T.dangerText, surfaceOnBg],
   ])('%s clears AA', (_label, fg, bg) => {
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(AA);
   });
@@ -118,10 +120,10 @@ describe('the contract', () => {
     for (const other of [GLOBAL_CSS, STAGE_CSS, PLAYER_CSS]) expect(stripped(other)).not.toMatch(/\.evp\b/);
   });
 
-  test('the stage\'s sheet is rooted at ag- (or the stage\'s own wipe, re-tinted)', () => {
+  test('the stage\'s sheet is rooted at ag- (or the stage\'s own wipe and chip, re-tinted)', () => {
     const sels = selectors(AG_CSS);
     expect(sels.length).toBeGreaterThan(30);
-    sels.forEach((s) => expect(s).toMatch(/^(\.ag-[a-z]|\.wipe\.ag-go\b)/));
+    sels.forEach((s) => expect(s).toMatch(/^(\.ag-[a-z]|\.wipe\.ag-go\b|\.chip\.ag-preview\b)/));
     for (const other of [GLOBAL_CSS, STAGE_CSS]) expect(stripped(other)).not.toMatch(/\.ag-[a-z]/);
   });
 
@@ -144,6 +146,11 @@ describe('the contract', () => {
     for (const css of [GLOBAL_CSS, STAGE_CSS, PLAYER_CSS, EVP_CSS, AG_CSS]) {
       for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) declared.add(m[1]);
     }
+    // Set inline by EventStage.jsx's useBoardFit, each with a default here.
+    for (const inline of ['--ag-cols', '--ag-rows']) {
+      expect(AG_CSS).toMatch(new RegExp(`var\\(${inline},\\s*1\\)`));
+      declared.add(inline);
+    }
     for (const css of [EVP_CSS, AG_CSS]) {
       const used = [...css.matchAll(/var\((--[a-z0-9-]+)/gi)].map((m) => m[1]);
       expect([...new Set(used)].filter((n) => !declared.has(n))).toEqual([]);
@@ -154,14 +161,29 @@ describe('the contract', () => {
     expect(stripped(EVP_CSS)).not.toMatch(/font-size:\s*[\d.]+px/);
   });
 
-  test('the host\'s panel: the console ladder, nothing under 12px, 44px targets', () => {
-    for (const [step, px] of [['floor', 12], ['label', 13], ['body', 15], ['head', 19], ['title', 24]]) {
-      expect(AG_CSS).toMatch(new RegExp(`--ag-t-${step}:\\s*${px}px`));
+  test('the board rides the stage\'s ladder, one-line rows, 44px targets, and it clips rather than scrolls', () => {
+    const css = stripped(AG_CSS);
+    const rule = (sel) => (css.match(new RegExp(`(^|\\n)${sel.replace(/[.[\]]/g, (c) => `\\${c}`)}\\s*\\{[^}]*\\}`)) || [''])[0];
+    // Sizes on the board are the profile ladder's, never a pixel literal.
+    for (const sel of ['.ag-r-tt', '.ag-r-sub', '.ag-r-at', '.ag-r-st', '.ag-b', '.ag-live', '.ag-when']) {
+      expect(rule(sel)).toMatch(/font-size:\s*var\(--t-(body|meta)\)/);
     }
-    const sizes = [...stripped(AG_CSS).matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    // One line each: the title and the kind truncate, as single text nodes.
+    for (const sel of ['.ag-r-tt', '.ag-r-sub']) {
+      expect(rule(sel)).toMatch(/white-space:\s*nowrap/);
+      expect(rule(sel)).toMatch(/text-overflow:\s*ellipsis/);
+      expect(rule(sel)).toMatch(/min-width:\s*0/);
+    }
+    expect(rule('.ag-b')).toMatch(/min-height:\s*44px/);
+    expect(rule('.ag-r')).toMatch(/min-height:\s*48px/);
+    // The columns are measured (useBoardFit), and the grid never scrolls.
+    expect(rule('.ag-grid')).toMatch(/grid-template-columns:\s*repeat\(var\(--ag-cols/);
+    expect(rule('.ag-grid')).toMatch(/grid-auto-flow:\s*column/);
+    expect(rule('.ag-grid')).toMatch(/overflow:\s*hidden/);
+    expect(css).not.toMatch(/\.ag-(grid|board)\s*\{[^}]*overflow(-y)?:\s*(auto|scroll)/);
+    // The dialogs (a laptop surface): nothing under 12px.
+    const sizes = [...css.matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
     sizes.forEach((n) => expect(n).toBeGreaterThanOrEqual(12));
-    expect(stripped(AG_CSS)).toMatch(/\.ag-row\s*\{[^}]*min-height:\s*44px/);
-    expect(stripped(AG_CSS)).toMatch(/\.ag-x\s*\{[^}]*width:\s*44px/);
   });
 
   test('the scrim scrolls and the card centres by margin (the recurring reachability rule)', () => {

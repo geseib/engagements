@@ -139,6 +139,28 @@ function GameHostPage() {
   });
   const [eventBusy, setEventBusy] = useState(false);
   /*
+    THIS SESSION'S AGENDA ITEM, as the event holds it: `planned` while the
+    host is only previewing it (its session made but not opened — run.js
+    `prepare`), `live`, `paused` or `done`. Read from GET /events/{code},
+    again whenever the event's frames say something moved.
+  */
+  const [eventItem, setEventItem] = useState(null);
+  const [eventRefresh, setEventRefresh] = useState(0);
+  useEffect(() => {
+    if (!eventCode || !gameId) {
+      setEventItem(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getEvent(eventCode)
+      .then((view) => {
+        if (cancelled) return;
+        setEventItem((view.items || []).find((i) => String(i.gameId || '') === String(gameId)) || null);
+      })
+      .catch(() => { /* the item's own stage still works; only its event door waits */ });
+    return () => { cancelled = true; };
+  }, [eventCode, gameId, eventRefresh]);
+  /*
     Bumped by every switchToGame(), including one that re-opens the game
     already in `gameId`. It exists ONLY to re-fire the restore effect in that
     same-id case — React bails out of a same-id setGameId entirely, and an
@@ -1838,6 +1860,9 @@ Focus on actionable business strategy insights.`;
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdFromUrl = urlParams.get('gameId');
     const eventTitleFromUrl = urlParams.get('eventTitle');
+    // AN EVENT'S ITEM (27 Sep 2026): its stage opens before its session has —
+    // the host previewing it. Nobody can join until the host takes it live.
+    const eventItemStage = /^\d{4}$/.test(urlParams.get('event') || '');
     
     if (gameIdFromUrl) {
       console.log(`🔗 HOST: Found game ID in URL: ${gameIdFromUrl}`);
@@ -1845,7 +1870,7 @@ Focus on actionable business strategy insights.`;
       // Check if this game exists and is started before proceeding
       checkGameStatus(gameIdFromUrl).then(gameStatus => {
         if (gameStatus.exists) {
-          if (gameStatus.started) {
+          if (gameStatus.started || eventItemStage) {
             // Game exists and is started - go to game screen
             console.log(`✅ HOST: Game ${gameIdFromUrl} exists and is started - proceeding to game screen`);
             setGameId(gameIdFromUrl);
@@ -2280,18 +2305,16 @@ Focus on actionable business strategy insights.`;
     });
 
     /*
-      THE EVENT MOVED ON WITHOUT THIS SCREEN (events M3). Another host screen —
-      the wall on a second device, a laptop — paused this item, started
-      another, or ended the day. The item is no longer the room's, so this
-      stage goes back to the event's wall, which follows whatever is live.
+      THE EVENT MOVED ON (events M3). Another item went live, this one paused,
+      or the day ended — from this screen or another. The host stays where
+      they are (looking is always the host's choice, 27 Sep 2026); the item's
+      state is read again, so the dock offers "Bring everyone back" once this
+      item is no longer the room's.
     */
-    const backToTheWall = (data) => {
-      const code = (data && data.event) || '';
-      if (/^\d{4}$/.test(String(code))) navigateTo(`/host/event/${code}`);
-    };
-    webSocketClient.onMessage('eventItemPaused', backToTheWall);
-    webSocketClient.onMessage('eventItemStarted', backToTheWall);
-    webSocketClient.onMessage('eventEnded', backToTheWall);
+    const eventMoved = () => setEventRefresh((n) => n + 1);
+    webSocketClient.onMessage('eventItemPaused', eventMoved);
+    webSocketClient.onMessage('eventItemStarted', eventMoved);
+    webSocketClient.onMessage('eventEnded', eventMoved);
 
     webSocketClient.onMessage('gameEnded', (data) => {
       console.log('🔌 Game ended notification:', data);
@@ -4552,24 +4575,40 @@ Focus on actionable business strategy insights.`;
   const [confirmLeave, setConfirmLeave] = useState(false);
 
   /**
-   * BACK TO THE EVENT'S AGENDA (events M3, roadmap D1/D5). Part-way through,
-   * the item PAUSES — answers kept, round where it was, phones on "Paused";
-   * once its session has ENDED, the item ends. Then the stage is the event's
-   * wall again. The item is found by this session's code on the event's own
-   * agenda; a refusal is said in the dock, and the stage stays put.
+   * BACK TO THE EVENT'S AGENDA — the HOST's screen only (the owner, 27 Sep
+   * 2026: switching between items "doesn't open it for the players"). Nothing
+   * pauses: the phones stay on whatever is live. The one write is
+   * bookkeeping — an item whose session has ENDED is marked done on the way
+   * out, since nothing in it is left to resume.
    */
   const goToAgenda = async () => {
     if (!eventCode || eventBusy) return;
     setEventBusy(true);
     try {
-      const view = await getEvent(eventCode);
-      const item = (view.items || []).find((i) => String(i.gameId || '') === String(gameId));
-      if (item && (item.state === 'live' || item.state === 'paused')) {
-        await runEvent(eventCode, gameState === 'ENDED' ? 'end' : 'pause', item.itemId);
+      if (gameState === 'ENDED' && eventItem && (eventItem.state === 'live' || eventItem.state === 'paused')) {
+        await runEvent(eventCode, 'end', eventItem.itemId);
       }
-      navigateTo(`/host/event/${eventCode}`);
     } catch (error) {
-      setSessionActionError((error && error.message) || 'Could not go back to the agenda. Try again.');
+      // Bookkeeping only: the agenda can end it too. Go regardless.
+    }
+    navigateTo(`/host/event/${eventCode}`);
+  };
+
+  /**
+   * BRING EVERYONE HERE — this item goes live for the room (run.js start, or
+   * resume for a paused one): a previewed session opens, the phones switch to
+   * it, and the host stays right here with the stage restored as live.
+   */
+  const goLiveHere = async () => {
+    if (!eventCode || !eventItem || eventBusy) return;
+    setEventBusy(true);
+    try {
+      const view = await runEvent(eventCode, eventItem.state === 'paused' ? 'resume' : 'start', eventItem.itemId);
+      setEventItem((view.items || []).find((i) => String(i.gameId || '') === String(gameId)) || null);
+      await restoreGameState();
+    } catch (error) {
+      setSessionActionError((error && error.message) || 'Could not bring everyone here. Try again.');
+    } finally {
       setEventBusy(false);
     }
   };
@@ -5895,7 +5934,7 @@ Focus on actionable business strategy insights.`;
     ? { progress: '', reached: false, line: '' }
     : goalRules.goalProgress({ target: sessionTarget, round: lessonNumber, phase: hostPhase });
 
-  const hostControls = hostControlsFor({
+  const baseHostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
     roundNoun: getHostRoundNoun(),
@@ -5909,6 +5948,49 @@ Focus on actionable business strategy insights.`;
     notesPage,
     notesPages,
   });
+  /*
+    AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
+    Its rounds wait: running one would play to an empty room. The one thing
+    to do is bring everyone here, so that is the primary, and the status says
+    where the phones are.
+  */
+  const eventWaiting = Boolean(eventCode && eventItem && (eventItem.state === 'planned' || eventItem.state === 'paused'));
+  /*
+    AND NO SECOND WAY BACK. In an event, Back to Menu is the agenda
+    (requestLeave → goToAgenda), and the dock already has AGENDA — two doors
+    to one place, and the second one pushed SESSION off a 1024-wide dock
+    (measured in Chromium, 27 Sep 2026). Where leaving is the primary (a
+    finished survey), it says where it goes.
+  */
+  const eventLeave = (control) => (control && control.intent === HOST_INTENTS.LEAVE ? null : control);
+  const eventControls = eventCode
+    ? {
+      ...baseHostControls,
+      primary: baseHostControls.primary && baseHostControls.primary.intent === HOST_INTENTS.LEAVE
+        ? { ...baseHostControls.primary, label: 'Back to the agenda' }
+        : baseHostControls.primary,
+      secondary: eventLeave(baseHostControls.secondary),
+      tertiary: eventLeave(baseHostControls.tertiary),
+    }
+    : baseHostControls;
+  const hostControls = eventWaiting
+    ? {
+      ...baseHostControls,
+      primary: {
+        label: eventItem.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here',
+        intent: HOST_INTENTS.EVENT_GO_LIVE,
+        disabled: eventBusy,
+      },
+      secondary: null,
+      tertiary: null,
+      status: {
+        text: eventItem.state === 'paused'
+          ? 'Paused — the phones are waiting on the agenda'
+          : 'Preview — the phones are not here yet',
+        tone: 'info',
+      },
+    }
+    : eventControls;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
@@ -6041,6 +6123,9 @@ Focus on actionable business strategy insights.`;
       setQrMode(null);
     }
     switch (action.intent) {
+      case HOST_INTENTS.EVENT_GO_LIVE:
+        await goLiveHere();
+        return;
       case HOST_INTENTS.PAGE:
         // The dock's Next Page — the same shared beat-keyed index the ↑↓ keys
         // and the pips move, so the three routes cannot disagree.
@@ -6574,6 +6659,8 @@ Focus on actionable business strategy insights.`;
   }) || surveyAllIn;
   const dockStatus = dockHint
     ? ''
+    : eventWaiting
+      ? hostControls.status.text
     : (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
       ? (everybodyIn
           ? 'Safe to move on'

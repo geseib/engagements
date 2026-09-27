@@ -82,6 +82,7 @@ const S = require('./event-store');
 const { checkItemSettings } = require('./item-settings');
 const { questionCountAt } = require('../session-goal');
 const { runEvent } = require('./run');
+const { discardChildSession } = require('./child-session');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -358,6 +359,8 @@ async function removeItem(meta, code, itemId) {
     if (!S.isCancelled(error)) throw error;
     return json(409, { error: S.AGENDA_CHANGED, code: 'agenda_changed' });
   }
+  // A previewed item's unopened session goes with it (run.js `prepare`).
+  if (row.GameId) await discardChildSession(db, TABLE(), String(row.GameId), meta.orgId);
   return json(200, { removed: itemId });
 }
 
@@ -456,6 +459,11 @@ async function editItem(request, meta, code, itemId) {
   const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
   const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
   let expression = 'SET #t = :t, #d = :d, #m = :m, #ua = :now';
+  // A PREVIEWED ITEM (run.js `prepare`) has an unopened session made from
+  // what it said before this edit. The session is let go (below, after the
+  // write lands) and the pointer removed, so the next preview or go-live
+  // makes one from what the item says now.
+  const prepared = row.GameId ? String(row.GameId) : '';
   /*
     THE ROW AS THIS REQUEST READ IT (fix round 1). Without this, a plain edit
     still writes back the `SetRef` and the `Settings` it read at the top of
@@ -496,7 +504,7 @@ async function editItem(request, meta, code, itemId) {
     await db.send(new UpdateCommand({
       TableName: TABLE(),
       Key: { PK: row.PK, SK: row.SK },
-      UpdateExpression: expression,
+      UpdateExpression: prepared ? `${expression} REMOVE GameId, PreparedAt` : expression,
       ConditionExpression: conditions.join(' AND '),
       ExpressionAttributeNames: names,
       ExpressionAttributeValues: values,
@@ -507,6 +515,7 @@ async function editItem(request, meta, code, itemId) {
     }
     throw error;
   }
+  if (prepared) await discardChildSession(db, TABLE(), prepared, meta.orgId);
   // Projected from the DECRYPTED row, so nothing sealed reaches the response.
   return json(200, {
     item: S.projectItem({

@@ -30,7 +30,7 @@
  * "no child session is orphaned" (roadmap §6, review focus 2).
  */
 const {
-  QueryCommand, DeleteCommand, UpdateCommand, BatchWriteCommand,
+  GetCommand, QueryCommand, DeleteCommand, UpdateCommand, BatchWriteCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { createGame } = require('../schema-compliant-manager');
@@ -92,20 +92,44 @@ const openingState = (type) => (type === 'survey' ? SURVEY_OPEN : 'STARTED');
  * but a lost code draw, which reserveCode retries; a failure after the create
  * removes what was made, so nothing is left holding a code.
  */
-async function createChildSession(db, tableName, { item, orgId, code, itemId, now = new Date().toISOString() }) {
+async function createChildSession(db, tableName, {
+  item, orgId, code, itemId, now = new Date().toISOString(), open = true,
+}) {
   const data = childGameData(item, { orgId, code, itemId });
   if (!data) throw new Error(`child-session: item ${itemId} of EVENT#${code} is not a playable engagement`);
   const gameId = await reserveCode(db, {
     kind: 'session', orgId, tableName, claim: (candidate) => createGame(candidate, data),
   });
-  try {
-    await startSession(db, tableName, gameId, { orgId, now, state: openingState(data.engagementType) });
-  } catch (error) {
-    await discardChildSession(db, tableName, gameId, orgId);
-    throw error;
+  // A PREVIEW (`open: false`, run.js `prepare`) stops here: the session
+  // exists, so the host's stage can show its lobby and its questions, but it
+  // is CREATED — session-gate.js refuses every join ("Game not started") until
+  // the host takes the item live, which opens it (openChildSession).
+  if (open) {
+    try {
+      await startSession(db, tableName, gameId, { orgId, now, state: openingState(data.engagementType) });
+    } catch (error) {
+      await discardChildSession(db, tableName, gameId, orgId);
+      throw error;
+    }
   }
   await recordSessionCreated({ gameId }); // platform metrics; never throws
   return gameId;
+}
+
+/**
+ * Open a previewed session when its item goes live: CREATED → STARTED (a
+ * survey: collecting), through the same startSession every door uses. A
+ * session already past CREATED is left as it is. Returns its state after.
+ */
+async function openChildSession(db, tableName, { gameId, orgId, type, now = new Date().toISOString() }) {
+  const res = await db.send(new GetCommand({
+    TableName: tableName, Key: { PK: gamePk(gameId), SK: 'STATE' }, ConsistentRead: true,
+  }));
+  const state = res && res.Item && res.Item.State;
+  if (state !== 'CREATED') return state || null;
+  const opening = openingState(type);
+  await startSession(db, tableName, gameId, { orgId, now, state: opening });
+  return opening;
 }
 
 /**
@@ -220,5 +244,5 @@ async function toSession(db, tableName, gameId, message) {
 
 module.exports = {
   ANONYMITY_TYPES, SURVEY_OPEN,
-  childGameData, openingState, createChildSession, discardChildSession, setPaused, toSession,
+  childGameData, openingState, createChildSession, openChildSession, discardChildSession, setPaused, toSession,
 };

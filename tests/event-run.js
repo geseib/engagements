@@ -447,6 +447,122 @@ async function makeEvent() {
     assert.strictEqual(sessionReservations().length, 0);
   });
 
+  console.log('\n11. preview: the host opens an item\'s stage without taking it live');
+  {
+    table.clear();
+    seedOrg(table, NW);
+    seedSets();
+    const fresh = await makeEvent();
+    const p = fresh.code;
+    const ann = bodyOf(await join(p, 'Ann'));
+    const before = sessionReservations().length;
+    const prep = await run(p, { action: 'prepare', itemId: fresh.ids.friction });
+    const previewId = bodyOf(prep).gameId;
+    await check('prepare makes the item\'s session, CREATED and unopened, and the item stays planned', () => {
+      assert.strictEqual(prep.statusCode, 200, prep.body);
+      assert.match(previewId, /^\d{4}$/);
+      assert.strictEqual(sessionReservations().length, before + 1);
+      assert.strictEqual(gameState(previewId).State, 'CREATED');
+      assert.strictEqual(gameMeta(previewId).Started, false);
+      assert.strictEqual(gameMeta(previewId).EventRef, p);
+      assert.strictEqual(itemRow(p, fresh.ids.friction).State, 'planned');
+      assert.strictEqual(itemRow(p, fresh.ids.friction).GameId, previewId);
+      assert.strictEqual(meta(p).LiveItem, undefined);
+    });
+    await check('nobody can join a preview, and the public agenda does not link it', async () => {
+      const res = await playerJoin(previewId, { attendeeToken: ann.token });
+      assert.strictEqual(res.statusCode, 403, res.body);
+      const pub = bodyOf(await agenda(p));
+      assert.ok(!pub.items.find((i) => i.itemId === fresh.ids.friction).gameId);
+      assert.strictEqual(bodyOf(await now(p)).now.liveItemId, '');
+    });
+    await check('preview again is the same session, never a second', async () => {
+      const again = await run(p, { action: 'prepare', itemId: fresh.ids.friction });
+      assert.strictEqual(bodyOf(again).gameId, previewId);
+      assert.strictEqual(sessionReservations().length, before + 1);
+    });
+    await check('a talk, a break or an activity has no session to preview', async () => {
+      const res = await run(p, { action: 'prepare', itemId: fresh.ids.talk });
+      assert.strictEqual(res.statusCode, 409, res.body);
+      assert.strictEqual(bodyOf(res).code, 'not_an_engagement');
+    });
+    await check('going live opens the SAME session: joinable, live, and the phones follow', async () => {
+      const res = await run(p, { action: 'start', itemId: fresh.ids.friction });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(bodyOf(res).gameId, previewId);
+      assert.strictEqual(sessionReservations().length, before + 1);
+      assert.strictEqual(gameState(previewId).State, 'STARTED');
+      assert.strictEqual(gameMeta(previewId).Started, true);
+      assert.strictEqual(meta(p).LiveItem, fresh.ids.friction);
+      const joinRes = await playerJoin(previewId, { attendeeToken: ann.token });
+      assert.strictEqual(joinRes.statusCode, 200, joinRes.body);
+    });
+    await check('an engagement whose session has ENDED is finished, not paused, when the next item goes live', async () => {
+      table.put({ ...gameState(previewId), State: 'ENDED' });
+      connect(previewId);
+      const res = await run(p, { action: 'start', itemId: fresh.ids.talk });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(itemRow(p, fresh.ids.friction).State, 'done');
+      assert.strictEqual(gameState(previewId).EventPaused, undefined);
+      assert.strictEqual(framesTo(previewId, 'eventItemEnded').length, 1);
+      assert.strictEqual(framesTo(previewId, 'eventItemPaused').length, 0);
+    });
+    await check('editing a previewed item lets its session go, and the next preview is made from the edit', async () => {
+      const again = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      assert.ok(gameMeta(again));
+      const edit = await items(request({
+        method: 'PUT', path: `/events/${p}/items/${fresh.ids.trivia}`, pathParameters: { code: p, itemId: fresh.ids.trivia },
+        requestContext: host(), body: { title: 'Space night, again', minutes: 15 },
+      }));
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, undefined);
+      assert.strictEqual(gameMeta(again), undefined, 'the old preview was not discarded');
+      assert.ok(!table.get('GAMES', `GAME#${again}`), 'its code is still held');
+      const next = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      assert.notStrictEqual(next, again);
+    });
+    await check('removing a previewed item lets its session go', async () => {
+      const gid = itemRow(p, fresh.ids.trivia).GameId;
+      const res = await items(request({
+        method: 'DELETE', path: `/events/${p}/items/${fresh.ids.trivia}`, pathParameters: { code: p, itemId: fresh.ids.trivia },
+        requestContext: host(),
+      }));
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(gameMeta(gid), undefined);
+      assert.ok(!table.get('GAMES', `GAME#${gid}`));
+    });
+    await check('deleting an event lets its previews go too', async () => {
+      table.clear();
+      seedOrg(table, NW);
+      seedSets();
+      const other = await makeEvent();
+      const gid = bodyOf(await run(other.code, { action: 'prepare', itemId: other.ids.pulse })).gameId;
+      const del = await h.load('lambda-functions/websocket/events/update-event.js').handler(request({
+        method: 'DELETE', path: `/events/${other.code}`, pathParameters: { code: other.code }, requestContext: host(),
+      }));
+      assert.strictEqual(del.statusCode, 200, del.body);
+      assert.strictEqual(gameMeta(gid), undefined);
+      assert.strictEqual(sessionReservations().length, 0);
+    });
+    await check('ending the day lets a preview nobody took live go, and keeps what was played', async () => {
+      table.clear();
+      seedOrg(table, NW);
+      seedSets();
+      const day = await makeEvent();
+      const previewed = bodyOf(await run(day.code, { action: 'prepare', itemId: day.ids.pulse })).gameId;
+      const played = bodyOf(await run(day.code, { action: 'start', itemId: day.ids.friction })).gameId;
+      const res = await run(day.code, { action: 'end-event' });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(gameMeta(previewed), undefined, 'the unopened preview was kept');
+      assert.ok(!table.get('GAMES', `GAME#${previewed}`), 'its code is still held');
+      assert.strictEqual(itemRow(day.code, day.ids.pulse).GameId, undefined);
+      assert.strictEqual(itemRow(day.code, day.ids.pulse).State, 'planned');
+      assert.ok(gameMeta(played), 'the item that was played lost its session');
+      assert.strictEqual(itemRow(day.code, day.ids.friction).State, 'done');
+      assert.strictEqual(framesTo(previewed, 'eventEnded').length, 0);
+    });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

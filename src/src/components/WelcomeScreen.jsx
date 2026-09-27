@@ -4,6 +4,7 @@ import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 import HelpButton from './HelpButton';
 import BrandMark from './BrandMark';
+import WelcomeEvents from './WelcomeEvents';
 
 /**
  * The host's front door: the screen before any session exists.
@@ -212,6 +213,10 @@ export default function WelcomeScreen({
                 </span>
               </button>
             </div>
+
+            {/* An organisation's events, each one door to its agenda and stage
+                (events, 27 Sep 2026). Draws nothing when there are none. */}
+            <WelcomeEvents />
           </section>
 
           {/* Quieter, but a real column rather than a link in a corner: a host

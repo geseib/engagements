@@ -1,13 +1,23 @@
 /**
- * THE EVENT ON THE WALL — components/event/EventStage.jsx (/host/event/<code>;
- * events M3; docs/design/agenda-redesign s-01, s-03, s-04, s-05).
+ * THE EVENT'S STAGE — components/event/EventStage.jsx (/host/event/<code>;
+ * events M3, reworked 27 Sep 2026: the agenda is the host's board).
  *
- * rejects: a wall that cannot start the first item; a start of an engagement
- * that stays on the wall instead of handing the stage to the item's session;
- * a live engagement found on arrival and not entered; a break with no
- * countdown or no +5 min; the agenda panel missing an item's own actions;
- * ending the event without a confirmation that says what it does; a refusal
- * swallowed instead of said.
+ * rejects: Open moving the phones (it is the host's screen only); Open on an
+ * engagement nobody has opened that does not make its preview session first;
+ * Go live that does not bring everyone AND the host's screen to the item; a
+ * live engagement on arrival that pulls the host off the agenda; a talk's or
+ * a break's screen with no way back to the agenda, or no "Bring everyone
+ * here" while it is not live; a break with no countdown or no +5 min; a row
+ * missing the actions that fit its state; ending the event without a
+ * confirmation that says what it does; a refusal swallowed instead of said;
+ * a board that takes more or fewer columns than its height needs, or goes
+ * dense while the width still holds full rows; a "Coming up" list that keeps
+ * a row its column cannot hold.
+ *
+ * The fit tests stub the three measurements the fitters read (jsdom lays
+ * nothing out) and assert what the fitters decide — never a position. That
+ * the decisions fit a real screen was measured in Chromium at 1280×720,
+ * 1366×768, 1024×768, 768×1024, 1180×820 and 1920×1080 (27 Sep 2026).
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
@@ -40,25 +50,47 @@ const DAY = [
   item(4, 'call-and-answer', 'What slows us down?'),
 ];
 const view = (event = {}, items = DAY) => ({ event: { ...EVENT, ...event }, items });
+const rowOf = (title) => [...document.querySelectorAll('.ag-r')].find((li) => li.querySelector('.ag-r-tt').textContent === title);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  window.history.pushState({}, '', `/host/event/${CODE}`);
 });
 
-test('before the day: the event\'s title, its code and QR, and "Start" the first item', async () => {
+test('the board: every item on one line, with Open, and Go live where it has not started', async () => {
   api.getEvent.mockResolvedValue(view());
   render(<EventStage code={CODE} />);
 
-  expect(await screen.findByRole('heading', { name: 'Q4 Kickoff' })).toBeInTheDocument();
-  expect(screen.getByText('Starting soon')).toBeInTheDocument();
-  expect(screen.getByTestId('qr')).toHaveAttribute('data-value', expect.stringMatching(/\/play\?event=5307$/));
+  expect(await screen.findByText('Starting soon')).toBeInTheDocument();
+  expect(screen.getAllByRole('listitem')).toHaveLength(4);
+  const trivia = rowOf('How well do you know our customers?');
+  expect(within(trivia).getByRole('button', { name: /^Open/ })).toBeInTheDocument();
+  expect(within(trivia).getByRole('button', { name: /^Go live/ })).toBeInTheDocument();
   expect(screen.getByText('12 joined')).toBeInTheDocument();
-  // An engagement is started by its kind (s-01's "Start the survey"): the
-  // wall above already shows its title.
-  expect(screen.getByRole('button', { name: 'Start trivia' })).toBeInTheDocument();
+  // The dock's one obvious step: the first item, live.
+  expect(screen.getByRole('button', { name: 'Go live: trivia' })).toBeInTheDocument();
 });
 
-test('starting an engagement runs the wipe, then hands the stage to its session', async () => {
+test('Open on an engagement nobody has opened makes its preview and goes to its stage — nothing else moves', async () => {
+  api.getEvent.mockResolvedValue(view());
+  api.runEvent.mockResolvedValue({ ...view({}, [{ ...DAY[0], gameId: '4821' }, ...DAY.slice(1)]), gameId: '4821' });
+  render(<EventStage code={CODE} />);
+
+  fireEvent.click(within(await screen.findByText('How well do you know our customers?').then((el) => el.closest('li'))).getByRole('button', { name: /^Open/ }));
+  await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'prepare', DAY[0].itemId));
+  expect(api.runEvent).not.toHaveBeenCalledWith(CODE, 'start', expect.anything());
+  await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/host?gameId=4821&event=5307'));
+});
+
+test('Open on an engagement that already has a session goes straight to its stage, and writes nothing', async () => {
+  api.getEvent.mockResolvedValue(view({}, [{ ...DAY[0], gameId: '4821' }, ...DAY.slice(1)]));
+  render(<EventStage code={CODE} />);
+  fireEvent.click(within(rowOf(await screen.findByText('How well do you know our customers?').then((el) => el.textContent))).getByRole('button', { name: /^Open/ }));
+  expect(navigateTo).toHaveBeenCalledWith('/host?gameId=4821&event=5307');
+  expect(api.runEvent).not.toHaveBeenCalled();
+});
+
+test('Go live brings everyone: the item starts, the wipe runs, and the host\'s stage follows', async () => {
   api.getEvent.mockResolvedValue(view());
   const live = { ...DAY[0], state: 'live', gameId: '4821' };
   api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: live.itemId }, [live, ...DAY.slice(1)]));
@@ -66,7 +98,7 @@ test('starting an engagement runs the wipe, then hands the stage to its session'
   try {
     render(<EventStage code={CODE} />);
     await act(async () => { await Promise.resolve(); });
-    fireEvent.click(await screen.findByRole('button', { name: 'Start trivia' }));
+    fireEvent.click(within(rowOf('How well do you know our customers?')).getByRole('button', { name: /^Go live/ }));
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', DAY[0].itemId);
@@ -78,15 +110,42 @@ test('starting an engagement runs the wipe, then hands the stage to its session'
   }
 });
 
-test('a live engagement on arrival is entered at once (a reload restores event mode)', async () => {
+test('a live engagement on arrival does NOT pull the host off the agenda', async () => {
   const live = { ...DAY[3], state: 'live', gameId: '6120' };
   api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: live.itemId }, [...DAY.slice(0, 3), live]));
   render(<EventStage code={CODE} />);
-  await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/host?gameId=6120&event=5307'));
+  expect(await screen.findByText('Live now')).toBeInTheDocument();
+  expect(navigateTo).not.toHaveBeenCalled();
+  const row = rowOf('What slows us down?');
+  expect(within(row).getByRole('button', { name: /^Pause/ })).toBeInTheDocument();
+  expect(within(row).getByRole('button', { name: /^End/ })).toBeInTheDocument();
+  expect(within(row).queryByRole('button', { name: /^Go live/ })).toBeNull();
 });
 
-test('a break: the countdown to the planned return, +5 min, and the next item\'s Start', async () => {
+test('Open on a talk shows its screen as a preview — "Bring everyone here", and AGENDA back', async () => {
+  api.getEvent.mockResolvedValue(view());
+  const liveTalk = { ...DAY[1], state: 'live' };
+  api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: liveTalk.itemId }, [DAY[0], liveTalk, DAY[2], DAY[3]]));
+  render(<EventStage code={CODE} />);
+
+  fireEvent.click(within(rowOf(await screen.findByText('FY26 in review').then((el) => el.textContent))).getByRole('button', { name: /^Open/ }));
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.getByText('Preview — the phones are not here yet')).toBeInTheDocument();
+  expect(api.runEvent).not.toHaveBeenCalled();
+  expect(window.location.search).toBe(`?focus=${DAY[1].itemId}`);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Bring everyone here' }));
+  await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', DAY[1].itemId));
+  expect(await screen.findByText('Now presenting')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /Back to the agenda/ }));
+  expect(await screen.findByText('Live now')).toBeInTheDocument();
+  expect(window.location.search).toBe('');
+});
+
+test('a live break: its screen counts down to the planned return, with +5 min', async () => {
   const brk = { ...DAY[2], state: 'live', endsAt: new Date(Date.now() + 9 * 60000).toISOString() };
+  window.history.pushState({}, '', `/host/event/${CODE}?focus=${brk.itemId}`);
   api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: brk.itemId }, [{ ...DAY[0], state: 'done' }, { ...DAY[1], state: 'done' }, brk, DAY[3]]));
   api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: brk.itemId }, [DAY[0], DAY[1], brk, DAY[3]]));
   render(<EventStage code={CODE} />);
@@ -94,25 +153,29 @@ test('a break: the countdown to the planned return, +5 min, and the next item\'s
   expect(await screen.findByRole('timer')).toHaveTextContent(/^(8:5\d|9:00)$/);
   fireEvent.click(screen.getByRole('button', { name: '+5 min' }));
   await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'extend', brk.itemId));
-  expect(screen.getByRole('button', { name: 'Start Call & Answer' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Go live: Call & Answer' })).toBeInTheDocument();
 });
 
-test('the agenda panel: every item with the actions that fit it, and a refusal said', async () => {
+test('a paused item offers Resume and End, and a refusal is said', async () => {
   const paused = { ...DAY[0], state: 'paused', gameId: '4821' };
   api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, [paused, ...DAY.slice(1)]));
   api.runEvent.mockRejectedValue(Object.assign(new Error('The survey is still collecting.'), { status: 409 }));
   render(<EventStage code={CODE} />);
 
-  fireEvent.click(await screen.findByRole('button', { name: /every item's controls/ }));
-  const dialog = await screen.findByRole('dialog');
-  const rows = within(dialog).getAllByRole('listitem');
-  expect(rows).toHaveLength(4);
-  expect(within(rows[0]).getByRole('button', { name: 'Resume' })).toBeInTheDocument();
-  expect(within(rows[0]).getByRole('button', { name: 'End' })).toBeInTheDocument();
-  expect(within(rows[1]).getByRole('button', { name: 'Start' })).toBeInTheDocument();
+  const row = rowOf(await screen.findByText('How well do you know our customers?').then((el) => el.textContent));
+  expect(within(row).getByRole('button', { name: /^Resume/ })).toBeInTheDocument();
+  fireEvent.click(within(row).getByRole('button', { name: /^End/ }));
+  await waitFor(() => expect(document.querySelector('.dock .status')).toHaveTextContent('The survey is still collecting.'));
+});
 
-  fireEvent.click(within(rows[0]).getByRole('button', { name: 'End' }));
-  expect(await within(dialog).findByRole('alert')).toHaveTextContent('The survey is still collecting.');
+test('the join QR opens large for latecomers, and closes', async () => {
+  api.getEvent.mockResolvedValue(view());
+  render(<EventStage code={CODE} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Show the join QR code' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByTestId('qr')).toHaveAttribute('data-value', expect.stringMatching(/\/play\?event=5307$/));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
 
 test('ending the event asks first, and says what it does', async () => {
@@ -120,11 +183,85 @@ test('ending the event asks first, and says what it does', async () => {
   api.runEvent.mockResolvedValue(view({ state: 'ENDED' }, DAY.map((i) => ({ ...i, state: 'done' }))));
   render(<EventStage code={CODE} />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'End the event' }));
+  await screen.findByText('Between items');
+  // Everything has run: the dock's step and END EVENT both end it.
+  fireEvent.click(screen.getAllByRole('button', { name: 'End the event' })[0]);
   const confirm = await screen.findByRole('dialog');
   expect(confirm).toHaveTextContent(/nobody new can join/);
   expect(api.runEvent).not.toHaveBeenCalled();
   fireEvent.click(within(confirm).getByRole('button', { name: 'End the event' }));
   await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'end-event', undefined));
-  expect(await screen.findByText('That’s the day.')).toBeInTheDocument();
+  expect(await screen.findByText('The day is over')).toBeInTheDocument();
+});
+
+/** Stubs clientHeight/clientWidth/offsetHeight/scrollHeight by class name. */
+function stubLayout(sizes) {
+  const by = (el, table) => {
+    const hit = Object.keys(table).find((c) => el.classList && el.classList.contains(c));
+    return hit ? table[hit](el) : 0;
+  };
+  const spies = [
+    jest.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function clientHeight() { return by(this, sizes.clientHeight || {}); }),
+    jest.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function clientWidth() { return by(this, sizes.clientWidth || {}); }),
+    jest.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function offsetHeight() { return by(this, sizes.offsetHeight || {}); }),
+    jest.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function scrollHeight() { return by(this, sizes.scrollHeight || {}); }),
+  ];
+  return () => spies.forEach((spy) => spy.mockRestore());
+}
+const rounds = (n) => Array.from({ length: n }, (_, i) => ({ ...item(1, 'trivia', `Round ${i + 1}`), itemId: `it_${String(i + 1).padStart(8, '0')}`, order: i + 1 }));
+
+test('the board takes the columns its height needs, and full rows while the width holds them', async () => {
+  // 461px of board, 55px rows: eight to a column, so nine items take two.
+  const restore = stubLayout({
+    clientHeight: { 'ag-grid': () => 461 }, clientWidth: { 'ag-grid': () => 1199 }, offsetHeight: { 'ag-r': () => 55 },
+  });
+  try {
+    api.getEvent.mockResolvedValue(view({}, rounds(9)));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Round 9');
+    const grid = document.querySelector('.ag-grid');
+    await waitFor(() => expect(grid.style.getPropertyValue('--ag-cols')).toBe('2'));
+    expect(grid.style.getPropertyValue('--ag-rows')).toBe('5');
+    expect(grid.hasAttribute('data-dense')).toBe(false);
+  } finally {
+    restore();
+  }
+});
+
+test('past the width it goes dense, then narrow, and still takes every column it needs — nothing is cut off', async () => {
+  // 800px wide holds one full-row column; eighteen items need three.
+  const restore = stubLayout({
+    clientHeight: { 'ag-grid': () => 461 }, clientWidth: { 'ag-grid': () => 800 }, offsetHeight: { 'ag-r': () => 55 },
+  });
+  try {
+    api.getEvent.mockResolvedValue(view({}, rounds(18)));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Round 18');
+    const grid = document.querySelector('.ag-grid');
+    await waitFor(() => expect(grid.style.getPropertyValue('--ag-cols')).toBe('3'));
+    expect(grid.style.getPropertyValue('--ag-rows')).toBe('6');
+    expect(grid.hasAttribute('data-dense')).toBe(true);
+    expect(grid.hasAttribute('data-narrow')).toBe(true);
+  } finally {
+    restore();
+  }
+});
+
+test('"Coming up" gives up rows to its "and N more" line until the column holds every row whole', async () => {
+  // 60px a row in a 400px column: six rows at most, the "more" line included.
+  const restore = stubLayout({
+    clientHeight: { 'ag-wall': () => 400 },
+    scrollHeight: { 'ag-wall': (el) => el.querySelectorAll('li').length * 60 },
+  });
+  try {
+    const day = rounds(10);
+    window.history.pushState({}, '', `/host/event/${CODE}?focus=${day[0].itemId}`);
+    api.getEvent.mockResolvedValue(view({}, day));
+    render(<EventStage code={CODE} />);
+    const wall = await screen.findByText('Coming up').then((h) => h.closest('aside'));
+    await waitFor(() => expect(wall.querySelectorAll('li')).toHaveLength(6));
+    expect(within(wall).getByText(/^and 4 more, until/)).toBeInTheDocument();
+  } finally {
+    restore();
+  }
 });
