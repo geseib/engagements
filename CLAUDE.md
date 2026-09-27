@@ -138,7 +138,11 @@ not repeated here. This section carries only what those two sections do not say.
 Create → Start (players join) → Questions (ASK/VOTE/RESULTS) → End
 ```
 - **Trivia**: ASK → RESULTS (no voting)
-- **Polls**: ASK → VOTE → RESULTS
+- **Polls**: ASK → RESULTS (no vote since 2026-09-27). A poll question is a survey
+  question the host asks: choice, rating, yes/no or open (`POLL_KINDS` in
+  `survey-kinds.js`), its result filling in live on the wall (`PollBoard`) and
+  counted by the survey's own aggregate (`game/poll-round.js`).
+- **Call & Answer**: ASK → VOTE → RESULTS
 
 ### Real-time Features
 - WebSocket connections for live updates
@@ -343,13 +347,19 @@ the stack outputs — there is no separate frontend-env step any more.
 ```
 
 ### Poll Questions
+A survey question the host asks, with its own category. The kind and its fields
+are the survey contract's (`lambda-functions/*/survey-kinds.js`, `POLL_KINDS`);
+a row written before 2026-09-27 has no `kind` and reads as a choice when it has
+two or more `options`, otherwise as an open question (`pollFieldsOf`).
 ```javascript
 {
-  id: timestamp,
-  title: "Question/prompt",
+  title: "Best day to meet in person?",
   detail: "Background context",
   category: "Category",
-  customInstructions: "Response guidance"
+  kind: "choice" | "rating" | "yesno" | "text",
+  options: ["Monday", "Friday"],          // choice
+  scale: "1-5", lowLabel, highLabel,      // rating
+  yesLabel: "Approve", noLabel: "Decline" // yesno (blank = Yes/No)
 }
 ```
 
