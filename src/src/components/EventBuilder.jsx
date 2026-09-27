@@ -543,6 +543,10 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
           onClose={closeDialog}
           onSaved={afterSave}
           onRemoved={afterRemove}
+          /* A 404 or 409 from the dialog means this agenda is out of date:
+             reload it, so the dialog (which stays open) reads the rows as
+             they are now (final review M2). */
+          onRefused={() => { load(); }}
         />
       )}
       {detailsOpen && (

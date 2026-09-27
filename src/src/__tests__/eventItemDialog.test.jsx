@@ -124,6 +124,85 @@ describe('adding an engagement', () => {
   });
 });
 
+describe('a refusal reloads the agenda behind the dialog (final review M2)', () => {
+  const changed = () => Object.assign(
+    new Error('The event changed while you were saving. Nothing was saved; reload it and try again.'),
+    { status: 409, body: { code: 'agenda_changed' } },
+  );
+  const CO_HOST_FIRST = { itemId: 'it_0000000f', order: 1, type: 'break', title: 'Doors open', minutes: 10, description: '', state: 'planned' };
+
+  it('a 409 asks the builder to reload, keeps the dialog open, and the retry places the item against the NEW agenda', async () => {
+    api.addItem.mockRejectedValueOnce(changed()).mockResolvedValueOnce({ item: {} });
+    const p = base({ type: 'break', onRefused: jest.fn() });
+    const { rerender } = render(<EventItemDialog {...p} />);
+    // "Goes after 1 · Before we start" — index 1 in the agenda as it was read.
+    fireEvent.change(screen.getByLabelText('Goes after'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The event changed while you were saving');
+    expect(p.onRefused).toHaveBeenCalledTimes(1);
+    expect(api.addItem).toHaveBeenLastCalledWith('5307', expect.objectContaining({ position: 1 }));
+
+    // The builder reloads: a co-host put a row at the top in the meantime.
+    rerender(<EventItemDialog {...p} items={[CO_HOST_FIRST, ...ITEMS]} />);
+    expect(screen.getByLabelText('Goes after')).toHaveDisplayValue('1 · Before we start');
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
+    // Still right after "Before we start", which is now the second row.
+    expect(api.addItem).toHaveBeenLastCalledWith('5307', { type: 'break', title: 'Break', description: '', minutes: 15, position: 2 });
+  });
+
+  it('left at "after the last item", the retry still goes last on the reloaded agenda', async () => {
+    api.addItem.mockRejectedValueOnce(changed()).mockResolvedValueOnce({ item: {} });
+    const p = base({ type: 'break', onRefused: jest.fn() });
+    const { rerender } = render(<EventItemDialog {...p} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await screen.findByRole('alert');
+    rerender(<EventItemDialog {...p} items={[...ITEMS, CO_HOST_FIRST]} />);
+    expect(screen.getByLabelText('Goes after')).toHaveDisplayValue('Break · Doors open');
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
+    expect(api.addItem).toHaveBeenLastCalledWith('5307', { type: 'break', title: 'Break', description: '', minutes: 15 });
+  });
+
+  it('if the row it was to go after is gone, it says so and sends nothing', async () => {
+    api.addItem.mockRejectedValueOnce(changed());
+    const p = base({ type: 'break', onRefused: jest.fn() });
+    const { rerender } = render(<EventItemDialog {...p} />);
+    fireEvent.change(screen.getByLabelText('Goes after'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await screen.findByRole('alert');
+    rerender(<EventItemDialog {...p} items={ITEMS.slice(1)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The item this was to go after is no longer on the agenda. Choose where it goes.');
+    expect(api.addItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('an edit or a remove refused with a 404 asks the builder to reload too, and says the server\'s sentence', async () => {
+    const gone = Object.assign(new Error('That item is no longer on the agenda.'), { status: 404, body: { code: 'item_gone' } });
+    api.updateItem.mockRejectedValueOnce(gone);
+    api.removeItem.mockRejectedValueOnce(gone);
+    const p = base({ mode: 'edit', type: 'trivia', item: ITEMS[2], onRefused: jest.fn() });
+    render(<EventItemDialog {...p} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That item is no longer on the agenda.');
+    expect(p.onRefused).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from agenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(p.onRefused).toHaveBeenCalledTimes(2));
+    expect(p.onRemoved).not.toHaveBeenCalled();
+  });
+
+  it('a refusal that is not about the agenda (a 400) does not reload', async () => {
+    api.addItem.mockRejectedValueOnce(Object.assign(new Error('That question set is switched off.'), { status: 400, body: {} }));
+    const p = base({ onRefused: jest.fn() });
+    render(<EventItemDialog {...p} />);
+    fireEvent.click(screen.getByLabelText('Customer knowledge — Q4'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    await screen.findByRole('alert');
+    expect(p.onRefused).not.toHaveBeenCalled();
+  });
+});
+
 describe('adding a break', () => {
   it('has no set, is called Break unless renamed, and goes where it is put', async () => {
     api.addItem.mockResolvedValue({ item: {} });

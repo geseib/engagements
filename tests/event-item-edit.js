@@ -92,7 +92,10 @@ const orderNow = () => [...table.store.values()]
     ['a version the set never had', quiz, { version: 7 }, 400, /version/],
     ['a version for a break', brk, { version: 2 }, 400, /Only an engagement/],
     ['an empty title', quiz, { title: '' }, 400, /title/],
-    ['an unknown item', 'it_ffffffff', { title: 'x' }, 404, /No event has that code/],
+    // Final review M2: the caller is already through the event's door, so an
+    // item that is gone says so — not "No event has that code" above an
+    // event that is plainly open.
+    ['an unknown item', 'it_ffffffff', { title: 'x' }, 404, /^That item is no longer on the agenda\.$/],
   ]) {
     await check(`${label}: ${status}`, async () => {
       const res = await call('PUT', itemId, body);
@@ -100,6 +103,24 @@ const orderNow = () => [...table.store.values()]
       assert.match(bodyOf(res).error, match);
     });
   }
+  await check('an item a co-host removed: edit, "Use vN" and remove each say it is no longer on the agenda', async () => {
+    const gone = bodyOf(await call('POST', null, { type: 'break', minutes: 5 })).item.itemId;
+    assert.strictEqual((await call('DELETE', gone)).statusCode, 200);
+    for (const [method, body] of [['PUT', { title: 'Mine' }], ['PUT', { version: 3 }], ['DELETE', undefined]]) {
+      const res = await call(method, gone, body);
+      assert.strictEqual(res.statusCode, 404, res.body);
+      assert.deepStrictEqual(bodyOf(res), { error: 'That item is no longer on the agenda.', code: 'item_gone' });
+    }
+    assert.strictEqual(rowOf(gone), undefined);
+  });
+  await check('an unknown code still answers the event\'s own 404, before any item is looked for', async () => {
+    const res = await items(request({
+      method: 'PUT', path: '/events/9999/items/it_ffffffff', pathParameters: { code: '9999', itemId: 'it_ffffffff' },
+      body: { title: 'x' }, requestContext: asHost(NW),
+    }));
+    assert.strictEqual(res.statusCode, 404, res.body);
+    assert.strictEqual(bodyOf(res).error, 'No event has that code.');
+  });
   await check('an item that has started cannot be edited', async () => {
     table.put({ ...rowOf(talk), State: 'done' });
     const res = await call('PUT', talk, { title: 'Too late' });

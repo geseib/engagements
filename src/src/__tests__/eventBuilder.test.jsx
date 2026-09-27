@@ -343,6 +343,27 @@ describe('the add menu (02, 02b)', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /add item/i })));
   });
 
+  // Final review M2: the dialog's items must not stay stale after a refusal.
+  it('an item dialog refused with agenda_changed reloads the agenda behind it and stays open', async () => {
+    serve(DAY.slice(0, 3));
+    api.addItem.mockRejectedValueOnce(Object.assign(
+      new Error('The event changed while you were saving. Nothing was saved; reload it and try again.'),
+      { status: 409, body: { code: 'agenda_changed' } },
+    ));
+    await mount();
+    openMenu();
+    fireEvent.click(item('Break'));
+    const reloaded = [{ itemId: 'it_0000000f', order: 1, type: 'break', title: 'Doors open', description: '', minutes: 10, state: 'planned' }, ...DAY.slice(0, 3)];
+    serve(reloaded);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
+    expect(await screen.findByText('The event changed while you were saving. Nothing was saved; reload it and try again.')).toBeInTheDocument();
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(titles()[0]).toBe('Doors open'));
+    expect(screen.getByRole('heading', { name: 'Add a break' })).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Goes after')).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['At the start', 'Break · Doors open', '1 · Before we start', '2 · FY26 in one word', '3 · How well do you know our customers?']);
+  });
+
   it('removing an item focuses the row that now sits in its place', async () => {
     api.removeItem.mockResolvedValue({ removed: 'it_00000003' });
     await mount();

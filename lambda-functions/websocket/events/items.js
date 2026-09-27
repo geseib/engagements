@@ -76,6 +76,16 @@ const TABLE = () => process.env.TABLE_NAME;
 const PLANNED = 'planned';
 const NOT_PLANNED = 'This item has started, so it cannot be changed here.';
 
+/**
+ * AN ITEM THAT IS GONE SAYS SO (final review M2). Every route here has
+ * already passed the event's door (openEvent), so the caller may see this
+ * event: telling them one of its items was removed — by a co-host, or in
+ * another tab — leaks nothing. The door's own "No event has that code." above
+ * an event that is plainly open would be false. The console reloads the
+ * agenda on this 404, as it does on a 409.
+ */
+const itemGone = () => json(404, { error: 'That item is no longer on the agenda.', code: 'item_gone' });
+
 const countsOf = (meta) => ({
   items: Number(meta.ItemCount) || 0,
   engagements: Number(meta.EngagementCount) || 0,
@@ -294,7 +304,7 @@ async function addItem(request, meta, code) {
 // ── DELETE: remove ──────────────────────────────────────────────────────────
 async function removeItem(meta, code, itemId) {
   const row = await readItem(code, itemId);
-  if (!row) return notFound();
+  if (!row) return itemGone();
   if (row.State !== PLANNED) return json(409, { error: NOT_PLANNED, code: 'not_planned' });
   const counted = rules.isCounted(row.Type);
   const delta = { items: counted ? -1 : 0, engagements: rules.isEngagement(row.Type) ? -1 : 0, breaks: counted ? 0 : -1 };
@@ -326,7 +336,7 @@ async function editItem(request, meta, code, itemId) {
   const body = readBody(request);
   if (!body) return json(400, { error: 'The request body is not valid JSON.' });
   const row = await readItem(code, itemId);
-  if (!row) return notFound();
+  if (!row) return itemGone();
   if (row.State !== PLANNED) return json(409, { error: NOT_PLANNED, code: 'not_planned' });
 
   const current = await S.decryptItemRow(meta.orgId, row);

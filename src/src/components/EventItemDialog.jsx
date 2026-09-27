@@ -29,7 +29,9 @@ import './EventBuilder.css';
  * "Use vN" on the row. A set may appear twice on one agenda, and says so
  * ("On this agenda · 6"). The add menu opens this only below the caps; if a
  * co-host fills the last place meanwhile, the server refuses Add with the
- * menu's own sentence and the choices here are KEPT (03's last note).
+ * menu's own sentence and the choices here are KEPT (03's last note). Any 404
+ * or 409 also asks the builder to reload the agenda (`onRefused`); the dialog
+ * stays open on the reloaded rows, and "Goes after" follows the row it named.
  *
  * @param {string}   code      the event
  * @param {'add'|'edit'} mode
@@ -38,14 +40,20 @@ import './EventBuilder.css';
  * @param {object[]} items     the agenda now, in order — for "Goes after" and
  *                             "On this agenda"
  * @param {object[]} sets      the console's question sets (GET /admin/question-sets)
+ * @param {Function} [onRefused] (error) => void — a 404 or 409 refusal: the
+ *                             builder reloads the agenda, and this dialog
+ *                             stays open and reads the new `items`
  */
+const AT_START = 'AT_START';
+const AT_END = 'AT_END';
+
 function numbered(items) {
   let n = 0;
   return items.map((it) => (it.type === rules.BREAK ? null : (n += 1)));
 }
 
 export default function EventItemDialog({
-  code, mode, type, item = null, items = [], sets = [], onClose, onSaved, onRemoved,
+  code, mode, type, item = null, items = [], sets = [], onClose, onSaved, onRemoved, onRefused,
 }) {
   const editing = mode === 'edit';
   const unreadable = editing && Boolean(item && item.decryptFailed);
@@ -58,14 +66,19 @@ export default function EventItemDialog({
     title: editing ? item.title : (isBreak ? 'Break' : ''),
     minutes: String(editing ? item.minutes : 15),
     description: editing ? item.description : '',
-    position: items.length,
+    after: AT_END,
     setKey: '',
   }));
   const [title, setTitle] = useState(baseline.title);
   const [titleTouched, setTitleTouched] = useState(editing);
   const [minutes, setMinutes] = useState(baseline.minutes);
   const [description, setDescription] = useState(baseline.description);
-  const [position, setPosition] = useState(baseline.position);
+  /* "Goes after" is held as WHICH ROW it follows — AT_START, AT_END or that
+     row's itemId — never as an index. An index is only true of the agenda it
+     was read from; after a refusal the builder reloads (onRefused) and a
+     co-host's insert would shift it. The position sent is worked out from the
+     agenda as it is at the moment of sending (final review M2). */
+  const [after, setAfter] = useState(baseline.after);
   const [setKey, setSetKey] = useState(baseline.setKey);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -86,12 +99,20 @@ export default function EventItemDialog({
   };
 
   const dirty = title !== baseline.title || minutes !== baseline.minutes || description !== baseline.description
-    || position !== baseline.position || setKey !== baseline.setKey;
+    || after !== baseline.after || setKey !== baseline.setKey;
 
   const requestClose = () => {
     if (busy) return;
     if (dirty && !window.confirm('Close without saving? What you chose will be lost.')) return;
     onClose();
+  };
+
+  /* A 404 (the item, or the event, is gone) or a 409 (the agenda changed,
+     or a cap was reached) means the agenda behind this dialog is out of
+     date: the builder reloads it, and this dialog stays open with every
+     choice kept (03's last note), now reading the reloaded `items`. */
+  const refused = (err) => {
+    if (onRefused && err && (err.status === 404 || err.status === 409)) onRefused(err);
   };
 
   const choose = (s) => {
@@ -111,6 +132,17 @@ export default function EventItemDialog({
       setError(checked.error);
       return;
     }
+    let position = null;
+    if (!editing && after !== AT_END) {
+      const anchor = after === AT_START ? -1 : items.findIndex((it) => it.itemId === after);
+      if (after !== AT_START && anchor < 0) {
+        // The row it was to follow went in the reload. Never guess a place.
+        setAfter(AT_END);
+        setError('The item this was to go after is no longer on the agenda. Choose where it goes.');
+        return;
+      }
+      position = anchor + 1;
+    }
     setBusy(true);
     setError('');
     try {
@@ -123,7 +155,7 @@ export default function EventItemDialog({
           // The default "goes after the last item" is not sent at all — the
           // server appends when `position` is absent (carried note: never
           // null, never items.length).
-          ...(position === items.length ? {} : { position }),
+          ...(position === null ? {} : { position }),
           ...(chosen ? {
             setRef: {
               scope: chosen.scope || 'platform', orgId: chosen.orgId || '', setId: chosen.id,
@@ -137,6 +169,7 @@ export default function EventItemDialog({
       // Everything chosen stays: the host reads the reason and decides.
       setError(err.message || 'The item was not saved.');
       setBusy(false);
+      refused(err);
     }
   };
 
@@ -150,8 +183,18 @@ export default function EventItemDialog({
       setError(err.message || 'The item was not removed.');
       setBusy(false);
       setConfirmingRemove(false);
+      refused(err);
     }
   };
+
+  /* The select's value: 0 is "At the start", i + 1 is "after items[i]". At
+     the end (the default) shows as after the last row, whatever the last row
+     now is. */
+  const afterIndex = (() => {
+    if (after === AT_START) return 0;
+    const i = after === AT_END ? -1 : items.findIndex((it) => it.itemId === after);
+    return i >= 0 ? i + 1 : items.length;
+  })();
 
   const heading = unreadable
     ? 'This item could not be read'
@@ -266,7 +309,15 @@ export default function EventItemDialog({
             {!editing && (
               <div className="evb-field">
                 <label className="evb-label" htmlFor="evb-after">Goes after</label>
-                <select id="evb-after" className="evb-input" value={position} onChange={(e) => setPosition(Number(e.target.value))}>
+                <select
+                  id="evb-after"
+                  className="evb-input"
+                  value={afterIndex}
+                  onChange={(e) => {
+                    const i = Number(e.target.value);
+                    setAfter(i === 0 ? AT_START : items[i - 1].itemId);
+                  }}
+                >
                   <option value={0}>At the start</option>
                   {items.map((it, i) => (
                     <option key={it.itemId} value={i + 1}>
