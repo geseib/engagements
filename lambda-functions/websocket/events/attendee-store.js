@@ -30,10 +30,14 @@
  * DynamoDB has not yet deleted it — deletion is lazy, up to ~48h late.
  */
 const crypto = require('crypto');
-const { GetCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const {
+  GetCommand, PutCommand, UpdateCommand, DeleteCommand, BatchWriteCommand,
+} = require('@aws-sdk/lib-dynamodb');
 const { eventPk } = require('../tenant');
 const { encryptItem, decryptItem } = require('../tenant-crypto');
-const { attendeeSk, META_SK } = require('./event-store');
+const {
+  attendeeSk, META_SK, ATTENDEE_PREFIX, queryAll,
+} = require('./event-store');
 
 const ATTENDEE_ID = /^at_[0-9a-f]{16}$/;
 const TOKEN = /^(at_[0-9a-f]{16})\.([A-Za-z0-9_-]{43})$/;
@@ -91,14 +95,18 @@ const isBusy = (error) => Boolean(error && BUSY_ERRORS.includes(error.name));
 /** Five tries, jittered waits under a doubling ceiling: 25, 50, 100, 200 ms. Mutable for a test. */
 const busyBudget = { tries: 5, baseMs: 25, capMs: 400 };
 
+function pause(attempt) {
+  const ceiling = Math.min(busyBudget.capMs, busyBudget.baseMs * (2 ** (attempt - 1)));
+  return new Promise((resolve) => { setTimeout(resolve, Math.ceil(ceiling / 2 + Math.random() * (ceiling / 2))); });
+}
+
 async function retryWhenBusy(fn) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await fn();
     } catch (error) {
       if (!isBusy(error) || attempt >= busyBudget.tries) throw error;
-      const ceiling = Math.min(busyBudget.capMs, busyBudget.baseMs * (2 ** (attempt - 1)));
-      await new Promise((resolve) => { setTimeout(resolve, Math.ceil(ceiling / 2 + Math.random() * (ceiling / 2))); });
+      await pause(attempt);
     }
   }
 }
@@ -194,6 +202,59 @@ async function removeAttendee(db, tableName, code, attendeeId) {
   })));
 }
 
+/** Every attendee row of an event (sealed), read to its last page. */
+const readAttendees = (db, tableName, code) => queryAll(db, tableName, eventPk(code), ATTENDEE_PREFIX, { consistent: true });
+
+/**
+ * AN EVENT'S ATTENDEES GO WITH IT — called by delete-event.js AFTER its
+ * transaction has removed METADATA, never inside it: that transaction is
+ * capped at DynamoDB's 100 items, and an event may have hundreds of
+ * attendees. Nothing can join behind this read, because a join's count is
+ * conditioned on METADATA and a join that loses takes its own row back. Until
+ * this finishes the code cannot be drawn again: code-reservation.js skips a
+ * code while ANY EVENT# row is there. BatchWrite, 25 keys a call, every
+ * unprocessed key sent again. Returns how many rows it deleted.
+ */
+async function deleteAttendees(db, tableName, code) {
+  const rows = await readAttendees(db, tableName, code);
+  for (let i = 0; i < rows.length; i += 25) {
+    let pending = rows.slice(i, i + 25).map((r) => ({ DeleteRequest: { Key: { PK: r.PK, SK: r.SK } } }));
+    for (let attempt = 1; pending.length; attempt += 1) {
+      const res = await retryWhenBusy(() => db.send(new BatchWriteCommand({ RequestItems: { [tableName]: pending } })));
+      pending = ((res && res.UnprocessedItems) || {})[tableName] || [];
+      if (!pending.length) break;
+      if (attempt >= busyBudget.tries) throw new Error(`${pending.length} attendee row(s) of EVENT#${code} were not deleted`);
+      await pause(attempt);
+    }
+  }
+  return rows.length;
+}
+
+/**
+ * A NEW DATE MOVES EVERY ATTENDEE'S EXPIRY — called by update-event.js AFTER
+ * its transaction commits, for the same 100-item reason. Each row's `ttl`
+ * becomes the event's new one; a row deleted meanwhile is skipped. Returns how
+ * many rows it read.
+ */
+async function restampAttendees(db, tableName, code, ttl) {
+  const rows = await readAttendees(db, tableName, code);
+  for (const row of rows) {
+    try {
+      await retryWhenBusy(() => db.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: row.PK, SK: row.SK },
+        UpdateExpression: 'SET #ttl = :ttl',
+        ConditionExpression: 'attribute_exists(SK)',
+        ExpressionAttributeNames: { '#ttl': 'ttl' },
+        ExpressionAttributeValues: { ':ttl': ttl },
+      })));
+    } catch (error) {
+      if (!(error && error.name === 'ConditionalCheckFailedException')) throw error;
+    }
+  }
+  return rows.length;
+}
+
 /** What a response says about an attendee: the name and when — never the id, the hash or the org. */
 const projectAttendee = (row) => ({
   name: typeof (row && row.AttendeeName) === 'string' ? row.AttendeeName : '',
@@ -205,4 +266,5 @@ module.exports = {
   newAttendeeId, hashToken, mintToken, parseToken, tokenMatches, bearerOf, isExpired,
   BUSY_ERRORS, busyBudget, isBusy, retryWhenBusy,
   putAttendee, readAttendee, openAttendee, projectAttendee, countJoin, removeAttendee,
+  readAttendees, deleteAttendees, restampAttendees,
 };
