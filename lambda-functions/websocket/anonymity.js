@@ -37,7 +37,7 @@ const ANON_FIELDS = ['playerId', 'playerName', 'name'];
  * for every spelling the table can hold, aliases included.
  */
 // `poll` since typed polls (27 Sep 2026): a poll is a survey question asked
-// live, with no vote, and its wall shows counts, never authors.
+// live, with no vote. It is nameless all the same — see NAMELESS_TYPES.
 const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'quiz', 'poll', 'polls']);
 
 function skipsVote(gameType) {
@@ -49,7 +49,23 @@ function skipsVote(gameType) {
  * @param {object} round    the round record carrying AuthorsRevealed
  * @returns {boolean} true when attribution must be withheld
  */
+/**
+ * A POLL IS NAMELESS, ALWAYS (typed polls, 27 Sep 2026). It holds no vote, so
+ * it is in the skip-set above — but that set exists to spare trivia and
+ * wavelength a redaction they have no use for, and a poll's answers are
+ * opinions: the wall shows counts, and the phone tells the room "how everyone
+ * answered, without names". Letting the skip-set decide sent every poll
+ * answer, open words included, with its author into the report and the
+ * feedback round (seen in Chromium the same day). Setup sends
+ * `anonymousUntilReveal: false` for a poll (it offers no anonymity option),
+ * so the preference cannot be read here either. Nothing reveals a poll; the
+ * Names setting (docs/design/survey-redesign/PLAN.md Phase 6) is not built.
+ */
+const NAMELESS_TYPES = new Set(['poll', 'polls']);
+
 function isHidden(metadata, round) {
+  if (NAMELESS_TYPES.has(String((metadata && metadata.GameType) || '').trim().toLowerCase())) return true;
+
   // Anonymity binds only the formats that hold a vote. Trivia's response is a
   // letter, so there is nothing authored to attribute — and redacting it breaks
   // the host's view of who answered what. Wavelength never attributes on stage.
