@@ -46,6 +46,7 @@ const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { periodOf } = require('../shared/usage');
 const { redeemCodeItems } = require('./adjustments');
+const leavePlan = require('./leave-plan');
 
 const STATUSES = ['requested', 'approved', 'declined', 'withdrawn'];
 /*
@@ -361,6 +362,8 @@ exports.handler = async (event) => {
       if (method === 'POST' && p.orgId && p.reqId) return await decide(event, p.orgId, p.reqId);
       return G.fail(404, 'Endpoint not found');
     }
+    // Leaving a paid plan, and "Make public" on the way out: orgs/leave-plan.js.
+    if (/\/plan\/leave(?:\/|$)/.test(path)) return await leavePlan.route(event, p.orgId, method, path);
     if (!p.orgId) return G.fail(400, 'orgId is required.');
     if (method === 'POST') return await createRequest(event, p.orgId);
     if (method === 'GET') return await listMine(event, p.orgId);

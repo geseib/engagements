@@ -338,7 +338,15 @@ async function recordSetCount(orgId, count, opts = {}) {
 }
 
 /** How many sets this org holds, counted from the rows. Paginates: an org with
- *  more than one page of sets is exactly the org whose peak matters. */
+ *  more than one page of sets is exactly the org whose peak matters.
+ *
+ *  A SET HELD FOR THE PUBLIC LIBRARY IS NOT COUNTED (admin/shared/public-hold.js,
+ *  `publicHold` on its metadata row). The owner, 27 Sep 2026: it is removed
+ *  once the library accepts a copy, so it is already on its way out. Released
+ *  — unticked, or declined — the attribute is gone and the set counts again,
+ *  which is what lets the free-tier gate refuse a NEW set until the org is back
+ *  at its allowance. `Select: 'COUNT'` counts AFTER the filter, so this stays
+ *  one cheap Query per page. */
 async function countSets(orgId, opts = {}) {
   const { db, tableName } = ctx(opts);
   const org = String(orgId || '').trim();
@@ -349,6 +357,8 @@ async function countSets(orgId, opts = {}) {
     const page = await db.send(new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      FilterExpression: 'attribute_not_exists(#hold)',
+      ExpressionAttributeNames: { '#hold': 'publicHold' },
       ExpressionAttributeValues: { ':pk': setsMetadataPk(ORG, org), ':sk': 'SET#' },
       Select: 'COUNT',
       ExclusiveStartKey,
