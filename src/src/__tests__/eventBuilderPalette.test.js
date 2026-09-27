@@ -136,6 +136,16 @@ describe('the contract', () => {
   test('the picker is a fixed-layout table', () => {
     expect(stripped(MY_CSS)).toMatch(/\.evb-pick-tbl\s*\{[^}]*table-layout:\s*fixed/);
   });
+  // rejects: the category chips one letter wide. .evb-modal breaks anywhere
+  // (overflow-wrap: anywhere) so a long title cannot push the dialog wide,
+  // and the shared options inherit it; styles.css gives every .category-name
+  // `flex: 1`, and the two together shrink each chip to a single character —
+  // the owner's screenshot of 27 Sep 2026. The create dialog never breaks
+  // anywhere, so the shared block is put back on its wrapping there.
+  test('the shared session options wrap as the create dialog does, never anywhere', () => {
+    expect(stripped(MY_CSS)).toMatch(/\.evb-modal\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(stripped(MY_CSS)).toMatch(/\.evb-sopts\s*\{[^}]*overflow-wrap:\s*normal/);
+  });
 });
 
 describe('the agenda place (02, 02b)', () => {
