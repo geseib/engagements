@@ -201,6 +201,9 @@ exports.handler = async (event) => {
         // the edit's PUT sends promptId, '' REMOVEs it, so a prefill without
         // it erased the approach chosen at create on any edit at all.
         promptId: gameMetadata.Item.PromptId || '',
+        // The goal (events M1b), for the same prefill: the edit's PUT sends
+        // `target`, and null clears it. null when there is none.
+        target: Number(gameMetadata.Item.Target) || null,
         // Same default-ON rule as anonymousUntilReveal above: only an explicit
         // false means "in written order" (schema-compliant-manager.js:106).
         randomizeQuestions: hostPreferences.randomizeQuestions !== false,

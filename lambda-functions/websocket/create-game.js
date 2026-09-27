@@ -13,6 +13,7 @@ const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
 const { recordSessionCreated } = require('./platform-metrics');
 const { planLimitResolve } = require('./plan-limit');
 const { normalizeBriefing, isCallAndAnswer } = require('./briefing');
+const { checkTarget, questionCountAt, goalApplies } = require('./session-goal');
 
 /**
  * WHERE THE PLAYER LINK POINTS, and why it was pointing at a dead host.
@@ -93,7 +94,7 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names, briefing } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names, briefing, target } = JSON.parse(event.body || '{}');
   // A survey is read in the order it was written: nothing shuffles it,
   // whatever the payload says (IMPLEMENTATION-phase-2.md, METADATA).
   const isSurvey = gameType === 'survey';
@@ -179,6 +180,47 @@ exports.handler = async (event) => {
     absent, exactly as it is everywhere else.
   */
   const setScope = await resolveSetScope(event, questionSetId, questionSetScope);
+
+  /*
+    THE GOAL (events M1b, session-goal.js): how many questions the host plans
+    to ask — a plan, never a stop. Checked here, before a code is drawn,
+    against the set's size at the version this session will pin: the explicit
+    `questionSetVersion` when one is sent, else the set's active version, which
+    is what createGame() pins. A survey has no rounds and so no goal. A refused
+    goal writes nothing.
+  */
+  let sessionTarget = null;
+  if (target !== undefined && target !== null && target !== '') {
+    if (!goalApplies(gameType || 'call-and-answer')) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'A survey is answered at each person’s own pace, so it has no goal.' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+    let count = 0;
+    if (questionSetId) {
+      try {
+        const found = await findSetMetadata(docClient, process.env.TABLE_NAME, event, questionSetId, setScope || 'platform');
+        if (found) {
+          const pinned = questionSetVersion !== undefined && questionSetVersion !== null
+            ? questionSetVersion : found.item.activeVersion;
+          count = questionCountAt(found.item, pinned);
+        }
+      } catch (err) {
+        console.warn(`⚠️ create: could not read set "${questionSetId}" to check the goal (${err.message}); bounding it by the ceiling alone`);
+      }
+    }
+    const checked = checkTarget(target, count);
+    if (checked.error) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: checked.error }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+    sessionTarget = checked.value;
+  }
 
   /*
     THE ONE GATE IN THE WHOLE SESSION LIFECYCLE, AND IT IS HERE ON PURPOSE.
@@ -273,6 +315,8 @@ exports.handler = async (event) => {
           ...(isSurvey ? { names } : {}),
           // Call & Answer only, and already checked above. Absent means unbriefed.
           ...(sessionBriefing ? { briefing: sessionBriefing } : {}),
+          // The goal, already checked above. Absent means no goal.
+          ...(sessionTarget ? { target: sessionTarget } : {}),
           details: engagementInfo || '',
           hostName: hostName || 'Host',
           visibility: visibility || 'public',

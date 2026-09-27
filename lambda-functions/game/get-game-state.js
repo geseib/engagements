@@ -377,6 +377,15 @@ exports.handler = async (event) => {
       */
       scoreboard: normaliseScoreboard(stateItem && stateItem.Scoreboard, stateItem && stateItem.ScoreboardRev),
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
+      /*
+        THE GOAL, on the host's door only (events M1b): the stage and the
+        remote say "Question 3 of 5" and "That's your 5" from it. A plan the
+        host made is not the room's to read, so the public /state never
+        carries it (tests/session-goal-routes.js §4). At the top level, never
+        in gameMetadata: tests/get-game-host-state.js §4 holds the host door's
+        gameMetadata equal to the public round's, key for key.
+      */
+      ...(onHostDoor ? { target: Number(gameMetadata.Item.Target) || null } : {}),
       gameMetadata: {
         title: sessionMeta.Title,
         hostName: sessionMeta.HostName,

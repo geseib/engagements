@@ -228,6 +228,12 @@ const createGame = async (gameId, gameData) => {
         // the set's own promptId; PUT /games/{id} switches it mid-game. Absent
         // means "what the set says, else the format standard".
         ...(gameData.promptId ? { PromptId: gameData.promptId } : {}),
+        // THE GOAL (events M1b, session-goal.js): how many questions the host
+        // plans to ask. A plan, never a stop; absent means no goal. Read back
+        // on the host's doors only (get-game.js host-details, get-game-state.js
+        // host-state) and changed before the start by PUT /games/{id}. The third
+        // of create-game.js's three edits for a new create field.
+        ...(gameData.target ? { Target: gameData.target } : {}),
         // The Call & Answer briefing: the host-checked document summary Workie
         // gets as the last layer of every round's prompt (personas.js
         // buildBriefingLayer). Encrypted by encryptSession below. Absent means
