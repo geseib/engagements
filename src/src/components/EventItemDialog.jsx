@@ -14,6 +14,12 @@ import './EventBuilder.css';
  *   mode 'add', type 'break'        the same fields without a set; 03 draws no
  *                                   break dialog, so this is 03's form minus
  *                                   its picker
+ *   mode 'add', a presentation      04-add-presentation's form without its
+ *                                   upload (roadmap M5): title, presenter,
+ *                                   length, description, and one line saying
+ *                                   the PDF copy for attendees comes later
+ *   mode 'add', an activity         the same form, led by "Led by" — the
+ *                                   owner's "custom choice" (events M1b)
  *   mode 'edit'                     title, length, description; the set is
  *                                   named, not changed (a different set is a
  *                                   different item: remove this one and add
@@ -33,6 +39,13 @@ import './EventBuilder.css';
  * or 409 also asks the builder to reload the agenda (`onRefused`); the dialog
  * stays open on the reloaded rows, and "Goes after" follows the row it named.
  *
+ * WHO LEADS IT (events M1b). Every kind but a break has one optional name,
+ * labelled for its kind — Facilitator, Presenter or Led by
+ * (agenda-rules.ledByLabel) — sent as `ledBy`. An add sends it only when a
+ * name was typed; an edit always sends it, so it can be cleared. An
+ * engagement's "Title on the agenda" is also what its session is called when
+ * roadmap M3 starts it, and the field says so.
+ *
  * @param {string}   code      the event
  * @param {'add'|'edit'} mode
  * @param {string}   type      the item's kind (agenda-rules.ITEM_TYPES)
@@ -46,6 +59,13 @@ import './EventBuilder.css';
  */
 const AT_START = 'AT_START';
 const AT_END = 'AT_END';
+
+/** The headings that are not "Add <Kind>" / "Edit <Kind>" (04 draws "Add a presentation"). */
+const HEADINGS = {
+  [rules.PRESENTATION]: ['Add a presentation', 'Edit presentation'],
+  [rules.CUSTOM]: ['Add an activity', 'Edit activity'],
+  [rules.BREAK]: ['Add a break', 'Edit break'],
+};
 
 function numbered(items) {
   let n = 0;
@@ -61,11 +81,14 @@ export default function EventItemDialog({
   const picking = !editing && rules.isEngagement(type);
   const numbers = numbered(items);
   const label = rules.TYPE_LABELS[type] || 'item';
+  const leads = rules.hasLeader(type);
+  const leaderLabel = rules.ledByLabel(type);
 
   const [baseline] = useState(() => ({
     title: editing ? item.title : (isBreak ? 'Break' : ''),
     minutes: String(editing ? item.minutes : 15),
     description: editing ? item.description : '',
+    ledBy: editing ? (item.ledBy || '') : '',
     after: AT_END,
     setKey: '',
   }));
@@ -73,6 +96,7 @@ export default function EventItemDialog({
   const [titleTouched, setTitleTouched] = useState(editing);
   const [minutes, setMinutes] = useState(baseline.minutes);
   const [description, setDescription] = useState(baseline.description);
+  const [ledBy, setLedBy] = useState(baseline.ledBy);
   /* "Goes after" is held as WHICH ROW it follows — AT_START, AT_END or that
      row's itemId — never as an index. An index is only true of the agenda it
      was read from; after a refusal the builder reloads (onRefused) and a
@@ -99,7 +123,7 @@ export default function EventItemDialog({
   };
 
   const dirty = title !== baseline.title || minutes !== baseline.minutes || description !== baseline.description
-    || after !== baseline.after || setKey !== baseline.setKey;
+    || ledBy !== baseline.ledBy || after !== baseline.after || setKey !== baseline.setKey;
 
   const requestClose = () => {
     if (busy) return;
@@ -132,6 +156,11 @@ export default function EventItemDialog({
       setError(checked.error);
       return;
     }
+    const leader = rules.checkLedBy(ledBy, type);
+    if (leader.error) {
+      setError(leader.error);
+      return;
+    }
     let position = null;
     if (!editing && after !== AT_END) {
       const anchor = after === AT_START ? -1 : items.findIndex((it) => it.itemId === after);
@@ -147,11 +176,12 @@ export default function EventItemDialog({
     setError('');
     try {
       if (editing) {
-        await updateItem(code, item.itemId, checked.value);
+        await updateItem(code, item.itemId, { ...checked.value, ...(leads ? { ledBy: leader.value } : {}) });
       } else {
         await addItem(code, {
           type,
           ...checked.value,
+          ...(leads && leader.value ? { ledBy: leader.value } : {}),
           // The default "goes after the last item" is not sent at all — the
           // server appends when `position` is absent (carried note: never
           // null, never items.length).
@@ -198,7 +228,7 @@ export default function EventItemDialog({
 
   const heading = unreadable
     ? 'This item could not be read'
-    : (editing ? `Edit ${isBreak ? 'break' : label}` : (isBreak ? 'Add a break' : `Add ${label}`));
+    : (HEADINGS[type] || [`Add ${label}`, `Edit ${label}`])[editing ? 1 : 0];
 
   return (
     <Modal
@@ -218,6 +248,8 @@ export default function EventItemDialog({
               {unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
               {!unreadable && picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
               {!unreadable && !picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
+              {!unreadable && type === rules.PRESENTATION && 'A talk given from the presenter’s own screen. While it runs, every phone, laptop or tablet says “look up”.'}
+              {!unreadable && type === rules.CUSTOM && 'Anything else on the day: networking, lunch with a speaker, an open discussion. It sits on the agenda, with nothing to answer.'}
               {!unreadable && editing && !isBreak && item.set && item.set.name && (item.set.pinnedMissing
                 ? `Pinned to ${item.set.name} · v${item.setRef.version}, which is no longer in the set.`
                 : `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`)}
@@ -291,8 +323,29 @@ export default function EventItemDialog({
                 value={title}
                 maxLength={rules.TITLE_MAX}
                 onChange={(e) => { setTitle(e.target.value); setTitleTouched(true); }}
+                aria-describedby={rules.isEngagement(type) ? 'evb-title-hint' : undefined}
               />
+              {rules.isEngagement(type) && (
+                <span className="evb-hint" id="evb-title-hint">
+                  Also the session’s name on the stage when you start it.
+                </span>
+              )}
             </div>
+            {leads && (
+              <div className="evb-field evb-span2">
+                <label className="evb-label" htmlFor="evb-ledby">
+                  {leaderLabel} <span className="evb-dim">· optional</span>
+                </label>
+                <input
+                  id="evb-ledby"
+                  className="evb-input"
+                  value={ledBy}
+                  maxLength={rules.LED_BY_MAX}
+                  placeholder="Their name"
+                  onChange={(e) => setLedBy(e.target.value)}
+                />
+              </div>
+            )}
             <div className="evb-field">
               <label className="evb-label" htmlFor="evb-minutes">Planned length</label>
               <div className="evb-len">
@@ -341,8 +394,11 @@ export default function EventItemDialog({
             </div>
           </div>
           <p className="evb-hint">
-            The title and description are what the room sees, and every phone, laptop or tablet that joins.
+            {leads
+              ? 'The title, the description and the name are what the room sees, and every phone, laptop or tablet that joins.'
+              : 'The title and description are what the room sees, and every phone, laptop or tablet that joins.'}
             {picking && ' The set’s own name stays in the console.'}
+            {type === rules.PRESENTATION && ' A PDF copy for attendees comes later.'}
           </p>
           </>)}
           {error && <p className="evb-error" role="alert">{error}</p>}

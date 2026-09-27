@@ -232,7 +232,7 @@ describe('editing and removing', () => {
     fireEvent.change(screen.getByLabelText('Planned length'), { target: { value: '20' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
-    expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', { title: 'FY27 plan quiz', description: '', minutes: 20 });
+    expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', { title: 'FY27 plan quiz', description: '', minutes: 20, ledBy: '' });
   });
 
   it('an item pinned to a deleted version does not claim to play it', () => {
