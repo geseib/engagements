@@ -14,7 +14,7 @@
  * notice bleeding into a round that has not reached the goal yet.
  */
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
@@ -76,7 +76,7 @@ function installFetch(overrides = {}) {
  * Mounts the real host page on a host-state response the caller supplies.
  * Mirrors sessionPanelMounted.test.jsx's own `renderLiveGame`.
  */
-async function renderLiveGame(hostState) {
+async function renderLiveGame(hostState, { restoredText } = {}) {
   installFetch({
     [`games/${GAME}$`]: { started: true },
     [`games/${GAME}/host-state`]: hostState,
@@ -89,13 +89,35 @@ async function renderLiveGame(hostState) {
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
   await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  // Something only the restored session can put on screen means host-state
+  // has been read and restored — the loading gate `\` obeys is down and the
+  // goal is known. Each case names its own (RESULTS restates a question
+  // differently from ASK).
+  if (restoredText) {
+    await screen.findAllByText(restoredText, {}, { timeout: 5000 });
+  }
 }
 
 /** The Questions tab's own progress line, opened the way a host would: `\`. */
 async function openGoalProgress() {
   await act(async () => { fireEvent.keyDown(document.body, { key: '\\' }); });
-  fireEvent.click(screen.getByRole('tab', { name: 'Questions' }));
-  return screen.getByTestId('goal-progress');
+  fireEvent.click(await screen.findByRole('tab', { name: 'Questions' }, { timeout: 5000 }));
+  return screen.findByTestId('goal-progress', {}, { timeout: 5000 });
+}
+
+/*
+  The SESSION button renders before host-state has been read and restored, so
+  awaiting it alone leaves the page mid-restore. Under the full suite's load
+  that read lands after the assertions — the dock still reads its pre-restore
+  status — which is why this file passed alone and failed in the full run.
+  Wait for the restore itself: the dock's status to carry the given words.
+*/
+async function dockStatusContains(text) {
+  await waitFor(() => {
+    const status = document.querySelector('.dock .status');
+    expect(status && status.textContent).toContain(text);
+  }, { timeout: 5000 });
+  return document.querySelector('.dock .status');
 }
 
 beforeEach(() => {
@@ -118,9 +140,8 @@ describe('the goal, mounted (events M1b, Task 5 fix round 1)', () => {
       },
     });
 
-    const status = document.querySelector('.dock .status');
+    const status = await dockStatusContains(GOAL_LINE);
     expect(status).not.toBeNull();
-    expect(status.textContent).toContain(GOAL_LINE);
 
     const primary = document.querySelector('.dock .host-action-bar__primary');
     expect(primary).not.toBeNull();
@@ -140,14 +161,16 @@ describe('the goal, mounted (events M1b, Task 5 fix round 1)', () => {
         id: 'q6', title: 'Q6', questionDetail: 'Detail 6',
         optionA: 'A', optionB: 'B', optionC: 'C', optionD: 'D',
       },
-    });
+    }, { restoredText: 'Detail 6' });
+
+    // The panel's count proves host-state was restored (the goal is known);
+    // only then is the dock's silence about the goal evidence of anything.
+    const progress = await openGoalProgress();
+    await waitFor(() => expect(progress).toHaveTextContent('Question 6 · your goal was 5'), { timeout: 5000 });
 
     const status = document.querySelector('.dock .status');
     expect(status).not.toBeNull();
     expect(status.textContent).not.toContain(GOAL_LINE);
     expect(status.textContent).not.toContain('Keep going');
-
-    const progress = await openGoalProgress();
-    expect(progress).toHaveTextContent('Question 6 · your goal was 5');
   });
 });
