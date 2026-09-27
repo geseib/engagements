@@ -43,7 +43,7 @@ const KEY_ECHO_MAX = 40;
 
 /** What each option says when the format does not have it. */
 const NOT_THIS_FORMAT = Object.freeze({
-  anonymousResponses: 'Anonymous responses apply to Call & Answer and Poll only.',
+  anonymousResponses: 'Anonymous responses apply to Call & Answer only.',
   randomizeQuestions: 'A survey is read in the order it was written, so it has no shuffle.',
   categoryIds: 'A survey has no categories.',
   target: 'A survey is answered at each person’s own pace, so it has no goal.',

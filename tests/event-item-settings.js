@@ -118,7 +118,9 @@ async function freshEvent() {
     ['501 characters of instructions', space({ settings: { aiContext: 'x'.repeat(501) } }), /500 characters/],
     ['301 characters of event details', space({ settings: { eventDetails: 'x'.repeat(301) } }), /300 characters/],
     ['a briefing over 1,500 characters', { type: 'call-and-answer', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'friction' }, settings: { briefing: 'x'.repeat(1501) } }, /1,500/],
-    ['anonymity that is neither on nor off', { type: 'poll', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'mood' }, settings: { anonymousResponses: 'yes' } }, /on or off/],
+    ['anonymity that is neither on nor off', { type: 'call-and-answer', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'friction' }, settings: { anonymousResponses: 'yes' } }, /on or off/],
+    // A typed poll has no vote to hide authors behind (27 Sep 2026).
+    ['anonymity on a poll', { type: 'poll', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'mood' }, settings: { anonymousResponses: true } }, /Call & Answer only/],
     ['an option that does not exist', space({ settings: { triviaTimer: 30 } }), /is not a session option/],
     ['25 categories', space({ settings: { categoryIds: Array.from({ length: 25 }, (_, i) => `C${i}`) } }), /Choose categories/],
     ['options on a presentation', { type: 'presentation', title: 'x', minutes: 5, settings: {} }, /Only an engagement has session options/],
@@ -261,8 +263,8 @@ async function freshEvent() {
     assert.strictEqual(res.statusCode, 201, res.body);
     assert.strictEqual(bodyOf(res).item.settings.names, 'anonymous');
   });
-  await check('null anonymousResponses on a poll reads as on (the default)', async () => {
-    const res = await add({ type: 'poll', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'mood' }, settings: { anonymousResponses: null } });
+  await check('null anonymousResponses on a call-and-answer reads as on (the default)', async () => {
+    const res = await add({ type: 'call-and-answer', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'friction' }, settings: { anonymousResponses: null } });
     assert.strictEqual(res.statusCode, 201, res.body);
     assert.strictEqual(bodyOf(res).item.settings.anonymousResponses, true);
   });

@@ -17,6 +17,11 @@ import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
 import { PlayerShell } from './components/PlayerShell';
 import SurveyRunner from './components/survey/SurveyRunner';
+import RatingInput from './components/survey/RatingInput';
+import ChoiceInput from './components/survey/ChoiceInput';
+import YesNoInput from './components/survey/YesNoInput';
+import TextInput from './components/survey/TextInput';
+import { isAnswered as pollIsAnswered, summaryFor as pollSummary } from './components/survey/surveyAnswers';
 import { namesMode } from './config/surveyNames';
 import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 import { resolveJoinCode, joinPathFor } from './utils/joinCode';
@@ -341,6 +346,10 @@ function PlayerPage({ event = null } = {}) {
   const [joined, setJoined] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState('');
+  // A TYPED POLL's draft (typed polls, 27 Sep 2026): the value its kind's
+  // survey input holds — an index list, a number, {v, why} or text — sent
+  // as-is and checked by the server against the same question.
+  const [pollValue, setPollValue] = useState(null);
   // The text the player actually submitted, kept after answerInput clears, so
   // the anonymous ballot can find this player's own row by content — the only
   // handle left once the author fields are redacted (see ownAnswerIndex).
@@ -1268,6 +1277,7 @@ function PlayerPage({ event = null } = {}) {
         // Reset the draft for a new question only.
         if (isNewQuestion && hasAnswered !== true) {
           setAnswerInput('');
+          setPollValue(null);
           setSelectedTriviaAnswer('');
           setMySubmittedAnswer('');
         }
@@ -2076,11 +2086,13 @@ function PlayerPage({ event = null } = {}) {
     } else if (gameType === 'wavelength') {
       // Filter out empty words and join with commas
       answer = wavelengthWords.filter(word => word.trim()).join(',');
+    } else if (gameType === 'poll' && currentQuestion?.poll) {
+      answer = pollIsAnswered(currentQuestion.poll, pollValue) ? pollValue : null;
     } else {
       answer = answerInput.trim();
     }
     
-    if (!answer || !currentQuestion) {
+    if (answer === null || answer === undefined || answer === '' || !currentQuestion) {
       console.log(`❌ PLAYER: Submit blocked - answer: ${answer}, currentQuestion: ${!!currentQuestion}`);
       return;
     }
@@ -2107,14 +2119,17 @@ function PlayerPage({ event = null } = {}) {
       console.log(`🎯 PLAYER: DEBUG answer: ${answer}, answerType: ${gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : 'text'}`);
       
       // Send answer via WebSocket
+      const typedPoll = gameType === 'poll' && Boolean(currentQuestion?.poll);
       webSocketClient.sendCleanMessage(messageType, {
         answer: answer,
-        answerType: gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : 'text'
+        answerType: gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : typedPoll ? 'poll' : 'text'
       });
       
       setHasAnswered(true);
-      setMySubmittedAnswer(answer);
+      // The receipt is words ("4 out of 5", "Approve"), never the raw value.
+      setMySubmittedAnswer(typedPoll ? pollSummary(currentQuestion.poll, answer) : answer);
       setAnswerInput('');
+      setPollValue(null);
       setSelectedTriviaAnswer('');
       setWavelengthWords(Array(10).fill(''));
       
@@ -3351,6 +3366,26 @@ function PlayerPage({ event = null } = {}) {
             </button>
           </>
         );
+      } else if (gameType === 'poll' && currentQuestion?.poll) {
+        /* A TYPED POLL (typed polls, 27 Sep 2026): the survey's own input for
+           the question's kind — the same control a survey draws for it — and
+           one Submit. The options are the ones the main screen is filling in
+           as the room answers. */
+        const pollQ = { qid: `poll-${currentQuestion.questionNumber || currentQuestion.id || ''}`, ...currentQuestion.poll };
+        const PollInput = { choice: ChoiceInput, rating: RatingInput, yesno: YesNoInput, text: TextInput }[pollQ.kind] || TextInput;
+        body = (
+          <>
+            {questionBlock}
+            <form id="plr-answer-form" onSubmit={handleSubmitAnswer}>
+              <PollInput question={pollQ} value={pollValue} onChange={(v) => setPollValue(v)} onBlur={() => {}} />
+            </form>
+          </>
+        );
+        dock = (
+          <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!pollIsAnswered(pollQ, pollValue)}>
+            Submit Answer
+          </button>
+        );
       } else {
         /* CALL-AND-ANSWER, POLL, SURVEY, ARTWORK.
 
@@ -3423,7 +3458,7 @@ function PlayerPage({ event = null } = {}) {
           <h1 className="plr-h1 plr-h1--primary">
             {gameType === 'trivia' ? 'Answer Submitted!'
               : gameType === 'wavelength' ? 'Words Submitted!'
-                : gameType === 'poll' ? 'Response Submitted!'
+                : gameType === 'poll' ? 'Answer In!'
                   : currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}
           </h1>
 
@@ -3455,7 +3490,9 @@ function PlayerPage({ event = null } = {}) {
                 /* Nothing is revealed until everyone is in — a player watching
                    words accumulate would change what they wrote (spec §5). */
                 ? 'Nothing shows until everyone is in. When the round closes, the words the whole room shares light up on the main screen.'
-                : 'The host will bring every response up on the main screen when the round closes, without names.'}
+                : gameType === 'poll' && currentQuestion?.poll
+                  ? 'Your answer is counted. Watch the main screen — the result fills in as the room answers, without names.'
+                  : 'The host will bring every response up on the main screen when the round closes, without names.'}
           </LookUpCue>
         </>
       );
@@ -3874,6 +3911,20 @@ function PlayerPage({ event = null } = {}) {
         </>
       );
 
+    } else if (gameType === 'poll' && currentQuestion?.poll) {
+      /* A TYPED POLL'S RESULTS (typed polls, 27 Sep 2026). OPEN-QUESTIONS §3,
+         answered: a poll is not scored. The payoff is the room's answer on the
+         main screen, and the phone's is the player's own answer beside it —
+         there is no row to find and no rank to earn. */
+      body = (
+        <>
+          <p className="plr-lab">Your answer</p>
+          <h1 className="plr-h1">{mySubmittedAnswer || 'You didn’t answer this one'}</h1>
+          <LookUpCue>
+            The room’s result is on the main screen — how everyone answered, without names.
+          </LookUpCue>
+        </>
+      );
     } else {
       /* CALL-AND-ANSWER, POLL, SURVEY.
 

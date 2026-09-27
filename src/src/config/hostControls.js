@@ -156,7 +156,13 @@ export function stageBeatFromFrame(frame, gameState) {
  * hides itself for a survey, whose own setting is Names), `podium.js`'s label,
  * and hostRemote.js's mirror of this list.
  */
-const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'survey']);
+/*
+ * `poll` joined with typed polls (27 Sep 2026): a poll question is a survey
+ * question asked live, counted on the wall as the room answers, so its round
+ * goes ASK → RESULTS like trivia's (docs/design/survey-redesign/PLAN.md,
+ * "Phase 6"). The backend refuses its vote too (websocket/start-vote.js).
+ */
+const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'survey', 'poll']);
 
 /** Does the host code open a VOTE phase for this type? */
 export function hostRunsVotePhase(type) {

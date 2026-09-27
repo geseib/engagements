@@ -40,9 +40,12 @@ export const GAME_TYPES = {
     short: 'Poll',
     icon: 'ChartBar',
     accent: 'var(--secondary)',
-    phases: ['ASK', 'VOTE', 'RESULTS'],
-    blurb: 'Gauge opinion — no right answer, distribution is the result.',
-    answerType: 'text',
+    // A poll question is a survey question the host asks (typed polls,
+    // 27 Sep 2026): pick, rate, yes/no or an open answer, counted live on the
+    // wall. No vote — that was call-and-answer under another name.
+    phases: ['ASK', 'RESULTS'],
+    blurb: 'One quick question at a time — pick, rate, yes/no or a short answer — with the result live on the main screen.',
+    answerType: 'poll',
     roundNoun: 'Poll',
   },
   wavelength: {

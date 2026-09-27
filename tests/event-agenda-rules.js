@@ -177,7 +177,8 @@ console.log('\n8. what an engagement item carries of its session');
 check('the options each format has, in the create dialog\'s own names', () => {
   assert.deepStrictEqual(R.settingKeysFor('trivia'), ['randomizeQuestions', 'categoryIds', 'target', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
   assert.deepStrictEqual(R.settingKeysFor('wavelength'), R.settingKeysFor('trivia'));
-  assert.deepStrictEqual(R.settingKeysFor('poll'), ['anonymousResponses', 'randomizeQuestions', 'categoryIds', 'target', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
+  // A typed poll has no vote to hide authors behind (typed polls, 27 Sep 2026).
+  assert.deepStrictEqual(R.settingKeysFor('poll'), ['randomizeQuestions', 'categoryIds', 'target', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
   assert.deepStrictEqual(R.settingKeysFor('call-and-answer'), ['anonymousResponses', 'randomizeQuestions', 'categoryIds', 'target', 'briefing', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
   assert.deepStrictEqual(R.settingKeysFor('survey'), ['names', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
   for (const t of ['presentation', 'custom', 'break']) assert.deepStrictEqual(R.settingKeysFor(t), [], t);
@@ -204,7 +205,7 @@ check('null on an applicable key reads as that key\'s own default, not the liter
   assert.deepStrictEqual(R.settingsFor('trivia', { randomizeQuestions: null, categoryIds: null, target: null, aiContext: null }),
     R.settingsFor('trivia', {}));
   assert.strictEqual(R.settingsFor('survey', { names: null }).names, 'anonymous');
-  assert.strictEqual(R.settingsFor('poll', { anonymousResponses: null }).anonymousResponses, true);
+  assert.strictEqual(R.settingsFor('call-and-answer', { anonymousResponses: null }).anonymousResponses, true);
 });
 // fix round 1: sessionFormOf cannot tell a decryptFailed item's blanked
 // Settings from a pre-M1b item's absent one — M3 must refuse it outright,

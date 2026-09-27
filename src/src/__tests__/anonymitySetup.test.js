@@ -13,8 +13,14 @@ import {
 
 describe('which formats offer anonymous responses', () => {
   // Not a new taxonomy — exactly the set that holds a vote.
-  test.each(['call-and-answer', 'poll'])('%s offers it', (type) => {
+  test.each(['call-and-answer'])('%s offers it', (type) => {
     expect(anonymityApplies(type)).toBe(true);
+  });
+
+  // A typed poll (27 Sep 2026) has no vote and its wall shows counts, never
+  // authors — there is nothing to hide until one.
+  test('poll no longer offers it', () => {
+    expect(anonymityApplies('poll')).toBe(false);
   });
 
   // An option that cannot do anything is a question a host should not be asked,

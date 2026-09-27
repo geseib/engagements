@@ -194,13 +194,13 @@ describe('the anonymity card', () => {
   });
 
   // rejects: gating on anything other than "does this format hold a vote".
-  test.each(['Trivia', 'Wavelength'])('is absent for %s', (label) => {
+  test.each(['Trivia', 'Wavelength', 'Poll'])('is absent for %s', (label) => {
     setup();
     fireEvent.click(pill(label));
     expect(screen.queryByText(/nobody sees who wrote which answer/i)).toBeNull();
   });
 
-  test.each(['Call & Answer', 'Poll'])('is present for %s', (label) => {
+  test.each(['Call & Answer'])('is present for %s', (label) => {
     setup();
     fireEvent.click(pill(label));
     expect(screen.getByText(/nobody sees who wrote which answer/i)).toBeInTheDocument();

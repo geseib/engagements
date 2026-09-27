@@ -10,7 +10,7 @@ import HostActionBar from '../components/HostActionBar';
 import { hostControlsFor, HOST_INTENTS } from '../config/hostControls';
 
 const controlsFor = (overrides = {}) => hostControlsFor({
-  gameType: 'poll',
+  gameType: 'call-and-answer',
   phase: 'ASK',
   playerCount: 4,
   answeredCount: 4,

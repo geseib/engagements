@@ -242,6 +242,13 @@ await check('a legacy call-and-answer game with no HostPreferences is hidden', (
 await check('an absent GameType still defaults to the voting behaviour', () =>
   assert.strictEqual(isHidden(bare, {}), true));
 
+// A typed poll (27 Sep 2026) has no vote and no authored response on the wall:
+// counts per option, never names. So there is nothing to hold back until one.
+await check('a poll is never hidden: it has no vote, and its wall shows counts', () => {
+  assert.strictEqual(isHidden({ GameType: 'poll', HostPreferences: { anonymousUntilReveal: true } }, {}), false);
+  assert.strictEqual(isHidden({ GameType: 'polls' }, undefined), false);
+});
+
 // Legacy spellings are stored in this table. `quiz` is trivia; a row written
 // under the old spelling must not be redacted either.
 await check('the legacy spelling "quiz" is treated as trivia', () =>
@@ -256,7 +263,7 @@ const { GAME_TYPE_IDS, ALIASES, normalizeGameType } =
   require(path.join(REPO, 'lambda-functions/game/game-types.js'));
 
 await check('the inlined skip-set agrees with game-types.js for every spelling', () => {
-  const SKIPS_VOTE = new Set(['trivia', 'wavelength']);
+  const SKIPS_VOTE = new Set(['trivia', 'wavelength', 'poll']);
   for (const spelling of [...GAME_TYPE_IDS, ...Object.keys(ALIASES)]) {
     const expectedHidden = !SKIPS_VOTE.has(normalizeGameType(spelling));
     assert.strictEqual(

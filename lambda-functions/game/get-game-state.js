@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/l
 const { resolveSetPartition } = require('./set-version');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
+const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
 const { isPresent } = require('./player-presence');
@@ -334,7 +335,10 @@ exports.handler = async (event) => {
                 once chose the host block, proved nothing and is now ignored.)
               */
               ...(revealed ? { correctAnswer: questionItem.correctAnswer } : {}),
-              points: questionItem.points || 10
+              points: questionItem.points || 10,
+              // A poll's question, exactly as get-question.js sends it: the
+              // same kind and fields reach a phone that arrives mid-round.
+              ...((gameMetadata.Item && gameMetadata.Item.GameType) === POLL ? { poll: pollQuestionOf(questionItem) } : {})
             };
             
             console.log(`✅ Fetched question data for question ${currentQuestionNumber}: ${currentQuestionData.title}`);

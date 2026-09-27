@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { isHidden, redactAnswers } = require('./anonymity');
 const { decryptItem, decryptItems } = require('./tenant-crypto');
+const { readPollQuestion, pollTally } = require('./poll-round');
 const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
@@ -234,6 +235,15 @@ exports.handler = async (event) => {
         answerCount: answers.length,
         timestamp: new Date().toISOString()
       };
+
+      // A POLL ROUND, COUNTED AS THE ROOM ANSWERS (typed polls, poll-round.js):
+      // the stage draws the question's options and fills them in from this,
+      // refetched on each `playerAnswered`. Counts and texts only — the tally
+      // never carries a name, whatever the answer rows beside it say.
+      if (String((metaRes.Item && metaRes.Item.GameType) || '') === 'poll') {
+        const read = await readPollQuestion(db, process.env.TABLE_NAME, gameId, targetQuestionId);
+        if (read) result.poll = { question: read.question, tally: pollTally(read.question, decryptedAnswers) };
+      }
 
       console.log(`✅ Returning host answer info for ${gameId}: ${answers.length} answers`);
       return {

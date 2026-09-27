@@ -81,7 +81,7 @@ describe('runtime phase graph', () => {
     expect(hostRunsVotePhase('trivia')).toBe(false);
     expect(hostRunsVotePhase('wavelength')).toBe(false);
     expect(hostRunsVotePhase('call-and-answer')).toBe(true);
-    expect(hostRunsVotePhase('poll')).toBe(true);
+    expect(hostRunsVotePhase('poll')).toBe(false); // typed polls: ASK → RESULTS
     // Surveys phase 2: a survey is a session with no rounds, so it never
     // opens a vote. It used to fall through handleFinishQuestion() and run
     // one; that is what made anonymityApplies('survey') true and put the
@@ -182,8 +182,11 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
 
 describe('the primary action per phase', () => {
   it('opens voting for vote types and reveals for the rest', () => {
-    expect(hostControlsFor({ gameType: 'poll', phase: 'ASK', ...READY }).primary.label)
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ASK', ...READY }).primary.label)
       .toBe('Start Voting');
+    // A typed poll is counted live: its ASK closes straight to results.
+    expect(hostControlsFor({ gameType: 'poll', phase: 'ASK', ...READY }).primary.label)
+      .toBe('Show Results');
     // A survey never reaches ASK (it has no rounds); if bad state puts it
     // there, it is a no-vote type like trivia and gets a way out, not a vote.
     expect(hostControlsFor({ gameType: 'survey', phase: 'ASK', ...READY }).primary.label)

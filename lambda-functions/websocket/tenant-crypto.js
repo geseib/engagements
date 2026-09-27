@@ -311,6 +311,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
     // FIRST. Encrypting only `Answer` left the participant's actual words
     // readable at rest and made the other field decorative.
     'ProcessedWords',
+    // A TYPED POLL'S VALUE (poll-question.js): the same answer, structured for
+    // the tally — a write-in or a "why" is as much the person's words as
+    // `Answer` is.
+    'PollValue',
   ]),
 
   /** A ballot: SK=QUESTION#<num>#VOTE#<player>. `Votes` is a MAP, not a

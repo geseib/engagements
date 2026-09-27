@@ -14,6 +14,7 @@ import HostReportsDialog from './components/HostReportsDialog';
 import { parseUpgradeRequired } from './utils/upgradeRequired';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
+import PollBoard from './components/stage/PollBoard';
 import QuestionCard from './components/QuestionCard';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
@@ -209,6 +210,13 @@ function GameHostPage() {
      upgraded in place by the `wavelengthAnalysisReady` frame when the
      clustering worker finishes, cleared with the rest of the round state. */
   const [wavelengthAnalysis, setWavelengthAnalysis] = useState(null);
+  /*
+    A TYPED POLL'S TALLY (components/stage/PollBoard.jsx): the survey's
+    aggregate over this round's answers, live from the host's answers door on
+    every `playerAnswered` and final from the round's close. Keyed by round so
+    a board never shows the last round's bars under this round's question.
+  */
+  const [pollTally, setPollTally] = useState(null);
   const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
   
   // Debug wrapper for setGameState
@@ -1804,7 +1812,12 @@ Focus on actionable business strategy insights.`;
 
   // Load AI insights when in results state and we have answers
   useEffect(() => {
-    if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && answers.length > 0) {
+    // Trivia and polls get the Workie's word even when nobody answered (the
+    // owner, 27 Sep 2026; get-ai-summary.js's `answerlessOk`) — and a typed
+    // poll's RESULTS carries no answer rows on the stage at all (PollBoard
+    // draws the tally), so the answer count cannot be its trigger.
+    const summaryWithoutAnswers = currentGameType === 'trivia' || currentGameType === 'poll';
+    if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && (answers.length > 0 || summaryWithoutAnswers)) {
       const questionId = String(currentQuestionIndex + 1).padStart(3, '0');
       console.log(`🤖 Starting AI insights load for question ${questionId} with ${answers.length} answers`);
       setLoadingAIInsights(true);
@@ -1840,7 +1853,7 @@ Focus on actionable business strategy insights.`;
       
       // REMOVED: AI insights polling - WebSocket handles notifications
     }
-  }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket]);
+  }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket, currentGameType]);
 
   // When the room finishes answering, close the expanded-question overlay so
   // the host is looking at the stage again. The celebratory full-screen alert
@@ -2818,6 +2831,11 @@ Focus on actionable business strategy insights.`;
                     basePoints: answer.basePoints || 0,
                     submittedAt: answer.submittedAt
                   }));
+                } else if (resultsData.gameType === 'poll') {
+                  // A reload on a poll's RESULTS: the same final board.
+                  if (resultsData.poll) {
+                    setPollTally({ round: String(questionNumber).padStart(3, '0'), tally: resultsData.poll.tally });
+                  }
                 } else if (resultsData.gameType === 'wavelength') {
                   // This branch did not exist: a refresh mid-RESULTS fell
                   // through to the call-and-answer arm, found no voteTallies,
@@ -2938,6 +2956,7 @@ Focus on actionable business strategy insights.`;
 
       setAnswers(questionAnswers);
       setAnswersFor(stageAnswersKey(`ASK#${paddedQuestionNumber}`));
+      if (json.poll) setPollTally({ round: paddedQuestionNumber, tally: json.poll.tally });
 
       // Participation is derived from these rows ONLY when they carry names.
       // On a hidden round every row is redacted, so this used to write
@@ -4184,7 +4203,7 @@ Focus on actionable business strategy insights.`;
   const openingVoteRef = useRef(false);
   const handleFinishQuestion = async () => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
-    if (currentGameType === 'trivia' || currentGameType === 'wavelength') {
+    if (currentGameType === 'trivia' || currentGameType === 'wavelength' || currentGameType === 'poll') {
       // Warn if not all players have answered
       if (answeredCount < players.length) {
         const proceed = await showConfirmation(
@@ -4264,7 +4283,7 @@ Focus on actionable business strategy insights.`;
   const handleShowResults = async () => {
     // For trivia and wavelength games, no voting phase - skip vote check
     // For call-and-answer games, warn if not all players have voted
-    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && playersWhoVoted.length < players.length) {
+    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && currentGameType !== 'poll' && playersWhoVoted.length < players.length) {
       const proceed = await showConfirmation(
         'Show Results?',
         `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
@@ -4327,6 +4346,13 @@ Focus on actionable business strategy insights.`;
         console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
         
+      } else if (resultsData.gameType === 'poll') {
+        // A typed poll: the board's final tally is the result (PollBoard).
+        // No rows to rank — nobody wrote a response to vote on.
+        if (resultsData.poll) {
+          setPollTally({ round: String(questionNumber).padStart(3, '0'), tally: resultsData.poll.tally });
+        }
+        formattedAnswers = [];
       } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
         // Wavelength: the analysis (landed words, near-miss, denominator,
         // matching mode) is the result; the answers ride along for the meter.
@@ -5934,6 +5960,9 @@ Focus on actionable business strategy insights.`;
     ? { progress: '', reached: false, line: '' }
     : goalRules.goalProgress({ target: sessionTarget, round: lessonNumber, phase: hostPhase });
 
+  // This round's poll tally, or none: never the last round's bars.
+  const pollTallyNow = pollTally && pollTally.round === String(lessonNumber).padStart(3, '0') ? pollTally.tally : null;
+
   const baseHostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
@@ -7003,6 +7032,12 @@ Focus on actionable business strategy insights.`;
               />
             )}
 
+            {/* A TYPED POLL: its options on the wall the moment it is asked,
+                each bar filling in as the room answers (PollBoard). */}
+            {hostPhase === 'ASK' && currentGameType === 'poll' && currentQuestion?.poll && (
+              <PollBoard question={currentQuestion.poll} tally={pollTallyNow} live />
+            )}
+
             {hostPhase === 'VOTE' && (
               <>
                 <div className="kicker">
@@ -7130,7 +7165,13 @@ Focus on actionable business strategy insights.`;
                     JSON.stringify(answers) at a room. */}
                 {/* Blank until this round's results are the ones in hand, so
                     "No responses came in" is never said while they load. */}
-                {!stageResponsesReady ? null : currentGameType !== 'trivia' && answers.length === 0 ? (
+                {currentGameType === 'poll' ? (
+                  /* A typed poll: the same board as ASK, no longer moving. */
+                  <>
+                    {currentQuestion?.title && <p className="recap">{currentQuestion.title}</p>}
+                    {currentQuestion?.poll && <PollBoard question={currentQuestion.poll} tally={pollTallyNow} />}
+                  </>
+                ) : !stageResponsesReady ? null : currentGameType !== 'trivia' && answers.length === 0 ? (
                   <p className="qdetail">No responses came in for this one.</p>
                 ) : currentGameType === 'trivia' ? (
                   /* The same card as ASK, in its RESULTS treatment: the correct

@@ -32,6 +32,8 @@ const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tena
 // question, the prompt, Workie's reply — describes them with this and never
 // quotes them. tests/ai-summary-content-not-logged.js.
 const { shapeForLog } = require('./log-shape');
+const { pollQuestionOf } = require('./poll-question');
+const { pollTally, describePollTally } = require('./poll-round');
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -1210,7 +1212,15 @@ exports.handler = async (event) => {
       : (storedResultsQuery.Item || null);
     console.log(`📊 Found ${answers.length} answers, ${votes.length} votes, stored results: ${storedResults ? 'YES' : 'NO'} for question ${paddedQuestionNumber}`);
     
-    if (answers.length === 0) {
+    // A ROUND NOBODY ANSWERED still gets a word when it is trivia or a poll
+    // (the owner, 27 Sep 2026: "if there are no answers, it's still ok to have
+    // Workie comment … it can talk about the correct answer … the status of
+    // the game … if it's going in the report"). The prompts' thin-round rule
+    // says what to write; this used to refuse before any prompt was read.
+    // Call-and-answer and wavelength keep the refusal: with no responses there
+    // is nothing of the room's to read back.
+    const answerlessOk = ['trivia', 'quiz', 'poll', 'polls'].includes(String(gameType).toLowerCase());
+    if (answers.length === 0 && !answerlessOk) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'No answers found for this question.' }),
@@ -2518,16 +2528,34 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // only for a row that has none. See pollOptionsLine.
     pollOptions = await pollOptionsLine(question, orgId);
 
-    // For polls, there's no correct answer, just distribution
+    // A TYPED POLL (typed polls, 27 Sep 2026; game/poll-round.js): the round
+    // counted by the survey's aggregate and described in the question's own
+    // words — each option's count, a scale's spread, the binary's labels, the
+    // open answers quoted. The question row reaches here encrypted (see
+    // pollOptionsLine), so it is opened first; a failure falls back to the
+    // plain distribution below, as a pre-typed poll always read.
+    const typedRows = answers.filter((a) => a && a.PollValue !== undefined && a.PollValue !== null);
+    let described = '';
+    if (typedRows.length) {
+      try {
+        const opened = orgId ? await decryptItem(orgId, 'question', question) : question;
+        const pollQ = pollQuestionOf(opened);
+        described = describePollTally(pollQ, pollTally(pollQ, typedRows));
+        if (pollQ.kind !== 'choice') pollOptions = '';
+      } catch (error) {
+        console.warn('⚠️ Poll tally could not be described for the summary: ' + error.message);
+      }
+    }
+    // A poll from before typed polls: no correct answer, just distribution.
     const responseDistribution = {};
-    answers.forEach(answer => {
-      const playerAnswer = answer.Answer || answer.answer;
-      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
-    });
-    
-    // Format as a distribution
-    triviaResponses = Object.entries(responseDistribution)
-      .map(([option, count]) => `${option}: ${count} votes`)
+    if (!described) {
+      answers.forEach(answer => {
+        const playerAnswer = answer.Answer || answer.answer;
+        responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+      });
+    }
+    triviaResponses = described || Object.entries(responseDistribution)
+      .map(([option, count]) => `${option}: ${count}`)
       .join(', ');
   } else if (gameType === 'wavelength') {
     // Handle wavelength word analysis

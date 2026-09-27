@@ -45,7 +45,8 @@ describe('every default, per format', () => {
   });
 
   test('Poll still holds a vote, so it carries the anonymity clause too', () => {
-    expect(line(advancedSummary(untouched('poll')))).toMatch(/answers anonymous until voting closes/);
+    // A typed poll holds no vote (27 Sep 2026), so it carries no anonymity clause.
+    expect(line(advancedSummary(untouched('poll')))).not.toMatch(/anonymous/);
   });
 
   test.each([['trivia', 'Trivia'], ['wavelength', 'Wavelength']])(

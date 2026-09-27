@@ -41,7 +41,9 @@ const { recordSessionCreated } = require('../platform-metrics');
 const rules = require('./agenda-rules');
 
 /** The two kinds whose votes can hide who wrote what (create dialog's rule). */
-const ANONYMITY_TYPES = Object.freeze(['call-and-answer', 'poll']);
+// Call-and-answer only since typed polls (27 Sep 2026): a poll has no vote,
+// and its wall shows counts, never authors (game/anonymity.js).
+const ANONYMITY_TYPES = Object.freeze(['call-and-answer']);
 const SURVEY_OPEN = 'SURVEY#OPEN';
 
 const gamePk = (gameId) => `GAME#${gameId}`;

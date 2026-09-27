@@ -311,7 +311,9 @@ const SETTING_DEFAULTS = Object.freeze({
   briefing: null,
 });
 const SETTING_KEYS = Object.freeze(Object.keys(SETTING_DEFAULTS));
-const ANONYMITY_TYPES = Object.freeze(['call-and-answer', 'poll']);
+// Call-and-answer only since typed polls (27 Sep 2026): a poll has no vote,
+// and its wall shows counts, never authors (game/anonymity.js).
+const ANONYMITY_TYPES = Object.freeze(['call-and-answer']);
 const WORKIE_KEYS = Object.freeze(['personaId', 'promptId', 'aiContext', 'eventDetails']);
 
 /** The option keys an item of `type` stores; [] for anything but an engagement. */

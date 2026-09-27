@@ -62,6 +62,18 @@ exports.handler = async (event) => {
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
+    // A POLL HAS NO VOTE since typed polls (27 Sep 2026): its question is a
+    // survey question, counted as the room answers, and the round goes from
+    // ASK straight to RESULTS. A VOTE#nnn here would send every phone to a
+    // ballot for answers that are option picks, not responses.
+    if (ownerRead.Item && ['poll', 'polls'].includes(String(ownerRead.Item.GameType || '').toLowerCase())) {
+      const reason = 'A poll has no vote: its results count as the room answers.';
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: reason, message: reason, poll: true, gameId }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
 
     // Update game state to VOTE#questionNumber (using the main STATE record)
     const paddedQuestionNumber = String(questionNumber).padStart(3, '0');

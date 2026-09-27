@@ -36,7 +36,9 @@ const ANON_FIELDS = ['playerId', 'playerName', 'name'];
  * tests/anonymity-contract.js asserts this set still agrees with game-types.js
  * for every spelling the table can hold, aliases included.
  */
-const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'quiz']);
+// `poll` since typed polls (27 Sep 2026): a poll is a survey question asked
+// live, with no vote, and its wall shows counts, never authors.
+const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'quiz', 'poll', 'polls']);
 
 function skipsVote(gameType) {
   return TYPES_THAT_SKIP_VOTE.has(String(gameType || '').trim().toLowerCase());

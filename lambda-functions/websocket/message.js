@@ -6,6 +6,8 @@ const { isHidden } = require('./anonymity');
 const { encryptItem, decryptItem } = require('./tenant-crypto');
 const { ORG } = require('./tenant');
 const { countAnsweredQuestion, COUNT_PROJECTION } = require('./session-count');
+const { isPollRound, pollQuestionOf, pollAnswerText } = require('./poll-question');
+const { checkAnswer } = require('./survey-answer');
 const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
@@ -252,6 +254,12 @@ async function handleRequestVote(gameId, messageData) {
       console.log(`🌊 Wavelength game detected - host will handle results transition directly via handleShowResults()`);
       return;
     }
+
+    // A typed poll has no vote either (start-vote.js says why).
+    if (gameType === 'poll' || gameType === 'polls') {
+      console.log(`📊 Poll detected - no vote; the host goes straight to results`);
+      return;
+    }
     
     // For call-and-answer games, transition to VOTE# state
     const newState = `VOTE#${currentQuestionId}`;
@@ -395,7 +403,10 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     console.log(`🎯 Processing answer: messageType=${messageType}, rawQuestionNumber=${rawQuestionNumber}, paddedQuestionNumber=${questionNumber}`);
     console.log(`🎯 Answer from ${playerName} in game ${gameId}: ${answerType}, ${describeAnswer(answer)}`);
     
-    if (!answer) {
+    // A typed poll's value can be 0 (a rating on the 0–10 scale) or `false`
+    // nowhere, but it is never a string to be truthy — so it is judged by
+    // presence, and every other type keeps the old rule.
+    if (answerType === 'poll' ? (answer === undefined || answer === null) : !answer) {
       console.log(`⚠️ No answer provided in message data`);
       return;
     }
@@ -556,6 +567,46 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
         console.error('Error calculating trivia scoring:', triviaError);
         // Continue with basic answer recording even if trivia scoring fails
       }
+    } else if (answerType === 'poll') {
+      // A TYPED POLL (poll-question.js): the value is checked against the
+      // question the round was served from, with the survey's own rules
+      // (survey-answer.js), and refused WHOLE if it is not an answer to it —
+      // the tally counts by option index, and an index that names no option
+      // would be counted against nothing. A refusal stores nothing, like a
+      // round that is no longer on screen.
+      const questionRef = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}#REF` }
+      }));
+      const ref = questionRef.Item;
+      if (!ref) {
+        console.log(`⚠️ Poll answer refused: no REF row for round ${questionNumber}`);
+        return;
+      }
+      const resolvedSet = await resolveSetPartition(
+        db, process.env.TABLE_NAME, refSetRef(ref, ref.SetId), ref.SetVersion
+      );
+      const questionRow = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: resolvedSet.pk, SK: ref.SourceQuestionId }
+      }));
+      const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+      const row = questionRow.Item && setOrgId
+        ? await decryptItem(setOrgId, 'question', questionRow.Item)
+        : questionRow.Item;
+      if (!row || !isPollRound(resolvedSet.metadata, row)) {
+        console.log(`⚠️ Poll answer refused: round ${questionNumber} is not a poll's`);
+        return;
+      }
+      const question = pollQuestionOf(row);
+      const checked = checkAnswer(question, answer);
+      if (!checked.ok || checked.value === null) {
+        console.log(`⚠️ Poll answer refused (${question.kind}): ${checked.error || 'empty'}`);
+        return;
+      }
+      answerRecord.Answer = pollAnswerText(question, checked.value) || '—';
+      answerRecord.PollValue = checked.value;
+      answerRecord.PollKind = question.kind;
     } else if (answerType === 'wavelength') {
       // For wavelength questions, process and normalize the word list
       try {
