@@ -151,6 +151,49 @@ const BASE = { engagementType: 'call-and-answer', userInput: 'leadership scenari
     assert.ok(job.items.every((i) => Array.isArray(i.options) && i.options.length >= 2));
     const props = state.bedrockCalls[0].body.tools[0].input_schema.properties.items.items.properties;
     assert.ok(!props.correctAnswer, 'a poll has no correct answer; the schema must not invite one');
+    // An item with options and no kind is the choice it plainly is.
+    assert.ok(job.items.every((i) => i.kind === 'choice'));
+  });
+
+  // rejects: the drafter writing a bare options list while the set generator
+  // writes typed polls — a question drafted into a poll set must be the same
+  // shape as the ones generated with it (ai-generate-polls.js).
+  await test('a drafted poll question is typed: the four kinds, their fields, the contract\'s shape', async () => {
+    reset();
+    state.bedrockHandler = () => toolResponse([
+      { ...makeQuestions(1, 'rate')[0], kind: 'rating', scale: '1-10', lowLabel: 'Not at all', highLabel: 'Completely' },
+      { ...makeQuestions(2, 'vote')[1], kind: 'yesno', yesLabel: 'True', noLabel: 'False' },
+      { ...makeQuestions(3, 'bare')[2] },
+    ]);
+    const { job } = await runJob({ ...BASE, engagementType: 'poll', questionCount: 3 });
+    const schema = state.bedrockCalls[0].body.tools[0].input_schema.properties.items.items;
+    assert.deepStrictEqual(schema.properties.kind.enum, ['choice', 'rating', 'yesno', 'text']);
+    assert.ok(schema.required.includes('kind'));
+    assert.ok(!schema.required.includes('customInstructions'), 'an instant poll needs no participant instruction');
+    assert.match(state.bedrockCalls[0].prompt, /KINDS OF POLL QUESTION/);
+    // The third has neither a kind nor options: dropped, not turned into a text box.
+    assert.deepStrictEqual(job.items.map((i) => i.kind), ['rating', 'yesno']);
+    assert.deepStrictEqual(
+      [job.items[0].scale, job.items[0].lowLabel, job.items[0].highLabel], ['1-10', 'Not at all', 'Completely']);
+    assert.deepStrictEqual([job.items[1].yesLabel, job.items[1].noLabel], ['True', 'False']);
+  });
+
+  await test('refining a typed poll tells the model its kind and settings', async () => {
+    reset();
+    state.bedrockHandler = () => toolResponse([
+      { ...makeQuestions(1, 'refined')[0], kind: 'rating', scale: '1-5', lowLabel: 'Low', highLabel: 'High' },
+    ]);
+    await runJob({
+      ...BASE,
+      engagementType: 'poll',
+      userInput: 'make the labels mean something',
+      existingQuestion: { title: 'How ready are we', kind: 'rating', scale: '1-10', lowLabel: 'Low', highLabel: 'High' },
+    });
+    const { prompt } = state.bedrockCalls[0];
+    assert.match(prompt, /Kind: rating/);
+    assert.match(prompt, /Scale: 1-10/);
+    assert.match(prompt, /Scale labels: Low to High/);
+    assert.match(prompt, /Keep its kind unless the feedback asks for another/);
   });
 
   await test('wavelength gets subject-sized guidance, not scenario-sized', async () => {

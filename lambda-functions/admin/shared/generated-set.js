@@ -79,7 +79,8 @@
 
 const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { jobKey, sealJobFields } = require('./generation-jobs');
-const { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell, tagsToCsvCell } = require('./csv');
+const { csvRow, buildCsv, tagsToCsvCell } = require('./csv');
+const { pollFieldsOf, itemsToSurveyCsv } = require('./survey-kinds');
 const { normalizeRoundKind } = require('./round-kinds');
 const { normalizeSetTags } = require('./set-topics');
 
@@ -384,11 +385,12 @@ async function createSetForJob({
 // ---------------------------------------------------------------- CSV shapes
 //
 // One builder per whole-set generator, each the byte-equivalent of the writer
-// the browser uses on the manual "Load into System" path — AdminPage.jsx's
-// generateScenariosCSV / generateTriviaCSV / generatePollCSV. They have to
-// agree: the manual path is still the fallback when creation could not happen,
-// and two shapes for one set would be two sets that differ by which path made
-// them.
+// the browser uses on the manual "Load into System" path —
+// utils/generatedSetUpload.js, which took over AdminPage.jsx's
+// generateScenariosCSV / generateTriviaCSV / generatePollCSV (a poll's is
+// utils/pollDraft.js now). They have to agree: the manual path is still the
+// fallback when creation could not happen, and two shapes for one set would be
+// two sets that differ by which path made them.
 
 /** Group by category, preserving first-seen category order, like the client. */
 function byCategory(items, fallbackCategory) {
@@ -460,28 +462,31 @@ function triviaToCsv(items) {
   return buildCsv(headers, rows);
 }
 
-/** poll. Mirrors AdminPage.generatePollCSV — ONE pipe-separated `Options`. */
+/**
+ * poll. THE SURVEY CONTRACT'S COLUMNS — `Kind`, `Required`, `Options` …
+ * `Themes` — because a poll question is a survey question the host asks
+ * (survey-kinds.js, POLL_KINDS), written by the survey's own writer,
+ * itemsToSurveyCsv. The one difference from a survey is the category: a
+ * survey files every row under `Survey`, and a poll keeps each question's own,
+ * grouped in first-seen order as every other builder here groups them.
+ *
+ * An item from before kinds (options and allowMultiple, no `kind`) is written
+ * as the kind pollFieldsOf reads it as — a choice with two or more options,
+ * an open answer otherwise — so a legacy item can never produce a blank Kind
+ * cell the importer would refuse.
+ *
+ * Mirrors utils/pollDraft.js `pollItemsToCsv`, the browser's writer for the
+ * same items; src/src/__tests__/pollDraft.test.js holds the two byte-identical.
+ */
 function pollsToCsv(items) {
-  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,'
-    + 'Options,AllowMultiple,Tags';
-  const groups = byCategory(items, 'General');
+  const groups = byCategory(items || [], 'General');
   const rows = [];
   for (const category of Object.keys(groups)) {
-    groups[category].forEach((poll, index) => {
-      rows.push(csvRow([
-        category,
-        index + 1,
-        poll.title,
-        poll.detail || '',
-        poll.school || 'General',
-        poll.customInstructions || '',
-        optionsToCsvCell(poll.options),
-        allowMultipleToCsvCell(poll.allowMultiple),
-        tagsToCsvCell(poll.tags),
-      ]));
-    });
+    for (const poll of groups[category]) {
+      rows.push({ ...poll, kind: pollFieldsOf(poll).kind, category, school: poll.school || 'General' });
+    }
   }
-  return buildCsv(headers, rows);
+  return itemsToSurveyCsv(rows);
 }
 
 module.exports = {

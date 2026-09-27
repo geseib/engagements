@@ -1,0 +1,123 @@
+/* ============================================================================
+   GENERATE POLLS — the typed-poll pieces of components/PollAIBuilder.jsx, `.pab`
+
+   Two pieces, on two grounds, because a poll question is now a survey question
+   the host asks (the owner, 27 Sep 2026) and the builder borrows the survey's
+   two surfaces for it:
+
+   1. THE KINDS PICKER, on the builder form. The survey builder's kind toggles
+      (SurveyAIBuilder.css `.sab-opt`), re-cut under `.pab` because `.sab` is
+      that builder's scope. It sits on the builder modal, which is white
+      (BuilderPage.css `.poll-ai-builder-modal .modal-content`), so it takes
+      the survey builder's measured values on white:
+
+        --pab-text       #2c3e50 on #ffffff  10.98:1
+        --pab-muted      #5b6b7c on #ffffff   5.47:1
+        --pab-on-accent  #1b2942 on --primary #F6A94C   7.43:1  (a pressed toggle)
+        --pab-edge       #7a8898 on #ffffff   3.62:1  (a control's boundary, 3:1)
+
+      Amber carries no text here: #F6A94C on white is 1.96:1. It FILLS a
+      pressed toggle, with dark words on it and a tick beside them — never the
+      fill alone.
+
+   2. THE EDIT CARD, `.pab-edit`: the set editor's survey question form
+      (SurveyQuestionFields), which is drawn and measured on the editor's dusk
+      card and paints only inside `.qs-editor`. So the card carries
+      `.qs-editor` and `data-theme="dark"` on its own root (PollAIBuilder.jsx),
+      and this sheet gives it the editor's question-dialog ground, `--surface`
+      — the ground every number in SurveyQuestionFields.css was measured on.
+      What this sheet adds on that ground:
+
+        --text  on --surface  12.53:1   (the refusal and problem notes)
+        --muted on --surface   6.06:1   (the tags hint)
+
+   TOKENS ONLY outside the token block. Measured in
+   __tests__/pollAIBuilderPalette.test.js. AA is 4.5:1.
+   ========================================================================== */
+
+.pab {
+  --pab-text: #2c3e50;
+  --pab-muted: #5b6b7c;
+  --pab-edge: #7a8898;
+  --pab-quiet: #f8f9fa;
+  --pab-field: #ffffff;
+  --pab-on-accent: #1b2942;
+
+  --pab-t-label: 13px;
+  --pab-t-body: 15px;
+}
+
+/* ------------------------------------------------------------ the kinds -- */
+
+.pab-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pab-lab { font-size: var(--pab-t-label); font-weight: 700; color: var(--pab-text); }
+.pab-help { margin: 0; font-size: var(--pab-t-label); color: var(--pab-muted); line-height: 1.45; }
+
+.pab-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 44px tall: a toggle is a touch target on a laptop's trackpad and a
+   tablet's glass alike. */
+.pab-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 13px 0 10px;
+  border: 1px solid var(--pab-edge);
+  border-radius: 8px;
+  background: var(--pab-field);
+  color: var(--pab-text);
+  font: inherit;
+  font-size: var(--pab-t-body);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pab-opt:hover { background: var(--pab-quiet); }
+.pab-opt:focus-visible { outline: 2px solid var(--pab-text); outline-offset: 2px; }
+.pab-opt[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary-deep);
+  color: var(--pab-on-accent);
+}
+.pab-tick { display: none; font-weight: 800; }
+.pab-opt[aria-pressed="true"] .pab-tick { display: inline; }
+
+/* -------------------------------------------------------- the edit card -- */
+
+.pab-edit {
+  margin: 0 0 16px;
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Category and tags, side by side where there is room for both. */
+.pab-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.pab-row .form-group { margin: 0; min-width: 0; }
+
+.pab-dim { color: var(--muted); font-weight: 400; }
+
+/* A refusal or a problem: the words in the text ink, an amber rule to say it
+   needs doing. Amber never carries the words. */
+.pab-note {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  color: var(--text);
+  font-size: var(--pab-t-label);
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .pab-row { grid-template-columns: minmax(0, 1fr); }
+}
