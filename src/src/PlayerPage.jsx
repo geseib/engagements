@@ -19,6 +19,8 @@ import { PlayerShell } from './components/PlayerShell';
 import SurveyRunner from './components/survey/SurveyRunner';
 import { namesMode } from './config/surveyNames';
 import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
+import { resolveJoinCode, joinPathFor } from './utils/joinCode';
+import { navigateTo } from './auth/navigate';
 
 const API_BASE = window.API_BASE;
 
@@ -727,7 +729,19 @@ function PlayerPage() {
     (async () => {
       try {
         const res = await fetch(`${API_BASE}games/${briefCode}?role=player`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          // NO SESSION BY THAT CODE — IT MAY BE AN EVENT'S (events M2). The
+          // code on the room's screen for an event is typed here, on /play, or
+          // arrives in a /play?gameId= link; the resolver says which it is,
+          // and an event's code goes to the attendee's page. Asked only after
+          // this 404, so a session's join makes no request it did not make
+          // before; anything but "an event" leaves this page exactly as it was.
+          if (res.status === 404) {
+            const kind = await resolveJoinCode(briefCode, { apiBase: API_BASE });
+            if (!cancelled && kind === 'event') navigateTo(joinPathFor(briefCode, kind));
+          }
+          return;
+        }
         const data = await res.json();
         if (cancelled || !data || typeof data !== 'object') return;
         setBrief({
