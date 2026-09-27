@@ -133,10 +133,33 @@ for (const minutes of [0, 241, 2.5, 'fifteen', null]) {
 }
 
 console.log('\n6. which kinds exist, and which may be added now');
-check('survey items may be added now; presentations are listed but not addable yet', () => {
-  assert.ok(R.ITEM_TYPES.includes('presentation') && R.ITEM_TYPES.includes('survey'));
-  assert.ok(R.ADDABLE_TYPES.includes('survey') && !R.ADDABLE_TYPES.includes('presentation'));
-  assert.ok(R.COMING_SOON.presentation && !R.COMING_SOON.survey);
+check('every kind may be added: five engagements, a presentation, an activity and a break', () => {
+  assert.deepStrictEqual([...R.ITEM_TYPES],
+    ['trivia', 'call-and-answer', 'poll', 'wavelength', 'survey', 'presentation', 'custom', 'break']);
+  assert.strictEqual(R.ADDABLE_TYPES, undefined);
+  assert.strictEqual(R.COMING_SOON, undefined);
+});
+check('an activity is called Activity, and counts as an item, never an engagement', () => {
+  assert.strictEqual(R.TYPE_LABELS.custom, 'Activity');
+  assert.deepStrictEqual(R.countItems([{ type: 'custom' }, { type: 'presentation' }, { type: 'trivia' }]),
+    { items: 3, engagements: 1, breaks: 0 });
+  assert.strictEqual(R.capRefusal({ items: 15, engagements: 8 }, 'custom'), null);
+  assert.strictEqual(R.capRefusal({ items: 16, engagements: 8 }, 'custom').cap, 'items');
+});
+check('who leads an item, by kind', () => {
+  for (const t of ['trivia', 'call-and-answer', 'poll', 'wavelength', 'survey']) assert.strictEqual(R.ledByLabel(t), 'Facilitator', t);
+  assert.strictEqual(R.ledByLabel('presentation'), 'Presenter');
+  assert.strictEqual(R.ledByLabel('custom'), 'Led by');
+  assert.strictEqual(R.ledByLabel('break'), '');
+  assert.ok(!R.hasLeader('break') && R.hasLeader('custom') && R.hasLeader('poll') && !R.hasLeader('party'));
+});
+check('a name is optional, trimmed and capped; a break carries none', () => {
+  assert.deepStrictEqual(R.checkLedBy('  Marcus Oyelaran ', 'presentation'), { value: 'Marcus Oyelaran' });
+  assert.deepStrictEqual(R.checkLedBy(undefined, 'custom'), { value: '' });
+  assert.match(R.checkLedBy('x'.repeat(81), 'custom').error, /80 characters/);
+  assert.match(R.checkLedBy('Sam', 'break').error, /not led by anyone/);
+  assert.deepStrictEqual(R.checkLedBy('', 'break'), { value: '' });
+  assert.strictEqual(R.LED_BY_MAX, 80);
 });
 check('a set row\'s type reads as an engagement type, old spellings included', () => {
   assert.strictEqual(R.canonicalSetType('quiz'), 'trivia');

@@ -3,9 +3,11 @@
  * the day, during it and after (p-05a, p-05, p-08; RATIONALE decision 11).
  *
  * PUBLIC, and so it says as little as an agenda needs: the event's name,
- * place and schedule, and per item its planned time, title, kind, length,
- * description and state. Never the organisation, the question set, who made
- * it, the report default or the counts. And no LINK into an item — its
+ * place and schedule, and per item its planned time, title, kind, who leads
+ * it (events M1b — p-05's "Presentation · Dana Whitfield"), length,
+ * description and state. Never an engagement's session options. Never the
+ * organisation, the question set, who made it, the report default or the
+ * counts. And no LINK into an item — its
  * session's code — until the host has started that item: "nothing is active
  * beforehand" (decision 11). Every item is `planned` in this release, so no
  * link is ever given yet; the rule is here so roadmap M3 cannot forget it.
@@ -56,6 +58,7 @@ exports.handler = async (request) => {
           type: row.Type || '',
           title: typeof row.Title === 'string' ? row.Title : '',
           description: typeof row.Description === 'string' ? row.Description : '',
+          ledBy: typeof row.LedBy === 'string' ? row.LedBy : '',
           minutes: Number(row.Minutes) || 0,
           at: row.at,
           until: row.until,

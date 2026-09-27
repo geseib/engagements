@@ -5,7 +5,13 @@
  *   DELETE /events/{code}/items/{itemId}   remove one that has not started
  *   PUT    /events/{code}/items            reorder: { order: [itemId, …] }
  *   PUT    /events/{code}/items/{itemId}   edit: title, description, minutes,
- *                                          and "Use vN" for an engagement
+ *                                          who leads it, and "Use vN" for an
+ *                                          engagement
+ *
+ * THE KINDS (events M1b): five engagements (survey included), a presentation
+ * (a placeholder until roadmap M5's PDF copy), an activity (`custom`) and a
+ * break. Every kind but a break may name who leads it — `ledBy`, stored as
+ * `LedBy` and sealed with the item's words.
  *
  * Every route opens the event through event-store.openEvent: another
  * organisation's event, an unknown code and a malformed one are the same 404.
@@ -238,10 +244,11 @@ async function addItem(request, meta, code) {
   const body = readBody(request);
   if (!body) return json(400, { error: 'The request body is not valid JSON.' });
   const type = String(body.type || '').trim();
-  if (rules.COMING_SOON[type]) return json(400, { error: rules.COMING_SOON[type] });
-  if (!rules.ADDABLE_TYPES.includes(type)) return json(400, { error: 'That is not a kind of agenda item.' });
+  if (!rules.ITEM_TYPES.includes(type)) return json(400, { error: 'That is not a kind of agenda item.' });
   const fields = rules.checkItemFields(body, type);
   if (fields.error) return json(400, { error: fields.error });
+  const leader = rules.checkLedBy(body.ledBy, type);
+  if (leader.error) return json(400, { error: leader.error });
 
   const wasCounts = countsOf(meta);
   const capped = rules.capRefusal(wasCounts, type);
@@ -266,6 +273,8 @@ async function addItem(request, meta, code) {
     Minutes: fields.value.minutes,
     Title: fields.value.title,
     Description: fields.value.description,
+    // Who leads it (sealed below with Title and Description); a break has none.
+    ...(rules.hasLeader(type) ? { LedBy: leader.value } : {}),
     State: PLANNED,
     ...(setRef ? { SetRef: setRef } : {}),
     CreatedAt: now,
@@ -341,12 +350,15 @@ async function editItem(request, meta, code, itemId) {
 
   const current = await S.decryptItemRow(meta.orgId, row);
   const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+  const leads = rules.hasLeader(row.Type);
   const fields = rules.checkItemFields({
     title: has('title') ? body.title : current.Title,
     description: has('description') ? body.description : current.Description,
     minutes: has('minutes') ? body.minutes : current.Minutes,
   }, row.Type);
   if (fields.error) return json(400, { error: fields.error });
+  const leader = rules.checkLedBy(has('ledBy') ? body.ledBy : current.LedBy, row.Type);
+  if (leader.error) return json(400, { error: leader.error });
 
   let setRef = row.SetRef || null;
   if (has('version')) {
@@ -357,10 +369,20 @@ async function editItem(request, meta, code, itemId) {
   }
 
   const now = new Date().toISOString();
-  const sealed = await encryptItem(meta.orgId, 'item', { Title: fields.value.title, Description: fields.value.description });
+  const words = {
+    Title: fields.value.title,
+    Description: fields.value.description,
+    ...(leads ? { LedBy: leader.value } : {}),
+  };
+  const sealed = await encryptItem(meta.orgId, 'item', words);
   const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
   const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
   let expression = 'SET #t = :t, #d = :d, #m = :m, #ua = :now';
+  if (leads) {
+    expression += ', #lb = :lb';
+    names['#lb'] = 'LedBy';
+    values[':lb'] = sealed.LedBy;
+  }
   if (setRef) {
     expression += ', #sr = :sr';
     names['#sr'] = 'SetRef';
@@ -381,9 +403,10 @@ async function editItem(request, meta, code, itemId) {
     }
     throw error;
   }
+  // Projected from the DECRYPTED row, so nothing sealed reaches the response.
   return json(200, {
     item: S.projectItem({
-      ...row, Title: fields.value.title, Description: fields.value.description, Minutes: fields.value.minutes,
+      ...current, ...words, Minutes: fields.value.minutes,
       ...(setRef ? { SetRef: setRef } : {}),
     }),
   });

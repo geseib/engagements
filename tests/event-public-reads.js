@@ -81,7 +81,7 @@ const add = (code, body) => items(request({
   });
   await check('no set, organisation, creator, report setting or count reaches the page', () => {
     assert.deepStrictEqual(Object.keys(body.items[0]).sort(),
-      ['at', 'description', 'itemId', 'minutes', 'state', 'title', 'type', 'until']);
+      ['at', 'description', 'itemId', 'ledBy', 'minutes', 'state', 'title', 'type', 'until']);
     for (const leak of ['custq4', NW, 'u_host', 'setRef', 'SetRef', 'attendeeReports', 'ItemCount', 'orgId']) {
       assert.ok(!res.body.includes(leak), `the agenda leaks ${leak}`);
     }

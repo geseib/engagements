@@ -8,7 +8,10 @@
  * choice ... enter the facilitator/speaker/presenter."
  *
  * rejects: a survey item that pins a set of another type, or does not count
- * as an engagement; the ninth engagement let in because it is a survey.
+ * as an engagement; the ninth engagement let in because it is a survey; a
+ * presentation or an activity counted as an engagement, or let in as the
+ * 17th item; a leader's name stored in the clear, on a break, or longer than
+ * 80; a name that cannot be cleared; an unreadable row showing ciphertext.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
@@ -45,7 +48,7 @@ const rowOf = (itemId) => table.get(`EVENT#${code}`, `ITEM#${itemId}`);
 const hostRead = async () => bodyOf(await getEvent(request({
   path: `/events/${code}`, pathParameters: { code }, requestContext: asHost(NW),
 })));
-const publicRead = async () => bodyOf(await agenda(request({ path: `/events/${code}/agenda` })));
+const publicRead = async () => bodyOf(await agenda(request({ path: `/events/${code}/agenda`, pathParameters: { code } })));
 
 async function freshEvent() {
   table.clear();
@@ -83,6 +86,90 @@ async function freshEvent() {
     const res = await add({ type: 'survey', title: 'x', minutes: 8, setRef: { scope: 'platform', setId: 'kickoff' } });
     assert.strictEqual(res.statusCode, 409, res.body);
     assert.strictEqual(bodyOf(res).error, rules.CAP_SENTENCES.engagements);
+  });
+
+  console.log('\n2. a presentation and an activity: counted items, never engagements');
+  await freshEvent();
+  let talk; let lunch;
+  await check('a presentation is added with its presenter, sealed', async () => {
+    const res = await add({ type: 'presentation', title: 'The FY27 plan', ledBy: 'Marcus Oyelaran', minutes: 35, description: 'The three bets.' });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    talk = bodyOf(res).item;
+    assert.strictEqual(talk.ledBy, 'Marcus Oyelaran');
+    assert.strictEqual(talk.setRef, undefined);
+    assert.ok(isEnvelope(rowOf(talk.itemId).LedBy));
+    assert.strictEqual(plainRow(NW, rowOf(talk.itemId)).LedBy, 'Marcus Oyelaran');
+  });
+  await check('an activity is added with nobody leading it', async () => {
+    const res = await add({ type: 'custom', title: 'Lunch with the speakers', minutes: 45 });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    lunch = bodyOf(res).item;
+    assert.strictEqual(lunch.type, 'custom');
+    assert.strictEqual(lunch.ledBy, '');
+  });
+  await check('both count toward the 16 items and neither toward the 8 engagements', () =>
+    assert.deepStrictEqual([meta().ItemCount, meta().EngagementCount, meta().BreakCount], [2, 0, 0]));
+  await check('the 17th item may not be a presentation either: the items sentence', async () => {
+    table.put({ ...meta(), ItemCount: 16 });
+    const res = await add({ type: 'presentation', title: 'One too many', minutes: 10 });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.deepStrictEqual(bodyOf(res), { error: rules.CAP_SENTENCES.items, cap: 'items' });
+    table.put({ ...meta(), ItemCount: 2 });
+  });
+  for (const [label, body, error] of [
+    ['a break with somebody leading it', { type: 'break', minutes: 15, ledBy: 'Sam' }, /A break is not led by anyone/],
+    ['a name longer than 80 characters', { type: 'custom', title: 'x', minutes: 5, ledBy: 'x'.repeat(81) }, /80 characters/],
+    ['an activity with no title', { type: 'custom', minutes: 5 }, /title/],
+  ]) {
+    await check(`${label}: 400, nothing written`, async () => {
+      const before = meta().ItemCount + meta().BreakCount;
+      const res = await add(body);
+      assert.strictEqual(res.statusCode, 400, res.body);
+      assert.match(bodyOf(res).error, error);
+      assert.strictEqual(meta().ItemCount + meta().BreakCount, before);
+    });
+  }
+  await check('the name is edited, and cleared', async () => {
+    let res = await edit(lunch.itemId, { ledBy: 'Dana Whitfield' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).item.ledBy, 'Dana Whitfield');
+    assert.strictEqual(plainRow(NW, rowOf(lunch.itemId)).LedBy, 'Dana Whitfield');
+    res = await edit(lunch.itemId, { ledBy: '' });
+    assert.strictEqual(bodyOf(res).item.ledBy, '');
+  });
+  await check('an edit that leaves the name out keeps it, and returns no ciphertext', async () => {
+    const res = await edit(talk.itemId, { minutes: 40 });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).item.ledBy, 'Marcus Oyelaran');
+    assert.ok(!/"ct"/.test(res.body));
+  });
+
+  console.log('\n3. who leads it, read back');
+  await check('the host\'s read carries ledBy on every item', async () => {
+    const body = await hostRead();
+    assert.deepStrictEqual(body.items.map((i) => [i.type, i.ledBy]), [['presentation', 'Marcus Oyelaran'], ['custom', '']]);
+  });
+  await check('the public agenda carries the name, for "Presentation · Marcus Oyelaran"', async () => {
+    const body = await publicRead();
+    assert.deepStrictEqual(body.items.map((i) => [i.type, i.ledBy]), [['presentation', 'Marcus Oyelaran'], ['custom', '']]);
+  });
+  await check('an item whose words cannot be opened shows no name and no ciphertext', async () => {
+    const row = rowOf(talk.itemId);
+    table.put({ ...row, LedBy: { v: 1, iv: 'AAAAAAAAAAAAAAAA', tag: 'AAAAAAAAAAAAAAAAAAAAAA==', ct: 'AAAA' } });
+    const res = await getEvent(request({ path: `/events/${code}`, pathParameters: { code }, requestContext: asHost(NW) }));
+    const bad = bodyOf(res).items.find((i) => i.itemId === talk.itemId);
+    assert.deepStrictEqual([bad.decryptFailed, bad.ledBy, bad.title], [true, '', '']);
+    assert.ok(!/"ct"/.test(res.body));
+    table.put(row);
+  });
+  await check('an item added before M1b (no LedBy at all) reads as nobody named, and edits', async () => {
+    const res = await add({ type: 'trivia', title: 'Old quiz', minutes: 10, setRef: { scope: 'platform', setId: 'space' } });
+    const id = bodyOf(res).item.itemId;
+    const { LedBy, ...m1Row } = rowOf(id);
+    table.put(m1Row);
+    const edited = await edit(id, { minutes: 12 });
+    assert.strictEqual(edited.statusCode, 200, edited.body);
+    assert.strictEqual(bodyOf(edited).item.ledBy, '');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

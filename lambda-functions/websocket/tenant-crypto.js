@@ -471,10 +471,11 @@ const ENCRYPTED_FIELDS = Object.freeze({
   event: Object.freeze(['Title', 'Place']),
 
   /** One agenda item: PK=EVENT#<code>, SK=ITEM#<id>. Its title and its
-   *  description are what the host wrote for the room. `Type`, `Order`,
-   *  `Minutes`, `State` and `SetRef` — a pointer to a question set, as a
-   *  session's `QuestionSetId` is — are structure, and stay plaintext. */
-  item: Object.freeze(['Title', 'Description']),
+   *  description are what the host wrote for the room; `LedBy` is the name of
+   *  who leads it (events M1b) — a person's name, personal data. `Type`,
+   *  `Order`, `Minutes`, `State` and `SetRef` — a pointer to a question set,
+   *  as a session's `QuestionSetId` is — are structure, and stay plaintext. */
+  item: Object.freeze(['Title', 'Description', 'LedBy']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

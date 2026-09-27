@@ -146,7 +146,7 @@ async function openItemRow(orgId, row, label) {
     return await decryptItemRow(orgId, row);
   } catch (error) {
     console.warn(`⚠️ ${label}: could not decrypt ${row && row.SK} of ${row && row.PK} for ${orgId}: ${error && error.message}`);
-    return { ...row, Title: '', Description: '', decryptFailed: true };
+    return { ...row, Title: '', Description: '', LedBy: '', decryptFailed: true };
   }
 }
 
@@ -159,6 +159,8 @@ function projectItem(row) {
     type: r.Type || '',
     title: typeof r.Title === 'string' ? r.Title : '',
     description: typeof r.Description === 'string' ? r.Description : '',
+    // Who leads it (events M1b); '' for a break and for nobody named.
+    ledBy: typeof r.LedBy === 'string' ? r.LedBy : '',
     minutes: Number(r.Minutes) || 0,
     state: r.State || 'planned',
   };

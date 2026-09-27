@@ -16,7 +16,7 @@
  * stops it); a non-numeric `position` — null, '', false — read as 0 instead
  * of "the end"; a set from another organisation's library pinned to this
  * agenda; a set of the wrong type; an unpinned version; plaintext titles;
- * a presentation added before its release; removing an item
+ * removing an item
  * that has started; counts left behind by a removal; an add racing a
  * concurrent date move, on both sides of the race.
  */
@@ -126,7 +126,6 @@ async function freshEvent() {
     ['a set switched off', trivia('x', { setRef: { scope: 'platform', setId: 'off' } }), /switched off/],
     ['a version the set never had', trivia('x', { setRef: { scope: 'org', setId: 'custq4', version: 9 } }), /version/],
     ['no set at all', { type: 'trivia', title: 'x', minutes: 5 }, /Choose a question set/],
-    ['a presentation, before M5', { type: 'presentation', title: 'x', minutes: 30 }, /Presentations are coming soon/],
     ['a kind that does not exist', { type: 'party', title: 'x', minutes: 5 }, /not a kind of agenda item/],
     ['a length of zero', trivia('x', { minutes: 0 }), /whole number of minutes/],
   ]) {

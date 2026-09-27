@@ -48,21 +48,22 @@ const MAX_BREAKS = 16;
 
 const ENGAGEMENT_TYPES = Object.freeze(['trivia', 'call-and-answer', 'poll', 'wavelength', 'survey']);
 const PRESENTATION = 'presentation';
-const BREAK = 'break';
-const ITEM_TYPES = Object.freeze([...ENGAGEMENT_TYPES, PRESENTATION, BREAK]);
-
 /**
- * What a host may ADD in this release. Survey items joined on 26 Sep 2026
- * (owner: "Survey should work today, as we have surveys"): a survey item picks
- * a survey set and counts as an engagement, exactly as the others do, and
- * running it is roadmap M3's, as for every engagement. Presentations wait for
- * their dialog (events M1b Task 8); the item route refuses what is not here, so
- * a stale client cannot add one.
+ * AN ACTIVITY — the owner's "custom choice ... where they could fill in what
+ * they want" (26 Sep 2026): networking, lunch with a speaker, an open
+ * discussion, a workshop activity. A title the host writes, an optional
+ * leader, a length and a description. Nothing to answer and no session; it
+ * counts toward the 16 items and never toward the 8 engagements. `custom` on
+ * the wire, "Activity" wherever a person reads it (TYPE_LABELS).
  */
-const ADDABLE_TYPES = Object.freeze(['trivia', 'call-and-answer', 'poll', 'wavelength', 'survey', BREAK]);
-const COMING_SOON = Object.freeze({
-  [PRESENTATION]: 'Presentations are coming soon.',
-});
+const CUSTOM = 'custom';
+const BREAK = 'break';
+/**
+ * Every kind may be added (events M1b). A presentation is a placeholder until
+ * roadmap M5 brings its PDF copy: a title, a presenter, a length and a
+ * description, on the agenda and counted as an item.
+ */
+const ITEM_TYPES = Object.freeze([...ENGAGEMENT_TYPES, PRESENTATION, CUSTOM, BREAK]);
 
 const TYPE_LABELS = Object.freeze({
   trivia: 'Trivia',
@@ -71,6 +72,7 @@ const TYPE_LABELS = Object.freeze({
   wavelength: 'Wavelength',
   survey: 'Survey',
   [PRESENTATION]: 'Presentation',
+  [CUSTOM]: 'Activity',
   [BREAK]: 'Break',
 });
 
@@ -140,6 +142,24 @@ function capRefusal(counts, type) {
 const TITLE_MAX = 120;
 const PLACE_MAX = 120;
 const DESCRIPTION_MAX = 600;
+/**
+ * WHO LEADS AN ITEM (events M1b): one free-text name on every item but a
+ * break, labelled for its kind. Optional — a talk is often booked before its
+ * speaker. A person's name is personal data: items.js stores it as `LedBy`,
+ * sealed with the `item` entity.
+ */
+const LED_BY_MAX = 80;
+const LED_BY_LABELS = Object.freeze({
+  engagement: 'Facilitator',
+  [PRESENTATION]: 'Presenter',
+  [CUSTOM]: 'Led by',
+});
+const hasLeader = (type) => ITEM_TYPES.includes(type) && type !== BREAK;
+/** "Facilitator", "Presenter" or "Led by"; '' for a break. */
+function ledByLabel(type) {
+  if (isEngagement(type)) return LED_BY_LABELS.engagement;
+  return LED_BY_LABELS[type] || '';
+}
 const MIN_MINUTES = 1;
 const MAX_MINUTES = 240;
 /** Who can join. `invite` is PLAN Phase 3; the dialog shows it, disabled. */
@@ -227,6 +247,19 @@ function checkItemFields(input, type) {
   return { value: { title, description, minutes } };
 }
 
+/**
+ * Who leads an item, checked (events M1b): a trimmed name of at most
+ * LED_BY_MAX characters, '' for nobody. A break is led by nobody, and a name
+ * sent for one is refused rather than dropped.
+ * @returns {{value: string}|{error: string}}
+ */
+function checkLedBy(input, type) {
+  const ledBy = text(input);
+  if (type === BREAK) return ledBy ? { error: 'A break is not led by anyone.' } : { value: '' };
+  if (ledBy.length > LED_BY_MAX) return { error: `A name can be ${LED_BY_MAX} characters at most.` };
+  return { value: ledBy };
+}
+
 // ── Times ───────────────────────────────────────────────────────────────────
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -298,12 +331,13 @@ function formatEventWhen(startsAt) {
 
 module.exports = {
   MAX_ITEMS, MAX_ENGAGEMENTS, MAX_BREAKS,
-  ENGAGEMENT_TYPES, PRESENTATION, BREAK, ITEM_TYPES, ADDABLE_TYPES, COMING_SOON,
+  ENGAGEMENT_TYPES, PRESENTATION, CUSTOM, BREAK, ITEM_TYPES,
   TYPE_LABELS, TYPE_ALIASES, CAP_SENTENCES,
-  TITLE_MAX, PLACE_MAX, DESCRIPTION_MAX, MIN_MINUTES, MAX_MINUTES,
+  TITLE_MAX, PLACE_MAX, DESCRIPTION_MAX, LED_BY_MAX, LED_BY_LABELS, MIN_MINUTES, MAX_MINUTES,
+  hasLeader, ledByLabel,
   ACCESS_CHOICES, ACCESS_NOW, REPORT_DEFAULTS, DAY, KEEP_DAYS, MAX_DAYS_AHEAD,
   canonicalSetType, isEngagement, isCounted, countItems, capRefusal,
-  isTimeZone, parseStartsAt, checkEventFields, checkItemFields,
+  isTimeZone, parseStartsAt, checkEventFields, checkItemFields, checkLedBy,
   clock, agendaTimes, formatDuration, eventTtl,
   formatEventDay, formatStartTime, formatEventWhen,
 };
