@@ -54,3 +54,36 @@ describe('the goal', () => {
     }
   });
 });
+
+/*
+  THE ITEM DIALOG WEARS THE SAME GROUND (events M1b, Task 11). The shared
+  options are styled by this sheet's `.gsd` tokens wherever they are drawn; in
+  the event item dialog they sit on EventBuilder.css's modal, whose surface is
+  the dusk `--surface`. Every pairing gameSetupPalette.test.js measures on
+  --gsd-card and --gsd-field therefore holds there only while those two ARE the
+  dusk surface and surface-2 — so that is what this pins.
+*/
+describe('the options inside the event item dialog', () => {
+  const dusk = (name) => {
+    const block = GLOBAL.slice(GLOBAL.indexOf('[data-theme="dark"] {'));
+    const m = block.slice(0, block.indexOf('}')).match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
+    if (!m) throw new Error(`${name} is not declared for dusk`);
+    return m[1].toUpperCase();
+  };
+  const gsd = (name) => {
+    const body = CSS.slice(CSS.indexOf('.gsd {'), CSS.indexOf('}', CSS.indexOf('.gsd {')));
+    return body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`))[1].toUpperCase();
+  };
+
+  test('the card and the field are the item dialog\'s own dusk surface and surface-2', () => {
+    expect(gsd('--gsd-card')).toBe(dusk('--surface'));
+    expect(gsd('--gsd-field')).toBe(dusk('--surface-2'));
+  });
+
+  test('the item dialog places the block with no colour of its own', () => {
+    const EVB = read('components', 'EventBuilder.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = EVB.match(/\.evb-sopts\s*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule[1]).not.toMatch(/color|background|#|rgba/);
+  });
+});

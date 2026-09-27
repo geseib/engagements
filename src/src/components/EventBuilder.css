@@ -85,6 +85,10 @@
   border-radius: 12px; box-shadow: var(--evb-shadow-modal); color: var(--text); overflow-wrap: anywhere;
 }
 .evb-modal--wide { width: min(940px, 100%); }
+/* An engagement's session options (events M1b): the create dialog's own block
+   (SessionOptions.jsx), styled by its sheet under the `.gsd` scope it carries;
+   this only places it under the item's own fields. */
+.evb-sopts { margin-top: 16px; }
 .evb-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
 .evb-modal-head h2 { margin: 0; font: 800 var(--evb-t-head)/1.2 var(--font-display); }
 .evb-modal-head p { margin: 4px 0 0; font-size: var(--evb-t-label); color: var(--muted); }

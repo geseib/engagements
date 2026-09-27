@@ -18,6 +18,17 @@ jest.mock('../utils/eventsApi', () => ({
   removeItem: jest.fn(),
 }));
 const api = require('../utils/eventsApi');
+// The session options' two lists (events M1b); eventItemSettings.test.jsx
+// exercises them. Empty here, so these tests read the M1 dialog as it was.
+jest.mock('../utils/sessionSetupApi', () => ({
+  listPersonas: jest.fn(async () => []),
+  listSetCategories: jest.fn(async () => []),
+}));
+/* What an untouched trivia item sends as its options (events M1b):
+   agenda-rules.settingsFor('trivia', {}) — the create dialog's defaults. */
+const TRIVIA_DEFAULTS = {
+  randomizeQuestions: true, categoryIds: [], target: null, personaId: '', promptId: '', aiContext: '', eventDetails: '',
+};
 
 const SETS = [
   { id: 'custq4', scope: 'org', orgId: 'org_nw', name: 'Customer knowledge — Q4', engagementType: 'trivia', activeVersion: 3, questionCount: 10, active: true },
@@ -73,6 +84,7 @@ describe('adding an engagement', () => {
     expect(api.addItem).toHaveBeenCalledWith('5307', {
       type: 'trivia', title: 'How well do you know our customers?', description: 'Ten questions. Scored.',
       minutes: 15, position: 1, setRef: { scope: 'org', orgId: 'org_nw', setId: 'custq4', version: 3 },
+      settings: TRIVIA_DEFAULTS,
     });
   });
 
@@ -86,6 +98,7 @@ describe('adding an engagement', () => {
     expect(api.addItem).toHaveBeenCalledWith('5307', {
       type: 'trivia', title: 'Customer knowledge — Q4', description: '', minutes: 15,
       setRef: { scope: 'org', orgId: 'org_nw', setId: 'custq4', version: 3 },
+      settings: TRIVIA_DEFAULTS,
     });
   });
 
@@ -232,7 +245,9 @@ describe('editing and removing', () => {
     fireEvent.change(screen.getByLabelText('Planned length'), { target: { value: '20' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
-    expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', { title: 'FY27 plan quiz', description: '', minutes: 20, ledBy: '' });
+    expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', {
+      title: 'FY27 plan quiz', description: '', minutes: 20, ledBy: '', settings: TRIVIA_DEFAULTS,
+    });
   });
 
   it('an item pinned to a deleted version does not claim to play it', () => {

@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
+import goalRules from '../../../lambda-functions/websocket/session-goal';
+import { NAMES_DEFAULT, namesMode } from '../config/surveyNames';
 import { addItem, updateItem, removeItem } from '../utils/eventsApi';
+import { listPersonas, listSetCategories } from '../utils/sessionSetupApi';
 import './EventBuilder.css';
 
 /**
@@ -45,6 +49,16 @@ import './EventBuilder.css';
  * name was typed; an edit always sends it, so it can be cleared. An
  * engagement's "Title on the agenda" is also what its session is called when
  * roadmap M3 starts it, and the field says so.
+ *
+ * EVERY SESSION OPTION (events M1b; owner: "all of the options that you get
+ * when setting up each engagement"). Once an engagement's set is chosen, the
+ * dialog renders the create dialog's own options — SessionCategories,
+ * SessionBriefing (Call & Answer) and the SessionOptions fold, never a copy —
+ * wrapped in the `.gsd` scope whose tokens they wear. What they say travels as
+ * `settings`, under the create payload's own keys, for exactly the keys the
+ * format has (agenda-rules.settingsFor); an edit seeds from the item's own. The
+ * goal is bounded by the pinned version's size, and Add waits while Workie is
+ * still drafting a briefing.
  *
  * @param {string}   code      the event
  * @param {'add'|'edit'} mode
@@ -109,6 +123,30 @@ export default function EventItemDialog({
   const [error, setError] = useState('');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
+  /* THE SESSION OPTIONS (events M1b). `options` holds SessionOptions' keys;
+     the categories and the briefing are held beside it, as the create dialog
+     holds them. An edit seeds from the item's settings; an item added before
+     M1b has none, and reads as the create dialog's defaults. */
+  const engagement = rules.isEngagement(type);
+  const isSurvey = type === 'survey';
+  const seeded = rules.settingsFor(type, editing ? item.settings : {});
+  const [options, setOptions] = useState(() => ({
+    anonymousResponses: seeded.anonymousResponses !== false,
+    randomizeQuestions: seeded.randomizeQuestions !== false,
+    names: seeded.names || NAMES_DEFAULT,
+    target: seeded.target === undefined ? null : seeded.target,
+    personaId: seeded.personaId || '',
+    promptId: seeded.promptId || '',
+    aiContext: seeded.aiContext || '',
+    eventDetails: seeded.eventDetails || '',
+  }));
+  const [chosenCats, setChosenCats] = useState(() => new Set(seeded.categoryIds || []));
+  const [briefing, setBriefing] = useState(seeded.briefing || null);
+  const [briefingWorking, setBriefingWorking] = useState(false);
+  const [namesTouched, setNamesTouched] = useState(editing);
+  const [personas, setPersonas] = useState([]);
+  const [categories, setCategories] = useState([]);
+
   const keyOf = (s) => `${s.scope || 'platform'}|${s.id}`;
   const candidates = picking
     ? sets.filter((s) => s.active !== false && !s.decryptFailed && rules.canonicalSetType(s.engagementType) === type)
@@ -116,6 +154,56 @@ export default function EventItemDialog({
   const needle = search.trim().toLowerCase();
   const shownSets = needle ? candidates.filter((s) => String(s.name || '').toLowerCase().includes(needle)) : candidates;
   const chosen = candidates.find((s) => keyOf(s) === setKey) || null;
+
+  /* The set the options are about: the one chosen in the picker, or the one
+     an edited item pins. Its size bounds the goal — the pinned version's own
+     count on an edit (event-store.describeSet), the picked version's on an add. */
+  const optionsSet = editing
+    ? (item.setRef ? { setId: item.setRef.setId, scope: item.setRef.scope || 'platform' } : null)
+    : (chosen ? { setId: chosen.id, scope: chosen.scope || 'platform' } : null);
+  const questionCount = editing
+    ? Number(item.set && item.set.questionCount) || 0
+    : Number(chosen && chosen.questionCount) || 0;
+  const setPromptId = editing
+    ? ((sets.find((s) => item.setRef && s.id === item.setRef.setId && (s.scope || 'platform') === (item.setRef.scope || 'platform')) || {}).promptId || '')
+    : ((chosen && chosen.promptId) || '');
+  const showOptions = engagement && !unreadable && Boolean(optionsSet);
+  const optionsKey = optionsSet ? `${optionsSet.scope}|${optionsSet.setId}` : '';
+  const goalProblem = engagement && !isSurvey
+    ? (goalRules.checkTarget(options.target, questionCount).error || '')
+    : '';
+
+  useEffect(() => {
+    if (!engagement) return undefined;
+    let live = true;
+    listPersonas(type).then((list) => { if (live) setPersonas(list); });
+    return () => { live = false; };
+  }, [engagement, type]);
+
+  useEffect(() => {
+    if (!optionsSet || isSurvey) return undefined;
+    let live = true;
+    listSetCategories(optionsSet.setId, optionsSet.scope).then((list) => { if (live) setCategories(list); });
+    return () => { live = false; };
+  }, [optionsKey, isSurvey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The settings this item stores: only the keys its format has. */
+  const settingsNow = () => rules.settingsFor(type, {
+    ...options,
+    categoryIds: Array.from(chosenCats),
+    briefing: briefing && briefing.text && briefing.text.trim() ? briefing : null,
+  });
+  const [settingsBaseline] = useState(() => JSON.stringify(settingsNow()));
+  const toggleCategory = (name) => setChosenCats((prev) => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
+  const changeOptions = (patch) => {
+    if ('names' in patch) setNamesTouched(true);
+    setOptions((prev) => ({ ...prev, ...patch }));
+  };
+
   const hereAt = (s) => {
     const i = items.findIndex((it) => it.setRef && it.setRef.setId === s.id
       && (it.setRef.scope || 'platform') === (s.scope || 'platform'));
@@ -123,7 +211,8 @@ export default function EventItemDialog({
   };
 
   const dirty = title !== baseline.title || minutes !== baseline.minutes || description !== baseline.description
-    || ledBy !== baseline.ledBy || after !== baseline.after || setKey !== baseline.setKey;
+    || ledBy !== baseline.ledBy || after !== baseline.after || setKey !== baseline.setKey
+    || (engagement && JSON.stringify(settingsNow()) !== settingsBaseline) || briefingWorking;
 
   const requestClose = () => {
     if (busy) return;
@@ -140,8 +229,19 @@ export default function EventItemDialog({
   };
 
   const choose = (s) => {
+    const changed = keyOf(s) !== setKey;
     setSetKey(keyOf(s));
     if (!titleTouched) setTitle(s.name || '');
+    if (changed) {
+      // A different set has different categories; its goal bound moves too.
+      setChosenCats(new Set());
+      setCategories([]);
+      // A survey set may carry its own Names default — it seeds the choice
+      // until the host picks, as the create dialog does.
+      if (isSurvey && !namesTouched) {
+        setOptions((prev) => ({ ...prev, names: namesMode(s.namesDefault).id }));
+      }
+    }
   };
 
   const submit = async (e) => {
@@ -161,6 +261,11 @@ export default function EventItemDialog({
       setError(leader.error);
       return;
     }
+    if (goalProblem) {
+      setError(goalProblem);
+      return;
+    }
+    const settings = engagement ? { settings: settingsNow() } : {};
     let position = null;
     if (!editing && after !== AT_END) {
       const anchor = after === AT_START ? -1 : items.findIndex((it) => it.itemId === after);
@@ -176,7 +281,9 @@ export default function EventItemDialog({
     setError('');
     try {
       if (editing) {
-        await updateItem(code, item.itemId, { ...checked.value, ...(leads ? { ledBy: leader.value } : {}) });
+        await updateItem(code, item.itemId, {
+          ...checked.value, ...(leads ? { ledBy: leader.value } : {}), ...settings,
+        });
       } else {
         await addItem(code, {
           type,
@@ -192,6 +299,7 @@ export default function EventItemDialog({
               version: chosen.activeVersion === undefined ? null : chosen.activeVersion,
             },
           } : {}),
+          ...settings,
         });
       }
       onSaved();
@@ -400,6 +508,35 @@ export default function EventItemDialog({
             {picking && ' The set’s own name stays in the console.'}
             {type === rules.PRESENTATION && ' A PDF copy for attendees comes later.'}
           </p>
+          {showOptions && (
+            /* THE CREATE DIALOG'S OWN OPTIONS, never a copy
+               (components/SessionOptions.jsx), in the `.gsd` scope whose
+               tokens they wear — the same dusk card and field this dialog's
+               surface is (sessionOptionsPalette.test.js). */
+            <div className="gsd evb-sopts" data-testid="item-session-options">
+              {!isSurvey && categories.length > 0 && (
+                <SessionCategories
+                  idPrefix="evb-so"
+                  categories={categories}
+                  selected={chosenCats}
+                  onToggle={toggleCategory}
+                />
+              )}
+              {type === 'call-and-answer' && (
+                <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} />
+              )}
+              <SessionOptions
+                idPrefix="evb-so"
+                gameType={type}
+                value={options}
+                onChange={changeOptions}
+                personas={personas}
+                setPromptId={setPromptId}
+                namesDefault={!editing && chosen ? chosen.namesDefault : ''}
+                questionCount={questionCount}
+              />
+            </div>
+          )}
           </>)}
           {error && <p className="evb-error" role="alert">{error}</p>}
         </div>
@@ -423,7 +560,12 @@ export default function EventItemDialog({
               <button type="button" className="evb-btn" onClick={requestClose} disabled={busy}>Close</button>
               <span className="evb-grow" />
               {!unreadable && (
-                <button type="submit" className="evb-btn evb-btn--primary" disabled={busy}>
+                <button
+                  type="submit"
+                  className="evb-btn evb-btn--primary"
+                  disabled={busy || briefingWorking}
+                  title={briefingWorking ? 'Waiting for Workie to finish the briefing' : undefined}
+                >
                   {busy ? 'Saving…' : (editing ? 'Save' : 'Add to agenda')}
                 </button>
               )}
