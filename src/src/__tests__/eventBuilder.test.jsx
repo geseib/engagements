@@ -339,6 +339,43 @@ describe('the add menu (02, 02b)', () => {
   });
 });
 
+describe('an item that could not be read (final review M4)', () => {
+  const UNREADABLE = {
+    itemId: 'it_0000000b', order: 2, type: 'poll', title: '', description: '', minutes: 12, state: 'planned',
+    decryptFailed: true, setRef: { scope: 'org', orgId: 'org_nw', setId: 'set2', version: 1 },
+    set: { name: 'Kickoff pulse', questionCount: 10, latestVersion: 3, missing: false },
+  };
+
+  it('says so on its row, keeps its time and length, and offers Remove rather than Edit or "Use vN"', async () => {
+    serve([DAY[0], UNREADABLE, DAY[2]]);
+    await mount();
+    const row = screen.getAllByTestId('agenda-row')[1];
+    expect(row.querySelector('.evb-nm')).toHaveTextContent('This item could not be read');
+    expect(row.querySelector('.evb-sub--bad')).toHaveTextContent('Its title and description could not be opened.');
+    expect(row).toHaveTextContent('12 min');
+    expect(times()).toEqual(['9:00', '9:08', '9:20']);
+    expect(within(row).queryByRole('button', { name: /^Use v/ })).toBeNull();
+    expect(within(row).queryByRole('button', { name: /^Edit/ })).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Remove item 2, which could not be read' })).toHaveTextContent('Remove');
+  });
+
+  it('Remove opens the one dialog, which removes it after an inline confirm', async () => {
+    serve([DAY[0], UNREADABLE, DAY[2]]);
+    api.removeItem.mockResolvedValue({ removed: 'it_0000000b' });
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove item 2, which could not be read' }));
+    expect(screen.getByRole('heading', { name: 'This item could not be read' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Title on the agenda')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from agenda' }));
+    expect(screen.getByTestId('remove-confirm')).toHaveTextContent('Remove this item from the agenda?');
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(api.removeItem).toHaveBeenCalledWith('5307', 'it_0000000b'));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'This item could not be read' })).toBeNull());
+  });
+});
+
 describe('crossing midnight', () => {
   it('a time that wraps past midnight carries a next-day mark, matching the builder\'s clock format', async () => {
     serve([eng(1, 'poll', 'Late night pulse', 45, 'Late pulse', 1, 1)], { ...EVENT, startsAt: '2026-10-09T23:30' });

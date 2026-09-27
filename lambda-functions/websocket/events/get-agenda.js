@@ -10,6 +10,10 @@
  * beforehand" (decision 11). Every item is `planned` in this release, so no
  * link is ever given yet; the rule is here so roadmap M3 cannot forget it.
  *
+ * An item whose words cannot be decrypted keeps its place, kind and length and
+ * simply has no words (event-store.openItemRow): the times after it still add
+ * up, and one bad row does not turn the whole agenda into an error.
+ *
  * Open events only. An invite-only event's agenda is shown only after a
  * passcode (PLAN Phase 3), which does not exist yet, so one answers 404 like
  * a code that names nothing.
@@ -33,7 +37,7 @@ exports.handler = async (request) => {
     if (!meta || !meta.orgId || (meta.Access || 'open') !== 'open') return notFound();
     const event = await S.decryptEvent(meta.orgId, meta);
     const rows = [];
-    for (const row of await S.readItems(db, TABLE(), code)) rows.push(await S.decryptItemRow(meta.orgId, row));
+    for (const row of await S.readItems(db, TABLE(), code)) rows.push(await S.openItemRow(meta.orgId, row, 'get-agenda'));
     const { rows: timed, endsAt } = rules.agendaTimes(meta.StartsAt, rows);
     return json(200, {
       event: {
@@ -56,6 +60,7 @@ exports.handler = async (request) => {
           at: row.at,
           until: row.until,
           state,
+          ...(row.decryptFailed ? { decryptFailed: true } : {}),
           ...(LINKED_STATES.includes(state) && row.GameId ? { gameId: String(row.GameId) } : {}),
         };
       }),

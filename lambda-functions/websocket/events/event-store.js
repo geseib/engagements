@@ -132,6 +132,24 @@ async function openEvent(db, tableName, request, code) {
 const decryptEvent = (orgId, row) => decryptItem(orgId, 'event', row);
 const decryptItemRow = (orgId, row) => decryptItem(orgId, 'item', row);
 
+/**
+ * ONE UNREADABLE ITEM MUST NOT SINK A WHOLE AGENDA (final review M4; the
+ * lesson get-events.js and get-question-sets.js record). The row decrypted,
+ * or — when its words cannot be opened — the row with blank words and
+ * `decryptFailed: true`, so the builder can say so and still offer Remove,
+ * and the public agenda keeps the item's place and length with no words.
+ * Logged by its key and the reason alone: never the ciphertext, never a word
+ * of the plaintext (tenant-crypto's message names the entity, field and org).
+ */
+async function openItemRow(orgId, row, label) {
+  try {
+    return await decryptItemRow(orgId, row);
+  } catch (error) {
+    console.warn(`⚠️ ${label}: could not decrypt ${row && row.SK} of ${row && row.PK} for ${orgId}: ${error && error.message}`);
+    return { ...row, Title: '', Description: '', decryptFailed: true };
+  }
+}
+
 /** An agenda item as a response names it, from a DECRYPTED row. */
 function projectItem(row) {
   const r = row || {};
@@ -144,6 +162,7 @@ function projectItem(row) {
     minutes: Number(r.Minutes) || 0,
     state: r.State || 'planned',
   };
+  if (r.decryptFailed) out.decryptFailed = true;
   if (r.SetRef && typeof r.SetRef === 'object') {
     out.setRef = {
       scope: r.SetRef.scope || 'platform',
@@ -196,5 +215,5 @@ module.exports = {
   META_SK, INDEX_PREFIX, ITEM_PREFIX, AGENDA_CHANGED,
   indexSk, itemSk, itemIdOf, codeOf, isCode, isItemId, isCancelled,
   queryAll, readMeta, readItems, sortItems, openEvent,
-  decryptEvent, decryptItemRow, projectEvent, projectItem, describeSet,
+  decryptEvent, decryptItemRow, openItemRow, projectEvent, projectItem, describeSet,
 };

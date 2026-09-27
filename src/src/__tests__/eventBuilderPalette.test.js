@@ -153,6 +153,14 @@ describe('the agenda place (02, 02b)', () => {
     expect(on(T.text, [T.bg, T.surface, tint('--evb-tint-cap')])).toBeGreaterThanOrEqual(AA);
     expect(on(T.muted, [T.bg, T.surface, tint('--evb-tint-cap')])).toBeGreaterThanOrEqual(AA);
   });
+  // The unreadable row (final review M4): its line and its Remove button are
+  // --danger-text, on the panel, under the hover tint, and on a break's tint.
+  test('--danger-text on an agenda row: the panel, a hovered row, a break row, and its hover tint', () => {
+    expect(on(T.dangerText, PANEL)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-row-hover')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-tint-brk')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-row-hover'), tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
+  });
   test('the cap\'s reason is never drawn at the disabled opacity', () => {
     const note = stripped(MY_CSS).match(/\.evb-capnote\s*\{([^}]*)\}/)[1];
     expect(note).not.toMatch(/opacity/);

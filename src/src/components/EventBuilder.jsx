@@ -37,6 +37,9 @@ import './EventBuilder.css';
  *     still announced; Break stays open. Presentation and Survey are always
  *     `aria-disabled`, "Coming soon": they are roadmap M5 and PLAN Phase 6.
  *     Activating an aria-disabled item does nothing.
+ *   - An item whose words the server could not decrypt (`decryptFailed`)
+ *     says "This item could not be read", keeps its place, time and length,
+ *     and offers only Remove (final review M4).
  *   - The foot: the end time, the planned length and both caps, counted once.
  *   - Focus never falls to the page: Escape in the add menu, and closing or
  *     saving an item dialog opened from that menu, return focus to "Add
@@ -69,6 +72,8 @@ const MENU_ENGAGEMENTS = [
   ['wavelength', 'Everyone gives a few words; the room’s shared language appears.'],
 ];
 const ACCESS_LABELS = { open: 'Anyone with the code', invite: 'Only people you invite' };
+const UNREADABLE_TITLE = 'This item could not be read';
+const UNREADABLE_LINE = 'Its title and description could not be opened. Remove it, and add it again if it is still wanted.';
 const ADD_BUTTON = 'ADD_BUTTON';
 
 /** How many midnights have passed before/after each row, from the event's own
@@ -418,11 +423,19 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
               {rows.map((item, index) => {
                 const isBreak = item.type === rules.BREAK;
                 if (!isBreak) n += 1;
-                const line = sourceLine(item, `${item.until}${dayMark(offsets[index].endOffset)}`);
-                const newer = item.set && !item.set.missing && item.set.latestVersion
+                /* An item whose words could not be decrypted (final review M4)
+                   keeps its place, time and length; it says so, and the only
+                   thing offered is Remove — an edit or a pin would have to
+                   open words the server cannot read. */
+                const unreadable = Boolean(item.decryptFailed);
+                const shown = unreadable ? UNREADABLE_TITLE : item.title;
+                const line = unreadable
+                  ? { text: UNREADABLE_LINE, bad: true }
+                  : sourceLine(item, `${item.until}${dayMark(offsets[index].endOffset)}`);
+                const newer = !unreadable && item.set && !item.set.missing && item.set.latestVersion
                   && item.setRef && item.setRef.version && item.set.latestVersion > item.setRef.version;
                 const rowClass = [isBreak ? 'evb-row--brk' : '', dragFrom === index ? 'evb-row--moving' : ''].filter(Boolean).join(' ');
-                const rowLabel = isBreak ? `Break — ${item.title}` : `Item ${n} — ${item.title}`;
+                const rowLabel = isBreak ? `Break — ${shown}` : `Item ${n} — ${shown}`;
                 return (
                   <tr
                     key={item.itemId}
@@ -456,7 +469,7 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
                     <td className="evb-no">{isBreak ? <span title="Breaks are not numbered or counted">–</span> : n}</td>
                     <td className="evb-at" data-testid="agenda-at">{item.at}{dayMark(offsets[index].startOffset)}</td>
                     <td>
-                      <span className="evb-nm" title={item.title}>{item.title}</span>
+                      <span className="evb-nm" title={shown}>{shown}</span>
                       {line.text && <span className={`evb-sub${line.bad ? ' evb-sub--bad' : ''}`} title={line.text}>{line.text}</span>}
                     </td>
                     <td>
@@ -473,15 +486,26 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
                             Use v{item.set.latestVersion}
                           </button>
                         )}
-                        <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${item.title} up`} disabled={index === 0} onClick={() => move(index, index - 1)}>
+                        <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${shown} up`} disabled={index === 0} onClick={() => move(index, index - 1)}>
                           <Icon name="ArrowUp" weight="bold" size={13} color="currentColor" />
                         </button>
-                        <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${item.title} down`} disabled={index === rows.length - 1} onClick={() => move(index, index + 1)}>
+                        <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${shown} down`} disabled={index === rows.length - 1} onClick={() => move(index, index + 1)}>
                           <Icon name="ArrowDown" weight="bold" size={13} color="currentColor" />
                         </button>
-                        <button type="button" className="evb-btn evb-btn--sm" aria-label={`Edit ${item.title}`} onClick={() => setDialog({ mode: 'edit', type: item.type, item })}>
-                          Edit
-                        </button>
+                        {unreadable ? (
+                          <button
+                            type="button"
+                            className="evb-btn evb-btn--sm evb-btn--ghostdanger"
+                            aria-label={isBreak ? `Remove the break at ${item.at}, which could not be read` : `Remove item ${n}, which could not be read`}
+                            onClick={() => setDialog({ mode: 'edit', type: item.type, item })}
+                          >
+                            Remove
+                          </button>
+                        ) : (
+                          <button type="button" className="evb-btn evb-btn--sm" aria-label={`Edit ${item.title}`} onClick={() => setDialog({ mode: 'edit', type: item.type, item })}>
+                            Edit
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

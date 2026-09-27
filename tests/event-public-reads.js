@@ -104,6 +104,38 @@ const add = (code, body) => items(request({
       table.put(planned);
     }
   });
+  // rejects: one unreadable row turning the whole public agenda into a 500
+  // (final review M4). The row keeps its place, kind and length — the times
+  // after it still add up — and simply has no words.
+  await check('an unreadable item keeps its place with no words, and the rest of the agenda still reads', async () => {
+    const sealedWrongly = await encryptItem('org_md', 'item', {
+      PK: `EVENT#${code}`, SK: 'ITEM#it_0000000c', State: 'planned', ttl: 1,
+      Type: 'poll', Order: 4, Minutes: 10, Title: 'Sealed wrongly', Description: 'Nobody can read this.',
+    });
+    table.put(sealedWrongly);
+    const logged = [];
+    const realWarn = console.warn; const realError = console.error;
+    console.warn = (...a) => logged.push(a.map(String).join(' '));
+    console.error = console.warn;
+    try {
+      const r = await read(code);
+      assert.strictEqual(r.statusCode, 200, r.body);
+      const got = bodyOf(r);
+      assert.deepStrictEqual(got.items.map((i) => i.title), ['Warm-up', 'How well do you know our customers?', 'Break', '']);
+      const bad = got.items[3];
+      assert.deepStrictEqual([bad.type, bad.minutes, bad.at, bad.until, bad.description, bad.decryptFailed],
+        ['poll', 10, '9:38', '9:48', '', true]);
+      assert.strictEqual(got.event.endsAt, '9:48');
+      assert.ok(!/"ct":/.test(r.body), 'an envelope reached the page');
+      const text = logged.join('\n');
+      assert.ok(/ITEM#it_0000000c/.test(text), `nothing named the row: ${text}`);
+      assert.ok(!text.includes(sealedWrongly.Title.ct) && !/Sealed wrongly|Nobody can read this/.test(text),
+        'the log carried the ciphertext or the words');
+    } finally {
+      console.warn = realWarn; console.error = realError;
+      table.store.delete(table.keyOf(`EVENT#${code}`, 'ITEM#it_0000000c'));
+    }
+  });
   await check('an invite-only event\'s agenda is not public (PLAN Phase 3)', async () => {
     const meta = table.get(`EVENT#${code}`, 'METADATA');
     table.put({ ...meta, Access: 'invite' });

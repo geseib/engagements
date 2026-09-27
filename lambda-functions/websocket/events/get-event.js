@@ -8,6 +8,11 @@
  * carries what the builder's row says about its set (event-store.describeSet):
  * its name, its question count, the version it would play today — which is
  * how the builder knows to offer "Use v3" — or that it is gone.
+ *
+ * An item whose words cannot be decrypted comes back in its place with blank
+ * words and `decryptFailed: true` (event-store.openItemRow), and is logged:
+ * one bad row must not stop a host opening the whole agenda, nor removing
+ * that row from it.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
@@ -27,7 +32,7 @@ exports.handler = async (request) => {
     const rows = await S.readItems(db, TABLE(), code);
     const items = [];
     for (const row of rows) {
-      const item = S.projectItem(await S.decryptItemRow(meta.orgId, row));
+      const item = S.projectItem(await S.openItemRow(meta.orgId, row, 'get-event'));
       if (item.setRef) item.set = await S.describeSet(db, TABLE(), item.setRef);
       items.push(item);
     }

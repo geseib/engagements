@@ -132,6 +132,42 @@ async function seedItem(code, itemId, fields) {
     });
   }
 
+  console.log('\n4. one unreadable item does not sink the builder (final review M4)');
+  // An item sealed under ANOTHER organisation's key: this org's key cannot
+  // open it, exactly as a corrupted or mis-keyed row would fail in production.
+  const other = later.code;
+  await seedItem(other, 'it_0000000a', { Type: 'break', Order: 1, Minutes: 10, Title: 'Coffee', Description: 'On the landing.' });
+  table.put(await encryptItem(MD, 'item', {
+    PK: `EVENT#${other}`, SK: 'ITEM#it_0000000b', State: 'planned', ttl: 1,
+    Type: 'poll', Order: 2, Minutes: 12, Title: 'Sealed wrongly', Description: 'Nobody can read this.',
+  }));
+  const logged = [];
+  const realWarn = console.warn; const realError = console.error; const realLog = console.log;
+  const capture = (...args) => logged.push(args.map(String).join(' '));
+  console.warn = capture; console.error = capture;
+  let unreadable;
+  try {
+    unreadable = await read(other, asHost(NW));
+  } finally { console.warn = realWarn; console.error = realError; console.log = realLog; }
+  const got = unreadable.statusCode === 200 ? bodyOf(unreadable) : null;
+  await check('200: the readable item as it is, the unreadable one in its place with blank words', () => {
+    assert.strictEqual(unreadable.statusCode, 200, unreadable.body);
+    assert.deepStrictEqual(got.items.map((i) => i.itemId), ['it_0000000a', 'it_0000000b']);
+    assert.strictEqual(got.items[0].title, 'Coffee');
+    assert.strictEqual(got.items[0].decryptFailed, undefined);
+    const bad = got.items[1];
+    assert.deepStrictEqual([bad.title, bad.description, bad.decryptFailed], ['', '', true]);
+    assert.deepStrictEqual([bad.type, bad.minutes, bad.order, bad.state], ['poll', 12, 2, 'planned']);
+  });
+  await check('no envelope in the response', () => assert.ok(!/"ct":/.test(unreadable.body), unreadable.body));
+  await check('it is logged, naming the row, with neither the ciphertext nor any plaintext', () => {
+    const row = table.get(`EVENT#${other}`, 'ITEM#it_0000000b');
+    const text = logged.join('\n');
+    assert.ok(/ITEM#it_0000000b/.test(text), `nothing named the row: ${text}`);
+    assert.ok(!text.includes(row.Title.ct) && !text.includes(row.Description.ct), 'the ciphertext was logged');
+    assert.ok(!/Sealed wrongly|Nobody can read this|Coffee|On the landing/.test(text), 'plaintext was logged');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

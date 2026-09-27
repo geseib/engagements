@@ -19,6 +19,10 @@ import './EventBuilder.css';
  *                                   different item: remove this one and add
  *                                   that). "Remove from agenda" confirms INLINE
  *                                   — never a modal from a modal.
+ *   mode 'edit', an item whose      no fields and no Save: its words could not
+ *   words could not be read         be decrypted, so nothing can be edited. It
+ *   (`item.decryptFailed`)          says so, and offers Remove and Close
+ *                                   (final review M4).
  *
  * The version shown in the picker ("v3 · latest") is the one that will be
  * pinned; the server pins it again and holds it until the host presses
@@ -44,6 +48,7 @@ export default function EventItemDialog({
   code, mode, type, item = null, items = [], sets = [], onClose, onSaved, onRemoved,
 }) {
   const editing = mode === 'edit';
+  const unreadable = editing && Boolean(item && item.decryptFailed);
   const isBreak = type === rules.BREAK;
   const picking = !editing && rules.isEngagement(type);
   const numbers = numbered(items);
@@ -96,6 +101,7 @@ export default function EventItemDialog({
 
   const submit = async (e) => {
     if (e) e.preventDefault();
+    if (unreadable) return;
     if (picking && !chosen) {
       setError('Choose a question set for this item.');
       return;
@@ -147,7 +153,9 @@ export default function EventItemDialog({
     }
   };
 
-  const heading = editing ? `Edit ${isBreak ? 'break' : label}` : (isBreak ? 'Add a break' : `Add ${label}`);
+  const heading = unreadable
+    ? 'This item could not be read'
+    : (editing ? `Edit ${isBreak ? 'break' : label}` : (isBreak ? 'Add a break' : `Add ${label}`));
 
   return (
     <Modal
@@ -164,15 +172,17 @@ export default function EventItemDialog({
           <div className="evb-grow">
             <h2 id="evb-item-title">{heading}</h2>
             <p>
-              {picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
-              {!picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
-              {editing && !isBreak && item.set && item.set.name && `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`}
+              {unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
+              {!unreadable && picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
+              {!unreadable && !picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
+              {!unreadable && editing && !isBreak && item.set && item.set.name && `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`}
             </p>
           </div>
           <button type="button" className="evb-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
         </header>
 
         <div className="evb-modal-body">
+          {!unreadable && (<>
           {picking && (
             <div className="evb-field evb-step">
               <span className="evb-label" id="evb-pick-label">Question set · {label} sets</span>
@@ -281,13 +291,16 @@ export default function EventItemDialog({
             The title and description are what the room sees, and every phone, laptop or tablet that joins.
             {picking && ' The set’s own name stays in the console.'}
           </p>
+          </>)}
           {error && <p className="evb-error" role="alert">{error}</p>}
         </div>
 
         <footer className="evb-modal-foot">
           {editing && confirmingRemove ? (
             <div className="evb-confirm" data-testid="remove-confirm">
-              <p>Remove “{item.title}” from the agenda? The times after it move up.</p>
+              <p>
+                {unreadable ? 'Remove this item from the agenda?' : `Remove “${item.title}” from the agenda?`} The times after it move up.
+              </p>
               <button type="button" className="evb-btn" onClick={() => setConfirmingRemove(false)} disabled={busy}>Keep it</button>
               <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={remove} disabled={busy}>Remove</button>
             </div>
@@ -300,9 +313,11 @@ export default function EventItemDialog({
               )}
               <button type="button" className="evb-btn" onClick={requestClose} disabled={busy}>Close</button>
               <span className="evb-grow" />
-              <button type="submit" className="evb-btn evb-btn--primary" disabled={busy}>
-                {busy ? 'Saving…' : (editing ? 'Save' : 'Add to agenda')}
-              </button>
+              {!unreadable && (
+                <button type="submit" className="evb-btn evb-btn--primary" disabled={busy}>
+                  {busy ? 'Saving…' : (editing ? 'Save' : 'Add to agenda')}
+                </button>
+              )}
             </>
           )}
         </footer>
