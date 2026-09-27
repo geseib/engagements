@@ -37,9 +37,16 @@ import './EventBuilder.css';
  *     kinds carry `aria-disabled` (never the native `disabled`) WITH the
  *     reason above them (02b), so they stay focusable and the reason is
  *     still announced; Break stays open. Every engagement kind, survey
- *     included, is offered below the caps (events M1b). Presentation is
- *     `aria-disabled`, "Coming soon", until its dialog lands. Activating an
+ *     included, is offered below the caps (events M1b). A presentation and an
+ *     activity are counted items: at 16 items every counted kind is
+ *     aria-disabled with the items sentence at the top of the menu, and Break
+ *     alone stays open; at 8 engagements only the engagement kinds close, and
+ *     the note says presentations and activities still fit. Activating an
  *     aria-disabled item does nothing.
+ *   - Each row's source line leads with who leads it (02 draws a talk's
+ *     "Marcus Oyelaran · …"), and an engagement with a goal says "5 of 50
+ *     questions". "Use vN" that had to turn a narrowed category list back to
+ *     every category says so.
  *   - An item whose words the server could not decrypt (`decryptFailed`)
  *     says "This item could not be read", keeps its place, time and length,
  *     and offers only Remove (final review M4).
@@ -73,6 +80,7 @@ const TYPE_ICONS = {
   wavelength: 'Waves',
   survey: 'ListChecks',
   presentation: 'Monitor',
+  custom: 'UsersThree',
   break: 'Clock',
 };
 const MENU_ENGAGEMENTS = [
@@ -104,13 +112,18 @@ const dayMark = (n) => (n > 0 ? ` (+${n} day${n > 1 ? 's' : ''})` : '');
 
 function sourceLine(item, until) {
   if (item.type === rules.BREAK) return { text: `Back at ${until} · not counted, not billed`, bad: false };
-  if (!item.set) return { text: '', bad: false };
-  if (item.set.missing) return { text: 'This question set is no longer available', bad: true };
+  // Who leads it comes first, as 02 draws a talk's line (events M1b).
+  const lead = (text, bad = false) => ({ text: [item.ledBy, text].filter(Boolean).join(' · '), bad });
+  if (!item.set) return lead('');
+  if (item.set.missing) return lead('This question set is no longer available', true);
   const version = item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : '';
   // The pinned version was deleted from the set (final review M1). Its count
   // would be a guess, so the line says what happened instead.
-  if (item.set.pinnedMissing) return { text: `${item.set.name || 'Question set'}${version} is no longer in the set`, bad: true };
-  return { text: `${item.set.name || 'Question set'}${version} · ${item.set.questionCount} questions`, bad: false };
+  if (item.set.pinnedMissing) return lead(`${item.set.name || 'Question set'}${version} is no longer in the set`, true);
+  // A goal reads against the pinned version's size: "5 of 50 questions".
+  const goal = item.settings && item.settings.target;
+  const size = goal ? `${goal} of ${item.set.questionCount} questions` : `${item.set.questionCount} questions`;
+  return lead(`${item.set.name || 'Question set'}${version} · ${size}`);
 }
 
 export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
@@ -283,8 +296,13 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
     setPinningId(item.itemId);
     const forCode = code;
     try {
-      await updateItem(code, item.itemId, { version: item.set.latestVersion });
+      const saved = await updateItem(code, item.itemId, { version: item.set.latestVersion });
       await load();
+      // A narrowed category list does not survive a version change; the
+      // server reset it to every category (events M1b), and the host is told.
+      if (stillCurrent(forCode) && saved && saved.categoriesReset) {
+        setError(`v${item.set.latestVersion} is in use, with every category on. Open the item to narrow them again.`);
+      }
     } catch (err) {
       const message = err.message || 'The version was not changed.';
       await load();
@@ -344,6 +362,24 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
     setMenuOpen(false);
     setDialog({ mode: 'add', type });
   };
+  /* A counted kind that is not an engagement — a presentation or an activity.
+     Only the 16-item cap closes it (events M1b). */
+  const countedKind = (type, sentence) => (
+    <button
+      type="button"
+      role="menuitem"
+      className="evb-menu-item"
+      aria-disabled={itemsFull ? 'true' : undefined}
+      aria-describedby={itemsFull ? 'evb-capwhy' : undefined}
+      onClick={() => { if (itemsFull) return; openAdd(type); }}
+    >
+      <Icon name={TYPE_ICONS[type]} weight="bold" size={17} color="var(--primary)" />
+      <div>
+        <b>{rules.TYPE_LABELS[type]}</b>
+        <span>{itemsFull ? '' : sentence}</span>
+      </div>
+    </button>
+  );
   const closeDialog = () => {
     if (dialog && dialog.mode === 'add') pendingFocus.current = ADD_BUTTON;
     setDialog(null);
@@ -404,10 +440,20 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
             </button>
             {menuOpen && (
               <div className="evb-menu" role="menu" aria-label="Add to the agenda">
-                <h6 className="evb-menu-h">Answered by the room{engagementsFull ? ` · ${counts.engagements} of ${rules.MAX_ENGAGEMENTS}` : ''}</h6>
-                {engagementReason && (
+                {/* THE CAP, SAID WHERE YOU ADD (02b; events M1b). At 16 items
+                    it closes every counted kind, so its reason leads the menu;
+                    at 8 engagements it closes only those, and sits with them. */}
+                {itemsFull && (
                   <p className="evb-capnote" id="evb-capwhy">
                     <b>{engagementReason.split('. ')[0]}.</b> {engagementReason.split('. ').slice(1).join('. ')}
+                    {!breaksFull && ' Breaks can still be added.'}
+                  </p>
+                )}
+                <h6 className="evb-menu-h">Answered by the room{engagementsFull ? ` · ${counts.engagements} of ${rules.MAX_ENGAGEMENTS}` : ''}</h6>
+                {!itemsFull && engagementReason && (
+                  <p className="evb-capnote" id="evb-capwhy">
+                    <b>{engagementReason.split('. ')[0]}.</b> {engagementReason.split('. ').slice(1).join('. ')}
+                    {' Presentations and activities still fit.'}
                     {!breaksFull && ' Breaks can still be added.'}
                   </p>
                 )}
@@ -433,15 +479,10 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                 })}
                 <hr className="evb-menu-rule" />
                 <h6 className="evb-menu-h">Talks</h6>
-                <button type="button" role="menuitem" className="evb-menu-item" aria-disabled="true">
-                  <Icon name={TYPE_ICONS.presentation} weight="bold" size={17} color="var(--primary)" />
-                  <div>
-                    <b>Presentation</b>
-                    <span>Coming soon. A talk from the presenter’s own screen, with an optional PDF copy for attendees.</span>
-                  </div>
-                </button>
+                {countedKind(rules.PRESENTATION, 'A talk from the presenter’s own screen. A PDF copy for attendees comes later.')}
                 <hr className="evb-menu-rule" />
                 <h6 className="evb-menu-h">Just on the agenda</h6>
+                {countedKind(rules.CUSTOM, 'Anything else on the day: networking, lunch with a speaker, an open discussion.')}
                 <button
                   type="button"
                   role="menuitem"

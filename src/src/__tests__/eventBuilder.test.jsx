@@ -301,17 +301,17 @@ describe('the add menu (02, 02b)', () => {
     expect(screen.getByRole('heading', { name: 'Add Trivia' })).toBeInTheDocument();
   });
 
-  it('Presentation is listed, aria-disabled, and says it is coming; Survey opens its dialog', async () => {
+  it('Survey, Presentation and Activity each open their dialog below the caps', async () => {
     serve(DAY.slice(0, 3));
     await mount();
-    openMenu();
-    expect(item('Presentation')).toHaveAttribute('aria-disabled', 'true');
-    expect(item('Presentation')).not.toBeDisabled();
-    expect(item('Presentation')).toHaveTextContent('Coming soon.');
-    expect(item('Survey')).not.toHaveAttribute('aria-disabled');
-    expect(item('Survey')).not.toHaveTextContent('Coming soon.');
-    fireEvent.click(item('Survey'));
-    expect(screen.getByRole('heading', { name: 'Add Survey' })).toBeInTheDocument();
+    for (const [name, heading] of [['Survey', 'Add Survey'], ['Presentation', 'Add a presentation'], ['Activity', 'Add an activity']]) {
+      openMenu();
+      expect(item(name)).not.toHaveAttribute('aria-disabled');
+      expect(item(name)).not.toHaveTextContent('Coming soon');
+      fireEvent.click(item(name));
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]);
+    }
   });
 
   it('Escape closes the menu and sends focus back to Add item (never the page)', async () => {
