@@ -82,7 +82,8 @@ async function seedItem(code, itemId, fields) {
   const code = soon.code;
   table.put(await encryptItem(NW, 'set', {
     PK: `ORG#${NW}#SETS`, SK: 'SET#custq4', name: 'Customer knowledge — Q4',
-    engagementType: 'trivia', questionCount: 10, activeVersion: 3, versions: [{ version: 2 }, { version: 3 }],
+    engagementType: 'trivia', questionCount: 10, activeVersion: 3,
+    versions: [{ version: 2, questionCount: 7 }, { version: 3, questionCount: 10 }],
   }));
   await seedItem(code, 'it_00000002', { Type: 'break', Order: 2, Minutes: 15, Title: 'Break', Description: 'Coffee' });
   await seedItem(code, 'it_00000001', {
@@ -93,22 +94,44 @@ async function seedItem(code, itemId, fields) {
     Type: 'poll', Order: 3, Minutes: 10, Title: 'Where next?', Description: '',
     SetRef: { scope: 'platform', orgId: '', setId: 'gone', version: 1 },
   });
+  // Pinned to v1, which the set no longer has (deleted after it was added).
+  await seedItem(code, 'it_00000004', {
+    Type: 'trivia', Order: 4, Minutes: 12, Title: 'Old quiz', Description: '',
+    SetRef: { scope: 'org', orgId: NW, setId: 'custq4', version: 1 },
+  });
+  // Pinned to the active version, which versions[] does not record, and
+  // unpinned: both read the set's own count, as the session read would.
+  await seedItem(code, 'it_00000005', {
+    Type: 'trivia', Order: 5, Minutes: 12, Title: 'Unpinned quiz', Description: '',
+    SetRef: { scope: 'org', orgId: NW, setId: 'custq4', version: null },
+  });
   const res = await read(code, asHost(NW));
   const body = bodyOf(res);
   await check('200 with the event and its items in agenda order', () => {
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(body.event.title, 'Q4 Kickoff');
-    assert.deepStrictEqual(body.items.map((i) => i.itemId), ['it_00000001', 'it_00000002', 'it_00000003']);
+    assert.deepStrictEqual(body.items.map((i) => i.itemId), ['it_00000001', 'it_00000002', 'it_00000003', 'it_00000004', 'it_00000005']);
   });
   await check('every word decrypted, no envelope anywhere', () => {
     assert.strictEqual(body.items[0].title, 'How well do you know our customers?');
     assert.strictEqual(body.items[1].description, 'Coffee');
     assert.ok(!/"ct":/.test(res.body), 'an envelope reached the response');
   });
-  await check('an engagement says its set, its pin and the version it would play today', () =>
+  // rejects: the PINNED version described with the ACTIVE one's count — "v2 ·
+  // 10 questions" beside a v2 of 7, at the very moment the host decides
+  // whether to press "Use v3" (final review M1).
+  await check('an engagement says its set, its pin, the PINNED version\'s own count, and the version it would play today', () =>
     assert.deepStrictEqual({ setRef: body.items[0].setRef, set: body.items[0].set }, {
       setRef: { scope: 'org', orgId: NW, setId: 'custq4', version: 2 },
-      set: { missing: false, name: 'Customer knowledge — Q4', questionCount: 10, latestVersion: 3 },
+      set: { missing: false, name: 'Customer knowledge — Q4', questionCount: 7, latestVersion: 3, pinnedMissing: false },
+    }));
+  await check('a pin to a version the set no longer has says so, and still names the one it would play', () =>
+    assert.deepStrictEqual(body.items[3].set, {
+      missing: false, name: 'Customer knowledge — Q4', questionCount: 0, latestVersion: 3, pinnedMissing: true,
+    }));
+  await check('an unpinned item reads the set\'s own count', () =>
+    assert.deepStrictEqual(body.items[4].set, {
+      missing: false, name: 'Customer knowledge — Q4', questionCount: 10, latestVersion: 3, pinnedMissing: false,
     }));
   await check('a break has no set', () => {
     assert.strictEqual(body.items[1].setRef, undefined);

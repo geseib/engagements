@@ -14,7 +14,7 @@
 const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { eventPk, callerMayManageEvent, ORG } = require('../tenant');
 const { decryptItem } = require('../tenant-crypto');
-const { getSetMetadata, toVersion } = require('../set-version');
+const { getSetMetadata, toVersion, versionList, knownVersions } = require('../set-version');
 const { callerSub } = require('./event-http');
 
 const META_SK = 'METADATA';
@@ -175,10 +175,26 @@ function projectItem(row) {
 }
 
 /**
- * What the builder says about an item's set: its name, its question count,
- * the version it would play today, or that it is gone. A set is read in the
- * one library its SetRef names — an org set only ever in the event's own
- * organisation — and never searched for.
+ * What the builder says about an item's set: its name, the question count OF
+ * THE PINNED VERSION, the version it would play today, or that it is gone. A
+ * set is read in the one library its SetRef names — an org set only ever in
+ * the event's own organisation — and never searched for.
+ *
+ * THE PIN IS LOOKED UP, NOT ASSUMED (final review M1). The row's own
+ * `questionCount` is the ACTIVE version's; a row pinned to v2 of a set now at
+ * v3 must say v2's count beside v2's name, since that is what the host weighs
+ * when deciding whether to press "Use v3". The pin is found in versions[]
+ * (set-version.versionList), the same record resolvePartitionFromMeta
+ * reasons from, and read the same way:
+ *   - found                        → that version's count;
+ *   - the active version, or a set
+ *     that records no versions yet → the set's own count (it trusts the pin);
+ *   - no pin at all (unversioned)  → the set's own count;
+ *   - anything else                → `pinnedMissing: true`, count 0: the
+ *     version was deleted, and at run time the item would fall back to the
+ *     active one (`pinned-missing`). The builder says so and offers "Use vN".
+ * roadmap M3 carries the other half: delete-set-version.js should warn about
+ * event items pinned to the version it deletes, as it does for sessions.
  */
 async function describeSet(db, tableName, setRef) {
   if (!setRef || !setRef.setId) return null;
@@ -189,7 +205,7 @@ async function describeSet(db, tableName, setRef) {
   } catch (error) {
     console.warn(`⚠️ event-store: could not read set ${ref.scope}/${ref.setId}: ${error && error.message}`);
   }
-  if (!row) return { missing: true, name: null, questionCount: 0, latestVersion: null };
+  if (!row) return { missing: true, name: null, questionCount: 0, latestVersion: null, pinnedMissing: false };
   let name = typeof row.name === 'string' ? row.name : null;
   if (ref.scope === ORG && ref.orgId) {
     try {
@@ -199,7 +215,20 @@ async function describeSet(db, tableName, setRef) {
       name = null;
     }
   }
-  return { missing: false, name, questionCount: Number(row.questionCount) || 0, latestVersion: toVersion(row.activeVersion) };
+  const latestVersion = toVersion(row.activeVersion);
+  const pinned = toVersion(setRef.version);
+  let questionCount = Number(row.questionCount) || 0;
+  let pinnedMissing = false;
+  if (pinned !== null) {
+    const entry = versionList(row).find((v) => toVersion(v && v.version) === pinned);
+    if (entry) {
+      questionCount = Number(entry.questionCount) || 0;
+    } else if (pinned !== latestVersion && knownVersions(row).length > 0) {
+      pinnedMissing = true;
+      questionCount = 0;
+    }
+  }
+  return { missing: false, name, questionCount, latestVersion, pinnedMissing };
 }
 
 /**

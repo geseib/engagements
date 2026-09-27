@@ -175,7 +175,9 @@ export default function EventItemDialog({
               {unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
               {!unreadable && picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
               {!unreadable && !picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
-              {!unreadable && editing && !isBreak && item.set && item.set.name && `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`}
+              {!unreadable && editing && !isBreak && item.set && item.set.name && (item.set.pinnedMissing
+                ? `Pinned to ${item.set.name} · v${item.setRef.version}, which is no longer in the set.`
+                : `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`)}
             </p>
           </div>
           <button type="button" className="evb-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>

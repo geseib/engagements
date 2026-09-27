@@ -156,6 +156,12 @@ describe('editing and removing', () => {
     expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', { title: 'FY27 plan quiz', description: '', minutes: 20 });
   });
 
+  it('an item pinned to a deleted version does not claim to play it', () => {
+    render(<EventItemDialog {...edit({ item: { ...ITEMS[2], set: { ...ITEMS[2].set, pinnedMissing: true } } })} />);
+    expect(screen.getByText('Pinned to FY27 plan — check-in · v1, which is no longer in the set.')).toBeInTheDocument();
+    expect(screen.queryByText(/^Plays /)).toBeNull();
+  });
+
   it('removing asks in place, and Keep it keeps it', async () => {
     api.removeItem.mockResolvedValue({ removed: 'it_00000003' });
     const p = edit();

@@ -26,11 +26,13 @@ import './EventBuilder.css';
  *     ANY refusal (a changed agenda, another 4xx, a 500, the network) reloads
  *     the agenda from the server rather than trusting the optimistic order,
  *     and says why with the server's own words.
+ *   - Each engagement's line gives the PINNED version's own question count,
+ *     or says the pinned version is no longer in the set.
  *   - "Use vN" on an engagement whose set has a newer version than the one
- *     pinned — never applied silently, and disabled on its own row while its
- *     request is out so a slow network can't fire it twice; a refusal
- *     reloads too, so a row for an item that has since started or been
- *     removed does not linger.
+ *     pinned, or whose pinned version was deleted — never applied silently,
+ *     and disabled on its own row while its request is out so a slow network
+ *     can't fire it twice; a refusal reloads too, so a row for an item that
+ *     has since started or been removed does not linger.
  *   - The add menu, grouped as 02 draws it. At 8 engagements the engagement
  *     kinds carry `aria-disabled` (never the native `disabled`) WITH the
  *     reason above them (02b), so they stay focusable and the reason is
@@ -96,6 +98,9 @@ function sourceLine(item, until) {
   if (!item.set) return { text: '', bad: false };
   if (item.set.missing) return { text: 'This question set is no longer available', bad: true };
   const version = item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : '';
+  // The pinned version was deleted from the set (final review M1). Its count
+  // would be a guess, so the line says what happened instead.
+  if (item.set.pinnedMissing) return { text: `${item.set.name || 'Question set'}${version} is no longer in the set`, bad: true };
   return { text: `${item.set.name || 'Question set'}${version} · ${item.set.questionCount} questions`, bad: false };
 }
 
@@ -432,8 +437,13 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
                 const line = unreadable
                   ? { text: UNREADABLE_LINE, bad: true }
                   : sourceLine(item, `${item.until}${dayMark(offsets[index].endOffset)}`);
-                const newer = !unreadable && item.set && !item.set.missing && item.set.latestVersion
-                  && item.setRef && item.setRef.version && item.set.latestVersion > item.setRef.version;
+                /* "Use vN": a newer version than the pin — or, when the pinned
+                   version was deleted, the one the set plays now, even an
+                   older one promoted back (final review M1). */
+                const latest = item.set && !item.set.missing ? item.set.latestVersion : null;
+                const pinnedAt = item.setRef && item.setRef.version;
+                const newer = !unreadable && latest && pinnedAt
+                  && (latest > pinnedAt || (item.set.pinnedMissing && latest !== pinnedAt));
                 const rowClass = [isBreak ? 'evb-row--brk' : '', dragFrom === index ? 'evb-row--moving' : ''].filter(Boolean).join(' ');
                 const rowLabel = isBreak ? `Break — ${shown}` : `Item ${n} — ${shown}`;
                 return (

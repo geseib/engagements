@@ -190,6 +190,37 @@ describe('the pinned version', () => {
     expect(screen.getByText('This question set is no longer available')).toHaveClass('evb-sub--bad');
   });
 
+  // Final review M1: the count beside "v2" is v2's, which the server now
+  // sends (describeSet looks the pin up in versions[]).
+  it('the row states the pinned version\'s own count, beside the offer of the newer one', async () => {
+    serve([{ ...DAY[2], set: { ...DAY[2].set, questionCount: 7, pinnedMissing: false } }]);
+    await mount();
+    const row = screen.getAllByTestId('agenda-row')[0];
+    expect(row).toHaveTextContent('Customer knowledge — Q4 · v2 · 7 questions');
+    expect(within(row).getByRole('button', { name: 'Use v3' })).toBeInTheDocument();
+  });
+
+  it('a pinned version that was deleted says so in plain words, and "Use v3" is still offered', async () => {
+    serve([{ ...DAY[2], set: { ...DAY[2].set, questionCount: 0, pinnedMissing: true } }]);
+    await mount();
+    const row = screen.getAllByTestId('agenda-row')[0];
+    const line = row.querySelector('.evb-sub');
+    expect(line).toHaveTextContent('Customer knowledge — Q4 · v2 is no longer in the set');
+    expect(line).toHaveClass('evb-sub--bad');
+    expect(row).not.toHaveTextContent('0 questions');
+    fireEvent.click(within(row).getByRole('button', { name: 'Use v3' }));
+    await waitFor(() => expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', { version: 3 }));
+  });
+
+  it('a deleted pin is offered the set\'s current version even when that one is older', async () => {
+    // v4 was pinned and later deleted; v2 was promoted back to be the one that plays.
+    serve([{ ...DAY[2], setRef: { ...DAY[2].setRef, version: 4 }, set: { ...DAY[2].set, latestVersion: 2, questionCount: 0, pinnedMissing: true } }]);
+    await mount();
+    const row = screen.getAllByTestId('agenda-row')[0];
+    expect(row).toHaveTextContent('v4 is no longer in the set');
+    expect(within(row).getByRole('button', { name: 'Use v2' })).toBeInTheDocument();
+  });
+
   it('a failed "Use vN" reloads the agenda and says why (a stale row should not linger)', async () => {
     api.updateItem.mockRejectedValue(new Error('That item has already started.'));
     await mount();
