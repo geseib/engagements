@@ -173,6 +173,32 @@ check('the aliases are game-types.js\'s, both copies', () => {
   }
 });
 
+console.log('\n8. what an engagement item carries of its session');
+check('the options each format has, in the create dialog\'s own names', () => {
+  assert.deepStrictEqual(R.settingKeysFor('trivia'), ['randomizeQuestions', 'categoryIds', 'target', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
+  assert.deepStrictEqual(R.settingKeysFor('wavelength'), R.settingKeysFor('trivia'));
+  assert.deepStrictEqual(R.settingKeysFor('poll'), ['anonymousResponses', 'randomizeQuestions', 'categoryIds', 'target', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
+  assert.deepStrictEqual(R.settingKeysFor('call-and-answer'), ['anonymousResponses', 'randomizeQuestions', 'categoryIds', 'target', 'briefing', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
+  assert.deepStrictEqual(R.settingKeysFor('survey'), ['names', 'personaId', 'promptId', 'aiContext', 'eventDetails']);
+  for (const t of ['presentation', 'custom', 'break']) assert.deepStrictEqual(R.settingKeysFor(t), [], t);
+});
+check('untouched options are the create dialog\'s defaults, and never share an array', () => {
+  const a = R.settingsFor('trivia', {});
+  a.categoryIds.push('x');
+  assert.deepStrictEqual(R.settingsFor('trivia', {}).categoryIds, []);
+  assert.deepStrictEqual(R.settingsFor('survey'), { names: 'anonymous', personaId: '', promptId: '', aiContext: '', eventDetails: '' });
+});
+check('a key the format does not have is dropped, not carried', () =>
+  assert.ok(!('briefing' in R.settingsFor('trivia', { briefing: { text: 'x' } }))));
+check('an item becomes the create dialog\'s payload, its pinned version beside it', () =>
+  assert.deepStrictEqual(R.sessionFormOf({
+    type: 'survey', title: 'Pulse', ledBy: 'Sam', description: 'Five questions.',
+    setRef: { scope: 'platform', orgId: '', setId: 'kickoff', version: 3 }, settings: { names: 'named' },
+  }), {
+    title: 'Pulse', gameType: 'survey', setId: 'kickoff', setScope: 'platform', setVersion: 3,
+    names: 'named', personaId: '', promptId: '', aiContext: '', eventDetails: '',
+  }));
+
 console.log('\n7. the browser can import it');
 check('no require and no process in the code (comments aside)', () => {
   const code = fs.readFileSync(FILE, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');

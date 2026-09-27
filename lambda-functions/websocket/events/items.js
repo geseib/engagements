@@ -11,7 +11,10 @@
  * THE KINDS (events M1b): five engagements (survey included), a presentation
  * (a placeholder until roadmap M5's PDF copy), an activity (`custom`) and a
  * break. Every kind but a break may name who leads it — `ledBy`, stored as
- * `LedBy` and sealed with the item's words.
+ * `LedBy` and sealed with the item's words. An engagement also carries its
+ * session options — the create dialog's own, checked by item-settings.js and
+ * sealed whole as `Settings` — which roadmap M3 feeds into the item's
+ * session (agenda-rules.sessionFormOf).
  *
  * Every route opens the event through event-store.openEvent: another
  * organisation's event, an unknown code and a malformed one are the same 404.
@@ -76,6 +79,8 @@ const { getSetMetadata, knownVersions, toVersion } = require('../set-version');
 const rules = require('./agenda-rules');
 const { json, notFound, readBody, trace, methodOf } = require('./event-http');
 const S = require('./event-store');
+const { checkItemSettings } = require('./item-settings');
+const { questionCountAt } = require('../session-goal');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -205,6 +210,9 @@ function orderUpdate(row, order, now) {
  * not forbidden, anywhere else. The version is the one asked for if the set
  * has it, else the set's current one: pinned when added, and changed later
  * only by an explicit "Use vN" (PUT), never silently (RATIONALE §c).
+ *
+ * The set's row comes back too (`setRow`), so a goal can be checked against
+ * the size of the version pinned.
  */
 async function pinSet(meta, type, requested) {
   const scope = String((requested && requested.scope) || '').trim();
@@ -226,7 +234,7 @@ async function pinSet(meta, type, requested) {
       return { error: 'That version of the question set does not exist.' };
     }
   }
-  return { setRef: { scope, orgId: ref.orgId, setId, version } };
+  return { setRef: { scope, orgId: ref.orgId, setId, version }, setRow: row };
 }
 
 async function readItem(code, itemId) {
@@ -255,10 +263,20 @@ async function addItem(request, meta, code) {
   if (capped) return json(409, { error: capped.message, cap: capped.cap });
 
   let setRef = null;
+  let settings = null;
   if (rules.isEngagement(type)) {
     const pinned = await pinSet(meta, type, body.setRef);
     if (pinned.error) return json(400, { error: pinned.error });
     setRef = pinned.setRef;
+    // The session options (events M1b), checked by create's rules; a goal
+    // against the size of the version just pinned.
+    const checked = checkItemSettings(type, body.settings, {
+      questionCount: questionCountAt(pinned.setRow, setRef.version),
+    });
+    if (checked.error) return json(400, { error: checked.error });
+    settings = checked.value;
+  } else if (body.settings !== undefined && body.settings !== null) {
+    return json(400, { error: 'Only an engagement has session options.' });
   }
 
   const rows = await S.readItems(db, TABLE(), code);
@@ -277,6 +295,8 @@ async function addItem(request, meta, code) {
     ...(rules.hasLeader(type) ? { LedBy: leader.value } : {}),
     State: PLANNED,
     ...(setRef ? { SetRef: setRef } : {}),
+    // Sealed whole with the item's words (tenant-crypto `item`).
+    ...(settings ? { Settings: settings } : {}),
     CreatedAt: now,
     UpdatedAt: now,
     ttl: meta.ttl,
@@ -361,11 +381,56 @@ async function editItem(request, meta, code, itemId) {
   if (leader.error) return json(400, { error: leader.error });
 
   let setRef = row.SetRef || null;
-  if (has('version')) {
+  let setRow = null;
+  const versionAsked = has('version');
+  if (versionAsked) {
     if (!rules.isEngagement(row.Type) || !setRef) return json(400, { error: 'Only an engagement plays a version of a set.' });
     const pinned = await pinSet(meta, row.Type, { ...setRef, version: body.version });
     if (pinned.error) return json(400, { error: pinned.error });
     setRef = pinned.setRef;
+    setRow = pinned.setRow;
+  }
+
+  /*
+    THE SESSION OPTIONS (events M1b). `settings` replaces the whole map,
+    checked by create's rules (item-settings.js). "Use vN" alone keeps the map
+    but re-checks it against the version it moves to: a goal the new version
+    cannot meet is refused in words, and a narrowed category list is reset to
+    every category (a newer version may not have the same ones), which the
+    reply says (`categoriesReset`) so the builder can. `undefined` below
+    leaves the stored map alone — an item added before M1b keeps none.
+  */
+  if (has('settings') && !rules.isEngagement(row.Type)) {
+    return json(400, { error: 'Only an engagement has session options.' });
+  }
+  let settings;
+  let categoriesReset = false;
+  if (rules.isEngagement(row.Type) && (has('settings') || versionAsked)) {
+    if (!setRow && setRef) {
+      setRow = await getSetMetadata(db, TABLE(), {
+        scope: setRef.scope, orgId: setRef.scope === tenant.ORG ? meta.orgId : '', setId: setRef.setId,
+      });
+    }
+    const questionCount = questionCountAt(setRow, setRef && setRef.version);
+    if (has('settings')) {
+      const checked = checkItemSettings(row.Type, body.settings, { questionCount });
+      if (checked.error) return json(400, { error: checked.error });
+      settings = checked.value;
+    } else {
+      const kept = rules.settingsFor(row.Type, current.Settings);
+      if (kept.target && questionCount && kept.target > questionCount) {
+        return json(400, {
+          error: `Your goal of ${kept.target} is more than v${setRef.version}’s ${questionCount} questions. Lower the goal, then use v${setRef.version}.`,
+          code: 'goal_over',
+        });
+      }
+      const moved = !row.SetRef || row.SetRef.version !== setRef.version;
+      if (moved && kept.categoryIds && kept.categoryIds.length) {
+        kept.categoryIds = [];
+        categoriesReset = true;
+      }
+      settings = kept;
+    }
   }
 
   const now = new Date().toISOString();
@@ -374,7 +439,9 @@ async function editItem(request, meta, code, itemId) {
     Description: fields.value.description,
     ...(leads ? { LedBy: leader.value } : {}),
   };
-  const sealed = await encryptItem(meta.orgId, 'item', words);
+  const sealed = await encryptItem(meta.orgId, 'item', {
+    ...words, ...(settings !== undefined ? { Settings: settings } : {}),
+  });
   const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
   const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
   let expression = 'SET #t = :t, #d = :d, #m = :m, #ua = :now';
@@ -387,6 +454,11 @@ async function editItem(request, meta, code, itemId) {
     expression += ', #sr = :sr';
     names['#sr'] = 'SetRef';
     values[':sr'] = setRef;
+  }
+  if (settings !== undefined) {
+    expression += ', #sx = :sx';
+    names['#sx'] = 'Settings';
+    values[':sx'] = sealed.Settings;
   }
   try {
     await db.send(new UpdateCommand({
@@ -408,7 +480,9 @@ async function editItem(request, meta, code, itemId) {
     item: S.projectItem({
       ...current, ...words, Minutes: fields.value.minutes,
       ...(setRef ? { SetRef: setRef } : {}),
+      ...(settings !== undefined ? { Settings: settings } : {}),
     }),
+    ...(categoriesReset ? { categoriesReset: true } : {}),
   });
 }
 

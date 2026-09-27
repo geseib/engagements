@@ -260,6 +260,85 @@ function checkLedBy(input, type) {
   return { value: ledBy };
 }
 
+// ── An engagement's session options (events M1b) ───────────────────────────
+/**
+ * WHAT AN ENGAGEMENT ITEM CARRIES OF THE SESSION IT BECOMES. The owner, 26
+ * Sep 2026: "It would also be nice if all of the options that you get when
+ * setting up each engagement is avail". The item dialog renders the create
+ * dialog's own options (src/src/components/SessionOptions.jsx), and the item
+ * stores what they say as one map, `Settings`, under the create dialog's own
+ * payload keys — so roadmap M3 turns an item into a session with
+ * `sessionFormOf` below and the create dialog's createGameBody, and cannot
+ * drift (src/src/__tests__/itemSessionMapping.test.js).
+ *
+ * Which options a format has is the create dialog's rule:
+ *   every engagement   personaId, promptId, aiContext, eventDetails
+ *   not a survey       randomizeQuestions, categoryIds, target
+ *   a vote to hide     anonymousResponses   (call-and-answer, poll)
+ *   a survey           names
+ *   call-and-answer    briefing
+ * `SETTING_DEFAULTS` is what the create dialog sends for an untouched form
+ * (config/setupDefaults.js); an empty `categoryIds` means every category, as
+ * it does at create.
+ */
+const SETTING_DEFAULTS = Object.freeze({
+  anonymousResponses: true,
+  randomizeQuestions: true,
+  names: 'anonymous',
+  target: null,
+  categoryIds: Object.freeze([]),
+  personaId: '',
+  promptId: '',
+  aiContext: '',
+  eventDetails: '',
+  briefing: null,
+});
+const SETTING_KEYS = Object.freeze(Object.keys(SETTING_DEFAULTS));
+const ANONYMITY_TYPES = Object.freeze(['call-and-answer', 'poll']);
+const WORKIE_KEYS = Object.freeze(['personaId', 'promptId', 'aiContext', 'eventDetails']);
+
+/** The option keys an item of `type` stores; [] for anything but an engagement. */
+function settingKeysFor(type) {
+  if (!isEngagement(type)) return [];
+  if (type === 'survey') return ['names', ...WORKIE_KEYS];
+  return [
+    ...(ANONYMITY_TYPES.includes(type) ? ['anonymousResponses'] : []),
+    'randomizeQuestions', 'categoryIds', 'target',
+    ...(type === 'call-and-answer' ? ['briefing'] : []),
+    ...WORKIE_KEYS,
+  ];
+}
+
+/** Only the keys that apply to `type`: each given value, else its default (an array is always a fresh copy). */
+function settingsFor(type, values) {
+  const given = values && typeof values === 'object' ? values : {};
+  const out = {};
+  for (const key of settingKeysFor(type)) {
+    const value = given[key] === undefined ? SETTING_DEFAULTS[key] : given[key];
+    out[key] = Array.isArray(value) ? value.slice() : value;
+  }
+  return out;
+}
+
+/**
+ * An item as the create dialog's payload (GameSetupDialog → createGameBody).
+ * `setVersion` rides beside it: createGameBody has no version input, and M3
+ * sends it as `questionSetVersion`, which create-game.js already accepts. The
+ * item's description, leader and length are the agenda's own, and stay out.
+ */
+function sessionFormOf(item) {
+  const i = item || {};
+  const ref = i.setRef || {};
+  return {
+    title: i.title || '',
+    gameType: i.type,
+    setId: ref.setId || '',
+    setScope: ref.scope || '',
+    setVersion: ref.version === undefined ? null : ref.version,
+    ...settingsFor(i.type, i.settings),
+  };
+}
+
 // ── Times ───────────────────────────────────────────────────────────────────
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -337,6 +416,7 @@ module.exports = {
   hasLeader, ledByLabel,
   ACCESS_CHOICES, ACCESS_NOW, REPORT_DEFAULTS, DAY, KEEP_DAYS, MAX_DAYS_AHEAD,
   canonicalSetType, isEngagement, isCounted, countItems, capRefusal,
+  SETTING_DEFAULTS, SETTING_KEYS, settingKeysFor, settingsFor, sessionFormOf,
   isTimeZone, parseStartsAt, checkEventFields, checkItemFields, checkLedBy,
   clock, agendaTimes, formatDuration, eventTtl,
   formatEventDay, formatStartTime, formatEventWhen,

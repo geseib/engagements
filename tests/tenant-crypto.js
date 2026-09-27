@@ -678,8 +678,8 @@ check('decryptItem refuses an unknown entity too', async () =>
 console.log('\n7b. an event and its items');
 check('event seals exactly its title and place', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.event].sort(), ['Place', 'Title']));
-check('item seals exactly its title, description and leader', () =>
-  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.item].sort(), ['Description', 'LedBy', 'Title']));
+check('item seals exactly its title, description, leader and session options', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.item].sort(), ['Description', 'LedBy', 'Settings', 'Title']));
 check('the schedule, the counts and the set pointer stay plaintext', () => {
   for (const f of ['StartsAt', 'TimeZone', 'Access', 'State', 'AttendeeReports', 'ItemCount', 'EngagementCount', 'BreakCount']) {
     assert.ok(!C.ENCRYPTED_FIELDS.event.includes(f), `event would encrypt ${f}`);
@@ -691,16 +691,19 @@ check('the schedule, the counts and the set pointer stay plaintext', () => {
 check('an agenda item round-trips, and its words are not in the stored row', async () => {
   const org = await newOrg('org_event_fields');
   const row = { PK: 'EVENT#5307', SK: 'ITEM#it_0a1b2c3d', Type: 'trivia', Order: 3, Minutes: 15,
-    Title: 'How well do you know our customers?', Description: 'Ten questions. Scored.', LedBy: 'Priya Raman' };
+    Title: 'How well do you know our customers?', Description: 'Ten questions. Scored.', LedBy: 'Priya Raman',
+    Settings: { target: 5, aiContext: 'End with one question for the ops leads.' } };
   const enc = await C.encryptItem(org, 'item', row);
-  assert.ok(C.isEnvelope(enc.Title) && C.isEnvelope(enc.Description) && C.isEnvelope(enc.LedBy));
+  assert.ok(C.isEnvelope(enc.Title) && C.isEnvelope(enc.Description) && C.isEnvelope(enc.LedBy) && C.isEnvelope(enc.Settings));
   assert.strictEqual(enc.Minutes, 15);
   assert.ok(!JSON.stringify(enc).includes('customers'));
   assert.ok(!JSON.stringify(enc).includes('Priya'));
+  assert.ok(!JSON.stringify(enc).includes('ops leads'));
   const back = await C.decryptItem(org, 'item', enc);
   assert.strictEqual(back.Title, row.Title);
   assert.strictEqual(back.Description, row.Description);
   assert.strictEqual(back.LedBy, row.LedBy);
+  assert.deepStrictEqual(back.Settings, row.Settings);
 });
 
 // ---------- 8. The three bundle copies are byte-identical ----------
