@@ -2548,6 +2548,13 @@ Focus on actionable business strategy insights.`;
         setAuthorsRevealed(!!gameStateData.authorsRevealed);
         console.log(`🔍 HOST: Questions array length: ${questions.length}`);
 
+        // The goal rides at host-state's TOP LEVEL (get-game-state.js), not
+        // inside gameMetadata — so this reads it here, unconditionally, rather
+        // than inside the `if (gameStateData.gameMetadata)` block below. A
+        // response that ever omitted gameMetadata but still carried a session
+        // would otherwise leave the previous game's goal on screen.
+        setSessionTarget(Number.isInteger(gameStateData.target) ? gameStateData.target : null);
+
         // Restore basic game metadata
         //
         // `restoredSetId`/`restoredSetScope` are declared out here, not `const`
@@ -2567,8 +2574,6 @@ Focus on actionable business strategy insights.`;
           // And the approach, for the same reason.
           setGamePromptId(gameStateData.gameMetadata.promptId || '');
           setSessionBriefed(gameStateData.gameMetadata.briefed === true);
-          // The goal rides at host-state's top level (get-game-state.js).
-          setSessionTarget(Number.isInteger(gameStateData.target) ? gameStateData.target : null);
           /*
             A SURVEY'S NAMES AND ITS WARNING, so a reload comes back up on the
             promise the phones were given and still says the warning went out.
