@@ -67,6 +67,32 @@ ballot, not a glance).
   presets — Yes/No (blank), Approve/Decline, True/False, Agree/Disagree — for surveys too.
 - `sets/new/poll-how-we-work.csv` is now a typed set (5 choice, 2 rating, 2 yes/no, 1 open).
 
+## The AI generator (merged from wip/typed-polls-ai)
+
+- `admin/ai-generate-polls.js` takes `kinds` (any of the four; none means all) and writes typed
+  questions: one idea each, 2–5 options that read at a glance, scale ends that mean something, a binary
+  whose two words fit, and open answers only where the room's own words are the point. An item with
+  neither a kind nor options is dropped. It is never turned into a text box, which was the bug the
+  owner saw ("a medium Poll item … didn't give options but an open text box").
+- `admin/shared/kind-generation.js` holds the kind fields' schema and repairs. The survey generator
+  (refactored onto it, output unchanged), the poll generator and the one-question drafter
+  (`ai-generate-questions.js`) all use it.
+- `shared/generated-set.js` `pollsToCsv` and `src/src/utils/pollDraft.js` `pollItemsToCsv` write the
+  survey contract's columns, and `pollDraft.test.js` holds them byte-identical.
+  `PER_ITEM_TOKENS.poll` is now 690.
+- `PollAIBuilder`: a kinds picker replaces "Allow multiple selections"; the review table has a Kind
+  column; the editor is `SurveyQuestionFields` with the four poll kinds (no Ranking).
+
+## Ask next vs Ask now (#29, merged from wip/ask-next-queue)
+
+- **Ask next** puts the question at the head of the queue. It is a new `first` op on the existing
+  `POST /games/{id}/queue` (`queue-order.js`, mirrored in `config/questionQueue.js`), and the round
+  on screen is untouched.
+- **Ask now** is the old jump (`next-question` select). On the stage it confirms mid-round; on the
+  phone it arms with "Tap again to ask now".
+- The phone remote's Questions tab mounts the stage's own `QueueList` (`variant="touch"`) over the same
+  queue and `GET /up-next`, so the remote shows the same running order as the host screen.
+
 ## Verified
 
 - Backend: `tests/typed-polls.js` (26) and the updated contract suites; the full loop.
