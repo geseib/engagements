@@ -531,6 +531,25 @@ describe('deleting the event (final review I1)', () => {
     expect(screen.queryByTestId('delete-confirm')).toBeNull();
   });
 
+  // rejects: focus falling to the page when the button that held it is
+  // swapped for the confirm, or the confirm for the button (the file's own
+  // rule: "Focus never falls to the page").
+  it('focus moves to Keep it when the confirm opens, and back to Delete event… when it closes', async () => {
+    api.deleteEvent.mockRejectedValue(Object.assign(new Error('Not now.'), { status: 409, body: {} }));
+    await mount({ onDeleted: jest.fn() });
+    const opener = screen.getByRole('button', { name: 'Delete event…' });
+    opener.focus();
+    startDelete();
+    expect(document.activeElement).toBe(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Keep it' }));
+    fireEvent.click(document.activeElement);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete event…' }));
+    // and after a refusal closes it
+    startDelete();
+    fireEvent.click(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Delete event' }));
+    await within(screen.getByTestId('event-delete')).findByRole('alert');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete event…' }));
+  });
+
   it('while the delete is out, neither button can fire it again', async () => {
     let resolveDelete;
     api.deleteEvent.mockImplementation(() => new Promise((resolve) => { resolveDelete = resolve; }));

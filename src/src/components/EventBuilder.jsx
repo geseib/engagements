@@ -129,6 +129,11 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
   /* One delete in flight, read synchronously (as savingRef is): a second
      click before React re-renders must not send a second DELETE. */
   const deletingRef = useRef(false);
+  /* The confirm swaps out the button that opened it, and back again, so
+     each swap hands focus across explicitly or it falls to the page. */
+  const keepRef = useRef(null);
+  const deleteOpenerRef = useRef(null);
+  const confirmWasOpen = useRef(false);
   const rowRefs = useRef({});
   const addBtnRef = useRef(null);
   /* Where focus should land after the NEXT render that can show it — an
@@ -225,6 +230,19 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
       document.removeEventListener('keydown', esc);
     };
   }, [menuOpen]);
+
+  // Opening the confirm puts focus on Keep it, the safe answer; closing it
+  // (Keep it, or a refusal) returns focus to "Delete event…". Never on the
+  // first render, when the confirm has not been opened.
+  useEffect(() => {
+    if (confirmingDelete) {
+      confirmWasOpen.current = true;
+      if (keepRef.current) keepRef.current.focus();
+    } else if (confirmWasOpen.current) {
+      confirmWasOpen.current = false;
+      if (deleteOpenerRef.current) deleteOpenerRef.current.focus();
+    }
+  }, [confirmingDelete]);
 
   const move = async (from, to, opts = {}) => {
     if (savingRef.current) return;
@@ -574,7 +592,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
             <p>
               Delete “{event.title}”? Its agenda and its join code, {event.code}, go with it. This cannot be undone.
             </p>
-            <button type="button" className="evb-btn" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</button>
+            <button type="button" ref={keepRef} className="evb-btn" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</button>
             <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={removeEvent} disabled={deleting}>
               {deleting ? 'Deleting…' : 'Delete event'}
             </button>
@@ -582,6 +600,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
         ) : (
           <button
             type="button"
+            ref={deleteOpenerRef}
             className="evb-btn evb-btn--ghostdanger"
             onClick={() => { setDeleteError(''); setConfirmingDelete(true); }}
           >
