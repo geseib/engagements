@@ -24,6 +24,7 @@
 import { gameTypeMeta, normalizeGameType } from './gameTypes';
 import { rosterRows } from './setupPanel';
 import { normaliseScoreboard, scoreboardAvailability } from './scoreboard';
+import goalRules from '../../../lambda-functions/websocket/session-goal';
 
 /**
  * The beats from which the only way on is the next round.
@@ -814,6 +815,26 @@ export function phaseSummary(stateResponse) {
     default:
       return { phase: 'UNKNOWN', headline: 'Waiting…', detail: 'No game state yet' };
   }
+}
+
+/**
+ * THE GOAL, ON THE HOST'S PHONE (events M1b, session-goal.js). The same words
+ * the stage's dock and SESSION panel say, from the same rule: "Question 3 of
+ * 5" under the headline, and on the goal's own round, once its results are
+ * up, "That's your 5. Keep going if there's time, or end the session." Never
+ * a stop: the primary button is exactly what it would have been.
+ *
+ * The goal rides at host-state's TOP level (`target`), because the host door's
+ * gameMetadata is held equal to the public round's. A survey has none.
+ *
+ * @returns {{progress: string, reached: boolean, line: string}}
+ */
+export function remoteGoal(stateResponse) {
+  const payload = stateResponse && typeof stateResponse === 'object' ? stateResponse : {};
+  const gameType = payload.gameType || payload.gameMetadata?.gameType;
+  if (!goalRules.goalApplies(gameType)) return { progress: '', reached: false, line: '' };
+  const { phase, round } = parseGamePhase(payload.state);
+  return goalRules.goalProgress({ target: payload.target, round, phase });
 }
 
 /* ------------------------------------------------- what went wrong, in words */

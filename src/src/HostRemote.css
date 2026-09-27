@@ -169,6 +169,16 @@
   color: var(--muted);
 }
 
+/* THE GOAL (events M1b): "Question 3 of 5", under the headline. Muted, as the
+   kicker above it is, on the same card — the pairing .hr-status-kicker
+   already carries, so no new colour is measured. 14px, above the floor. */
+.hr-goal {
+  margin: 6px 0 0;
+  font-size: .875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .hr-status-phase {
   margin: 6px 0 0;
   font-family: var(--font-display, var(--font-ui));

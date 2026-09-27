@@ -26,6 +26,7 @@ import {
   questionSetFailure,
   scoreboardControl,
   accessDeniedMessage,
+  remoteGoal,
 } from './config/hostRemote';
 import { scoreboardRequest } from './config/scoreboard';
 import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
@@ -460,6 +461,8 @@ function HostRemote() {
   const gameType = snapshot?.gameType || snapshot?.gameMetadata?.gameType;
   const summary = useMemo(() => phaseSummary(snapshot), [snapshot]);
   const progress = useMemo(() => roundProgress(snapshot), [snapshot]);
+  // The goal (events M1b): the same words the stage says, from the same rule.
+  const goal = useMemo(() => remoteGoal(snapshot), [snapshot]);
   // `stageBeat` comes from the SERVER (get-game-state), so the phone follows
   // the projector as well as driving it. Without passing it here the two-step
   // in primaryAction is dead code: the phone would offer "What We Heard"
@@ -1151,6 +1154,7 @@ function HostRemote() {
             <section className="hr-status" aria-live="polite">
               <p className="hr-status-kicker">{summary.detail}</p>
               <h1 className="hr-status-phase">{summary.headline}</h1>
+              {goal.progress && <p className="hr-goal" data-testid="remote-goal">{goal.progress}</p>}
 
               {progress.applicable ? (
                 <div className={`hr-progress ${progress.allIn ? 'is-complete' : ''}`}>
@@ -1185,6 +1189,16 @@ function HostRemote() {
                 </p>
               )}
             </section>
+
+            {/* THE GOAL IS MET (events M1b): said once, on the goal's own
+                round while its results are up. Words, never a stop — the
+                primary below is exactly what it would have been. */}
+            {goal.reached && (
+              <p className="hr-flash hr-flash--notice" role="status" data-testid="remote-goal-reached">
+                <Icon name="Target" weight="fill" size={18} color="currentColor" />
+                {goal.line}
+              </p>
+            )}
 
             {/* WHO THE ROOM IS WAITING FOR — 17-remote.html's `Still to vote`
                 block, names and all.
