@@ -56,6 +56,14 @@ const TRIVIA = {
   randomizeQuestions: false, categoryIds: ['Ops'], target: 5,
   personaId: 'coach', promptId: 'trivia-vj', aiContext: 'Be brief.', eventDetails: 'Why we meet.',
 };
+/** A new event on the same seeded sets — resets the 8-engagement cap between
+ *  fix-round-1 sections that each add several engagement items of their own. */
+async function freshEvent() {
+  code = bodyOf(await create(request({
+    method: 'POST', path: '/events', requestContext: asHost(NW),
+    body: { title: 'Fix round 1', startsAt: startsIn(25), timeZone: 'Europe/London' },
+  }))).event.code;
+}
 
 (async () => {
   table.clear();
@@ -203,6 +211,144 @@ const TRIVIA = {
     assert.strictEqual(S.EVENT_DETAILS_MAX, 300);
     assert.match(near('-ai-context`}'), new RegExp(`maxLength="${S.AI_CONTEXT_MAX}"`));
     assert.match(near('-details`}'), new RegExp(`maxLength="${S.EVENT_DETAILS_MAX}"`));
+  });
+
+  console.log('\n6. a concurrent edit cannot land a goal the pin cannot hold (fix round 1)');
+  await freshEvent(); // sections 1-5 already used 5 of the 8 engagement slots
+  await check('"Use v1" that read the row before a concurrent goal change loses the race, not silently combining with it', async () => {
+    const raceId = bodyOf(await add(space({ settings: { target: 5 } }))).item.itemId;
+    assert.strictEqual(rowOf(raceId).SetRef.version, 2);
+    // Guarantee the item's creation UpdatedAt is on a different millisecond
+    // from the winning edit's, below — otherwise a test this fast could
+    // coincidentally collide and the guard would (correctly) not fire.
+    await new Promise((resolve) => { setTimeout(resolve, 2); });
+
+    const gate = table.hold((c) => c.type === 'update' && c.input.Key && c.input.Key.SK === `ITEM#${raceId}`);
+    const slow = edit(raceId, { version: 1 }); // alone, this would succeed: target 5 fits v1's 8
+    await gate.reached;
+    const fast = await edit(raceId, { settings: { target: 10 } }); // fits v2's 12, the pin as fast itself reads it
+    assert.strictEqual(fast.statusCode, 200, fast.body);
+    gate.release();
+    const late = await slow;
+
+    // Before this fix `late` was conditioned only on State = planned, and
+    // landed anyway: v1 pinned with a goal of 10 — more than v1's 8
+    // questions, a combination neither edit's own check ever allowed.
+    assert.strictEqual(late.statusCode, 409, late.body);
+    assert.strictEqual(bodyOf(late).code, 'agenda_changed');
+    assert.strictEqual(rowOf(raceId).SetRef.version, 2, 'the losing "Use v1" moved the version anyway');
+    assert.strictEqual(plainRow(NW, rowOf(raceId)).Settings.target, 10, 'the winning edit\'s goal was lost');
+  });
+
+  console.log('\n7. null means blank or default, never a refusal (fix round 1 RULING)');
+  await check('every applicable key sent as null reads as the create dialog\'s own default', async () => {
+    const res = await add(space({
+      settings: {
+        randomizeQuestions: null, categoryIds: null, target: null,
+        personaId: null, promptId: null, aiContext: null, eventDetails: null,
+      },
+    }));
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.deepStrictEqual(bodyOf(res).item.settings, rules.settingsFor('trivia', {}));
+  });
+  await check('null for a key this format does not have is skipped, not refused', async () => {
+    const res = await add(space({ settings: { briefing: null } })); // trivia has no briefing
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.deepStrictEqual(Object.keys(bodyOf(res).item.settings), Object.keys(rules.settingsFor('trivia', {})));
+  });
+  await check('null Names on a survey reads as Anonymous', async () => {
+    const res = await add({ type: 'survey', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'kickoff' }, settings: { names: null } });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.strictEqual(bodyOf(res).item.settings.names, 'anonymous');
+  });
+  await check('null anonymousResponses on a poll reads as on (the default)', async () => {
+    const res = await add({ type: 'poll', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'mood' }, settings: { anonymousResponses: null } });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.strictEqual(bodyOf(res).item.settings.anonymousResponses, true);
+  });
+  await check('a null goal on a survey is still just skipped — a survey never gets one', async () => {
+    const res = await add({ type: 'survey', title: 'x', minutes: 5, setRef: { scope: 'platform', setId: 'kickoff' }, settings: { target: null } });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.ok(!('target' in bodyOf(res).item.settings));
+  });
+  await check('an unknown key is still refused even when its value is null', async () => {
+    const res = await add(space({ settings: { triviaTimer: null } }));
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.match(bodyOf(res).error, /is not a session option/);
+  });
+  await check('an unrecognised key\'s own name is truncated in the 400 sentence', async () => {
+    const longKey = 'x'.repeat(60);
+    const res = await add(space({ settings: { [longKey]: 1 } }));
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.ok(bodyOf(res).error.includes('x'.repeat(S.KEY_ECHO_MAX)), 'the truncated prefix is missing');
+    assert.ok(!bodyOf(res).error.includes(longKey), 'the full 60-character key rode into the message');
+  });
+
+  console.log('\n8. settings: null on a non-engagement is accepted as none (fix round 1)');
+  await check('add: settings: null on a break is accepted, and the item carries none', async () => {
+    const res = await add({ type: 'break', minutes: 5, settings: null });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.strictEqual(bodyOf(res).item.settings, undefined);
+    assert.ok(!('Settings' in rowOf(bodyOf(res).item.itemId)));
+  });
+  await check('edit: settings: null on a presentation is accepted, and changes nothing about it', async () => {
+    const talk = bodyOf(await add({ type: 'presentation', title: 'Talk', minutes: 30 })).item;
+    const res = await edit(talk.itemId, { settings: null });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).item.settings, undefined);
+  });
+  await check('edit: a real settings object on a break is still refused', async () => {
+    const brk = bodyOf(await add({ type: 'break', minutes: 5 })).item;
+    const res = await edit(brk.itemId, { settings: { target: 3 } });
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.match(bodyOf(res).error, /Only an engagement has session options/);
+  });
+
+  console.log('\n9. version and settings together, and "Use vN" on the edges (fix round 1)');
+  await freshEvent(); // sections 6-8 already used several of the 8 engagement slots
+  let combo;
+  await check('setup: an item pinned to v2 with a goal that fits v2 but not v1', async () => {
+    combo = bodyOf(await add(space({ settings: { target: 9 } }))).item.itemId;
+    assert.strictEqual(rowOf(combo).SetRef.version, 2);
+  });
+  await check('version and settings together: the goal is checked against the NEW version, not the old one', async () => {
+    const res = await edit(combo, { version: 1, settings: { target: 9 } });
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.match(bodyOf(res).error, /This set has 8 questions/);
+    assert.strictEqual(rowOf(combo).SetRef.version, 2, 'a refused combined edit moved the version anyway');
+  });
+  await check('version and settings together, a goal the new version can hold: both land in one edit', async () => {
+    const res = await edit(combo, { version: 1, settings: { target: 8 } });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).item.settings.target, 8);
+    assert.strictEqual(rowOf(combo).SetRef.version, 1);
+  });
+  await check('the category list is kept when "Use vN" does not actually move the version', async () => {
+    await edit(combo, { version: 2, settings: { target: 8, categoryIds: ['Ops'] } });
+    const res = await edit(combo, { version: 2 }); // the version it is already pinned to
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).categoriesReset, undefined, 'a version that did not move reset the categories anyway');
+    assert.deepStrictEqual(bodyOf(res).item.settings.categoryIds, ['Ops']);
+  });
+  await check('"Use vN" on an item added before M1b writes the create dialog\'s defaults', async () => {
+    const preM1bId = bodyOf(await add(space({ title: 'Old quiz, races' }))).item.itemId;
+    const { Settings, ...bare } = rowOf(preM1bId);
+    table.put(bare);
+    assert.ok(!('Settings' in rowOf(preM1bId)));
+    const res = await edit(preM1bId, { version: 1 });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(bodyOf(res).item.settings, rules.settingsFor('trivia', {}));
+    assert.ok(isEnvelope(rowOf(preM1bId).Settings), 'the item did not gain a Settings envelope');
+  });
+
+  console.log('\n10. a null version is refused in plain words, never "vnull" (fix round 1 nit)');
+  await check('version: null is refused before it ever reaches the goal-over sentence', async () => {
+    const before = rowOf(combo).SetRef.version;
+    const res = await edit(combo, { version: null });
+    assert.strictEqual(res.statusCode, 400, res.body);
+    assert.match(bodyOf(res).error, /Choose a version/);
+    assert.ok(!/vnull/.test(bodyOf(res).error));
+    assert.strictEqual(rowOf(combo).SetRef.version, before, 'a null version moved the pin anyway');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

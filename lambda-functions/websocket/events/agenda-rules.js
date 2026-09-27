@@ -309,12 +309,20 @@ function settingKeysFor(type) {
   ];
 }
 
-/** Only the keys that apply to `type`: each given value, else its default (an array is always a fresh copy). */
+/**
+ * Only the keys that apply to `type`: each given value, else its default (an
+ * array is always a fresh copy). `null` reads the same as "not given" — the
+ * create dialog's own convention for a cleared field (createGameBody, RULING
+ * fix round 1: "null means blank/default") — never "the literal value null"
+ * for a key whose own default happens to be something else. This is a no-op
+ * for `target` and `briefing`, whose defaults are already `null`.
+ */
 function settingsFor(type, values) {
   const given = values && typeof values === 'object' ? values : {};
   const out = {};
   for (const key of settingKeysFor(type)) {
-    const value = given[key] === undefined ? SETTING_DEFAULTS[key] : given[key];
+    const raw = given[key];
+    const value = (raw === undefined || raw === null) ? SETTING_DEFAULTS[key] : raw;
     out[key] = Array.isArray(value) ? value.slice() : value;
   }
   return out;
@@ -325,9 +333,17 @@ function settingsFor(type, values) {
  * `setVersion` rides beside it: createGameBody has no version input, and M3
  * sends it as `questionSetVersion`, which create-game.js already accepts. The
  * item's description, leader and length are the agenda's own, and stay out.
+ *
+ * `null` for an item whose words could not be decrypted (`decryptFailed`,
+ * event-store.openItemRow) — fix round 1. THIS IS A BACKSTOP, NOT THE CHECK
+ * M3 SHOULD RELY ON: a decryptFailed item's blanked `Settings` looks exactly
+ * like a pre-M1b item's absent one, and sessionFormOf has no way to tell them
+ * apart from the shape alone. Roadmap M3 must refuse a decryptFailed item
+ * outright, before ever reaching this function.
  */
 function sessionFormOf(item) {
   const i = item || {};
+  if (i.decryptFailed) return null;
   const ref = i.setRef || {};
   return {
     title: i.title || '',

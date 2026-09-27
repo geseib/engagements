@@ -15,6 +15,15 @@
  *
  * The map this returns is complete for the format (every key that applies,
  * defaults filled), and items.js seals it whole as `Settings`.
+ *
+ * NULL MEANS BLANK/DEFAULT (fix round 1 RULING), the same convention
+ * create-game.js's own body uses for a cleared field. A `null` for a key this
+ * format does not have is skipped, exactly as if it had never been sent —
+ * never refused. A `null` for a key this format DOES have reads as that key's
+ * own default (agenda-rules.settingsFor does the substitution): '' for a
+ * string, the boolean default for a switch, `[]` for categories, `anonymous`
+ * for Names. An UNKNOWN key is refused whether or not its value is null — the
+ * null convention only ever excuses a key that exists but does not apply.
  */
 const rules = require('./agenda-rules');
 const { normalizeBriefing } = require('../briefing');
@@ -26,6 +35,11 @@ const EVENT_DETAILS_MAX = 300;
 const ID_MAX = 128;
 const CATEGORY_MAX = 24;
 const CATEGORY_NAME_MAX = 120;
+/** How much of an unrecognised key's own name the 400 sentence echoes back
+ *  (fix round 1 nit): a key is caller-supplied text, not a bounded token, and
+ *  echoing it whole would let an arbitrarily long string ride into a log or a
+ *  toast under the guise of an error message. */
+const KEY_ECHO_MAX = 40;
 
 /** What each option says when the format does not have it. */
 const NOT_THIS_FORMAT = Object.freeze({
@@ -54,8 +68,13 @@ function checkItemSettings(type, input, { questionCount = 0 } = {}) {
   const given = sent ? input : {};
   const applies = rules.settingKeysFor(type);
   for (const key of Object.keys(given)) {
-    if (!rules.SETTING_KEYS.includes(key)) return { error: `“${key}” is not a session option.` };
-    if (!applies.includes(key)) return { error: NOT_THIS_FORMAT[key] };
+    if (!rules.SETTING_KEYS.includes(key)) {
+      const shown = key.length > KEY_ECHO_MAX ? `${key.slice(0, KEY_ECHO_MAX)}…` : key;
+      return { error: `“${shown}” is not a session option.` };
+    }
+    // null on a key this format does not have is skipped, not refused — see
+    // the file header. A real value for the wrong format is still refused.
+    if (!applies.includes(key) && given[key] !== null) return { error: NOT_THIS_FORMAT[key] };
   }
 
   const s = rules.settingsFor(type, given);
@@ -105,6 +124,6 @@ function checkItemSettings(type, input, { questionCount = 0 } = {}) {
 }
 
 module.exports = {
-  AI_CONTEXT_MAX, EVENT_DETAILS_MAX, ID_MAX, CATEGORY_MAX, CATEGORY_NAME_MAX,
+  AI_CONTEXT_MAX, EVENT_DETAILS_MAX, ID_MAX, CATEGORY_MAX, CATEGORY_NAME_MAX, KEY_ECHO_MAX,
   checkItemSettings,
 };

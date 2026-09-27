@@ -198,6 +198,22 @@ check('an item becomes the create dialog\'s payload, its pinned version beside i
     title: 'Pulse', gameType: 'survey', setId: 'kickoff', setScope: 'platform', setVersion: 3,
     names: 'named', personaId: '', promptId: '', aiContext: '', eventDetails: '',
   }));
+// fix round 1: null means blank/default (the create dialog's own convention
+// for a cleared field), the same way for every applicable key.
+check('null on an applicable key reads as that key\'s own default, not the literal null', () => {
+  assert.deepStrictEqual(R.settingsFor('trivia', { randomizeQuestions: null, categoryIds: null, target: null, aiContext: null }),
+    R.settingsFor('trivia', {}));
+  assert.strictEqual(R.settingsFor('survey', { names: null }).names, 'anonymous');
+  assert.strictEqual(R.settingsFor('poll', { anonymousResponses: null }).anonymousResponses, true);
+});
+// fix round 1: sessionFormOf cannot tell a decryptFailed item's blanked
+// Settings from a pre-M1b item's absent one — M3 must refuse it outright,
+// before ever reaching this function; this is only the cheap backstop.
+check('sessionFormOf refuses an item whose words could not be decrypted, as null', () =>
+  assert.strictEqual(R.sessionFormOf({
+    type: 'trivia', title: '', decryptFailed: true,
+    setRef: { scope: 'platform', orgId: '', setId: 'space', version: 2 },
+  }), null));
 
 console.log('\n7. the browser can import it');
 check('no require and no process in the code (comments aside)', () => {

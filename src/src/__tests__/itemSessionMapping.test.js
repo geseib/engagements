@@ -64,6 +64,18 @@ test('a survey item sends its Names, and never a shuffle, a goal or a vote to hi
   expect('target' in body).toBe(false);
 });
 
+// fix round 1: settingKeysFor('survey') never lists 'target', so even a
+// corrupted or pre-fix row carrying one cannot smuggle a goal into a
+// survey's session — settingsFor reads only the keys the format has.
+test('a survey item never sends a goal, even one sitting in its own settings', () => {
+  const it = item({
+    type: 'survey', title: 'How did today go?', setRef: { scope: 'platform', orgId: '', setId: 'kickoff', version: 1 },
+    settings: { names: 'finished', personaId: '', promptId: '', aiContext: '', eventDetails: '', target: 3 },
+  });
+  const body = createGameBody(rules.sessionFormOf(it));
+  expect('target' in body).toBe(false);
+});
+
 test.each(['trivia', 'call-and-answer', 'poll', 'wavelength', 'survey'])(
   'an untouched %s item is an untouched create dialog',
   (type) => {

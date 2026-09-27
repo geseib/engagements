@@ -385,6 +385,13 @@ async function editItem(request, meta, code, itemId) {
   const versionAsked = has('version');
   if (versionAsked) {
     if (!rules.isEngagement(row.Type) || !setRef) return json(400, { error: 'Only an engagement plays a version of a set.' });
+    // fix round 1 nit: refuse a null version in plain words BEFORE pinSet —
+    // pinSet's own null-handling means "keep the active version" (right for
+    // an add's setRef, where no version at all means the same thing), but
+    // "Use vN" is an explicit gesture and a null N is not a version. Left
+    // unchecked, a set with no active version of its own would resolve to
+    // `version: null`, and the goal-over sentence below would print "vnull".
+    if (body.version === null) return json(400, { error: 'Choose a version to use.' });
     const pinned = await pinSet(meta, row.Type, { ...setRef, version: body.version });
     if (pinned.error) return json(400, { error: pinned.error });
     setRef = pinned.setRef;
@@ -400,7 +407,10 @@ async function editItem(request, meta, code, itemId) {
     reply says (`categoriesReset`) so the builder can. `undefined` below
     leaves the stored map alone — an item added before M1b keeps none.
   */
-  if (has('settings') && !rules.isEngagement(row.Type)) {
+  // `settings: null` on a non-engagement is accepted as "none" — the same
+  // rule addItem already holds for its own `else if` (fix round 1); only a
+  // REAL settings object is a 400 here, matched by `has()` alone before.
+  if (has('settings') && body.settings !== null && !rules.isEngagement(row.Type)) {
     return json(400, { error: 'Only an engagement has session options.' });
   }
   let settings;
@@ -445,6 +455,27 @@ async function editItem(request, meta, code, itemId) {
   const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
   const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
   let expression = 'SET #t = :t, #d = :d, #m = :m, #ua = :now';
+  /*
+    THE ROW AS THIS REQUEST READ IT (fix round 1). Without this, a plain edit
+    still writes back the `SetRef` and the `Settings` it read at the top of
+    this function, even though neither changed — so two edits that overlap
+    can each pass its OWN check against what it read and still leave the row
+    in a state neither ever checked: "Use v1" lands, a concurrent settings
+    edit (checked against the OLD v2) writes v2's SetRef back over it, and a
+    THIRD edit that read the row as v1 lands last, carrying the second edit's
+    now-too-large goal onto the version that cannot hold it. Conditioning on
+    `UpdatedAt` (as update-event.js's own METADATA write already does) closes
+    all of it in one guard: any write that landed since this request's own
+    read moves `UpdatedAt`, so this one fails with the same AGENDA_CHANGED 409
+    every other lost race here gets, rather than silently overwriting it.
+  */
+  const conditions = ['attribute_exists(SK)', '#st = :planned'];
+  if (row.UpdatedAt === undefined) {
+    conditions.push('attribute_not_exists(#ua)');
+  } else {
+    conditions.push('#ua = :uaWas');
+    values[':uaWas'] = row.UpdatedAt;
+  }
   if (leads) {
     expression += ', #lb = :lb';
     names['#lb'] = 'LedBy';
@@ -465,7 +496,7 @@ async function editItem(request, meta, code, itemId) {
       TableName: TABLE(),
       Key: { PK: row.PK, SK: row.SK },
       UpdateExpression: expression,
-      ConditionExpression: 'attribute_exists(SK) AND #st = :planned',
+      ConditionExpression: conditions.join(' AND '),
       ExpressionAttributeNames: names,
       ExpressionAttributeValues: values,
     }));
