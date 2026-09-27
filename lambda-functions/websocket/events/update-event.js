@@ -16,6 +16,12 @@
  * this route can never touch a session's code. At most 16 + 16 items plus
  * three rows: inside DynamoDB's 100.
  *
+ * ── A RACE AGAINST ANOTHER WRITE OF THE EVENT ─────────────────────────────
+ * METADATA's Update is conditioned on the UpdatedAt (and StartsAt) this
+ * request read, so a date move, a rename or an agenda change that lands
+ * between this route's read and its write cancels this write with a 409
+ * rather than being silently undone by it (final review M3).
+ *
  * ── A RACE AGAINST items.js's ADD (OR REMOVE) ─────────────────────────────
  * The per-item updates above are built from ONE read of the agenda
  * (`S.readItems`), taken before this transaction commits. An item added by
@@ -68,7 +74,10 @@ exports.handler = async (request) => {
     if (checked.error) return json(400, { error: checked.error });
     const v = checked.value;
 
-    const now = new Date(nowSeconds * 1000).toISOString();
+    // To the millisecond, not the second: UpdatedAt is what a later write's
+    // race guard compares (below), and two writes inside one second would
+    // otherwise leave it unchanged.
+    const now = new Date().toISOString();
     const sealed = await encryptItem(meta.orgId, 'event', { Title: v.title, Place: v.place });
     const moved = v.startsAt !== meta.StartsAt;
     const ttl = moved ? rules.eventTtl(v.startsAt, nowSeconds) : meta.ttl;
@@ -79,13 +88,29 @@ exports.handler = async (request) => {
     const values = {
       ':t': sealed.Title, ':pl': sealed.Place, ':sa': v.startsAt, ':tz': v.timeZone, ':ac': v.access, ':ttl': ttl,
     };
-    // When the date moves, this Update's own condition also pins down the
-    // agenda's shape as this route read it — see the file header's note on
-    // the race with items.js's add/remove. A rename with no date change
-    // touches no item row, so it carries no such condition.
-    const metaConditions = ['attribute_exists(PK)'];
+    // THE EVENT AS THIS REQUEST READ IT (final review M3). Every write of
+    // METADATA — this route, and items.js's add, remove and reorder — stamps
+    // UpdatedAt, so conditioning on the value read at the start makes any
+    // write that landed in between cancel this one, with the same
+    // AGENDA_CHANGED 409 a lost cap race gets. Without it a rename that read
+    // METADATA just before a co-host's date move committed wrote the OLD
+    // StartsAt and ttl back over METADATA and the list row, while the items
+    // and the code kept the new ttl: rows on two clocks. StartsAt is pinned
+    // too, so a date move stamped in the same millisecond still cannot slip
+    // past. (tests/event-update.js §2b drives that race.)
+    //
+    // When the date moves, the condition also pins down the agenda's shape
+    // as this route read it — see the file header's note on the race with
+    // items.js's add/remove.
+    const metaConditions = ['attribute_exists(PK)', '#sa = :saWas'];
     const metaNames = { ...names, '#ar': 'AttendeeReports', '#ua': 'UpdatedAt' };
-    const metaValues = { ...values, ':ar': v.attendeeReports, ':now': now };
+    const metaValues = { ...values, ':ar': v.attendeeReports, ':now': now, ':saWas': meta.StartsAt };
+    if (meta.UpdatedAt === undefined) {
+      metaConditions.push('attribute_not_exists(#ua)');
+    } else {
+      metaConditions.push('#ua = :uaWas');
+      metaValues[':uaWas'] = meta.UpdatedAt;
+    }
     if (moved) {
       metaConditions.push('#ic = :icWas', '#ec = :ecWas', '#bc = :bcWas');
       Object.assign(metaNames, { '#ic': 'ItemCount', '#ec': 'EngagementCount', '#bc': 'BreakCount' });

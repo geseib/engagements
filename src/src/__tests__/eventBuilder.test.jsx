@@ -437,6 +437,56 @@ describe('crossing midnight', () => {
   });
 });
 
+describe('edit details (final review M3)', () => {
+  const openDetails = () => fireEvent.click(screen.getByRole('button', { name: /edit details/i }));
+  const changed = () => Object.assign(
+    new Error('The event changed while you were saving. Nothing was saved; reload it and try again.'),
+    { status: 409, body: { code: 'agenda_changed' } },
+  );
+
+  // rejects: the whole form sent from a tab opened before a co-host's edit,
+  // which put back every field that co-host had changed.
+  it('sends only what the host changed, so a field a co-host changed meanwhile is not put back', async () => {
+    api.updateEvent.mockResolvedValue({ ...EVENT, title: 'Q4 Kickoff, day one' });
+    await mount();
+    openDetails();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Q4 Kickoff, day one' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.updateEvent).toHaveBeenCalledWith('5307', { title: 'Q4 Kickoff, day one' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Event details' })).toBeNull());
+    expect(screen.getByTestId('event-facts')).toHaveTextContent('Fri 9 Oct 2026');
+  });
+
+  it('a new start time sends the start; nothing changed sends nothing', async () => {
+    api.updateEvent.mockResolvedValue({ ...EVENT, startsAt: '2026-10-09T10:30' });
+    await mount();
+    openDetails();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Event details' })).toBeNull());
+    expect(api.updateEvent).not.toHaveBeenCalled();
+    openDetails();
+    fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '10:30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.updateEvent).toHaveBeenCalledWith('5307', { startsAt: '2026-10-09T10:30' }));
+  });
+
+  it('agenda_changed: the plain sentence in the dialog, the event reloaded behind it, and the retry sends the change again', async () => {
+    api.updateEvent.mockRejectedValueOnce(changed()).mockResolvedValueOnce({ ...EVENT, title: 'Renamed', startsAt: '2026-10-16T09:00' });
+    await mount();
+    openDetails();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed' } });
+    serve(DAY, { ...EVENT, startsAt: '2026-10-16T09:00' }); // a co-host moved the date meanwhile
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('The event changed while you were saving. Nothing was saved; reload it and try again.');
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByTestId('event-facts')).toHaveTextContent('Fri 16 Oct 2026'));
+    expect(screen.getByLabelText('Name')).toHaveValue('Renamed');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.updateEvent).toHaveBeenLastCalledWith('5307', { title: 'Renamed' }));
+  });
+});
+
 describe('who can join', () => {
   it('reads event.access when present, and falls back to "Anyone with the code"', async () => {
     serve(DAY, { ...EVENT, access: undefined });

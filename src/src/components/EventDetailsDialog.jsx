@@ -24,6 +24,11 @@ import './EventsPanel.css';
  * refusal is said here before it is sent — and the server's own sentence is
  * shown if it refuses anyway (a Personal space in a stale tab: 402).
  *
+ * EDITING SENDS ONLY WHAT CHANGED, so a stale dialog cannot put back what a
+ * co-host changed after it opened; the server refuses a write that raced
+ * another (409 agenda_changed), and `onRefused` has the builder reload the
+ * event while this dialog keeps what was typed (final review M3).
+ *
  * TWO EXITS, ONE CLOSE: the X and Close both go through `requestClose`, which
  * asks before discarding typed words; Escape and the backdrop are gated on the
  * same (hard rules 2 and 3).
@@ -56,7 +61,7 @@ const REPORT_CHOICES = [
   { value: 'none', label: 'Not shared', sentence: 'Reports stay in the console.' },
 ];
 
-export default function EventDetailsDialog({ initial = null, onClose, onSaved }) {
+export default function EventDetailsDialog({ initial = null, onClose, onSaved, onRefused }) {
   const editing = Boolean(initial && initial.code);
   const [baseline] = useState(() => {
     const start = (initial && initial.startsAt) || '';
@@ -96,14 +101,33 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved })
       setError(checked.error);
       return;
     }
+    /* AN EDIT SENDS ONLY WHAT THIS HOST CHANGED (final review M3). The PUT
+       keeps every field a body leaves out, so a name changed here cannot put
+       back a date a co-host moved after this dialog opened — which the whole
+       form, read when the dialog opened, would. Nothing changed, nothing
+       sent. */
+    const v = checked.value;
+    const changes = {};
+    if (title !== baseline.title) changes.title = v.title;
+    if (place !== baseline.place) changes.place = v.place;
+    if (date !== baseline.date || time !== baseline.time) changes.startsAt = v.startsAt;
+    if (timeZone !== baseline.timeZone) changes.timeZone = v.timeZone;
+    if (reports !== baseline.reports) changes.attendeeReports = v.attendeeReports;
+    if (editing && Object.keys(changes).length === 0) {
+      onClose();
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      const event = editing ? await updateEvent(initial.code, checked.value) : await createEvent(checked.value);
+      const event = editing ? await updateEvent(initial.code, changes) : await createEvent(v);
       onSaved(event);
     } catch (err) {
       setError(err.message || 'The event was not saved.');
       setBusy(false);
+      // A 404 or 409 (another write landed first): the builder reloads the
+      // event behind this dialog, which stays open with what was typed.
+      if (onRefused && (err.status === 404 || err.status === 409)) onRefused(err);
     }
   };
 

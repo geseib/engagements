@@ -553,6 +553,9 @@ export default function EventBuilder({ code, sets = [], onTitle }) {
         <EventDetailsDialog
           initial={event}
           onClose={() => setDetailsOpen(false)}
+          /* Another write landed first (409) or the event is gone (404):
+             reload the facts behind the dialog, which keeps what was typed. */
+          onRefused={() => { load(); }}
           onSaved={(saved) => {
             setDetailsOpen(false);
             setEvent({ ...event, ...saved });

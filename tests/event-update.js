@@ -100,6 +100,48 @@ const put = (code, body, ctx = asHost(NW)) => update(request({
     } finally { table.put(held); }
   });
 
+  console.log('\n2b. a rename cannot undo a date move that lands while it is saving (final review M3)');
+  // rejects: the rename's METADATA Update conditioned only on
+  // attribute_exists(PK). It read METADATA, a co-host's date move committed,
+  // and then it wrote the OLD StartsAt and ttl back over METADATA and the list
+  // row while the items and the code kept the new ttl — rows on two clocks.
+  await check('the rename that read first loses: 409 agenda_changed, and the date move stands whole', async () => {
+    const moveTo = startsIn(150);
+    const gate = table.hold((c) => c.type === 'transactWrite');
+    const renaming = put(code, { title: 'Renamed in the other tab' });
+    await gate.reached;
+    const moved = await put(code, { startsAt: moveTo });
+    assert.strictEqual(moved.statusCode, 200, moved.body);
+    const afterMove = JSON.stringify(rows());
+    gate.release();
+    const late = await renaming;
+    assert.strictEqual(late.statusCode, 409, late.body);
+    assert.strictEqual(bodyOf(late).code, 'agenda_changed');
+    assert.strictEqual(JSON.stringify(rows()), afterMove, 'the losing rename wrote something');
+    const expected = rules.eventTtl(moveTo, Math.floor(Date.now() / 1000));
+    for (const [name, row] of Object.entries(rows())) assert.strictEqual(row.ttl, expected, `${name} is on another clock`);
+    assert.strictEqual(plainRow(NW, rows().meta).Title, 'Q4 Kickoff, day one');
+  });
+  await check('with nothing in between, the same rename saves, and UpdatedAt moves on', async () => {
+    const was = rows().meta.UpdatedAt;
+    await new Promise((r) => setTimeout(r, 5));
+    const res = await put(code, { title: 'Renamed in the other tab' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(plainRow(NW, rows().meta).Title, 'Renamed in the other tab');
+    assert.notStrictEqual(rows().meta.UpdatedAt, was);
+  });
+  await check('an event written before UpdatedAt existed can still be renamed', async () => {
+    const meta = rows().meta;
+    const bare = { ...meta };
+    delete bare.UpdatedAt;
+    table.put(bare);
+    try {
+      const res = await put(code, { place: 'Riverside Hall, east wing' });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.ok(rows().meta.UpdatedAt, 'the rename did not stamp UpdatedAt');
+    } finally { table.put({ ...rows().meta }); }
+  });
+
   console.log('\n3. refusals change nothing');
   for (const [label, patch] of [
     ['an empty name', { title: '  ' }],
