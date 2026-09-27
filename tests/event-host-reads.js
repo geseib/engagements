@@ -73,6 +73,17 @@ async function seedItem(code, itemId, fields) {
       assert.strictEqual(events.length, 4);
     } finally { table.pageSize = null; }
   });
+  // rejects: an eventually consistent list — the console re-reads it the
+  // moment a delete succeeds, and a stale page lists the event it just
+  // removed, which then opens as "No event has that code."
+  await check('every page of the list is a strongly consistent read', async () => {
+    const from = table.log.length;
+    await list(NW);
+    const reads = table.log.slice(from).filter((e) => e.type === 'query'
+      && e.input.ExpressionAttributeValues[':pk'] === `ORG#${NW}#EVENTS`);
+    assert.ok(reads.length >= 1, 'the list was not read');
+    for (const q of reads) assert.strictEqual(q.input.ConsistentRead, true);
+  });
   await check('a caller acting for no organisation is refused', async () => {
     const res = await list('', asHost(''));
     assert.strictEqual(res.statusCode, 403, res.body);

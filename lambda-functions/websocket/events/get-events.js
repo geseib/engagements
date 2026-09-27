@@ -24,7 +24,10 @@ exports.handler = async (request) => {
   if (refused) return refused;
   const orgId = tenant.callerOrgId(request);
   try {
-    const rows = await S.queryAll(db, TABLE(), tenant.eventsIndexPk(orgId), S.INDEX_PREFIX);
+    // Strongly consistent: the console re-reads this list the moment a delete
+    // succeeds, and an eventually consistent page can still carry the event
+    // it just removed — which then opens as "No event has that code."
+    const rows = await S.queryAll(db, TABLE(), tenant.eventsIndexPk(orgId), S.INDEX_PREFIX, { consistent: true });
     const events = [];
     for (const row of rows) {
       try {
