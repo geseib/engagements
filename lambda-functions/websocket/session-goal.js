@@ -55,16 +55,32 @@ function checkTarget(value, questionCount) {
 }
 
 /**
- * How many questions a set has at `version`: the entry in versions[] when it
- * records a count, else the set's own count, which is the active version's.
- * The rule websocket/events/event-store.js describeSet reasons from.
+ * How many questions a set has at `version` — the number the goal is bounded
+ * by, which must be what will actually be asked, not what the builder
+ * displays about the pin.
+ *
+ * A `version` NOT FOUND in versions[] plays the ACTIVE version at run time:
+ * that is set-version.js `resolvePartitionFromMeta`'s 'pinned-missing' case
+ * (lambda-functions/websocket/set-version.js, the `if (active) return
+ * at(active, 'pinned-missing');` branch) — the pin was deleted, so the
+ * session falls back to whatever is active now. The bound below follows that
+ * same fallback, which is why it disagrees with
+ * websocket/events/event-store.js `describeSet`: describeSet reports
+ * `questionCount: 0, pinnedMissing: true` for this case, but that is a
+ * DISPLAY value so the builder can warn the host and offer "Use vN" — a
+ * different job from bounding a goal by what will actually play.
+ *
+ * An entry that IS found in versions[] but records no count of its own is a
+ * different case: genuinely unknown, not "the active version's count" (it
+ * may be an older, differently-sized version). That returns null, so
+ * `checkTarget` bounds the goal by TARGET_MAX alone rather than guess.
  */
 function questionCountAt(setMeta, version) {
   if (!setMeta) return 0;
   const wanted = toCount(version);
   if (wanted !== null && Array.isArray(setMeta.versions)) {
     const entry = setMeta.versions.find((v) => toCount(v && v.version) === wanted);
-    if (entry && toCount(entry.questionCount)) return Number(entry.questionCount);
+    if (entry) return toCount(entry.questionCount);
   }
   return toCount(setMeta.questionCount) || 0;
 }

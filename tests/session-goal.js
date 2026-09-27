@@ -48,6 +48,11 @@ check('an unknown size bounds the goal by the ceiling alone', () => {
   assert.deepStrictEqual(G.checkTarget(999, 0), { value: 999 });
   assert.deepStrictEqual(G.checkTarget(12, undefined), { value: 12 });
 });
+check('surrounding space is trimmed', () => assert.deepStrictEqual(G.checkTarget(' 5 ', 50), { value: 5 }));
+check('NaN is refused in plain words', () =>
+  assert.strictEqual(G.checkTarget(NaN, 50).error, 'A goal is a whole number of questions, 1 or more.'));
+check('Infinity is refused in plain words', () =>
+  assert.strictEqual(G.checkTarget(Infinity, 50).error, 'A goal is a whole number of questions, 1 or more.'));
 check('a survey has no goal; every round-based format does', () => {
   assert.strictEqual(G.goalApplies('survey'), false);
   assert.strictEqual(G.goalApplies(' Survey '), false);
@@ -66,11 +71,15 @@ check('the active version, and no version at all, give the set\'s count', () => 
   assert.strictEqual(G.questionCountAt(SET, 3), 12);
   assert.strictEqual(G.questionCountAt(SET, null), 12);
 });
-check('a version that records no count falls back to the set\'s', () =>
-  assert.strictEqual(G.questionCountAt(SET, 2), 12));
+check('a pin missing from versions[] plays the active version at run time (resolvePartitionFromMeta\'s pinned-missing fallback), so the bound follows it', () =>
+  assert.strictEqual(G.questionCountAt(SET, 5), 12));
+check('an entry that exists but records no count of its own is unknown, not the active version\'s', () =>
+  assert.strictEqual(G.questionCountAt(SET, 2), null));
 check('no set is size 0 (unknown)', () => assert.strictEqual(G.questionCountAt(null, 1), 0));
 
 console.log('\n3. where a running session stands');
+check('goalReachedLine reads the notice for a given goal', () =>
+  assert.strictEqual(G.goalReachedLine(5), 'That’s your 5. Keep going if there’s time, or end the session.'));
 const NONE = { progress: '', reached: false, line: '' };
 check('no goal: nothing to say', () =>
   assert.deepStrictEqual(G.goalProgress({ target: null, round: 3, phase: 'ASK' }), NONE));
