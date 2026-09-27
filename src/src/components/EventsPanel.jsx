@@ -217,9 +217,15 @@ export default function EventsPanel({
                     <td>{event.access === 'invite' ? 'Invite only' : 'Anyone with the code'}</td>
                     <td className="evts-mono">{event.code}</td>
                     <td>
-                      {event.itemCount > 0
+                      {event.state === 'LIVE' && <span className="evts-chip evts-chip--type">Running</span>}
+                      {event.state === 'ENDED' && <span className="evts-chip evts-chip--off">Ended</span>}
+                      {event.state !== 'LIVE' && event.state !== 'ENDED' && (event.itemCount > 0
                         ? <span className="evts-chip evts-chip--type">Scheduled</span>
-                        : <span className="evts-chip evts-chip--off">Draft</span>}
+                        : <span className="evts-chip evts-chip--off">Draft</span>)}
+                      {/* "N joined" (events M2): a count, never a name. */}
+                      {Number(event.attendeeCount) > 0 && (
+                        <span className="evts-sub" data-testid="event-joined">{`${event.attendeeCount} joined`}</span>
+                      )}
                     </td>
                     <td>
                       <div className="evts-rowact">

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import BrandMark from './BrandMark';
+import { EventBarContext } from './event/eventBar';
 import HelpButton from './HelpButton';
 // The shell is the `.plr` scope root, so it brings the scope's stylesheet with
 // it; PlayerPage imports it too, and webpack loads it once.
@@ -37,6 +38,7 @@ export const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
   centre = false, dock = null, after = null, progress = null, children,
 }) => {
+  const eventBar = useContext(EventBarContext);
   const metered = typeof progress === 'number' && Number.isFinite(progress);
   const pct = metered ? Math.max(0, Math.min(100, Math.round(progress))) : null;
   return (
@@ -58,6 +60,14 @@ export const PlayerShell = ({
               <span className={`plr-dot${online ? '' : ' plr-dot--off'}`} />
               {who}
             </span>
+          )}
+          {/* AN EVENT'S ITEM (events M4): the agenda, one tap away from any
+              screen. Nothing is lost by looking: the session stays open behind
+              it, and "Back to live" returns to exactly this screen. */}
+          {eventBar && typeof eventBar.onAgenda === 'function' && (
+            <button type="button" className="plr-agenda" onClick={eventBar.onAgenda}>
+              Agenda
+            </button>
           )}
           {/*
             THE PLAYER'S ONLY WAY INTO THE DOCUMENTATION WRITTEN FOR THEM.

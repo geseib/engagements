@@ -146,6 +146,10 @@
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--evb-rule-strong); color: var(--muted); white-space: nowrap;
 }
 .evb-chip--warn { color: var(--primary); border-color: var(--evb-rule-warn); }
+/* An item's state on the day (events M3), beside its name. */
+.evb-runstate { margin-left: 6px; }
+/* "Run the event" is a link to the stage, drawn as the primary button. */
+.evb-facts-acts a.evb-btn { text-decoration: none; }
 .evb-error {
   margin: 12px 0 0; padding: 9px 12px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
   background: var(--evb-tint-danger); color: var(--danger-text); font-size: var(--evb-t-label);

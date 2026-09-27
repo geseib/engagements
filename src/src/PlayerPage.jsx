@@ -19,8 +19,15 @@ import { PlayerShell } from './components/PlayerShell';
 import SurveyRunner from './components/survey/SurveyRunner';
 import { namesMode } from './config/surveyNames';
 import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
+import { resolveJoinCode, joinPathFor } from './utils/joinCode';
+import { navigateTo } from './auth/navigate';
 
 const API_BASE = window.API_BASE;
+
+/** What an event tells the room inside one of its items (websocket/events/run.js). */
+export const EVENT_FRAMES = Object.freeze([
+  'eventItemPaused', 'eventItemResumed', 'eventItemStarted', 'eventItemEnded', 'eventEnded',
+]);
 
 /**
  * What a survey's join screen adds about the name: the Names value's own phone
@@ -242,8 +249,26 @@ const roundNumberOf = (question, gameState) => {
   return Number.isFinite(fromState) && fromState > 0 ? fromState : null;
 };
 
-function PlayerPage() {
+/**
+ * `event` — AN EVENT'S ITEM (events M4). Given by the attendee's page
+ * (components/event/EventAttendeePage.jsx) when the host starts an
+ * engagement: `{ code, token, gameId, onAgenda, onFrame, onNotJoined }`. The
+ * page then plays that one session exactly as it plays any other, with three
+ * differences and no more:
+ *   - it joins with the attendee's token, never a typed code or name
+ *     (game/join-game.js takes `attendeeToken` for a session with EventRef);
+ *   - it hands the event's frames (eventItemPaused, …) to `onFrame`, since
+ *     they arrive on this session's socket and the singleton client allows one
+ *     handler per type;
+ *   - the end screen offers "Back to the agenda".
+ * Without `event`, nothing here changes: /play reads its code from the URL.
+ */
+function PlayerPage({ event = null } = {}) {
   const [gameId, setGameId] = useState('');
+  const eventRef = useRef(event);
+  eventRef.current = event;
+  const inEvent = Boolean(event && event.gameId);
+  const [eventJoinError, setEventJoinError] = useState(null);
   
   // Helper function to check if game is in waiting state
   const isWaitingState = (state) => {
@@ -479,6 +504,16 @@ function PlayerPage() {
   */
 
   useEffect(() => {
+    // AN EVENT'S ITEM: the code and the identity come from the event, not the
+    // URL, and the join needs no tap — the attendee joined the event already.
+    if (eventRef.current && eventRef.current.gameId) {
+      const gid = String(eventRef.current.gameId);
+      setGameId(gid);
+      setGameIdFromUrl(true);
+      attemptEventJoin(gid);
+      return;
+    }
+
     // 🔗 PLAYER: Get game ID from URL params (optional)
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdFromUrl = urlParams.get('gameId');
@@ -536,7 +571,7 @@ function PlayerPage() {
    * (see components/joinResult.js). `claimExisting` is only ever true when the
    * person has said so out loud.
    */
-  const performJoin = async (gid, name, { accessCode = null, claimExisting = false } = {}) => {
+  const performJoin = async (gid, name, { accessCode = null, claimExisting = false, attendeeToken = null } = {}) => {
     const trimmed = String(name || '').trim();
     const clientId = getClientId(gid);
 
@@ -549,7 +584,10 @@ function PlayerPage() {
           playerName: trimmed,
           accessCode,
           clientId,
-          claimExisting
+          claimExisting,
+          // An event's attendee (events M4): the server takes the name from
+          // the event, so `playerName` is empty here.
+          ...(attendeeToken ? { attendeeToken } : {})
         }),
       });
     } catch (error) {
@@ -640,6 +678,31 @@ function PlayerPage() {
     if (!quiet) setJoinError(failure.message);
   };
 
+  /**
+   * AN EVENT'S ITEM, JOINED BY TOKEN (events M4). No form: the attendee's name
+   * is the event's, and the seat is theirs every time they come back
+   * (game/join-game.js joinAsAttendee). A token the event no longer knows
+   * sends the attendee back to the event's name step; anything else is shown
+   * with a way to try again.
+   */
+  const attemptEventJoin = async (gid) => {
+    const ev = eventRef.current || {};
+    setEventJoinError(null);
+    const result = await performJoin(gid, '', { attendeeToken: ev.token });
+    if (result.ok) {
+      const name = String((result.data && result.data.playerName) || '').trim();
+      enterSession(gid, name, result.data);
+      return;
+    }
+    if (result.status === 401 && typeof ev.onNotJoined === 'function') {
+      ev.onNotJoined();
+      return;
+    }
+    setEventJoinError(result.failure && result.failure.message
+      ? result.failure.message
+      : 'Could not get you into this item. Try again.');
+  };
+
   // 🔄 Attempt to automatically join the game
   const attemptAutoJoin = async (gameId, name, accessCode = null) => {
     console.log(`🔄 PLAYER: Auto-joining game ${gameId} as ${name}`);
@@ -727,7 +790,18 @@ function PlayerPage() {
     (async () => {
       try {
         const res = await fetch(`${API_BASE}games/${briefCode}?role=player`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          // NO SESSION BY THAT CODE — IT MAY BE AN EVENT'S (events M2). An
+          // event's code typed here, or arriving in a /play?gameId= link, goes
+          // to the attendee's page. Asked only after this 404, so a session's
+          // join makes no request it did not make before; anything but "an
+          // event" leaves this page exactly as it was.
+          if (res.status === 404 && !eventRef.current) {
+            const kind = await resolveJoinCode(briefCode, { apiBase: API_BASE });
+            if (!cancelled && kind === 'event') navigateTo(joinPathFor(briefCode, kind));
+          }
+          return;
+        }
         const data = await res.json();
         if (cancelled || !data || typeof data !== 'object') return;
         setBrief({
@@ -948,6 +1022,20 @@ function PlayerPage() {
       applyGameState(data?.newState || SURVEY_CLOSED);
     });
 
+    /*
+      THE EVENT'S FRAMES (events M3/M4, websocket/events/run.js). They arrive
+      on this session's socket, and the event's own page decides what the
+      attendee sees next — the paused screen, the agenda, the next item — so
+      they are handed straight up. Registered for every session and harmless
+      outside an event: nothing sends them to a session without EventRef.
+    */
+    for (const type of EVENT_FRAMES) {
+      webSocketClient.onMessage(type, (data) => {
+        const ev = eventRef.current;
+        if (ev && typeof ev.onFrame === 'function') ev.onFrame(type, data || {});
+      });
+    }
+
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
     webSocketClient.connect(gameId, playerName, false);
@@ -981,6 +1069,7 @@ function PlayerPage() {
       webSocketClient.offMessage('gameEnded');
       webSocketClient.offMessage('surveyClosingSoon');
       webSocketClient.offMessage('surveyClosed');
+      for (const type of EVENT_FRAMES) webSocketClient.offMessage(type);
     };
   }, [gameId, playerName, joined, useWebSocket]);
 
@@ -2492,6 +2581,40 @@ function PlayerPage() {
     </div>
   );
 
+  // AN EVENT'S ITEM, NOT YET IN (events M4). No form: the join is by the
+  // attendee's token and needs nothing typed. Either it is on its way, or it
+  // was refused and says why, with a way to try again and a way back.
+  if (inEvent && !joined) {
+    return (
+      <PlayerShell
+        phase="join"
+        volume="rest"
+        ctx="Joining"
+        centre
+        dock={eventJoinError ? (
+          <button type="button" className="plr-btn" onClick={() => attemptEventJoin(String(event.gameId))}>
+            Try again
+          </button>
+        ) : null}
+      >
+        {eventJoinError ? (
+          <>
+            <h1 className="plr-h1">Not in yet.</h1>
+            <p className="plr-err" role="alert">
+              <Icon name="WarningCircle" weight="bold" size={16} />
+              {eventJoinError}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="plr-h1">Getting you in…</h1>
+            <p className="plr-lede plr-muted">No code and no name to type: you joined the event already.</p>
+          </>
+        )}
+      </PlayerShell>
+    );
+  }
+
   // The name is already answering in this session. Shown ahead of everything
   // else on the join side: it is the only screen that tells the second Chris
   // they are the second Chris, and it used to not exist — the server merged
@@ -3001,11 +3124,20 @@ function PlayerPage() {
           away — is on the main screen.
         </LookUpCue>
         <p className="plr-help" style={{ marginTop: '18px' }}>
-          You can close this page. If your host publishes a session summary, they will share
-          the link themselves.
+          {inEvent
+            ? 'Keep this page open: the next item starts here by itself.'
+            : 'You can close this page. If your host publishes a session summary, they will share the link themselves.'}
         </p>
       </>
     );
+    // AN EVENT'S ITEM (events M4): the day goes on, and the agenda is one tap.
+    if (inEvent && typeof event.onAgenda === 'function') {
+      dock = (
+        <button type="button" className="plr-btn" onClick={() => event.onAgenda()}>
+          Back to the agenda
+        </button>
+      );
+    }
 
   /* ------------------------------------------------------------------ ASK -- */
   } else if (gameState.startsWith('ASK#') && currentQuestion) {

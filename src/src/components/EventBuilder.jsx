@@ -73,6 +73,9 @@ import './EventBuilder.css';
  * @param {Function} [onTitle] (title) => void — the place's heading follows a rename
  * @param {Function} [onDeleted] (code) => void — the event is gone; show the list
  */
+/** An item's state on the day (events M3), said in a word; planned says nothing. */
+const RUN_WORDS = Object.freeze({ live: 'Live', paused: 'Paused', done: 'Done' });
+
 const TYPE_ICONS = {
   trivia: 'Brain',
   'call-and-answer': 'ChatCircleText',
@@ -416,10 +419,28 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
         {event.place && <div className="evb-fact"><span className="evb-lab">Place</span><span className="evb-v">{event.place}</span></div>}
         <div className="evb-fact"><span className="evb-lab">Who can join</span><span className="evb-v">{ACCESS_LABELS[event.access] || 'Anyone with the code'}</span></div>
         <div className="evb-fact"><span className="evb-lab">Join code</span><span className="evb-code">{event.code}</span></div>
+        {/* "N joined" (events M2): joins, not people — a "Not you?" joins
+            again. A count only; the host never sees a list of names here. */}
+        <div className="evb-fact" data-testid="event-joined">
+          <span className="evb-lab">Joined</span>
+          <span className="evb-v">{Number(event.attendeeCount) || 0}</span>
+        </div>
         <div className="evb-fact evb-facts-acts">
           <button type="button" className="evb-btn" onClick={() => setDetailsOpen(true)}>
             <Icon name="PencilSimple" weight="bold" size={14} color="currentColor" /> Edit details
           </button>
+          {/* RUN THE EVENT (events M3): the event on the wall, in its own tab
+              so this builder stays where it is. The stage starts, pauses and
+              ends each item; phones follow by themselves. */}
+          <a
+            className="evb-btn evb-btn--primary"
+            href={`/host/event/${encodeURIComponent(event.code)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon name="Monitor" weight="bold" size={14} color="currentColor" />
+            {event.state === 'LIVE' ? ' Open the stage' : event.state === 'ENDED' ? ' The stage' : ' Run the event'}
+          </a>
         </div>
       </div>
 
@@ -575,6 +596,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                     <td>
                       <span className="evb-nm" title={shown}>{shown}</span>
                       {line.text && <span className={`evb-sub${line.bad ? ' evb-sub--bad' : ''}`} title={line.text}>{line.text}</span>}
+                      {RUN_WORDS[item.state] && <span className="evb-chip evb-chip--warn evb-runstate">{RUN_WORDS[item.state]}</span>}
                     </td>
                     <td>
                       <span className={`evb-type${isBreak ? ' evb-type--brk' : ''}`}>
@@ -606,7 +628,14 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                             Remove
                           </button>
                         ) : (
-                          <button type="button" className="evb-btn evb-btn--sm" aria-label={`Edit ${item.title}`} onClick={() => setDialog({ mode: 'edit', type: item.type, item })}>
+                          <button
+                            type="button"
+                            className="evb-btn evb-btn--sm"
+                            aria-label={`Edit ${item.title}`}
+                            disabled={Boolean(RUN_WORDS[item.state])}
+                            title={RUN_WORDS[item.state] ? 'This item has started, so it cannot be changed.' : undefined}
+                            onClick={() => setDialog({ mode: 'edit', type: item.type, item })}
+                          >
                             Edit
                           </button>
                         )}

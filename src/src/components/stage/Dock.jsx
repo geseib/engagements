@@ -70,7 +70,7 @@ import CompletionFlag from './CompletionFlag';
  * ---------------------------------------------------------------------------
  */
 export default function Dock({
-  status, hint, kbd, onSetup, complete = false, progress = null, children,
+  status, hint, kbd, onSetup, onAgenda, complete = false, progress = null, children,
 }) {
   return (
     <footer className="dock">
@@ -115,6 +115,22 @@ export default function Dock({
         a live-looking control wired to nothing once it stopped being the
         only caller.
       */}
+      {/*
+        AN EVENT'S ITEM (events M3, roadmap D5): the way back to the event's
+        agenda, beside SESSION and shaped like it. Part-way through, the item
+        pauses; once it has ended, it ends. Only where there is an event.
+      */}
+      {onAgenda && (
+        <button
+          type="button"
+          className="dock-more"
+          onClick={onAgenda}
+          aria-label="Back to the event's agenda"
+          title="Back to the event's agenda — the item pauses, and resumes where it left off"
+        >
+          <span className="dock-more-lbl">AGENDA</span>
+        </button>
+      )}
       {onSetup && (
         <button
           type="button"

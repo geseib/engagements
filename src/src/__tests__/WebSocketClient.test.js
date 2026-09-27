@@ -105,4 +105,30 @@ describe('the shared WebSocket client', () => {
     expect(socket.close).toHaveBeenCalled();
     expect(webSocketClient.isConnected()).toBeFalsy();
   });
+
+  // rejects: a disconnected socket's late close reaching the socket opened
+  //          after it. An event's next item remounts the player page, which
+  //          disconnects and connects in one tick; the old socket's onclose
+  //          used to stop the NEW socket's heartbeat and report it offline.
+  test('a late close from a disconnected socket does not touch the next one', () => {
+    const status = jest.fn();
+    webSocketClient.connect('4821', 'Ada', false);
+    const old = sockets[0];
+    old.readyState = 1;
+    webSocketClient.disconnect();
+
+    webSocketClient.onConnectionStatusChange(status);
+    webSocketClient.connect('5307', 'Ada', false);
+    const next = sockets[1];
+    next.readyState = 1;
+    if (next.onopen) next.onopen();
+    status.mockClear();
+
+    if (old.onclose) old.onclose({ code: 1000, reason: 'Manual disconnect' });
+
+    expect(old.onclose).toBeNull();
+    expect(status).not.toHaveBeenCalledWith(false);
+    expect(webSocketClient.isConnected()).toBe(true);
+    webSocketClient.onConnectionStatusChange(null);
+  });
 });

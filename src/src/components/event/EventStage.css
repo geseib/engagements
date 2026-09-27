@@ -1,0 +1,502 @@
+/* ===========================================================================
+   EventStage.css — the event on the wall (events M3), and the host's agenda
+   panel over it.
+
+   THE WALL is docs/design/agenda-redesign/_src/agenda-stage.css, carried over
+   as a DIFF against the shipped stage (styles/stage.css): every size reads
+   the profile ladder (--t-*, --hair), so Room, TV, Call and Table each get
+   their own literal numbers; every colour is a Warm Summit token or the
+   stage's own (--rule, --success-text); the way in is the lobby's
+   .joinblock / .qr / .joininfo, reused; the trigger is the stage's own .wipe.
+   New classes are prefixed ag-. Nothing loops.
+
+   THE PANEL AND THE CONFIRM are laptop surfaces over the stage — the host at
+   the lectern, not the room — so they take the console's ladder
+   (12/13/15/19/24px, RATIONALE §3), not the wall's, declared locally as
+   --ag-t-*. Rows are 44px: the panel is pressed on a touchscreen as often as
+   clicked.
+
+   MEASURED on the stage's lifted stack (#2A3550, agenda-stage.css):
+     --text on lifted                 10.49:1  agenda titles
+     --muted on lifted                 6.76:1  times, type lines
+     --success-text on lifted          6.52:1  "Done"
+     --primary on lifted               6.21:1  "Next", "Now", the kicker
+   On the panel (--surface #1B2942):
+     --text                           13.01:1
+     --muted #9BA8BE                   6.47:1
+     --primary                         7.43:1  "Live", "Paused"
+     --danger-text #EF8C86             5.34:1  "End the event…"
+     --bg #0F1A2E on --primary         8.86:1  the Start button
+   ======================================================================== */
+
+.ag-stage-root {
+  --ag-t-floor: 12px;
+  --ag-t-label: 13px;
+  --ag-t-body: 15px;
+  --ag-t-head: 19px;
+  --ag-t-title: 24px;
+  --ag-rule: rgba(155, 168, 190, .22);
+  --ag-now-tint: rgba(246, 169, 76, .10);
+  --ag-scrim: rgba(6, 11, 22, .72);
+}
+
+/* ------------------------------------------------ loading and refusal --- */
+.ag-load {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: center;
+}
+
+.ag-load h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.ag-load a {
+  color: var(--primary);
+  font-size: 15px;
+}
+
+/* ----------------------------------------------------- the wall agenda --
+   Every item, in order, its state said in a WORD. Done items step back;
+   the live or first one carries the amber edge. Titles wrap. */
+.ag-wall {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(.6vh + 2px);
+  border-left: var(--hair) solid var(--rule);
+  padding-left: calc(1.4vw + 10px);
+  width: clamp(420px, 38vw, 760px);
+  align-self: start;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.ag-wall h4 {
+  margin: 0 0 calc(.4vh + 2px);
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.ag-wl {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ag-wl li {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr) auto;
+  gap: .1em calc(.7vw + 8px);
+  align-items: baseline;
+  padding: calc(.7vh + 4px) calc(.6vw + 6px);
+  border-bottom: var(--hair) solid var(--rule);
+  min-width: 0;
+}
+
+.ag-wl li:last-child {
+  border-bottom: 0;
+}
+
+.ag-wl .at {
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-wl .tt {
+  font-size: var(--t-body);
+  font-weight: 700;
+  line-height: 1.18;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ag-wl .ty {
+  display: block;
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: .03em;
+  margin-top: .15em;
+}
+
+.ag-wl .st {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ag-wl li.done .tt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ag-wl li.done .st {
+  color: var(--success-text);
+}
+
+.ag-wl li.now {
+  background: var(--ag-now-tint);
+  border-left: calc(var(--hair) * 4) solid var(--primary);
+  border-radius: 0 10px 10px 0;
+  border-bottom-color: transparent;
+}
+
+.ag-wl li.now .st {
+  color: var(--primary);
+}
+
+.ag-wl li.now .tt {
+  font-size: var(--t-secondary);
+  line-height: 1.1;
+}
+
+.ag-wl li.more .tt {
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+/* ------------------------------------------------------------ up next --- */
+.ag-up {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.2vh + 4px);
+  min-width: 0;
+}
+
+.ag-up .ty {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.ag-up .ty svg {
+  width: 1.3em;
+  height: 1.3em;
+  flex: none;
+}
+
+.ag-up .q {
+  max-width: 22ch;
+  margin: 0;
+}
+
+.ag-up .qdetail {
+  max-width: 40ch;
+}
+
+.ag-up .joinblock {
+  margin-top: calc(1.2vh + 6px);
+}
+
+.ag-up .qr {
+  width: clamp(220px, 26vh, 320px);
+  height: clamp(220px, 26vh, 320px);
+}
+
+.ag-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-hero);
+  line-height: .98;
+  letter-spacing: -.01em;
+  margin: 0;
+  max-width: 16ch;
+  color: var(--text);
+}
+
+.ag-date {
+  font-size: var(--t-secondary);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ag-who {
+  margin: -.2em 0 0;
+  font-size: var(--t-secondary);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A break: the countdown at the hero tier, once. It stops at 0:00. */
+.ag-count {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--t-hero) * 1.6);
+  line-height: .95;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+/* The trigger: the wipe names the item AND says the phones have moved. */
+.wipe.ag-go small b {
+  color: var(--primary);
+}
+
+/* ------------------------------------------------ the host's agenda panel -- */
+.ag-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--ag-scrim);
+}
+
+.ag-scrim > * {
+  margin: auto;
+}
+
+.ag-panel,
+.ag-confirm {
+  width: min(720px, calc(100vw - 32px));
+  padding: 20px 24px;
+  border: 1px solid var(--ag-rule);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--ag-t-body);
+}
+
+.ag-confirm {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.ag-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ag-panel-head h2,
+.ag-confirm h2 {
+  margin: 0;
+  font-size: var(--ag-t-head);
+  font-weight: 700;
+}
+
+.ag-x {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ag-x:hover {
+  color: var(--text);
+}
+
+.ag-refusal {
+  margin: 0 0 8px;
+  color: var(--primary);
+  font-size: var(--ag-t-label);
+}
+
+.ag-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ag-row {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ag-rule);
+}
+
+.ag-row:last-child {
+  border-bottom: 0;
+}
+
+.ag-row--live {
+  background: var(--ag-now-tint);
+}
+
+.ag-row-at {
+  color: var(--muted);
+  font-size: var(--ag-t-label);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-row-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ag-row-tt {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.ag-row--done .ag-row-tt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ag-row-ty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--ag-t-label);
+}
+
+.ag-row-st {
+  font-size: var(--ag-t-floor);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ag-row-st--live,
+.ag-row-st--paused {
+  color: var(--primary);
+}
+
+.ag-row-st--done {
+  color: var(--success-text);
+}
+
+/* The row's own actions, on its right. Not justify-content:flex-end — that
+   overflows toward the start, where nothing can reach it (the skill's rule
+   9); the group is its own auto track, and wraps. */
+.ag-row-go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ag-row-go > :first-child {
+  margin-left: auto;
+}
+
+.ag-act {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--primary);
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--bg);
+  font-family: inherit;
+  font-size: var(--ag-t-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ag-act--quiet {
+  border-color: var(--ag-rule);
+  background: none;
+  color: var(--text);
+}
+
+.ag-act:disabled,
+.ag-end:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.ag-panel-foot,
+.ag-confirm-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ag-rule);
+}
+
+.ag-joined {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: var(--ag-t-label);
+  overflow-wrap: anywhere;
+}
+
+.ag-confirm-foot {
+  justify-content: flex-end;
+}
+
+.ag-confirm p {
+  margin: 10px 0 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.ag-close,
+.ag-end {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: var(--ag-t-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ag-close {
+  border: 1px solid var(--ag-rule);
+  background: none;
+  color: var(--text);
+}
+
+.ag-end {
+  border: 1px solid var(--danger-deep);
+  background: none;
+  color: var(--danger-text);
+}

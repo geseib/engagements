@@ -1324,6 +1324,34 @@
   color: var(--text);
 }
 
+/* THE EVENT'S AGENDA DOOR, in the bar (events M4; PlayerShell reads
+   components/event/eventBar.js). A bordered word rather than an icon: it is
+   the one way back to the day, so it says so. --text on --bg, 44px tall. */
+.plr-agenda {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--plr-tap);
+  margin: 0 0 0 8px;
+  padding: 0 12px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.plr-agenda:hover,
+.plr-agenda:active {
+  border-color: var(--plr-amber-edge);
+}
+
 /* ==========================================================================
    12. THE SURVEY — answering at your own pace
    ==========================================================================

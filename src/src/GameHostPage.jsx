@@ -88,6 +88,8 @@ import {
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
+import { getEvent, runEvent } from './utils/eventsApi';
+import { navigateTo } from './auth/navigate';
 
 const API_BASE = window.API_BASE;
 
@@ -122,6 +124,20 @@ function GameHostPage() {
   
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
+  /*
+    AN EVENT'S ITEM (events M3). The event's code when this session is one
+    item of an event's agenda: from `?event=` (the wall, components/event/
+    EventStage.jsx, opens an item's stage that way) or from the session's own
+    host-state (`eventRef`), so a session reopened from history still knows.
+    It changes three things and no more: the dock gains an Agenda door; the
+    lobby's QR and code are the EVENT's (attendees join the day once, never an
+    item); and "Back to Menu" goes back to the agenda instead.
+  */
+  const [eventCode, setEventCode] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('event') || '';
+    return /^\d{4}$/.test(fromUrl) ? fromUrl : '';
+  });
+  const [eventBusy, setEventBusy] = useState(false);
   /*
     Bumped by every switchToGame(), including one that re-opens the game
     already in `gameId`. It exists ONLY to re-fire the restore effect in that
@@ -2263,6 +2279,20 @@ Focus on actionable business strategy insights.`;
       setAiSummaryFailure(classifyAISummaryFailure({ phase: 'generation' }));
     });
 
+    /*
+      THE EVENT MOVED ON WITHOUT THIS SCREEN (events M3). Another host screen —
+      the wall on a second device, a laptop — paused this item, started
+      another, or ended the day. The item is no longer the room's, so this
+      stage goes back to the event's wall, which follows whatever is live.
+    */
+    const backToTheWall = (data) => {
+      const code = (data && data.event) || '';
+      if (/^\d{4}$/.test(String(code))) navigateTo(`/host/event/${code}`);
+    };
+    webSocketClient.onMessage('eventItemPaused', backToTheWall);
+    webSocketClient.onMessage('eventItemStarted', backToTheWall);
+    webSocketClient.onMessage('eventEnded', backToTheWall);
+
     webSocketClient.onMessage('gameEnded', (data) => {
       console.log('🔌 Game ended notification:', data);
       // A dialog box is not how a session ends. The stage moves to its ENDED
@@ -2350,6 +2380,9 @@ Focus on actionable business strategy insights.`;
       // that outlived its session and fired with a stale closure. Found by the
       // registered/removed symmetry test in __tests__/hostControls.test.js.
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('eventItemPaused');
+      webSocketClient.offMessage('eventItemStarted');
+      webSocketClient.offMessage('eventEnded');
       webSocketClient.offMessage('surveyProgress');
       webSocketClient.offMessage('surveyClosingSoon');
       webSocketClient.offMessage('surveyClosed');
@@ -2554,6 +2587,10 @@ Focus on actionable business strategy insights.`;
         // response that ever omitted gameMetadata but still carried a session
         // would otherwise leave the previous game's goal on screen.
         setSessionTarget(Number.isInteger(gameStateData.target) ? gameStateData.target : null);
+        // An event's item keeps its Agenda door however it was opened.
+        if (typeof gameStateData.eventRef === 'string' && /^\d{4}$/.test(gameStateData.eventRef)) {
+          setEventCode(gameStateData.eventRef);
+        }
 
         // Restore basic game metadata
         //
@@ -4514,7 +4551,34 @@ Focus on actionable business strategy insights.`;
   */
   const [confirmLeave, setConfirmLeave] = useState(false);
 
+  /**
+   * BACK TO THE EVENT'S AGENDA (events M3, roadmap D1/D5). Part-way through,
+   * the item PAUSES — answers kept, round where it was, phones on "Paused";
+   * once its session has ENDED, the item ends. Then the stage is the event's
+   * wall again. The item is found by this session's code on the event's own
+   * agenda; a refusal is said in the dock, and the stage stays put.
+   */
+  const goToAgenda = async () => {
+    if (!eventCode || eventBusy) return;
+    setEventBusy(true);
+    try {
+      const view = await getEvent(eventCode);
+      const item = (view.items || []).find((i) => String(i.gameId || '') === String(gameId));
+      if (item && (item.state === 'live' || item.state === 'paused')) {
+        await runEvent(eventCode, gameState === 'ENDED' ? 'end' : 'pause', item.itemId);
+      }
+      navigateTo(`/host/event/${eventCode}`);
+    } catch (error) {
+      setSessionActionError((error && error.message) || 'Could not go back to the agenda. Try again.');
+      setEventBusy(false);
+    }
+  };
+
   const requestLeave = () => {
+    if (eventCode) {
+      goToAgenda();
+      return;
+    }
     const midSession = gameState !== 'CREATED' && gameState !== 'ENDED' && players.length > 0;
     if (midSession) {
       setConfirmLeave(true);
@@ -5228,7 +5292,11 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const playUrl = `${window.location.protocol}//${window.location.host}/play?gameId=${gameId}`;
+  // An event's item is joined through the EVENT (events M4): its QR opens the
+  // attendee's page, which joins the day once and follows it into this item.
+  const playUrl = eventCode
+    ? `${window.location.protocol}//${window.location.host}/play?event=${eventCode}`
+    : `${window.location.protocol}//${window.location.host}/play?gameId=${gameId}`;
   // What the RAIL prints, which is a different job: the QR carries the whole
   // URL, and a room reading a bare address off a projector needs the shortest
   // thing that works. The player page takes the session code by hand.
@@ -6618,7 +6686,7 @@ Focus on actionable business strategy insights.`;
                 ? { code: gameId, closed: true }
                 : {
                     url: joinDisplayUrl,
-                    code: gameId,
+                    code: eventCode || gameId,
                     onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : 'preview')),
                     onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' ? mode : null)),
                     onPin: () => setQrMode('pinned'),
@@ -6641,6 +6709,7 @@ Focus on actionable business strategy insights.`;
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
+            onAgenda={eventCode ? goToAgenda : undefined}
             complete={everybodyIn}
             /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
                `heading` / `body`, handed to the dock so that the fitter taking
@@ -6790,8 +6859,8 @@ Focus on actionable business strategy insights.`;
                         says how to join. */}
                     <div className="joininfo">
                       <div className="url">{joinDisplayUrl}</div>
-                      <div className="lbl">Session code</div>
-                      <div className="code">{gameId}</div>
+                      <div className="lbl">{eventCode ? 'Event code' : 'Session code'}</div>
+                      <div className="code">{eventCode || gameId}</div>
                     </div>
                   </div>
                 )}
@@ -6818,7 +6887,7 @@ Focus on actionable business strategy insights.`;
                 names={surveyNames}
                 playUrl={playUrl}
                 joinUrl={joinDisplayUrl}
-                code={gameId}
+                code={eventCode || gameId}
               />
             )}
             {/* …then CLOSED, and a survey's ENDED: counts only (phase 3 draws

@@ -162,6 +162,8 @@ async function start(db, tableName, { meta, code, row, itemId }) {
     throw error;
   }
 
+  if (meta.State !== 'LIVE') await markList(db, tableName, meta, code, 'LIVE');
+
   // The rows are written; now the rooms. The item that was live hears that
   // it paused AND what started, so its phones can follow at once.
   if (prev && prev.GameId) {
@@ -352,11 +354,33 @@ async function endEvent(db, tableName, { meta, code }) {
     if (error && error.name === 'ConditionalCheckFailedException') return { refusal: raced() };
     throw error;
   }
+  await markList(db, tableName, meta, code, 'ENDED');
   for (const row of rows) {
     if (row.GameId) await C.toSession(db, tableName, row.GameId, { type: 'eventEnded', event: code });
   }
   console.log(`🏁 run: EVENT#${code} ended`);
   return {};
+}
+
+/**
+ * THE EVENTS LIST SAYS IT TOO: Running, then Ended, on the organisation's list
+ * row, which the console's list reads without opening every event. Best
+ * effort, after the event's own rows: a miss costs the list a word.
+ */
+async function markList(db, tableName, meta, code, state) {
+  if (!meta.orgId) return;
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: { PK: tenant.eventsIndexPk(meta.orgId), SK: S.indexSk(code) },
+      UpdateExpression: 'SET #st = :st',
+      ConditionExpression: 'attribute_exists(PK)',
+      ExpressionAttributeNames: { '#st': 'State' },
+      ExpressionAttributeValues: { ':st': state },
+    }));
+  } catch (error) {
+    console.warn(`⚠️ run: the list row of EVENT#${code} did not take ${state}: ${error && error.name}`);
+  }
 }
 
 /**
