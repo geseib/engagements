@@ -157,10 +157,14 @@ export default function EventItemDialog({
 
   /* The set the options are about: the one chosen in the picker, or the one
      an edited item pins. Its size bounds the goal — the pinned version's own
-     count on an edit (event-store.describeSet), the picked version's on an add. */
+     count on an edit (event-store.describeSet), the picked version's on an
+     add. Its VERSION (fix round 1) is what the categories are read at too:
+     an edited item's categories must come from the version it PLAYS, not
+     whatever the set has been replaced by since — the pinned version on an
+     edit, the version about to be pinned on an add. */
   const optionsSet = editing
-    ? (item.setRef ? { setId: item.setRef.setId, scope: item.setRef.scope || 'platform' } : null)
-    : (chosen ? { setId: chosen.id, scope: chosen.scope || 'platform' } : null);
+    ? (item.setRef ? { setId: item.setRef.setId, scope: item.setRef.scope || 'platform', version: item.setRef.version } : null)
+    : (chosen ? { setId: chosen.id, scope: chosen.scope || 'platform', version: chosen.activeVersion } : null);
   const questionCount = editing
     ? Number(item.set && item.set.questionCount) || 0
     : Number(chosen && chosen.questionCount) || 0;
@@ -168,29 +172,35 @@ export default function EventItemDialog({
     ? ((sets.find((s) => item.setRef && s.id === item.setRef.setId && (s.scope || 'platform') === (item.setRef.scope || 'platform')) || {}).promptId || '')
     : ((chosen && chosen.promptId) || '');
   const showOptions = engagement && !unreadable && Boolean(optionsSet);
-  const optionsKey = optionsSet ? `${optionsSet.scope}|${optionsSet.setId}` : '';
+  const optionsKey = optionsSet ? `${optionsSet.scope}|${optionsSet.setId}|${optionsSet.version ?? ''}` : '';
   const goalProblem = engagement && !isSurvey
     ? (goalRules.checkTarget(options.target, questionCount).error || '')
     : '';
 
+  // Both fetches are gated on `showOptions` (fix round 1): an unreadable
+  // item's options are never shown, and neither list is anyone's business
+  // to fetch for it.
   useEffect(() => {
-    if (!engagement) return undefined;
+    if (!showOptions) return undefined;
     let live = true;
     listPersonas(type).then((list) => { if (live) setPersonas(list); });
     return () => { live = false; };
-  }, [engagement, type]);
+  }, [showOptions, type]);
 
   useEffect(() => {
-    if (!optionsSet || isSurvey) return undefined;
+    if (!showOptions || isSurvey) return undefined;
     let live = true;
-    listSetCategories(optionsSet.setId, optionsSet.scope).then((list) => { if (live) setCategories(list); });
+    listSetCategories(optionsSet.setId, optionsSet.scope, optionsSet.version).then((list) => { if (live) setCategories(list); });
     return () => { live = false; };
-  }, [optionsKey, isSurvey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showOptions, optionsKey, isSurvey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** The settings this item stores: only the keys its format has. */
+  /** The settings this item stores: only the keys its format has. Category
+      ids are SORTED (fix round 1) so toggling one off and back on again is
+      not a change — a Set's own iteration order is insertion order, and
+      without this a no-op toggle would trip `dirty` and reorder what is sent. */
   const settingsNow = () => rules.settingsFor(type, {
     ...options,
-    categoryIds: Array.from(chosenCats),
+    categoryIds: Array.from(chosenCats).sort(),
     briefing: briefing && briefing.text && briefing.text.trim() ? briefing : null,
   });
   const [settingsBaseline] = useState(() => JSON.stringify(settingsNow()));
@@ -246,6 +256,7 @@ export default function EventItemDialog({
 
   const submit = async (e) => {
     if (e) e.preventDefault();
+    if (briefingWorking) return; // The button disables, but Enter in a field still submits the form.
     if (unreadable) return;
     if (picking && !chosen) {
       setError('Choose a question set for this item.');
@@ -514,16 +525,31 @@ export default function EventItemDialog({
                tokens they wear — the same dusk card and field this dialog's
                surface is (sessionOptionsPalette.test.js). */
             <div className="gsd evb-sopts" data-testid="item-session-options">
-              {!isSurvey && categories.length > 0 && (
+              {!isSurvey && (categories.length > 0 ? (
                 <SessionCategories
                   idPrefix="evb-so"
                   categories={categories}
                   selected={chosenCats}
                   onToggle={toggleCategory}
                 />
-              )}
+              ) : chosenCats.size > 0 && (
+                /* An empty list here is NOT "every category" (fix round 1):
+                   this item already narrowed its categories, and a fetch
+                   that has not come back must not read as though the grid
+                   had confirmed sending them all. */
+                <p className="evb-hint" data-testid="evb-so-categories-unavailable">
+                  This item plays only the categories chosen before; the list could not be loaded.
+                </p>
+              ))}
               {type === 'call-and-answer' && (
                 <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} />
+              )}
+              {options.personaId && personas.length === 0 && (
+                /* Same honesty for a stored voice the persona list cannot
+                   confirm (fix round 1) — the select still carries it. */
+                <p className="evb-hint" data-testid="evb-so-persona-unavailable">
+                  This item plays the voice chosen before; the list of voices could not be loaded.
+                </p>
               )}
               <SessionOptions
                 idPrefix="evb-so"

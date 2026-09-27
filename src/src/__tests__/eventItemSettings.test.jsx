@@ -31,6 +31,7 @@ const lists = require('../utils/sessionSetupApi');
 
 const SETS = [
   { id: 'custq4', scope: 'org', orgId: 'org_nw', name: 'Customer knowledge — Q4', engagementType: 'trivia', activeVersion: 3, questionCount: 10, active: true },
+  { id: 'salesq1', scope: 'org', orgId: 'org_nw', name: 'Sales pulse — Q1', engagementType: 'trivia', activeVersion: 2, questionCount: 6, active: true },
   { id: 'friction', scope: 'org', orgId: 'org_nw', name: 'Friction finder', engagementType: 'call-and-answer', activeVersion: 5, questionCount: 4, active: true },
   { id: 'kickoff', scope: 'platform', orgId: null, name: 'Kickoff pulse', engagementType: 'survey', activeVersion: 1, questionCount: 5, active: true },
 ];
@@ -48,15 +49,35 @@ beforeEach(() => {
 });
 
 describe('adding an engagement', () => {
-  it('offers the options once a set is chosen, reading its categories from its own library', async () => {
+  it('offers the options once a set is chosen, reading its categories from its own library at the version about to be pinned', async () => {
     render(<EventItemDialog {...base()} />);
     expect(screen.queryByTestId('item-session-options')).toBeNull();
     fireEvent.click(screen.getByLabelText('Customer knowledge — Q4'));
     expect(await screen.findByRole('button', { name: /Ops/ })).toBeInTheDocument();
-    expect(lists.listSetCategories).toHaveBeenCalledWith('custq4', 'org');
+    expect(lists.listSetCategories).toHaveBeenCalledWith('custq4', 'org', 3);
     expect(lists.listPersonas).toHaveBeenCalledWith('trivia');
     expect(screen.getByLabelText('Goal')).toBeInTheDocument();
     expect(screen.getByText('of 10 questions')).toBeInTheDocument();
+  });
+
+  // fix round 1: a stale response from a set picked and then un-picked must
+  // never overwrite what the LATER pick's own fetch returns.
+  it('a category fetch from a set no longer chosen never overwrites the one now chosen', async () => {
+    // mockImplementationOnce TWICE, never the persistent mockImplementation —
+    // that would leak this pending-promise stand-in into every later test in
+    // this file and hang them once the two calls below are made.
+    const resolvers = [];
+    const standIn = () => new Promise((resolve) => { resolvers.push(resolve); });
+    lists.listSetCategories.mockImplementationOnce(standIn).mockImplementationOnce(standIn);
+    render(<EventItemDialog {...base()} />);
+    fireEvent.click(screen.getByLabelText('Customer knowledge — Q4'));
+    fireEvent.click(screen.getByLabelText('Sales pulse — Q1'));
+    expect(resolvers).toHaveLength(2);
+    // Resolve the LATER pick's fetch first, then the abandoned one's — late.
+    await act(async () => { resolvers[1]([{ name: 'FromSales', questionCount: 3 }]); });
+    await act(async () => { resolvers[0]([{ name: 'FromCustomer', questionCount: 9 }]); });
+    expect(await screen.findByRole('button', { name: /FromSales/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /FromCustomer/ })).toBeNull();
   });
 
   it('what the host chooses is sent as the item\'s settings, and only the keys trivia has', async () => {
@@ -125,6 +146,9 @@ describe('editing an engagement', () => {
     const p = base({ mode: 'edit', item: ITEM });
     render(<EventItemDialog {...p} />);
     await screen.findByRole('button', { name: /Ops/ });
+    // fix round 1: v2 is what this item PLAYS — custq4's own activeVersion is
+    // 3, and the categories must come from the pin, never the newer version.
+    expect(lists.listSetCategories).toHaveBeenCalledWith('custq4', 'org', 2);
     expect(screen.getByLabelText('Goal')).toHaveValue('4');
     expect(screen.getByText('of 8 questions')).toBeInTheDocument();
     expect(screen.getByLabelText('Instructions for Workie')).toHaveValue('Be brief.');
@@ -141,5 +165,50 @@ describe('editing an engagement', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]);
     expect(window.confirm).toHaveBeenCalled();
     expect(p.onClose).not.toHaveBeenCalled();
+  });
+
+  // fix round 1: toggling a category off and back on is not a change — the
+  // sent (and compared) categoryIds are SORTED, not left in toggle order,
+  // which would otherwise move a re-added category to the end of the array.
+  it('toggling a category off and back on is not a change, and does not reorder what is sent', async () => {
+    const BOTH = { ...ITEM, settings: { ...ITEM.settings, categoryIds: ['Leadership', 'Ops'] } };
+    const p = base({ mode: 'edit', item: BOTH });
+    render(<EventItemDialog {...p} />);
+    const leadership = await screen.findByRole('button', { name: /Leadership/ });
+    fireEvent.click(leadership); // remove Leadership — left with just Ops
+    fireEvent.click(leadership); // add it back — insertion order is now Ops, Leadership
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]);
+    expect(window.confirm).not.toHaveBeenCalled(); // sorted, so this reads as unchanged
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
+    expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', expect.objectContaining({
+      settings: expect.objectContaining({ categoryIds: ['Leadership', 'Ops'] }),
+    }));
+  });
+
+  // fix round 1: an empty list on an edit is not "every category" or a
+  // silent voice swap — the item's own choices are kept, said plainly, and
+  // sent back unchanged.
+  it('a categories or personas fetch that comes back empty keeps the item\'s own choices and says so', async () => {
+    lists.listSetCategories.mockResolvedValueOnce([]);
+    lists.listPersonas.mockResolvedValueOnce([]);
+    const p = base({ mode: 'edit', item: ITEM });
+    render(<EventItemDialog {...p} />);
+    await settle();
+    expect(screen.getByText('This item plays only the categories chosen before; the list could not be loaded.')).toBeInTheDocument();
+    expect(screen.getByText('This item plays the voice chosen before; the list of voices could not be loaded.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
+    expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', expect.objectContaining({ settings: ITEM.settings }));
+  });
+
+  // fix round 1: neither fetch is anyone's business for an item whose words
+  // could not be opened — its options are never shown.
+  it('fetches neither list for an item whose words could not be read', async () => {
+    const p = base({ mode: 'edit', item: { ...ITEM, decryptFailed: true } });
+    render(<EventItemDialog {...p} />);
+    await settle();
+    expect(lists.listPersonas).not.toHaveBeenCalled();
+    expect(lists.listSetCategories).not.toHaveBeenCalled();
   });
 });
