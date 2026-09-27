@@ -121,6 +121,20 @@ const PUBLIC_ROUTES = [['GET', '/events/{code}/agenda'], ['GET', '/join/{code}']
       });
     }
   }
+  // rejects: the host door reading METADATA before it asks who is calling
+  // (final review M5). A route that ever lost its authorizer would then cost a
+  // strongly consistent read per anonymous guess; with the identity checked
+  // first it costs nothing.
+  for (const key of Object.keys(HANDLERS)) {
+    await check(`${key} — no identity at all: the unknown code's 404, and not one table call`, async () => {
+      const unknown = bodyOf(await callAs(key, asHost('org_nw'), '9999'));
+      const before = table.log.length;
+      const res = await callAs(key, { authorizer: { lambda: { orgId: 'org_nw', orgIds: 'org_nw', groups: 'hosts' } } }, code);
+      assert.strictEqual(res.statusCode, 404, res.body);
+      assert.deepStrictEqual(bodyOf(res), unknown);
+      assert.deepStrictEqual(table.log.slice(before).map((e) => e.type), [], 'the door read the table before asking who was calling');
+    });
+  }
   await check('and nothing any of them sent was written', () => {
     const rows = [...table.store.values()].filter((r) => r.PK === `EVENT#${code}`);
     assert.deepStrictEqual(rows.map((r) => r.SK), ['METADATA']);

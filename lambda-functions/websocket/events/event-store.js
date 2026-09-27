@@ -15,6 +15,7 @@ const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { eventPk, callerMayManageEvent, ORG } = require('../tenant');
 const { decryptItem } = require('../tenant-crypto');
 const { getSetMetadata, toVersion } = require('../set-version');
+const { callerSub } = require('./event-http');
 
 const META_SK = 'METADATA';
 const INDEX_PREFIX = 'EVENT#';
@@ -112,8 +113,17 @@ async function readItems(db, tableName, code) {
  * THE HOST ROUTES' DOOR. The event's METADATA row when this caller may act on
  * it, else null — for a malformed code, an unknown one and somebody else's
  * alike, so the caller answers every case with the same 404.
+ *
+ * NO IDENTITY, NO READ (final review M5). The caller's user id is asked for
+ * before anything touches the table: a request with none is refused at no
+ * cost, and tenant.callerMayManageEvent — which reads groups and
+ * organisations, not the user id — is never the only thing standing between
+ * an anonymous request and an event. Every host route carries the Cognito
+ * authorizer, which always supplies the id; this is what holds if one ever
+ * does not (tests/event-routes-authorization.js counts the table calls).
  */
 async function openEvent(db, tableName, request, code) {
+  if (!callerSub(request)) return null;
   const meta = await readMeta(db, tableName, code);
   if (!meta) return null;
   return callerMayManageEvent(request, meta) ? meta : null;
