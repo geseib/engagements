@@ -5,6 +5,7 @@ import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
 import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
+import { feedbackRoundFrom } from './config/sessionHistory';
 import {
   participationUrl, participationFrom, nextParticipation,
 } from './utils/playerParticipation';
@@ -1315,7 +1316,7 @@ function PlayerPage({ event = null } = {}) {
       setFeedbackComments([]);
       return;
     }
-    setFeedbackRound(result.round);
+    setFeedbackRound(feedbackRoundFrom(result.round));
     setFeedbackNumber(result.questionNumber);
     setFeedbackComments((result.round && result.round.comments) || []);
   };

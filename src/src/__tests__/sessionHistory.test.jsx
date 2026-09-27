@@ -19,7 +19,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import PastRound from '../components/PastRound';
 import {
   roundsFrom, roundSubtitle, hasSummary, indexOfRound,
-  answersFrom, snippetOf, podiumAnswers, roundIsAttributed,
+  answersFrom, snippetOf, podiumAnswers, roundIsAttributed, feedbackRoundFrom,
 } from '../config/sessionHistory';
 
 /**
@@ -195,6 +195,48 @@ describe('turning a report into a list of rounds', () => {
     expect(indexOfRound(rounds, '002')).toBe(0);
     expect(indexOfRound(rounds, 10)).toBe(1);
     expect(indexOfRound(rounds, 99)).toBe(-1);
+  });
+});
+
+/*
+ * THE ROUND A PHONE IS HANDED IN A FEEDBACK ROUND. `GET /feedback-round`
+ * returns the stored report's own slice, and the phone used to pass it to
+ * RoundReport as it came: a blank title over blank rows on every Call & Answer
+ * and poll feedback round (27 Sep 2026).
+ */
+describe('the feedback round a phone is handed', () => {
+  test('the report\'s slice becomes the round RoundReport draws', () => {
+    // rejects: the slice passed through raw (questionData.title, answerText).
+    const round = feedbackRoundFrom({
+      questionNumber: '003',
+      questionData: { title: 'Competitive response', detail: 'They cut price 20%.' },
+      answers: [{ answerText: 'Hold price.', rank: 1, answerIndex: 0 }],
+      aiSummary: { markdownResponse: '## What We Heard' },
+      comments: [{ commentId: 'c1', text: 'Agree' }],
+    });
+    expect(round.title).toBe('Competitive response');
+    expect(round.detail).toBe('They cut price 20%.');
+    expect(round.number).toBe('003');
+    expect(round.answers[0].answer).toBe('Hold price.');
+    expect(round.aiSummary.markdownResponse).toBe('## What We Heard');
+    expect(round.comments).toHaveLength(1);
+  });
+
+  test('a closed survey\'s round keeps its kind, so its rows read as questions', () => {
+    const round = feedbackRoundFrom({
+      kind: 'survey',
+      questionNumber: '000',
+      title: 'Offsite pulse',
+      questionData: { title: 'Offsite pulse', detail: '2 answered · 4 questions' },
+      answers: [{ answerIndex: 0, answer: '1. How useful? 2 answered.', answerText: '1. How useful? 2 answered.' }],
+    });
+    expect(round.kind).toBe('survey');
+    expect(round.title).toBe('Offsite pulse');
+    expect(round.answers[0].answer).toBe('1. How useful? 2 answered.');
+  });
+
+  test('no round is no round', () => {
+    expect(feedbackRoundFrom(null)).toBeNull();
   });
 });
 

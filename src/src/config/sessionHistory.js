@@ -242,9 +242,26 @@ export function roundsFrom(payload) {
           is missing".
         */
         comments: Array.isArray(round.comments) ? round.comments : [],
+        // A closed survey's feedback round (comments.js surveyFeedbackRound):
+        // its rows are the survey's questions, and RoundReport titles them so.
+        ...(round.kind ? { kind: round.kind } : {}),
       };
     })
     .sort((a, b) => a.ordinal - b.ordinal);
+}
+
+/**
+ * THE ONE ROUND `GET /feedback-round` HANDS A PHONE, in the shape RoundReport
+ * draws. The route returns the stored report's own slice — `questionData.title`
+ * and `answers[].answerText` — and the phone passed it to RoundReport as it
+ * came, so a Call & Answer or poll feedback round showed a blank title over
+ * blank response rows (found 27 Sep 2026; the survey's round happened to send
+ * both spellings). The same normaliser the host's Rounds tab uses, so the two
+ * can never draw one round differently.
+ */
+export function feedbackRoundFrom(slice) {
+  if (!slice) return null;
+  return roundsFrom({ detailedQuestions: [slice] })[0] || null;
 }
 
 /**
