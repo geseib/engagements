@@ -9012,6 +9012,19 @@ body {
   line-height: 1.6;
 }
 
+/* "**Lead**: detail" — every Workie point — arrives split (MarkdownRenderer
+   formatListItem: .md-lead, .md-rest) with its colon dropped, for the
+   big-screen notes to stack as headline over caption. Everywhere else the two
+   stay inline and ran together: "Most of the room answeredthe counts" on the
+   stage, the phone's feedback round and the Rounds tab (27 Sep 2026). The
+   colon comes back wherever they are not stacked. */
+.md-point > .md-lead::after {
+  content: ': ';
+}
+.results-state.big-screen-mode .ai-insights-markdown .markdown-li .md-lead::after {
+  content: none;
+}
+
 .markdown-h2 {
   font-size: 1.5rem;
   color: #2c3e50;

@@ -104,7 +104,8 @@ ballot, not a glance).
   each phone's own control, results, What We Heard, next poll. The host screen fits at 1280×720.
 - The same stack now serves the shipped prompts (populate-defaults over an in-memory S3), a canned
   model reply and the summary's self-invoke, so What We Heard runs the real pipeline. Three drives,
-  all green at the push: the typed poll (6), the event day (14), and a survey in an event (9): two
+  all green at the push: the typed poll (7, with a feedback round: title and nameless rows on the
+  phone), the event day (14), and a survey in an event (9): two
   phones answer four kinds, the host closes it, What We Heard, Request feedback, a nameless comment on
   the wall, back, end, and the dock swept from 1000 to 1920 wide.
 
@@ -133,13 +134,22 @@ ballot, not a glance).
   counts"). `MarkdownRenderer` drops the colon for the old big-screen notes to stack; the stage now
   puts it back (`.notes-md .md-lead::after`).
 
+- **Polls are nameless, always** (`anonymity.js` `NAMELESS_TYPES`, both copies). Putting `poll` in
+  the no-vote set had also made `isHidden` false for it, so for a few hours of dev every poll answer
+  went into the report and the feedback round with its author. A poll's phone promises "without
+  names"; nothing reveals a poll until a Names setting exists.
+- **The phone's feedback round was blank** on every Call & Answer and poll round: `GET
+  /feedback-round` returns the report's slice (`questionData.title`, `answers[].answerText`) and the
+  phone passed it to `RoundReport` raw. `PlayerPage` now reads it through `feedbackRoundFrom`
+  (`config/sessionHistory.js`, the host Rounds tab's own `roundsFrom`).
+- **The Workie's read on the phone** was the paper theme's dark slate on the dusk panel;
+  `FeedbackRoundPanel.css` now colours it. The "Lead: detail" colon is one rule in `styles.css`
+  (`.md-point > .md-lead`), off only where the big-screen notes stack.
+
 ## Still open
 
 - The editor's question preview (`QuestionCard`/`questionPreview`) does not draw poll kinds yet.
 - The Names setting for polls (PLAN.md Phase 6) is not built; poll answers are shown without names.
-- Pre-existing, found by the survey worker: on a round-type feedback round the phone is sent the
-  report's shape (`questionData.title`, `answerText`) while the panel reads `title` and `answer`, so
-  titles and response texts can come up blank on phones. The survey round sends both shapes.
 - Template variables tagged for surveys (responses, votes, scores) are always empty for a survey
   read; their tags want re-checking.
 - Settings → Rounds lists a survey's read as "Round 000".

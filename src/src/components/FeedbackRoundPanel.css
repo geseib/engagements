@@ -256,3 +256,22 @@
   opacity: 0.55;
   cursor: default;
 }
+
+/* THE WORKIE'S READ, ON THIS GROUND. MarkdownRenderer brings the paper
+   theme's colours (#2c3e50 headings and body), which on the phone's dusk panel
+   read as dark slate on navy — every feedback round's AI summary, barely
+   legible (seen in Chromium, 27 Sep 2026). The stage fixes the same fault for
+   `.notes-md` in styles/stage.css. */
+.fbr .markdown-content,
+.fbr .markdown-content * {
+  color: var(--fbr-text);
+}
+.fbr .markdown-content h1,
+.fbr .markdown-content h2,
+.fbr .markdown-content h3,
+.fbr .markdown-content h4,
+.fbr .markdown-content h5,
+.fbr .markdown-content h6,
+.fbr .markdown-content strong {
+  color: var(--fbr-accent);
+}
