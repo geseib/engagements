@@ -24,6 +24,10 @@ const { normalizeGameType } = require('./shared/game-types');
 const {
   normalizeRoundKind, roundKindDirection, roundKindDetailCeiling,
 } = require('./shared/round-kinds');
+const { POLL_KINDS, normalizeKind, pollFieldsOf } = require('./shared/survey-kinds');
+const {
+  POLL_MAX_OPTIONS, pollItemProperties, pollKindGuide, typedPollFields,
+} = require('./shared/kind-generation');
 
 const MAX_COUNT = 100;
 
@@ -31,6 +35,44 @@ const textList = (value, limit) => (Array.isArray(value) ? value : [])
   .map((entry) => String(entry ?? '').trim())
   .filter(Boolean)
   .slice(0, limit);
+
+/**
+ * The poll kinds a drafted poll question may be: `kinds` as sent, else all
+ * four. A refine may change the kind when the feedback asks for it ("make it
+ * a yes/no"), so it is offered all four too unless the caller says otherwise.
+ */
+function pollKindsFrom(payload) {
+  const wanted = new Set((Array.isArray(payload.kinds) ? payload.kinds : [])
+    .map((raw) => normalizeKind(raw).kind)
+    .filter(Boolean));
+  const ordered = POLL_KINDS.filter((kind) => wanted.has(kind));
+  return ordered.length > 0 ? ordered : [...POLL_KINDS];
+}
+
+/** The house detail ceiling; above it a round kind hands the room material to read. */
+const FRAMING_CEILING = 350;
+
+/**
+ * An existing poll question's kind and settings, as lines of the refine
+ * prompt. Read through the contract's pollFieldsOf, so a row from before kinds
+ * is described as the choice (or open answer) it plays as.
+ */
+function describePollFields(question) {
+  const f = pollFieldsOf(question);
+  const lines = [`Kind: ${f.kind}`];
+  if (f.kind === 'choice') {
+    if (f.options.length > 0) lines.push(`Options: ${f.options.join(', ')}`);
+    lines.push(`Pick: ${f.allowMultiple ? 'several' : 'one'}`);
+  } else if (f.kind === 'rating') {
+    lines.push(`Scale: ${f.scale}`);
+    if (f.lowLabel || f.highLabel) lines.push(`Scale labels: ${f.lowLabel || '(none)'} to ${f.highLabel || '(none)'}`);
+  } else if (f.kind === 'yesno') {
+    lines.push(`Buttons: ${f.yesLabel || 'Yes'} / ${f.noLabel || 'No'}${f.unsure ? ' / Not sure' : ''}`);
+  } else if (f.kind === 'text') {
+    lines.push(`Answer: ${f.textLength}${f.placeholder ? `, hint "${f.placeholder}"` : ''}`);
+  }
+  return lines.map((line) => `${line}\n`).join('');
+}
 
 function parseRequest(payload) {
   const existing = payload.existingQuestion || null;
@@ -55,6 +97,9 @@ function parseRequest(payload) {
       // shared/round-kinds.js.
       roundKind: normalizeRoundKind(payload.roundKind),
       roundKindBrief: String(payload.roundKindBrief || '').trim(),
+      // A POLL QUESTION IS TYPED (ai-generate-polls.js says why), so the
+      // drafter writes one of these kinds with its fields, never a bare list.
+      pollKinds: pollKindsFrom(payload),
     },
   };
 }
@@ -102,15 +147,26 @@ function buildTool(config) {
     };
     required = [...required, 'questionDetail', 'optionA', 'optionB', 'optionC', 'optionD', 'correctAnswer', 'answerDetails', 'difficulty'];
   } else if (config.gameType === 'poll') {
+    // The same kind and kind fields the poll set generator offers
+    // (shared/kind-generation.js), so a poll question drafted into a set is
+    // the same shape as one generated with it. An instant poll needs no
+    // participant instruction and, outside a round that hands the room
+    // material, no detail either — requiring them is what made a poll read
+    // like a call-and-answer prompt.
+    const carriesMaterial = detailMax > FRAMING_CEILING;
     properties = {
+      ...pollItemProperties(config.pollKinds),
       ...properties,
-      options: {
-        type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5,
-        description: '2-5 genuinely distinct answer options, 60 characters each.',
+      title: { type: 'string', description: 'The poll question itself: one idea, 3-15 words, readable from the back of the room.' },
+      detail: {
+        type: 'string',
+        description: carriesMaterial
+          ? `The material the question is about, 3-8 sentences, ${detailMax} characters maximum.`
+          : `Optional framing shown under the question, 1-3 sentences, ${detailMax} characters maximum. Usually empty.`,
       },
-      allowMultiple: { type: 'boolean', description: 'True only where picking several options is genuinely useful.' },
+      customInstructions: { type: 'string', description: 'Optional: one short sentence, only when the question\'s own buttons do not already say what to do.' },
     };
-    required = [...required, 'options', 'allowMultiple'];
+    required = ['kind', 'title', 'category', ...(carriesMaterial ? ['detail'] : []), 'tags'];
   }
 
   return {
@@ -149,6 +205,23 @@ function lengthGuidanceFor(gameType, roundKind) {
   // weights the most recent formatting instruction most heavily, so a flat 350
   // would quietly overrule an Apply direction that needs the material carried.
   const detailMax = roundKindDetailCeiling(gameType, roundKind);
+  if (gameType === 'poll') {
+    // The poll set generator's limits (ai-generate-polls.js): a poll is read
+    // at a glance, so its detail is usually absent and its answers are short.
+    return [
+      '',
+      '',
+      'LENGTH LIMITS (hard limits, not targets):',
+      '- title: the question itself, 3-15 words.',
+      detailMax > FRAMING_CEILING
+        ? `- detail: 3-8 sentences, ${detailMax} characters maximum.`
+        : `- detail: 1-3 sentences, ${detailMax} characters maximum — and usually none at all.`,
+      '- customInstructions: one short sentence, or none.',
+      `- options: 2-${POLL_MAX_OPTIONS} of them, 40 characters each.`,
+      '- labels and placeholder: a few words, 30 characters maximum.',
+      'Write only what the content needs; do not pad to reach a limit.',
+    ].join('\n');
+  }
   return [
     '',
     '',
@@ -189,7 +262,12 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     ]) {
       if (value) p += `${label}: ${value}\n`;
     }
-    if (Array.isArray(existingQuestion.options) && existingQuestion.options.length > 0) {
+    if (gameType === 'poll') {
+      // The poll as it stands, kind first: without it a rating or a yes/no
+      // under refinement is a title with nothing to say what it asks for, and
+      // comes back as whatever the model guesses.
+      p += describePollFields(existingQuestion);
+    } else if (Array.isArray(existingQuestion.options) && existingQuestion.options.length > 0) {
       p += `Options: ${existingQuestion.options.join(', ')}\n`;
     }
     for (const key of ['optionA', 'optionB', 'optionC', 'optionD']) {
@@ -197,6 +275,7 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     }
     p += `\nUSER FEEDBACK: ${userInput}\n`;
     p += '\nReturn exactly ONE improved question.';
+    if (gameType === 'poll') p += ' Keep its kind unless the feedback asks for another.';
   } else {
     p += `Create ${count} high-quality ${gameType} questions.\n\nREQUIREMENTS: ${userInput}\n`;
     if (context?.title) p += `Question Set Title: ${context.title}\n`;
@@ -241,6 +320,15 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     }
   }
 
+  if (gameType === 'poll') {
+    // An instant-feedback poll, typed — the same kinds and the same guidance
+    // the poll set generator gives, so a question drafted into a poll set
+    // matches the ones generated with it.
+    p += '\n\nA poll is instant feedback: the host puts one question on the main screen and the room answers in'
+      + ' seconds while the results fill in. One idea per question; no correct answer.';
+    p += `\n\n${pollKindGuide(config.pollKinds)}`;
+  }
+
   p += lengthGuidanceFor(gameType, roundKind);
   p += tagGuidance();
   p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
@@ -274,11 +362,12 @@ function normalizeItem(raw, config) {
     item.answerDetails = String(raw?.answerDetails || '').trim();
     item.difficulty = String(raw?.difficulty || 'medium').trim();
   } else if (config.gameType === 'poll') {
-    const options = (Array.isArray(raw?.options) ? raw.options : [])
-      .map((o) => String(o || '').trim()).filter(Boolean).slice(0, 5);
-    if (options.length < 2) return null;
-    item.options = options;
-    item.allowMultiple = raw?.allowMultiple === true;
+    // The kind and the fields it uses, repaired and validated by the contract
+    // (shared/kind-generation.js typedPollFields); a choice with one option, or
+    // a question with neither a kind nor options, is dropped.
+    const fields = typedPollFields(raw, { kinds: config.pollKinds });
+    if (!fields) return null;
+    Object.assign(item, fields);
   }
 
   return item;

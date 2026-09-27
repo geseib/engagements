@@ -600,7 +600,7 @@ const scenarioBody = (overrides = {}) => ({
     // the same defect.
     reset();
     bedrockHandler = () => toolResponse([
-      { title: 'Which reading lands here', category: 'Ops', detail: 'A passage.',
+      { kind: 'choice', title: 'Which reading lands here', category: 'Ops', detail: 'A passage.',
         customInstructions: 'Pick one.', options: ['One', 'Two', 'Three'], allowMultiple: false, tags: ['ops'] },
     ]);
     await runJob(polls, {
@@ -895,7 +895,7 @@ const scenarioBody = (overrides = {}) => ({
     // how every AI-generated poll set once imported with zero options.
     reset();
     bedrockHandler = () => toolResponse([{
-      title: 'Which release cadence', category: 'Delivery', detail: 'Pick one.',
+      kind: 'choice', title: 'Which release cadence', category: 'Delivery', detail: 'Pick one.',
       customInstructions: 'Choose.', options: ['Weekly', 'Fortnightly', 'Monthly'],
       allowMultiple: false, school: 'Delivery', tags: ['delivery'],
     }]);
@@ -906,6 +906,55 @@ const scenarioBody = (overrides = {}) => ({
     const row = questionRows('deliverypolls')[0];
     assert.deepStrictEqual(row.options, ['Weekly', 'Fortnightly', 'Monthly']);
     assert.strictEqual(row.allowMultiple, false);
+    assert.strictEqual(row.kind, 'choice');
+  });
+
+  await test('a typed poll set stores each question\'s kind and fields, under its own category', async () => {
+    // rejects: the old Options,AllowMultiple writer. It has no column for a
+    // kind, a scale or a label, so a rating or a yes/no poll arrived as a
+    // choice with no options — the "open text box" the owner reported — and
+    // the importer has no way to tell. The poll CSV is the survey contract's
+    // columns (shared/generated-set.js pollsToCsv), each row keeping its own
+    // category rather than the survey's `Survey`.
+    reset();
+    bedrockHandler = () => toolResponse([
+      { kind: 'rating', title: 'How ready is the launch', category: 'Launch', scale: '1-10',
+        lowLabel: 'Not at all ready', highLabel: 'Ready today', tags: ['launch'] },
+      { kind: 'yesno', title: 'Adopt the new review rule', category: 'Process',
+        yesLabel: 'Approve', noLabel: 'Decline', unsure: true, tags: ['process'] },
+      { kind: 'text', title: 'One word for the quarter', category: 'Launch', placeholder: 'One word', tags: ['mood'] },
+    ]);
+    const { job } = await runJob(polls, {
+      topic: 'launch readiness', count: 3, kinds: ['rating', 'yesno', 'text'],
+      setMetadata: { title: 'Launch Polls', description: 'd', customInstructions: 'c', aiContextInstructions: 'a' },
+    });
+    assert.ok(job.createdSet, `no set was created: ${job.setCreationError}`);
+    const rows = questionRows('launchpolls');
+    assert.strictEqual(rows.length, 3, 'a typed poll was skipped on import');
+    const byTitle = Object.fromEntries(rows.map((r) => [r.Title, r]));
+
+    const rating = byTitle['How ready is the launch'];
+    assert.strictEqual(rating.kind, 'rating');
+    assert.strictEqual(rating.scale, '1-10');
+    assert.strictEqual(rating.lowLabel, 'Not at all ready');
+    assert.strictEqual(rating.highLabel, 'Ready today');
+    assert.strictEqual(rating.Category, 'Launch');
+
+    const yesno = byTitle['Adopt the new review rule'];
+    assert.strictEqual(yesno.kind, 'yesno');
+    assert.strictEqual(yesno.yesLabel, 'Approve');
+    assert.strictEqual(yesno.noLabel, 'Decline');
+    assert.strictEqual(yesno.unsure, true);
+    assert.strictEqual(yesno.Category, 'Process', 'a poll keeps its own category, never "Survey"');
+
+    const text = byTitle['One word for the quarter'];
+    assert.strictEqual(text.kind, 'text');
+    assert.strictEqual(text.textLength, 'short');
+    assert.strictEqual(text.placeholder, 'One word');
+    for (const r of rows) {
+      assert.ok(!Array.isArray(r.options) || r.options.length === 0 || r.kind === 'choice',
+        `${r.kind} "${r.Title}" carries a choice's options`);
+    }
   });
 
   await test('a quote inside a title is escaped, not left to shift every column', async () => {

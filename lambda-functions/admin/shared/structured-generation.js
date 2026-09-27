@@ -63,7 +63,28 @@ const PER_ITEM_TOKENS = {
   // actually is. Twenty subjects still fit one call (600 + 20×260 < 8000).
   wavelength: 260,
   survey: 200,
-  poll: 260,
+  /*
+    A TYPED POLL, priced from its worst-case item like call-and-answer and
+    trivia below. 260 was sized for the old shape — a title, a short detail and
+    3-5 options — and never for an Apply round, whose detail carries 900
+    characters of material. Typing the poll (ai-generate-polls.js) adds the
+    kind and up to twelve kind fields, and a model tends to emit every property
+    it is offered, empty or not. Same arithmetic as the block below:
+
+      typed poll (Apply round, a choice — the widest kind — all four offered)
+        title 15 words ≈ 90 ch ........ 26    customInstructions ≈ 120 ch  35
+        category ≈ 40 ch .............. 12    school ≈ 40 ch ............. 12
+        detail 900 ch ................ 258    6 tags × ≈20 ch + quotes ... 54
+        options 5 × 40 ch ............. 60    kind ........................ 2
+        allowMultiple, maxPicks,              the other kinds' 8 fields,
+          allowOther, shuffle ........... 4      emitted empty .............. 8
+        19 keys + braces .............. 97                         total  568
+
+    × 1.2 for a model overshooting a stated maximum: 682, rounded up to 690.
+    What it costs: ten polls a pass rather than twenty-eight, so the builder's
+    default of ten is still one call.
+  */
+  poll: 690,
   /*
     CALL & ANSWER AND TRIVIA ARE PRICED FROM THEIR WORST-CASE ITEM, because the
     question-background work made `background` a REQUIRED field in both schemas

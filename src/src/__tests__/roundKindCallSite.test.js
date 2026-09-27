@@ -101,14 +101,19 @@ describe('the builder hands it over', () => {
   });
 
   test('the poll instruction keeps the game MECHANIC and adds the direction', () => {
-    // rejects: replacing "Select your preferred option(s)" with the round
-    // kind's line. The mechanic is how a poll works and never changes; the
-    // direction is what the options are about. A poll set needs both, and
-    // dropping the mechanic would leave the room not knowing it may pick more
-    // than one.
+    // rejects: replacing the mechanic line with the round kind's line. The
+    // mechanic is how a poll is answered; the direction is what the questions
+    // are about. A poll set needs both, and dropping the mechanic would leave
+    // the room not knowing how to answer. Since polls are typed, the mechanic
+    // is written for the kinds the set was made with (utils/pollDraft.js) —
+    // "Select your preferred option(s)" was wrong for a rating, a yes/no or an
+    // open answer.
     const source = read('components', 'PollAIBuilder.jsx');
-    expect(source).toContain('Select your preferred option(s)');
+    expect(source).toMatch(/pollMechanicInstruction\(pollConfig\.kinds\)/);
     expect(source).toMatch(/roundKindParticipantInstruction\(pollConfig\.roundKind/);
+    const instruction = source.slice(source.indexOf('customInstructions: ['));
+    expect(instruction.indexOf('pollMechanicInstruction'))
+      .toBeLessThan(instruction.indexOf('roundKindParticipantInstruction'));
   });
 
   test('the participant instruction is not keyed on the scenario type', () => {

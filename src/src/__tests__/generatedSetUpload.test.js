@@ -25,6 +25,7 @@ import {
   uploadGeneratedSet,
 } from '../utils/generatedSetUpload';
 import { surveyItemsToCsv } from '../utils/surveyDraft';
+import { pollItemsToCsv } from '../utils/pollDraft';
 import { authFetch } from '../auth/authFetch';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
@@ -60,17 +61,28 @@ describe('the CSV each kind writes', () => {
     ]);
   });
 
-  test('poll: ONE pipe-separated Options column and AllowMultiple as true/false', () => {
-    // rejects: Option1..Option5, which the importer does not read. Every
-    // AI-generated poll set once imported with zero options that way.
-    const csv = generatedSetCsv('poll', [
-      { title: 'LUNCH', detail: 'Where?', category: 'Team', options: ['Tacos', 'Pho', ''], allowMultiple: true, tags: ['food'] },
-      { title: 'WHEN', options: ['Noon'], customInstructions: 'Pick one' },
-    ]);
+  test('poll: the survey contract\'s columns, each question under its own category', () => {
+    // rejects: the old Options,AllowMultiple writer, which had no column for a
+    // kind, a scale or a label — a typed poll written by it imports as a
+    // choice with no options. And rejects Option1..Option5, which the importer
+    // does not read: every AI-generated poll set once imported with zero
+    // options that way.
+    const items = [
+      { kind: 'choice', title: 'LUNCH', detail: 'Where?', category: 'Team', options: ['Tacos', 'Pho', ''], allowMultiple: true, tags: ['food'] },
+      { kind: 'yesno', title: 'SHIP IT', yesLabel: 'Approve', noLabel: 'Decline', customInstructions: 'Vote' },
+      // From before kinds: options and nothing else plays as a choice.
+      { title: 'WHEN', options: ['Noon', 'One'], customInstructions: 'Pick one' },
+    ];
+    const csv = generatedSetCsv('poll', items);
+    expect(csv).toBe(pollItemsToCsv(items));
     expect(csv.split('\n')).toEqual([
-      'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags',
-      '"Team","1","LUNCH","Where?","General","","Tacos|Pho","true","food"',
-      '"General","1","WHEN","","General","Pick one","Noon","false",""',
+      'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,AllowMultiple,MaxPicks,'
+        + 'AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,FollowUpWhen,FollowUpPrompt,RankTop,'
+        + 'TextLength,MaxLength,Placeholder,Themes,Tags',
+      '"Team",1,"LUNCH","Where?","General","","choice","false","Tacos|Pho","true","","false","false","","","","","","false","","","","","","","false","food"',
+      '"General",1,"SHIP IT","","General","Vote","yesno","false","","false","","false","false","","","","Approve","Decline","false","","","","","","","false",""',
+      '"General",2,"WHEN","","General","Pick one","choice","false","Noon|One","false","","false","false","","","","","","false","","","","","","","false",""',
+      '',
     ]);
   });
 
