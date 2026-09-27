@@ -479,6 +479,16 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  question set, as a session's `QuestionSetId` is — are structure, and
    *  stay plaintext. */
   item: Object.freeze(['Title', 'Description', 'LedBy', 'Settings']),
+
+  /** Somebody who joined an open event (events M2): PK=EVENT#<code>,
+   *  SK=ATTENDEE#<id>. `AttendeeName` is the name they typed — a person's
+   *  name, personal data, so it is sealed (a session's `PlayerName` is not;
+   *  the controller ruled this one differently). It is NOT called `Name`:
+   *  tests/tenant-crypto.js holds `Name` plaintext everywhere, for a survey's
+   *  Named rows. `TokenHash` is a SHA-256 and is not a secret; `JoinedAt`,
+   *  `orgId` and `ttl` are a time, an owner and an expiry, and stay
+   *  plaintext. */
+  attendee: Object.freeze(['AttendeeName']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

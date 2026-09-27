@@ -47,6 +47,7 @@ const rules = require('./agenda-rules');
 const { json, notFound, readBody, trace, methodOf } = require('./event-http');
 const S = require('./event-store');
 const { deleteEvent } = require('./delete-event');
+const { restampAttendees } = require('./attendee-store');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -173,6 +174,16 @@ async function updateEvent(request) {
     } catch (error) {
       if (!S.isCancelled(error)) throw error;
       return json(409, { error: S.AGENDA_CHANGED, code: 'agenda_changed' });
+    }
+    // THE ATTENDEES' EXPIRY FOLLOWS THE DATE (events M2), after the commit:
+    // there can be more attendee rows than one transaction holds. A failure
+    // here leaves some on the old clock; the move itself has landed.
+    if (moved) {
+      try {
+        await restampAttendees(db, TABLE(), code, ttl);
+      } catch (error) {
+        console.error(`❌ update-event: EVENT#${code} moved, but some attendees keep the old expiry:`, error && error.message);
+      }
     }
 
     return json(200, {

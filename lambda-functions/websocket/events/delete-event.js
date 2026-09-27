@@ -33,6 +33,15 @@
  *      another organisation's can never be released here, and a reservation
  *      DynamoDB has already reaped (the rows expire together, but deletion is
  *      lazy) does not strand the rest.
+ * ATTENDEES ARE THE EXCEPTION (events M2). An event may have hundreds of
+ * attendee rows, which one transaction cannot hold, so they are left out of it
+ * and deleted straight after it commits (attendee-store.deleteAttendees). That
+ * is safe in both directions: no join can land once METADATA is gone (a
+ * join's count is conditioned on it), and code-reservation.js will not draw
+ * this code again while ANY EVENT# row remains, so a sweep that fails part-way
+ * leaves rows that expire with the event's ttl and hold the code until then —
+ * never rows under somebody else's event.
+ *
  * Ordered writes (items, METADATA, list, reservation last) would satisfy "the
  * code goes back last" only while nothing fails and nothing races: a failure
  * part-way leaves an event half-deleted, and an item added after the item
@@ -50,6 +59,7 @@ const { TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../tenant');
 const { json, notFound, trace, eventsEnabled } = require('./event-http');
 const S = require('./event-store');
+const { deleteAttendees } = require('./attendee-store');
 
 const PLANNED = 'planned';
 const TRANSACTION_LIMIT = 100;
@@ -72,7 +82,7 @@ async function deleteEvent(db, tableName, request) {
     if (!meta) return notFound();
 
     const rows = (await S.queryAll(db, tableName, tenant.eventPk(code), '', { consistent: true }))
-      .filter((row) => row.SK !== S.META_SK);
+      .filter((row) => row.SK !== S.META_SK && !String(row.SK).startsWith(S.ATTENDEE_PREFIX));
     const items = rows.filter((row) => String(row.SK).startsWith(S.ITEM_PREFIX));
     if (items.some((row) => (row.State || PLANNED) !== PLANNED)) {
       return json(409, { error: NOT_PLANNED, code: 'not_planned' });
@@ -133,7 +143,15 @@ async function deleteEvent(db, tableName, request) {
       if (!S.isCancelled(error)) throw error;
       return json(409, { error: CHANGED, code: 'agenda_changed' });
     }
-    console.log(`🗑️ delete-event: EVENT#${code} and ${items.length} item(s) deleted; the code is free`);
+    let attendees = 0;
+    try {
+      attendees = await deleteAttendees(db, tableName, code);
+    } catch (error) {
+      // The event is gone; what is left expires with its ttl and keeps the
+      // code from being drawn until then (see the header).
+      console.error(`❌ delete-event: EVENT#${code} is deleted but some attendee rows remain:`, error && error.message);
+    }
+    console.log(`🗑️ delete-event: EVENT#${code}, ${items.length} item(s) and ${attendees} attendee(s) deleted; the code is free`);
     return json(200, { deleted: code });
   } catch (error) {
     console.error('❌ delete-event failed:', error && error.message);

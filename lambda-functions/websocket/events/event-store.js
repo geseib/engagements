@@ -6,6 +6,8 @@
  *   PK: ORG#<org>#EVENTS  SK: EVENT#<code>   the org's list row
  *   PK: EVENT#<code>      SK: METADATA       the event
  *   PK: EVENT#<code>      SK: ITEM#<id>      one agenda item each
+ *   PK: EVENT#<code>      SK: ATTENDEE#<id>  one per join (events M2,
+ *                                            attendee-store.js)
  *
  * The partition keys come from tenant.js; the sort keys are spelled here and
  * nowhere else. Title, Place and each item's Title and Description are sealed
@@ -20,6 +22,7 @@ const { callerSub } = require('./event-http');
 const META_SK = 'METADATA';
 const INDEX_PREFIX = 'EVENT#';
 const ITEM_PREFIX = 'ITEM#';
+const ATTENDEE_PREFIX = 'ATTENDEE#';
 const CODE = /^\d{4}$/;
 const ITEM_ID = /^it_[0-9a-f]{8}$/;
 
@@ -48,6 +51,9 @@ function projectEvent(row) {
     access: r.Access || 'open',
     state: r.State || 'SCHEDULED',
     itemCount: Number(r.ItemCount) || 0,
+    // "N joined" (events M2): joins, not people — a "Not you?" re-join is a
+    // second row and counts again. A count only; never a name.
+    attendeeCount: Number(r.AttendeeCount) || 0,
   };
   if (r.SK === META_SK) {
     out.engagementCount = Number(r.EngagementCount) || 0;
@@ -60,6 +66,7 @@ function projectEvent(row) {
 }
 
 const itemSk = (itemId) => `${ITEM_PREFIX}${itemId}`;
+const attendeeSk = (attendeeId) => `${ATTENDEE_PREFIX}${attendeeId}`;
 const itemIdOf = (row) => String((row && row.SK) || '').replace(/^ITEM#/, '');
 const isCode = (code) => CODE.test(String(code || ''));
 const isItemId = (itemId) => ITEM_ID.test(String(itemId || ''));
@@ -248,8 +255,8 @@ const AGENDA_CHANGED = 'The event changed while you were saving. Nothing was sav
 const isCancelled = (error) => Boolean(error && error.name === 'TransactionCanceledException');
 
 module.exports = {
-  META_SK, INDEX_PREFIX, ITEM_PREFIX, AGENDA_CHANGED,
-  indexSk, itemSk, itemIdOf, codeOf, isCode, isItemId, isCancelled,
+  META_SK, INDEX_PREFIX, ITEM_PREFIX, ATTENDEE_PREFIX, AGENDA_CHANGED,
+  indexSk, itemSk, attendeeSk, itemIdOf, codeOf, isCode, isItemId, isCancelled,
   queryAll, readMeta, readItems, sortItems, openEvent,
   decryptEvent, decryptItemRow, openItemRow, projectEvent, projectItem, describeSet,
 };

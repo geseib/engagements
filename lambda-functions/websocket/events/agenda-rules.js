@@ -260,6 +260,23 @@ function checkLedBy(input, type) {
   return { value: ledBy };
 }
 
+/**
+ * AN ATTENDEE'S NAME (events M2): what somebody types once to join an open
+ * event. The session join's rules — trimmed, and never empty (PlayerPage
+ * trims before it sends; join-game.js refuses an empty one) — plus the one
+ * cap this file already puts on a person's name, LED_BY_MAX. A session sets
+ * no cap at all, but the attendee route is a public write and needs a bound.
+ * Two people may join under the same name: M2 shows no roster.
+ * @returns {{value: string}|{error: string}}
+ */
+const ATTENDEE_NAME_MAX = LED_BY_MAX;
+function checkAttendeeName(input) {
+  const name = text(input);
+  if (!name) return { error: 'Type your name.' };
+  if (name.length > ATTENDEE_NAME_MAX) return { error: `A name can be ${ATTENDEE_NAME_MAX} characters at most.` };
+  return { value: name };
+}
+
 // ── An engagement's session options (events M1b) ───────────────────────────
 /**
  * WHAT AN ENGAGEMENT ITEM CARRIES OF THE SESSION IT BECOMES. The owner, 26
@@ -428,12 +445,12 @@ module.exports = {
   MAX_ITEMS, MAX_ENGAGEMENTS, MAX_BREAKS,
   ENGAGEMENT_TYPES, PRESENTATION, CUSTOM, BREAK, ITEM_TYPES,
   TYPE_LABELS, TYPE_ALIASES, CAP_SENTENCES,
-  TITLE_MAX, PLACE_MAX, DESCRIPTION_MAX, LED_BY_MAX, LED_BY_LABELS, MIN_MINUTES, MAX_MINUTES,
+  TITLE_MAX, PLACE_MAX, DESCRIPTION_MAX, LED_BY_MAX, LED_BY_LABELS, MIN_MINUTES, MAX_MINUTES, ATTENDEE_NAME_MAX,
   hasLeader, ledByLabel,
   ACCESS_CHOICES, ACCESS_NOW, REPORT_DEFAULTS, DAY, KEEP_DAYS, MAX_DAYS_AHEAD,
   canonicalSetType, isEngagement, isCounted, countItems, capRefusal,
   SETTING_DEFAULTS, SETTING_KEYS, settingKeysFor, settingsFor, sessionFormOf,
-  isTimeZone, parseStartsAt, checkEventFields, checkItemFields, checkLedBy,
+  isTimeZone, parseStartsAt, checkEventFields, checkItemFields, checkLedBy, checkAttendeeName,
   clock, agendaTimes, formatDuration, eventTtl,
   formatEventDay, formatStartTime, formatEventWhen,
 };

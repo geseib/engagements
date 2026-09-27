@@ -53,7 +53,13 @@ const HOST_ROUTES = [
   ['POST', '/events/{code}/items'], ['PUT', '/events/{code}/items'],
   ['PUT', '/events/{code}/items/{itemId}'], ['DELETE', '/events/{code}/items/{itemId}'],
 ];
-const PUBLIC_ROUTES = [['GET', '/events/{code}/agenda'], ['GET', '/join/{code}']];
+// The attendee's two routes (events M2) are public for the agenda's reason:
+// an attendee has no account, and GET /me's bearer is an attendee token, not
+// a Cognito one — an authorizer there would refuse every attendee.
+const PUBLIC_ROUTES = [
+  ['GET', '/events/{code}/agenda'], ['GET', '/join/{code}'],
+  ['POST', '/events/{code}/attendees'], ['GET', '/events/{code}/me'],
+];
 
 (async () => {
   console.log('\n1. the template');
