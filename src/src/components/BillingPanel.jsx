@@ -102,6 +102,12 @@ export default function BillingPanel({
   adjustments = null,
   onBillingHistory,
   onInvoice,
+  /**
+   * LEAVING A PAID PLAN (components/LeavePlanDialog.jsx). The caller passes it
+   * only to someone who may manage billing; the control is drawn only on a
+   * paid plan. Absent, nothing is drawn.
+   */
+  onLeavePlan,
   theme = 'dark',
   className = '',
 }) {
@@ -174,6 +180,11 @@ export default function BillingPanel({
           {!metered && onBillingHistory && (
             <button type="button" className="bill-btn" onClick={onBillingHistory}>Billing history</button>
           )}
+          {metered && onLeavePlan ? (
+            <button type="button" className="bill-btn" onClick={onLeavePlan} data-testid="bill-leave-plan">
+              {`Leave the ${/\bplan$/i.test(plan.name) ? plan.name : `${plan.name} plan`}`}
+            </button>
+          ) : null}
           {metered ? (
             <button type="button" className="bill-btn" onClick={onBillingHistory}>
               Billing history

@@ -16,6 +16,7 @@ import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
 import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
 import PlanRequestDialog from './components/PlanRequestDialog';
+import LeavePlanDialog from './components/LeavePlanDialog';
 import CreateOrgDialog from './components/CreateOrgDialog';
 import ActingAsBanner from './components/ActingAsBanner';
 import PublicLibraryPanel from './components/PublicLibraryPanel';
@@ -231,6 +232,10 @@ function AdminPage() {
   const [showPlanRequest, setShowPlanRequest] = useState(false);
   const [planRequestBusy, setPlanRequestBusy] = useState(false);
   const [planRequestCount, setPlanRequestCount] = useState(null);
+  // Leaving a paid plan (components/LeavePlanDialog.jsx), and the nudge that
+  // re-reads usage once it has happened.
+  const [showLeavePlan, setShowLeavePlan] = useState(false);
+  const [usageNonce, setUsageNonce] = useState(0);
   const [orgAdjustments, setOrgAdjustments] = useState(null);
   // BILLING STEP 4 — a PLACE inside the Billing section: '' = Plan & usage,
   // 'history' = Billing history, 'yyyy-mm' = that month's invoice.
@@ -428,7 +433,7 @@ function AdminPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, activeOrgId]);
+  }, [activeTab, activeOrgId, usageNonce]);
 
   /* The latest plan request, read with the Billing section for the same
      reasons as usage above. Admins may read it; a member's 403 is not an
@@ -1947,6 +1952,19 @@ function AdminPage() {
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
           {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 
+          {showLeavePlan && activeOrg && (
+            <LeavePlanDialog
+              orgId={activeOrgId}
+              orgName={activeOrg.name || activeOrgId}
+              onClose={() => setShowLeavePlan(false)}
+              onSetsChanged={fetchQuestionSets}
+              /* The plan and any withdrawn request are re-read from the
+                 server (loadPlanRequest answers with the plan as it is now),
+                 and usage is fetched again, so the panel redraws as free. */
+              onLeft={() => { setShowLeavePlan(false); loadPlanRequest(); setUsageNonce((n) => n + 1); }}
+            />
+          )}
+
           {showPlanRequest && activeOrg && (
             <PlanRequestDialog
               orgId={activeOrgId}
@@ -2050,6 +2068,10 @@ function AdminPage() {
               onRequestPlan={orgRole === 'owner' || activeOrg.type === 'personal' ? () => setShowPlanRequest(true) : undefined}
               onWithdrawRequest={withdrawPlanRequest}
               requestBusy={planRequestBusy}
+              /* Owner or admin — whoever sees Billing may manage it; a
+                 personal space's owner is its owner. The panel draws the
+                 control only on a paid plan. */
+              onLeavePlan={orgRole === 'owner' || orgRole === 'admin' || activeOrg.type === 'personal' ? () => setShowLeavePlan(true) : undefined}
               /*
                 NO `onUpgrade` — deliberately. It opened "Create a team", which
                 creates ANOTHER FREE organisation and upgrades nothing; a
