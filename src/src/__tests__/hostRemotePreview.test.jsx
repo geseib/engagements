@@ -103,7 +103,7 @@ function serve(questions, setName = 'Strategic Pricing Plays') {
 async function mount(questions, props = {}) {
   serve(questions);
   const view = render(
-    <RemoteQuestionBrowser setId="pricing" gameType="trivia" onAsk={jest.fn()} {...props} />,
+    <RemoteQuestionBrowser setId="pricing" gameType="trivia" onAskNext={jest.fn()} onAskNow={jest.fn()} {...props} />,
   );
   await screen.findByText(questions[0].title);
   return view;
@@ -568,11 +568,13 @@ describe('paging without leaving the card', () => {
     for (const node of before) {
       expect(pane.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     }
-    // and the one committing action is after it: the host reads the question, then
+    // and the committing actions are after it: the host reads the question, then
     // decides.
-    expect(pane.compareDocumentPosition(
-      within(preview()).getByRole('button', { name: /ask this next/i }),
-    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const name of [/^ask next/i, /^ask now/i]) {
+      expect(pane.compareDocumentPosition(
+        within(preview()).getByRole('button', { name }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 
   // rejects: stepping through the whole set from inside a filtered list, which
@@ -601,7 +603,7 @@ describe('paging without leaving the card', () => {
 
     serve([ART], 'Masterpieces');
     view.rerender(
-      <RemoteQuestionBrowser setId="art" gameType="call-and-answer" onAsk={jest.fn()} />,
+      <RemoteQuestionBrowser setId="art" gameType="call-and-answer" onAskNext={jest.fn()} onAskNow={jest.fn()} />,
     );
 
     await screen.findByText(ART.title);
@@ -616,11 +618,11 @@ describe('paging without leaving the card', () => {
     openPreview(TRIVIA_A.title);
 
     serve([ART], 'Masterpieces');
-    view.rerender(<RemoteQuestionBrowser setId="art" gameType="call-and-answer" onAsk={jest.fn()} />);
+    view.rerender(<RemoteQuestionBrowser setId="art" gameType="call-and-answer" onAskNext={jest.fn()} onAskNow={jest.fn()} />);
     await screen.findByText(ART.title);
 
     serve([TRIVIA_A, TRIVIA_B]);
-    view.rerender(<RemoteQuestionBrowser setId="pricing" gameType="trivia" onAsk={jest.fn()} />);
+    view.rerender(<RemoteQuestionBrowser setId="pricing" gameType="trivia" onAskNext={jest.fn()} onAskNow={jest.fn()} />);
     await screen.findByText(TRIVIA_A.title);
 
     expect(screen.queryByTestId('hrq-preview')).not.toBeInTheDocument();
@@ -631,48 +633,81 @@ describe('paging without leaving the card', () => {
 
 describe('what the row could already do, it can still do', () => {
   // rejects: a preview that is a dead end. The host opened it to decide, and
-  // deciding means asking this one next.
-  it('asks the previewed question from inside the preview', async () => {
-    const onAsk = jest.fn().mockResolvedValue(undefined);
-    await mount([TRIVIA_A, TRIVIA_B], { onAsk });
+  // deciding means asking this one — next or now — without backing out first.
+  it('asks the previewed question next, or now, from inside the preview', async () => {
+    const onAskNext = jest.fn().mockResolvedValue(undefined);
+    const onAskNow = jest.fn().mockResolvedValue(undefined);
+    await mount([TRIVIA_A, TRIVIA_B], { onAskNext, onAskNow });
 
     openPreview(TRIVIA_B.title);
-    fireEvent.click(within(preview()).getByRole('button', { name: /ask this next/i }));
+    fireEvent.click(within(preview()).getByRole('button', { name: /^ask next/i }));
+    await waitFor(() => expect(onAskNext).toHaveBeenCalledTimes(1));
+    expect(onAskNext.mock.calls[0][0]).toMatchObject({ id: TRIVIA_B.id, title: TRIVIA_B.title });
+    expect(onAskNow).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(onAsk).toHaveBeenCalledTimes(1));
-    expect(onAsk.mock.calls[0][0]).toMatchObject({ id: TRIVIA_B.id, title: TRIVIA_B.title });
+    fireEvent.click(within(preview()).getByRole('button', { name: /^ask now/i }));
+    await waitFor(() => expect(onAskNow).toHaveBeenCalledTimes(1));
+    expect(onAskNow.mock.calls[0][0]).toMatchObject({ id: TRIVIA_B.id, title: TRIVIA_B.title });
   });
 
-  // rejects: the list losing its own Ask when the preview was added beside it.
-  it('still asks straight from a row', async () => {
-    const onAsk = jest.fn().mockResolvedValue(undefined);
-    await mount([TRIVIA_A], { onAsk });
+  // rejects: the list losing its own asks when the preview was added beside it,
+  // and — the reported bug — a button labelled "next" that asks NOW.
+  it('still asks straight from a row, each verb to its own handler', async () => {
+    const onAskNext = jest.fn().mockResolvedValue(undefined);
+    const onAskNow = jest.fn().mockResolvedValue(undefined);
+    await mount([TRIVIA_A], { onAskNext, onAskNow });
 
-    fireEvent.click(within(cardFor(TRIVIA_A.title)).getByRole('button', { name: /ask this next/i }));
+    fireEvent.click(within(cardFor(TRIVIA_A.title)).getByRole('button', { name: /^ask next/i }));
+    await waitFor(() => expect(onAskNext).toHaveBeenCalledTimes(1));
+    expect(onAskNow).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(onAsk).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(cardFor(TRIVIA_A.title)).getByRole('button', { name: /^ask now/i }));
+    await waitFor(() => expect(onAskNow).toHaveBeenCalledTimes(1));
+    expect(onAskNext).toHaveBeenCalledTimes(1);
   });
 
   // rejects: an Ask that fires while the session is already moving. The remote
   // owns the cooldown; the preview has to respect the same flag the list does.
-  it('holds Ask while the remote is busy', async () => {
+  it('holds both asks while the remote is busy', async () => {
     await mount([TRIVIA_A], { busy: true });
     openPreview(TRIVIA_A.title);
 
-    expect(within(preview()).getByRole('button', { name: /ask this next/i })).toBeDisabled();
+    expect(within(preview()).getByRole('button', { name: /^ask next/i })).toBeDisabled();
+    expect(within(preview()).getByRole('button', { name: /^ask now/i })).toBeDisabled();
+  });
+
+  // rejects: a live Ask next on the question already at the top of the queue,
+  // and a row that does not say where it sits.
+  it('says where a queued question sits, and holds Ask next on the one already next', async () => {
+    await mount([TRIVIA_A, TRIVIA_B], { queue: [TRIVIA_B.id, TRIVIA_A.id] });
+
+    expect(within(cardFor(TRIVIA_B.title)).getByTestId('hrq-queued')).toHaveTextContent(/up next/i);
+    expect(within(cardFor(TRIVIA_A.title)).getByTestId('hrq-queued')).toHaveTextContent('Queued #2');
+    expect(within(cardFor(TRIVIA_B.title)).getByRole('button', { name: /^ask next/i })).toBeDisabled();
+    expect(within(cardFor(TRIVIA_A.title)).getByRole('button', { name: /^ask next/i })).toBeEnabled();
+  });
+
+  // The remote's mid-round guard, drawn on the row it armed and no other.
+  it('draws an armed Ask now as "Tap again to ask now"', async () => {
+    await mount([TRIVIA_A, TRIVIA_B], { askNowArmedKey: TRIVIA_A.id });
+
+    expect(within(cardFor(TRIVIA_A.title)).getByRole('button', { name: /^tap again to ask now/i }))
+      .toHaveClass('is-armed');
+    expect(within(cardFor(TRIVIA_B.title)).getByRole('button', { name: /^ask now/i }))
+      .not.toHaveClass('is-armed');
   });
 
   /*
-   * BOTH OF A ROW'S BUTTONS NAME ITS QUESTION, or neither should. Preview names
-   * it and Ask did not, so a set of thirty read to a screen reader as thirty
-   * distinct Previews beside thirty identical "Ask this next"s — and Ask is the
+   * EVERY ONE OF A ROW'S BUTTONS NAMES ITS QUESTION, or none should. Preview
+   * named it and Ask did not, so a set of thirty read to a screen reader as
+   * thirty distinct Previews beside thirty identical asks — and an ask is the
    * one that moves the room.
    */
-  it('names the question on both of a row\'s buttons', async () => {
+  it('names the question on every one of a row\'s buttons', async () => {
     await mount([TRIVIA_A, TRIVIA_B]);
 
     const buttons = [...cardFor(TRIVIA_B.title).querySelectorAll('.hrq-actions button')];
-    expect(buttons).toHaveLength(2);
+    expect(buttons.map((b) => b.textContent.trim())).toEqual(['Preview', 'Ask next', 'Ask now']);
     for (const button of buttons) {
       expect(button).toHaveAttribute('aria-label', expect.stringContaining(TRIVIA_B.title));
       // and the visible label still opens the name, so what a reader hears starts

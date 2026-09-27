@@ -99,6 +99,52 @@ export async function fetchQueue({ fetchFn = authFetch, apiBase, gameId }) {
 }
 
 /**
+ * What the session will ask next — `GET /games/{id}/up-next`, the queued rows
+ * AND the automatic walk after them, as the server's own selection would run.
+ *
+ * For the PHONE. The stage has read this inline since before the phone could
+ * show a running order (GameHostPage.loadUpNext); the phone reads it here so
+ * that the two surfaces ask the same question the same way — same count, same
+ * projections — and render the answer through the same QueueList.
+ *
+ * Never throws, like everything in this module. A failure is `ok: false` with
+ * empty lists, and the caller keeps whatever it last drew: a preview that is a
+ * poll stale is better than one that blanks on a flaky radio.
+ */
+export const UP_NEXT_COUNT = 6;
+
+export async function fetchUpNext({
+  fetchFn = authFetch, apiBase, gameId, count = UP_NEXT_COUNT,
+}) {
+  const empty = { upNext: [], blocked: [], advisories: [], excluded: [] };
+  let response;
+  try {
+    response = await fetchFn(`${apiBase}games/${encodeURIComponent(gameId)}/up-next?count=${count}`);
+  } catch (e) {
+    return { ok: false, ...empty, error: e?.message || 'The request did not reach the server.' };
+  }
+
+  if (!response.ok) {
+    return { ok: false, ...empty, error: await describeFailure(response) };
+  }
+
+  try {
+    const body = (await response.json()) || {};
+    const list = (value) => (Array.isArray(value) ? value : []);
+    return {
+      ok: true,
+      upNext: list(body.upNext),
+      blocked: list(body.blocked),
+      advisories: list(body.advisories),
+      excluded: list(body.excluded),
+      error: null,
+    };
+  } catch {
+    return { ok: false, ...empty, error: 'What comes next could not be read.' };
+  }
+}
+
+/**
  * Change the running order — ONE OPERATION, never an array.
  *
  * `expectedVersion` travels with every op and is ADVISORY at the far end: the

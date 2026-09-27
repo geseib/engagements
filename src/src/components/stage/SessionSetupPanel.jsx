@@ -65,6 +65,9 @@ const DISPLAY_PROFILES = [
   ['table', 'Table — laptop'],
 ];
 
+/* Why an asked question's Queue and Ask next are held — see the browser row. */
+const ALREADY_ASKED = 'Already asked this session. The running order skips asked questions — use Ask again now.';
+
 export default function SessionSetupPanel({
   onClose = () => {},
   wsConnected = false,
@@ -132,6 +135,11 @@ export default function SessionSetupPanel({
   upNextAdvisories = [],
   upNextExcluded = [],
   onQueueQuestion = () => {},
+  /* "Ask next": the `first` queue op, by canonical key — the top of the
+     running order, with the round on screen left alone. `onSelectQuestion`
+     above is "Ask now". The owner: "'ask next' in most people's mind means put
+     it at the top of the queue, not run it now." */
+  onQueueFirst = () => {},
   onQueueMove = () => {},
   onQueueRemove = () => {},
   /* Rearranging an AUTO row — materialises the displayed plan into the queue
@@ -298,7 +306,7 @@ export default function SessionSetupPanel({
   const remaining = questionsRemaining(catRows);
 
   // The projection is what reaches the DOM; the original is what goes back to
-  // the caller. Keeping them paired here is what lets `Ask next` hand
+  // the caller. Keeping them paired here is what lets `Ask now` hand
   // `selectQuestion` a question the next-question endpoint will accept while
   // the row on screen carries no answer.
   /*
@@ -316,7 +324,7 @@ export default function SessionSetupPanel({
   }, [catRows]);
 
   // The projection is what reaches the DOM; the original is what goes back to
-  // the caller. Keeping them paired here is what lets `Ask next` hand
+  // the caller. Keeping them paired here is what lets `Ask now` hand
   // `selectQuestion` a question the next-question endpoint will accept while
   // the row on screen carries no answer.
   const rows = useMemo(
@@ -340,6 +348,18 @@ export default function SessionSetupPanel({
     () => new Set(queueBusyKeys.map((key) => questionKey(String(key)))),
     [queueBusyKeys],
   );
+
+  /*
+    "Ask now" FROM THE RUNNING ORDER hands `onSelectQuestion` a question, as
+    the browser rows do, so the page has one ask-now path rather than two. The
+    row only carries a key; the loaded question is found by the same canonical
+    key, and when the set has not loaded it the key itself is enough — the
+    next-question endpoint reads nothing but the id.
+  */
+  const askNowByKey = (key, { title = '' } = {}) => {
+    const found = questions.find((q) => questionKey(String(q?.id ?? '')) === key);
+    onSelectQuestion(found || { id: key, title });
+  };
 
   const visible = useMemo(() => {
     const filtered = filterBrowserRows(rows.map((r) => r.row), {
@@ -658,7 +678,7 @@ export default function SessionSetupPanel({
                 It renders when EMPTY too — see QueueList. A queue that appears
                 only once it is in use is a feature that has to be explained
                 somewhere else, and the empty line is where the difference
-                between Queue and Ask next is stated.
+                between Ask next and Ask now is stated.
               */}
               <QueueList
                 queue={questionQueue}
@@ -673,6 +693,8 @@ export default function SessionSetupPanel({
                 onAutoMove={onAutoMove}
                 onDisable={onDisableQuestion}
                 onRestore={onRestoreQuestion}
+                onAskNext={onQueueFirst}
+                onAskNow={askNowByKey}
               />
 
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the
@@ -823,23 +845,33 @@ export default function SessionSetupPanel({
                           </div>
                         </div>
                         {/*
-                          TWO ACTIONS, AND THE DIFFERENCE BETWEEN THEM IS THE
-                          FEATURE. `Ask next` interrupts — it puts the question
-                          on the room's screen now, which is what the owner
-                          described as the old behaviour: *"no matter where you
-                          are it forward to that question."* `Queue` does not
-                          touch the round in flight.
+                          THREE ACTIONS, AND THE DIFFERENCE BETWEEN THEM IS THE
+                          FEATURE. `Queue` adds to the END of the running
+                          order; `Ask next` puts the question at the TOP of it;
+                          neither touches the round in flight. `Ask now`
+                          interrupts — it puts the question on the room's
+                          screen straight away. That last one used to be
+                          labelled "Ask next", and the owner: *"'ask next' in
+                          most people's mind means put it at the top of the
+                          queue, not run it now."*
 
-                          Queue is listed FIRST and Ask next keeps the primary
-                          treatment it already had. Queueing is the safe,
-                          reversible action and the one a host will reach for
-                          most; interrupting the room stays the deliberate one.
+                          ORDERED BY HOW MUCH THEY DISTURB: the reversible ones
+                          first, the one that ends a round last and in the
+                          interrupting tone.
+
+                          AN ASKED QUESTION CANNOT BE QUEUED, only asked again
+                          now. The drain in next-question.js drops any queued
+                          entry that has already been asked, so a Queue or Ask
+                          next on one would vanish at the end of the round with
+                          nothing on screen to say why — held, with the reason.
                         */}
                         <div className="setup-qb__acts">
                           <button
                             type="button"
                             className="setup-qb__queue"
-                            disabled={queueBusy.has(questionKey(String(row.id)))}
+                            disabled={queueBusy.has(questionKey(String(row.id)))
+                              || (row.used && queuePosition(questionQueue, row.id) === 0)}
+                            title={row.used ? ALREADY_ASKED : 'Add it to the end of the running order.'}
                             onClick={() => (
                               queuePosition(questionQueue, row.id) > 0
                                 ? onQueueRemove(row.id)
@@ -850,10 +882,24 @@ export default function SessionSetupPanel({
                           </button>
                           <button
                             type="button"
-                            className="setup-qb__use"
+                            className="setup-qb__next setup-ask setup-ask--next"
+                            disabled={queueBusy.has(questionKey(String(row.id)))
+                              || row.used
+                              || queuePosition(questionQueue, row.id) === 1}
+                            title={row.used
+                              ? ALREADY_ASKED
+                              : 'Put it at the top of the running order. The round on screen carries on; this is asked when you end it.'}
+                            onClick={() => onQueueFirst(questionKey(String(row.id)))}
+                          >
+                            Ask next
+                          </button>
+                          <button
+                            type="button"
+                            className="setup-qb__use setup-ask setup-ask--now"
+                            title="Put it on the room's screen straight away. The round on screen ends."
                             onClick={() => onSelectQuestion(question)}
                           >
-                            {row.used ? 'Ask again' : 'Ask next'}
+                            {row.used ? 'Ask again now' : 'Ask now'}
                           </button>
                         </div>
                       </div>

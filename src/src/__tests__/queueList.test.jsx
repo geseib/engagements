@@ -29,19 +29,21 @@ const rowNames = () => screen.getAllByTestId('queue-row')
   .map((row) => within(row).getByText(/\?|c\d/).textContent);
 
 describe('an empty running order', () => {
-  test('it still renders, and states the difference between Queue and Ask next', () => {
+  test('it still renders, and states the difference between Ask next and Ask now', () => {
     // rejects: hiding the section until something is queued. A feature that is
     // invisible until it is already in use is one nobody finds — the exact
     // report the owner made about the help entry point ("i dont see the help
-    // anywhere"), and the empty line is the ONLY place this distinction is
-    // stated anywhere in the product.
+    // anywhere"). And rejects the old sentence, which said "Ask next puts it on
+    // screen straight away" — the owner: "'ask next' in most people's mind
+    // means put it at the top of the queue, not run it now."
     render(<QueueList queue={[]} questions={questions} />);
 
     expect(screen.getByRole('heading', { name: /running order/i })).toBeInTheDocument();
     const empty = screen.getByTestId('queue-empty');
-    expect(empty).toHaveTextContent(/Queue.*running order/i);
+    expect(empty).toHaveTextContent(/Ask next.*top of the running order/i);
     expect(empty).toHaveTextContent(/waits until you end the current round/i);
-    expect(empty).toHaveTextContent(/Ask next.*straight away/i);
+    expect(empty).toHaveTextContent(/Ask now.*straight away/i);
+    expect(empty).not.toHaveTextContent(/Ask next puts it on screen/i);
     expect(screen.queryByTestId('queue-list')).not.toBeInTheDocument();
   });
 
@@ -543,5 +545,170 @@ describe('the automatic rows are subordinate, not disabled', () => {
     // distinction the colour exists to make.
     expect(block('.setup-q__flag--auto')).toMatch(/var\(--muted/);
     expect(block('.setup-q__flag--auto')).not.toMatch(/var\(--primary/);
+  });
+});
+
+/* ========================================================================== */
+
+/*
+  ASK NEXT AND ASK NOW — the owner, testing on dev: "when you click a question
+  to 'ask next' on the remote it actually switches the game to that one. The
+  host screen does the same thing ... 'ask next' in most people's mind means
+  put it at the top of the queue, not run it now."
+*/
+describe('every row in the running order offers Ask next AND Ask now', () => {
+  const plan = [
+    { source: 'auto', questionId: 'QUESTION#c009#001', title: 'Auto One', categoryName: 'Pricing', round: 4 },
+    { source: 'auto', questionId: 'QUESTION#c009#002', title: 'Auto Two', categoryName: 'Pricing', round: 5 },
+  ];
+  const renderAsks = (props = {}) => {
+    const onAskNext = jest.fn();
+    const onAskNow = jest.fn();
+    render(
+      <QueueList
+        queue={['c001#002', 'c002#001']}
+        questions={questions}
+        upNext={plan}
+        onAskNext={onAskNext}
+        onAskNow={onAskNow}
+        {...props}
+      />,
+    );
+    return { onAskNext, onAskNow };
+  };
+
+  test('queued rows and automatic rows both carry the pair, in that order', () => {
+    // rejects: one "Ask next" that jumps. Two verbs, two words, never shared.
+    renderAsks();
+    const rows = [...screen.getAllByTestId('queue-row'), ...screen.getAllByTestId('queue-auto-row')];
+    for (const row of rows) {
+      const names = within(row).getAllByRole('button').map((b) => b.textContent);
+      expect(names.slice(0, 2)).toEqual(['Ask next', 'Ask now']);
+    }
+  });
+
+  test('Ask next raises the canonical key and does NOT ask the question', () => {
+    // rejects: wiring Ask next to the interrupt. The key is bare, because the
+    // caller hands it to the `first` queue op and next-question alike, and
+    // neither accepts the `QUESTION#` spelling.
+    const { onAskNext, onAskNow } = renderAsks();
+    fireEvent.click(within(screen.getAllByTestId('queue-row')[1])
+      .getByRole('button', { name: /^ask next/i }));
+    expect(onAskNext).toHaveBeenCalledWith('c002#001', { title: 'Which bundle wins?' });
+
+    fireEvent.click(within(screen.getAllByTestId('queue-auto-row')[1])
+      .getByRole('button', { name: /^ask next/i }));
+    expect(onAskNext).toHaveBeenLastCalledWith('c009#002', { title: 'Auto Two' });
+    expect(onAskNow).not.toHaveBeenCalled();
+  });
+
+  test('Ask now raises the same key to the interrupt, and never to the queue', () => {
+    const { onAskNext, onAskNow } = renderAsks();
+    fireEvent.click(within(screen.getAllByTestId('queue-auto-row')[0])
+      .getByRole('button', { name: /^ask now/i }));
+    expect(onAskNow).toHaveBeenCalledWith('c009#001', { title: 'Auto One' });
+    expect(onAskNext).not.toHaveBeenCalled();
+  });
+
+  test('the row already next holds its Ask next, and keeps its Ask now', () => {
+    // rejects: a live Ask next that would change nothing, and an Ask now that
+    // disappears from the one row a host is most likely to want on screen.
+    renderAsks();
+    const head = screen.getAllByTestId('queue-row')[0];
+    expect(within(head).getByRole('button', { name: /^ask next/i })).toBeDisabled();
+    expect(within(head).getByRole('button', { name: /^ask now/i })).toBeEnabled();
+    expect(within(screen.getAllByTestId('queue-row')[1])
+      .getByRole('button', { name: /^ask next/i })).toBeEnabled();
+  });
+
+  test('with nothing queued, the first automatic pick is the one already next', () => {
+    render(<QueueList queue={[]} questions={questions} upNext={plan} onAskNext={jest.fn()} onAskNow={jest.fn()} />);
+    const autos = screen.getAllByTestId('queue-auto-row');
+    expect(within(autos[0]).getByRole('button', { name: /^ask next/i })).toBeDisabled();
+    expect(within(autos[1]).getByRole('button', { name: /^ask next/i })).toBeEnabled();
+  });
+
+  test('an armed Ask now says so, on its own row only', () => {
+    // The phone's second-tap guard mid-round. The words carry it, not the fill.
+    renderAsks({ askNowArmedKey: 'QUESTION#c009#001' });
+    const [armed, other] = screen.getAllByTestId('queue-auto-row');
+    expect(within(armed).getByRole('button', { name: /tap again to ask now/i })).toBeInTheDocument();
+    expect(within(other).getByRole('button', { name: /^ask now/i })).toBeInTheDocument();
+  });
+
+  test('askBusy holds every ask — a double tap must not ask two questions', () => {
+    renderAsks({ askBusy: true });
+    for (const button of screen.getAllByRole('button', { name: /^ask (next|now)/i })) {
+      expect(button).toBeDisabled();
+    }
+  });
+
+  test('without handlers the pair is not drawn, and the old columns are unchanged', () => {
+    // rejects: buttons that cannot work.
+    render(<QueueList queue={['c001#002']} questions={questions} upNext={plan} />);
+    expect(screen.queryAllByRole('button', { name: /^ask (next|now)/i })).toHaveLength(0);
+  });
+});
+
+describe('the phone mounts the same list', () => {
+  test('touch: no arrows, a ✕ on queued rows, and the asks on every row', () => {
+    // The owner: "It would be nice if it reuses the interface that we see in
+    // the host screen with seeing the order of coming up questions."
+    const { container } = render(
+      <QueueList
+        variant="touch"
+        queue={['c001#002']}
+        questions={questions}
+        upNext={[{ source: 'auto', questionId: 'QUESTION#c009#001', title: 'Auto One', round: 2 }]}
+        onMove={null}
+        onRemove={jest.fn()}
+        onAskNext={jest.fn()}
+        onAskNow={jest.fn()}
+      />,
+    );
+    expect(container.querySelector('.setup-q--touch')).toBeTruthy();
+    const queued = screen.getByTestId('queue-row');
+    expect(within(queued).queryByRole('button', { name: /earlier|later/i })).toBeNull();
+    expect(within(queued).getByRole('button', { name: /out of the queue/i })).toBeInTheDocument();
+    expect(within(queued).getAllByRole('button')).toHaveLength(3);
+    const auto = screen.getByTestId('queue-auto-row');
+    expect(within(auto).getAllByRole('button')).toHaveLength(2);
+  });
+
+  test('touch targets are 44px and a title wraps rather than truncating', () => {
+    expect(block('.setup-q--touch .setup-ask')).toMatch(/min-height:\s*44px/);
+    expect(block('.setup-q--touch .setup-q__btn')).toMatch(/width:\s*44px/);
+    expect(block('.setup-q--touch .setup-q__btn')).toMatch(/height:\s*44px/);
+    expect(block('.setup-q--touch .setup-q__name')).toMatch(/white-space:\s*normal/);
+    // The actions take a line of their own, under the title.
+    expect(block('.setup-q--touch .setup-q__acts')).toMatch(/grid-column:\s*1\s*\/\s*-1/);
+  });
+});
+
+describe('the stylesheet contract for the asks', () => {
+  test('the two asks are exempt from the panel\'s blanket button repaint', () => {
+    // rejects: two different verbs painted as one navy button — which is how
+    // Queue and the old Ask next looked identical for their whole life.
+    expect(CSS).toMatch(/\.setup-panel button:not\([^{]*\.setup-ask\)/);
+  });
+
+  test('Ask next is amber and Ask now is the interrupting tone — never --danger for copy', () => {
+    expect(block('.setup-ask--next')).toMatch(/color:\s*var\(--primary/);
+    expect(block('.setup-ask--now')).toMatch(/color:\s*var\(--danger-text/);
+    expect(block('.setup-ask--now')).not.toMatch(/(^|[^-])color:\s*var\(--danger[,)]/);
+    expect(block('.setup-ask--now.is-armed')).toMatch(/background:\s*var\(--danger-deep/);
+  });
+
+  test('a disabled ask dims rather than disappearing', () => {
+    const disabled = block('.setup-ask:disabled');
+    expect(disabled).toMatch(/opacity:/);
+    expect(disabled).not.toMatch(/display:\s*none/);
+    expect(disabled).not.toMatch(/visibility:\s*hidden/);
+  });
+
+  test('nothing an ask draws is below the 12px floor', () => {
+    const sizes = [...CSS.matchAll(/\.setup-ask[^{]*\{[^}]*font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
   });
 });

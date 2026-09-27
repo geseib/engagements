@@ -169,6 +169,30 @@ const bodyOf = (res) => JSON.parse(res.body);
   await check('a remove is persisted', () =>
     assert.deepStrictEqual(bodyOf(removed).queue, ['c002#001', 'c001#018']));
 
+  /*
+    "ASK NEXT" IS AN OP ON THIS ROUTE, NOT A NEW ONE. The owner: "'ask next' in
+    most people's mind means put it at the top of the queue, not run it now."
+    It rides the same read-apply-conditional-write loop as every other op, so
+    it inherits the race handling and the broadcast rather than growing its own.
+  */
+  const promoted = await post({ op: 'first', questionKey: 'c001#018' });
+  await check('first moves a queued question to the head', () =>
+    assert.deepStrictEqual(bodyOf(promoted).queue, ['c001#018', 'c002#001']));
+  await check('first is persisted like any other op', () =>
+    assert.deepStrictEqual(queueRow().Queue, ['c001#018', 'c002#001']));
+  const inserted = await post({ op: 'first', questionKey: 'QUESTION#c003#004' });
+  await check('first on an unqueued question inserts it at the head, canonically', () =>
+    assert.deepStrictEqual(bodyOf(inserted).queue, ['c003#004', 'c001#018', 'c002#001']));
+  sent.length = 0;
+  frames.length = 0;
+  const alreadyNext = await post({ op: 'first', questionKey: 'c003#004' });
+  await check('first on the head answers 200 with refused:at-edge and writes nothing', () => {
+    assert.strictEqual(alreadyNext.statusCode, 200);
+    assert.strictEqual(bodyOf(alreadyNext).changed, false);
+    assert.strictEqual(bodyOf(alreadyNext).refused, 'at-edge');
+    assert.strictEqual(frames.length, 0, `${frames.length} frame(s) went out`);
+  });
+
   console.log('\n3. the TTL — 90 days, and pinned to the constant that means it');
 
   await check('the handler\'s TTL is schema-compliant-manager\'s TTL_CREATION_PHASE', () =>

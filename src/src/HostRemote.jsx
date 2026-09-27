@@ -9,14 +9,16 @@ import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
 import { useOptionalAuth } from './auth/AuthContext';
-import { categoryRows } from './config/setupPanel';
+import { categoryRows, questionKey } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
 import { fetchComments } from './utils/commentsClient';
+import { postQueueOp } from './utils/questionQueueClient';
 import {
   primaryAction,
   skipAction,
   requestFor,
-  askNextRequest,
+  askNowRequest,
+  askNowNeedsConfirm,
   roundProgress,
   needsConfirmation,
   phaseSummary,
@@ -877,11 +879,22 @@ function HostRemote() {
   }, [skip, blocked, armedAction, arm, fire]);
 
   /**
-   * "Ask this next" from the phone's browser.
+   * "Ask now" from the phone — the running order or the set browser.
+   *
+   * It used to be the only ask this phone had, behind a button reading "Ask
+   * this next", and the owner reported exactly that: *"when you click a
+   * question to 'ask next' on the remote it actually switches the game to that
+   * one."* It is labelled for what it does now, and `askNext` below is the
+   * verb the old label promised.
    *
    * Goes through the same POST-then-repoll-then-cool path every other advance
    * uses, because it IS an advance — mid-round it skips the round on screen —
    * and the cooldown is what stops a double-tap consuming two questions.
+   *
+   * ARMED MID-ROUND, like Skip: the first tap in ASK or VOTE only turns the
+   * button into "Tap again to ask now" (askNowNeedsConfirm), because that is
+   * when it discards the round in flight. The stage asks the same question in
+   * a dialog at the same two phases.
    *
    * authFetch, like every other dispatch here. `next-question` USED to be a
    * public route — this comment used to say so, and say that only
@@ -892,13 +905,21 @@ function HostRemote() {
    * GameHostPage.selectQuestion calls the same route the same way, and moved
    * in the same change — the two must not diverge.
    */
-  const askSpecific = useCallback(async (row) => {
-    const request = askNextRequest({ gameId, questionId: row?.id, state: snapshot?.state });
+  const askNow = useCallback(async (row) => {
+    const key = questionKey(String(row?.id ?? '').trim());
+    const request = askNowRequest({ gameId, questionId: key, state: snapshot?.state });
     if (!request) {
       setError('Still reading the session — try again in a second.');
       return;
     }
 
+    const armKey = `ask-now:${key}`;
+    if (askNowNeedsConfirm(snapshot?.state) && armedAction !== armKey) {
+      arm(armKey);
+      return;
+    }
+
+    disarm();
     setError('');
     setNotice('');
     setBusyAction('ask');
@@ -931,7 +952,62 @@ function HostRemote() {
     } finally {
       setBusyAction(null);
     }
-  }, [gameId, snapshot, pollState, email]);
+  }, [gameId, snapshot, pollState, email, armedAction, arm, disarm]);
+
+  /**
+   * One running-order op from the phone — the same `POST /queue` the stage
+   * sends, through the same client, so the phone cannot invent its own opinion
+   * about ordering. Re-polls rather than patching: `/host-state` carries the
+   * queue (get-game-state.js), and it is this phone's only source of truth.
+   *
+   * `expectedVersion` is the version the last poll saw. The server treats it as
+   * advisory (question-queue.js) — a phone is two seconds stale by design, and
+   * refusing on a mismatch would freeze its buttons while the session is busy.
+   */
+  const queueOp = useCallback(async (op, rawKey) => {
+    const key = questionKey(String(rawKey ?? '').trim());
+    if (!gameId || !key) return false;
+
+    setError('');
+    setBusyAction('queue');
+    try {
+      const result = await postQueueOp({
+        apiBase: apiBase(),
+        gameId,
+        op,
+        questionKey: key,
+        expectedVersion: snapshot?.questionQueue?.version,
+      });
+      if (!result.ok) {
+        setError(`Could not change the running order: ${result.error}`);
+        return false;
+      }
+      // The one refusal a host cannot see on screen — a full queue.
+      if (result.message) {
+        setError(result.message);
+        return false;
+      }
+      await pollState(gameId);
+      return true;
+    } finally {
+      setBusyAction(null);
+    }
+  }, [gameId, snapshot, pollState]);
+
+  /**
+   * "Ask next" — the top of the running order, and the round on screen is
+   * untouched. What the owner said the words mean: *"put it at the top of the
+   * queue, not run it now."* The panel stays open, because the answer to "did
+   * it work?" is the row arriving at the top of the list under the thumb.
+   */
+  const askNext = useCallback(async (row) => {
+    disarm();
+    const done = await queueOp('first', row?.id);
+    if (done) setNotice(row?.title ? `Up next: ${row.title}` : 'Moved to the top of the running order.');
+  }, [queueOp, disarm]);
+
+  /** Take one back out of the running order — the undo for a stray Ask next. */
+  const unqueue = useCallback((key) => queueOp('remove', key), [queueOp]);
 
   /**
    * Turn a category on or off mid-session — the same endpoint and the same
@@ -1137,18 +1213,42 @@ function HostRemote() {
           /* THE THREE LISTS. Rendered INSIDE the body rather than instead of
              the whole screen, which is what keeps the bar above and the dock
              below on the page — see RemoteSessionPanel for the argument. */
-          <RemoteSessionPanel
-            gameId={gameId}
-            setId={setId}
-            initialTab={panelTab}
-            roster={roster}
-            state={snapshot?.state}
-            gameType={gameType}
-            round={round}
-            unaskedCount={unaskedCount}
-            busy={!!busyAction || cooling}
-            onAsk={askSpecific}
-          />
+          <>
+            {/* THE FLASH FOLLOWS THE HOST INTO THE LIST. Ask next leaves this
+                panel open (the row moving to the top is the answer), so a
+                refusal — a full queue, a lost connection — has to be said
+                here or it is not said at all. */}
+            {error && (
+              <p className="hr-flash hr-flash--error" role="alert">
+                <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                {error}
+              </p>
+            )}
+            {notice && !error && (
+              <p className="hr-flash hr-flash--notice" role="status">
+                <Icon name="Info" weight="fill" size={18} color="currentColor" />
+                {notice}
+              </p>
+            )}
+            <RemoteSessionPanel
+              gameId={gameId}
+              setId={setId}
+              initialTab={panelTab}
+              roster={roster}
+              state={snapshot?.state}
+              gameType={gameType}
+              round={round}
+              unaskedCount={unaskedCount}
+              questionQueue={snapshot?.questionQueue || null}
+              busy={!!busyAction || cooling}
+              askNowArmedKey={typeof armedAction === 'string' && armedAction.startsWith('ask-now:')
+                ? armedAction.slice('ask-now:'.length)
+                : null}
+              onAskNext={askNext}
+              onAskNow={askNow}
+              onUnqueue={unqueue}
+            />
+          </>
         ) : (
           <>
             <section className="hr-status" aria-live="polite">

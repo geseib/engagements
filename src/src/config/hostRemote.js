@@ -461,12 +461,19 @@ export function filterRemoteRows(rows = [], search = '') {
 }
 
 /**
- * "Ask this next" — the same two-action dance `GameHostPage.selectQuestion`
- * does, and for its reason: `next-question.js:473` refuses to advance out of
- * ASK#, so choosing a question mid-round has to say `skip_to_specific` or the
- * tap returns 200 and nothing moves.
+ * "Ask now" — the same two-action dance `GameHostPage.selectQuestion` does,
+ * and for its reason: `next-question.js:473` refuses to advance out of ASK#,
+ * so choosing a question mid-round has to say `skip_to_specific` or the tap
+ * returns 200 and nothing moves.
+ *
+ * THIS WAS `askNextRequest`, behind a button reading "Ask this next", and that
+ * name is the bug the owner reported: *"when you click a question to 'ask
+ * next' on the remote it actually switches the game to that one ... 'ask next'
+ * in most people's mind means put it at the top of the queue, not run it
+ * now."* It is renamed for what it does. "Ask next" is now the `first` queue
+ * op (utils/questionQueueClient.js `postQueueOp`), which touches no round.
  */
-export function askNextRequest({ gameId, questionId, state } = {}) {
+export function askNowRequest({ gameId, questionId, state } = {}) {
   if (!gameId || !questionId) return null;
   const { phase } = parseGamePhase(state);
   const mid = phase === 'ASK' || phase === 'VOTE';
@@ -474,6 +481,22 @@ export function askNextRequest({ gameId, questionId, state } = {}) {
     path: `games/${gameId}/next-question`,
     body: { questionId, action: mid ? 'skip_to_specific' : 'select_specific' },
   };
+}
+
+/**
+ * Does "Ask now" need the second tap?
+ *
+ * Exactly while a round is OPEN — ASK or VOTE — because that is when it ends
+ * the round on screen and discards whoever is still answering or voting; the
+ * stage asks the same question in a dialog at the same two phases
+ * (`GameHostPage.selectQuestion`). Unlike the primary advance it arms even when
+ * everyone is in: jumping from a finished ASK skips that round's vote and
+ * results, which is a loss the room would notice. On RESULTS or in the lobby
+ * nothing is lost, and a button that fights the host there reads as broken.
+ */
+export function askNowNeedsConfirm(state) {
+  const { phase } = parseGamePhase(state);
+  return phase === 'ASK' || phase === 'VOTE';
 }
 
 /* ---------------------------------------------------------------- progress */

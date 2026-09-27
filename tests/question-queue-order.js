@@ -35,7 +35,7 @@ const REPO = path.join(__dirname, '..');
 
 const API = [
   'QUEUE_OPS', 'QUEUE_MAX', 'normaliseQueue', 'queueEnqueue', 'queueRemove',
-  'queueMove', 'queueDrop', 'applyQueueOp', 'queuePosition', 'queueRows',
+  'queueMove', 'queueFirst', 'queueDrop', 'applyQueueOp', 'queuePosition', 'queueRows',
   'queueSummary',
 ];
 
@@ -258,9 +258,54 @@ const CASES = [
     identity: 'same',
   },
   {
-    name: 'R7 "clear" is not an op — the enum is the four in QUEUE_OPS',
+    name: 'R7 "clear" is not an op — the enum is the five in QUEUE_OPS',
     fn: 'applyQueueOp', args: [THREE, { op: 'clear' }],
     expect: { queue: THREE, changed: false, refused: 'unknown-op' },
+    identity: 'same',
+  },
+
+  /* -- R9: "Ask next" puts it at the TOP, queued or not -------------------- */
+  {
+    name: 'R9 first on an unqueued key inserts it at the head, not the tail',
+    fn: 'applyQueueOp', args: [THREE, { op: 'first', questionKey: 'c009#009' }],
+    expect: { queue: ['c009#009', ...THREE], changed: true, refused: null },
+  },
+  {
+    name: 'R9 first on a queued key moves it to the head and keeps the rest in order',
+    fn: 'applyQueueOp', args: [FIVE, { op: 'first', questionKey: 'q4' }],
+    expect: { queue: ['q4', 'q1', 'q2', 'q3', 'q5'], changed: true, refused: null },
+  },
+  {
+    name: 'R9 first finds a queued key by its prefixed spelling — no second copy',
+    fn: 'applyQueueOp', args: [THREE, { op: 'first', questionKey: 'QUESTION#c001#003' }],
+    expect: { queue: ['c001#003', 'c001#001', 'c001#002'], changed: true, refused: null },
+  },
+  {
+    name: 'R9 first on the head is a no-op, refused as at-edge',
+    fn: 'applyQueueOp', args: [THREE, { op: 'first', questionKey: 'c001#001' }],
+    expect: { queue: THREE, changed: false, refused: 'at-edge' },
+    identity: 'same',
+  },
+  {
+    name: 'R9 first on an empty queue starts it',
+    fn: 'applyQueueOp', args: [[], { op: 'first', questionKey: 'q1' }],
+    expect: { queue: ['q1'], changed: true, refused: null },
+  },
+  {
+    name: 'R9 a NEW entry at the head is still refused by the cap',
+    fn: 'applyQueueOp', args: [FULL, { op: 'first', questionKey: 'c001#099' }],
+    expect: { queue: FULL, changed: false, refused: 'full' },
+    identity: 'same',
+  },
+  {
+    name: 'R9 a full queue can still promote one of its own entries',
+    fn: 'applyQueueOp', args: [FULL, { op: 'first', questionKey: FULL[23] }],
+    expect: { queue: [FULL[23], ...FULL.slice(0, 23)], changed: true, refused: null },
+  },
+  {
+    name: 'R9 an empty key promotes nothing',
+    fn: 'applyQueueOp', args: [THREE, { op: 'first', questionKey: '  ' }],
+    expect: { queue: THREE, changed: false, refused: 'no-key' },
     identity: 'same',
   },
 
@@ -342,7 +387,7 @@ check('QUEUE_MAX is 24 in both — the same 24 as the host masks', () => {
   assert.strictEqual(back.QUEUE_MAX, 24);
 });
 check('QUEUE_OPS is the same closed enum in both', () => {
-  assert.deepStrictEqual(front.QUEUE_OPS, ['add', 'remove', 'earlier', 'later']);
+  assert.deepStrictEqual(front.QUEUE_OPS, ['add', 'remove', 'earlier', 'later', 'first']);
   assert.deepStrictEqual(back.QUEUE_OPS, front.QUEUE_OPS);
 });
 
@@ -383,6 +428,8 @@ check('the input array is never mutated in place', () => {
   back.applyQueueOp(original, { op: 'later', questionKey: 'q1' });
   front.queueDrop(original, 'q2');
   back.queueDrop(original, 'q2');
+  front.applyQueueOp(original, { op: 'first', questionKey: 'q3' });
+  back.applyQueueOp(original, { op: 'first', questionKey: 'q3' });
   // Mutating in place would make the optimistic surface and the server's
   // re-read the same object, so a failed conditional would replay the op
   // against a list that has ALREADY had it applied.

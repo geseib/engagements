@@ -719,7 +719,10 @@ body {
 
    (This list used to exempt `.issue-fab-main` / `.issue-fab-option`, the
    separate report control the menu replaced on 2026-09-21.) */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item) {
+/* `.setup-ask` (Ask next / Ask now) is exempt too: the two must read as two
+   DIFFERENT actions, and this repaint would draw them as one navy button —
+   which is how the Queue / Ask next pair looked the same for its whole life. */
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
@@ -1345,6 +1348,102 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: var(--danger-text, #EF8C86);
+}
+
+/* ─── ASK NEXT / ASK NOW ──────────────────────────────────────────────────────
+   The owner: "'ask next' in most people's mind means put it at the top of the
+   queue, not run it now." Two verbs, on the queue rows AND the browser rows of
+   the stage panel, and on the phone (which mounts the same QueueList). They
+   must never read as one button, so they differ in colour AND in word:
+
+     Ask next  amber outline — the reversible, round-preserving verb, painted
+               like the Next flag it produces.
+     Ask now   --danger-text outline — it ENDS the round on screen, so it wears
+               the tone the panel keeps for "this interrupts something".
+               Filled --danger-deep only while armed on the phone.
+
+   Measured in setupAskPalette.test.js on every ground they stand on — the
+   panel's #111D33 (browser rows), the same under the queue box's 5% amber
+   tint, and that tint over the remote's --bg #0F1A2E: --primary 7.91:1 at
+   worst, --danger-text 6.48:1 at worst, #F4EDE4 on --danger-deep 5.16:1.
+   Exempt from the panel's blanket button repaint (see `.setup-panel button`). */
+.setup-ask {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  padding: 5px 10px;
+  min-height: 26px;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.setup-ask--next {
+  border: 1px solid rgba(246, 169, 76, 0.55);
+  color: var(--primary, #F6A94C);
+}
+
+.setup-ask--next:hover:not(:disabled) { background: rgba(246, 169, 76, 0.12); }
+
+.setup-ask--now {
+  border: 1px solid rgba(229, 100, 94, 0.55);
+  color: var(--danger-text, #EF8C86);
+}
+
+.setup-ask--now:hover:not(:disabled) { background: rgba(229, 100, 94, 0.12); }
+
+/* Armed: the phone's second-tap guard, mid-round. The fill is the signal; the
+   words ("Tap again to ask now") carry it for anyone who cannot see the red. */
+.setup-ask--now.is-armed {
+  background: var(--danger-deep, #B03A34);
+  border-color: var(--danger-deep, #B03A34);
+  color: #F4EDE4;
+}
+
+/* Dimmed, never hidden — the same rule as `.setup-q__btn:disabled`, for the
+   same buttons-move-under-the-finger reason. */
+.setup-ask:disabled { opacity: 0.4; cursor: default; }
+
+/* ─── THE SAME LIST ON THE PHONE ──────────────────────────────────────────────
+   `QueueList variant="touch"` — the remote's Questions tab. Geometry only: the
+   rows, flags and words are the panel's. Every target is 44px (the remote's
+   floor, HostRemote.css), a title WRAPS rather than truncating because a phone
+   column is too narrow for an ellipsis to leave anything readable, and the
+   actions take a line of their own under the title. */
+.setup-q--touch .setup-q__row,
+.setup-q--touch .setup-q__row--auto.setup-q__row--acts {
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 8px;
+  padding: 10px 0;
+}
+
+.setup-q--touch .setup-q__name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.setup-q--touch .setup-q__acts {
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.setup-q--touch .setup-ask {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 15px;
+  white-space: normal;
+  border-radius: 8px;
+}
+
+.setup-q--touch .setup-q__btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
 }
 
 .setup-loading { color: #B6C2D4; font-size: 13px; }

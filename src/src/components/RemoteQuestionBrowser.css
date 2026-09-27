@@ -148,20 +148,62 @@
   color: var(--danger-text);
 }
 
-/* TWO ACTIONS PER ROW, SIDE BY SIDE — `.hr-grid`'s shape, declared here because
-   this is a card's footer rather than a page-level pair. `minmax(0, 1fr)` and
-   not `1fr`: a track sized to its content refuses to shrink below the widest
-   label, and "Ask this next" beside "Preview" would push a 390px card sideways. */
+/* THREE ACTIONS PER ROW, SIDE BY SIDE — Preview, Ask next, Ask now.
+   `minmax(0, 1fr)` and not `1fr`: a track sized to its content refuses to
+   shrink below the widest label, and "Tap again to ask now" beside "Preview"
+   would push a 390px card sideways. Three tracks leave ~100px each on a 390px
+   phone, so the padding narrows to fit and a long armed label WRAPS inside its
+   48px-high button rather than widening the row. */
 .hrq-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   margin-top: 12px;
 }
 
-.hrq-ask {
-  width: 100%;
-  margin-top: 12px;
+.hrq-actions .hr-btn { padding-inline: 8px; }
+
+/* The preview's pair — the same two asks, full width under the card. */
+.hrq-asks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ASK NEXT / ASK NOW — the tones the stage panel and the running order above
+   give the same two words (styles.css `.setup-ask`), so one verb looks like
+   one verb on every surface. On `--surface`: --primary 7.15:1, --danger-text
+   6.08:1; armed, --text on --danger-deep 5.16:1 (styles.css:30-31).
+   hostRemotePreviewPalette.test.js holds all three. */
+.hrq-next {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  color: var(--primary);
+}
+
+.hrq-now {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger-text);
+}
+
+/* Armed: the phone's second-tap guard mid-round, as Skip's is. The words
+   ("Tap again to ask now") carry it for anyone who cannot see the fill. */
+.hrq-now.is-armed {
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
+  color: var(--text);
+}
+
+/* Where the row already sits in the running order. A word, in the amber the
+   running order's Next flag wears. */
+.hrq-queued {
+  margin: 8px 0 0;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--primary);
 }
 
 .hrq-private { margin: 4px 0 0; }

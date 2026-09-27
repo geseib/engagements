@@ -66,7 +66,7 @@ export const QUEUE_MAX = 24;
  * goes out, every client compares the value against the four it knows, and the
  * host watches a button do nothing with no error anywhere in the system.
  */
-export const QUEUE_OPS = ['add', 'remove', 'earlier', 'later'];
+export const QUEUE_OPS = ['add', 'remove', 'earlier', 'later', 'first'];
 
 /**
  * ONE spelling of a question id, borrowed rather than rebuilt.
@@ -198,6 +198,39 @@ export function queueMove(queue, id, direction) {
 }
 
 /**
+ * "ASK NEXT" — put this question at the HEAD, whether or not it is queued.
+ *
+ * The owner: *"'ask next' in most people's mind means put it at the top of the
+ * queue, not run it now."* So the button that used to jump the room is now
+ * "Ask now", and this is what "Ask next" does: the round in flight is left
+ * alone, and the question is served when the host next advances.
+ *
+ * ONE OP FOR BOTH CASES, because the host's intent is the same whether the
+ * row is already queued (it moves to the top) or not (it goes in at the top):
+ * a surface two seconds stale cannot know which case the server is in, and it
+ * should not have to choose between two ops to say one thing.
+ *
+ * AN ABSOLUTE POSITION IS SAFE HERE where `queueMove` refuses to use one. A
+ * step is relative to the list the SURFACE saw; "the top" means the same thing
+ * in any list the server reads, so replaying it after a race still lands where
+ * the host meant. Already at the head is `at-edge` — the button was at rest —
+ * and the cap applies only when the question would be a new entry.
+ */
+export function queueFirst(queue, id) {
+  const list = normaliseQueue(queue);
+  const key = canonical(id);
+
+  if (!key) return refuse(list, 'no-key');
+
+  const at = list.indexOf(key);
+  if (at === 0) return refuse(list, 'at-edge');
+  if (at === -1 && list.length >= QUEUE_MAX) return refuse(list, 'full');
+
+  const rest = at === -1 ? list : list.filter((entry) => entry !== key);
+  return accept([key, ...rest]);
+}
+
+/**
  * The SERVER's removal, not the host's — which is why it is not in QUEUE_OPS.
  *
  * The drain in `next-question.js` uses it for two things no host asked for:
@@ -240,6 +273,7 @@ export function applyQueueOp(queue, operation = {}) {
     case 'remove': return queueRemove(queue, id);
     case 'earlier':
     case 'later': return queueMove(queue, id, operation.op);
+    case 'first': return queueFirst(queue, id);
     default:
       // Unchanged, named, and 200 — see QUEUE_OPS. A client sending an op this
       // build has never heard of is a client from a different deploy, and the
