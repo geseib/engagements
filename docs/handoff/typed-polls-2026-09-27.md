@@ -102,9 +102,44 @@ ballot, not a glance).
   over `tests/helpers`' fake DynamoDB and KMS, with a WebSocket bridge): host plus two phones, a choice,
   a rating, an Approve/Decline and an open question — options on the wall at once, bars filling live,
   each phone's own control, results, What We Heard, next poll. The host screen fits at 1280×720.
+- The same stack now serves the shipped prompts (populate-defaults over an in-memory S3), a canned
+  model reply and the summary's self-invoke, so What We Heard runs the real pipeline. Three drives,
+  all green at the push: the typed poll (6), the event day (14), and a survey in an event (9): two
+  phones answer four kinds, the host closes it, What We Heard, Request feedback, a nameless comment on
+  the wall, back, end, and the dock swept from 1000 to 1920 wide.
+
+## A closed survey: What We Heard and feedback (merged from wip/survey-workie-feedback)
+
+- A survey has no rounds, so its read and its feedback ride the round machinery at pseudo-round
+  `000`. On close the stage keeps the frozen counts and the primary becomes **What We Heard**. The
+  last page offers **End the session** and **Request feedback**; the feedback wall has **End the
+  session** and **Back to What We Heard**.
+- `get-ai-summary.js` reads the survey whole from its FROZEN results (`survey-host.js`
+  `surveyResultsPayload`, described per question by `game/survey-digest.js` as the new
+  `{surveyResults}` variable). It returns a 409 before close and a 400 for any round but `000`, and no
+  name reaches the prompt. A new default prompt, **"Survey Read-Back - What We Heard"**, needs the
+  same reseeding; until then a survey gets the plain built-in summary stating its respondent count.
+- `comments.js` takes comments on `000` only while the survey is CLOSED, and strips the name from
+  every survey comment (the composer says so). The report gets a "What we heard" section above the
+  survey charts. The phone's feedback round is `kind: 'survey'`, so `RoundReport` titles its rows
+  "Results by question" with no "Response N" author beside them.
+
+## Stage fixes found driving it
+
+- **Dock in an event:** AGENDA beside SESSION ran the feedback beat's dock 12–148px past the edge
+  from 1150 to 1440 wide (SESSION clipped at 1280×720). In an event the key hints go sooner, and
+  `Dock.jsx` measures itself: if the row still overflows it wraps (`data-crowded`). Swept 1000–1920.
+- **Workie points on the stage** ran their lead into the text ("Most of the room answeredthe
+  counts"). `MarkdownRenderer` drops the colon for the old big-screen notes to stack; the stage now
+  puts it back (`.notes-md .md-lead::after`).
 
 ## Still open
 
-- Survey Workie and feedback (pseudo-round `000`) — see the survey worker's branch/notes below.
 - The editor's question preview (`QuestionCard`/`questionPreview`) does not draw poll kinds yet.
 - The Names setting for polls (PLAN.md Phase 6) is not built; poll answers are shown without names.
+- Pre-existing, found by the survey worker: on a round-type feedback round the phone is sent the
+  report's shape (`questionData.title`, `answerText`) while the panel reads `title` and `answer`, so
+  titles and response texts can come up blank on phones. The survey round sends both shapes.
+- Template variables tagged for surveys (responses, votes, scores) are always empty for a survey
+  read; their tags want re-checking.
+- Settings → Rounds lists a survey's read as "Round 000".

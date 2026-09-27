@@ -1089,6 +1089,13 @@ body, .stage-ladder-table{
   font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-primary) * .62));line-height:1.1;margin:.4em 0 .25em}
 .notes .notes-md p,.notes .notes-md li{margin:0 0 .4em}
+/* "**Lead**: detail" — every Workie point — arrives split by MarkdownRenderer
+   (formatListItem: .md-lead, .md-rest) with its colon dropped, for the old
+   big-screen notes to stack. On this stage they stayed inline and ran
+   together: "Most of the room answeredthe counts" (seen in Chromium, 27 Sep
+   2026). The colon comes back; the line does not change shape, so the prose
+   pager's budget still holds. */
+.notes .notes-md .md-lead::after{content:': '}
 /* The other constructs the renderer gained. Sized off the profile ladder like
    everything else on the stage; nothing here is a fixed px. */
 .notes .notes-md blockquote{margin:0 0 .4em;padding-left:.7em;
