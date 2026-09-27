@@ -59,9 +59,10 @@ const PRESENTATION = 'presentation';
 const CUSTOM = 'custom';
 const BREAK = 'break';
 /**
- * Every kind may be added (events M1b). A presentation is a placeholder until
- * roadmap M5 brings its PDF copy: a title, a presenter, a length and a
- * description, on the agenda and counted as an item.
+ * Every kind may be added (events M1b). A presentation is a title, a
+ * presenter, a length and a description, on the agenda and counted as an
+ * item — and, since 27 Sep 2026, optionally its slides as one PDF, which the
+ * event's stage shows a page at a time (DECK_*, below).
  */
 const ITEM_TYPES = Object.freeze([...ENGAGEMENT_TYPES, PRESENTATION, CUSTOM, BREAK]);
 
@@ -277,6 +278,104 @@ function checkAttendeeName(input) {
   return { value: name };
 }
 
+// ── A presentation's slides (27 Sep 2026) ──────────────────────────────────
+/**
+ * THE SLIDES. The owner, 27 Sep 2026: "can the presentation show pdf
+ * presentation with arrow key forward/backward through the pages?" — so a
+ * presentation may carry ONE PDF, which the event's stage draws a page at a
+ * time (← → and a clicker's PageUp/PageDown), and phones following the talk
+ * may show the same page. This supersedes RATIONALE decision 8's "Engage never
+ * shows or drives slides" for the stage; the PDF is still PDF only (decision
+ * 4). PowerPoint, Keynote and Google Slides all save as PDF, which the dialog
+ * says instead of refusing a .pptx with no way forward.
+ *
+ * Only a presentation has slides (`hasDeck`). The file travels straight from
+ * the host's browser to storage (events/deck-store.js); the item keeps its
+ * name, its size, how many pages it has, and which page the stage is on.
+ *   DECK_MAX_BYTES  a 50 MB ceiling: a long, image-heavy deck, not a video
+ *   DECK_MAX_PAGES  a bound on the count a browser reports, not a limit
+ *                   anybody asked for
+ *   DECK_NAME_MAX   the file's name as the builder shows it
+ */
+const DECK_MAX_BYTES = 50 * 1024 * 1024;
+const DECK_MAX_PAGES = 2000;
+const DECK_NAME_MAX = 120;
+const DECK_TYPE = 'application/pdf';
+const hasDeck = (type) => type === PRESENTATION;
+
+/** A file's name as the builder keeps it: its last path segment, trimmed, bounded. */
+function deckName(raw) {
+  const base = String(raw == null ? '' : raw).split(/[\\/]/).pop();
+  return base.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, DECK_NAME_MAX);
+}
+
+/** `3.4 MB`, `820 KB` — a deck's size, as the builder says it. */
+function formatBytes(bytes) {
+  const n = Math.max(0, Number(bytes) || 0);
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1).replace(/\.0$/, '')} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/**
+ * A file offered as a presentation's slides, checked before a byte moves —
+ * in the dialog, and again by the route that signs its upload. `type` is what
+ * the browser says (it may say nothing); the server checks the file's own
+ * first bytes once it has landed (deck-store.verifyStaged).
+ * @returns {{value: {name: string, size: number}}|{error: string}}
+ */
+function checkDeckFile(input) {
+  const i = input || {};
+  const name = deckName(i.name);
+  if (!name) return { error: 'That file has no name.' };
+  const type = text(i.type).toLowerCase();
+  if (!/\.pdf$/i.test(name) || (type && type !== DECK_TYPE)) {
+    return { error: `“${name}” is not a PDF. PowerPoint, Keynote and Google Slides all save as PDF.` };
+  }
+  const size = Number(i.size);
+  if (!Number.isFinite(size) || size <= 0) return { error: `“${name}” is empty.` };
+  if (size > DECK_MAX_BYTES) {
+    return { error: `“${name}” is ${formatBytes(size)}. Slides can be ${formatBytes(DECK_MAX_BYTES)} at most.` };
+  }
+  return { value: { name, size } };
+}
+
+/**
+ * The slides an item is given: `{ key, name, pages }`, the key an upload was
+ * signed for. Only its shape is checked here; that the key is this event's,
+ * and that the file behind it is a PDF, is deck-store's (the server's) to say.
+ * @returns {{value: {key: string, name: string, pages: number}}|{error: string}}
+ */
+function checkDeckFields(input) {
+  const i = input && typeof input === 'object' && !Array.isArray(input) ? input : null;
+  if (!i) return { error: 'Choose a PDF for the slides.' };
+  const key = text(i.key);
+  if (!key) return { error: 'Choose a PDF for the slides.' };
+  const name = deckName(i.name);
+  if (!name) return { error: 'That file has no name.' };
+  const pages = Number(i.pages);
+  if (!Number.isInteger(pages) || pages < 1 || pages > DECK_MAX_PAGES) {
+    return { error: `Slides are 1 to ${DECK_MAX_PAGES} pages.` };
+  }
+  return { value: { key, name, pages } };
+}
+
+/** `12 slides`, `1 slide`. */
+const slidesLabel = (pages) => {
+  const n = Math.max(0, Math.round(Number(pages) || 0));
+  return `${n} slide${n === 1 ? '' : 's'}`;
+};
+
+/** `Slide 3 of 12` — the stage, the dialog and the phone say it alike. */
+const slideLabel = (page, pages) => `Slide ${Math.round(Number(page) || 0)} of ${Math.round(Number(pages) || 0)}`;
+
+/** A page number held inside 1..pages; 1 for anything that is not one. */
+function clampPage(page, pages) {
+  const last = Math.max(1, Math.round(Number(pages) || 1));
+  const n = Math.round(Number(page));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, last);
+}
+
 // ── An engagement's session options (events M1b) ───────────────────────────
 /**
  * WHAT AN ENGAGEMENT ITEM CARRIES OF THE SESSION IT BECOMES. The owner, 26
@@ -449,6 +548,8 @@ module.exports = {
   TYPE_LABELS, TYPE_ALIASES, CAP_SENTENCES,
   TITLE_MAX, PLACE_MAX, DESCRIPTION_MAX, LED_BY_MAX, LED_BY_LABELS, MIN_MINUTES, MAX_MINUTES, ATTENDEE_NAME_MAX,
   hasLeader, ledByLabel,
+  DECK_MAX_BYTES, DECK_MAX_PAGES, DECK_NAME_MAX, DECK_TYPE,
+  hasDeck, deckName, formatBytes, checkDeckFile, checkDeckFields, slidesLabel, slideLabel, clampPage,
   ACCESS_CHOICES, ACCESS_NOW, REPORT_DEFAULTS, DAY, KEEP_DAYS, MAX_DAYS_AHEAD,
   canonicalSetType, isEngagement, isCounted, countItems, capRefusal,
   SETTING_DEFAULTS, SETTING_KEYS, settingKeysFor, settingsFor, sessionFormOf,

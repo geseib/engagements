@@ -14,6 +14,10 @@
  *   { action: 'extend',    itemId }  a live break: back five minutes later
  *   { action: 'end-event' }          every live or paused item ends, and the
  *                                    event is over
+ *   { action: 'page', itemId, page } the slide a presentation's stage is on
+ *                                    (27 Sep 2026): kept on the item, so a
+ *                                    reload lands on it and phones following
+ *                                    the talk can show it (get-agenda.js)
  *
  * A ROUTE OF THE ITEMS FUNCTION (items.js hands it over), not a function of
  * its own: the stack is near CloudFormation's 500-resource limit. One route
@@ -60,7 +64,7 @@ const { json, readBody } = require('./event-http');
 const S = require('./event-store');
 const C = require('./child-session');
 
-const ACTIONS = Object.freeze(['prepare', 'start', 'resume', 'pause', 'end', 'extend', 'end-event']);
+const ACTIONS = Object.freeze(['prepare', 'start', 'resume', 'pause', 'end', 'extend', 'end-event', 'page']);
 const EXTEND_MINUTES = 5;
 const MINUTE_MS = 60 * 1000;
 
@@ -515,12 +519,50 @@ async function bumpRev(db, tableName, code) {
   }
 }
 
+/**
+ * TURN A PAGE — the slide a presentation's stage shows, kept on its row as
+ * `DeckPage` (1-based). Not a step of the day: it moves no state, tells no
+ * socket and does not move RunRev, so a phone re-reads nothing for it — the
+ * agenda's `now` view carries the page to phones already polling it. It is
+ * the host's view of the slides and nothing more, so it is kept in a
+ * preview, while paused, and after the day is over alike. The answer is the
+ * page, not the whole event: a clicker turns pages faster than the stage
+ * should redraw the agenda.
+ */
+async function turnPage(db, tableName, code, body) {
+  const itemId = String(body.itemId || '');
+  const row = await readItem(db, tableName, code, itemId);
+  if (!row) return itemGone();
+  const pages = Number(row.Deck && row.Deck.pages) || 0;
+  if (!rules.hasDeck(row.Type) || !pages) return refuse('This item has no slides.', 'no_slides');
+  const page = Number(body.page);
+  if (!Number.isInteger(page) || page < 1 || page > pages) {
+    return json(400, { error: `Choose a slide from 1 to ${pages}.` });
+  }
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: itemKey(code, itemId),
+      UpdateExpression: 'SET #dp = :page',
+      ConditionExpression: 'attribute_exists(#dk)',
+      ExpressionAttributeNames: { '#dp': 'DeckPage', '#dk': 'Deck' },
+      ExpressionAttributeValues: { ':page': page },
+    }));
+  } catch (error) {
+    if (error && error.name === 'ConditionalCheckFailedException') return raced();
+    throw error;
+  }
+  return json(200, { itemId, page });
+}
+
 /** POST /events/{code}/run, past the host's door. */
 async function runEvent(db, tableName, request, meta, code) {
   const body = readBody(request);
   if (!body) return json(400, { error: 'The request body is not valid JSON.' });
   const action = String(body.action || '');
   if (!ACTIONS.includes(action)) return json(400, { error: `Say what to do: ${ACTIONS.join(', ')}.` });
+
+  if (action === 'page') return turnPage(db, tableName, code, body);
 
   let outcome;
   if (action === 'end-event') {

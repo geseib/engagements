@@ -479,10 +479,13 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  who leads it (events M1b) — a person's name, personal data. `Settings`
    *  is an engagement's session options, sealed WHOLE: it carries Workie's
    *  briefing, instructions and event details, which a session seals too.
+   *  `DeckName` is a presentation's PDF as the host named the file (27 Sep
+   *  2026, events/deck-store.js) — words the host brought, like the title.
    *  `Type`, `Order`, `Minutes`, `State` and `SetRef` — a pointer to a
    *  question set, as a session's `QuestionSetId` is — are structure, and
-   *  stay plaintext. */
-  item: Object.freeze(['Title', 'Description', 'LedBy', 'Settings']),
+   *  stay plaintext; so are `Deck` (a storage key, a size and a page count)
+   *  and `DeckPage`. */
+  item: Object.freeze(['Title', 'Description', 'LedBy', 'Settings', 'DeckName']),
 
   /** Somebody who joined an open event (events M2): PK=EVENT#<code>,
    *  SK=ATTENDEE#<id>. `AttendeeName` is the name they typed — a person's

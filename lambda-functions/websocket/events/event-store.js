@@ -18,6 +18,8 @@ const { eventPk, callerMayManageEvent, ORG } = require('../tenant');
 const { decryptItem, isEnvelope } = require('../tenant-crypto');
 const { getSetMetadata, toVersion, versionList, knownVersions } = require('../set-version');
 const { callerSub } = require('./event-http');
+const { clampPage } = require('./agenda-rules');
+const { deckIdOf } = require('./deck-store');
 
 const META_SK = 'METADATA';
 const INDEX_PREFIX = 'EVENT#';
@@ -157,7 +159,7 @@ async function openItemRow(orgId, row, label) {
     return await decryptItemRow(orgId, row);
   } catch (error) {
     console.warn(`⚠️ ${label}: could not decrypt ${row && row.SK} of ${row && row.PK} for ${orgId}: ${error && error.message}`);
-    return { ...row, Title: '', Description: '', LedBy: '', Settings: null, decryptFailed: true };
+    return { ...row, Title: '', Description: '', LedBy: '', Settings: null, DeckName: '', decryptFailed: true };
   }
 }
 
@@ -186,6 +188,20 @@ function projectItem(row) {
   // envelope: a row that could not be opened carries none (openItemRow).
   if (r.Settings && typeof r.Settings === 'object' && !Array.isArray(r.Settings) && !isEnvelope(r.Settings)) {
     out.settings = r.Settings;
+  }
+  // A PRESENTATION'S SLIDES (27 Sep 2026, deck-store.js): the file's name as
+  // the host chose it (sealed with the item's words, so never an envelope
+  // here), its size and page count, and the page the stage is on. Never the
+  // storage key: a deck is read only through a URL the deck routes sign.
+  if (r.Deck && typeof r.Deck === 'object') {
+    const pages = Number(r.Deck.pages) || 0;
+    out.deck = {
+      id: deckIdOf(r.Deck.key),
+      name: typeof r.DeckName === 'string' ? r.DeckName : '',
+      pages,
+      bytes: Number(r.Deck.bytes) || 0,
+    };
+    out.deckPage = clampPage(r.DeckPage, pages);
   }
   if (r.SetRef && typeof r.SetRef === 'object') {
     out.setRef = {
