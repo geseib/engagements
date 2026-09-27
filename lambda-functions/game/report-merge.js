@@ -64,6 +64,14 @@
 /** A round carries participants only if it has at least one ranked answer. */
 const hasAnswers = (round) => Array.isArray(round && round.answers) && round.answers.length > 0;
 
+/**
+ * A closed survey's pseudo-round, 000: the Workie's read of the whole survey
+ * and the room's comments on it. It never had responses of its own — the
+ * survey's answers are in `surveyResults` — so an empty `answers` there is
+ * the round as it always was, not rows that expired.
+ */
+const neverHeldAnswers = (round) => String(round && round.questionNumber) === '000';
+
 /** `undefined`/`null` mean "the live table had nothing to say", not "empty". */
 const pick = (live, kept) => (live === undefined || live === null ? kept : live);
 
@@ -85,7 +93,7 @@ const resolvedQuestion = (round) => !!(round && round.questionData && round.ques
  * @returns {{ round: object, recovered: boolean, unrecoverable: boolean }}
  */
 function mergeRound(live, kept) {
-  if (!kept) return { round: live, recovered: false, unrecoverable: !hasAnswers(live) };
+  if (!kept) return { round: live, recovered: false, unrecoverable: !hasAnswers(live) && !neverHeldAnswers(live) };
   // The round fell out of the rebuild entirely. That is the votes-only round:
   // `questionNumbers` is built from votes ∪ results ∪ summaries, so a round
   // that was answered and voted but never closed disappears the moment its
@@ -114,7 +122,7 @@ function mergeRound(live, kept) {
         : {}),
     },
     recovered,
-    unrecoverable: !liveHas && !keptHas,
+    unrecoverable: !liveHas && !keptHas && !neverHeldAnswers(live),
   };
 }
 

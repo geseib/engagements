@@ -573,6 +573,114 @@ const aComment = (over = {}) => ({
     assert.match(JSON.parse(noReport.body).error, /report/i);
   });
 
+  // ---------- 8. a closed survey: its one pseudo-round, 000 ----------
+  console.log('\n8. a closed survey takes comments on 000, and never with a name');
+
+  /*
+    The owner, 27 Sep 2026: surveys get "the ability to provide feedback just
+    like we do for call and answer". A survey has no RESULTS#nnn — it is
+    SURVEY#OPEN, then SURVEY#CLOSED, then ENDED — so its Workie read and the
+    comments on it sit at 000, open exactly while the survey is CLOSED.
+    tests/survey-workie-read.js drives the same through the real close.
+  */
+  function seedSurvey(gameId, { state = 'SURVEY#CLOSED', beat = 'field-notes', prefs } = {}) {
+    store.clear();
+    sent = [];
+    put({
+      PK: `GAME#${gameId}`, SK: 'METADATA', GameType: 'survey', Title: 'Offsite pulse',
+      ...(prefs ? { HostPreferences: prefs } : {}),
+    });
+    put({ PK: `GAME#${gameId}`, SK: 'STATE', State: state });
+    put({ PK: `GAME#${gameId}`, SK: 'ROUND#000', QuestionNumber: '000', StageBeat: beat });
+    put({ PK: `GAME#${gameId}`, SK: 'PLAYER#Ada Lovelace', PlayerName: 'Ada Lovelace' });
+  }
+  const onTheRead = (over = {}) => aComment({
+    questionNumber: 0, anchorKind: 'summary', anchorRef: '', anchorLabel: 'AI summary',
+    anchorExcerpt: 'Prep matters.', text: 'Send the agenda too.', ...over,
+  });
+
+  seedSurvey('4020');
+  const surveyWrite = await post('4020', onTheRead());
+  check('a closed survey: a comment on 000 is written (201)', () =>
+    assert.strictEqual(surveyWrite.statusCode, 201, `got ${surveyWrite.statusCode}: ${surveyWrite.body}`));
+  check('...under COMMENT#000, the key create-report files as the survey\'s read', () =>
+    assert.ok(/^COMMENT#000#summary#/.test(rows('4020', 'COMMENT#')[0].SK), rows('4020', 'COMMENT#')[0].SK));
+
+  seedSurvey('4021');
+  const otherRound = await post('4021', onTheRead({ questionNumber: 3 }));
+  // rejects: a gate that opens any round number once a survey is closed.
+  check('a closed survey: any round but 000 is refused (409)', () =>
+    assert.strictEqual(otherRound.statusCode, 409, `got ${otherRound.statusCode}`));
+
+  for (const state of ['SURVEY#OPEN', 'ENDED']) {
+    seedSurvey('4022', { state });
+    // eslint-disable-next-line no-await-in-loop
+    const refused = await post('4022', onTheRead());
+    // rejects: comments while the room is still answering, or after the end.
+    check(`a survey in ${state}: a comment on 000 is refused (409)`, () =>
+      assert.strictEqual(refused.statusCode, 409, `got ${refused.statusCode}`));
+  }
+
+  seedGame('4023');
+  put({ PK: 'GAME#4023', SK: 'STATE', State: 'SURVEY#CLOSED' });
+  const notASurvey = await post('4023', onTheRead());
+  // rejects: keying the 000 door on the state string alone.
+  check('a round session is not a survey, whatever its state says: 000 is refused (409)', () =>
+    assert.strictEqual(notASurvey.statusCode, 409, `got ${notASurvey.statusCode}`));
+
+  // The host's saved preference says names are shown; a survey says otherwise.
+  seedSurvey('4024', { prefs: { anonymousUntilReveal: false } });
+  await post('4024', onTheRead());
+  const surveyRead = JSON.parse((await get('4024', { questionNumber: '000' })).body);
+  check('read back, a survey comment carries no name — even with names switched on for rounds', () => {
+    assert.strictEqual(surveyRead.comments.length, 1);
+    const c = surveyRead.comments[0];
+    assert.strictEqual(c.text, 'Send the agenda too.');
+    assert.ok(!('playerName' in c) && !('name' in c), `a name survived: ${JSON.stringify(c)}`);
+  });
+
+  seedSurvey('4025', { beat: 'feedback' });
+  put({
+    PK: 'GAME#4025', SK: 'REPORT', gameId: '4025', gameTitle: 'Offsite pulse',
+    detailedQuestions: [{
+      questionNumber: '000', questionData: { title: 'Question 000' }, answers: [],
+      aiSummary: { markdownResponse: '## What the Room Said\n\n- **Prep**: send slides early.' }, comments: [],
+    }],
+    surveyResults: {
+      n: 2, finished: 2,
+      questions: [
+        { qid: 'c001#001', n: 1, kind: 'rating', scale: '1-5', title: 'How useful was today?', result: { kind: 'rating', n: 2, counts: [0, 0, 1, 0, 1], mean: 4 }, texts: [] },
+        { qid: 'c001#002', n: 2, kind: 'text', title: 'What would you change?', result: { kind: 'text', n: 1, answerIds: ['c001#002:0'] }, texts: [{ id: 'c001#002:0', text: 'Slides a day ahead' }] },
+      ],
+    },
+  });
+  await post('4025', onTheRead());
+  const surveyRound = JSON.parse((await feedbackRound('4025')).body);
+  check('the survey\'s feedback round is round 000, titled with the survey', () => {
+    assert.strictEqual(surveyRound.questionNumber, '000');
+    assert.strictEqual(surveyRound.round.title, 'Offsite pulse');
+    assert.strictEqual(surveyRound.round.questionData.title, 'Offsite pulse');
+  });
+  // rejects: a round RoundReport cannot draw — it reads `answers[].answer`.
+  check('...one row per question, in the words the Workie was given', () => {
+    assert.strictEqual(surveyRound.round.answers.length, 2);
+    assert.ok(surveyRound.round.answers[0].answer.startsWith('1. How useful was today? (a rating)'),
+      surveyRound.round.answers[0].answer);
+    assert.ok(surveyRound.round.answers[1].answer.includes('"Slides a day ahead"'), surveyRound.round.answers[1].answer);
+    assert.strictEqual(surveyRound.round.answers[1].answerText, surveyRound.round.answers[1].answer);
+  });
+  check('...with the Workie\'s read from the 000 slice, and the comments, nameless', () => {
+    assert.ok(surveyRound.round.aiSummary.markdownResponse.includes('send slides early'));
+    assert.strictEqual(surveyRound.round.comments.length, 1);
+    assert.ok(!('playerName' in surveyRound.round.comments[0]), 'a name survived');
+  });
+
+  seedSurvey('4026', { beat: 'field-notes' });
+  put({ PK: 'GAME#4026', SK: 'REPORT', gameId: '4026', detailedQuestions: [], surveyResults: { n: 0, questions: [] } });
+  const surveyNotOpen = await feedbackRound('4026');
+  check('a closed survey on What We Heard has no feedback round open (409)', () =>
+    assert.strictEqual(surveyNotOpen.statusCode, 409, `got ${surveyNotOpen.statusCode}`));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

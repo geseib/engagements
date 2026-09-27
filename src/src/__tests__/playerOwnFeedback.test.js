@@ -304,6 +304,40 @@ describe('minors folded into fix round 1', () => {
   });
 });
 
+/**
+ * A CLOSED SURVEY'S FEEDBACK ROUND ON THE PHONE (27 Sep 2026). The owner:
+ * surveys get "the ability to provide feedback just like we do for call and
+ * answer". A survey phone renders SurveyRunner for everything, so the host's
+ * feedback round (round 000, confirmed by GET /feedback-round) has to be
+ * checked BEFORE that early return — and asked for on arrival, like a round's.
+ */
+describe('a closed survey hands the phone the same feedback round', () => {
+  test('the survey feedback arm comes before the SurveyRunner early return', () => {
+    const arm = player.indexOf("if (gameType === 'survey' && gameState === 'SURVEY#CLOSED' && feedbackRound)");
+    const runner = player.indexOf('<SurveyRunner');
+    expect(arm).toBeGreaterThan(-1);
+    expect(runner).toBeGreaterThan(arm);
+  });
+
+  test('it is the host-triggered panel, posting through the same composer, with no name promised', () => {
+    const arm = sliceFrom(player, "if (gameType === 'survey' && gameState === 'SURVEY#CLOSED' && feedbackRound)", "if (gameType === 'survey') {");
+    expect(arm).toMatch(/<FeedbackRoundPanel/);
+    expect(arm).toMatch(/round=\{feedbackRound\}/);
+    expect(arm).toMatch(/questionNumber=\{feedbackNumber\}/);
+    expect(arm).toMatch(/onSubmit=\{submitComment\}/);
+    // rejects: "Your name will be shown" on a surface whose comments never
+    // carry one (comments.js strips it for a survey).
+    expect(arm).toMatch(/namesShown=\{false\}/);
+  });
+
+  test('a phone arriving on a closed survey asks whether the feedback round is open', () => {
+    // The arrival effect, not only the frame: a phone that joins or reloads
+    // mid-feedback has already missed the stageBeatChanged that opened it.
+    const effect = sliceFrom(player, 'if (!joined || !gameId) return;', 'loadFeedbackRound();');
+    expect(effect).toMatch(/gameState !== 'SURVEY#CLOSED'/);
+  });
+});
+
 describe('the player page still registers and removes its sockets symmetrically', () => {
   // Guards against this feature having quietly added a handler with no
   // matching offMessage — the exact defect feedbackRoundCallSite.test.js

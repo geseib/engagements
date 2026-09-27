@@ -924,6 +924,49 @@ describe('Survey results in the report', () => {
     expect(meta[2]).toBe('Questions2');
   });
 
+  /*
+   * THE WORKIE'S READ OF A CLOSED SURVEY, AND THE ROOM'S COMMENTS ON IT
+   * (27 Sep 2026). Both live at round 000; create-report.js files that as the
+   * one `detailedQuestions` entry a survey has, and the report prints it
+   * first, as 34-report.html puts "Workie's read" above the questions.
+   */
+  const surveyRead = {
+    questionNumber: '000',
+    questionData: { title: 'Question 000' },
+    answers: [],
+    aiSummary: { markdownResponse: '## What the Room Said\n\n- **Useful**: both rated it 4 or 5.' },
+    comments: [{
+      commentId: 'c-1', anchorKind: 'summary', anchorLabel: 'AI summary', anchorExcerpt: 'Useful',
+      text: 'Agreed — and send the agenda too.', featured: false,
+    }],
+  };
+
+  test('a closed survey\'s read prints as "What we heard", ahead of the results', () => {
+    const { container } = render(<ReportDocument reportData={{ ...surveyReportData, questions: [surveyRead] }} />);
+    const read = container.querySelector('.report-survey-read');
+    expect(read).not.toBeNull();
+    expect(read.textContent).toMatch(/What we heard/);
+    expect(read.textContent).toMatch(/both rated it 4 or 5/);
+    // rejects: the read printed after the charts, or not at all.
+    const results = container.querySelector('.report-survey-results');
+    // eslint-disable-next-line no-bitwise
+    expect(read.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('...with the room\'s comments on it, each unattributed', () => {
+    const { container } = render(<ReportDocument reportData={{ ...surveyReportData, questions: [surveyRead] }} />);
+    const comment = container.querySelector('.report-survey-read .report-comment');
+    expect(comment.textContent).toMatch(/Agreed — and send the agenda too\./);
+    expect(comment.querySelector('.comment-author').textContent).toBe('Comment 1');
+  });
+
+  test('a survey with no read yet prints no empty section for it', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    expect(container.querySelector('.report-survey-read')).toBeNull();
+    // Nor does a round type grow one.
+    expect(screen.queryByText('What we heard')).toBeNull();
+  });
+
   // rejects: a report requested before the survey has closed crashing, or
   // silently rendering half a page — the front matter must still be a
   // complete document on its own.

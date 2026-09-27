@@ -17,6 +17,9 @@ import {
   stageBeatFromFrame,
   canEndSession,
   endSessionConfirm,
+  hostPhaseForBeat,
+  resultsRoundOf,
+  SURVEY_ROUND,
 } from '../config/hostControls';
 import { GAME_TYPE_LIST } from '../config/gameTypes';
 
@@ -744,9 +747,14 @@ describe('a survey: the four phases, each with exactly one primary', () => {
     expect(early).toMatch(/cannot be reopened/);
   });
 
-  test('CLOSED: "End the session", with "See the results" beside it', () => {
+  test('CLOSED: "What We Heard", with "See the results" beside it', () => {
+    // 27 Sep 2026, the owner: the Workie comments on a survey's results as it
+    // does on a round's. CLOSED is the survey's results showing, so its
+    // primary is the same beat RESULTS' is; the end is one step later.
+    // rejects: a closed survey that still goes straight to the end, with no
+    // way to the Workie's read but the settings panel.
     const c = survey('CLOSED');
-    expect(c.primary).toMatchObject({ label: 'End the session', intent: HOST_INTENTS.END_SURVEY, disabled: false });
+    expect(c.primary).toMatchObject({ label: 'What We Heard', intent: HOST_INTENTS.FIELD_NOTES, disabled: false });
     expect(c.secondary).toMatchObject({ label: 'See the results', intent: HOST_INTENTS.SURVEY_RESULTS });
     expect(c.secondary.confirm).toBeFalsy();
   });
@@ -988,5 +996,88 @@ describe('the page wires "End session" to the intent and the confirm', () => {
     expect(source).toMatch(/from '\.\/utils\/endSession'/);
     const dispatch = bodyOf('endSessionNow');
     expect(dispatch).toMatch(/requestEndSession\(\{ fetchFn: authFetch/);
+  });
+});
+
+/**
+ * A CLOSED SURVEY HAS THE ROUND'S BEATS (27 Sep 2026). The owner: "For polls
+ * and Surveys: having the Workie just comment on the results … Also it could
+ * make sense to have the ability to provide feedback just like we do for call
+ * and answer." A survey has no rounds, so the Workie's read and the feedback
+ * round ride the round machinery at round 000, off the CLOSED phase — and
+ * every way on from them is the survey's end, because next-question refuses a
+ * survey.
+ */
+describe('a closed survey: What We Heard, then feedback, then the end', () => {
+  const survey = (phase, extra = {}) => hostControlsFor({ gameType: 'survey', phase, ...READY, ...extra });
+
+  test('the beats map off CLOSED exactly as they map off RESULTS', () => {
+    // rejects: a survey beat that the phase derivation drops, so the stage
+    // stays on the frozen counts while the room is asked for feedback.
+    expect(hostPhaseForBeat('CLOSED', 'field-notes')).toBe('FIELD_NOTES');
+    expect(hostPhaseForBeat('CLOSED', 'feedback')).toBe('FEEDBACK');
+    expect(hostPhaseForBeat('CLOSED', 'results')).toBe('CLOSED');
+    expect(hostPhaseForBeat('CLOSED', 'from-the-future')).toBe('CLOSED');
+    // Still collecting: a beat means nothing yet.
+    expect(hostPhaseForBeat('COLLECTING', 'field-notes')).toBe('COLLECTING');
+  });
+
+  test('What We Heard, on its last page: "End the session", with "Request feedback" beside it', () => {
+    const c = survey('FIELD_NOTES');
+    expect(c.primary).toMatchObject({ label: 'End the session', intent: HOST_INTENTS.END_SURVEY, disabled: false });
+    expect(c.secondary).toMatchObject({ label: 'Request feedback', intent: HOST_INTENTS.FEEDBACK });
+  });
+
+  test('What We Heard, mid-document: the page turn, and the end as the way past the rest', () => {
+    const c = survey('FIELD_NOTES', { notesPage: 0, notesPages: 3 });
+    expect(c.primary).toMatchObject({ label: 'Next Page', intent: HOST_INTENTS.PAGE });
+    expect(c.secondary).toMatchObject({ label: 'End the session', intent: HOST_INTENTS.END_SURVEY });
+  });
+
+  test('the feedback round: "End the session", with "Back to What We Heard" beside it', () => {
+    const c = survey('FEEDBACK');
+    expect(c.primary).toMatchObject({ label: 'End the session', intent: HOST_INTENTS.END_SURVEY, disabled: false });
+    expect(c.secondary).toMatchObject({ label: 'Back to What We Heard', intent: HOST_INTENTS.FIELD_NOTES });
+  });
+
+  test('no control on a closed survey\'s beats asks for a next round', () => {
+    // rejects: the round types' "Next Question" left on a survey's read-back —
+    // next-question refuses a survey, so it is a button that does nothing.
+    for (const phase of ['CLOSED', 'FIELD_NOTES', 'FEEDBACK']) {
+      for (const pages of [1, 3]) {
+        const c = survey(phase, { notesPage: 0, notesPages: pages });
+        for (const control of [c.primary, c.secondary, c.tertiary].filter(Boolean)) {
+          expect([HOST_INTENTS.NEXT, HOST_INTENTS.SKIP, HOST_INTENTS.START]).not.toContain(control.intent);
+        }
+      }
+    }
+  });
+
+  test('the round types keep their own way on from the same beats', () => {
+    for (const type of ALL_TYPES.filter((t) => t !== 'survey')) {
+      expect(hostControlsFor({ gameType: type, phase: 'FIELD_NOTES', ...READY }).primary.intent).toBe(HOST_INTENTS.NEXT);
+      expect(hostControlsFor({ gameType: type, phase: 'FEEDBACK', ...READY }).primary.intent).toBe(HOST_INTENTS.NEXT);
+    }
+  });
+
+  test('resultsRoundOf: the round whose results are up, padded as the server keys it', () => {
+    expect(resultsRoundOf('RESULTS#003')).toBe('003');
+    expect(resultsRoundOf('RESULTS#12')).toBe('012');
+    expect(resultsRoundOf('SURVEY#CLOSED')).toBe(SURVEY_ROUND);
+    expect(SURVEY_ROUND).toBe('000');
+    // rejects: a survey still collecting, or any live round phase, treated as
+    // results showing — a comment or a beat then lands on the wrong round.
+    for (const state of ['SURVEY#OPEN', 'ASK#003', 'VOTE#003', 'ENDED', 'CREATED', '', null, undefined]) {
+      expect(resultsRoundOf(state)).toBeNull();
+    }
+  });
+
+  test('the stage follows a beat for round 000 while the survey is closed, and at no other time', () => {
+    const frame = (beat, questionNumber) => ({ type: 'stageBeatChanged', beat, questionNumber });
+    expect(stageBeatFromFrame(frame('field-notes', '000'), 'SURVEY#CLOSED')).toBe('field-notes');
+    expect(stageBeatFromFrame(frame('feedback', 0), 'SURVEY#CLOSED')).toBe('feedback');
+    expect(stageBeatFromFrame(frame('field-notes', '001'), 'SURVEY#CLOSED')).toBeNull();
+    expect(stageBeatFromFrame(frame('field-notes', '000'), 'SURVEY#OPEN')).toBeNull();
+    expect(stageBeatFromFrame(frame('field-notes', '000'), 'RESULTS#001')).toBeNull();
   });
 });

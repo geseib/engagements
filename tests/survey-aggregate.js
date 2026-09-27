@@ -591,6 +591,11 @@ const READERS = new Map([
   // comment alone.
   ['src/src/components/survey/results/RankResult.jsx', 'displays avgPlace and placeHist, computes neither'],
   ['src/src/components/survey/results/RatingResult.jsx', 'displays topTwo, computes nothing'],
+  // The Workie's read of a closed survey (27 Sep 2026): prints each ranking's
+  // avgPlace and firsts from surveyResultsPayload into the prompt's
+  // {surveyResults}, in the order those averages already put them. It divides
+  // nothing — read it before trusting this line, as the note above says.
+  ['lambda-functions/game/survey-digest.js', 'prints avgPlace and firsts into the Workie prompt, computes neither'],
 ]);
 
 const OWN = 'lambda-functions/game/survey-aggregate.js';

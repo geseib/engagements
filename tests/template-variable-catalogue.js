@@ -333,6 +333,25 @@ check('pollOptions is offered to polls and NOT to surveys', () => {
   assert.deepStrictEqual(typesFor('pollOptions'), ['poll']);
 });
 
+check('surveyResults is offered to surveys alone, because only a survey\'s read fills it', () => {
+  /*
+    A closed survey's whole result (27 Sep 2026), from survey-digest.js. The
+    key is '' on every round of every other type, so the rule above puts
+    survey alone on its tag — and it is the survey's answers, so it must be
+    one of the tokens that satisfies "this prompt receives the responses".
+
+    rejects: tagging it for polls (a poll's result is triviaResponses);
+    assigning it from anything but the digest; leaving it off the
+    ANSWER_TOKENS list, which would refuse every survey prompt at save.
+  */
+  assert.deepStrictEqual(typesFor('surveyResults'), ['survey']);
+  assert(/surveyResults: survey \? survey\.text : ''/.test(summarySource),
+    'surveyResults is no longer the digest\'s text; re-derive its tag');
+  const pf = fs.readFileSync(path.join(REPO, 'src', 'src', 'utils', 'promptPreflight.js'), 'utf8');
+  const block = pf.slice(pf.indexOf('const ANSWER_TOKENS'), pf.indexOf('];', pf.indexOf('const ANSWER_TOKENS')));
+  assert(block.includes("'surveyResults'"), 'a survey prompt naming {surveyResults} would be refused at save');
+});
+
 check('triviaResponses is offered to polls too, because the poll branch assigns it', () => {
   // rejects: trusting the NAME. It is assigned twice — once in the trivia
   // branch and once in the poll branch, where it formats as "option: n votes".

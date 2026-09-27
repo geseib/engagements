@@ -86,6 +86,14 @@ export default function FeedbackRoundPanel({
    * current, so it never needs this.
    */
   postDisabled = false,
+  /**
+   * WHETHER THE WRITER'S NAME GOES WITH THE COMMENT. True for a round, whose
+   * feedback runs attributed (the disclosure below). False for a closed
+   * survey's feedback round (27 Sep 2026): comments.js strips the name from
+   * every survey comment, on every screen and in the report, so the composer
+   * must promise the opposite — and say it before anyone types.
+   */
+  namesShown = true,
 }) {
   /** The section being commented on, or null when the composer is closed. */
   const [anchor, setAnchor] = useState(null);
@@ -212,7 +220,11 @@ export default function FeedbackRoundPanel({
             that assumption into a comment is the real privacy failure available
             here. It is said BEFORE they type, not discovered afterwards.
           */}
-          <p className="fbr__attribution">Your name will be shown with this comment.</p>
+          <p className="fbr__attribution">
+            {namesShown
+              ? 'Your name will be shown with this comment.'
+              : 'Your name is not shown with this comment.'}
+          </p>
 
           {error && <p className="fbr__error">{error}</p>}
 

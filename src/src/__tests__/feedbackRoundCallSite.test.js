@@ -151,10 +151,12 @@ describe('the comment count follows the round, not the beat', () => {
   });
 
   test('it reloads on any RESULTS phase, not only the feedback beat', () => {
+    // `resultsRoundOf` (config/hostControls.js) answers for every RESULTS#nnn
+    // and for a closed survey's round 000 — the 27 Sep 2026 survey feedback.
     const candidates = allEffects(host).filter(
       (e) => /\[\s*gameState\s*\]/.test(e) && /loadRoundComments/.test(e),
     );
-    expect(candidates[0]).toMatch(/phaseOfGameState\(gameState\) === 'RESULTS'/);
+    expect(candidates[0]).toMatch(/resultsRoundOf\(gameState\) !== null/);
     expect(candidates[0]).not.toMatch(/resultsBeat === 'feedback'/);
   });
 
@@ -175,6 +177,59 @@ describe('the comment count follows the round, not the beat', () => {
   });
 });
 
+
+/**
+ * A CLOSED SURVEY OPENS THE SAME FEEDBACK ROUND (27 Sep 2026). The owner: "it
+ * could make sense to have the ability to provide feedback just like we do for
+ * call and answer." A survey has no RESULTS#nnn — its results are showing
+ * while it is SURVEY#CLOSED — so every place the page asks "which round's
+ * results are up" has to answer 000 for it, or the beat, the report build and
+ * the comment count all silently do nothing on a survey.
+ */
+describe('a closed survey is a round whose results are showing: 000', () => {
+  const { resultsRoundOf } = require('../config/hostControls');
+  const bodyOf = (name) => {
+    const start = host.indexOf(`const ${name} = `);
+    expect(start).toBeGreaterThan(-1);
+    return host.slice(start, host.indexOf('\n  };', start));
+  };
+
+  test('the shared answer maps a closed survey to 000', () => {
+    expect(resultsRoundOf('SURVEY#CLOSED')).toBe('000');
+    expect(resultsRoundOf('RESULTS#004')).toBe('004');
+    expect(resultsRoundOf('SURVEY#OPEN')).toBeNull();
+  });
+
+  test.each(['publishStageBeat', 'requestFeedbackRound', 'loadRoundComments'])(
+    '%s asks resultsRoundOf, not the RESULTS phase alone',
+    (name) => {
+      // rejects: a survey's "Request feedback" that returns before it builds
+      // the report, because RESULTS#nnn is the only shape it recognises.
+      const body = bodyOf(name);
+      expect(body).toMatch(/resultsRoundOf\(gameState\)/);
+      expect(body).not.toMatch(/phaseOfGameState\(gameState\) === 'RESULTS'/);
+    },
+  );
+
+  test('publishStageBeat and requestFeedbackRound treat round 0 as a round, not as "none"', () => {
+    // `!round` is true for 0, which is exactly a survey's round number.
+    for (const name of ['publishStageBeat', 'requestFeedbackRound']) {
+      expect(bodyOf(name)).toMatch(/=== null\) return;/);
+    }
+  });
+
+  test('the stage scopes its comments by the same answer', () => {
+    expect(host).toMatch(/const currentResultsRound = resultsRoundOf\(gameState\);/);
+  });
+
+  test('a closed survey fetches, else generates, the Workie read at 000', () => {
+    const effects = [...host.matchAll(/useEffect\(\(\) => \{[\s\S]*?\n {2}\}, \[[^\]]*\]\);/g)].map((m) => m[0]);
+    const survey = effects.find((e) => /gameState !== 'SURVEY#CLOSED'/.test(e));
+    expect(survey).toBeTruthy();
+    expect(survey).toMatch(/fetchAISummary\(SURVEY_ROUND\)/);
+    expect(survey).toMatch(/startAISummaryGeneration\(SURVEY_ROUND, 0\)/);
+  });
+});
 
 /**
  * THE PLAYER PAGE LETS GO OF WHAT IT SUBSCRIBED TO.

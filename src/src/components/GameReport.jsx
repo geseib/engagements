@@ -325,6 +325,139 @@ function GameReport({
 }
 
 /**
+ * WHAT THE AI MADE OF ONE ROUND — or of a whole closed survey, whose read
+ * is the report's round 000 (27 Sep 2026). One renderer for both, so a
+ * survey's read prints exactly as a round's does.
+ */
+function ReportAISummary({ aiSummary }) {
+  if (!aiSummary) return null;
+  return (
+    <div className="report-block report-ai-summary">
+      <h3 className="report-block-heading">
+        <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" />AI Analysis
+      </h3>
+
+      <div className="report-ai-content">
+        {aiSummary.markdownResponse ? (
+          // Use Markdown renderer if available
+          <MarkdownRenderer
+            content={aiSummary.markdownResponse}
+            className="report-ai-markdown"
+          />
+        ) : (
+          // Fallback to structured display
+          <>
+            {/* Summary */}
+            {aiSummary.summaryText && (
+              <div className="report-ai-text">
+                <h4>Summary</h4>
+                {/* Same reason as the stage fallback: this text is
+                    model output and carries markdown. */}
+                <MarkdownRenderer content={aiSummary.summaryText} className="report-ai-markdown" />
+              </div>
+            )}
+
+            {/* Conversation Starters */}
+            {aiSummary.discussionQuestions && aiSummary.discussionQuestions.length > 0 && (
+              <div className="report-ai-discussion">
+                <h4>Conversation Starters</h4>
+                <ul>
+                  {aiSummary.discussionQuestions.map((discussionQuestion, idx) => (
+                    <li key={idx}>{discussionQuestion}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Next Steps */}
+            {aiSummary.nextSteps && aiSummary.nextSteps.length > 0 && (
+              <div className="report-ai-steps">
+                <h4>Next Steps</h4>
+                <ul>
+                  {aiSummary.nextSteps.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * WHAT THE ROOM SAID ABOUT THIS ROUND'S REPORT, in a feedback
+ * round. The owner: *"these will get added to the round report and
+ * the over all report as well. clearly called out as comments."*
+ *
+ * CLEARLY CALLED OUT is done three ways, because this is the one
+ * surface where the two kinds of prose sit closest together and
+ * the reader may be holding a printout with no way to ask: its own
+ * heading, its own class, and — on every comment — the SECTION it
+ * is about. That last one is the load-bearing part here. A comment
+ * in the session report is read a long way from the round it
+ * belongs to, so "too internal" against nothing is not a comment.
+ *
+ * The label is the STORED one, never re-derived from the answers
+ * array beside it. That is what keeps a comment readable after the
+ * 7-day ANSWER rows expire and this report rebuilds with
+ * `answers: []` — from that point the label and the excerpt are
+ * the only surviving record of what was being discussed.
+ *
+ * Absent on every report built before this feature, so the guard
+ * is a real case and not defensive habit.
+ *
+ * A closed survey's comments (27 Sep 2026) print here too, from its round
+ * 000, and arrive with no `playerName` at all — create-report.js never
+ * attributes a survey comment — so each reads as "Comment N".
+ */
+function ReportComments({ comments }) {
+  if (!Array.isArray(comments) || comments.length === 0) return null;
+  return (
+    <div className="report-comments">
+      <h3 className="report-block-heading">Comments</h3>
+      {comments.map((comment, cIdx) => (
+        <div key={comment.commentId || cIdx} className="report-comment report-keep">
+          {comment.anchorLabel && (
+            <div className="comment-on">On {comment.anchorLabel}</div>
+          )}
+          {/*
+            THE EXCERPT — quoted material the comment is about, not
+            the comment itself. In THIS report it is not optional
+            polish: the label alone names a section ("Response 1 —
+            Ada") that this document has no other way to show once
+            the 7-day answer rows behind it have expired, and a
+            session report is read further from the round it
+            belongs to than the round report ever is. Absent on a
+            comment stored before this field existed — `''`, never
+            undefined, so this renders nothing rather than an empty
+            quote.
+          */}
+          {comment.anchorExcerpt && (
+            <div className="comment-excerpt">{comment.anchorExcerpt}</div>
+          )}
+          <blockquote className="comment-text">{comment.text}</blockquote>
+          <div className="comment-meta">
+            {/* `playerName` is ABSENT, never null, on a round the
+                server redacted — so the fallback is a position,
+                never a blank where a name should be. */}
+            <span className="comment-author">
+              {comment.playerName || `Comment ${cIdx + 1}`}
+            </span>
+            {/* The host put it on the wall during the round. */}
+            {comment.featured === true && (
+              <span className="comment-featured">Shown to the room</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * THE DOCUMENT ITSELF — one <article>, one column, on screen and on paper.
  *
  * Split out from the shell so it takes a guaranteed-present `reportData`: the
@@ -399,6 +532,11 @@ function ReportDocument({ reportData }) {
    */
   const isSurvey = reportData.gameType === 'survey';
   const surveyResults = reportData.surveyResults || null;
+  // A closed survey's Workie read and the room's comments on it: the round
+  // 000 entry create-report.js files for it, or null.
+  const surveyRead = isSurvey
+    ? questions.find((q) => String(q && q.questionNumber) === '000') || null
+    : null;
   // `surveyNames` travels on its own even when `surveyResults` is still
   // null (a report requested before the survey has closed), so this reads
   // off it first and falls back to the frozen results' own copy.
@@ -561,7 +699,30 @@ function ReportDocument({ reportData }) {
             has not closed yet — renders nothing further; the front matter
             above is still a complete document as far as it goes.
           */
-          surveyResults && surveyResults.questions.length > 0 && (
+          <>
+          {/*
+            THE WORKIE'S READ OF THE SURVEY, AND WHAT THE ROOM SAID ABOUT IT
+            (27 Sep 2026). A closed survey's read and its feedback round live
+            at round 000 (get-ai-summary.js, comments.js), which create-report
+            files as the one entry a survey has in `detailedQuestions`. First,
+            as the mockup puts it (docs/design/survey-redesign/34-report.html:
+            "Workie's read" above the questions) — the conclusion leads, the
+            charts are the evidence beneath it. The same two renderers a round
+            uses, so the two cannot print a read differently.
+          */}
+          {surveyRead && (surveyRead.aiSummary || (surveyRead.comments || []).length > 0) && (
+            <section className="report-question report-survey-read">
+              <header className="report-question-header">
+                <p className="report-section-index">
+                  <span className="report-section-number">Workie&rsquo;s read</span>
+                </p>
+                <h2 className="report-lesson-heading">What we heard</h2>
+              </header>
+              <ReportAISummary aiSummary={surveyRead.aiSummary} />
+              <ReportComments comments={surveyRead.comments} />
+            </section>
+          )}
+          {surveyResults && surveyResults.questions.length > 0 && (
             <section className="report-question report-survey-results">
               <header className="report-question-header">
                 <p className="report-section-index">
@@ -577,7 +738,8 @@ function ReportDocument({ reportData }) {
                 ))}
               </div>
             </section>
-          )
+          )}
+          </>
         ) : (
         <>
         {questions.map((question, qIdx) => {
@@ -639,60 +801,7 @@ function ReportDocument({ reportData }) {
               )}
 
               {/* AI Summary for this question */}
-              {aiSummary && (
-                <div className="report-block report-ai-summary">
-                  <h3 className="report-block-heading">
-                    <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" />AI Analysis
-                  </h3>
-
-                  <div className="report-ai-content">
-                    {aiSummary.markdownResponse ? (
-                      // Use Markdown renderer if available
-                      <MarkdownRenderer
-                        content={aiSummary.markdownResponse}
-                        className="report-ai-markdown"
-                      />
-                    ) : (
-                      // Fallback to structured display
-                      <>
-                        {/* Summary */}
-                        {aiSummary.summaryText && (
-                          <div className="report-ai-text">
-                            <h4>Summary</h4>
-                            {/* Same reason as the stage fallback: this text is
-                                model output and carries markdown. */}
-                            <MarkdownRenderer content={aiSummary.summaryText} className="report-ai-markdown" />
-                          </div>
-                        )}
-
-                        {/* Conversation Starters */}
-                        {aiSummary.discussionQuestions && aiSummary.discussionQuestions.length > 0 && (
-                          <div className="report-ai-discussion">
-                            <h4>Conversation Starters</h4>
-                            <ul>
-                              {aiSummary.discussionQuestions.map((discussionQuestion, idx) => (
-                                <li key={idx}>{discussionQuestion}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Next Steps */}
-                        {aiSummary.nextSteps && aiSummary.nextSteps.length > 0 && (
-                          <div className="report-ai-steps">
-                            <h4>Next Steps</h4>
-                            <ul>
-                              {aiSummary.nextSteps.map((step, idx) => (
-                                <li key={idx}>{step}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+              <ReportAISummary aiSummary={aiSummary} />
 
               <div className="report-answers">
                 <h3 className="report-block-heading">Player applications</h3>
@@ -718,68 +827,7 @@ function ReportDocument({ reportData }) {
                 )}
               </div>
 
-              {/*
-                WHAT THE ROOM SAID ABOUT THIS ROUND'S REPORT, in a feedback
-                round. The owner: *"these will get added to the round report and
-                the over all report as well. clearly called out as comments."*
-
-                CLEARLY CALLED OUT is done three ways, because this is the one
-                surface where the two kinds of prose sit closest together and
-                the reader may be holding a printout with no way to ask: its own
-                heading, its own class, and — on every comment — the SECTION it
-                is about. That last one is the load-bearing part here. A comment
-                in the session report is read a long way from the round it
-                belongs to, so "too internal" against nothing is not a comment.
-
-                The label is the STORED one, never re-derived from the answers
-                array beside it. That is what keeps a comment readable after the
-                7-day ANSWER rows expire and this report rebuilds with
-                `answers: []` — from that point the label and the excerpt are
-                the only surviving record of what was being discussed.
-
-                Absent on every report built before this feature, so the guard
-                is a real case and not defensive habit.
-              */}
-              {Array.isArray(question.comments) && question.comments.length > 0 && (
-                <div className="report-comments">
-                  <h3 className="report-block-heading">Comments</h3>
-                  {question.comments.map((comment, cIdx) => (
-                    <div key={comment.commentId || cIdx} className="report-comment report-keep">
-                      {comment.anchorLabel && (
-                        <div className="comment-on">On {comment.anchorLabel}</div>
-                      )}
-                      {/*
-                        THE EXCERPT — quoted material the comment is about, not
-                        the comment itself. In THIS report it is not optional
-                        polish: the label alone names a section ("Response 1 —
-                        Ada") that this document has no other way to show once
-                        the 7-day answer rows behind it have expired, and a
-                        session report is read further from the round it
-                        belongs to than the round report ever is. Absent on a
-                        comment stored before this field existed — `''`, never
-                        undefined, so this renders nothing rather than an empty
-                        quote.
-                      */}
-                      {comment.anchorExcerpt && (
-                        <div className="comment-excerpt">{comment.anchorExcerpt}</div>
-                      )}
-                      <blockquote className="comment-text">{comment.text}</blockquote>
-                      <div className="comment-meta">
-                        {/* `playerName` is ABSENT, never null, on a round the
-                            server redacted — so the fallback is a position,
-                            never a blank where a name should be. */}
-                        <span className="comment-author">
-                          {comment.playerName || `Comment ${cIdx + 1}`}
-                        </span>
-                        {/* The host put it on the wall during the round. */}
-                        {comment.featured === true && (
-                          <span className="comment-featured">Shown to the room</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ReportComments comments={question.comments} />
             </section>
           );
         })}

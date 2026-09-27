@@ -103,9 +103,37 @@ export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
  */
 const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', feedback: 'FEEDBACK' };
 
+/*
+  A CLOSED SURVEY HAS THE SAME BEATS (27 Sep 2026, the owner: the Workie
+  comments on a survey's results, and the room can give feedback "just like
+  we do for call and answer"). CLOSED is a survey's results showing, so the
+  beats map off it exactly as they map off RESULTS; every other phase keeps
+  ignoring a beat.
+*/
 export function hostPhaseForBeat(roundPhase, beat) {
-  if (roundPhase !== 'RESULTS') return roundPhase;
+  if (roundPhase !== 'RESULTS' && roundPhase !== 'CLOSED') return roundPhase;
   return PHASE_FOR_BEAT[beat] || roundPhase;
+}
+
+/**
+ * A SURVEY'S ONE ROUND NUMBER. A survey has no rounds, so its Workie read and
+ * the comments on it sit at a number no round can have — the server's
+ * get-ai-summary.js, comments.js and stage-beat.js all take 000 as a round.
+ */
+export const SURVEY_ROUND = '000';
+
+/**
+ * The round whose results are showing, padded the way the server keys it —
+ * '003' on RESULTS#003, SURVEY_ROUND on a closed survey — or null when no
+ * results are up. The one answer to "which round does a beat, a comment or a
+ * summary belong to right now", so the stage's four callers cannot disagree.
+ */
+export function resultsRoundOf(gameState) {
+  const state = String(gameState ?? '');
+  if (state === 'SURVEY#CLOSED') return SURVEY_ROUND;
+  if (!state.startsWith('RESULTS#')) return null;
+  const n = parseInt(state.split('#')[1], 10);
+  return Number.isFinite(n) ? String(n).padStart(3, '0') : null;
 }
 
 /**
@@ -128,18 +156,20 @@ export function stageBeatFromFrame(frame, gameState) {
   const beat = frame && typeof frame === 'object' ? frame.beat : null;
   if (!STAGE_BEATS.includes(beat)) return null;
 
-  // A beat is a beat OF RESULTS. Acting on one during ASK would put the stage
-  // into FIELD_NOTES, whose control is "Next Round" — an advance offered to the
-  // host while the room is still typing.
-  const onScreen = String(gameState ?? '').match(/^RESULTS#(\d+)$/);
-  if (!onScreen) return null;
+  // A beat is a beat OF RESULTS — or of a closed survey, whose round is 000.
+  // Acting on one during ASK would put the stage into FIELD_NOTES, whose
+  // control is "Next Round" — an advance offered to the host while the room
+  // is still typing.
+  const state = String(gameState ?? '');
+  const onScreen = /^RESULTS#\d+$/.test(state) || state === 'SURVEY#CLOSED' ? resultsRoundOf(state) : null;
+  if (onScreen === null) return null;
 
   // stage-beat.js pads to three digits before it writes the SK, and puts the
   // padded string on the wire. Compare as numbers, or '003' never equals 3 and
   // the stage ignores every frame it is sent.
   const announced = String(frame.questionNumber ?? '').trim();
   if (!/^\d+$/.test(announced)) return null;
-  if (parseInt(announced, 10) !== parseInt(onScreen[1], 10)) return null;
+  if (parseInt(announced, 10) !== parseInt(onScreen, 10)) return null;
 
   return beat;
 }
@@ -373,6 +403,16 @@ export function canEndSession(gameType, gameState) {
   return !isLobbyState(gameState);
 }
 
+/** A survey's end — SURVEY#CLOSED → ENDED (survey-host.js), from any beat of CLOSED. */
+const endSurveyControl = () => ({
+  id: 'end-survey',
+  label: 'End the session',
+  icon: 'FlagCheckered',
+  intent: HOST_INTENTS.END_SURVEY,
+  disabled: false,
+  hint: '',
+});
+
 function primaryFor(phase, {
   runsVote, isSurvey, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages, survey,
 }) {
@@ -460,6 +500,9 @@ function primaryFor(phase, {
       room waits. The way back to the read-back is the secondary.
     */
     case 'FEEDBACK':
+      // A survey has no next round to advance to — next-question refuses a
+      // survey — so its way on from the feedback round is the end.
+      if (isSurvey) return endSurveyControl();
       return {
         id: 'next',
         label: `Next ${roundNoun}`,
@@ -487,12 +530,19 @@ function primaryFor(phase, {
         disabled: false,
         hint: '',
       };
+    /*
+      WHAT WE HEARD, on a closed survey (27 Sep 2026). The owner asked for the
+      Workie to comment on a survey's results the way it does on a round's,
+      so CLOSED — the survey's results showing — leads to the same beat
+      RESULTS does. Ending moves on to the read-back's own primary, one step
+      later: the host who wants no read presses it twice.
+    */
     case 'CLOSED':
       return {
-        id: 'end-survey',
-        label: 'End the session',
-        icon: 'FlagCheckered',
-        intent: HOST_INTENTS.END_SURVEY,
+        id: 'field-notes',
+        label: 'What We Heard',
+        icon: 'Sparkle',
+        intent: HOST_INTENTS.FIELD_NOTES,
         disabled: false,
         hint: '',
       };
@@ -555,6 +605,8 @@ function primaryFor(phase, {
           hint: '',
         };
       }
+      // A closed survey's read-back: the last page's way on is the end.
+      if (isSurvey) return endSurveyControl();
       return {
         id: 'next',
         label: `Next ${roundNoun}`,
@@ -720,8 +772,9 @@ export function hostControlsFor({
       `freeze()` synchronously), so both phases where they are the only
       other thing on screen — CLOSED (before End) and a survey's own ENDED
       (after) — offer the same secondary. Never the primary: CLOSED's one
-      forward act is ending it, and ENDED's is leaving, and a results screen
-      the host can return from is not a step in that sequence.
+      forward act is What We Heard (then the end), and ENDED's is leaving,
+      and a results screen the host can return from is not a step in that
+      sequence.
     */
     secondary = {
       id: 'survey-results', label: 'See the results', icon: 'ChartBar', intent: HOST_INTENTS.SURVEY_RESULTS, disabled: false, hint: '',
@@ -741,7 +794,9 @@ export function hostControlsFor({
       vanishes the moment the last page is up (the primary becomes Next Round
       and one button suffices again).
     */
-    secondary = {
+    // A survey has no next round to skip to: its way past the rest of the
+    // read-back is the end, the same act the last page's primary is.
+    secondary = isSurvey ? endSurveyControl() : {
       id: 'skip-notes',
       label: `Skip to Next ${noun}`,
       icon: 'SkipForward',
