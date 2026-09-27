@@ -411,6 +411,61 @@ describe('surveys — a file with a Kind column', () => {
   });
 });
 
+/**
+ * TYPED POLLS. A poll question is a survey question the host asks (the owner,
+ * 27 Sep 2026), so a poll file WITH a Kind column is read by the survey's
+ * reader and checked by `validatePoll` (upload-questions.js): the survey's
+ * rules for choice, rating, yes/no and open answers, and one sentence for a
+ * ranking. Each row keeps its own Category. A poll file WITHOUT a Kind column
+ * is the legacy Options / AllowMultiple file, above, preflighted as before.
+ */
+describe('typed polls — a poll file with a Kind column', () => {
+  const POLL_ROWS = [
+    { Category: 'Workplace', Title: 'Where do you work best?', Kind: 'choice', Options: 'Office|Home|Both' },
+    { Category: 'Meetings', Title: 'How useful was standup?', Kind: 'rating', Scale: '1-5' },
+    { Category: 'Decisions', Title: 'Ship on Thursday?', Kind: 'yesno', YesLabel: 'Approve', NoLabel: 'Decline' },
+    { Category: 'Ideas', Title: 'What should we stop?', Kind: 'text', TextLength: 'short' },
+  ];
+
+  test('one row of each poll kind preflights clean, in its own categories', () => {
+    const report = preflight(surveyCsv(...POLL_ROWS), 'poll');
+    expect(report.blocking).toEqual([]);
+    expect(report.skipped).toEqual([]);
+    // rejects: the legacy "Poll options are in the wrong shape" gap firing on a
+    // rating or a yes/no, which have no options by design.
+    expect(report.gaps).toEqual([]);
+    expect(report.importedCount).toBe(4);
+    expect(report.categories).toEqual(['Workplace', 'Meetings', 'Decisions', 'Ideas']);
+  });
+
+  test.each([
+    ['a ranking', { Kind: 'rank', Options: 'a|b|c' }, "a poll can't be a rank question"],
+    ['a ranking in the old spelling', { Kind: 'ranking', Options: 'a|b|c' }, "a poll can't be a rank question"],
+    ['no kind', { Kind: '' }, 'needs a kind'],
+    ['a choice with one option', { Kind: 'choice', Options: 'Only' }, 'needs at least two options'],
+    ['a follow-up with no question', { Kind: 'yesno', FollowUpWhen: 'no' }, 'needs the follow-up question'],
+  ])('%s is skipped, in the importer’s words', (_label, fields, reason) => {
+    const report = preflight(surveyCsv(POLL_ROWS[0], { Category: 'Ideas', Title: 'The bad one', ...fields }), 'poll');
+    expect(report.skipped).toEqual([
+      expect.objectContaining({ row: 3, problem: reason, result: 'Row skipped' }),
+    ]);
+    expect(report.importedCount).toBe(1);
+  });
+
+  test('a poll row with no Category is skipped — polls keep their categories', () => {
+    // rejects: filing it under Survey, which only a survey does.
+    const report = preflight(surveyCsv(POLL_ROWS[0], { ...POLL_ROWS[1], Category: '' }), 'poll');
+    expect(report.skipped).toEqual([expect.objectContaining({ row: 3, problem: 'Missing Category' })]);
+  });
+
+  test('a legacy poll file with no Options and no Kind is told how to type it', () => {
+    const report = preflight(csv('Category,Title', 'Workplace,Where do you work best?'), 'poll');
+    expect(report.gaps.map((g) => g.code)).toEqual(['poll-options-shape']);
+    expect(report.gaps[0].detail).toMatch(/import as open questions/);
+    expect(report.gaps[0].detail).toMatch(/Kind column/);
+  });
+});
+
 describe('surveys — the JSON the old builder exported', () => {
   const EXPORT = JSON.stringify({
     title: 'Q3 feedback',

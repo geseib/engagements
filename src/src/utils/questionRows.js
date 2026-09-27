@@ -163,6 +163,38 @@ function surveyFields(q) {
   };
 }
 
+/* --------------------------------------------------------------- polls --- */
+/*
+ * A POLL QUESTION IS A SURVEY QUESTION THE HOST ASKS — one of four kinds, with
+ * the survey's fields and the survey's validation, less rank (the owner, 27 Sep
+ * 2026: "a short instant feedback version of the survey items"). The server's
+ * half is POLL_KINDS / pollFieldsOf / validatePoll in
+ * lambda-functions/admin/shared/survey-kinds.js; the kinds a person is offered
+ * are config/surveyKinds.js POLL_KINDS, in the same order.
+ */
+const POLL_KIND_IDS = ['choice', 'rating', 'yesno', 'text'];
+
+/**
+ * A poll row as the kind it is. A row stored before polls had kinds carries
+ * only its options (and perhaps allowMultiple) and reads as the kind it always
+ * meant: two or more options a choice, fewer an open answer, with that kind's
+ * defaults — the server's `pollFieldsOf`, so the editor, the Save and the
+ * download all see the same question. Nothing is migrated; this is the reading.
+ *
+ * A row that NAMES a kind keeps it, even one a poll cannot be: a ranking copied
+ * in from a survey stays a ranking here, so `rowProblems` can say so in the
+ * importer's words instead of quietly turning it into something else.
+ */
+function pollRow(row) {
+  const r = row || {};
+  if (text(r.kind)) return r;
+  const kind = filledOptions(r).length >= 2 ? 'choice' : 'text';
+  const typed = { ...r, ...surveyDefaults(kind), required: toBool(r.required) };
+  return kind === 'choice'
+    ? { ...typed, options: filledOptions(r), allowMultiple: toBool(r.allowMultiple) }
+    : typed;
+}
+
 /**
  * One question from `GET /question-sets/{setId}/questions` as an editable row.
  *
@@ -212,9 +244,10 @@ function toRow(question, extra = {}) {
     options: toTagList(pick(q, 'options', 'Options')),
     allowMultiple: pick(q, 'allowMultiple', 'AllowMultiple') === true
       || text(pick(q, 'allowMultiple', 'AllowMultiple')).toLowerCase() === 'true',
-    // A survey question's kind and the kind's settings. On every row, so a row
-    // has one shape whatever set it is in; a trivia or poll row reads them all
-    // as empty and no serialiser but the survey branch writes any of them.
+    // A survey or poll question's kind and the kind's settings. On every row,
+    // so a row has one shape whatever set it is in; a trivia row reads them all
+    // as empty and only the survey and poll branches write any of them. A poll
+    // row stored before polls had kinds reads its kind through `pollRow`.
     ...surveyFields(q),
     ...extra,
   };
@@ -230,12 +263,16 @@ function toRow(question, extra = {}) {
  * emits the partition in key order. Sorting on it is what makes a load → save
  * with no edits produce the exporter's own bytes.
  */
-function editableRows(payload) {
+function editableRows(payload, engagementType) {
   const list = Array.isArray(payload)
     ? payload
     : (payload && Array.isArray(payload.questions) ? payload.questions : []);
+  // A poll's rows are read as the kind each one is, so a question stored
+  // before polls had kinds opens in the editor as the choice (or open answer)
+  // it always was, not as a question with no kind selected.
+  const asType = engagementType === 'poll' ? pollRow : (r) => r;
   return list
-    .map((q) => toRow(q))
+    .map((q) => asType(toRow(q)))
     .sort((a, b) => a.sk.localeCompare(b.sk));
 }
 
@@ -302,11 +339,22 @@ function rowProblems(row, engagementType) {
       problems.push(`marks ${correct} correct, but that option is empty`);
     }
   }
-  if (engagementType === 'poll' && (row.options || []).length < 2) {
-    problems.push('needs at least two options');
-  }
+  if (engagementType === 'poll') problems.push(...pollProblems(row));
   if (engagementType === 'survey') problems.push(...surveyProblems(row));
   return problems;
+}
+
+/**
+ * What would make the importer skip a poll row — `validatePoll`'s words: the
+ * survey's checks for the four kinds a poll may be, and for any other kind the
+ * one sentence the importer gives. Read as `pollRow` reads it, which is also
+ * how `rowsToCsv` writes it, so what is checked is what is sent.
+ */
+function pollProblems(row) {
+  const r = pollRow(row);
+  const kind = text(r.kind);
+  if (SURVEY_KIND_IDS.includes(kind) && !POLL_KIND_IDS.includes(kind)) return [`a poll can't be a ${kind} question`];
+  return surveyProblems(r);
 }
 
 /**
@@ -561,10 +609,15 @@ function rowsToCsv(rows, engagementType, options = {}) {
       + optionalCells(r)
       + `,"${tagsOf(r)}"`);
   } else if (engagementType === 'poll') {
-    header = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple'
+    // THE CONTRACT CSV, as a survey's — a poll question is a survey question
+    // of one of four kinds — but each row keeps its own Category. A row with
+    // no kind (stored before polls had kinds) is written as the kind it always
+    // meant (`pollRow`), exactly as download-question-set.js writes it.
+    header = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,'
+      + SURVEY_CSV_COLUMNS.join(',')
       + optionalHeader + ',Tags';
     body = live.map((r) => common(r)
-      + `,${quoted((r.options || []).join('|'))},"${r.allowMultiple === true}"`
+      + surveyCsvCells(pollRow(r)).map((cell) => `,${cell}`).join('')
       + optionalCells(r)
       + `,"${tagsOf(r)}"`);
   } else if (engagementType === 'survey') {
@@ -635,6 +688,7 @@ module.exports = {
   editableRows,
   blankRow,
   copiedRow,
+  pollRow,
   rowProblems,
   workingCopyProblems,
   summarizeRowChanges,

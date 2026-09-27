@@ -18,6 +18,21 @@ const EVERY_KIND_TEMPLATE = [
   { kind: 'text', title: 'What would you like to see added or changed?', textLength: 'long', placeholder: 'A sentence or two is plenty.', tags: ['suggestions'] },
 ];
 
+/*
+  THE POLL TEMPLATE: one question of each kind a poll may be, in the order the
+  kinds are offered (POLL_KINDS), each in a category of its own — a poll keeps
+  its categories, which is what lets a host switch a group of questions off.
+  The yes/no uses Approve / Decline rather than the default Yes / No, so the
+  template also shows that a binary question's two answers can be renamed.
+  tests/survey-upload.js imports it and requires zero skipped rows.
+*/
+const POLL_TEMPLATE = [
+  { kind: 'choice', category: 'Workplace', title: 'Where do you do your best work?', detail: 'Pick the one that is true most weeks.', options: ['In the office', 'At home', 'A mix of both', 'Somewhere else entirely'], tags: ['workplace'] },
+  { kind: 'rating', category: 'Meetings', title: 'How useful was this week’s team meeting?', scale: '1-5', lowLabel: 'A waste of time', highLabel: 'Worth every minute', tags: ['meetings'] },
+  { kind: 'yesno', category: 'Decisions', title: 'Should we move the release to Thursday?', detail: 'It gives QA one more day; support covers Friday.', yesLabel: 'Approve', noLabel: 'Decline', tags: ['release'] },
+  { kind: 'text', category: 'Ideas', title: 'In a few words: what should we stop doing?', textLength: 'short', maxLength: 280, tags: ['ideas'] },
+];
+
 const SURVEY_TEMPLATES = Object.freeze({
   // THE MOCKUPS' SURVEY — docs/design/survey-redesign/_src/content.py, the one
   // every screen in that folder draws, so the template a person starts from is
@@ -84,11 +99,12 @@ exports.handler = async (event) => {
         '2,"Which programming language is primarily used for web development?","Which programming language is most commonly used for client-side web development?","Technology","JavaScript","Assembly","COBOL","Fortran","BASIC","Pascal","OptionA","JavaScript is the primary programming language for client-side web development. It runs in web browsers and enables interactive web pages, dynamic content updates, and modern web applications. While other languages can be used for web development, JavaScript is essential for front-end development.","easy","technology|web-development|programming"\n' +
         '3,"What is emotional intelligence in leadership?","What does emotional intelligence mean in the context of leadership?","Leadership","The ability to understand and manage emotions","The ability to solve complex problems","The ability to memorize information","The ability to work with numbers","The ability to lift heavy objects","The ability to run fast","OptionA","Emotional intelligence in leadership refers to the ability to recognize, understand, and manage both your own emotions and the emotions of others. This includes self-awareness, self-regulation, empathy, and social skills - all crucial for effective leadership and team management.","medium","leadership|soft-skills|emotional-intelligence"';
     } else if (templateType === 'poll') {
+      // A POLL TEMPLATE IS THE CONTRACT CSV — a survey's columns, with each
+      // row keeping its own Category — built by the same shared/survey-kinds.js
+      // the importer validates with, so it can never carry a row the importer
+      // would skip. One question of each of the four poll kinds.
       filename = 'poll-template.csv';
-      csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags\n' +
-        '"Workplace",1,"What is your preferred work environment?","Understanding work environment preferences helps create better workplace policies.","Business School","Select your preference.","Office|Remote|Hybrid|Co-working space","false","remote-work|workplace"\n' +
-        '"Communication",2,"Which communication tools do you use most?","Communication tool preferences vary by generation and work style.","Business School","You may select multiple options.","Email|Slack|Teams|Phone|Video calls|In-person","true","communication|tools"\n' +
-        '"Development",3,"What skills would you like to develop?","Professional development priorities help guide training programs.","Business School","Choose your top priorities.","Leadership|Technical skills|Communication|Project management|Data analysis","true","professional-development"';
+      csvTemplate = itemsToSurveyCsv(POLL_TEMPLATE);
     } else if (templateType === 'survey') {
       // A SURVEY TEMPLATE IS A CSV NOW — the contract's survey branch, built by
       // the same shared/survey-kinds.js the importer validates with, so a
