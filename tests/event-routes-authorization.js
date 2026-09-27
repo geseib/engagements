@@ -38,6 +38,8 @@ const HANDLERS = {
   'PUT /events/{code}/items': load('items.js'),
   'PUT /events/{code}/items/{itemId}': load('items.js'),
   'DELETE /events/{code}/items/{itemId}': load('items.js'),
+  // Running the day (events M3) rides the items function.
+  'POST /events/{code}/run': load('items.js'),
 };
 const { requiredGroupsForRoute, hasPermission } = h.load('lambda-functions/auth/authorizer.js');
 
@@ -52,6 +54,7 @@ const HOST_ROUTES = [
   ['GET', '/events/{code}'], ['PUT', '/events/{code}'], ['DELETE', '/events/{code}'],
   ['POST', '/events/{code}/items'], ['PUT', '/events/{code}/items'],
   ['PUT', '/events/{code}/items/{itemId}'], ['DELETE', '/events/{code}/items/{itemId}'],
+  ['POST', '/events/{code}/run'],
 ];
 // The attendee's two routes (events M2) are public for the agenda's reason:
 // an attendee has no account, and GET /me's bearer is an attendee token, not
@@ -83,6 +86,7 @@ const PUBLIC_ROUTES = [
   console.log('\n2. the authorizer demands a host');
   const concrete = ['events', 'events/{code}', 'events/5307', 'events/{code}/items', 'events/5307/items',
     'events/{code}/items/{itemId}', 'events/5307/items/it_0a1b2c3d',
+    'events/{code}/run', 'events/5307/run',
     // An id that spells a word the generic public rule matches with includes().
     'events/5307/items/join', 'events/5307/items/vote', 'events/5307/items/answer'];
   for (const p of concrete) {

@@ -124,6 +124,11 @@ const conflict = () => refuse(503, 'CONFLICT', 'Another save for this person lan
  */
 function collectingOr(state) {
   const s = state && state.State;
+  // An event's survey, paused by the host (events M3): open, but not
+  // collecting until it resumes. Nothing is lost; the phone waits.
+  if (s === SURVEY_OPEN && state.EventPaused) {
+    return refuse(409, 'PAUSED', 'The host has paused this for a moment.', { state: s });
+  }
   if (s === SURVEY_OPEN) return null;
   if (s === SURVEY_CLOSED || s === 'ENDED') {
     return refuse(409, 'SURVEY_CLOSED', 'This survey has closed.', { state: s });

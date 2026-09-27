@@ -101,6 +101,8 @@ function reset() {
       code: 'x', title: 'Q4 Kickoff', place: 'Harbour Room, 4th floor', startsAt: STARTS,
       timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
       engagementCount: 0, breakCount: 0, attendeeReports: 'anonymous', createdAt: 'x', updatedAt: 'x',
+      // Events M2 and M3: nobody has joined, nothing is live, the day has not ended.
+      attendeeCount: 0, liveItemId: '', endedAt: null,
     });
   });
   const code = event.code;

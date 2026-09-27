@@ -382,13 +382,23 @@ for (const [method, p] of MUST_STAY_OPEN) {
 // pre-flight rule exists once; RootPage (/join) and JoinCodeEntry (/) both call
 // the hook. So this reads the hook for the fetch, and both callers for the hook
 // -- a caller that grew its own copy of the fetch would be the regression.
+// Since events M2 the hook asks GET /join/{code} — which says whether a code is
+// a session or an event — through utils/joinCode.js, the one module every join
+// door shares. Still a plain fetch, still no credentials, still a public route.
 check('the join field still checks a code with a plain fetch, and that still works', () => {
   const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
   const hook = read('src/src/hooks/useJoinCode.js');
-  assert.ok(/fetch\(`\$\{window\.API_BASE\}games\/\$\{code\}`\)/.test(hook),
+  const resolver = read('src/src/utils/joinCode.js');
+  assert.ok(/resolveJoinCode\(code\)/.test(hook),
     'useJoinCode no longer does the unauthenticated code check this asserts about');
-  assert.ok(!/Authorization|getIdToken|authHeaders/.test(hook),
-    'the code check now sends credentials -- a participant has none to send');
+  assert.ok(/fetchImpl\(`\$\{apiBase\}join\/\$\{code\}`\)/.test(resolver) && /fetch\(\.\.\.args\)/.test(resolver),
+    'utils/joinCode.js no longer checks the code with a plain fetch of join/{code}');
+  for (const src of [hook, resolver]) {
+    assert.ok(!/Authorization|getIdToken|authHeaders|authFetch/.test(src),
+      'the code check now sends credentials -- a participant has none to send');
+  }
+  assert.strictEqual(findRoute(routes, 'GET', '/join/{code}').authorizer, null,
+    'the resolver route is closed — nobody can check a code before signing in');
   for (const caller of ['src/src/components/RootPage.jsx', 'src/src/components/JoinCodeEntry.jsx']) {
     const src = read(caller);
     assert.ok(/useJoinCode\(\)/.test(src), `${caller} no longer joins through useJoinCode`);

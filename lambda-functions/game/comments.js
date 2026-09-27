@@ -413,6 +413,10 @@ async function writeComment(gameId, body) {
       currentState: state.State,
     });
   }
+  // An event's item, paused (events M3): nothing is posted until it resumes.
+  if (state.EventPaused) {
+    return respond(409, { error: 'The host has paused this for a moment.', code: 'PAUSED' });
+  }
   // The round record itself must still exist — a defensive data-integrity
   // check, not a reintroduction of the beat requirement dropped above.
   const round = await roundRecord(gameId, padded);

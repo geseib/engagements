@@ -28,15 +28,7 @@ exports.handler = async (request) => {
   try {
     const meta = await S.openEvent(db, TABLE(), request, code);
     if (!meta) return notFound();
-    const event = S.projectEvent(await S.decryptEvent(meta.orgId, meta));
-    const rows = await S.readItems(db, TABLE(), code);
-    const items = [];
-    for (const row of rows) {
-      const item = S.projectItem(await S.openItemRow(meta.orgId, row, 'get-event'));
-      if (item.setRef) item.set = await S.describeSet(db, TABLE(), item.setRef);
-      items.push(item);
-    }
-    return json(200, { event, items });
+    return json(200, await S.hostView(db, TABLE(), meta, code, 'get-event'));
   } catch (error) {
     console.error('❌ get-event failed:', error && error.message);
     return json(500, { error: 'Could not load the event. Try again.' });

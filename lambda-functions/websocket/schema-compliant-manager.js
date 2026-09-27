@@ -246,6 +246,12 @@ const createGame = async (gameId, gameData) => {
         ...(gameData.engagementType === 'survey'
           ? { Names: surveyNamesFor(gameData.names, resolvedSet.metadata) }
           : {}),
+        // AN EVENT'S ITEM (events M3, websocket/events/run.js): the event's
+        // code and the agenda item this session plays. join-game.js reads
+        // EventRef to accept an attendee's token in place of a typed name;
+        // session-count.js bills the event once instead of each item. Absent
+        // on every session a host creates by hand.
+        ...(gameData.eventRef ? { EventRef: gameData.eventRef, EventItem: gameData.eventItem || '' } : {}),
         Visibility: gameData.visibility || 'public',
         AccessCode: gameData.accessCode || null,
         Started: false, // Game is created but not started

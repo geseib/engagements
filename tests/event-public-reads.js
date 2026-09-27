@@ -60,8 +60,11 @@ const add = (code, body) => items(request({
   const body = bodyOf(res);
   await check('200 for anyone with the code, with the event\'s name, place and times', () => {
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.deepStrictEqual(body.event, {
+    // `rev` (events M3) is an opaque hash a phone compares, never read.
+    assert.match(body.event.rev, /^[A-Za-z0-9_-]{16}$/);
+    assert.deepStrictEqual({ ...body.event, rev: 'x' }, {
       code, title: 'Q4 Kickoff', place: 'Harbour Room', startsAt, timeZone: 'Europe/London', endsAt: '9:38', state: 'SCHEDULED',
+      liveItemId: '', rev: 'x',
     });
   });
   await check('items in order, timed from the start, with their words', () => {

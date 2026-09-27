@@ -456,9 +456,13 @@ function requiredGroupsForRoute(method, path) {
   // `rawPath` fallback) alike. WHICH event a caller may touch is decided per
   // row by tenant.callerMayManageEvent, which answers 404.
   //
-  // NOT here: GET /events/{code}/agenda and GET /join/{code}. They carry no
-  // authorizer at all — an attendee has no account.
-  const EVENT_HOST_ROUTE = /^events(\/[^/]+(\/items(\/[^/]+)?)?)?$/;
+  // `events/{code}/run` (events M3) is the host running the day: start,
+  // pause, resume, end.
+  //
+  // NOT here: GET /events/{code}/agenda, POST /events/{code}/attendees,
+  // GET /events/{code}/me and GET /join/{code}. They carry no authorizer at
+  // all — an attendee has no account.
+  const EVENT_HOST_ROUTE = /^events(\/[^/]+(\/(items(\/[^/]+)?|run))?)?$/;
   if (EVENT_HOST_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }

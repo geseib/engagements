@@ -56,6 +56,10 @@ function projectEvent(row) {
     attendeeCount: Number(r.AttendeeCount) || 0,
   };
   if (r.SK === META_SK) {
+    // THE DAY AS IT RUNS (events M3, run.js): the one live item, if any, and
+    // when the host ended the event.
+    out.liveItemId = typeof r.LiveItem === 'string' ? r.LiveItem : '';
+    out.endedAt = r.EndedAt || null;
     out.engagementCount = Number(r.EngagementCount) || 0;
     out.breakCount = Number(r.BreakCount) || 0;
     out.attendeeReports = r.AttendeeReports || 'full';
@@ -172,6 +176,12 @@ function projectItem(row) {
     state: r.State || 'planned',
   };
   if (r.decryptFailed) out.decryptFailed = true;
+  // ON THE DAY (events M3, run.js): the item's session once it has one, when
+  // it started and ended, and — for a live break — when the room is back.
+  if (r.GameId) out.gameId = String(r.GameId);
+  if (r.StartedAt) out.startedAt = r.StartedAt;
+  if (r.EndedAt) out.endedAt = r.EndedAt;
+  if (r.EndsAt) out.endsAt = r.EndsAt;
   // An engagement's session options (events M1b), decrypted. Never an
   // envelope: a row that could not be opened carries none (openItemRow).
   if (r.Settings && typeof r.Settings === 'object' && !Array.isArray(r.Settings) && !isEnvelope(r.Settings)) {
@@ -246,6 +256,24 @@ async function describeSet(db, tableName, setRef) {
 }
 
 /**
+ * THE HOST'S VIEW OF ONE EVENT — `{ event, items }`, what GET /events/{code}
+ * answers and what every run action (run.js) answers with, so the builder,
+ * the stage and the remote redraw from one shape. `meta` is the event's raw
+ * METADATA row, already past openEvent.
+ */
+async function hostView(db, tableName, meta, code, label = 'get-event') {
+  const event = projectEvent(await decryptEvent(meta.orgId, meta));
+  const rows = await readItems(db, tableName, code);
+  const items = [];
+  for (const row of rows) {
+    const item = projectItem(await openItemRow(meta.orgId, row, label));
+    if (item.setRef) item.set = await describeSet(db, tableName, item.setRef);
+    items.push(item);
+  }
+  return { event, items };
+}
+
+/**
  * Every write that loses a race answers with this sentence, and nothing of it
  * landed: each is one TransactWrite, all or nothing.
  */
@@ -258,5 +286,5 @@ module.exports = {
   META_SK, INDEX_PREFIX, ITEM_PREFIX, ATTENDEE_PREFIX, AGENDA_CHANGED,
   indexSk, itemSk, attendeeSk, itemIdOf, codeOf, isCode, isItemId, isCancelled,
   queryAll, readMeta, readItems, sortItems, openEvent,
-  decryptEvent, decryptItemRow, openItemRow, projectEvent, projectItem, describeSet,
+  decryptEvent, decryptItemRow, openItemRow, projectEvent, projectItem, describeSet, hostView,
 };

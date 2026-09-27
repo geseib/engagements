@@ -81,6 +81,7 @@ const { json, notFound, readBody, trace, methodOf } = require('./event-http');
 const S = require('./event-store');
 const { checkItemSettings } = require('./item-settings');
 const { questionCountAt } = require('../session-goal');
+const { runEvent } = require('./run');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -567,6 +568,13 @@ async function reorderItems(request, meta, code) {
   return json(200, { order });
 }
 
+/** POST /events/{code}/run — by the path's last segment, as get-agenda.js tells its routes apart. */
+function isRunPath(request) {
+  const http = (request && request.requestContext && request.requestContext.http) || {};
+  const path = String(http.path || request.rawPath || '');
+  return /\/run\/?$/.test(path) || String(request.routeKey || '').endsWith('/run');
+}
+
 exports.handler = async (request) => {
   trace('event-items', request);
   const params = request.pathParameters || {};
@@ -576,6 +584,9 @@ exports.handler = async (request) => {
   try {
     const meta = await S.openEvent(db, TABLE(), request, code);
     if (!meta) return notFound();
+    // POST /events/{code}/run (events M3): running the day rides on this
+    // function rather than a new one — run.js.
+    if (method === 'POST' && isRunPath(request)) return await runEvent(db, TABLE(), request, meta, code);
     if (method === 'POST' && itemId === null) return await addItem(request, meta, code);
     if (method === 'DELETE' && itemId !== null) return await removeItem(meta, code, itemId);
     if (method === 'PUT' && itemId === null) return await reorderItems(request, meta, code);

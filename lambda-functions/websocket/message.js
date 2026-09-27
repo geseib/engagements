@@ -426,6 +426,14 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
       console.log(`⚠️ Invalid state for answer submission. Expected one of: ${expectedStates.join(', ')}, Got: ${currentState}`);
       return;
     }
+    // AN EVENT'S ITEM, PAUSED (events M3, websocket/events/run.js): the host
+    // went back to the agenda part-way. The round keeps its phase, and no
+    // answer lands until the host resumes — the same silent refusal as a
+    // round that is no longer on screen.
+    if (gameState.Item.EventPaused) {
+      console.log(`⏸️ Answer refused: game ${gameId} is paused by its event`);
+      return;
+    }
     
     // Store the answer in DynamoDB (using question number format)
     const now = new Date().toISOString();

@@ -67,6 +67,9 @@ async function joinEvent(db, tableName, request) {
   try {
     const meta = await openForAttendees(db, tableName, code, nowSeconds);
     if (!meta) return notFound();
+    // The day is over (events M3, run.js end-event): the agenda stays
+    // readable, and somebody who joined is still known, but nobody new joins.
+    if (meta.State === 'ENDED') return json(409, { error: 'This event has ended.', code: 'event_ended' });
     const body = readBody(request);
     if (!body) return json(400, { error: 'The request body is not valid JSON.' });
     const checked = rules.checkAttendeeName(body.name);

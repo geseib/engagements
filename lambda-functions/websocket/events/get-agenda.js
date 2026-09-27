@@ -26,8 +26,9 @@
  * the three public routes an attendee's page calls, on one function, because
  * the stack is near CloudFormation's 500-resource limit.
  */
+const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const rules = require('./agenda-rules');
 const { json, notFound, trace, methodOf, eventsEnabled } = require('./event-http');
 const S = require('./event-store');
@@ -38,6 +39,51 @@ const TABLE = () => process.env.TABLE_NAME;
 /** The states in which an attendee may follow an item into its session. */
 const LINKED_STATES = Object.freeze(['live', 'paused', 'done']);
 
+/**
+ * What changed since a phone last read the whole agenda: every run action adds
+ * one to RunRev (run.js), an edit moves UpdatedAt or the item count. A phone
+ * re-reads the agenda when this string differs. Hashed, so it says nothing
+ * else — not when the host last edited, not how many items there are.
+ */
+const revOf = (meta) => crypto.createHash('sha256')
+  .update([Number(meta.RunRev) || 0, Number(meta.ItemCount) || 0, meta.UpdatedAt || ''].join('.'))
+  .digest('base64url')
+  .slice(0, 16);
+
+/** A live break's planned return, the only time an agenda row carries besides its plan. */
+const endsAtOf = (row) => ((row.State === 'live' && row.EndsAt) ? { endsAt: row.EndsAt } : {});
+
+/**
+ * GET /events/{code}/agenda?view=now — WHAT IS LIVE, AND NOTHING ELSE (events
+ * M3/M4). The phone polls this every few seconds between items, so it is two
+ * plain reads (METADATA, and the live item's row when there is one) and no
+ * decryption: the live item's kind, state, session code and a break's return
+ * time, the event's state, and `rev`. Never a title, never a description —
+ * the phone has those from the whole agenda, which it re-reads when `rev`
+ * moves. The same door as the agenda: switched off, unknown, invite-only or
+ * malformed is the one 404.
+ */
+async function readNow(meta, code) {
+  const liveItemId = typeof meta.LiveItem === 'string' ? meta.LiveItem : '';
+  let live = null;
+  if (liveItemId && S.isItemId(liveItemId)) {
+    const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: meta.PK, SK: S.itemSk(liveItemId) } }));
+    const row = res && res.Item;
+    if (row) {
+      live = {
+        itemId: liveItemId,
+        type: row.Type || '',
+        state: row.State || 'planned',
+        ...(row.GameId ? { gameId: String(row.GameId) } : {}),
+        ...endsAtOf(row),
+      };
+    }
+  }
+  return json(200, {
+    now: { code, state: meta.State || 'SCHEDULED', liveItemId, live, rev: revOf(meta) },
+  });
+}
+
 async function readAgenda(request) {
   trace('get-agenda', request);
   const code = String((request.pathParameters || {}).code || '');
@@ -45,6 +91,8 @@ async function readAgenda(request) {
   try {
     const meta = await S.readMeta(db, TABLE(), code);
     if (!meta || !meta.orgId || (meta.Access || 'open') !== 'open') return notFound();
+    const query = request.queryStringParameters || {};
+    if (query.view === 'now') return await readNow(meta, code);
     const event = await S.decryptEvent(meta.orgId, meta);
     const rows = [];
     for (const row of await S.readItems(db, TABLE(), code)) rows.push(await S.openItemRow(meta.orgId, row, 'get-agenda'));
@@ -58,6 +106,9 @@ async function readAgenda(request) {
         timeZone: meta.TimeZone || '',
         endsAt,
         state: meta.State || 'SCHEDULED',
+        // The one live item (events M3), or '' while the agenda is up.
+        liveItemId: typeof meta.LiveItem === 'string' ? meta.LiveItem : '',
+        rev: revOf(meta),
       },
       items: timed.map((row) => {
         const state = row.State || 'planned';
@@ -73,6 +124,7 @@ async function readAgenda(request) {
           state,
           ...(row.decryptFailed ? { decryptFailed: true } : {}),
           ...(LINKED_STATES.includes(state) && row.GameId ? { gameId: String(row.GameId) } : {}),
+          ...endsAtOf(row),
         };
       }),
     });

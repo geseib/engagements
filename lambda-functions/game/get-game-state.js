@@ -376,6 +376,14 @@ exports.handler = async (event) => {
         on its way when the host pressed S cannot shut the board again.
       */
       scoreboard: normaliseScoreboard(stateItem && stateItem.Scoreboard, stateItem && stateItem.ScoreboardRev),
+      /*
+        AN EVENT'S ITEM (events M3): the event's code, and whether its host
+        has paused this item to go back to the agenda. A phone that reloads
+        mid-pause shows the paused screen from this, and a host page that
+        reloads keeps its Agenda door. Both are facts the room already sees.
+      */
+      ...(gameMetadata.Item.EventRef ? { eventRef: String(gameMetadata.Item.EventRef) } : {}),
+      eventPaused: Boolean(stateItem && stateItem.EventPaused),
       gameType: gameMetadata.Item.GameType || 'call-and-answer',
       /*
         THE GOAL, on the host's door only (events M1b): the stage and the

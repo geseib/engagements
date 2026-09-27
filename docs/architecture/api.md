@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-164 routes across 9 groups. 141 carry the Cognito authorizer; 23 are public.
+167 routes across 9 groups. 142 carry the Cognito authorizer; 25 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -27,8 +27,11 @@ on `requestContext.routeKey`.
 | GET | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/get-event.js` |
 | PUT | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/update-event.js` |
 | GET | `/events/{code}/agenda` | public | `lambda-functions/websocket/events/get-agenda.js` |
+| POST | `/events/{code}/attendees` | public | `lambda-functions/websocket/events/get-agenda.js` |
 | POST | `/events/{code}/items` | **Cognito** | `lambda-functions/websocket/events/items.js` |
 | PUT | `/events/{code}/items` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| GET | `/events/{code}/me` | public | `lambda-functions/websocket/events/get-agenda.js` |
+| POST | `/events/{code}/run` | **Cognito** | `lambda-functions/websocket/events/items.js` |
 | DELETE | `/events/{code}/items/{itemId}` | **Cognito** | `lambda-functions/websocket/events/items.js` |
 | PUT | `/events/{code}/items/{itemId}` | **Cognito** | `lambda-functions/websocket/events/items.js` |
 

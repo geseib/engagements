@@ -505,8 +505,21 @@ Resources:
             Method: put
             Auth:
               Authorizer: CognitoAuthorizer
+        # RUNNING THE DAY (events M3, events/run.js): start, pause, resume and
+        # end an item, extend a break, end the event. One route for every
+        # action, on this function: a route costs a permission, a function a
+        # role and more, and the stack is near the 500-resource limit.
+        RunEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/run
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
-        # Seals and opens item titles and descriptions.
+        # Seals and opens item titles and descriptions; since events M3 also
+        # makes an item's session (its title and details sealed the same way).
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -514,6 +527,13 @@ Resources:
               Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Tells the phones and the stage inside an item's session that the
+        # event paused, resumed, ended or moved on (events/child-session.js).
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3461,6 +3481,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Opens an event attendee's name (events M4, game/event-attendee.js):
+        # a phone joining an event's item by token plays under the name it
+        # joined the event with, sealed with the organisation's key.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:

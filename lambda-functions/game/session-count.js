@@ -57,7 +57,19 @@ const { GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { recordBillableSession } = require('./usage');
 
 /** What countAnsweredQuestion needs from METADATA, for the caller's own read. */
-const COUNT_PROJECTION = 'orgId, FirstAnsweredRound, CountedAt';
+const COUNT_PROJECTION = 'orgId, FirstAnsweredRound, CountedAt, EventRef';
+
+/**
+ * AN EVENT IS ONE SESSION (RATIONALE decision 1, events M3). Each engagement
+ * on an event's agenda is a session of its own (websocket/events/run.js), and
+ * each still counts at its own second answered question — but they are all
+ * billed under ONE ledger key, the event's, so the ledger's conditional put
+ * charges the first to count and makes every later one "already". The key
+ * stays a SESSION ledger row (`LEDGER#<period>#SESSION#EVENT#<code>`), so the
+ * reconciler, which counts SESSION rows, counts the event as the one session
+ * it is.
+ */
+const billableIdOf = (gameId, meta) => (meta && meta.EventRef ? `EVENT#${meta.EventRef}` : gameId);
 
 const metadataKey = (gameId) => ({ PK: `GAME#${gameId}`, SK: 'METADATA' });
 
@@ -102,7 +114,7 @@ async function countAnsweredQuestion(db, tableName, gameId, round, meta = {}, op
     }
     if (!first || first === round) return { counted: false, reason: 'same-question' };
 
-    const charge = await recordBillableSession(meta.orgId, gameId, { db, tableName, now });
+    const charge = await recordBillableSession(meta.orgId, billableIdOf(gameId, meta), { db, tableName, now });
     if (charge.reason === 'error') return { counted: false, reason: 'meter-error' };
 
     await db.send(new UpdateCommand({
@@ -118,4 +130,4 @@ async function countAnsweredQuestion(db, tableName, gameId, round, meta = {}, op
   }
 }
 
-module.exports = { countAnsweredQuestion, COUNT_PROJECTION };
+module.exports = { countAnsweredQuestion, COUNT_PROJECTION, billableIdOf };
