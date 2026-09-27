@@ -36,9 +36,10 @@ import './EventBuilder.css';
  *   - The add menu, grouped as 02 draws it. At 8 engagements the engagement
  *     kinds carry `aria-disabled` (never the native `disabled`) WITH the
  *     reason above them (02b), so they stay focusable and the reason is
- *     still announced; Break stays open. Presentation and Survey are always
- *     `aria-disabled`, "Coming soon": they are roadmap M5 and PLAN Phase 6.
- *     Activating an aria-disabled item does nothing.
+ *     still announced; Break stays open. Every engagement kind, survey
+ *     included, is offered below the caps (events M1b). Presentation is
+ *     `aria-disabled`, "Coming soon", until its dialog lands. Activating an
+ *     aria-disabled item does nothing.
  *   - An item whose words the server could not decrypt (`decryptFailed`)
  *     says "This item could not be read", keeps its place, time and length,
  *     and offers only Remove (final review M4).
@@ -411,23 +412,21 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                   </p>
                 )}
                 {MENU_ENGAGEMENTS.map(([type, sentence]) => {
-                  const soon = !rules.ADDABLE_TYPES.includes(type);
                   const capped = Boolean(engagementReason);
-                  const disabled = soon || capped;
                   return (
                     <button
                       key={type}
                       type="button"
                       role="menuitem"
                       className="evb-menu-item"
-                      aria-disabled={disabled ? 'true' : undefined}
-                      aria-describedby={capped && !soon ? 'evb-capwhy' : undefined}
-                      onClick={() => { if (disabled) return; openAdd(type); }}
+                      aria-disabled={capped ? 'true' : undefined}
+                      aria-describedby={capped ? 'evb-capwhy' : undefined}
+                      onClick={() => { if (capped) return; openAdd(type); }}
                     >
                       <Icon name={TYPE_ICONS[type]} weight="bold" size={17} color="var(--primary)" />
                       <div>
                         <b>{rules.TYPE_LABELS[type]}</b>
-                        <span>{soon ? `Coming soon. ${sentence}` : (capped ? '' : sentence)}</span>
+                        <span>{capped ? '' : sentence}</span>
                       </div>
                     </button>
                   );

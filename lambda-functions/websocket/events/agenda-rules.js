@@ -52,14 +52,15 @@ const BREAK = 'break';
 const ITEM_TYPES = Object.freeze([...ENGAGEMENT_TYPES, PRESENTATION, BREAK]);
 
 /**
- * What a host may ADD in this release. Survey items wait for the event's
- * survey design (PLAN Phase 6) and presentations for roadmap M5; the add menu
- * lists both, disabled, with COMING_SOON, and the item route refuses both so a
- * stale client cannot add one.
+ * What a host may ADD in this release. Survey items joined on 26 Sep 2026
+ * (owner: "Survey should work today, as we have surveys"): a survey item picks
+ * a survey set and counts as an engagement, exactly as the others do, and
+ * running it is roadmap M3's, as for every engagement. Presentations wait for
+ * their dialog (events M1b Task 8); the item route refuses what is not here, so
+ * a stale client cannot add one.
  */
-const ADDABLE_TYPES = Object.freeze(['trivia', 'call-and-answer', 'poll', 'wavelength', BREAK]);
+const ADDABLE_TYPES = Object.freeze(['trivia', 'call-and-answer', 'poll', 'wavelength', 'survey', BREAK]);
 const COMING_SOON = Object.freeze({
-  survey: 'Survey items are coming soon.',
   [PRESENTATION]: 'Presentations are coming soon.',
 });
 

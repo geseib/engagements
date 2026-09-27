@@ -133,10 +133,10 @@ for (const minutes of [0, 241, 2.5, 'fifteen', null]) {
 }
 
 console.log('\n6. which kinds exist, and which may be added now');
-check('presentations and survey items are listed but not addable', () => {
+check('survey items may be added now; presentations are listed but not addable yet', () => {
   assert.ok(R.ITEM_TYPES.includes('presentation') && R.ITEM_TYPES.includes('survey'));
-  assert.ok(!R.ADDABLE_TYPES.includes('presentation') && !R.ADDABLE_TYPES.includes('survey'));
-  assert.ok(R.COMING_SOON.presentation && R.COMING_SOON.survey);
+  assert.ok(R.ADDABLE_TYPES.includes('survey') && !R.ADDABLE_TYPES.includes('presentation'));
+  assert.ok(R.COMING_SOON.presentation && !R.COMING_SOON.survey);
 });
 check('a set row\'s type reads as an engagement type, old spellings included', () => {
   assert.strictEqual(R.canonicalSetType('quiz'), 'trivia');

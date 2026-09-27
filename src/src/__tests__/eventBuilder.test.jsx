@@ -10,8 +10,9 @@
  * saved, or that loses focus; a failed save that leaves the rows moved; "Use
  * v3" offered when no newer version exists, or applied without a click; the
  * cap's kinds disabled with no reason, or the reason at the disabled
- * opacity's mercy; Break closed at the engagement cap; Presentation and Survey
- * offered as if they worked; the foot counting a break.
+ * opacity's mercy; Break closed at the engagement cap; Presentation offered
+ * as if it worked; Survey held back as if it still did not; the foot
+ * counting a break.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
@@ -300,16 +301,17 @@ describe('the add menu (02, 02b)', () => {
     expect(screen.getByRole('heading', { name: 'Add Trivia' })).toBeInTheDocument();
   });
 
-  it('Presentation and Survey are listed, aria-disabled, and say they are coming', async () => {
+  it('Presentation is listed, aria-disabled, and says it is coming; Survey opens its dialog', async () => {
     serve(DAY.slice(0, 3));
     await mount();
     openMenu();
     expect(item('Presentation')).toHaveAttribute('aria-disabled', 'true');
     expect(item('Presentation')).not.toBeDisabled();
     expect(item('Presentation')).toHaveTextContent('Coming soon.');
-    expect(item('Survey')).toHaveAttribute('aria-disabled', 'true');
-    expect(item('Survey')).not.toBeDisabled();
-    expect(item('Survey')).toHaveTextContent('Coming soon.');
+    expect(item('Survey')).not.toHaveAttribute('aria-disabled');
+    expect(item('Survey')).not.toHaveTextContent('Coming soon.');
+    fireEvent.click(item('Survey'));
+    expect(screen.getByRole('heading', { name: 'Add Survey' })).toBeInTheDocument();
   });
 
   it('Escape closes the menu and sends focus back to Add item (never the page)', async () => {
