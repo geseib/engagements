@@ -426,7 +426,7 @@ describe('the Questions tab — the browser', () => {
     expect(rows).toHaveLength(3);
     expect(rows[1].className).toMatch(/is-used/);
     expect(within(rows[1]).getByRole('button', { name: /ask again/i })).toBeInTheDocument();
-    expect(within(rows[0]).getByRole('button', { name: /ask next/i })).toBeInTheDocument();
+    expect(within(rows[0]).getByRole('button', { name: /^ask now$/i })).toBeInTheDocument();
   });
 
   test('"Unasked only" hides them, on request', () => {
@@ -443,7 +443,7 @@ describe('the Questions tab — the browser', () => {
     const onSelectQuestion = jest.fn();
     renderPanel({ onSelectQuestion });
     openTab('Questions');
-    fireEvent.click(within(screen.getAllByTestId('browser-row')[0]).getByRole('button', { name: /ask next/i }));
+    fireEvent.click(within(screen.getAllByTestId('browser-row')[0]).getByRole('button', { name: /^ask now$/i }));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
   });
 

@@ -5,7 +5,7 @@ import { requestNextQuestion } from './utils/nextQuestion';
 import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
-import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
+import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -3685,6 +3685,13 @@ Focus on actionable business strategy insights.`;
     [runQueueOp],
   );
 
+  // "Ask next": the top of the running order, and nothing about the round on
+  // screen changes. `selectQuestion` below is "Ask now".
+  const handleQueueFirst = useCallback(
+    (key) => runQueueOp('first', key, (q) => queueFirst(q, key)),
+    [runQueueOp],
+  );
+
   /**
    * MOVING AN AUTO ROW MAKES THE WHOLE DISPLAYED PLAN MANUAL — the owner's own
    * semantics ("in a way all of them now are manually adjusted. that may not
@@ -3783,7 +3790,8 @@ Focus on actionable business strategy insights.`;
     loadUpNext();
   }, [gameId, loadQueue, loadUpNext]);
 
-  // Select a specific question to trigger as the next question
+  // "Ask now": put one named question on the room's screen straight away.
+  // "Ask next" is handleQueueFirst above — the top of the running order.
   const selectQuestion = async (selectedQuestion) => {
     try {
       console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
@@ -3793,11 +3801,13 @@ Focus on actionable business strategy insights.`;
       closeAllSidePanels();
 
       // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
+      // It names the reversible neighbour, because a host who pressed Ask now
+      // mid-round most often meant "after this one" — which is Ask next.
       if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
         const proceed = await showConfirmation(
-          'Skip to Selected Question?',
-          'Do you want to skip the current question and move to the selected question?',
-          'Skip to Question'
+          'Ask this question now?',
+          'This ends the round on screen and puts the selected question up straight away. To ask it after this round instead, use Ask next.',
+          'Ask now'
         );
         if (!proceed) return;
       }
@@ -7675,6 +7685,7 @@ Focus on actionable business strategy insights.`;
           upNextAdvisories={upNextAdvisories}
           upNextExcluded={upNextExcluded}
           onQueueQuestion={handleQueueQuestion}
+          onQueueFirst={handleQueueFirst}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}
           onAutoMove={handleAutoMove}

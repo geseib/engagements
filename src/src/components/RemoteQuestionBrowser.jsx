@@ -7,6 +7,8 @@ import { canReveal, revealText, stepSelection } from '../config/questionPreview'
 import { resolveInstruction } from '../config/instructions';
 import { normalizeGameType } from '../config/gameTypes';
 import { questionSetFailure } from '../config/hostRemote';
+import { queuePosition } from '../config/questionQueue';
+import { questionKey } from '../config/setupPanel';
 import { authFetch } from '../auth/authFetch';
 
 /**
@@ -36,6 +38,16 @@ import { authFetch } from '../auth/authFetch';
  * `GameHostPage.fetchQuestionsForBrowsing` calls, whole set in one request so
  * the search filters client-side and costs nothing. Asking is delegated to the
  * remote, which owns the cooldown and the error flash.
+ *
+ * ── TWO ASKS, AND THEY ARE NOT THE SAME BUTTON ANY MORE ────────────────────
+ *
+ * The row used to offer one "Ask this next", which switched the room to the
+ * question on the spot. The owner: *"'ask next' in most people's mind means
+ * put it at the top of the queue, not run it now."* So `Ask next` is now the
+ * top of the running order (the round on screen carries on) and `Ask now` is
+ * what the old button did — armed mid-round by the remote, which knows the
+ * phase. The same two words, in the same order and the same tones, as the
+ * running order above this list and the stage's own panel.
  *
  * ── THE PREVIEW ───────────────────────────────────────────────────────────
  *
@@ -113,7 +125,16 @@ export default function RemoteQuestionBrowser({
   gameType = '',
   unaskedCount = null,
   busy = false,
-  onAsk,
+  /* The running order's keys, so a row can say where it already sits and an
+     Ask next that would change nothing is held. */
+  queue = [],
+  /* Which question's Ask now the remote has armed (its first tap, mid-round). */
+  askNowArmedKey = null,
+  /* Hands the loaded set up, so the running order above can name its queued
+     rows without a second fetch of the same set. */
+  onQuestions = null,
+  onAskNext = () => {},
+  onAskNow = () => {},
 }) {
   const [questions, setQuestions] = useState(null);
   const [setName, setSetName] = useState('');
@@ -133,6 +154,7 @@ export default function RemoteQuestionBrowser({
      rather than needing a reload — which mid-session would cost the host the
      round they are reading. */
   const [reloadKey, setReloadKey] = useState(0);
+  // `{ id, which }` while one ask is in the air, `which` being 'next' or 'now'.
   const [asking, setAsking] = useState(null);
   // Which question the preview is showing, or null for the list.
   const [previewId, setPreviewId] = useState(null);
@@ -217,20 +239,74 @@ export default function RemoteQuestionBrowser({
 
   const shown = useMemo(() => filterRemoteRows(rows, search), [rows, search]);
 
+  useEffect(() => {
+    if (onQuestions && questions) onQuestions(questions);
+  }, [questions, onQuestions]);
+
   // The card and config/instructions.js both compare `trivia` as a literal, so
   // an alias or a capital from the server would draw a trivia question as free
   // text — no options, and another game's instruction line.
   const type = normalizeGameType(gameType);
 
-  const ask = useCallback(async (row) => {
+  const ask = useCallback(async (which, row) => {
     if (busy || asking) return;
-    setAsking(row.id);
+    setAsking({ id: row.id, which });
     try {
-      await onAsk(row);
+      await (which === 'now' ? onAskNow(row) : onAskNext(row));
     } finally {
       setAsking(null);
     }
-  }, [busy, asking, onAsk]);
+  }, [busy, asking, onAskNext, onAskNow]);
+
+  const armedKey = askNowArmedKey ? questionKey(String(askNowArmedKey)) : null;
+
+  /*
+    THE PAIR, drawn the same in the list and on the preview. Ask next first —
+    the verb that leaves the room alone — then Ask now, in the interrupting
+    tone. Each names its question for a screen reader, opening with the words
+    on the button, so thirty rows do not read as thirty identical asks.
+  */
+  const askPair = (row) => {
+    const position = queuePosition(queue, row.id);
+    const armed = armedKey !== null && questionKey(String(row.id)) === armedKey;
+    const mine = (which) => asking !== null && asking.id === row.id && asking.which === which;
+    const nextWord = mine('next') ? 'Working…' : 'Ask next';
+    const nowWord = mine('now') ? 'Working…' : (armed ? 'Tap again to ask now' : 'Ask now');
+    return (
+      <>
+        <button
+          className="hr-btn hrq-next"
+          type="button"
+          disabled={busy || asking !== null || position === 1}
+          aria-label={`${nextWord} “${row.title}”`}
+          onClick={() => ask('next', row)}
+        >
+          {nextWord}
+        </button>
+        <button
+          className={`hr-btn hrq-now ${armed ? 'is-armed' : ''}`}
+          type="button"
+          disabled={busy || asking !== null}
+          aria-label={`${nowWord} “${row.title}”`}
+          onClick={() => ask('now', row)}
+        >
+          {nowWord}
+        </button>
+      </>
+    );
+  };
+
+  /* Where a row already sits in the running order — the stage browser's
+     `Queued #n` tag, in words, so the pair under it is read with that fact. */
+  const queuedTag = (row) => {
+    const position = queuePosition(queue, row.id);
+    if (!position) return null;
+    return (
+      <p className="hrq-queued" data-testid="hrq-queued">
+        {position === 1 ? 'Up next' : `Queued #${position}`}
+      </p>
+    );
+  };
 
   /*
     THE PREVIEWED ROW, RESOLVED FROM THE LIST ON EVERY RENDER — never held.
@@ -442,16 +518,10 @@ export default function RemoteQuestionBrowser({
         ))}
 
         {/* WHAT THE ROW COULD ALREADY DO. The host opened the preview to decide,
-            and deciding means asking this one next; without it the view would be
-            a dead end they have to back out of. */}
-        <button
-          className="hr-btn hr-btn--ghost hrq-ask"
-          type="button"
-          disabled={busy || asking !== null}
-          onClick={() => ask(open)}
-        >
-          {asking === open.id ? 'Working…' : 'Ask this next'}
-        </button>
+            and deciding means asking this one — next or now; without the pair
+            the view would be a dead end they have to back out of. */}
+        {queuedTag(open)}
+        <div className="hrq-asks">{askPair(open)}</div>
 
         {privateNote}
       </div>
@@ -519,6 +589,7 @@ export default function RemoteQuestionBrowser({
               {[row.category, row.difficulty].filter(Boolean).join(' · ')}
             </p>
           )}
+          {queuedTag(row)}
           {row.detail && <p className="hrq-detail">{row.detail}</p>}
 
           {row.options.length > 0 && (
@@ -542,10 +613,10 @@ export default function RemoteQuestionBrowser({
             <p className="hrq-unresolved">{NO_RIGHT_ANSWER}</p>
           )}
 
-          {/* TWO ACTIONS, AND THE COMMITTING ONE IS SECOND. Preview only changes
-              what this phone shows; "Ask this next" moves the room. The label
-              carries the question's title so a screen reader hears which of
-              thirty Previews it is on. */}
+          {/* THREE ACTIONS, AND THE COMMITTING ONES COME AFTER. Preview only
+              changes what this phone shows; Ask next changes what follows this
+              round; Ask now moves the room. Every label carries the question's
+              title so a screen reader hears which of thirty rows it is on. */}
           <div className="hrq-actions">
             <button
               className="hr-btn hr-btn--ghost"
@@ -556,21 +627,7 @@ export default function RemoteQuestionBrowser({
               <Icon name="Eye" weight="bold" size={16} color="currentColor" />
               Preview
             </button>
-            {/* AND SO DOES THIS ONE, which is the half that was missing: Preview
-                named its question and Ask did not, so thirty rows read out as
-                thirty distinct Previews beside thirty identical "Ask this
-                next"s — and Ask is the one that moves the room. The name opens
-                with the words on the button, in both of its states, so what a
-                reader hears starts with what a looker sees. */}
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
-              disabled={busy || asking !== null}
-              aria-label={`${asking === row.id ? 'Working…' : 'Ask this next'} “${row.title}”`}
-              onClick={() => ask(row)}
-            >
-              {asking === row.id ? 'Working…' : 'Ask this next'}
-            </button>
+            {askPair(row)}
           </div>
         </article>
       ))}

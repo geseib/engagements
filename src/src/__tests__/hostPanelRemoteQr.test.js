@@ -23,19 +23,24 @@ const source = fs.readFileSync(src('GameHostPage.jsx'), 'utf8');
  * the word "join" appears nowhere in the remote section. What CANNOT be
  * asserted there, and is asserted here, is the division of labour at the call
  * site — which url the page hands to which surface.
+ *
+ * The {0,3000} window is how far down the panel's prop list the two urls sit,
+ * not part of the contract. It was 2000 with one character to spare, so the
+ * next prop added above them (Ask next's `onQueueFirst`) failed this test
+ * without changing which url goes where.
  */
 describe('the host page hands each QR surface the right url', () => {
   test('the setup panel gets the REMOTE url', () => {
     // rejects: passing playUrl to the panel, which walks the host's own phone
     // into the player flow.
-    expect(source).toMatch(/<SessionSetupPanel[\s\S]{0,2000}remoteUrl=\{remoteUrl\}/);
+    expect(source).toMatch(/<SessionSetupPanel[\s\S]{0,3000}remoteUrl=\{remoteUrl\}/);
   });
 
   test('the same call also hands it the player link, separately labelled', () => {
     // rejects: collapsing the two into one prop. The panel prints the player
     // link under its own heading and the remote url under another; one prop
     // for both is how they become ambiguous again.
-    expect(source).toMatch(/<SessionSetupPanel[\s\S]{0,2000}playUrl=\{playUrl\}/);
+    expect(source).toMatch(/<SessionSetupPanel[\s\S]{0,3000}playUrl=\{playUrl\}/);
   });
 
   test('remoteUrl is the /remote route, carrying the game', () => {
