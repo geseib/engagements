@@ -221,6 +221,28 @@
   color: var(--gsd-muted);
 }
 
+/* THE GOAL (events M1b): a short number and its unit on one line, in the
+   Advanced fold's Questions section (SessionOptions.jsx). */
+.gsd .gsd-goal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gsd .gsd-goal .dialog-input {
+  width: 96px;
+  text-align: center;
+}
+
+.gsd .gsd-goal-unit {
+  font-size: var(--gsd-t-body);
+  color: var(--gsd-muted);
+}
+
+/* A goal the set cannot meet, said in the colour destructive copy takes on
+   dusk (sessionOptionsPalette.test.js measures it on the card). */
+.gsd .dialog-help-text.gsd-goal-problem { color: var(--danger-text); }
+
 /* ------------------------------------------------------------- format pills */
 
 .gsd-types {

@@ -21,7 +21,8 @@
  *
  * CONTROLLED. Every value arrives in `value` and leaves as a patch through
  * `onChange(patch)`, under the create payload's own keys (anonymousResponses,
- * randomizeQuestions, names, personaId, promptId, aiContext, eventDetails) —
+ * randomizeQuestions, names, target, personaId, promptId, aiContext,
+ * eventDetails) —
  * the keys GameSetupDialog raises and an event item stores as its Settings.
  *
  * THE ONE FETCH, moved here from GameSetupDialog with the block it serves.
@@ -45,6 +46,7 @@ import { gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { anonymityApplies } from '../config/anonymity';
 import { NAMES_MODES, namesMode } from '../config/surveyNames';
 import { advancedSummary } from '../config/setupDefaults';
+import goalRules from '../../../lambda-functions/websocket/session-goal';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import BriefingField from './BriefingField';
@@ -149,6 +151,8 @@ export function SessionBriefing({ value = null, onChange, onWorkingChange }) {
  * @param {string}   setPromptId   the chosen set's own summary prompt, if any
  * @param {string}   namesDefault  the chosen survey set's own Names default
  * @param {boolean}  shuffleLocked an edit: the order was drawn at creation
+ * @param {number}   questionCount the chosen set's size, which bounds the goal
+ *                                 (0 = unknown: the server bounds it)
  */
 export default function SessionOptions({
   idPrefix = 'gsd',
@@ -159,6 +163,7 @@ export default function SessionOptions({
   setPromptId = '',
   namesDefault = '',
   shuffleLocked = false,
+  questionCount = 0,
 }) {
   const isSurvey = normalizeGameType(gameType) === 'survey';
   const anonymous = value.anonymousResponses !== false;
@@ -167,6 +172,11 @@ export default function SessionOptions({
   const eventDetails = value.eventDetails || '';
   const names = namesMode(value.names);
   const setNamesDefault = isSurvey && namesDefault ? namesMode(namesDefault) : null;
+
+  // THE GOAL (events M1b, session-goal.js): a whole number of questions, or
+  // null for none. A survey has no rounds, so no goal.
+  const target = value.target === undefined ? null : value.target;
+  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, questionCount).error || '');
 
   // NULL IS "NOT KNOWN", AND IT IS NOT THE SAME AS EMPTY — see the header.
   const [knownPromptIds, setKnownPromptIds] = useState(null);
@@ -235,6 +245,7 @@ export default function SessionOptions({
     anonymousResponses: anonymous,
     randomizeQuestions: shuffled,
     names: value.names,
+    target: isSurvey ? null : target,
     namesDefault,
     personaId: value.personaId || '',
     promptId: value.promptId || '',
@@ -435,6 +446,39 @@ export default function SessionOptions({
                   this session was set up.
                 </p>
               )}
+            </div>
+
+            {/*
+              THE GOAL (events M1b). The owner: "even though the set contains
+              50 question they might have a goal of 5 questions". A plan, not a
+              stop: when the room reaches it the stage and the remote say so,
+              and Next stays live. Blank is no goal.
+            */}
+            <div className="form-group">
+              <label htmlFor={`${idPrefix}-goal`}>Goal</label>
+              <div className="gsd-goal">
+                <input
+                  id={`${idPrefix}-goal`}
+                  className="dialog-input"
+                  inputMode="numeric"
+                  value={target === null ? '' : String(target)}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    onChange({ target: digits === '' ? null : Number(digits) });
+                  }}
+                  aria-describedby={`${idPrefix}-goal-help`}
+                  aria-invalid={goalProblem ? 'true' : undefined}
+                />
+                <span className="gsd-goal-unit">
+                  {questionCount ? `of ${questionCount} questions` : 'questions'}
+                </span>
+              </div>
+              <small
+                id={`${idPrefix}-goal-help`}
+                className={`dialog-help-text${goalProblem ? ' gsd-goal-problem' : ''}`}
+              >
+                {goalProblem || 'Blank plays until you end the session. When the room reaches the goal, the stage and the remote tell you, and you can keep going.'}
+              </small>
             </div>
           </>
         )}

@@ -43,6 +43,7 @@ export function advancedSummary({
   anonymousResponses = true,
   randomizeQuestions = true,
   names,
+  target = null,
   namesDefault,
   personaId = '',
   promptId = '',
@@ -74,6 +75,9 @@ export function advancedSummary({
   if (!isSurvey) {
     if (randomizeQuestions === false) changed.push('questions asked in order');
     else room.push('questions shuffled');
+    // THE GOAL (events M1b): only a goal the host set is named — no goal is
+    // the default, and says nothing.
+    if (Number.isInteger(target) && target > 0) changed.push(`a goal of ${target} question${target === 1 ? '' : 's'}`);
   }
 
   // ── Workie. A survey has no rounds to sum up, so its defaults say nothing

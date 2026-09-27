@@ -86,6 +86,7 @@ import {
 import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
+import goalRules from '../../../lambda-functions/websocket/session-goal';
 import Modal from './Modal';
 import PlanLimitNotice from './PlanLimitNotice';
 import './GameSetupDialog.css';
@@ -205,6 +206,9 @@ export default function GameSetupDialog({
   */
   const [briefing, setBriefing] = useState(isEdit ? (seed.briefing || null) : null);
   const [briefingWorking, setBriefingWorking] = useState(false);
+  // THE GOAL (events M1b): how many questions the host plans to ask, or null.
+  // Seeded from the session on an edit (get-game.js host-details).
+  const [target, setTarget] = useState(isEdit && Number.isInteger(seed.target) ? seed.target : null);
   const pickNames = (id) => {
     namesTouched.current = true;
     setNamesChoice(namesMode(id).id);
@@ -246,9 +250,6 @@ export default function GameSetupDialog({
   };
 
   const isCallAndAnswer = normalizeGameType(engagementType) === 'call-and-answer';
-  // A draft still being written would be lost by a Create pressed now.
-  const canCreate = Boolean(newGameSetId) && title.trim().length > 0
-    && !(isCallAndAnswer && briefingWorking);
 
   // Merged by id, page copy first. A set the host just made exists only in
   // `localSets` until the page next re-reads; a set the page already knows about
@@ -274,6 +275,17 @@ export default function GameSetupDialog({
   */
   const isSurvey = normalizeGameType(engagementType) === 'survey';
   const chosenSet = allSets.find((s) => sameSetRef(s, newGameSetRef)) || null;
+  /*
+    THE GOAL is bounded by the chosen set's size — the version a create pins.
+    An edited session may pin an older version; update-game.js holds that
+    bound and says so if this one is wrong.
+  */
+  const chosenCount = chosenSet ? Number(chosenSet.totalQuestions) || 0 : 0;
+  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, chosenCount).error || '');
+  // A draft still being written would be lost by a Create pressed now, and a
+  // goal the set cannot meet would only be refused by the server.
+  const canCreate = Boolean(newGameSetId) && title.trim().length > 0
+    && !(isCallAndAnswer && briefingWorking) && !goalProblem;
 
   /** The chosen set's own summary prompt, for the Advanced line's claim —
       SessionOptions checks it against the prompt library it reads. */
@@ -318,6 +330,7 @@ export default function GameSetupDialog({
     if ('anonymousResponses' in patch) setAnonymousResponses(patch.anonymousResponses);
     if ('randomizeQuestions' in patch) setRandomizeQuestions(patch.randomizeQuestions);
     if ('names' in patch) pickNames(patch.names);
+    if ('target' in patch) setTarget(patch.target);
     if ('personaId' in patch) setNewGamePersonaId(patch.personaId);
     if ('promptId' in patch) setNewGamePromptId(patch.promptId);
     if ('aiContext' in patch) setGameAiContext(patch.aiContext);
@@ -349,6 +362,8 @@ export default function GameSetupDialog({
       anonymousResponses,
       // Only a survey carries Names; createGameBody drops it for anything else.
       ...(isSurvey ? { names: namesChoice } : {}),
+      // The goal, for every format but a survey; null is "no goal".
+      ...(isSurvey ? {} : { target }),
       // Only Call & Answer carries a briefing: null when there is none, so an
       // edit clears one the host removed. createGameBody/updateGameBody drop
       // it for any other format.
@@ -367,7 +382,7 @@ export default function GameSetupDialog({
   */
   const snapshot = JSON.stringify([
     title, engagementType, newGameSetKey, eventDetails, gameAiContext,
-    newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice,
+    newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice, target,
     isEdit ? Array.from(editCategoryNames).sort() : null,
     // A briefing typed or drafted — or a document still being read — is work.
     briefing ? briefing.text : null, briefingWorking,
@@ -614,6 +629,7 @@ export default function GameSetupDialog({
             anonymousResponses,
             randomizeQuestions,
             names: namesChoice,
+            target,
             personaId: newGamePersonaId,
             promptId: newGamePromptId,
             aiContext: gameAiContext,
@@ -624,6 +640,7 @@ export default function GameSetupDialog({
           setPromptId={chosenSetPromptId}
           namesDefault={chosenSet ? chosenSet.namesDefault : ''}
           shuffleLocked={isEdit}
+          questionCount={chosenCount}
         />
       </div>
 
@@ -683,7 +700,7 @@ export default function GameSetupDialog({
             className="btn-primary"
             onClick={submit}
             disabled={!canCreate || busy}
-            title={isCallAndAnswer && briefingWorking ? 'Waiting for Workie to finish the briefing' : undefined}
+            title={isCallAndAnswer && briefingWorking ? 'Waiting for Workie to finish the briefing' : (goalProblem || undefined)}
           >
             {busy
               ? (isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…'))

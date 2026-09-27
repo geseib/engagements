@@ -30,6 +30,8 @@
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
  *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names),
+ *     target (the goal of N questions, events M1b — and since then
+ *     promptList and knownPromptIds live in components/SessionOptions.jsx),
  *     briefing and briefingWorking (Workie's briefing, Call & Answer only —
  *     the session's own row carries the saved one).
  *     (This list named five and omitted three until the
