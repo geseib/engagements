@@ -486,6 +486,37 @@
   border-top: 1px solid var(--wel-rule);
 }
 
+/* THE HEADING AND "New event" SHARE ONE LINE, so a host who may make events
+   gets the button without the block growing — the page fits 1280x720 with no
+   scroll. The button is pushed right by its own margin, never by
+   justify-content (the skill's rule 9). */
+.wel-evhead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.wel-evhead h2 {
+  min-width: 0;
+}
+
+.wel-evhead .wel-btn-line {
+  flex: none;
+  margin-left: auto;
+}
+
+/* "See how", inside the sentence that names the plan: a real button, sized to
+   the line rather than to the 40px controls above it (24px keeps WCAG 2.5.8). */
+.wel-ev-more .wel-ev-plan {
+  display: inline-flex;
+  min-height: 24px;
+  padding: 0 4px;
+  vertical-align: baseline;
+  color: var(--text);
+  text-decoration: underline;
+}
+
 .wel-evlist {
   list-style: none;
   margin: 12px 0 0;

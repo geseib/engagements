@@ -12,6 +12,9 @@ import {
 } from './eventDisplay';
 import './EventStage.css';
 
+/** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
+const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
+
 /**
  * THE EVENT'S STAGE — /host/event/<code> (events M3, reworked 27 Sep 2026).
  *
@@ -227,7 +230,18 @@ export default function EventStage({ code }) {
   useEffect(() => () => { mounted.current = false; }, []);
 
   const event = (view && view.event) || null;
-  const items = useMemo(() => (view && view.items) || [], [view]);
+  /* THE PLANNED TIMES. GET /events/{code} sends the agenda without them; the
+     builder and the phones' agenda (get-agenda.js) each work them out with
+     agenda-rules' agendaTimes, and the stage now does too — it printed
+     `item.at` from a field nothing sent, so the host's run sheet had no times
+     and a break read "Back at" with nothing after it (seen in Chromium, 27 Sep
+     2026). Rows that already carry times are left as they are. */
+  const items = useMemo(() => {
+    const raw = (view && view.items) || [];
+    const startsAt = view && view.event && view.event.startsAt;
+    if (!startsAt || raw.every((i) => i.at)) return raw;
+    return rules.agendaTimes(startsAt, raw).rows;
+  }, [view]);
   const liveItem = event ? items.find((i) => i.itemId === event.liveItemId) || null : null;
   const focused = focus === 'agenda' ? null : items.find((i) => i.itemId === focus) || null;
   useBoardFit(boardGrid, items.length);
@@ -338,7 +352,7 @@ export default function EventStage({ code }) {
   // ── The one obvious next step, for the dock ──────────────────────────────
   const plan = useMemo(() => {
     if (!event) return null;
-    if (event.state === 'ENDED') return { label: 'Back to the builder', run: () => navigateTo('/admin') };
+    if (event.state === 'ENDED') return { label: 'Back to the agenda', run: () => navigateTo(agendaPath(code)) };
     if (focused) {
       if (focused.state !== 'live' && focused.state !== 'done') {
         return { label: focused.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here', run: () => goLive(focused) };
@@ -360,7 +374,7 @@ export default function EventStage({ code }) {
     const paused = items.find((i) => i.state === 'paused');
     if (paused) return { label: `Resume ${startWords(paused)}`, run: () => goLive(paused) };
     return { label: 'End the event', run: () => setConfirmEndEvent(true) };
-  }, [event, focused, items, next, act, goLive, endThenGoLive, setFocus]);
+  }, [event, focused, items, next, act, goLive, endThenGoLive, setFocus, code]);
 
   // SPACE (and the clicker's arrow) takes the dock's step, as on every stage.
   useEffect(() => {
@@ -507,6 +521,11 @@ export default function EventStage({ code }) {
         </button>
       ) : (
         <>
+          {/* The agenda, on the host's side (27 Sep 2026: a host builds and
+              changes it without the console). */}
+          <button type="button" className="dock-more" onClick={() => navigateTo(agendaPath(code))} aria-label="Edit the agenda">
+            <span className="dock-more-lbl">EDIT AGENDA</span>
+          </button>
           {!ended && (
             <button type="button" className="dock-more" onClick={() => setQrOpen(true)} aria-label="Show the join QR code">
               <span className="dock-more-lbl">QR</span>

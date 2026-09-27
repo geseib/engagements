@@ -1,0 +1,113 @@
+/* components/event/HostEventAgenda.jsx — an event's agenda on the host's side.
+   ==========================================================================
+   The frame around the console's own builder (EventBuilder.jsx, `.evb`), so a
+   host builds an agenda without the console (27 Sep 2026). The builder was
+   drawn for AdminShell's dark work field — `.adm-work-body[data-theme="dark"]`:
+   `var(--bg)` under it, 14px 20px 40px of padding (AdminShell.css) — and this
+   page gives it exactly that ground, plus a head of the host's own: back to the
+   main screen, the event's name, and on to its stage.
+
+   One scope, `.hea`. Dusk, declared on the root (data-theme="dark"). Laptop
+   ladder 12 / 13 / 15 / 24; controls 40px.
+
+   MEASURED on --bg #0F1A2E (hostEventAgendaPalette.test.js):
+     --text  #F4EDE4 on --bg                    15.43
+     --muted #9BA8BE on --bg                     7.50   the kicker
+     #0F1A2E on --primary #F6A94C (the filled)    8.86
+     --text on the ghost button over --bg        15.43   (the button is unfilled)
+   ========================================================================== */
+.hea {
+  --hea-t-floor: 12px;
+  --hea-t-label: 13px;
+  --hea-t-body: 15px;
+  --hea-t-title: 24px;
+  --hea-on-accent: #0F1A2E;
+  --hea-rule: rgba(155, 168, 190, .20);
+  --hea-rule-strong: rgba(155, 168, 190, .34);
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.hea .hea-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hea-rule);
+}
+
+.hea .hea-titles {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.hea .hea-kicker {
+  margin: 0;
+  font-size: var(--hea-t-label);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* One text node with min-width:0, so the name truncates rather than being
+   silently cut; the full name is its title. */
+.hea .hea-title {
+  margin: 2px 0 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--hea-t-title);
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.hea .hea-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--hea-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 700 var(--hea-t-body)/1.2 var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hea .hea-btn:hover {
+  border-color: var(--muted);
+}
+
+.hea .hea-btn--primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--hea-on-accent);
+}
+
+.hea .hea-btn--primary:hover {
+  border-color: var(--primary-deep);
+}
+
+.hea .hea-btn:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The console's work field, to the pixel (AdminShell.css .adm-work-body[data-theme="dark"]). */
+.hea .hea-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 14px 20px 40px;
+}
