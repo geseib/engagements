@@ -161,6 +161,37 @@ function gamesIndexPk(orgId) {
 }
 
 /**
+ * AN EVENT'S TWO PARTITIONS (docs/design/agenda-redesign/40-data-model.html).
+ *
+ *   PK: ORG#<org>#EVENTS  SK: EVENT#<code>   the org's list of its events
+ *   PK: EVENT#<code>      SK: METADATA       the event itself
+ *                         SK: ITEM#<id>      one row per agenda item
+ *
+ * The code IS the id, exactly as a session's is (`GAME#<code>`), and it is
+ * reserved in the same global `GAMES` registry (websocket/code-reservation.js),
+ * so an event and a session can never hold the same four digits. `EVENT#`
+ * stays global for the reason `GAME#` does: an attendee reaches it by code
+ * alone, knowing nothing of any organisation.
+ *
+ * A code is exactly four digits. Anything else throws, rather than building
+ * `EVENT#undefined` or a key with a `#` smuggled into it.
+ */
+function eventsIndexPk(orgId) {
+  const id = clean(orgId);
+  if (!id) throw new Error('tenant: eventsIndexPk requires an orgId');
+  return `ORG#${id}#EVENTS`;
+}
+
+const EVENT_CODE = /^\d{4}$/;
+function eventPk(code) {
+  const c = clean(typeof code === 'number' ? String(code) : code);
+  if (!EVENT_CODE.test(c)) {
+    throw new Error(`tenant: eventPk requires a four-digit code, got ${JSON.stringify(code)}`);
+  }
+  return `EVENT#${c}`;
+}
+
+/**
  * WHERE SAVED REPORTS ARE LISTED. A report used to exist ONLY as an S3 object
  * whose key the session's save response handed back once; when the session
  * row expires (session-ttl.js) nothing could ever find it again. This is the
@@ -329,6 +360,35 @@ function callerMayDriveSession(event, gameRow) {
   return callerOrgIds(event).includes(gameOrg);      // ...or simply a member of it
 }
 
+/**
+ * MAY THIS SIGNED-IN CALLER PLAN OR RUN THIS EVENT?
+ *
+ * The membership rule `callerMayDriveSession` settled, for the same reason: an
+ * event names its owning organisation on its own row, so there is no library
+ * for an active-org choice to resolve. Any member of that organisation may
+ * plan its events, as any member may run its sessions.
+ *
+ * TWO DELIBERATE DIFFERENCES FROM THAT FUNCTION. It waves through a row with
+ * no `orgId` and a caller in no group, because pre-tenancy sessions and
+ * anonymous participants exist. Neither exists for an event: every event is
+ * made inside an organisation (create-event.js refuses without one), and every
+ * route that asks this sits behind the Cognito authorizer. So both are
+ * refused here — a guard with no reason to be lenient is not lenient.
+ *
+ * Being Engage staff is not membership, as everywhere in this file. Callers
+ * answer a refusal with 404, never 403: a 403 would confirm that a guessed
+ * code names somebody else's event.
+ *
+ * @returns {boolean} true when the caller may act on this event
+ */
+function callerMayManageEvent(event, eventRow) {
+  const eventOrg = clean(eventRow && eventRow.orgId);
+  if (!eventOrg) return false;
+  if (!callerGroups(event).length) return false;
+  if (callerOrgId(event) === eventOrg) return true;
+  return callerOrgIds(event).includes(eventOrg);
+}
+
 function readableScopes(event) {
   const scopes = [PLATFORM, PUBLIC];
   if (callerOrgId(event)) scopes.push(ORG);
@@ -430,8 +490,9 @@ module.exports = {
   PLATFORM, ORG, PUBLIC, SCOPES, ORG_ROLES,
   GAMES_RESERVATION_PK, ORGS_INDEX_PK, REPORTS_PLATFORM_PK, reportsIndexPk,
   scopePrefix, setsMetadataPk, setContentPk, promptsMetadataPk, personasPk, gamesIndexPk, orgPk, userPk,
+  eventsIndexPk, eventPk,
   callerOrgId, callerOrgRole, callerOrgIds, callerGroups, isPlatformAdmin,
   roleAtLeast, readableScopes, canManageScope,
-  callerMayDriveSession,
+  callerMayDriveSession, callerMayManageEvent,
   requireOrg, requireOrgAdmin, tenantStamp,
 };

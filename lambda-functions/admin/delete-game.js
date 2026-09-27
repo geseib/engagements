@@ -63,6 +63,20 @@ exports.handler = async (event) => {
       TableName: TABLE_NAME,
       Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` }
     }));
+    /*
+      AN EVENT'S CODE IS NOT A SESSION'S TO RELEASE. Events reserve their code
+      in this same registry (websocket/code-reservation.js, `Kind: 'event'`),
+      and without this check the route would delete that reservation for
+      anyone who typed the event's code — leaving an event nobody can join.
+      Events have their own routes; here the code names no session.
+    */
+    if (reservation.Item && reservation.Item.Kind === 'event') {
+      return {
+        statusCode: 404,
+        headers,
+        body: JSON.stringify({ success: false, error: 'No session has that code.' })
+      };
+    }
     let orgId = (reservation.Item && reservation.Item.orgId) || '';
     if (!orgId) {
       const metadata = await db.send(new GetCommand({
@@ -106,9 +120,16 @@ exports.handler = async (event) => {
     }
 
     console.log('Releasing the game code reservation...');
+    // BELT AND SUSPENDERS: the read above already refuses an event's code with
+    // its own 404 before anything is touched. This condition says the same
+    // thing at the write, so a reordering of this handler, or a race that
+    // slips an event's Kind onto the row after that read, still cannot make
+    // this route release a code it does not own — it would throw
+    // ConditionalCheckFailedException instead (tests/event-code-reservation.js).
     await db.send(new DeleteCommand({
       TableName: TABLE_NAME,
-      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` }
+      Key: { PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` },
+      ConditionExpression: 'attribute_not_exists(Kind)'
     }));
     pointerRowsDeleted += 1;
 

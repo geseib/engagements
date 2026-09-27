@@ -244,10 +244,22 @@ class WebSocketClient {
     this._cancelReconnect();
     if (this.ws) {
       console.log('🔌 Manually disconnecting WebSocket');
-      this.intentionalClose = true;
       this._stopHeartbeat();
-      this.ws.close(1000, 'Manual disconnect');
+      // DETACH BEFORE CLOSING (events M4). A close lands later, and this
+      // socket's onclose — left attached — then stopped the heartbeat of
+      // whatever socket had been opened since and reported THAT one offline.
+      // An event's next item remounts the player page for a new session, and
+      // connects in the same tick this one disconnects, so the late close hit
+      // the new socket every time. Detached, the old socket goes quietly; the
+      // page that asked for the disconnect is told at once instead.
+      const socket = this.ws;
       this.ws = null;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      try { socket.close(1000, 'Manual disconnect'); } catch (_) { /* already gone */ }
+      if (this.onConnectionChange) this.onConnectionChange(false);
     }
   }
 

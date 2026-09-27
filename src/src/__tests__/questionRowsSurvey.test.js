@@ -208,9 +208,13 @@ describe("rowProblems(row, 'survey') speaks the importer's words", () => {
     expect(problems({ kind: 'text', maxLength: 2000 })).toEqual([]);
   });
 
-  test('trivia and poll validation is not touched by any of it', () => {
-    expect(rowProblems({ category: 'Food', title: 'Q', options: ['A'] }, 'poll')).toEqual(['needs at least two options']);
+  test('trivia and call-and-answer validation is not touched by any of it', () => {
     expect(rowProblems({ category: 'Food', title: 'Q' }, 'call-and-answer')).toEqual([]);
+    expect(rowProblems({ category: 'Food', title: 'Q', optionA: 'a', optionB: 'b', correctAnswer: 'OptionA' }, 'trivia')).toEqual([]);
+  });
+
+  test('a poll choice is held to the survey\'s rule — questionRowsPoll.test.js has the rest', () => {
+    expect(rowProblems({ category: 'Food', title: 'Q', kind: 'choice', options: ['A'] }, 'poll')).toEqual(['needs at least two options']);
   });
 });
 

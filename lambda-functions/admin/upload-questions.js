@@ -31,7 +31,8 @@ const { encryptItem } = require('./shared/tenant-crypto');
 const { resolvePromptRef, refusal } = require('./shared/workie-refs');
 const { dispatchHouseCheck } = require('./shared/house-check');
 const {
-  SURVEY_CATEGORY, SURVEY_CSV_COLUMNS, surveyFieldsFromCells, validateSurvey, itemFields, legacySurveyJsonToCsv,
+  SURVEY_CATEGORY, SURVEY_CSV_COLUMNS, surveyFieldsFromCells, validateSurvey, validatePoll, itemFields,
+  legacySurveyJsonToCsv,
 } = require('./shared/survey-kinds');
 const { clampBackground } = require('./shared/question-background');
 
@@ -242,7 +243,7 @@ exports.handler = async (event) => {
 
     // On a REPLACE the target set is read BEFORE the CSV is parsed, because the
     // parse is engagement-type specific: which columns are read (OptionA..F and
-    // CorrectAnswer for trivia, Options/AllowMultiple for a poll) depends on it.
+    // CorrectAnswer for trivia, Kind…Themes for a survey or a typed poll) depends on it.
     // A replace that omitted engagementType would silently reparse a trivia set
     // as call-and-answer and drop every option — so the existing set's type is
     // the default, and only an explicit value overrides it.
@@ -491,12 +492,29 @@ exports.handler = async (event) => {
       allowMultipleIndex = getColumnIndex('AllowMultiple');
     }
 
+    /*
+      A TYPED POLL IS READ AS A SURVEY IS. A poll question is a survey question
+      the host asks (the owner, 27 Sep 2026: "a short instant feedback version
+      of the survey items"), so a poll CSV that carries the contract's Kind
+      column is read by the survey's reader and checked by `validatePoll` —
+      the survey's rules, less rank. What a poll keeps that a survey does not
+      is its Category: a survey files every row under `Survey`, a poll row
+      stays in the category its author gave it.
+
+      No Kind column is the poll CSV every existing file and template is:
+      Options and AllowMultiple, read exactly as they always were. The KIND
+      column decides which reader, not the Options column, because both
+      shapes carry Options — only the contract's shape says what each row is.
+    */
+    const isTypedPoll = engagementType === 'poll' && getColumnIndex('Kind') !== -1;
+    const readsKinds = isSurvey || isTypedPoll;
+
     // THE SURVEY'S TWENTY COLUMNS, Kind … Themes, found by EXACT name only.
     // No loose fallback for any of them: a loose `includes('label')` or
     // `includes('max')` would claim some other column's prose and feed it to a
     // validated vocabulary, which is the failure the RoundKind note below
     // describes. An absent column simply reads blank, so its default applies.
-    const surveyIndex = isSurvey
+    const surveyIndex = readsKinds
       ? Object.fromEntries(SURVEY_CSV_COLUMNS.map((column) => [column, getColumnIndex(column)]))
       : null;
 
@@ -535,13 +553,14 @@ exports.handler = async (event) => {
     const looseMatch = (names) => headers.findIndex(h => names.includes(
       h.toLowerCase().trim().replace(/[\s_-]/g, '')
     ));
-    // NOT `kind` ON A SURVEY. A survey CSV's `Kind` column is the question's
-    // kind (rating, choice…), and the bare-`kind` spelling below would claim
-    // it as the RoundKind override — then refuse the whole file for carrying
-    // "unrecognised round kinds" on every row. An exact `RoundKind` header is
-    // still read, so a survey set that somehow carries one round-trips.
+    // NOT `kind` ON A SURVEY OR A TYPED POLL. Their `Kind` column is the
+    // question's kind (rating, choice…), and the bare-`kind` spelling below
+    // would claim it as the RoundKind override — then refuse the whole file
+    // for carrying "unrecognised round kinds" on every row. An exact
+    // `RoundKind` header is still read, so a set that somehow carries one
+    // round-trips.
     if (roundKindIndex === -1) {
-      roundKindIndex = looseMatch(isSurvey ? ['roundkind', 'direction'] : ['roundkind', 'kind', 'direction']);
+      roundKindIndex = looseMatch(readsKinds ? ['roundkind', 'direction'] : ['roundkind', 'kind', 'direction']);
     }
     if (sourceAttributionIndex === -1) sourceAttributionIndex = looseMatch(['sourceattribution', 'attribution']);
     // Only the normalised spelling ("Source Set Id" as well as "SourceSetId").
@@ -676,10 +695,17 @@ exports.handler = async (event) => {
         // what the author was warned about is exactly what was skipped. Every
         // problem on the row is named at once, joined with "; ", rather than
         // one per upload. Nothing about the row is written until it passes.
+        //
+        // A TYPED POLL ROW the same, by `validatePoll`: a rank row is skipped
+        // as "a poll can't be a rank question" rather than stored as a kind no
+        // poll screen draws. Its Category is named with the rest, in the
+        // editor's words, because unlike a survey's it is not filled in.
         let surveyAttributes = null;
-        if (isSurvey) {
+        if (readsKinds) {
           const fields = surveyFieldsFromCells((column) => cell(values, surveyIndex[column]));
-          const problems = [...(title ? [] : ['needs a title']), ...validateSurvey(fields)];
+          const problems = isSurvey
+            ? [...(title ? [] : ['needs a title']), ...validateSurvey(fields)]
+            : [...(category ? [] : ['needs a category']), ...(title ? [] : ['needs a title']), ...validatePoll(fields)];
           if (problems.length > 0) {
             skippedRows.push({ row: i + 1, reason: problems.join('; ') });
             console.log(`⚠️ Row ${i + 1} skipped: ${problems.join('; ')}`);
@@ -783,6 +809,8 @@ exports.handler = async (event) => {
             baseQuestion.OptionF = cell(values, optionFIndex);
             baseQuestion.CorrectAnswer = cell(values, correctAnswerIndex);
             baseQuestion.Difficulty = cell(values, difficultyIndex) || 'medium';
+          } else if (isTypedPoll) {
+            baseQuestion.SurveyAttributes = surveyAttributes;
           } else if (engagementType === 'poll') {
             const optionsStr = cell(values, optionsIndex);
             baseQuestion.Options = optionsStr ? optionsStr.split('|').map(opt => opt.trim()) : [];
@@ -1196,8 +1224,16 @@ exports.handler = async (event) => {
         questionItem.correctAnswer = question.CorrectAnswer || '';
         questionItem.difficulty = question.Difficulty || 'medium';
         questionItem.points = 10;
+      } else if (engagementType === 'poll' && question.SurveyAttributes) {
+        // A typed poll row is stored exactly as a survey row is — `kind`,
+        // `required` and the fields its kind uses, nothing else — so every
+        // reader of a survey question reads a poll question too. Encrypted by
+        // the same `encryptItem` call below.
+        Object.assign(questionItem, question.SurveyAttributes);
       } else if (engagementType === 'poll') {
-        // Store poll options
+        // A legacy poll row: options and allowMultiple, and no kind. Readers
+        // take it as the kind it always meant (shared/survey-kinds.js
+        // pollFieldsOf), so nothing is migrated.
         questionItem.options = question.Options || [];
         questionItem.allowMultiple = question.AllowMultiple || false;
       } else if (engagementType === 'survey') {

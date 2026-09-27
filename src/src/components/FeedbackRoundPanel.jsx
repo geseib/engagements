@@ -58,6 +58,42 @@ export default function FeedbackRoundPanel({
    * throw here would take the participant's words with it.
    */
   onSubmit,
+  /**
+   * LIFTED "HAS A DRAFT" FLAG — fix round 1, item 6. Called with `true`
+   * whenever the composer holds unsent text, `false` once it is empty again
+   * (sent, cancelled, or never typed into). This component owns the draft
+   * text itself — it is the one place it exists — but a container that needs
+   * to decide something ABOUT the draft (PlayerPage.jsx: auto-close the
+   * panel and follow the room once the round moves on, but only when there
+   * is nothing to lose) cannot see inside without this. Optional and
+   * side-effect free on the host-triggered caller, which does not pass it.
+   */
+  onDraftChange,
+  /**
+   * Pass-through to RoundReport (fix round 2) — see that component's own doc
+   * for why. Neither is used by the host-triggered caller, which reads a
+   * round already loaded in full.
+   */
+  answersEmptyText,
+  onRetryAnswers,
+  /**
+   * DISABLE THE COMMIT, NOT THE DRAFT — fix round 2, item 3. Once the round
+   * this panel opened on has left RESULTS, a post would be refused by
+   * comments.js's own state check; disabling "Post comment" says so before
+   * the round trip rather than after it, while the textarea stays open and
+   * selectable so the words can still be copied. Default false: the
+   * host-triggered whole-room panel is only ever shown while its round is
+   * current, so it never needs this.
+   */
+  postDisabled = false,
+  /**
+   * WHETHER THE WRITER'S NAME GOES WITH THE COMMENT. True for a round, whose
+   * feedback runs attributed (the disclosure below). False for a closed
+   * survey's feedback round (27 Sep 2026): comments.js strips the name from
+   * every survey comment, on every screen and in the report, so the composer
+   * must promise the opposite — and say it before anyone types.
+   */
+  namesShown = true,
 }) {
   /** The section being commented on, or null when the composer is closed. */
   const [anchor, setAnchor] = useState(null);
@@ -72,6 +108,13 @@ export default function FeedbackRoundPanel({
   useEffect(() => {
     if (anchor && boxRef.current) boxRef.current.focus();
   }, [anchor]);
+
+  // Reported on every change to `text`, not only at send/cancel: a container
+  // deciding "is it safe to close this out from under them right now" needs
+  // the CURRENT answer, not the answer as of the last open/close.
+  useEffect(() => {
+    onDraftChange?.(Boolean(text.trim()));
+  }, [text, onDraftChange]);
 
   const open = useCallback((next) => {
     setAnchor(next);
@@ -131,6 +174,8 @@ export default function FeedbackRoundPanel({
         round={round}
         comments={comments}
         onComment={open}
+        answersEmptyText={answersEmptyText}
+        onRetryAnswers={onRetryAnswers}
       />
 
       {anchor && (
@@ -175,9 +220,20 @@ export default function FeedbackRoundPanel({
             that assumption into a comment is the real privacy failure available
             here. It is said BEFORE they type, not discovered afterwards.
           */}
-          <p className="fbr__attribution">Your name will be shown with this comment.</p>
+          <p className="fbr__attribution">
+            {namesShown
+              ? 'Your name will be shown with this comment.'
+              : 'Your name is not shown with this comment.'}
+          </p>
 
           {error && <p className="fbr__error">{error}</p>}
+
+          {postDisabled && (
+            <p className="fbr__error" role="status">
+              This round has moved on, so this can no longer be posted — copy it if you want to
+              keep it.
+            </p>
+          )}
 
           <div className="fbr__actions">
             {/* The way out that is not the commit. */}
@@ -188,7 +244,7 @@ export default function FeedbackRoundPanel({
               type="button"
               className="fbr__post"
               onClick={send}
-              disabled={busy || !text.trim()}
+              disabled={busy || !text.trim() || postDisabled}
             >
               <Icon name="PaperPlaneTilt" size={16} />
               {busy ? 'Posting…' : 'Post comment'}

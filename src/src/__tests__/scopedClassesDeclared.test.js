@@ -62,6 +62,9 @@ const SURFACES = [
   ['ModerationPanel', 'modq'],
   ['ScoreCard', 'scard'],
   ['PublicLibraryPanel', 'publib'],
+  // Events M2–M4: the attendee's page and the event on the wall.
+  ['event/EventAttendeePage', 'evp'],
+  ['event/EventStage', 'ag'],
 ];
 
 /** Class names appearing in string literals and template literals in the JSX. */

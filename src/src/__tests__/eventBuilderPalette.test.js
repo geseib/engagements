@@ -1,0 +1,206 @@
+/**
+ * ONE EVENT'S AGENDA — THE CSS CONTRACT of components/EventBuilder.css, the
+ * builder (02, 02b) and its item dialog (03).
+ *
+ * Read as text and composited on the real paint stack, as every *Palette test
+ * here is (.claude/skills/engage-design/references/testing-a-surface.md).
+ * Named `*Palette`, never `*Token*` (`.gitignore:35`).
+ *
+ * WHAT GREEN MEANS: the arithmetic holds and the rules jsdom cannot see have
+ * not been reverted — not that the screen reads well on a real panel.
+ */
+const fs = require('fs');
+const path = require('path');
+
+const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
+const GLOBAL_CSS = read('styles.css');
+const MY_CSS = read('components', 'EventBuilder.css');
+const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
+function ratio(a, b) {
+  const la = lum(a); const lb = lum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
+function bgOf(el, win) {
+  let node = el; const stack = [];
+  while (node && node.nodeType === 1) {
+    const c = win.getComputedStyle(node).backgroundColor;
+    const m = String(c).match(/[\d.]+/g);
+    if (m) {
+      const a = m.length > 3 ? parseFloat(m[3]) : 1;
+      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
+    }
+    node = node.parentElement;
+  }
+  if (!stack.length) return [15, 26, 46];
+  let out = stack[stack.length - 1][0];
+  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
+  return out;
+}
+const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+function token(css, block, name) {
+  const start = css.indexOf(block);
+  if (start < 0) throw new Error(`no ${block} block`);
+  const body = css.slice(start, css.indexOf('}', start));
+  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
+  if (!m) throw new Error(`${name} not declared in ${block}`);
+  return m[1];
+}
+function tint(name) {
+  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
+  if (!m) throw new Error(`${name} not declared in EventBuilder.css`);
+  return m[1];
+}
+function composited(layers) {
+  document.body.innerHTML = '';
+  let host = document.body;
+  for (const background of layers) {
+    const el = document.createElement('div');
+    el.style.backgroundColor = background;
+    host.appendChild(el);
+    host = el;
+  }
+  return bgOf(host, window);
+}
+const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+
+const ROOT = ':root {';
+const DUSK = '[data-theme="dark"] {';
+const T = {
+  bg: token(GLOBAL_CSS, DUSK, '--bg'),
+  surface: token(GLOBAL_CSS, DUSK, '--surface'),
+  text: token(GLOBAL_CSS, DUSK, '--text'),
+  muted: token(GLOBAL_CSS, DUSK, '--muted'),
+  primary: token(GLOBAL_CSS, ROOT, '--primary'),
+  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
+  onAccent: token(MY_CSS, '.evb {', '--evb-on-accent'),
+};
+const AA = 4.5;
+const PANEL = [T.bg, T.surface];
+
+describe('the item dialog (03)', () => {
+  test.each([
+    ['dialog copy on the dialog surface', T.text, PANEL],
+    ['labels and hints on the dialog surface', T.muted, PANEL],
+    ['an input on its --bg well inside the dialog', T.text, [T.bg, T.surface, T.bg]],
+    ['the ink on a filled amber button', T.onAccent, [T.primary]],
+    ['"On this agenda" in amber on a picker row', T.primary, PANEL],
+  ])('%s clears AA', (_label, fg, layers) => {
+    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  });
+  test('the picked set\'s row, and an error on its tint', () => {
+    expect(on(T.text, [T.bg, T.surface, tint('--evb-row-sel')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-row-sel')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [T.bg, T.surface, tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+describe('the contract', () => {
+  test('the ladder, the 12px floor and the 48px agenda rows', () => {
+    for (const [step, px] of [['floor', 12], ['label', 13], ['body', 15], ['head', 19], ['numeral', 30]]) {
+      expect(MY_CSS).toMatch(new RegExp(`--evb-t-${step}:\\s*${px}px`));
+    }
+    expect(MY_CSS).toMatch(/--evb-row-h:\s*48px/);
+    const sizes = [...stripped(MY_CSS).matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    sizes.forEach((n) => expect(n).toBeGreaterThanOrEqual(12));
+  });
+  test('every selector is rooted at .evb, and styles.css declares nothing there', () => {
+    const selectors = stripped(MY_CSS).match(/^[^\s@}][^{]*(?=\{)/gm) || [];
+    expect(selectors.length).toBeGreaterThan(20);
+    selectors.forEach((sel) => sel.split(',').forEach((s) => expect(s.trim()).toMatch(/^\.evb(\b|-|\.|\s|:)/)));
+    expect(stripped(GLOBAL_CSS)).not.toMatch(/\.evb\b/);
+  });
+  test('no hex or raw rgba(...) outside the token block, and --danger never carries text', () => {
+    const css = stripped(MY_CSS);
+    const start = css.indexOf('.evb {');
+    const outside = css.slice(0, start) + css.slice(css.indexOf('}', start));
+    expect(outside).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(outside).not.toMatch(/rgba\(/i);
+    expect(css.split('\n').filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l))).toEqual([]);
+  });
+  test('the warn chip\'s border is a token, not a raw colour, matching the mockup\'s .chip.warn', () => {
+    const css = stripped(MY_CSS);
+    expect(css).toMatch(/--evb-rule-warn:\s*rgba\(246,\s*169,\s*76,\s*\.5\)/);
+    expect(css).toMatch(/\.evb-chip--warn\s*\{[^}]*border-color:\s*var\(--evb-rule-warn\)/);
+  });
+  test('every custom property used is declared somewhere', () => {
+    const declared = new Set();
+    for (const css of [GLOBAL_CSS, MY_CSS]) for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) declared.add(m[1]);
+    const used = [...MY_CSS.matchAll(/var\((--[a-z0-9-]+)/gi)].map((m) => m[1]);
+    expect([...new Set(used)].filter((n) => !declared.has(n))).toEqual([]);
+  });
+  test('the picker is a fixed-layout table', () => {
+    expect(stripped(MY_CSS)).toMatch(/\.evb-pick-tbl\s*\{[^}]*table-layout:\s*fixed/);
+  });
+  // rejects: the category chips one letter wide. .evb-modal breaks anywhere
+  // (overflow-wrap: anywhere) so a long title cannot push the dialog wide,
+  // and the shared options inherit it; styles.css gives every .category-name
+  // `flex: 1`, and the two together shrink each chip to a single character —
+  // the owner's screenshot of 27 Sep 2026. The create dialog never breaks
+  // anywhere, so the shared block is put back on its wrapping there.
+  test('the shared session options wrap as the create dialog does, never anywhere', () => {
+    expect(stripped(MY_CSS)).toMatch(/\.evb-modal\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(stripped(MY_CSS)).toMatch(/\.evb-sopts\s*\{[^}]*overflow-wrap:\s*normal/);
+  });
+});
+
+describe('the agenda place (02, 02b)', () => {
+  test.each([
+    ['titles and times on the panel', T.text, PANEL],
+    ['source lines and the foot on the panel', T.muted, PANEL],
+    ['the join code and "the most an event can hold" in amber', T.primary, PANEL],
+  ])('%s clears AA', (_label, fg, layers) => {
+    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  });
+  test('a break row, the row being moved, and the cap\'s reason', () => {
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-tint-brk')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [T.bg, T.surface, tint('--evb-row-sel')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-row-sel')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [T.bg, T.surface, tint('--evb-tint-cap')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.muted, [T.bg, T.surface, tint('--evb-tint-cap')])).toBeGreaterThanOrEqual(AA);
+  });
+  // The unreadable row (final review M4): its line and its Remove button are
+  // --danger-text, on the panel, under the hover tint, and on a break's tint.
+  test('--danger-text on an agenda row: the panel, a hovered row, a break row, and its hover tint', () => {
+    expect(on(T.dangerText, PANEL)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-row-hover')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-tint-brk')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, T.surface, tint('--evb-row-hover'), tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
+  });
+  // "Delete event…" and its inline confirm sit on the work field below the
+  // agenda panel (final review I1): the ghost-danger button idle and hovered,
+  // the confirm's words on its danger tint, and the button hovered inside it.
+  test('deleting the event: --danger-text and --text on the field and on the danger tint', () => {
+    const FIELD = [T.bg];
+    const TINT = [T.bg, tint('--evb-tint-danger')];
+    expect(on(T.dangerText, FIELD)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, TINT)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, TINT)).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [...TINT, tint('--evb-tint-danger')])).toBeGreaterThanOrEqual(AA);
+  });
+  test('the delete zone uses the existing destructive idiom and no new colour', () => {
+    const css = stripped(MY_CSS);
+    const zone = css.match(/\.evb-endzone\s*\{([^}]*)\}/);
+    expect(zone).not.toBeNull();
+    expect(zone[1]).not.toMatch(/color|background|#|rgba/);
+  });
+  test('the cap\'s reason is never drawn at the disabled opacity', () => {
+    const note = stripped(MY_CSS).match(/\.evb-capnote\s*\{([^}]*)\}/)[1];
+    expect(note).not.toMatch(/opacity/);
+  });
+  test('the agenda is fixed-layout and its row actions never use flex-end (hard rules 9 and 11)', () => {
+    const css = stripped(MY_CSS);
+    expect(css).toMatch(/\.evb-tbl\s*\{[^}]*table-layout:\s*fixed/);
+    expect(css).toMatch(/\.evb-rowact > :first-child\s*\{\s*margin-left:\s*auto;\s*\}/);
+    expect(css).not.toMatch(/\.evb-rowact\s*\{[^}]*justify-content:\s*flex-end/);
+  });
+  test('a truncating title is one text node with min-width 0 (hard rule 8)', () => {
+    const nm = stripped(MY_CSS).match(/\.evb-nm\s*\{([^}]*)\}/)[1];
+    expect(nm).toMatch(/min-width:\s*0/);
+    expect(nm).toMatch(/text-overflow:\s*ellipsis/);
+  });
+});

@@ -22,6 +22,44 @@ export const SURVEY_KINDS = [
 ];
 
 /**
+ * THE KINDS A POLL QUESTION MAY BE — the browser's twin of POLL_KINDS in
+ * lambda-functions/admin/shared/survey-kinds.js, in the same order, so the
+ * default (multiple choice) comes first. A poll question is a survey question
+ * the host asks one at a time (the owner, 27 Sep 2026: "a short instant
+ * feedback version of the survey items"). Ranking is left out: a ranking is a
+ * ballot, not a glance.
+ */
+export const POLL_KINDS = ['choice', 'rating', 'yesno', 'text'];
+
+/**
+ * THE NAMED PAIRS A BINARY QUESTION'S TWO ANSWERS COME IN. "Default yes/no but
+ * could be approve/decline, true/false" (the owner, 27 Sep 2026). A preset
+ * only fills the two labels, which stay editable — anything else typed is
+ * simply a pair of its own. Yes / No is the default and is stored as two BLANK
+ * labels, exactly as a question nobody relabelled is, so choosing it again
+ * restores the default rather than pinning the words.
+ */
+export const YESNO_PRESETS = [
+  { id: 'yes-no', label: 'Yes / No', yesLabel: '', noLabel: '' },
+  { id: 'approve-decline', label: 'Approve / Decline', yesLabel: 'Approve', noLabel: 'Decline' },
+  { id: 'true-false', label: 'True / False', yesLabel: 'True', noLabel: 'False' },
+  { id: 'agree-disagree', label: 'Agree / Disagree', yesLabel: 'Agree', noLabel: 'Disagree' },
+];
+
+/**
+ * The preset a question's two labels are, or '' when they are a pair of the
+ * author's own. Blank labels read as Yes and No, so they are the Yes / No
+ * preset — and so are the words Yes and No typed out.
+ */
+export function yesNoPresetOf(row) {
+  const r = row || {};
+  const yes = String(r.yesLabel ?? '').trim() || 'Yes';
+  const no = String(r.noLabel ?? '').trim() || 'No';
+  const match = YESNO_PRESETS.find((p) => (p.yesLabel || 'Yes') === yes && (p.noLabel || 'No') === no);
+  return match ? match.id : '';
+}
+
+/**
  * Every survey row is filed under this category. Surveys expose no categories,
  * but the importer's category bitmask needs one, so the editor hides the field
  * and fills it.

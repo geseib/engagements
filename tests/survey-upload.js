@@ -22,7 +22,11 @@
  * refused; a JSON upload for any OTHER type being accepted, or refused in words
  * that still talk about surveys; an org survey's options, labels and follow-up
  * question sitting in the clear at rest; an org POLL's options doing the same;
- * the editor or the download being handed an envelope instead of the words.
+ * the editor or the download being handed an envelope instead of the words; a
+ * typed POLL (a survey question the host asks, one of four kinds) importing as
+ * anything but its kinds in its own categories, or accepting a rank row; the
+ * poll template or sets/new/poll-how-we-work.csv carrying a row the importer
+ * would skip.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -591,6 +595,104 @@ const questionRows = (pk) => rowsIn(pk)
     const { res, body: t } = await getTemplate({ type: 'survey', template: 'nope' });
     assert.strictEqual(res.statusCode, 400);
     for (const id of NAMED) assert.ok(t.error.includes(id), t.error);
+  });
+
+  say('\n11. a poll is a survey question the host asks: typed poll CSVs');
+
+  // The same reader and the same rules as a survey, less rank, and each row
+  // keeps its own Category. Legacy poll files (no Kind column) are section 7
+  // and tests/question-set-roundtrip.js.
+  const POLL_CHOICE = { Category: 'Workplace', 'Question#': 1, Title: 'Where do you work best?', Kind: 'choice', Options: 'Office|Home|Both' };
+  const POLL_YESNO = { Category: 'Decisions', 'Question#': 1, Title: 'Ship on Thursday?', Kind: 'yesno', YesLabel: 'Approve', NoLabel: 'Decline' };
+  const pollUpload = (fileContent, title) => doUpload(STAFF, { fileContent, title, engagementType: 'poll' });
+
+  await test('a typed poll imports each row as its kind, in its own category', async () => {
+    reset();
+    const res = await pollUpload(csvOf(POLL_CHOICE, POLL_YESNO, { ...RATING, Category: 'Meetings' }, { ...TEXT, Category: 'Ideas' }), 'Typed');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(parse(res).skippedRowCount, 0, JSON.stringify(parse(res).skippedRows));
+    assert.strictEqual(store.get('SETS|SET#typed').engagementType, 'poll');
+    const rows = questionRows('SET#typed#v1').sort((a, b) => a.SK.localeCompare(b.SK));
+    assert.deepStrictEqual(rows.map((r) => [r.Category, r.kind]),
+      [['Workplace', 'choice'], ['Decisions', 'yesno'], ['Meetings', 'rating'], ['Ideas', 'text']]);
+    assert.deepStrictEqual(surveyAttrs(rows[1]), {
+      kind: 'yesno', required: false, yesLabel: 'Approve', noLabel: 'Decline', unsure: false, followUpWhen: '',
+    });
+    assert.deepStrictEqual(surveyAttrs(rows[0]), {
+      kind: 'choice', required: false, options: ['Office', 'Home', 'Both'], allowMultiple: false, allowOther: false, shuffle: false,
+    });
+  });
+  await test('a bad poll row is skipped with its reason — a rank, a missing category, a lone option', async () => {
+    reset();
+    const res = await pollUpload(csvOf(
+      POLL_CHOICE,
+      { ...RANK, Category: 'Ideas' },
+      { ...POLL_YESNO, Category: '' },
+      { ...POLL_CHOICE, 'Question#': 2, Title: 'Just one', Options: 'Only' },
+      { ...POLL_CHOICE, 'Question#': 3, Title: 'Legacy spelling', Kind: 'ranking' },
+    ), 'Bad Rows');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.deepStrictEqual(parse(res).skippedRows, [
+      { row: 3, reason: "a poll can't be a rank question" },
+      { row: 4, reason: 'needs a category' },
+      { row: 5, reason: 'needs at least two options' },
+      { row: 6, reason: "a poll can't be a rank question" },
+    ]);
+    assert.deepStrictEqual(questionRows('SET#badrows#v1').map((r) => r.kind), ['choice']);
+  });
+  await test('a legacy poll (no Kind column) still imports exactly as before', async () => {
+    reset();
+    const legacy = ['Category,Title,Options,AllowMultiple', '"Delivery","Which cadence?","Weekly|Monthly","true"'].join('\n');
+    const res = await pollUpload(legacy, 'Legacy');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const [row] = questionRows('SET#legacy#v1');
+    assert.deepStrictEqual(surveyAttrs(row), { options: ['Weekly', 'Monthly'], allowMultiple: true });
+  });
+  await test('a typed poll downloads as the file it was, and re-imports to the same rows', async () => {
+    reset();
+    await pollUpload(csvOf(POLL_CHOICE, POLL_YESNO), 'Round');
+    const { content } = await downloadCsv(STAFF, 'round');
+    // Typed out from the contract: blank cells come back as their defaults.
+    assert.strictEqual(content, [
+      EXPECTED_DOWNLOAD.split('\n')[0],
+      '"Workplace",1,"Where do you work best?","","","","choice","false","Office|Home|Both","false","","false","false","","","","","","false","","","","","","","false",""',
+      '"Decisions",1,"Ship on Thursday?","","","","yesno","false","","false","","false","false","","","","Approve","Decline","false","","","","","","","false",""',
+      '',
+    ].join('\n'));
+    await pollUpload(content, 'Round Again');
+    const strip = (r) => ({ ...surveyAttrs(r), Title: r.Title, Category: r.Category, Tags: r.Tags });
+    assert.deepStrictEqual(questionRows('SET#roundagain#v1').map(strip), questionRows('SET#round#v1').map(strip));
+  });
+
+  await test('type=poll is the contract CSV: one question of each poll kind, a relabelled yes/no among them', async () => {
+    const { res, body: t } = await getTemplate({ type: 'poll' });
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(t.filename, 'poll-template.csv');
+    assert.ok(t.content.startsWith(`${EXPECTED_DOWNLOAD.split('\n')[0]}\n`), 'not the contract header');
+    reset();
+    const imported = await pollUpload(t.content, 'Poll Template');
+    assert.strictEqual(imported.statusCode, 200, imported.body);
+    assert.strictEqual(parse(imported).skippedRowCount, 0, JSON.stringify(parse(imported).skippedRows));
+    const rows = questionRows('SET#polltemplate#v1');
+    assert.deepStrictEqual(rows.map((r) => r.kind).sort(), ['choice', 'rating', 'text', 'yesno']);
+    assert.ok(rows.every((r) => r.Category && r.Category !== 'Survey'), 'a poll template row lost its category');
+    const yesno = rows.find((r) => r.kind === 'yesno');
+    assert.deepStrictEqual([yesno.yesLabel, yesno.noLabel], ['Approve', 'Decline']);
+  });
+
+  await test('sets/new/poll-how-we-work.csv imports with nothing skipped, mixing all four kinds', async () => {
+    reset();
+    const file = require('fs').readFileSync(path.join(REPO, 'sets', 'new', 'poll-how-we-work.csv'), 'utf8');
+    const res = await pollUpload(file, 'How We Work');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(parse(res).skippedRowCount, 0, JSON.stringify(parse(res).skippedRows));
+    const rows = questionRows('SET#howwework#v1');
+    assert.ok(rows.length >= 8 && rows.length <= 12, `${rows.length} questions`);
+    const kinds = rows.map((r) => r.kind);
+    for (const kind of ['choice', 'rating', 'yesno', 'text']) assert.ok(kinds.includes(kind), `no ${kind} question`);
+    assert.ok(kinds.filter((k) => k === 'text').length <= 2, 'more than two open questions');
+    // Downloads as itself, so the file in the repo is what an export of it is.
+    assert.strictEqual((await downloadCsv(STAFF, 'howwework')).content, file);
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);

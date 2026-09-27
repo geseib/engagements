@@ -311,6 +311,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
     // FIRST. Encrypting only `Answer` left the participant's actual words
     // readable at rest and made the other field decorative.
     'ProcessedWords',
+    // A TYPED POLL'S VALUE (poll-question.js): the same answer, structured for
+    // the tally — a write-in or a "why" is as much the person's words as
+    // `Answer` is.
+    'PollValue',
   ]),
 
   /** A ballot: SK=QUESTION#<num>#VOTE#<player>. `Votes` is a MAP, not a
@@ -335,10 +339,23 @@ const ENCRYPTED_FIELDS = Object.freeze({
   report: Object.freeze([
     'gameTitle',
     'hostName',
+    // The event's own free text (Task 2, "About this session"): the same
+    // class of host-authored content as gameTitle/hostName above, and it is
+    // ENCRYPTED_FIELDS.session's `Details`/`EngagementInfo` on the row this
+    // report is built from.
+    'eventDetails',
     'playerPerformance',
     'detailedQuestions',
     'questionSummaries',
     'questionSetData',
+    // A survey's frozen tallies (Task 4 of the 2026-09-26 feature sweep):
+    // every question's title beside its aggregate counts and, for a text
+    // question, the words people actually wrote — the same class of quoted
+    // content as `detailedQuestions` above, read the same way GET
+    // /games/{gameId}/survey-results does (survey-host.js
+    // `surveyResultsPayload`, which never opens a SURVEY#RESP#/SURVEY#DONE#
+    // row, so no respondent name is ever in here to protect).
+    'surveyResults',
   ]),
 
   /** The derived tally: SK=QUESTION#<nnn>#RESULTS.
@@ -447,6 +464,35 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  `PerQuestion`, `Order` and `TextPages` are counts, question ids and page
    *  counts and stay plaintext, like `results.VoteTallies`. */
   surveyResults: Object.freeze(['Texts']),
+
+  /** An event (docs/design/agenda-redesign/40-data-model.html): its METADATA
+   *  row, PK=EVENT#<code>, and the organisation's list row,
+   *  PK=ORG#<org>#EVENTS / SK=EVENT#<code>. The same two strings ride on both
+   *  rows, so both are sealed — the `session` entity's reasoning about its
+   *  index row, again. `StartsAt`, `TimeZone`, `Access`, `State`,
+   *  `AttendeeReports` and the three counts are when, switches and counts,
+   *  and stay plaintext. */
+  event: Object.freeze(['Title', 'Place']),
+
+  /** One agenda item: PK=EVENT#<code>, SK=ITEM#<id>. Its title and its
+   *  description are what the host wrote for the room; `LedBy` is the name of
+   *  who leads it (events M1b) — a person's name, personal data. `Settings`
+   *  is an engagement's session options, sealed WHOLE: it carries Workie's
+   *  briefing, instructions and event details, which a session seals too.
+   *  `Type`, `Order`, `Minutes`, `State` and `SetRef` — a pointer to a
+   *  question set, as a session's `QuestionSetId` is — are structure, and
+   *  stay plaintext. */
+  item: Object.freeze(['Title', 'Description', 'LedBy', 'Settings']),
+
+  /** Somebody who joined an open event (events M2): PK=EVENT#<code>,
+   *  SK=ATTENDEE#<id>. `AttendeeName` is the name they typed — a person's
+   *  name, personal data, so it is sealed (a session's `PlayerName` is not;
+   *  the controller ruled this one differently). It is NOT called `Name`:
+   *  tests/tenant-crypto.js holds `Name` plaintext everywhere, for a survey's
+   *  Named rows. `TokenHash` is a SHA-256 and is not a secret; `JoinedAt`,
+   *  `orgId` and `ttl` are a time, an owner and an expiry, and stay
+   *  plaintext. */
+  attendee: Object.freeze(['AttendeeName']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

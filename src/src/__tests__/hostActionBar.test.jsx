@@ -10,7 +10,7 @@ import HostActionBar from '../components/HostActionBar';
 import { hostControlsFor, HOST_INTENTS } from '../config/hostControls';
 
 const controlsFor = (overrides = {}) => hostControlsFor({
-  gameType: 'poll',
+  gameType: 'call-and-answer',
   phase: 'ASK',
   playerCount: 4,
   answeredCount: 4,
@@ -81,6 +81,24 @@ describe('HostActionBar', () => {
     fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true });
 
     expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  // Task 8, 2026-09-26 feature sweep: config/hostControls.js's third, optional
+  // slot — a survey's CLOSED/ENDED "Walk through", beside "See the results".
+  it('renders a tertiary action beside the secondary, when the controls carry one', () => {
+    const onAction = jest.fn();
+    const controls = hostControlsFor({ gameType: 'survey', phase: 'CLOSED', hasQuestionSet: true });
+    render(<HostActionBar controls={controls} onAction={onAction} />);
+
+    expect(screen.getByRole('button', { name: 'See the results' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Walk through' }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction.mock.calls[0][0].intent).toBe(HOST_INTENTS.SURVEY_PRESENT);
+  });
+
+  it('renders no tertiary button when the controls carry none', () => {
+    render(<HostActionBar controls={controlsFor()} onAction={() => {}} />);
+    expect(screen.queryByRole('button', { name: 'Walk through' })).not.toBeInTheDocument();
   });
 
   it('ignores modified key presses so browser shortcuts still work', () => {

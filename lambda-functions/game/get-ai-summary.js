@@ -32,6 +32,17 @@ const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tena
 // question, the prompt, Workie's reply — describes them with this and never
 // quotes them. tests/ai-summary-content-not-logged.js.
 const { shapeForLog } = require('./log-shape');
+const { pollQuestionOf } = require('./poll-question');
+const { pollTally, describePollTally } = require('./poll-round');
+const { describeSurveyResults } = require('./survey-digest');
+
+/**
+ * A SURVEY'S ONE SUMMARY lives at this pseudo-round. A survey has no rounds
+ * (SURVEY#OPEN, SURVEY#CLOSED, ENDED), so its read-back borrows the round
+ * machinery at a number no round can have: the AISummary and COMMENT keys,
+ * stage-beat.js and create-report.js all take 000 as they take 003.
+ */
+const SURVEY_ROUND = '000';
 
 /**
  * Voice attribution carried out of generateAISummary() and onto the stored
@@ -578,6 +589,20 @@ const sessionOnFinalRound = async (gameId) => {
   }
 };
 
+/**
+ * The id tried when no prompt claims isDefault for this type. A SURVEY GETS
+ * NONE, deliberately: lessons-learned reads a round's ranked responses, and a
+ * survey has none, so it would tell the room nobody answered. Until the
+ * survey default is seeded (admin/populate-defaults.js), the data-driven
+ * fallback — which states the survey's own respondent count — is the honest
+ * read.
+ */
+const houseFallbackPrompt = (canonical) => {
+  if (canonical === 'trivia') return 'trivia-basic';
+  if (canonical === 'survey') return '';
+  return 'lessons-learned';
+};
+
 // Find default prompt ID for a given game type
 const findDefaultPromptId = async (gameType) => {
   const canonical = normalizeGameType(gameType);
@@ -649,13 +674,13 @@ const findDefaultPromptId = async (gameType) => {
     }
 
     // Final fallback - return a hardcoded default based on game type
-    const fallbackPrompt = canonical === 'trivia' ? 'trivia-basic' : 'lessons-learned';
+    const fallbackPrompt = houseFallbackPrompt(canonical);
     console.log(`⚠️ No default prompt found for ${gameType}, using hardcoded fallback: ${fallbackPrompt}`);
     return fallbackPrompt;
 
   } catch (error) {
     console.error(`❌ Error finding default prompt for ${gameType}:`, error);
-    const fallbackPrompt = canonical === 'trivia' ? 'trivia-basic' : 'lessons-learned';
+    const fallbackPrompt = houseFallbackPrompt(canonical);
     return fallbackPrompt; // Fallback
   }
 };
@@ -1022,6 +1047,7 @@ exports.handler = async (event) => {
 
     // Extract scoring configuration and game type early since they're used in vote processing
     const gameType = gameMetadata.Item.GameType || 'call-and-answer';
+    const isSurveySummary = normalizeGameType(gameType) === 'survey';
     const scoringConfig = gameMetadata.Item.ScoringConfig || {
       firstPlacePoints: 3,
       secondPlacePoints: 2,
@@ -1035,9 +1061,59 @@ exports.handler = async (event) => {
     let question = null;
     let questionSetId = null;
     let questionSetVersion = null;
+
+    /*
+      A CLOSED SURVEY IS READ WHOLE, FROM ITS FROZEN RESULTS (the owner, 27
+      Sep 2026: the Workie comments "on the results vs what is given about the
+      event"). A survey has no REF, ANSWER or VOTE rows, so none is read below:
+      the material is surveyResultsPayload — the same reader the results route
+      and the report use, which never opens a row a name lives on — described
+      question by question by survey-digest.js. The session stands in for the
+      question: its title, and what the survey was.
+
+      Required HERE rather than at the top: survey-host.js is the survey's
+      whole host surface, and a round's summary has no use for it.
+    */
+    let surveyDigest = null;
+    if (isSurveySummary) {
+      if (paddedQuestionNumber !== SURVEY_ROUND) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'A survey has one summary, at questionId ' + SURVEY_ROUND + '.' }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      const { surveyResultsPayload } = require('./survey-host');
+      const frozen = await surveyResultsPayload(gameId, gameMetadata.Item);
+      if (!frozen) {
+        // Nothing is frozen until the host closes it. The worker tells the
+        // room rather than retrying — a retry cannot close a survey.
+        if (workerMode) {
+          await broadcastToGame(gameId, {
+            type: 'aiSummaryError', gameId, questionId: targetQuestionId,
+            message: 'Close the survey before Workie reads it.',
+          });
+        }
+        return {
+          statusCode: 409,
+          body: JSON.stringify({ error: 'Close the survey before Workie reads it.', code: 'NOT_CLOSED' }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      surveyDigest = describeSurveyResults(frozen);
+      question = {
+        title: gameMetadata.Item.Title || gameMetadata.Item.EventTitle || 'The survey',
+        questionDetail: 'A survey of ' + surveyDigest.questionCount + ' question'
+          + (surveyDigest.questionCount === 1 ? '' : 's') + ', answered at each person\'s own pace',
+        category: 'Survey',
+      };
+      questionSetId = gameMetadata.Item.QuestionSetId || null;
+      console.log(`📋 SURVEY: ${surveyDigest.respondents} respondents, ${surveyDigest.questionCount} questions, digest ${shapeForLog(surveyDigest.text)}`);
+    }
+
     try {
-      // Get question reference record (same as get-results.js)
-      const questionRef = await db.send(new GetCommand({
+      // Get question reference record (same as get-results.js). A survey has none.
+      const questionRef = isSurveySummary ? {} : await db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionNumber}#REF` }
       }));
@@ -1079,7 +1155,7 @@ exports.handler = async (event) => {
           question = await decryptItem(questionOrgId, 'question', question);
         }
         console.log(`📋 Question data fetched from question set:`, question ? 'Success' : 'Not found');
-      } else {
+      } else if (!isSurveySummary) {
         console.log(`❌ Question reference not found: QUESTION#${paddedQuestionNumber}#REF`);
       }
     } catch (error) {
@@ -1144,8 +1220,9 @@ exports.handler = async (event) => {
 
     // Use the sequential question number for answers lookup (already calculated above)
     
-    // Get answers for this question using sequential question number
-    const answersQuery = await db.send(new QueryCommand({
+    // Get answers for this question using sequential question number. A
+    // survey's answers are already counted into its frozen results above.
+    const answersQuery = isSurveySummary ? { Items: [] } : await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
@@ -1155,7 +1232,7 @@ exports.handler = async (event) => {
     }));
 
     // Get vote tallies for results calculation (using same logic as get-results.js)
-    const votesQuery = await db.send(new QueryCommand({
+    const votesQuery = isSurveySummary ? { Items: [] } : await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
@@ -1179,7 +1256,7 @@ exports.handler = async (event) => {
       : (answersQuery.Items || []);
     
     // Get stored results data if available (contains wavelength commonWords)
-    const storedResultsQuery = await db.send(new GetCommand({
+    const storedResultsQuery = isSurveySummary ? {} : await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { 
         PK: `GAME#${gameId}`, 
@@ -1210,7 +1287,18 @@ exports.handler = async (event) => {
       : (storedResultsQuery.Item || null);
     console.log(`📊 Found ${answers.length} answers, ${votes.length} votes, stored results: ${storedResults ? 'YES' : 'NO'} for question ${paddedQuestionNumber}`);
     
-    if (answers.length === 0) {
+    // A ROUND NOBODY ANSWERED still gets a word when it is trivia or a poll
+    // (the owner, 27 Sep 2026: "if there are no answers, it's still ok to have
+    // Workie comment … it can talk about the correct answer … the status of
+    // the game … if it's going in the report"). The prompts' thin-round rule
+    // says what to write; this used to refuse before any prompt was read.
+    // Call-and-answer and wavelength keep the refusal: with no responses there
+    // is nothing of the room's to read back. A survey carries its material in
+    // the digest, never in answer rows, and the prompt says what a survey
+    // nobody answered means.
+    const answerlessOk = isSurveySummary
+      || ['trivia', 'quiz', 'poll', 'polls'].includes(String(gameType).toLowerCase());
+    if (answers.length === 0 && !answerlessOk) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'No answers found for this question.' }),
@@ -1352,7 +1440,9 @@ exports.handler = async (event) => {
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionNumber}` }
     }));
-    const hidden = isHidden(metadata, roundRecord.Item);
+    // A survey's read-back is never attributed, whatever its Names setting:
+    // the digest carries no name, and nothing the prompt is built from may.
+    const hidden = isSurveySummary || isHidden(metadata, roundRecord.Item);
 
     // Fetch question set details for AI context and custom instructions
     let customInstruction = null;
@@ -1565,7 +1655,11 @@ exports.handler = async (event) => {
       // unrelated to anonymity. Wiring it through is the minimum needed to
       // make that branch (and this task's redaction inside it) reachable at
       // all, let alone testable.
-      storedResults: storedResults
+      storedResults: storedResults,
+      // A closed survey's frozen results in words (survey-digest.js), or null
+      // for every round. It becomes {surveyResults}, and its respondent count
+      // is what the data-driven fallback states.
+      survey: surveyDigest
     };
 
     // Generate AI summary
@@ -1902,7 +1996,7 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '' }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -1937,8 +2031,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     };
   }
 
-  // Prepare the context for AI
-  const totalParticipants = answers.length;
+  // Prepare the context for AI. A survey has no answer rows here — its
+  // respondents were counted at close, and that count is the one to state.
+  const totalParticipants = survey ? survey.respondents : answers.length;
   const winners = results.winners || [];
   const voteTallies = results.voteTallies || {};
 
@@ -2518,16 +2613,34 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // only for a row that has none. See pollOptionsLine.
     pollOptions = await pollOptionsLine(question, orgId);
 
-    // For polls, there's no correct answer, just distribution
+    // A TYPED POLL (typed polls, 27 Sep 2026; game/poll-round.js): the round
+    // counted by the survey's aggregate and described in the question's own
+    // words — each option's count, a scale's spread, the binary's labels, the
+    // open answers quoted. The question row reaches here encrypted (see
+    // pollOptionsLine), so it is opened first; a failure falls back to the
+    // plain distribution below, as a pre-typed poll always read.
+    const typedRows = answers.filter((a) => a && a.PollValue !== undefined && a.PollValue !== null);
+    let described = '';
+    if (typedRows.length) {
+      try {
+        const opened = orgId ? await decryptItem(orgId, 'question', question) : question;
+        const pollQ = pollQuestionOf(opened);
+        described = describePollTally(pollQ, pollTally(pollQ, typedRows));
+        if (pollQ.kind !== 'choice') pollOptions = '';
+      } catch (error) {
+        console.warn('⚠️ Poll tally could not be described for the summary: ' + error.message);
+      }
+    }
+    // A poll from before typed polls: no correct answer, just distribution.
     const responseDistribution = {};
-    answers.forEach(answer => {
-      const playerAnswer = answer.Answer || answer.answer;
-      responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
-    });
-    
-    // Format as a distribution
-    triviaResponses = Object.entries(responseDistribution)
-      .map(([option, count]) => `${option}: ${count} votes`)
+    if (!described) {
+      answers.forEach(answer => {
+        const playerAnswer = answer.Answer || answer.answer;
+        responseDistribution[playerAnswer] = (responseDistribution[playerAnswer] || 0) + 1;
+      });
+    }
+    triviaResponses = described || Object.entries(responseDistribution)
+      .map(([option, count]) => `${option}: ${count}`)
       .join(', ');
   } else if (gameType === 'wavelength') {
     // Handle wavelength word analysis
@@ -2804,6 +2917,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     uniqueAnswers: uniqueAnswersText,
     answerCategories: answerCategories,
     triviaResponses: triviaResponses,
+    // A CLOSED SURVEY, whole (survey-digest.js): each question's frozen
+    // result in the survey's order, the aggregate's own figures, and a sample
+    // of what people wrote. Never a name. '' on every round.
+    surveyResults: survey ? survey.text : '',
     responsesText: responsesText,
     correctCount: gameType === 'trivia' ? correctCount : 0, // For trivia templates
     

@@ -331,6 +331,30 @@ function assertNoSecrets(r) {
     });
   }
 
+  say('\n7. a closed survey\'s read (000) goes through the same two doors');
+  // The owner, 27 Sep 2026: the Workie comments on a closed survey. It is
+  // generated at the pseudo-round 000 (get-ai-summary.js), and that must not
+  // open a side door: the public route still refuses to start it.
+  put({ PK: 'GAME#4104', SK: 'STATE', State: 'SURVEY#CLOSED' });
+  put({ PK: 'GAME#4104', SK: 'METADATA', GameType: 'survey', orgId: ORG });
+  const surveyPublic = await call(PUBLIC_ROUTE, '4104', { questionId: '000', generateNew: 'true' });
+  await check('the public route refuses to generate a survey\'s read: 403, nothing started', () => {
+    assert.strictEqual(surveyPublic.status, 403, surveyPublic.raw);
+    assert.deepStrictEqual(surveyPublic.invoked, []);
+  });
+  const surveyHost = await call(HOST_ROUTE, '4104', { questionId: '000', generateNew: 'true' }, hostOf(ORG));
+  await check('the owning host starts ONE worker, for questionId 000', () => {
+    assert.strictEqual(surveyHost.status, 202, surveyHost.raw);
+    assert.strictEqual(surveyHost.invoked.length, 1);
+    assert.strictEqual(surveyHost.invoked[0].questionId, '000');
+    assert.strictEqual(surveyHost.invoked[0].paddedQuestionNumber, '000');
+  });
+  const surveyRival = await call(HOST_ROUTE, '4104', { questionId: '000', generateNew: 'true' }, hostOf(RIVAL));
+  await check('another team\'s host: the same 404, nothing started', () => {
+    assert.strictEqual(surveyRival.status, 404, surveyRival.raw);
+    assert.deepStrictEqual(surveyRival.invoked, []);
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

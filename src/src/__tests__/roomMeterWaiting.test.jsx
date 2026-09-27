@@ -29,15 +29,16 @@ import {
 
 const roster = (...names) => names.map((name) => ({ name }));
 
-/** An open round: poll with anonymity switched off, so no gate applies. */
+/** An open round: call-and-answer with anonymity switched off, so no gate applies.
+ *  (Poll was the fixture until typed polls took it out of the vote, 27 Sep 2026.) */
 const open = {
-  gameType: 'poll',
+  gameType: 'call-and-answer',
   anonymousUntilReveal: false,
 };
 
-/** A hidden round: poll, anonymous, authors not yet revealed. */
+/** A hidden round: call-and-answer, anonymous, authors not yet revealed. */
 const hidden = {
-  gameType: 'poll',
+  gameType: 'call-and-answer',
   anonymousUntilReveal: true,
   authorsRevealed: false,
 };
@@ -307,7 +308,7 @@ describe('joinedRoster — who is already here', () => {
     })).toEqual(['Dana', 'Tomás']);
   });
 
-  test('NO ANONYMITY GATE — an anonymous poll still names its lobby', () => {
+  test('NO ANONYMITY GATE — an anonymous round still names its lobby', () => {
     // THE OWNER'S RULING, and the one an implementation gets wrong by being
     // careful. The round phases have an anonymity rule at all because naming
     // the waiters shrinks the anonymity set of the responses on the stage. In a
@@ -370,7 +371,7 @@ function MeterHarness({ names = ['Dana', 'Tomás'], phase = 'ASK', onAdvance = (
       <span data-testid="roster-mode">{String(rosterMode)}</span>
       <HostActionBar
         controls={hostControlsFor({
-          gameType: 'poll', phase: 'ASK', playerCount: 4, answeredCount: 4,
+          gameType: 'call-and-answer', phase: 'ASK', playerCount: 4, answeredCount: 4,
           votedCount: 0, answerCount: 4, hasQuestionSet: true,
         })}
         onAction={onAdvance}

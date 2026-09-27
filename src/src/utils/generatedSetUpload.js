@@ -24,8 +24,9 @@ import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from './adminApi';
 import { parseUpgradeRequired } from './upgradeRequired';
 import { tagsToCsvCell } from './tags';
-import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from './csv';
+import { csvRow, buildCsv } from './csv';
 import { surveyItemsToCsv } from './surveyDraft';
+import { pollItemsToCsv } from './pollDraft';
 
 /** Items grouped by category, in first-seen order: the importer numbers per category. */
 function byCategory(items, fallback) {
@@ -90,32 +91,6 @@ function triviaToCsv(questions) {
   return buildCsv(headers, rows);
 }
 
-function pollsToCsv(questions) {
-  // ONE `Options` column, pipe-separated — see optionsToCsvCell(). This used
-  // to emit Option1..Option5, which upload-questions.js does not read and has
-  // no fallback for, so every AI-generated poll set imported with zero
-  // options. Do not "restore" the numbered columns.
-  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
-  const rows = [];
-  const groups = byCategory(questions, 'General');
-  Object.keys(groups).forEach((category) => {
-    groups[category].forEach((poll, index) => {
-      rows.push(csvRow([
-        category,
-        index + 1,
-        poll.title,
-        poll.detail || '',
-        poll.school || 'General',
-        poll.customInstructions || '',
-        optionsToCsvCell(poll.options),
-        allowMultipleToCsvCell(poll.allowMultiple),
-        tagsToCsvCell(poll.tags),
-      ]));
-    });
-  });
-  return buildCsv(headers, rows);
-}
-
 /*
   WHAT DIFFERS BY BUILDER, and nothing else does.
 
@@ -138,7 +113,9 @@ const KINDS = {
     processing: 'Processing AI-generated trivia questions…', created: 'trivia set created',
   },
   poll: {
-    items: 'questions', toCsv: pollsToCsv, type: 'poll', direction: true, instructions: true,
+    // A poll question is typed now (utils/pollDraft.js): the survey contract's
+    // columns, each question keeping its own category.
+    items: 'questions', toCsv: pollItemsToCsv, type: 'poll', direction: true, instructions: true,
     processing: 'Processing AI-generated poll questions…', created: 'poll set created',
   },
   survey: {

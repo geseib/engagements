@@ -61,6 +61,8 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
+  # Events (roadmap D6): switched on for dev only. See EVENTS_ENABLED in Globals.
+  IsDev: !Equals [!Ref Environment, "dev"]
   # True when the deploy passes Google credentials, fetched from
   # /<stack>/google/* SSM parameters by all three buildspecs.
   #
@@ -135,6 +137,13 @@ Globals:
         # console — and pinning it means the version a set was checked against
         # is a fact that can be recorded beside the outcome.
         CONTENT_GUARDRAIL_VERSION: !GetAtt ContentGuardrailVersion.Version
+        # EVENTS (roadmap D6, docs/superpowers/plans/2026-09-26-events-roadmap.md).
+        # On for dev only, so each milestone can land on dev as it is finished
+        # without showing half a feature on test or prod. Read at call time by
+        # websocket/events/event-http.js `eventsEnabled` (POST /events refuses
+        # while it is off) and by admin/orgs/list-my-orgs.js (the console hides
+        # Events). Turned on for test when the owner asks (roadmap M6).
+        EVENTS_ENABLED: !If [IsDev, 'on', 'off']
 
 Resources:
 
@@ -315,6 +324,304 @@ Resources:
               Action: [ kms:Decrypt ]
               Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ## Events (docs/design/agenda-redesign; roadmap M1)
+  #
+  # IN THE websocket BUNDLE ON PURPOSE. An event reserves its code with the
+  # module a session does (websocket/code-reservation.js), and CodeUri is
+  # per-directory with no layers: a lambda-functions/events/ bundle of its own
+  # would need a fourth copy of tenant.js, tenant-crypto.js, usage.js,
+  # pricing.js, pricing-adjust.js and plan-limit.js, and a second copy of the
+  # code lock. Handlers live in websocket/events/.
+  CreateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-create-event'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/create-event.handler
+      Events:
+        CreateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events
+            Method: post
+            # A host's route. requiredGroupsForRoute answers hosts|admins
+            # through its anchored EVENT_HOST_ROUTE rule; the handler adds the
+            # organisation and the Team-plan gate.
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Seals the event's name and place with the org's data key.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  GetEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-events'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/get-events.handler
+      Events:
+        GetEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Opens the event names on the organisation's list.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  GetEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-get-event'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/get-event.handler
+      Events:
+        GetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Opens the event, its items and an org set's name.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  UpdateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-update-event'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/update-event.handler
+      Events:
+        UpdateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # DELETE rides on this function (update-event.js hands it to
+        # delete-event.js) rather than on a new one: the stack is near
+        # CloudFormation's 500-resource limit, and a function costs a role
+        # and a permission besides itself. EVENT_HOST_ROUTE already answers
+        # hosts|admins for any method on events/{code}.
+        DeleteEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Opens and re-seals the event's name and place; deletes an event's
+        # rows and its code's reservation.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  EventItemsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-event-items'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/items.handler
+      Events:
+        AddEventItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        RemoveEventItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items/{itemId}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ReorderEventItems:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        EditEventItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items/{itemId}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # RUNNING THE DAY (events M3, events/run.js): start, pause, resume and
+        # end an item, extend a break, end the event. One route for every
+        # action, on this function: a route costs a permission, a function a
+        # role and more, and the stack is near the 500-resource limit.
+        RunEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/run
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Policies:
+        # Seals and opens item titles and descriptions; since events M3 also
+        # makes an item's session (its title and details sealed the same way).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # Tells the phones and the stage inside an item's session that the
+        # event paused, resumed, ended or moved on (events/child-session.js).
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  # THE ATTENDEE'S FUNCTION: the three public routes an attendee's page calls
+  # (events M2). get-agenda.js hands the two attendee routes to
+  # events/attendees.js — two events on this function, not a new one: the
+  # stack is near CloudFormation's 500-resource limit.
+  EventAgendaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-event-agenda'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/get-agenda.handler
+      Events:
+        GetEventAgenda:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/agenda
+            Method: get
+            # PUBLIC: an attendee has no account. The handler shows an open
+            # event's agenda and nothing an agenda does not need.
+        JoinEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/attendees
+            Method: post
+            # PUBLIC: joining is typing a name. The handler answers with the
+            # caller's own token and name, and nothing about anybody else.
+        GetEventAttendee:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/me
+            Method: get
+            # PUBLIC: the attendee token in Authorization is the identity.
+            # Not a Cognito token, so no authorizer may sit on this route.
+      Policies:
+        # Opens the event's and its items' words for the public agenda, and
+        # seals and opens an attendee's name.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        # Exactly the calls the three routes make, and no Scan: the agenda and
+        # "now" read METADATA and the ITEM# rows (GetItem, Query); a join
+        # writes the attendee row, adds one to the event's count, and takes
+        # the row back if the count fails (PutItem, UpdateItem, DeleteItem).
+        # A PUBLIC function, so it holds no Scan and no batch write.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt GameTable.Arn
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
+  ResolveJoinCodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-resolve-join-code'
+      CodeUri: lambda-functions/websocket/
+      Handler: events/resolve-code.handler
+      Events:
+        ResolveJoinCode:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /join/{code}
+            Method: get
+            # PUBLIC: the join box asks it before anybody has an identity.
+      Policies:
+        # Opens an event's title for the join screen.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBReadPolicy:
             TableName: !Ref GameTable
       Tags:
         Environment: !Ref Environment
@@ -2514,12 +2821,28 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: a phone reads the answers it votes on here, and a returning
+        # player asks for their own answer back. It answers `?role=host`
+        # exactly as it answers a player (get-answers.js).
         GetAnswersEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/answers
             Method: GET
+        # THE HOST'S DOOR to the same handler: every answer to a round, at any
+        # phase, with its author on a round that is not anonymous. It was the
+        # public `?role=host` until 2026-09-26, open to anyone with the code.
+        # Cognito here, authorizer.js names it for hosts|admins, and
+        # get-answers.js asks callerMayDriveSession. tests/get-answers-host.js.
+        GetAnswersHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/answers/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3073,6 +3396,9 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: every phone reads the round here with no token. It returns
+        # only what a player may see, whatever the query says; the
+        # `?includeHostData=true` flag is ignored (get-game-state.js).
         GetGameStateEvent:
           Type: HttpApi
           Properties:
@@ -3085,6 +3411,21 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/state/{playerId}
             Method: GET
+        # THE HOST'S DOOR to the same handler: the round plus the running
+        # order, the category counts and masks, and who has answered or voted.
+        # It was the public `?includeHostData=true` until 2026-09-26, open to
+        # anyone with the code, which walked around the lock on /queue.
+        # Cognito here, authorizer.js names it for hosts|admins, and
+        # get-game-state.js asks callerMayDriveSession.
+        # tests/get-game-host-state.js.
+        GetGameHostStateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/host-state
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3140,6 +3481,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # Opens an event attendee's name (events M4, game/event-attendee.js):
+        # a phone joining an event's item by token plays under the name it
+        # joined the event with, sealed with the organisation's key.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:
@@ -3539,6 +3888,17 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
+        # The frozen tallies, once closed (game/survey-host.js `results()`).
+        # PLAN.md "Phase 3" names it with the hyphen, matching SURVEY#RESULTS'
+        # own SK rather than its siblings' /survey/<verb> shape.
+        SurveyResultsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/survey-results
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3566,12 +3926,27 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
+        # PUBLIC: a count of the round's votes, and nothing else. It answers
+        # `?role=host` with that count too (get-votes.js).
         GetVotesEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/votes
             Method: GET
+        # THE HOST'S DOOR to the same handler: every ballot in a round,
+        # decrypted, with its voter. It was the public `?role=host` until
+        # 2026-09-26, open to anyone with the code. Cognito here,
+        # authorizer.js names it for hosts|admins, and get-votes.js asks
+        # callerMayDriveSession. tests/get-votes-host.js.
+        GetVotesHostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/votes/host
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

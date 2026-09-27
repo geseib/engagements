@@ -22,6 +22,7 @@ import {
   queueEnqueue,
   queueRemove,
   queueMove,
+  queueFirst,
   queueDrop,
   applyQueueOp,
   queuePosition,
@@ -37,6 +38,7 @@ describe('the module the bundle actually loads', () => {
     expect(typeof queueEnqueue).toBe('function');
     expect(typeof queueRemove).toBe('function');
     expect(typeof queueMove).toBe('function');
+    expect(typeof queueFirst).toBe('function');
     expect(typeof queueDrop).toBe('function');
     expect(typeof applyQueueOp).toBe('function');
     expect(typeof queuePosition).toBe('function');
@@ -48,8 +50,8 @@ describe('the module the bundle actually loads', () => {
     expect(QUEUE_MAX).toBe(24);
   });
 
-  test('QUEUE_OPS is closed to the four the endpoint accepts', () => {
-    expect(QUEUE_OPS).toEqual(['add', 'remove', 'earlier', 'later']);
+  test('QUEUE_OPS is closed to the five the endpoint accepts', () => {
+    expect(QUEUE_OPS).toEqual(['add', 'remove', 'earlier', 'later', 'first']);
   });
 });
 
@@ -89,6 +91,26 @@ describe('R3/R4 — one step, clamped, as a swap', () => {
     const result = queueMove(five, 'q5', 'later');
     expect(result.changed).toBe(false);
     expect(result.queue).toBe(five);
+  });
+});
+
+describe('R9 — "Ask next" is the top of the queue, never the room', () => {
+  test('an unqueued question goes in at the head, ahead of what was queued', () => {
+    // rejects: `add`, which appends. The owner: "'ask next' in most people's
+    // mind means put it at the top of the queue, not run it now."
+    expect(queueFirst(['q1', 'q2'], 'q9').queue).toEqual(['q9', 'q1', 'q2']);
+  });
+
+  test('a queued question moves to the head in one press, not one step', () => {
+    expect(applyQueueOp(['q1', 'q2', 'q3'], { op: 'first', questionKey: 'QUESTION#q3' }).queue)
+      .toEqual(['q3', 'q1', 'q2']);
+  });
+
+  test('already next is a no-op that hands back the same array', () => {
+    const queue = ['q1', 'q2'];
+    const result = queueFirst(queue, 'q1');
+    expect(result).toEqual({ queue, changed: false, refused: 'at-edge' });
+    expect(result.queue).toBe(queue);
   });
 });
 

@@ -32,8 +32,21 @@ import { authFetch, setActiveOrgId, getActiveOrgId } from '../auth/authFetch';
  * No flash of a wrong name, and no error banner across somebody's home screen
  * if the lookup fails: an unlabelled screen is the state this was in yesterday,
  * and it is a better failure than a red box over the button they came to press.
+ *
+ * ── `onSwitch`, FOR A CALLER THAT CANNOT WAIT FOR THE RELOAD ─────────────────
+ *
+ * `choose()` below reloads the whole page, which is how every other mount of
+ * this component gets its recheck: a fresh load re-fetches everything for the
+ * new organisation. `HostRemote.jsx`'s access gate (Task 6) needs the same
+ * recheck one step earlier — jsdom's `Location` cannot be replaced, so a
+ * reload never actually happens under test, and in production the reload
+ * itself IS the recheck. `onSwitch(orgId)` fires right before the reload, so a
+ * caller that keeps its own state in sync with "which organisation" — as the
+ * access gate does — gets a chance to act on the new value immediately rather
+ * than depending on a navigation this environment cannot observe. Optional,
+ * and every existing mount omits it.
  */
-export default function ActiveOrgSwitcher() {
+export default function ActiveOrgSwitcher({ onSwitch } = {}) {
   const [orgs, setOrgs] = useState(null);
   const [activeOrgId, setActive] = useState(() => getActiveOrgId());
 
@@ -71,6 +84,7 @@ export default function ActiveOrgSwitcher() {
   const choose = (orgId) => {
     if (!orgId || orgId === activeOrgId) return;
     setActiveOrgId(orgId);
+    if (onSwitch) onSwitch(orgId);
     /* A reload, for the same reason the console reloads: the question sets,
        the session list and the quickstarts on this screen have all been
        fetched for the previous organisation, and no single place owns them.

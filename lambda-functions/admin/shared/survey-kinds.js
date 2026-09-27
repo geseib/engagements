@@ -480,8 +480,41 @@ function legacySurveyJsonToCsv(jsonText) {
   return itemsToSurveyCsv(questions.map(legacyQuestionToItem), { category: SURVEY_CATEGORY });
 }
 
+// ── Polls ─────────────────────────────────────────────────────────────────
+//
+// A POLL QUESTION IS A SURVEY QUESTION THE HOST ASKS (the owner, 27 Sep 2026:
+// "a short instant feedback version of the survey items"). Same kinds, same
+// fields, same validation, same answers and the same tallies; what differs is
+// the pacing — one question at a time, its result on the main screen as the
+// room answers. Rank is left out: a ranking is a ballot, not a glance.
+
+const POLL_KINDS = Object.freeze(['choice', 'rating', 'yesno', 'text']);
+
+/**
+ * A stored poll row's question fields, normalised as the survey's are. A row
+ * written before polls had kinds carries only `options` (and perhaps
+ * `allowMultiple`): with two or more it is the choice it always meant, with
+ * fewer an open question.
+ */
+function pollFieldsOf(row) {
+  const r = row || {};
+  const options = Array.isArray(r.options) ? r.options.filter((o) => String(o ?? '').trim()) : [];
+  const kind = POLL_KINDS.includes(r.kind) ? r.kind : (options.length >= 2 ? 'choice' : 'text');
+  return surveyFieldsFromItem({ ...r, kind });
+}
+
+/** `validateSurvey`, for the kinds a poll may be. */
+function validatePoll(fields) {
+  const kind = String((fields || {}).kind ?? '').trim();
+  if (KINDS.includes(kind) && !POLL_KINDS.includes(kind)) return [`a poll can't be a ${kind} question`];
+  return validateSurvey(fields);
+}
+
 module.exports = {
   KINDS,
+  POLL_KINDS,
+  pollFieldsOf,
+  validatePoll,
   SURVEY_CATEGORY,
   SURVEY_CSV_COLUMNS,
   SURVEY_CSV_HEADER,

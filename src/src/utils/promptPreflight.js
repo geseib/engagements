@@ -960,6 +960,9 @@ export function preflightPrompt(input = {}) {
     'responsesText', 'triviaResponses', 'uniqueAnswers',
     'voteTally', 'votingBreakdown',
     'playerResponses', 'playerAnswers', 'wavelengthWords',
+    // The whole result of a closed survey (27 Sep 2026): its answers arrive here
+    // and nowhere else, so a survey prompt naming it has received them.
+    'surveyResults',
   ];
   const namesAnAnswer = variables.some((v) => ANSWER_TOKENS.includes(v.name));
   /*
@@ -988,7 +991,7 @@ export function preflightPrompt(input = {}) {
         + 'reply is then stored and shown to the room. Nothing errors and nothing is logged.',
       `variables found: ${variables.length ? variables.map((v) => `{${v.name}}`).join(' ') : '(none)'}`,
       'Add {responsesText} where the responses should appear — for trivia use {triviaResponses}, '
-        + 'for a poll or survey {uniqueAnswers}.'
+        + 'for a poll {uniqueAnswers}, and for a survey {surveyResults}.'
     ));
   }
 

@@ -25,6 +25,19 @@
 import { createPayloadFor } from './anonymity';
 import { namesPayloadFor } from './surveyNames';
 import { DEFAULT_SCOPE } from '../utils/setRef';
+import goalRules from '../../../lambda-functions/websocket/session-goal';
+
+/*
+ * 6. **The goal is not a survey's** (events M1b, session-goal.js). A blank
+ *    goal sends no key at create; an edit sends null to clear. A value the
+ *    rule refuses is sent as typed, so the server refuses it out loud rather
+ *    than this function dropping it in silence.
+ */
+const hasGoal = (value) => value !== undefined && value !== null && value !== '';
+const targetOf = (value) => {
+  const checked = goalRules.checkTarget(value, 0);
+  return checked.error ? value : checked.value;
+};
 
 /*
  * 4. **A survey carries `names`, and is never shuffled** (surveys phase 2,
@@ -69,6 +82,7 @@ export function createGameBody(form = {}) {
     randomizeQuestions = true,
     anonymousResponses = true,
     names,
+    target,
   } = form;
 
   return {
@@ -96,6 +110,7 @@ export function createGameBody(form = {}) {
     ...createPayloadFor({ gameType, anonymousResponses }),
     ...namesPayloadFor({ gameType, names }),
     ...(briefingApplies(gameType) && briefingValue(form.briefing) ? { briefing: briefingValue(form.briefing) } : {}),
+    ...(goalRules.goalApplies(gameType) && hasGoal(target) ? { target: targetOf(target) } : {}),
   };
 }
 
@@ -162,5 +177,8 @@ export function updateGameBody(form = {}) {
     // Only when the form says something about it — an absent key leaves the
     // session's briefing alone; null clears it.
     ...(briefingApplies(gameType) && 'briefing' in form ? { briefing: briefingValue(form.briefing) } : {}),
+    // The goal: only when the form says something about it; null clears it.
+    ...('target' in form && goalRules.goalApplies(gameType)
+      ? { target: hasGoal(form.target) ? targetOf(form.target) : null } : {}),
   };
 }

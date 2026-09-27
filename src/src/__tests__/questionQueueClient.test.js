@@ -11,7 +11,9 @@
  * Collapsing it into the error path puts a banner in front of a host who
  * pressed ↑ on the first row; collapsing it the other way hides a 403.
  */
-import { fetchQueue, postQueueOp, refusalMessage } from '../utils/questionQueueClient';
+import {
+  fetchQueue, postQueueOp, refusalMessage, fetchUpNext, UP_NEXT_COUNT,
+} from '../utils/questionQueueClient';
 
 const ok = (body) => ({
   ok: true,
@@ -186,5 +188,50 @@ describe('changing the running order', () => {
     const result = await fetchQueue({ fetchFn, apiBase: 'https://api/', gameId: '1234' });
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/could not be read/i);
+  });
+});
+
+describe('what comes next, for the phone', () => {
+  test('asks the same endpoint, at the same count, the stage asks', async () => {
+    // rejects: a phone preview of a different length from the stage's. The
+    // owner asked for the remote to show "the order of coming up questions"
+    // the host screen shows — GameHostPage.loadUpNext asks for 6.
+    const fetchFn = jest.fn().mockResolvedValue(ok({ upNext: [], blocked: [], advisories: [], excluded: [] }));
+    await fetchUpNext({ fetchFn, apiBase: 'https://api/', gameId: '1234' });
+    expect(UP_NEXT_COUNT).toBe(6);
+    expect(fetchFn).toHaveBeenCalledWith('https://api/games/1234/up-next?count=6');
+  });
+
+  test('hands back the four projections, as lists even when absent', async () => {
+    const row = { source: 'auto', questionId: 'QUESTION#c1#3', title: 'Three', round: 4 };
+    const fetchFn = jest.fn().mockResolvedValue(ok({ upNext: [row], blocked: null }));
+    const result = await fetchUpNext({ fetchFn, apiBase: 'https://api/', gameId: '1234' });
+    expect(result).toEqual({
+      ok: true, upNext: [row], blocked: [], advisories: [], excluded: [], error: null,
+    });
+  });
+
+  test('a failure is reported, never thrown, and never passed off as an empty plan', async () => {
+    const refused = await fetchUpNext({
+      fetchFn: jest.fn().mockResolvedValue(bad(403, { error: 'Forbidden' })),
+      apiBase: 'https://api/',
+      gameId: '1234',
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.error).toBeTruthy();
+
+    const offline = await fetchUpNext({
+      fetchFn: jest.fn().mockRejectedValue(new Error('Network down')),
+      apiBase: 'https://api/',
+      gameId: '1234',
+    });
+    expect(offline).toMatchObject({ ok: false, error: 'Network down', upNext: [] });
+
+    const garbled = await fetchUpNext({
+      fetchFn: jest.fn().mockResolvedValue(unreadable()),
+      apiBase: 'https://api/',
+      gameId: '1234',
+    });
+    expect(garbled.ok).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import {
-  SURVEY_KINDS, surveyKindMeta, kindLabel, previewLine, convertKind,
+  SURVEY_KINDS, YESNO_PRESETS, yesNoPresetOf, surveyKindMeta, kindLabel, previewLine, convertKind,
 } from '../config/surveyKinds';
 import './SurveyQuestionFields.css';
 
@@ -183,9 +183,9 @@ const inWords = (list) => (list.length < 2 ? list.join('')
   : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`);
 
 /** A pressed-button segment: one of N, the choice named by aria-pressed. */
-function Segment({ labelledBy, options, value, onChange }) {
+function Segment({ labelledBy, options, value, onChange, className = '' }) {
   return (
-    <div className="sqf-seg" role="group" aria-labelledby={labelledBy}>
+    <div className={`sqf-seg${className ? ` ${className}` : ''}`} role="group" aria-labelledby={labelledBy}>
       {options.map((o) => (
         <button key={o.id} type="button" aria-pressed={value === o.id} onClick={() => onChange(o.id)}>
           {o.label}
@@ -322,8 +322,26 @@ function ChoiceFields({ draft, onChange, set, idOf }) {
 
 function YesNoFields({ draft, set, idOf }) {
   const asking = Boolean(draft.followUpWhen);
+  // Which named pair the two labels are, or none when they are the author's
+  // own words. A preset only fills the two boxes below; typing in either one
+  // is how a pair of your own is made, and no preset is lit then.
+  const preset = yesNoPresetOf(draft);
+  const choosePreset = (id) => {
+    const chosen = YESNO_PRESETS.find((p) => p.id === id);
+    if (chosen) set({ yesLabel: chosen.yesLabel, noLabel: chosen.noLabel });
+  };
   return (
     <>
+      <div className="sqf-field">
+        <span className="sqf-lab" id={idOf('answers-label')}>The two answers</span>
+        <Segment
+          labelledBy={idOf('answers-label')}
+          className="sqf-presets"
+          options={YESNO_PRESETS}
+          value={preset}
+          onChange={choosePreset}
+        />
+      </div>
       <div className="sqf-row">
         <div className="form-group">
           <label htmlFor={idOf('yesLabel')}>Yes reads</label>
@@ -472,11 +490,25 @@ const KIND_FIELDS = {
  * are Phase 2, so there is nothing to show yet and QuestionsPanel passes
  * nothing; the day there is, the preview (an iframe of the participant surface
  * fed this draft) goes in here and the form makes room beside it.
+ *
+ * A POLL QUESTION IS EDITED HERE TOO. A poll question is a survey question the
+ * host asks (the owner, 27 Sep 2026), so the poll form mounts this with
+ * `kinds={POLL_KINDS}` — the kind bar offers only those, in that order — and
+ * `textFields={false}`, because the poll form already draws the question, its
+ * detail and its category, with the siblings and the AI draft between them.
  */
-export default function SurveyQuestionFields({ draft, onChange, idOf, phonePreview = null }) {
+export default function SurveyQuestionFields({
+  draft, onChange, idOf, phonePreview = null, kinds = null, textFields = true,
+}) {
   const [pendingSwitch, setPendingSwitch] = useState(null); // { kind, row, loses }
   const set = (fields) => onChange({ ...draft, ...fields });
   const Fields = KIND_FIELDS[draft.kind];
+  // The kinds offered, in the order given; an id no kind has is dropped
+  // rather than drawn as a button that picks nothing.
+  const offered = Array.isArray(kinds)
+    ? kinds.map((id) => SURVEY_KINDS.find((k) => k.id === id)).filter(Boolean)
+    : SURVEY_KINDS;
+  const keepsList = offered.some((k) => k.id === 'choice') && offered.some((k) => k.id === 'rank');
 
   const requestKind = (kind) => {
     if (kind === draft.kind) return;
@@ -491,7 +523,7 @@ export default function SurveyQuestionFields({ draft, onChange, idOf, phonePrevi
         <div className="sqf-field">
           <span className="sqf-lab" id={idOf('kind-label')}>Kind</span>
           <div className="sqf-kindbar" role="group" aria-labelledby={idOf('kind-label')}>
-            {SURVEY_KINDS.map((k) => (
+            {offered.map((k) => (
               <button
                 key={k.id}
                 type="button"
@@ -505,8 +537,10 @@ export default function SurveyQuestionFields({ draft, onChange, idOf, phonePrevi
             ))}
           </div>
           <p className="sqf-help">
-            Multiple choice and Ranking share a list, so switching between them keeps it. Any other
-            switch asks first when it would throw something away.
+            {keepsList
+              ? 'Multiple choice and Ranking share a list, so switching between them keeps it. Any other '
+                + 'switch asks first when it would throw something away.'
+              : 'Switching kind asks first when it would throw something away.'}
           </p>
         </div>
 
@@ -535,18 +569,22 @@ export default function SurveyQuestionFields({ draft, onChange, idOf, phonePrevi
           </div>
         )}
 
-        <div className="form-group">
-          <label htmlFor={idOf('title')}>Question</label>
-          <input id={idOf('title')} type="text" className="form-input" value={draft.title || ''}
-            onChange={(e) => set({ title: e.target.value })} />
-        </div>
-        <div className="form-group">
-          <label htmlFor={idOf('detail')}>
-            Detail <span className="sqf-dim">— optional, shown under the question</span>
-          </label>
-          <input id={idOf('detail')} type="text" className="form-input" value={draft.detail || ''}
-            onChange={(e) => set({ detail: e.target.value })} />
-        </div>
+        {textFields && (
+          <>
+            <div className="form-group">
+              <label htmlFor={idOf('title')}>Question</label>
+              <input id={idOf('title')} type="text" className="form-input" value={draft.title || ''}
+                onChange={(e) => set({ title: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label htmlFor={idOf('detail')}>
+                Detail <span className="sqf-dim">— optional, shown under the question</span>
+              </label>
+              <input id={idOf('detail')} type="text" className="form-input" value={draft.detail || ''}
+                onChange={(e) => set({ detail: e.target.value })} />
+            </div>
+          </>
+        )}
 
         {Fields && <Fields draft={draft} onChange={onChange} set={set} idOf={idOf} />}
 

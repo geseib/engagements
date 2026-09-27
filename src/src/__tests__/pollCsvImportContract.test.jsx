@@ -232,6 +232,10 @@ describe('trivia CSV → real upload-questions.js importer', () => {
 });
 
 describe('PollAIBuilder Export CSV → real importer', () => {
+  // A poll question is typed since the 27 Sep 2026 redesign: the export is the
+  // survey contract's columns, each question under its own category. The
+  // first item is from before kinds — options and allowMultiple only — and
+  // must still export as the choice it plays as.
   const POLLS = [{
     category: 'Team',
     title: 'Which "policy" wins, all things considered?',
@@ -240,6 +244,14 @@ describe('PollAIBuilder Export CSV → real importer', () => {
     options: ['Office first', 'Remote first', ''],
     allowMultiple: true,
     tags: ['remote-work', 'feedback'],
+  }, {
+    kind: 'rating',
+    category: 'Team',
+    title: 'How well does the policy work for you?',
+    scale: '1-5',
+    lowLabel: 'Not at all',
+    highLabel: 'Perfectly',
+    tags: ['feedback'],
   }];
 
   /** Drive the real component to step 2, then capture the exported CSV text. */
@@ -295,19 +307,27 @@ describe('PollAIBuilder Export CSV → real importer', () => {
   }
 
   // Rejects: any change to PollAIBuilder.generatePollCSV that stops emitting the
-  // `Options` column the importer reads — including a revert to Option1..Option5.
-  test('a set exported from the builder imports with its options intact', async () => {
+  // survey contract's columns — the old Options,AllowMultiple header has no
+  // column for a kind, a scale or a label, so a rating poll would import as a
+  // choice with no options — or a revert to Option1..Option5.
+  test('a set exported from the builder imports with its kinds and options intact', async () => {
     const csvText = await exportCsvFromBuilder();
 
-    expect(csvText).toContain(',Options,AllowMultiple,Tags');
+    expect(csvText).toContain(',CustomInstruction,Kind,Required,Options,AllowMultiple,');
     expect(csvText).not.toContain('Option1');
 
     const questions = await importCsv(csvText);
 
-    expect(questions).toHaveLength(1);
-    expect(questions[0].options).toEqual(['Office first', 'Remote first']);
-    expect(questions[0].allowMultiple).toBe(true);
-    expect(questions[0].Title).toBe('Which "policy" wins, all things considered?');
-    expect(questions[0].Tags).toEqual(['remote-work', 'feedback']);
+    expect(questions).toHaveLength(2);
+    const [choice, rating] = questions;
+    expect(choice.kind).toBe('choice');
+    expect(choice.options).toEqual(['Office first', 'Remote first']);
+    expect(choice.allowMultiple).toBe(true);
+    expect(choice.Title).toBe('Which "policy" wins, all things considered?');
+    expect(choice.Tags).toEqual(['remote-work', 'feedback']);
+    expect(rating.kind).toBe('rating');
+    expect(rating.scale).toBe('1-5');
+    expect([rating.lowLabel, rating.highLabel]).toEqual(['Not at all', 'Perfectly']);
+    expect(rating.Category).toBe('Team');
   });
 });

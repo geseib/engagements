@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { navigateTo } from '../auth/navigate';
+import { resolveJoinCode, joinPathFor } from '../utils/joinCode';
 
 export const CODE_LENGTH = 4;
 
@@ -68,10 +69,11 @@ export default function useJoinCode() {
   };
 
   /**
-   * type code -> GET {API_BASE}games/{code}
+   * type code -> GET {API_BASE}join/{code}   (utils/joinCode.js, events M2)
    *   404           -> say so, stay put
-   *   200           -> /play?gameId={code}
-   *   anything else -> navigate anyway
+   *   an event      -> /play?event={code}    (the attendee's page)
+   *   a session     -> /play?gameId={code}
+   *   anything else -> /play?gameId={code} anyway
    *
    * That last rule is the important one. A check that can strand a participant
    * is worse than no check: network failure, timeout, CORS -- navigate, and let
@@ -87,17 +89,13 @@ export default function useJoinCode() {
 
     setChecking(true);
     clearFeedback();
-    try {
-      const response = await fetch(`${window.API_BASE}games/${code}`);
-      if (response && response.status === 404) {
-        setMissing(code);
-        setChecking(false);
-        return;
-      }
-    } catch (_) {
-      /* deliberate: fall through to the navigation below */
+    const kind = await resolveJoinCode(code);
+    if (kind === 'missing') {
+      setMissing(code);
+      setChecking(false);
+      return;
     }
-    navigateTo(`/play?gameId=${code}`);
+    navigateTo(joinPathFor(code, kind));
   };
 
   return {

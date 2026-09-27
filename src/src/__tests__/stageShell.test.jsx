@@ -335,7 +335,7 @@ describe('the phase bar', () => {
   });
 
   test.each([
-    ['ASK', 'wipe', 'Answering', 'Write your answer on your phone'],
+    ['ASK', 'wipe', 'Answering', 'Answer on your phone'],
     ['VOTE', 'wipe', 'Voting', 'Choose on your phone'],
   ])('a change to %s wipes with its own words', (phase, className, word, small) => {
     const { container, rerender } = render(<PhaseBar phase="LOBBY" />);
@@ -594,6 +594,33 @@ describe('the dock', () => {
       </Dock>
     );
     expect(screen.getByRole('button', { name: 'Start Voting' })).toBeInTheDocument();
+  });
+
+  /**
+   * FIX ROUND 1, M1: `onSetup` used to be unconditional — a caller with no
+   * session panel to open (SurveyWalkthrough.jsx) still got a live-looking
+   * "Session panel" button wired to nothing. Every OTHER caller already
+   * passes `onSetup` (GameHostPage.jsx's own dock), so hiding the button in
+   * its absence changes nothing for them.
+   */
+  test('the SESSION button is hidden when the caller has nothing for it to open', () => {
+    const { container } = render(
+      <Dock status="Walking the room through the results">
+        <button type="button">Next result</button>
+      </Dock>
+    );
+    expect(container.querySelector('.dock-more')).toBeNull();
+  });
+
+  test('...and still renders, wired, when onSetup is given', () => {
+    const onSetup = jest.fn();
+    render(
+      <Dock status="" onSetup={onSetup}>
+        <button type="button">Go</button>
+      </Dock>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Session panel' }));
+    expect(onSetup).toHaveBeenCalledTimes(1);
   });
 });
 

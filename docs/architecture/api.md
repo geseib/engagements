@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-149 routes across 7 groups. 128 carry the Cognito authorizer; 21 are public.
+167 routes across 9 groups. 142 carry the Cognito authorizer; 25 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -16,6 +16,24 @@ design, so those checks live in code. See `callerMayDriveSession` in
 `lambda-functions/game/tenant.js`, and note that `get-results.js` serves one
 public route and one authenticated route from the same handler, discriminating
 on `requestContext.routeKey`.
+
+## /events
+
+| Method | Path | Auth | Handler |
+|---|---|---|---|
+| GET | `/events` | **Cognito** | `lambda-functions/websocket/events/get-events.js` |
+| POST | `/events` | **Cognito** | `lambda-functions/websocket/events/create-event.js` |
+| DELETE | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/update-event.js` |
+| GET | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/get-event.js` |
+| PUT | `/events/{code}` | **Cognito** | `lambda-functions/websocket/events/update-event.js` |
+| GET | `/events/{code}/agenda` | public | `lambda-functions/websocket/events/get-agenda.js` |
+| POST | `/events/{code}/attendees` | public | `lambda-functions/websocket/events/get-agenda.js` |
+| POST | `/events/{code}/items` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| PUT | `/events/{code}/items` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| GET | `/events/{code}/me` | public | `lambda-functions/websocket/events/get-agenda.js` |
+| POST | `/events/{code}/run` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| DELETE | `/events/{code}/items/{itemId}` | **Cognito** | `lambda-functions/websocket/events/items.js` |
+| PUT | `/events/{code}/items/{itemId}` | **Cognito** | `lambda-functions/websocket/events/items.js` |
 
 ## /games
 
@@ -36,6 +54,7 @@ on `requestContext.routeKey`.
 | POST | `/games/{gameId}/exclusions` | **Cognito** | `lambda-functions/game/question-exclusions.js` |
 | GET | `/games/{gameId}/feedback-round` | public | `lambda-functions/game/comments.js` |
 | GET | `/games/{gameId}/host-details` | **Cognito** | `lambda-functions/game/get-game.js` |
+| GET | `/games/{gameId}/host-state` | **Cognito** | `lambda-functions/game/get-game-state.js` |
 | POST | `/games/{gameId}/host-ticket` | **Cognito** | `lambda-functions/game/mint-host-ticket.js` |
 | POST | `/games/{gameId}/next-question` | **Cognito** | `lambda-functions/game/next-question.js` |
 | PUT | `/games/{gameId}/persona` | **Cognito** | `lambda-functions/game/update-game-persona.js` |
@@ -56,12 +75,14 @@ on `requestContext.routeKey`.
 | POST | `/games/{gameId}/start-vote` | **Cognito** | `lambda-functions/websocket/start-vote.js` |
 | GET | `/games/{gameId}/state` | public | `lambda-functions/game/get-game-state.js` |
 | GET | `/games/{gameId}/survey` | public | `lambda-functions/game/survey-answers.js` |
+| GET | `/games/{gameId}/survey-results` | **Cognito** | `lambda-functions/game/survey-host.js` |
 | POST | `/games/{gameId}/toggle-category` | **Cognito** | `lambda-functions/game/toggle-category.js` |
 | GET | `/games/{gameId}/up-next` | **Cognito** | `lambda-functions/game/up-next.js` |
 | GET | `/games/{gameId}/votes` | public | `lambda-functions/game/get-votes.js` |
 | POST | `/games/{gameId}/votes` | public | `lambda-functions/game/submit-vote.js` |
 | POST | `/games/briefing/draft` | **Cognito** | `lambda-functions/game/draft-briefing.js` |
 | GET | `/games/{gameId}/ai-summary/host` | **Cognito** | `lambda-functions/game/get-ai-summary.js` |
+| GET | `/games/{gameId}/answers/host` | **Cognito** | `lambda-functions/game/get-answers.js` |
 | GET | `/games/{gameId}/report/download` | public | `lambda-functions/game/download-report.js` |
 | GET | `/games/{gameId}/state/{playerId}` | public | `lambda-functions/game/get-game-state.js` |
 | PUT | `/games/{gameId}/survey/answers` | public | `lambda-functions/game/survey-answers.js` |
@@ -72,6 +93,7 @@ on `requestContext.routeKey`.
 | GET | `/games/{gameId}/survey/progress` | **Cognito** | `lambda-functions/game/survey-host.js` |
 | POST | `/games/{gameId}/survey/submit` | public | `lambda-functions/game/survey-answers.js` |
 | POST | `/games/{gameId}/survey/warning` | **Cognito** | `lambda-functions/game/survey-host.js` |
+| GET | `/games/{gameId}/votes/host` | **Cognito** | `lambda-functions/game/get-votes.js` |
 | POST | `/games/{gameId}/comments/{commentId}/feature` | **Cognito** | `lambda-functions/game/comments.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover` | **Cognito** | `lambda-functions/game/grant-handover.js` |
 | POST | `/games/{gameId}/players/{playerName}/handover-request` | public | `lambda-functions/game/request-handover.js` |
@@ -184,6 +206,12 @@ on `requestContext.routeKey`.
 | POST | `/admin/question-sets/{setId}/media/uploads` | **Cognito** | `lambda-functions/admin/media-upload-urls.js` |
 | DELETE | `/admin/question-sets/{setId}/versions/{version}` | **Cognito** | `lambda-functions/admin/delete-set-version.js` |
 | POST | `/admin/question-sets/{setId}/versions/{version}/promote` | **Cognito** | `lambda-functions/admin/promote-set-version.js` |
+
+## /join
+
+| Method | Path | Auth | Handler |
+|---|---|---|---|
+| GET | `/join/{code}` | public | `lambda-functions/websocket/events/resolve-code.js` |
 
 ## /platform
 

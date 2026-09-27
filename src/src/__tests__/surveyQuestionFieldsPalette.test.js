@@ -298,4 +298,13 @@ describe('the sheet keeps to the design system', () => {
   test('rows are 36px', () => {
     expect(SCOPE).toMatch(/--sqf-row-h:\s*36px/);
   });
+
+  test('a yes / no question\'s answer pairs are full 44px targets, painted by the segment rules', () => {
+    // Each press rewrites both labels, so it is a target hit with intent. No
+    // paint of its own: its inks and grounds are the segment's, measured above.
+    expect(SCOPE).toMatch(/--sqf-target:\s*44px/);
+    const presets = ruleBody(SQF_CSS, '.sqf-seg.sqf-presets button');
+    expect(presets).toMatch(/height:\s*var\(--sqf-target\)/);
+    expect(presets).not.toMatch(/color|background/);
+  });
 });

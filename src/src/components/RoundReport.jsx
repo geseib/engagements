@@ -185,6 +185,26 @@ export default function RoundReport({
    * prop keeps them off a screen; it does not keep them off the wire.
    */
   showWorkieContext = false,
+  /**
+   * WHAT TO SAY WHEN THERE ARE NO RESPONSES — fix round 2. Defaults to the
+   * original, honest statement of a real outcome. The player's own feedback
+   * panel (PlayerPage.jsx) fetches this round's responses itself, on its own
+   * schedule, and three OTHER states can put `answers` at `[]` that are not
+   * "nobody responded": still loading, the fetch failed, or (Call & Answer
+   * with zero votes) the server's own response for that case carries no
+   * response data at all — get-results.js's early return there is
+   * `{message, totalVotes: 0, winners: [], voteTallies: {}}`, nothing else,
+   * so the honest claim is "nobody voted", not "nobody responded". Each of
+   * those passes its own text here rather than this component guessing.
+   */
+  answersEmptyText = 'Nobody responded to this round.',
+  /**
+   * Retry fetching the responses, offered only in the failed-fetch case.
+   * Optional, and its absence is every other caller: PastRound and the
+   * host-triggered feedback round both read a round that already exists in
+   * full, with nothing to retry.
+   */
+  onRetryAnswers,
 }) {
   if (!round) return null;
 
@@ -192,6 +212,7 @@ export default function RoundReport({
   const showSummary = hasSummary(round);
   const podium = podiumAnswers(round);
   const answers = Array.isArray(round.answers) ? round.answers : [];
+  const byQuestion = round.kind === 'survey';
   const options = Array.isArray(round.options) ? round.options : [];
 
   /*
@@ -239,10 +260,14 @@ export default function RoundReport({
         {round.answerDetails && <p className="past-round__answer-detail">{round.answerDetails}</p>}
       </section>
 
-      {/* WHAT THE ROOM SAID. */}
+      {/* WHAT THE ROOM SAID. A closed survey's feedback round (comments.js
+          surveyFeedbackRound, kind 'survey') has one row per QUESTION — its
+          result in words — so the list is titled by question and no row
+          carries an author: "Response 3" beside a question's result named a
+          respondent who does not exist. */}
       <section className="past-round__results">
         <div className="rr-c__section-head">
-          <h4>Responses</h4>
+          <h4>{byQuestion ? 'Results by question' : 'Responses'}</h4>
           {onComment && (
             <CommentButton
               label="the results"
@@ -253,8 +278,17 @@ export default function RoundReport({
         {answers.length === 0 ? (
           /* A round with no responses is a real outcome and has to read as one.
              Rendering an empty list instead looks like a load that failed,
-             which sends the reader looking for a bug. */
-          <p className="past-round__empty">Nobody responded to this round.</p>
+             which sends the reader looking for a bug — which is exactly why
+             the CALLER'S text matters here: a load that actually did fail
+             must not be dressed up as this same honest outcome. */
+          <>
+            <p className="past-round__empty">{answersEmptyText}</p>
+            {onRetryAnswers && (
+              <button type="button" className="btn-secondary past-round__retry" onClick={onRetryAnswers}>
+                Try again
+              </button>
+            )}
+          </>
         ) : (
           /*
             THE BRIEF BAR, AND A WAY INTO THE WHOLE THING.
@@ -282,19 +316,21 @@ export default function RoundReport({
           */
           <ol className="past-round__answers">
             {answers.map((answer, i) => {
-              const who = displayLabelFor(answer, i);
+              const who = byQuestion ? null : displayLabelFor(answer, i);
               return (
                 <li key={i} className={answer.rank === 1 ? 'is-lead' : ''}>
                   <button
                     type="button"
                     className={`past-round__rank${i < podium.length ? ' is-podium' : ''}`}
                     onClick={() => onSpotlight(i)}
-                    aria-label={`Read response ${i + 1} in full, by ${who}`}
+                    aria-label={byQuestion
+                      ? `Read question ${i + 1}'s result in full`
+                      : `Read response ${i + 1} in full, by ${who}`}
                   >
                     {answer.rank || i + 1}
                   </button>
                   <span className="past-round__answer">{snippetOf(answer.answer)}</span>
-                  <span className="past-round__who">{who}</span>
+                  {who && <span className="past-round__who">{who}</span>}
                   {/*
                     THE ANCHOR IS THE ROW'S POSITION `i`, never the rank printed
                     on the badge beside it. Equal scores get equal ranks
@@ -304,7 +340,7 @@ export default function RoundReport({
                   */}
                   {onComment && (
                     <CommentButton
-                      label={`response ${i + 1}`}
+                      label={byQuestion ? `question ${i + 1}` : `response ${i + 1}`}
                       onClick={() => onComment(anchorFor('response', String(i), answer.answer))}
                     />
                   )}
@@ -330,11 +366,11 @@ export default function RoundReport({
           index={spotlight}
           onIndex={onSpotlight}
           onClose={() => onSpotlight(null)}
-          labelFor={displayLabelFor}
+          labelFor={byQuestion ? (_answer, i) => `Question ${i + 1}` : displayLabelFor}
           showPoints={roundIsAttributed(round)}
           closeOnKey
           onJump={onSpotlight}
-          title={`Round ${round.ordinal} response`}
+          title={byQuestion ? 'Survey result' : `Round ${round.ordinal} response`}
         />
       </section>
 

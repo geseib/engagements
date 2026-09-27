@@ -108,7 +108,13 @@ function serve({ state = 'STARTED', players = [], report = REPORT, progress = {}
       }
       return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
     }
-    if (href.includes('/state')) {
+    // The access gate (Task 6): asked before anything else about the session.
+    // This file is about the session tab downstream of it, so it always
+    // answers 200.
+    if (href.includes('/host-details')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    }
+    if (href.includes('/host-state')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -410,13 +416,16 @@ describe('the primary action survives a list being open', () => {
 
   // Rejects: leaving the panel open after a choice, and rejects a back button
   // that survives the return. The host chose; what they need next is the meter.
+  // Ask NOW — mid-round it is armed, so it takes the second tap. (Ask next
+  // leaves the panel open on purpose: the row moving to the top is its answer.)
   it('closes itself when a question is asked from the Questions tab', async () => {
     serve({ state: 'ASK#002' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
     await screen.findByText('Which pricing change?');
 
-    fireEvent.click(screen.getByRole('button', { name: /ask this next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^tap again to ask now/i }));
 
     await waitFor(() =>
       expect(screen.queryByRole('tablist', { name: /session/i })).not.toBeInTheDocument());

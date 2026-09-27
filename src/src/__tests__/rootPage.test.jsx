@@ -133,7 +133,19 @@ describe('the code check', () => {
     type('4821');
     fireEvent.click(joinButton());
     await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/play?gameId=4821'));
-    expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/games/4821');
+    // Since events M2 the check asks GET /join/{code}, which also says whether
+    // a code is an event's (utils/joinCode.js); a session still goes to /play.
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/join/4821');
+  });
+
+  test('an event\'s code goes to the attendee\'s page', async () => {
+    // rejects: sending an event's code to the session join form, where it
+    // names no session and the attendee is told nothing is running.
+    render(<RootPage />);
+    global.fetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: '5307', kind: 'event' }) });
+    type('5307');
+    fireEvent.click(joinButton());
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/play?event=5307'));
   });
 
   test('a network failure navigates anyway', async () => {

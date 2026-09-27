@@ -347,5 +347,40 @@ console.log('\n9. the game/ copy the running survey reads');
   }
 }
 
+console.log('\n10. a poll question is a survey question the host asks');
+check('a poll is four of the five kinds: rank is a ballot, not a glance', () => {
+  assert.deepStrictEqual([...K.POLL_KINDS], ['choice', 'rating', 'yesno', 'text']);
+  K.POLL_KINDS.forEach((k) => assert.ok(K.KINDS.includes(k)));
+});
+check('a poll row from before kinds: two or more options are the choice it meant', () => {
+  const f = K.pollFieldsOf({ options: ['Monday', 'Friday'], allowMultiple: true });
+  assert.strictEqual(f.kind, 'choice');
+  assert.deepStrictEqual(f.options, ['Monday', 'Friday']);
+  assert.strictEqual(f.allowMultiple, true);
+  assert.deepStrictEqual(K.validatePoll(f), []);
+});
+check('a poll row from before kinds with no options is an open question, with the text defaults', () => {
+  for (const row of [{}, { options: [] }, { options: ['only one'] }, { options: ['', ' '] }]) {
+    const f = K.pollFieldsOf(row);
+    assert.strictEqual(f.kind, 'text');
+    assert.strictEqual(f.textLength, 'long');
+    assert.strictEqual(f.maxLength, 500);
+    assert.deepStrictEqual(K.validatePoll(f), []);
+  }
+});
+check('a typed poll row keeps its kind and fields: a binary with its own labels', () => {
+  const f = K.pollFieldsOf({ kind: 'yesno', yesLabel: 'Approve', noLabel: 'Decline', options: ['x', 'y'] });
+  assert.strictEqual(f.kind, 'yesno');
+  assert.strictEqual(f.yesLabel, 'Approve');
+  assert.strictEqual(f.noLabel, 'Decline');
+  assert.deepStrictEqual(f.options, [], 'a yes/no carries no options, whatever the row held');
+  assert.strictEqual(K.pollFieldsOf({ kind: 'rating' }).scale, '1-5');
+});
+check('validatePoll refuses a rank, and otherwise says what validateSurvey says', () => {
+  assert.deepStrictEqual(K.validatePoll({ kind: 'rank', options: ['a', 'b', 'c'] }), ["a poll can't be a rank question"]);
+  assert.deepStrictEqual(K.validatePoll({ kind: 'choice', options: ['a'] }), ['needs at least two options']);
+  assert.deepStrictEqual(K.validatePoll({}), ['needs a kind']);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

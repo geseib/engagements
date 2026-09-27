@@ -26,7 +26,8 @@ import React, { useEffect, useRef, useState } from 'react';
 const KNOWN_PHASES = new Set(['lobby', 'ask', 'vote', 'results', 'done']);
 
 const WIPE = {
-  ask: ['wipe', 'Answering', 'Write your answer on your phone'],
+  // "Answer", not "write": a poll or trivia round is a tap, not a sentence.
+  ask: ['wipe', 'Answering', 'Answer on your phone'],
   vote: ['wipe', 'Voting', 'Choose on your phone'],
   results: ['wipe results', 'Results', 'Look up'],
 };

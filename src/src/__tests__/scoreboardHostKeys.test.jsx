@@ -18,10 +18,12 @@
 import React, { useState } from 'react';
 import fs from 'fs';
 import path from 'path';
+import { flushSync } from 'react-dom';
 import { render, act, fireEvent, screen } from '@testing-library/react';
 import useScoreboardKeys from '../components/stage/scoreboard/useScoreboardKeys';
+import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import HostActionBar from '../components/HostActionBar';
-import { shortcutsSuppressed, scoreboardKeysLive } from '../utils/hostOverlays';
+import { shortcutsSuppressed, scoreboardKeysLive, sessionPanelKeyLive } from '../utils/hostOverlays';
 import Scoreboard from '../components/stage/scoreboard/Scoreboard';
 import AnswerSpotlight from '../components/AnswerSpotlight';
 import Stage from '../components/stage/Stage';
@@ -229,6 +231,179 @@ describe('under an overlay the board\'s keys are not the board\'s', () => {
     // With the spotlight gone the board's keys are its own again.
     await act(async () => { fireEvent.keyDown(window, { key: 'ArrowRight' }); });
     expect(document.querySelector('[data-scoreboard]').dataset.page).toBe('1');
+  });
+});
+
+/**
+ * FIX ROUND 1 — the session panel can now open OVER an open board
+ * (sessionPanelKeyLive deliberately does not yield to `scoreboardOpen`), and
+ * a reviewer found that this opened a second race of the same shape
+ * useSessionPanelKey.js's header describes: the panel's own `document`
+ * closer runs first for a shared Escape, its `onClose` (here `flushSync`,
+ * mimicking the browser checkpoint a plain `fireEvent`+`act()` does not
+ * reproduce) flips `setupPanelOpen`, `scoreboardKeysLive` recomputes true,
+ * and `useScoreboardKeys`'s effect re-attaches its `window` listener before
+ * the SAME Escape finishes propagating — so the freshly re-armed board
+ * listener saw and closed the board too. `useScoreboardKeys.js`'s own
+ * `defaultPrevented` guard (scoped to Escape/`\` only) is the fix; this is
+ * its regression test, and it failed against a355c6d1's `useScoreboardKeys`
+ * (recorded in backslash-report.md's "Fix round 1" section).
+ */
+describe('the session panel opening over an open board does not also close the board (fix round 1)', () => {
+  const BOARD_PLAYERS = Array.from({ length: 5 }, (_, i) => ({
+    playerId: `r${i}`, playerName: `Player ${i + 1}`, totalScore: 40 - i, rank: i + 1, movement: 0, previousScore: 30 - i,
+  }));
+
+  function RoomWithPanel() {
+    const [board, setBoard] = useState({ open: true, style: 'departure', page: 0, openedAt: 't' });
+    const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+    const boardLive = scoreboardKeysLive({ setupPanelOpen });
+    const panelLive = sessionPanelKeyLive({ setupPanelOpen });
+    useScoreboardKeys({
+      enabled: boardLive,
+      open: board.open,
+      canOpen: true,
+      onOpen: () => setBoard((b) => ({ ...b, open: true })),
+      onClose: () => setBoard((b) => ({ ...b, open: false })),
+      onCycleStyle: () => setBoard((b) => ({ ...b, style: nextStyle(b.style) })),
+    });
+    useSessionPanelKey({
+      enabled: panelLive,
+      onOpen: () => setSetupPanelOpen(true),
+    });
+    return (
+      <div className="stage">
+        <output data-testid="board">{board.open ? 'open' : 'closed'}</output>
+        <output data-testid="panel">{setupPanelOpen ? 'open' : 'closed'}</output>
+        {board.open && (
+          <Scoreboard gameId="6161" apiBase="https://api.test/" profile="room" board={board} keysEnabled={boardLive} />
+        )}
+        {setupPanelOpen && (
+          // flushSync — see the block comment above for why a plain setState
+          // here would hide the exact race this test exists to catch.
+          <SessionSetupPanel onClose={() => flushSync(() => setSetupPanelOpen(false))} />
+        )}
+      </div>
+    );
+  }
+
+  beforeEach(() => {
+    window.matchMedia = jest.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ players: BOARD_PLAYERS, afterRound: 2 }) }));
+  });
+  afterEach(() => { delete global.fetch; });
+
+  test('one Escape, with the panel open over the board, closes only the panel', async () => {
+    await act(async () => { render(<RoomWithPanel />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId('board').textContent).toBe('open');
+    expect(screen.getByTestId('panel').textContent).toBe('closed');
+
+    // \ opens the panel over the still-open board — a supported path now.
+    await act(async () => { fireEvent.keyDown(document.body, { key: '\\' }); });
+    expect(screen.getByTestId('panel').textContent).toBe('open');
+    expect(screen.getByTestId('board').textContent).toBe('open');
+
+    // ONE Escape. Before this round's fix, this closed both.
+    await act(async () => { fireEvent.keyDown(document.body, { key: 'Escape' }); });
+    expect(screen.getByTestId('panel').textContent).toBe('closed');
+    expect(screen.getByTestId('board').textContent).toBe('open');
+  });
+
+  test('Space, S, V and the arrows on the board are unaffected by the new guard', async () => {
+    await act(async () => { render(<RoomWithPanel />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('[data-scoreboard]').dataset.style).toBe('departure');
+
+    // V cycles the look — not Escape or \, so the new guard never touches it.
+    await act(async () => { fireEvent.keyDown(document.body, { key: 'v' }); });
+    expect(document.querySelector('[data-scoreboard]').dataset.style).toBe('olympic');
+
+    // -> pages the board.
+    await act(async () => { fireEvent.keyDown(document.body, { key: 'ArrowRight' }); });
+    expect(document.querySelector('[data-scoreboard]').dataset.page).toBe('0');
+
+    // Space closes the board (and only the board — the panel was never open).
+    await act(async () => { fireEvent.keyDown(document.body, { key: ' ' }); });
+    expect(screen.getByTestId('board').textContent).toBe('closed');
+
+    // S reopens it.
+    await act(async () => { fireEvent.keyDown(document.body, { key: 's' }); });
+    expect(screen.getByTestId('board').textContent).toBe('open');
+  });
+});
+
+/**
+ * TASK 1: "add a way to click the scoreboard off back to what was showing
+ * before." A click on the board's own close button, wired the same way S /
+ * Esc / Space are: through the host page's `onClose` (publishScoreboard),
+ * never the dock's advance. `Room` (above) already proves the KEYS behave
+ * around an overlay; this proves the on-board CLICK is additive to them —
+ * mirrors the Space-does-not-advance case in "useScoreboardKeys" above.
+ */
+describe('the board\'s own close button (a click, not a key)', () => {
+  const PLAYERS = Array.from({ length: 5 }, (_, i) => ({
+    playerId: `p${i}`, playerName: `Player ${i + 1}`, totalScore: 50 - i, rank: i + 1, movement: 0, previousScore: 40 - i,
+  }));
+
+  beforeEach(() => {
+    window.matchMedia = jest.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ players: PLAYERS, afterRound: 2 }) }));
+  });
+  afterEach(() => { delete global.fetch; });
+
+  function RoomWithBoard({ onAction = () => {} }) {
+    const [board, setBoard] = useState({ open: true, style: 'departure', page: 0, openedAt: 't' });
+    const close = () => setBoard((b) => ({ ...b, open: false }));
+    useScoreboardKeys({
+      enabled: true,
+      open: board.open,
+      canOpen: true,
+      onOpen: () => setBoard((b) => ({ ...b, open: true })),
+      onClose: close,
+      onCycleStyle: () => setBoard((b) => ({ ...b, style: nextStyle(b.style) })),
+    });
+    return (
+      <div className="stage">
+        <output data-testid="board">{board.open ? 'open' : 'closed'}</output>
+        {board.open && (
+          <Scoreboard gameId="6060" apiBase="https://api.test/" profile="room" board={board} onClose={close} />
+        )}
+        <HostActionBar
+          controls={{ primary: { id: 'next', label: 'Next Round' } }}
+          onAction={onAction}
+          bigScreen
+          shortcutsEnabled={!shortcutsSuppressed({ scoreboardOpen: board.open })}
+        />
+      </div>
+    );
+  }
+
+  test('a click closes the board and does not advance the round', async () => {
+    const onAction = jest.fn();
+    await act(async () => { render(<RoomWithBoard onAction={onAction} />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId('board').textContent).toBe('open');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Close scoreboard' }));
+    });
+    expect(screen.getByTestId('board').textContent).toBe('closed');
+    expect(onAction).not.toHaveBeenCalled();
+
+    // ...and with the board gone, Space is the dock's advance key again —
+    // the click did not leave the shortcut gate stuck closed-for-Space.
+    await act(async () => { fireEvent.keyDown(window, { key: ' ' }); });
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  test('S still reopens the board after a click closed it — the keys keep working', async () => {
+    await act(async () => { render(<RoomWithBoard />); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close scoreboard' })); });
+    expect(screen.getByTestId('board').textContent).toBe('closed');
+    await act(async () => { fireEvent.keyDown(window, { key: 's' }); });
+    expect(screen.getByTestId('board').textContent).toBe('open');
   });
 });
 

@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
 const { ORG } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
+const { isPollRound, pollQuestionOf } = require('./poll-question');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -241,7 +242,13 @@ exports.handler = async (event) => {
       optionC: questionItem.optionC || questionItem.OptionC || '',
       optionD: questionItem.optionD || questionItem.OptionD || '',
       optionE: questionItem.optionE || questionItem.OptionE || '',
-      optionF: questionItem.optionF || questionItem.OptionF || ''
+      optionF: questionItem.optionF || questionItem.OptionF || '',
+      // A POLL'S QUESTION: its kind and that kind's fields (options, scale and
+      // labels, the binary's own labels), so the phone draws the control the
+      // answer check accepts and the stage draws the options it will fill in.
+      // Until typed polls this payload carried no options at all, and every
+      // poll played as a free-text box (poll-question.js).
+      ...(isPollRound(resolved.metadata, questionItem) ? { poll: pollQuestionOf(questionItem) } : {})
     };
 
     // Include correct answer for both host and player in RESULTS state

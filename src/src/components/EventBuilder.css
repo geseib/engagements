@@ -1,0 +1,261 @@
+/* components/EventBuilder.jsx, EventItemDialog.jsx — one event's agenda.
+   ==========================================================================
+   Built from docs/design/agenda-redesign/02-builder.html, 02b-cap-reached
+   .html and 03-add-item.html (_src/agenda-console.css over admin-redesign
+   shell.css), under one scope, `.evb`. The add-item dialog is part of this
+   screen and shares its tokens, as QuestionSetsPanel.css holds its dialogs.
+
+   Dusk, on AdminShell's dark work field. Ladder 12 / 13 / 15 / 19 / 30.
+   Agenda rows are 48px: a title and a source line each
+   (agenda-console.css: "the pair does not fit 36 at the 15/13 ladder").
+
+   MEASURED, composited (eventBuilderPalette.test.js):
+     --text / --muted on --surface (the panel)            12.53 / 6.37
+     --muted on a break row (#9BA8BE @3.5% over --surface)      5.71
+     --text / --muted on the moving row (amber @10%)     10.42 / 5.04
+     --text / --muted on the cap's reason (amber @8%)    10.84 / 5.24
+     --primary on --surface (the code, "the most…")            7.42
+     #0F1A2E on --primary (a filled button)                    8.86
+     --danger-text on the field / on its tint (delete event)   7.26 / 6.59
+     --text on the danger tint over the field (the confirm)       13.60
+     --danger-text, a hovered button inside the confirm            5.90
+   ========================================================================== */
+.evb {
+  --evb-t-floor: 12px;
+  --evb-t-label: 13px;
+  --evb-t-body: 15px;
+  --evb-t-head: 19px;
+  --evb-t-numeral: 30px;
+  --evb-row-h: 48px;
+
+  --evb-on-accent: #0F1A2E;
+  --evb-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --evb-rule: rgba(155, 168, 190, .20);
+  --evb-rule-strong: rgba(155, 168, 190, .34);
+  --evb-rule-warn: rgba(246, 169, 76, .5);
+  --evb-row-hover: rgba(155, 168, 190, .055);
+  --evb-row-sel: rgba(246, 169, 76, .10);
+  --evb-tint-cap: rgba(246, 169, 76, .08);
+  --evb-tint-brk: rgba(155, 168, 190, .035);
+  --evb-tint-danger: rgba(229, 100, 94, .09);
+  --evb-scrim: rgba(6, 11, 22, .72);
+  --evb-shadow-modal: 0 24px 64px rgba(0, 0, 0, .5);
+  --evb-shadow-menu: 0 20px 48px rgba(0, 0, 0, .5);
+
+  color: var(--text);
+  font: 400 var(--evb-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.evb *,
+.evb *::before,
+.evb *::after { box-sizing: border-box; }
+.evb :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* ------------------------------------------------------------- buttons --- */
+.evb-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: 6px; border: 1px solid var(--evb-rule-strong); background: transparent;
+  color: var(--text); font: 600 var(--evb-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.evb-btn:hover:not(:disabled) { background: var(--evb-row-hover); border-color: var(--muted); }
+.evb-btn:disabled { opacity: .42; cursor: not-allowed; }
+.evb-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--evb-on-accent); font-weight: 700; }
+.evb-btn--primary:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); filter: brightness(1.08); }
+.evb-btn--sm { height: 26px; padding: 0 9px; font-size: var(--evb-t-floor); }
+.evb-btn--icon { width: 26px; padding: 0; justify-content: center; }
+.evb-btn--ghostdanger { border-color: transparent; color: var(--danger-text); }
+.evb-btn--ghostdanger:hover:not(:disabled) { border-color: var(--danger-text); background: var(--evb-tint-danger); }
+.evb-dim { color: var(--muted); }
+.evb-grow { flex: 1 1 auto; min-width: 0; }
+/* Visually hidden but announced — the reorder live region. */
+.evb-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* --------------------------------------------------------------- dialog --- */
+/* The scrim scrolls; the card centres with margin:auto (hard rule 10). */
+.evb-scrim {
+  position: fixed; inset: 0; z-index: 60; background: var(--evb-scrim);
+  display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 28px 24px;
+}
+.evb-modal {
+  margin: auto; width: min(760px, 100%); background: var(--surface); border: 1px solid var(--evb-rule-strong);
+  border-radius: 12px; box-shadow: var(--evb-shadow-modal); color: var(--text); overflow-wrap: anywhere;
+}
+.evb-modal--wide { width: min(940px, 100%); }
+/* An engagement's session options (events M1b): the create dialog's own block
+   (SessionOptions.jsx), styled by its sheet under the `.gsd` scope it carries;
+   this places it under the item's own fields, and puts it back on the create
+   dialog's wrapping: .evb-modal breaks anywhere, and inherited into the
+   category chips (whose names styles.css gives `flex: 1`) that shrank every
+   chip to one letter wide. */
+.evb-sopts { margin-top: 16px; overflow-wrap: normal; }
+.evb-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.evb-modal-head h2 { margin: 0; font: 800 var(--evb-t-head)/1.2 var(--font-display); }
+.evb-modal-head p { margin: 4px 0 0; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-x {
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer;
+}
+.evb-x:hover { color: var(--text); background: var(--evb-row-hover); }
+.evb-modal-body { padding: 0 18px 4px; }
+.evb-modal-foot {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap; padding: 14px 18px 16px; margin-top: 12px;
+  border-top: 1px solid var(--evb-rule);
+}
+.evb-step + .evb-step { margin-top: 16px; }
+.evb-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.evb-label { font-size: var(--evb-t-label); font-weight: 600; color: var(--muted); }
+.evb-hint { margin: 6px 0 0; font-size: var(--evb-t-label); color: var(--muted); line-height: 1.45; }
+.evb-input {
+  font: 400 var(--evb-t-body)/1.4 var(--font-ui); color: var(--text); background: var(--bg);
+  border: 1px solid var(--evb-rule-strong); border-radius: 6px; padding: 6px 9px; min-height: 32px; width: 100%;
+}
+.evb-input::placeholder { color: var(--muted); opacity: .62; }
+.evb-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.evb-textarea { min-height: 58px; resize: vertical; line-height: 1.5; }
+.evb-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.evb-span2 { grid-column: span 2; }
+.evb-span4 { grid-column: 1 / -1; }
+.evb-len { display: flex; align-items: center; gap: 8px; }
+.evb-len .evb-input { width: 78px; text-align: center; }
+.evb-search { position: relative; display: flex; align-items: center; max-width: 300px; margin: 0 0 8px; }
+.evb-search > svg { position: absolute; left: 9px; pointer-events: none; color: var(--muted); }
+.evb-search .evb-input { padding-left: 29px; }
+/* The set picker: the sets of ONE type, as a table (lists are tables). */
+.evb-pick { border: 1px solid var(--evb-rule); border-radius: 8px; overflow: auto; max-height: 260px; background: var(--bg); }
+.evb-pick-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.evb-pick-tbl th {
+  text-align: left; font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 8px 10px 7px; border-bottom: 1px solid var(--evb-rule-strong); background: var(--bg);
+}
+.evb-pick-tbl td {
+  height: 40px; padding: 0 10px; border-bottom: 1px solid var(--evb-rule); background: var(--surface);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evb-pick-tbl tr[aria-selected="true"] td { background: var(--evb-row-sel); }
+.evb-pick-tbl .evb-col-r { width: 34px; text-align: center; }
+.evb-pick-tbl .evb-col-plays { width: 130px; }
+.evb-pick-tbl .evb-col-qs { width: 56px; text-align: right; }
+.evb-pick-tbl .evb-col-here { width: 180px; }
+.evb-ver { font-size: var(--evb-t-floor); color: var(--muted); font-weight: 600; }
+.evb-chip {
+  display: inline-flex; align-items: center; font-size: var(--evb-t-floor); font-weight: 600; line-height: 1.5;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--evb-rule-strong); color: var(--muted); white-space: nowrap;
+}
+.evb-chip--warn { color: var(--primary); border-color: var(--evb-rule-warn); }
+/* An item's state on the day (events M3), beside its name. */
+.evb-runstate { margin-left: 6px; }
+/* "Run the event" is a link to the stage, drawn as the primary button. */
+.evb-facts-acts a.evb-btn { text-decoration: none; }
+.evb-error {
+  margin: 12px 0 0; padding: 9px 12px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
+  background: var(--evb-tint-danger); color: var(--danger-text); font-size: var(--evb-t-label);
+}
+.evb-confirm {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap; width: 100%; padding: 9px 12px;
+  border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0; background: var(--evb-tint-danger);
+}
+.evb-confirm p { margin: 0; flex: 1 1 260px; min-width: 0; font-size: var(--evb-t-label); color: var(--text); }
+
+/* ======================================================= the agenda place ==
+   Everything below is the builder itself (EventBuilder.jsx). */
+.evb-alert {
+  display: flex; align-items: center; gap: 9px; margin: 0 0 14px; padding: 9px 12px;
+  border: 1px solid var(--evb-rule-strong); border-left: 3px solid var(--danger); border-radius: 6px;
+  background: var(--evb-tint-danger); color: var(--danger-text);
+}
+.evb-alert > span { flex: 1 1 auto; min-width: 0; }
+.evb-loading { color: var(--muted); }
+
+/* The event's facts: each said once, each with its label. The code is the
+   one display numeral the place is allowed. */
+.evb-facts {
+  display: flex; flex-wrap: wrap; margin: 0 0 14px; border: 1px solid var(--evb-rule);
+  border-radius: 10px; background: var(--surface);
+}
+.evb-fact { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 10px 16px; border-right: 1px solid var(--evb-rule); }
+.evb-fact:last-child { border-right: 0; }
+.evb-lab { font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.evb-v { font-size: var(--evb-t-body); font-weight: 600; white-space: nowrap; }
+.evb-code { font: 800 var(--evb-t-numeral)/1 var(--font-display); letter-spacing: .08em; color: var(--primary); }
+.evb-facts-acts { flex-direction: row; align-items: center; margin-left: auto; }
+
+.evb-panel { position: relative; margin: 0 0 14px; border: 1px solid var(--evb-rule); border-radius: 10px; background: var(--surface); }
+.evb-panel-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 11px 14px; border-bottom: 1px solid var(--evb-rule); }
+.evb-panel-head h2 { margin: 0; font: 700 var(--evb-t-head)/1.2 var(--font-display); }
+.evb-note { margin: 0; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-menuwrap { position: relative; margin-left: auto; }
+
+/* The agenda table: the console's table plus a grip, a place and a time. */
+.evb-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.evb-tbl th {
+  text-align: left; font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 9px 10px 7px; white-space: nowrap; border-bottom: 1px solid var(--evb-rule-strong);
+}
+.evb-tbl td {
+  height: var(--evb-row-h); padding: 0 10px; border-bottom: 1px solid var(--evb-rule);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.evb-tbl tbody tr:hover td { background: var(--evb-row-hover); }
+.evb-tbl .evb-row--brk td { background: var(--evb-tint-brk); }
+.evb-tbl .evb-row--moving td { background: var(--evb-row-sel); }
+.evb-col-grip { width: 30px; }
+.evb-col-no { width: 34px; }
+.evb-col-at { width: 66px; }
+.evb-col-type { width: 158px; }
+.evb-col-len { width: 74px; }
+.evb-col-acts { width: 196px; }
+.evb-grip { color: var(--muted); text-align: center; cursor: grab; }
+.evb-no { text-align: right; font-weight: 700; font-size: var(--evb-t-label); color: var(--muted); }
+.evb-at { font-weight: 700; }
+.evb-len-cell { text-align: right; }
+.evb-nm { display: block; min-width: 0; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.evb-row--brk .evb-nm { font-weight: 500; color: var(--muted); }
+.evb-sub { display: block; min-width: 0; font-size: var(--evb-t-label); color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.evb-sub--bad { color: var(--danger-text); }
+/* A type is an icon AND a word, everywhere (colour never alone). */
+.evb-type {
+  display: inline-flex; align-items: center; gap: 5px; font-size: var(--evb-t-floor); font-weight: 600; line-height: 1.5;
+  padding: 2px 8px 2px 6px; border-radius: 999px; border: 1px solid var(--evb-rule-strong); color: var(--text); white-space: nowrap;
+}
+.evb-type--brk { border-color: transparent; color: var(--muted); }
+/* Row actions: margin-left auto on the first child, never flex-end (hard rule 9). */
+.evb-rowact { display: flex; gap: 5px; flex-wrap: wrap; }
+.evb-rowact > :first-child { margin-left: auto; }
+.evb-foot { padding: 11px 14px; font-size: var(--evb-t-label); color: var(--muted); }
+/* Delete the event (final review I1): below the agenda, on the work field.
+   The button is the ghost-danger one the item dialog's Remove uses, and its
+   confirm is the same inline .evb-confirm — never a second dialog. */
+.evb-endzone { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+.evb-endzone .evb-error { margin: 0; }
+.evb-foot b { color: var(--text); }
+.evb-warn { margin-left: 6px; font-size: var(--evb-t-floor); font-weight: 700; color: var(--primary); }
+
+/* The add menu: a popover under its button, so the one dialog behind it is
+   the set picker — never a modal opened from a modal. */
+.evb-menu {
+  position: absolute; z-index: 40; top: 36px; right: 0; width: 392px; padding: 6px;
+  border: 1px solid var(--evb-rule-strong); border-radius: 10px; background: var(--surface);
+  box-shadow: var(--evb-shadow-menu);
+}
+.evb-menu-h { margin: 8px 10px 4px; font-size: var(--evb-t-floor); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.evb-menu-item {
+  display: flex; gap: 11px; align-items: flex-start; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px;
+  background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.evb-menu-item:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--evb-row-hover); }
+.evb-menu-item:disabled,
+.evb-menu-item[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.evb-menu-item b { display: block; font-size: var(--evb-t-body); }
+.evb-menu-item span { display: block; font-size: var(--evb-t-label); color: var(--muted); line-height: 1.4; }
+.evb-menu-rule { border: 0; border-top: 1px solid var(--evb-rule); margin: 5px 4px; }
+/* The cap's reason: full contrast, above the kinds it disables. A disabled
+   control is exempt from contrast; the sentence saying why is not. */
+.evb-capnote {
+  margin: 2px 10px 8px; padding: 8px 10px; border-left: 3px solid var(--primary); border-radius: 0 6px 6px 0;
+  background: var(--evb-tint-cap); font-size: var(--evb-t-label); color: var(--muted); line-height: 1.45;
+}
+.evb-capnote b { color: var(--text); font-weight: 600; }

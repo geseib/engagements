@@ -32,11 +32,12 @@ import HostRemote from '../HostRemote';
    accessors are the real ones, so what they store is observable. */
 jest.mock('../auth/authFetch', () => ({
   ...jest.requireActual('../auth/authFetch'),
-  authFetch: jest.fn(() => Promise.resolve({
-    ok: true,
-    status: 200,
-    json: async () => ({ status: 'OK' }),
-  })),
+  // Dispatches (POST) answer OK here, which is all the assertions below need.
+  // Reads go through the routed `global.fetch` below: the state poll is an
+  // authenticated read of the host's door, /host-state, since 2026-09-26.
+  authFetch: jest.fn((url, init) => (init && init.method === 'POST'
+    ? Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'OK' }) })
+    : global.fetch(url, init))),
 }));
 // qrcode.react draws to a canvas jsdom does not implement.
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
@@ -57,7 +58,13 @@ function serve({
   state, stageBeat = 'results', players = [], aiSummary = null, progress = {}, comments = null,
 }) {
   global.fetch = jest.fn((url) => {
-    if (String(url).includes('/state')) {
+    // The access gate (Task 6): asked before anything else about the
+    // session. This file is about the call sites downstream of it, so it
+    // always answers 200.
+    if (String(url).includes('/host-details')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    }
+    if (String(url).includes('/host-state')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({

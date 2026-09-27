@@ -1,0 +1,227 @@
+/**
+ * SURVEY RESULTS — the KindResult family (rating, choice, yes/no, rank, text).
+ *
+ * THEME-AGNOSTIC ON PURPOSE. Every colour here is a shared token declared in
+ * styles.css (--text, --muted, --surface, --surface-2, --primary,
+ * --primary-deep, --secondary, --success, --danger, --danger-text) and there
+ * is no `data-theme` in this file — the ancestor sets it. SurveyResultsPanel
+ * mounts these cards under `data-theme="dark"`; Task 4's paper report mounts
+ * the SAME components under `data-theme="light"`, and the same rules resolve
+ * to the paper palette with no code change here. That is the whole reason
+ * KindResult is presentational (props in, markup out): a component that
+ * fetched or held state would still be theme-safe, but it could not be
+ * mounted twice, in two documents, from two different callers.
+ *
+ * Ladder: laptop surfaces, 12/13/15/19/24/30 — engage-design skill §2.
+ * Row/measurement values (gaps, radii, strip heights) are layout, not type,
+ * and are not held to the floor.
+ * Measured contrast: __tests__/surveyResultsPalette.test.js.
+ */
+
+.svr-card {
+  --svr-t-floor: 12px;
+  --svr-t-label: 13px;
+  --svr-t-body: 15px;
+  --svr-t-head: 19px;
+  --svr-t-numeral: 30px;
+  /* Text sitting DIRECTLY on a solid accent fill (the split bars' own
+     percentages) — the one deliberate literal here, matching the pattern
+     already shipped as `--cnt-on-accent` / `--sab-on-accent` elsewhere in
+     this app (CountField.css, SurveyAIBuilder.css) and the mockup's own
+     `--sv-on-accent` (survey-console.css). Measured (dusk):
+       --svr-on-accent #1B2942 on --primary 7.42 / --success 5.58
+     `--danger` itself is UNDER 4.5:1 for any text colour that also clears it
+     on --primary/--success (engage-design skill: "--danger never carries
+     text"), so the negative segment uses --danger-deep + --text (5.16)
+     instead — the same substitution the skill prescribes for a filled
+     destructive button. */
+  --svr-on-accent: #1B2942;
+
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.svr-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--svr-t-label);
+  color: var(--muted);
+}
+
+.svr-card-n { font-weight: 700; color: var(--text); }
+
+.svr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--svr-t-floor);
+}
+
+.svr-grow { flex: 1; }
+
+.svr-count { font-size: var(--svr-t-floor); color: var(--muted); }
+
+.svr-card-title {
+  margin: 0;
+  font-size: var(--svr-t-head);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.svr-card-body { font-size: var(--svr-t-body); color: var(--text); }
+
+.svr-empty { color: var(--muted); font-size: var(--svr-t-body); margin: 0; }
+
+.svr-foot { margin: 0; font-size: var(--svr-t-label); color: var(--muted); }
+
+.svr-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--secondary);
+  font: inherit;
+  font-size: var(--svr-t-label);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.svr-link:hover { color: var(--primary); }
+
+/* ── rating (1–5 / 1–10 / stars, and the 0–10 recommend split) ────────────── */
+
+.svr-rate { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+
+.svr-mean { display: flex; flex-direction: column; gap: 2px; min-width: 140px; }
+.svr-mean b { font-size: var(--svr-t-numeral); line-height: 1; color: var(--text); }
+.svr-mean span { font-size: var(--svr-t-label); color: var(--muted); }
+.svr-mean em { font-style: normal; font-size: var(--svr-t-floor); color: var(--muted); }
+
+.svr-hist {
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  align-items: end;
+  gap: 6px;
+  height: 90px;
+  min-width: 220px;
+}
+.svr-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.svr-col em { font-style: normal; font-size: var(--svr-t-floor); color: var(--muted); }
+.svr-col i { display: block; width: 100%; background: var(--surface-2); border-radius: 4px 4px 0 0; }
+.svr-col.is-top i { background: var(--primary); }
+
+.svr-histx {
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  font-size: var(--svr-t-floor);
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: center;
+}
+
+.svr-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--svr-t-floor);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.svr-split-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 260px; flex: 1; }
+
+.svr-split {
+  display: flex;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: var(--svr-t-label);
+}
+.svr-split i { display: flex; align-items: center; justify-content: center; font-style: normal; min-width: 0; white-space: nowrap; overflow: hidden; }
+
+/* The negative segment is --danger-DEEP, not --danger: --danger itself
+   carries no text colour that clears AA against it (measured above). */
+.svr-det, .svr-no { background: var(--danger-deep); color: var(--text); }
+.svr-pas, .svr-ns { background: var(--surface-2); color: var(--muted); }
+.svr-pro, .svr-yes { background: var(--success); color: var(--svr-on-accent); }
+
+.svr-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: var(--svr-t-label); color: var(--muted); }
+.svr-legend b { color: var(--text); }
+
+.svr-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+.svr-swatch--det { background: var(--danger-deep); }
+.svr-swatch--pas { background: var(--surface-2); }
+.svr-swatch--pro { background: var(--success); }
+
+/* ── choice ─────────────────────────────────────────────────────────────── */
+
+.svr-bars { display: flex; flex-direction: column; gap: 8px; }
+
+.svr-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 2fr) 70px;
+  align-items: center;
+  gap: 10px;
+}
+.svr-bar-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.svr-bar-t { background: var(--surface-2); border-radius: 4px; height: 14px; overflow: hidden; }
+.svr-bar-t i { display: block; height: 100%; background: var(--secondary); border-radius: 4px; }
+.svr-bar.is-top .svr-bar-t i { background: var(--primary); }
+.svr-bar-v { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.svr-bar-v small { color: var(--muted); margin-left: 4px; }
+
+/* --primary-deep on --surface-2 measures 3.59 — under AA — so the tag is a
+   filled amber pill (the same --svr-on-accent pairing as the split bars, not
+   a tinted label) rather than amber-on-neutral. */
+.svr-tag {
+  margin-left: 8px;
+  font-size: var(--svr-t-floor);
+  font-weight: 700;
+  color: var(--svr-on-accent);
+  background: var(--primary);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.svr-otherlist { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+
+/* ── yes/no ─────────────────────────────────────────────────────────────── */
+
+.svr-yesno { display: flex; flex-direction: column; gap: 10px; }
+
+.svr-quotes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.svr-quotes li { background: var(--surface-2); border-radius: 6px; padding: 8px 10px; color: var(--text); }
+.svr-quotes small { display: block; color: var(--muted); font-size: var(--svr-t-floor); margin-top: 2px; }
+
+/* ── rank ───────────────────────────────────────────────────────────────── */
+
+.svr-rank { display: flex; flex-direction: column; gap: 8px; }
+
+.svr-rank-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(80px, 2fr) 70px;
+  align-items: center;
+  gap: 10px;
+}
+.svr-rank-p { color: var(--muted); font-variant-numeric: tabular-nums; }
+.svr-rank-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.svr-rank-strip { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-2); }
+.svr-rank-strip i { display: block; }
+.svr-p1 { background: var(--primary); }
+.svr-p2 { background: var(--primary-deep); }
+.svr-p3, .svr-p4, .svr-p5, .svr-p6, .svr-p7 { background: var(--secondary); }
+.svr-punplaced { background: transparent; }
+.svr-rank-v { text-align: right; color: var(--text); }
+
+/* ── text ───────────────────────────────────────────────────────────────── */
+
+.svr-textlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.svr-textlist li { background: var(--surface-2); border-radius: 6px; padding: 8px 10px; color: var(--text); }

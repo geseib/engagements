@@ -426,7 +426,7 @@ describe('the Questions tab — the browser', () => {
     expect(rows).toHaveLength(3);
     expect(rows[1].className).toMatch(/is-used/);
     expect(within(rows[1]).getByRole('button', { name: /ask again/i })).toBeInTheDocument();
-    expect(within(rows[0]).getByRole('button', { name: /ask next/i })).toBeInTheDocument();
+    expect(within(rows[0]).getByRole('button', { name: /^ask now$/i })).toBeInTheDocument();
   });
 
   test('"Unasked only" hides them, on request', () => {
@@ -443,7 +443,7 @@ describe('the Questions tab — the browser', () => {
     const onSelectQuestion = jest.fn();
     renderPanel({ onSelectQuestion });
     openTab('Questions');
-    fireEvent.click(within(screen.getAllByTestId('browser-row')[0]).getByRole('button', { name: /ask next/i }));
+    fireEvent.click(within(screen.getAllByTestId('browser-row')[0]).getByRole('button', { name: /^ask now$/i }));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
   });
 
@@ -666,7 +666,7 @@ describe('the Settings tab', () => {
  */
 describe('the Settings tab is where the names decisions are made', () => {
   const openNames = (props = {}) => {
-    const result = renderPanel({ gameType: 'poll', ...props });
+    const result = renderPanel({ gameType: 'call-and-answer', ...props });
     openTab('Settings');
     return result;
   };
@@ -794,7 +794,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     // moot. With the names up there is no subtraction to protect, so
     // waitingRoster ignores this setting entirely — and a switch that moves
     // nothing is exactly what this panel refuses to draw.
-    const { container } = renderPanel({ gameType: 'poll', anonymousUntilReveal: false });
+    const { container } = renderPanel({ gameType: 'call-and-answer', anonymousUntilReveal: false });
     openTab('Settings');
     expect(container.querySelector('[data-testid="attribute-authors"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="name-waiting"]')).toBeNull();
@@ -806,7 +806,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     // already public. The round is revealed; there is no anonymity set left to
     // shrink, and a caution that is always up is a caution nobody reads.
     const { container } = renderPanel({
-      gameType: 'poll', answerCount: 2, authorsRevealed: true,
+      gameType: 'call-and-answer', answerCount: 2, authorsRevealed: true,
     });
     openTab('Settings');
     expect(container.querySelector('[data-testid="name-waiting"]')).not.toBeNull();
@@ -824,7 +824,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     // and is exactly the inference the owner forbade. Asserted by rendering the
     // same panel on all four profiles and requiring identical answers.
     const seen = ['room', 'tv', 'call', 'table'].map((profile) => {
-      const { container, unmount } = renderPanel({ gameType: 'poll', profile, answerCount: 2 });
+      const { container, unmount } = renderPanel({ gameType: 'call-and-answer', profile, answerCount: 2 });
       openTab('Settings');
       const section = container.querySelector('.setup-settings');
       const snapshot = {

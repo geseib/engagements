@@ -7,6 +7,8 @@ import TermsOfServicePage from './TermsOfServicePage';
 import GameHostPage from './GameHostPage';
 import InviteAcceptPage from './components/InviteAcceptPage';
 import PlayerPage from './PlayerPage';
+import EventAttendeePage from './components/event/EventAttendeePage';
+import EventStage from './components/event/EventStage';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
@@ -245,6 +247,13 @@ function AppRouter() {
 
   // Player routes (no authentication required)
   if (path.startsWith('/play')) {
+    // AN EVENT'S CODE (events M2): the attendee's page, which joins once by
+    // name and follows the agenda all day (components/event/EventAttendeePage).
+    // Every other /play is a session, exactly as before.
+    const eventCode = new URLSearchParams(window.location.search).get('event');
+    if (eventCode && /^\d{4}$/.test(eventCode.trim())) {
+      return <EventAttendeePage code={eventCode.trim()} />;
+    }
     return <PlayerPage />;
   }
 
@@ -379,6 +388,17 @@ function AppRouter() {
     return (
       <ProtectedRoute>
         <BuilderPage />
+      </ProtectedRoute>
+    );
+  }
+
+  // AN EVENT ON THE WALL (events M3): the agenda between items, breaks and
+  // talks, and the doors into each item's own stage. A host's page.
+  const eventStage = /^\/host\/event\/(\d{4})\/?$/.exec(path);
+  if (eventStage) {
+    return (
+      <ProtectedRoute>
+        <EventStage code={eventStage[1]} />
       </ProtectedRoute>
     );
   }

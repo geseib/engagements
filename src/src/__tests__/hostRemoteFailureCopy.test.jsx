@@ -22,7 +22,18 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import HostRemote from '../HostRemote';
-import { questionSetFailure, sessionActionMessage } from '../config/hostRemote';
+import { questionSetFailure, sessionActionMessage, accessDeniedMessage } from '../config/hostRemote';
+
+// The signed-in account, for the "names the account" half of this file — see
+// "the round controls" below and Task 6's brief item 2. `useOptionalAuth`
+// (not `useAuth`, which throws with no provider) is what HostRemote.jsx reads.
+jest.mock('../auth/AuthContext', () => ({
+  __esModule: true,
+  useOptionalAuth: () => ({
+    currentUser: { username: 'host', attributes: { email: 'host@example.com' } },
+    signOut: jest.fn(),
+  }),
+}));
 
 /* PARTIAL MOCK: `HostRemote` mounts `ActiveOrgSwitcher`, which reads and writes
    the active organisation through this same module. Only the transport moves. */
@@ -46,7 +57,9 @@ const TRIVIA = {
  * `questions` may be a list (served 200) or a `{status}` refusal;
  * `questionsThen` is the second attempt, so a retry can be watched succeeding.
  */
-function serve({ questions = [TRIVIA], questionsThen = null, dispatch = null, categories = [] } = {}) {
+function serve({
+  questions = [TRIVIA], questionsThen = null, dispatch = null, categories = [], hostDetails = { status: 200 },
+} = {}) {
   let attempt = 0;
   global.fetch = jest.fn((url, init) => {
     const href = String(url);
@@ -61,10 +74,20 @@ function serve({ questions = [TRIVIA], questionsThen = null, dispatch = null, ca
       }
       return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
     }
+    // The access gate (Task 6): asked before anything else about the session.
+    // Every scenario here is about a failure DOWNSTREAM of that check, so it
+    // has to answer 200 unless a test says otherwise.
+    if (href.includes('/host-details')) {
+      return Promise.resolve({
+        ok: hostDetails.status === 200,
+        status: hostDetails.status,
+        json: async () => ({}),
+      });
+    }
     if (href.includes('/orgs')) {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ orgs: [] }) });
     }
-    if (href.includes('/state')) {
+    if (href.includes('/host-state')) {
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -282,10 +305,91 @@ describe('sessionActionMessage — the phone knows the session is there', () => 
     const message = sessionActionMessage({ status: 0, payload: {}, live: true });
     expect(message).not.toMatch(/undefined|NaN|\(0\)/);
   });
+
+  // Task 6 item 2: "the existing dispatch failure copy for a 404 on a live
+  // session also names the signed-in account" — a host removed from the
+  // team mid-session, or one who never noticed the up-front banner, gets told
+  // WHICH account is in the way, not just that one is.
+  describe('naming the account (Task 6)', () => {
+    it('names the signed-in account when one is known', () => {
+      const message = sessionActionMessage({
+        status: 404,
+        payload: { error: 'Game not found' },
+        live: true,
+        email: 'host@example.com',
+      });
+      expect(message).toMatch(/host@example\.com/);
+      expect(message).toMatch(/team/i);
+      expect(message).not.toMatch(/game not found/i);
+    });
+
+    it('omits the sentence rather than naming nobody when no email is known', () => {
+      const message = sessionActionMessage({
+        status: 404,
+        payload: { error: 'Game not found' },
+        live: true,
+        email: '',
+      });
+      expect(message).not.toMatch(/signed in as/i);
+      expect(message).toMatch(/team/i);
+    });
+
+    // Rejects: an email leaking into a message this deduction never earns —
+    // an unrelated 404, an unexplained status, or a session that has not been
+    // proven live.
+    it('never appears on a message the account had nothing to do with', () => {
+      const unrelated = sessionActionMessage({
+        status: 404,
+        payload: { error: 'Question not found' },
+        live: true,
+        email: 'host@example.com',
+      });
+      expect(unrelated).not.toMatch(/host@example\.com/);
+
+      const notLive = sessionActionMessage({
+        status: 404,
+        payload: { error: 'Game not found' },
+        live: false,
+        email: 'host@example.com',
+      });
+      expect(notLive).not.toMatch(/host@example\.com/);
+    });
+  });
+});
+
+/* -------------------------------------------------------- the access gate */
+
+describe('accessDeniedMessage — what the phone says before offering a control', () => {
+  it('names the account for a refused door, and gives both remedies', () => {
+    const message = accessDeniedMessage({ reason: 'account', email: 'host@example.com' });
+    expect(message).toMatch(/host@example\.com/);
+    expect(message).toMatch(/team/i);
+    expect(message).toMatch(/created it/i);
+  });
+
+  it('omits the sentence rather than naming nobody when no email is known', () => {
+    const message = accessDeniedMessage({ reason: 'account', email: '' });
+    expect(message).not.toMatch(/signed in as/i);
+    expect(message).toMatch(/team/i);
+  });
+
+  it('asks for a fresh sign-in on an expired token, and names no account', () => {
+    const message = accessDeniedMessage({ reason: 'expired', email: 'host@example.com' });
+    expect(message).toMatch(/sign in again/i);
+    expect(message).not.toMatch(/host@example\.com/);
+    expect(message).not.toMatch(/team/i);
+  });
+
+  it('never claims the account is wrong for a status it cannot explain', () => {
+    const message = accessDeniedMessage({ reason: 'error', email: 'host@example.com' });
+    expect(message).not.toMatch(/can't run this session/i);
+    expect(message).not.toMatch(/host@example\.com/);
+    expect(message).toMatch(/check signal|try again/i);
+  });
 });
 
 describe('the round controls', () => {
-  it('do not tell a host their running session is gone', async () => {
+  it('do not tell a host their running session is gone, and name the account', async () => {
     serve({ dispatch: { status: 404, error: 'Game not found' } });
     await connect();
 
@@ -294,5 +398,7 @@ describe('the round controls', () => {
     const flash = await screen.findByRole('alert');
     expect(flash.textContent).toMatch(/team/i);
     expect(flash.textContent).not.toMatch(/game not found/i);
+    // Task 6 item 2 — see the AuthContext mock at the top of this file.
+    expect(flash.textContent).toMatch(/host@example\.com/);
   });
 });

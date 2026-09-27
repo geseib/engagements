@@ -9,8 +9,7 @@ import RoundKindPicker from './RoundKindPicker';
 import {
   roundKindParticipantInstruction, roundKindGaps, DEFAULT_ROUND_KIND,
 } from '../config/roundKinds';
-import { normalizeTags, tagsToCsvCell } from '../utils/tags';
-import { csvRow, buildCsv, optionsToCsvCell, allowMultipleToCsvCell } from '../utils/csv';
+import { normalizeTags } from '../utils/tags';
 import GenerationJobPanel from './GenerationJobPanel';
 import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
@@ -24,6 +23,19 @@ import {
   forgetGenerationJob,
   resumeIsGone,
 } from '../utils/generationJob';
+import SurveyQuestionFields from './SurveyQuestionFields';
+import { convertKind } from '../config/surveyKinds';
+import {
+  POLL_KINDS, POLL_KIND_IDS, DEFAULT_POLL_KINDS,
+  pollKindOf, pollKindMeta, pollKindLabel, pollItemsToCsv, pollItemProblem, pollSummary, pollMechanicInstruction,
+} from '../utils/pollDraft';
+// The set editor's ground: its token block and the dusk inking of the shared
+// form controls. The question form below is the editor's own
+// (SurveyQuestionFields), and that form paints only inside `.qs-editor` — see
+// the edit card's comment. Imported here rather than trusted to be in the
+// bundle, because this builder also opens where the editor has never loaded.
+import './QuestionSetEditor.css';
+import './PollAIBuilder.css';
 
 const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-polls`;
@@ -39,7 +51,12 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
     audience: appendTo?.brief?.audience || '',
     difficulty: appendTo?.brief?.difficulty || 'medium',
     count: 10,
-    allowMultiple: false,
+    // THE KINDS OF POLL QUESTION — the four the contract gives a poll, all on
+    // by default so Workie can choose the one that fits each question. It
+    // replaced an "Allow multiple selections" checkbox, which was the only say
+    // a host had over what a poll asked for, and which said nothing about the
+    // ratings, yes/no calls and open answers a poll can now be.
+    kinds: DEFAULT_POLL_KINDS,
     customPrompt: '',
     // DIRECTION — what the room is asked to DO with each item, as distinct
     // from the topic. A poll round can hand people somebody else's material
@@ -74,6 +91,9 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
   // the input falls back to the poll's stored tags. Normalising on every
   // keystroke would eat the hyphen out of "remote-" as it is typed.
   const [tagDraft, setTagDraft] = useState(null);
+  // A kind the question form offered and a poll cannot be (Ranking), named
+  // under the form until the host picks another or moves on. null = none.
+  const [refusedKind, setRefusedKind] = useState(null);
 
   /*
    * FIELDS LOCKED AGAINST THE AI HELPER — see AIScenarioBuilder for the full
@@ -189,7 +209,7 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
         audience: pollConfig.audience,
         difficulty: pollConfig.difficulty,
         count: appendTo?.count || pollConfig.count,
-        allowMultiple: pollConfig.allowMultiple,
+        kinds: pollConfig.kinds,
         customPrompt: withAppendRequirement(pollConfig.customPrompt, appendTo),
         roundKind: pollConfig.roundKind,
         roundKindBrief: pollConfig.roundKindBrief,
@@ -257,29 +277,54 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
     setGeneratedPolls(updatedPolls);
   };
 
-  const handleOptionEdit = (pollIndex, optionIndex, value) => {
-    const updatedPolls = [...generatedPolls];
-    const newOptions = [...updatedPolls[pollIndex].options];
-    newOptions[optionIndex] = value;
-    updatedPolls[pollIndex] = { ...updatedPolls[pollIndex], options: newOptions };
-    setGeneratedPolls(updatedPolls);
+  /**
+   * The question form's change, for the poll being edited. The form is the
+   * set editor's survey question form, which offers all five survey kinds; a
+   * poll is four of them, so a switch to Ranking is refused here and said
+   * under the form rather than accepted into a question the importer would
+   * then skip.
+   */
+  const handleQuestionChange = (index, next) => {
+    if (!POLL_KIND_IDS.includes(next.kind)) {
+      setRefusedKind(next.kind);
+      return;
+    }
+    setRefusedKind(null);
+    setGeneratedPolls((prev) => prev.map((poll, i) => (i === index ? next : poll)));
   };
 
-  const addOption = (pollIndex) => {
-    const updatedPolls = [...generatedPolls];
-    updatedPolls[pollIndex].options.push('');
-    setGeneratedPolls(updatedPolls);
+  /**
+   * Switch a question's kind from the review table — convertKind decides what
+   * survives, and a switch that would throw something away is asked about
+   * first, naming it, exactly as the survey builder asks.
+   */
+  const changeKind = (index, toKind) => {
+    const current = generatedPolls[index];
+    if (!current) return;
+    const typed = { ...current, kind: pollKindOf(current) };
+    if (typed.kind === toKind) return;
+    const { row, loses } = convertKind(typed, toKind);
+    if (loses.length > 0) {
+      const ok = window.confirm(
+        `Make question ${index + 1} ${POLL_KINDS.find((k) => k.id === toKind).label}? It would lose ${loses.join(', ')}.`
+      );
+      if (!ok) return;
+    }
+    setGeneratedPolls((prev) => prev.map((poll, i) => (i === index ? row : poll)));
   };
 
-  const removeOption = (pollIndex, optionIndex) => {
-    const updatedPolls = [...generatedPolls];
-    updatedPolls[pollIndex].options.splice(optionIndex, 1);
-    setGeneratedPolls(updatedPolls);
-  };
+  /** One kind toggle on the form. The last one ticked stays ticked. */
+  const toggleKind = (id) => setPollConfig((prev) => {
+    const on = prev.kinds.includes(id);
+    if (on && prev.kinds.length === 1) return prev;
+    const next = on ? prev.kinds.filter((k) => k !== id) : [...prev.kinds, id];
+    return { ...prev, kinds: POLL_KIND_IDS.filter((k) => next.includes(k)) };
+  });
 
   const navigatePoll = (direction) => {
-    // Drop any in-flight tag edit; it belongs to the poll being left.
+    // Drop any in-flight tag edit and refusal; they belong to the poll being left.
     setTagDraft(null);
+    setRefusedKind(null);
     if (direction === 'prev' && currentPollIndex > 0) {
       setCurrentPollIndex(currentPollIndex - 1);
     } else if (direction === 'next' && currentPollIndex < generatedPolls.length - 1) {
@@ -300,26 +345,12 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
     window.URL.revokeObjectURL(url);
   };
 
-  const generatePollCSV = () => {
-    // ONE `Options` column, pipe-separated — see optionsToCsvCell(). This used
-    // to emit Option1..Option5, which upload-questions.js does not read and has
-    // no fallback for, so every exported poll set re-imported with zero
-    // options. Do not "restore" the numbered columns.
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags';
-    // Excluded rows are excluded everywhere — see TriviaAIBuilder.
-    const rows = keptPolls.map((poll, index) => csvRow([
-      poll.category,
-      index + 1,
-      poll.title,
-      poll.detail,
-      poll.school || 'General',
-      poll.customInstructions || '',
-      optionsToCsvCell(poll.options),
-      allowMultipleToCsvCell(poll.allowMultiple),
-      tagsToCsvCell(poll.tags)
-    ]));
-    return buildCsv(headers, rows);
-  };
+  /**
+   * The kept polls as the poll contract's CSV — the survey's columns, each
+   * question under its own category (utils/pollDraft.js). Excluded rows are
+   * excluded everywhere — see TriviaAIBuilder.
+   */
+  const generatePollCSV = () => pollItemsToCsv(keptPolls);
 
   /**
    * The set's own copy, from the CONFIGURATION and nothing else.
@@ -334,19 +365,22 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
    */
   const buildSetMetadata = () => ({
     title: `${pollConfig.topic} Polls${pollConfig.audience ? ` for ${pollConfig.audience}` : ''}`,
-    description: `AI-generated poll questions about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
-    // The MECHANIC line plus the round's DIRECTION. The mechanic ("pick an
-    // option") is a property of the game and never changes; the direction is
-    // what tells the room whether they are choosing between their own
-    // instincts, between readings of a passage they were handed, or between
-    // verdicts. A poll that says only "select your preferred option" leaves
-    // the second and third of those looking identical to the first.
+    description: `AI-generated instant-feedback polls about ${pollConfig.topic}. Difficulty: ${pollConfig.difficulty}.`,
+    // The MECHANIC line plus the round's DIRECTION. The mechanic is how a poll
+    // is answered — for the kinds this set was made with, since "select your
+    // preferred option(s)" is wrong for a rating, a yes/no or an open answer —
+    // and the direction is what tells the room whether they are answering from
+    // their own instincts, about a passage they were handed, or with a
+    // verdict. A poll that states only the mechanic leaves the second and
+    // third of those looking identical to the first.
     customInstructions: [
-      `Select your preferred option(s) for each poll question.`,
-      pollConfig.allowMultiple ? 'Multiple selections may be allowed for some questions.' : '',
+      pollMechanicInstruction(pollConfig.kinds),
       roundKindParticipantInstruction(pollConfig.roundKind, pollConfig.roundKindInstruction),
     ].filter(Boolean).join(' '),
-    aiContextInstructions: `These are ${pollConfig.difficulty}-level poll questions about ${pollConfig.topic}. Encourage thoughtful consideration and diverse perspectives.`
+    // "These are <level>-level … questions about <topic>." is the shape
+    // utils/appendMode.js briefFromSet reads back when the host adds more.
+    aiContextInstructions: `These are ${pollConfig.difficulty}-level instant-feedback poll questions about ${pollConfig.topic}. `
+      + 'The room answers each in seconds and sees the results fill in on screen, so read the answers as the room\'s view as a whole: where it agrees, and where it splits.'
   });
 
   /**
@@ -391,19 +425,10 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
     onClose();
   };
 
-  /**
-   * A poll with fewer than two options is unplayable — there is nothing to
-   * choose between. Real: the importer stores whatever it is given, and the
-   * emitter drops empty option slots rather than padding them.
-   */
-  const optionDefect = (poll) => {
-    const options = Array.isArray(poll?.options)
-      ? poll.options.filter((option) => String(option ?? '').trim())
-      : [];
-    if (options.length === 0) return 'No options — nobody can vote on this.';
-    if (options.length === 1) return 'Only one option — there is nothing to choose between.';
-    return null;
-  };
+  // A kept poll the importer would skip — a choice switched here and left
+  // without its options — must not reach the set: it would be made without it
+  // and only a skipped-row count would say so.
+  const keptFlagged = keptPolls.filter((poll) => pollItemProblem(poll)).length;
 
   return (
     <div className="poll-ai-builder-modal">
@@ -539,17 +564,30 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                     />
                 </div>
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={pollConfig.allowMultiple}
-                        onChange={(e) => setPollConfig(prev => ({ ...prev, allowMultiple: e.target.checked }))}
-                      />
-                      Allow multiple selections (where appropriate)
-                    </label>
+                {/* The kinds, as the survey builder asks for them: pressed
+                    toggles with a word and a tick, never the fill alone. */}
+                <div className="pab pab-field">
+                  <span className="pab-lab" id="pab-kinds-label">Kinds of poll question</span>
+                  <div className="pab-opts" role="group" aria-labelledby="pab-kinds-label">
+                    {POLL_KINDS.map((kind) => (
+                      <button
+                        key={kind.id}
+                        type="button"
+                        className="pab-opt"
+                        aria-pressed={pollConfig.kinds.includes(kind.id)}
+                        onClick={() => toggleKind(kind.id)}
+                        title={kind.blurb}
+                      >
+                        <Icon name={kind.icon} weight="bold" size={15} color="currentColor" />
+                        {kind.label}
+                        <span className="pab-tick" aria-hidden="true">✓</span>
+                      </button>
+                    ))}
                   </div>
+                  <p className="pab-help">
+                    Workie uses only the ticked kinds and picks the one that fits each question. Tick one
+                    for a set of a single kind.
+                  </p>
                 </div>
 
                 <div className="form-group">
@@ -614,15 +652,24 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                   onToggleExclude={interpreted.createdSet ? undefined : toggleExcluded}
                   onEdit={interpreted.createdSet
                     ? undefined
-                    : (index) => { setCurrentPollIndex(index); setTagDraft(null); setEditingItem(true); }}
+                    : (index) => {
+                      setCurrentPollIndex(index); setTagDraft(null); setRefusedKind(null); setEditingItem(true);
+                    }}
                   primary={(poll) => poll.title}
-                  secondary={(poll) => (Array.isArray(poll.options) && poll.options.length
-                    ? poll.options.join(' · ')
-                    : null)}
-                  flag={optionDefect}
+                  // What the room will see: the options, the scale and its
+                  // words, the two buttons, or the answer box and its hint.
+                  secondary={pollSummary}
+                  flag={pollItemProblem}
+                  // The Kind column, as the survey builder's: with onChange the
+                  // chip IS the select, offering the four poll kinds.
+                  kinds={{
+                    options: POLL_KINDS,
+                    of: pollKindOf,
+                    label: pollKindLabel,
+                    onChange: interpreted.createdSet ? undefined : changeKind,
+                  }}
                   columns={[
                     { header: 'Category', value: (poll) => poll.category, width: '150px', filterable: true },
-                    { header: 'Options', value: (poll) => (Array.isArray(poll.options) ? poll.options.length : 0), width: '90px' },
                   ]}
                   actions={(
                     <>
@@ -635,7 +682,14 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                           Open &ldquo;{interpreted.createdSet.setName}&rdquo;
                         </button>
                       ) : (
-                        <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptPolls.length === 0}>
+                        <button
+                          className="btn-primary"
+                          onClick={handleLoadIntoSystem}
+                          disabled={keptPolls.length === 0 || keptFlagged > 0}
+                          title={keptFlagged > 0
+                            ? `${keptFlagged === 1 ? 'One poll' : `${keptFlagged} polls`} could not be imported as ${keptFlagged === 1 ? 'it stands' : 'they stand'} — edit ${keptFlagged === 1 ? 'it' : 'them'}, or leave ${keptFlagged === 1 ? 'it' : 'them'} out.`
+                            : undefined}
+                        >
                           <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptPolls.length} to “${appendTo.setName}”` : `Load ${keptPolls.length} into System`}
                         </button>
                       )}
@@ -653,9 +707,10 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                       <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
                     </button>
 
+                    {/* Where you are, not what the question says: the question
+                        is in the form below, and stating it twice is noise. */}
                     <div className="poll-counter">
                       <span>Poll {currentPollIndex + 1} of {generatedPolls.length}</span>
-                      <h3>{currentPoll?.title}</h3>
                     </div>
 
                     <button
@@ -668,122 +723,82 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                   </div>
 
                   {currentPoll && (
-                    <div className="poll-editor">
-                      <div className="form-group">
-                        <label>Poll Question</label>
-                        <input
-                          type="text"
-                          value={currentPoll.title || ''}
-                          onChange={(e) => handlePollEdit(currentPollIndex, 'title', e.target.value)}
-                        />
-                      </div>
+                    /*
+                      THE SET EDITOR'S OWN QUESTION FORM, ON THE SET EDITOR'S
+                      OWN GROUND. A poll question is a survey question the host
+                      asks, so it is edited with the survey's form
+                      (SurveyQuestionFields): the kind first, then the question,
+                      its detail and the kind's fields. That form is drawn and
+                      measured on the editor's dusk card and paints only inside
+                      `.qs-editor` (SurveyQuestionFields.css), so this card IS
+                      one — dusk on its own root, whatever the builder is on.
+                      Category and tags sit on the same card, inked by the same
+                      scope. PollAIBuilder.css draws the card itself.
+                    */
+                    <div className="qs-editor pab pab-edit" data-theme="dark">
+                      <SurveyQuestionFields
+                        draft={{ ...currentPoll, kind: pollKindOf(currentPoll) }}
+                        onChange={(next) => handleQuestionChange(currentPollIndex, next)}
+                        idOf={(field) => `pab-${currentPollIndex}-${field}`}
+                        kinds={POLL_KIND_IDS}
+                      />
+                      {refusedKind && (
+                        <p className="pab-note" role="status">
+                          A poll can&rsquo;t be a ranking — a ranking is a ballot, and a poll is answered at a
+                          glance. This one stays {pollKindMeta(currentPoll).label}.
+                        </p>
+                      )}
 
-                      <div className="form-row">
+                      <div className="pab-row">
                         <div className="form-group">
-                          <label>Category</label>
+                          <label htmlFor={`pab-${currentPollIndex}-category`}>Category</label>
                           <input
+                            id={`pab-${currentPollIndex}-category`}
                             type="text"
+                            className="form-input"
                             value={currentPoll.category || ''}
                             onChange={(e) => handlePollEdit(currentPollIndex, 'category', e.target.value)}
                           />
                         </div>
+
+                        {/*
+                          Suggested tags, not imposed tags. The model that just wrote
+                          the poll is best placed to say what it is about, but the
+                          owner gets the final word before anything is saved. Stored
+                          as a flat lowercase kebab-case array under `tags`.
+                        */}
                         <div className="form-group">
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={currentPoll.allowMultiple || false}
-                              onChange={(e) => handlePollEdit(currentPollIndex, 'allowMultiple', e.target.checked)}
-                            />
-                            Allow multiple selections
+                          <label htmlFor={`pab-${currentPollIndex}-tags`}>
+                            Tags <span className="pab-dim">— suggested; edit freely, comma separated</span>
                           </label>
+                          <input
+                            id={`pab-${currentPollIndex}-tags`}
+                            type="text"
+                            className="form-input"
+                            value={tagDraft !== null ? tagDraft : (currentPoll?.tags || []).join(', ')}
+                            onChange={(e) => setTagDraft(e.target.value)}
+                            onBlur={() => {
+                              if (tagDraft !== null) {
+                                handlePollEdit(currentPollIndex, 'tags', normalizeTags(tagDraft));
+                                setTagDraft(null);
+                              }
+                            }}
+                            placeholder="remote-work, feedback, decisions"
+                          />
                         </div>
                       </div>
 
-                      {/*
-                        Suggested tags, not imposed tags. The model that just wrote
-                        the poll is best placed to say what it is about, but the
-                        owner gets the final word before anything is saved. Stored
-                        as a flat lowercase kebab-case array under `tags`.
-                      */}
-                      <div className="form-group">
-                        <label>Tags <span className="field-hint">suggested — edit freely, comma separated</span></label>
-                        <input
-                          type="text"
-                          value={tagDraft !== null ? tagDraft : (currentPoll?.tags || []).join(', ')}
-                          onChange={(e) => setTagDraft(e.target.value)}
-                          onBlur={() => {
-                            if (tagDraft !== null) {
-                              handlePollEdit(currentPollIndex, 'tags', normalizeTags(tagDraft));
-                              setTagDraft(null);
-                            }
-                          }}
-                          placeholder="remote-work, feedback, decisions"
-                        />
-                        {(currentPoll?.tags || []).length > 0 && (
-                          <div className="tag-chips">
-                            {currentPoll.tags.map((tag) => (
-                              <span className="tag-chip" key={tag}>{tag}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="poll-options-editor">
-                        <h4>Poll Options</h4>
-                        {currentPoll.options?.map((option, index) => (
-                          <div key={index} className="option-editor">
-                            <label>
-                              <span className="option-number">{index + 1}.</span>
-                              <input
-                                type="text"
-                                value={option}
-                                onChange={(e) => handleOptionEdit(currentPollIndex, index, e.target.value)}
-                              />
-                            </label>
-                            {currentPoll.options.length > 2 && (
-                              <button
-                                type="button"
-                                className="remove-option-btn"
-                                onClick={() => removeOption(currentPollIndex, index)}
-                              >
-                                <Icon name="X" weight="bold" size={16} color="currentColor" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          className="add-option-btn"
-                          onClick={() => addOption(currentPollIndex)}
-                        >
-                          + Add Option
-                        </button>
-                      </div>
-
-                      <div className="poll-preview">
-                        <h4>Preview:</h4>
-                        <div className="poll-preview-display">
-                          <div className="question-header">
-                            <h3>{currentPoll.title}</h3>
-                            <div className="field-badge">{currentPoll.category}</div>
-                            {currentPoll.allowMultiple && <div className="multiple-badge">Multiple Choice</div>}
-                          </div>
-                          <div className="poll-options">
-                            {currentPoll.options?.map((option, index) => (
-                              <div key={index} className="category-item poll-option">
-                                <span className="category-name">
-                                  <span className="option-number">{index + 1}.</span> {option}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      {/* What would stop it importing, in the importer's words. */}
+                      {pollItemProblem(currentPoll) && (
+                        <p className="pab-note" role="status">
+                          Can&rsquo;t be loaded yet: {pollItemProblem(currentPoll)}. Fix it here, or leave it out.
+                        </p>
+                      )}
                     </div>
                   )}
 
                   <div className="poll-actions">
-                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setRefusedKind(null); setEditingItem(false); }}>
                       <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedPolls.length} poll questions
                     </button>
                     <button

@@ -8,6 +8,8 @@ const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
 const { reconcileReport } = require('./report-merge');
+const { surveyResultsPayload } = require('./survey-host');
+const { normalizeNames } = require('./survey-names');
 
 /**
  * WHOSE SESSION IS THIS? — off the row, though the route is no longer public.
@@ -178,9 +180,12 @@ exports.handler = async (event) => {
         ':sk': 'COMMENT#'
       }
     }));
-    /** True when THIS round's authors must stay off the report. */
+    /** True when THIS round's authors must stay off the report. A survey's
+     *  one pseudo-round (000, its Workie read and the room's comments on it)
+     *  never carries a name — comments.js holds the same rule on the wire. */
     const roundIsHidden = (paddedQuestionNumber) =>
-      isHidden(gameMetadata.Item, roundsByNumber.get(paddedQuestionNumber));
+      gameMetadata.Item.GameType === 'survey'
+      || isHidden(gameMetadata.Item, roundsByNumber.get(paddedQuestionNumber));
 
     // Process the data with proper filtering
     const players = playersQuery.Items || [];
@@ -801,6 +806,14 @@ exports.handler = async (event) => {
 
       return {
         playerName: playerName,
+        // "Who was here" (Task 2): the frontend roster sorts by this to list
+        // names in join order rather than by score, which is what Final
+        // Scores already owns. Off the deduplicated PLAYER# row itself —
+        // `player` here, not `playerScoreRecord` — because the SCORE row
+        // carries no join time at all. null, not undefined, for a row
+        // written before this field existed or a snapshot recovered from a
+        // report generated before it did.
+        joinedAt: player.JoinedAt || null,
         totalScore: totalScore,
         answersGiven: playerAnswers.length,
         votesGiven: playerVotes.length,
@@ -843,6 +856,46 @@ exports.handler = async (event) => {
       detailedQuestions, playerPerformance, gameStats
     });
 
+    /*
+      SURVEY RESULTS IN THE REPORT (Task 4 of the 2026-09-26 feature sweep).
+
+      "this should also be what the report shows, not who filled in the
+      survey." Read the SAME WAY GET /games/{gameId}/survey-results does —
+      `surveyResultsPayload`, survey-host.js's own exported reader, not a
+      second copy of it — so this report can never carry who answered what,
+      in any Names mode: that function opens SURVEY#RESULTS and its text
+      pages and NEVER a SURVEY#RESP#/SURVEY#DONE# row, which is the whole of
+      the privacy guarantee, in one place.
+      tests/survey-report-results.js pins the reuse and the privacy property
+      together, the same way tests/survey-results-route.js already does for
+      the route.
+
+      `surveyNames` is read straight off METADATA — the session's Names
+      setting is fixed at open and does not depend on the survey having
+      closed — so GameReport.jsx can decide whether a roster ("Who was here")
+      belongs beside anonymous answers even for a report generated before a
+      close ever happened.
+
+      RECOVERY FLOOR, same reasoning as report-merge.js above: SURVEY#RESULTS
+      lives 30 days from close, the same clock as this REPORT snapshot, so a
+      retro opened after that day would otherwise silently lose its survey
+      section the moment the live row expired — exactly the "hollow rebuild
+      overwrites the good snapshot" failure this file's Rounds already guard
+      against. Falls back to what the STORED snapshot carried only when the
+      live read comes back with nothing.
+    */
+    const isSurveyGame = gameMetadata.Item.GameType === 'survey';
+    const surveyNames = isSurveyGame ? normalizeNames(gameMetadata.Item.Names) : null;
+    let liveSurveyResults = null;
+    if (isSurveyGame) {
+      try {
+        liveSurveyResults = await surveyResultsPayload(gameId, gameMetadata.Item);
+      } catch (error) {
+        console.log('Could not read survey results for report:', error.message);
+      }
+    }
+    const surveyResults = liveSurveyResults || (storedReport && storedReport.surveyResults) || null;
+
     // Create comprehensive report
     const reportData = {
       gameId,
@@ -853,6 +906,15 @@ exports.handler = async (event) => {
       // and `session.HostName`, which are ciphertext at rest on an org's row.
       gameTitle: sessionMeta.EventTitle || sessionMeta.Title || 'Untitled Game',
       hostName: sessionMeta.HostName || 'Unknown Host',
+      // "About this session" (Task 2 of the 2026-09-26 feature sweep): the
+      // event's own free text, verbatim. Same field and fallback order
+      // get-ai-summary.js already reads for its prompt
+      // (eventDetails: metadata.EngagementInfo || metadata.Details || '').
+      // sessionMeta is the decrypted session row two lines up already reads
+      // Title/HostName from — an org's Details is sealed the same way and
+      // opens the same way. '' rather than undefined: the frontend's
+      // conditional block reads absence, not undefined-vs-missing.
+      eventDetails: sessionMeta.EngagementInfo || sessionMeta.Details || '',
       questionSetId: gameMetadata.Item.QuestionSetId,
       gameType: gameMetadata.Item.GameType || 'standard',
       createdAt: gameMetadata.Item.CreatedAt,
@@ -864,6 +926,13 @@ exports.handler = async (event) => {
       // because resolveRoundNoun() is called as
       // resolveRoundNoun(questionData, reportData.gameType, reportData.roundNoun).
       roundNoun: questionSetData?.roundNoun || questionSetData?.RoundNoun || null,
+
+      // Survey results (Task 4): `null` for every other game type, and for a
+      // survey whose close has not yet frozen anything. `surveyNames` travels
+      // separately from `surveyResults.names` so GameReport.jsx knows the
+      // Names mode even before a close exists to carry it.
+      surveyNames,
+      surveyResults,
 
       // Statistics. Reconciled, which for every live session and every report
       // generated inside a week is byte-for-byte the figures computed above —

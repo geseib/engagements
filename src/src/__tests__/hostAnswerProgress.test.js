@@ -109,12 +109,13 @@ describe('answeredCountFrom — the meter must move on an anonymous round', () =
 
 /**
  * The names' OTHER source. `answeredNamesFrom` reads the /answers rows, which
- * carry nothing on a hidden round; this reads /state's participation list,
- * which is the only thing that can move the names there. The fixtures below are
- * the shapes get-game-state.js:398 actually emits — it assembles
- * `answerProgress` only under `?includeHostData=true` and only while the round
- * is in ASK#, so "no answerProgress" is a real and frequent payload rather than
- * a defensive hypothetical.
+ * carry nothing on a hidden round; this reads the participation list off the
+ * host's door onto the game state, which is the only thing that can move the
+ * names there. The fixtures below are the shapes get-game-state.js actually
+ * emits — it assembles `answerProgress` only on the authenticated
+ * `/host-state` (the public `/state` stopped carrying it, flag or no flag, on
+ * 2026-09-26) and only while the round is in ASK#, so "no answerProgress" is a
+ * real and frequent payload rather than a defensive hypothetical.
  */
 describe('answererIdsFrom — the participation list a redacted frame cannot carry', () => {
   test('CRITICAL: a payload with no answerProgress says NOTHING, and must not blank the list', () => {
@@ -130,6 +131,18 @@ describe('answererIdsFrom — the participation list a redacted frame cannot car
     expect(answererIdsFrom({})).toBeNull();
     expect(answererIdsFrom(null)).toBeNull();
     expect(answererIdsFrom(undefined)).toBeNull();
+  });
+
+  test('the PUBLIC round says nothing about participation, even mid-ASK', () => {
+    // The shape `GET /games/{id}/state` returns to anyone since 2026-09-26,
+    // `?includeHostData=true` or not: the round, with no host block. A reader
+    // left on that URL must leave the list alone rather than blank it.
+    //
+    // rejects: treating the public payload as "nobody has answered".
+    expect(answererIdsFrom({
+      gameId: '4821', state: 'ASK#002', currentQuestion: 2, stageBeat: 'results',
+      gameMetadata: { title: 'Q3 Leadership Offsite', gameType: 'call-and-answer' },
+    })).toBeNull();
   });
 
   test('an empty list IS an answer, and a different one', () => {

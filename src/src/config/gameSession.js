@@ -30,6 +30,8 @@
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
  *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
  *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names),
+ *     target (the goal of N questions, events M1b — and since then
+ *     promptList and knownPromptIds live in components/SessionOptions.jsx),
  *     briefing and briefingWorking (Workie's briefing, Call & Answer only —
  *     the session's own row carries the saved one).
  *     (This list named five and omitted three until the
@@ -169,6 +171,10 @@ export function initialGameSession() {
     promptSwitchStatus: '',
     // --- and whether it carries a briefing (the stage's "Briefing on") ----
     sessionBriefed: false,
+    // --- and its goal (events M1b): how many questions the host plans to
+    //     ask, or null. Per-game like the rest of this block — the last
+    //     session's goal must never follow the host into the next one.
+    sessionTarget: null,
 
     // --- AI summaries ---------------------------------------------------
     aiSummaries: {},
@@ -178,6 +184,42 @@ export function initialGameSession() {
     // --- reports ---------------------------------------------------------
     showReport: false,
     reportData: null,
+
+    // --- the survey results panel (Phase 3, 2026-09-26 feature sweep) ----
+    // Same shape as reports just above, and reset for the same reason: left
+    // alone, switching sessions from a survey's results screen carried the
+    // PREVIOUS session's fetched data and status into the next one's overlay
+    // — the "one stale panel" bug this whole module exists to stop. Fixed in
+    // the Task 3 review's fix round 1 (was declared in GameHostPage.jsx but
+    // never joined this list).
+    showSurveyResults: false,
+    surveyResultsData: null,
+    surveyResultsStatus: 'idle',
+    surveyResultsError: null,
+    /*
+      WHICH SESSION THE PANEL ABOVE IS ACTUALLY SHOWING — fix round 2. Not
+      `gameId`: the results panel opens for ANY closed survey from the
+      Sessions list (fix round 1), not only the one on stage, so Retry has to
+      name the session it fetched rather than reaching for the page's own
+      `gameId` — which is how the round-2 bug happened: a retry from a
+      DIFFERENT survey's results screen re-fetched the stage's session, and
+      the panel's header named no session, so the wrong data would have
+      looked right. `{ gameId, title }`, set by `loadSurveyResults` from its
+      own arguments, the same way `reportTarget` (not itself on this list —
+      a pre-existing gap this fix does not extend) tracks the report's.
+    */
+    surveyResultsTarget: null,
+    /*
+      THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep. Same reasoning
+      as `showSurveyResults` just above and the same fix-round-1 bug it would
+      otherwise repeat: left off this list, switching sessions away from an
+      open walk-through would carry it — full-screen, over the NEW session's
+      stage — into the next game. It reads the SAME `surveyResultsData` /
+      `surveyResultsTarget` above, so those two resets already cover the
+      payload; this only has to cover the flag that decides which of the two
+      survey-results surfaces (the cut sheet or the walk-through) is on top.
+    */
+    showSurveyWalkthrough: false,
 
     // --- panels and transient banners tied to the current game ----------
     eventTitle: '',

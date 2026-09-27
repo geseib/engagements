@@ -97,7 +97,7 @@ describe('gameTypes registry', () => {
     expect(hasVotePhase('trivia')).toBe(false);
     expect(hasVotePhase('wavelength')).toBe(false);
     expect(hasVotePhase('call-and-answer')).toBe(true);
-    expect(hasVotePhase('poll')).toBe(true);
+    expect(hasVotePhase('poll')).toBe(false); // typed polls: ASK → RESULTS
     // Surveys phase 2: a survey has no rounds and so no vote — COLLECTING
     // then CLOSED. It used to fall through to start-vote by accident.
     expect(hasVotePhase('survey')).toBe(false);

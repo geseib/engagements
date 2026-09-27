@@ -4,6 +4,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 
 const { openSessionOr } = require('./session-gate');
 const { nowSeconds, handoverOpenFor } = require('./handover');
+const { attendeeForToken, seatName, MAX_SEATS } = require('./event-attendee');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -113,6 +114,127 @@ function nameConflictResponse(code, playerName) {
   };
 }
 
+const cors = { 'Access-Control-Allow-Origin': '*' };
+const reply = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), headers: { ...cors } });
+
+/**
+ * JOINING AN EVENT'S ITEM WITH THE ATTENDEE'S TOKEN (events M4).
+ *
+ * The session is one an event's host started (METADATA.EventRef,
+ * websocket/events/run.js). The phone sends `attendeeToken` — the token the
+ * attendee got when they joined the event once, by name — and no name: the
+ * name is the attendee's own, read from the event (event-attendee.js). So a
+ * whole day of sessions is joined without typing a code or a name again.
+ *
+ * ONE SEAT PER ATTENDEE PER SESSION. The seat is `PLAYER#<name>`, as every
+ * player's is, and carries `AttendeeId`. Coming back — a reload, a phone that
+ * slept, "Back to live" — finds the seat by that id and reconnects to it,
+ * score and answers intact. Two attendees with one name get "Sam" and
+ * "Sam 2", tried in order, so each always lands on the same one. A seat typed
+ * by hand (no AttendeeId) is never taken over: it is somebody else's.
+ *
+ * The session's own gate still runs first (openSessionOr): it must exist and
+ * have started. The token is then the whole identity; a missing, forged,
+ * expired or other-event token is 401 NOT_JOINED, and the phone goes back to
+ * the event's name step.
+ */
+async function joinAsAttendee(gameId, token, clientId) {
+  const TABLE = process.env.TABLE_NAME;
+  const gate = await openSessionOr(db, TABLE, gameId, undefined);
+  if (!gate.ok) return gate.response;
+  const meta = gate.metadata || {};
+  if (!meta.EventRef) {
+    return reply(400, { error: 'This session is not part of an event. Join it with a name.', code: 'NOT_EVENT' });
+  }
+  const attendee = await attendeeForToken(db, TABLE, { eventRef: String(meta.EventRef), orgId: meta.orgId, token });
+  if (!attendee) return reply(401, { error: 'You have not joined this event yet.', code: 'NOT_JOINED' });
+
+  for (let n = 1; n <= MAX_SEATS; n += 1) {
+    const name = seatName(attendee.name, n);
+    const key = { PK: `GAME#${gameId}`, SK: `PLAYER#${name}` };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const existing = await db.send(new GetCommand({ TableName: TABLE, Key: key, ConsistentRead: true }));
+      const seat = existing && existing.Item;
+      if (seat && seat.AttendeeId !== attendee.attendeeId) break; // somebody else's: try the next name
+      if (seat) {
+        // THIS attendee's seat. A removal is undone, as any rejoin undoes it
+        // (see the handler below); the browser becomes the seat's ClientId,
+        // so a plain rejoin from it by name also works.
+        const sets = [];
+        const values = {};
+        if (clientId && seat.ClientId !== clientId) { sets.push('ClientId = :cid'); values[':cid'] = clientId; }
+        if (sets.length || seat.RemovedAt) {
+          await db.send(new UpdateCommand({
+            TableName: TABLE,
+            Key: key,
+            UpdateExpression: `${sets.length ? `SET ${sets.join(', ')} ` : ''}REMOVE RemovedAt`,
+            ConditionExpression: 'AttendeeId = :aid',
+            ExpressionAttributeValues: { ...values, ':aid': attendee.attendeeId },
+          }));
+        }
+        await notifyHostOfPlayerJoin(gameId, {
+          playerId: name, playerName: name, totalScore: 0,
+          joinedAt: seat.joinedAt || seat.JoinedAt, isReconnection: true,
+        });
+        return reply(200, {
+          success: true, message: 'Reconnected to existing player', playerId: name, playerName: name,
+          totalScore: 0, isReconnection: true, attendee: true,
+        });
+      }
+      const now = new Date().toISOString();
+      try {
+        await db.send(new PutCommand({
+          TableName: TABLE,
+          Item: {
+            ...key,
+            playerId: name,
+            PlayerName: name,
+            playerName: name,
+            AttendeeId: attendee.attendeeId,
+            ...(clientId ? { ClientId: clientId } : {}),
+            JoinedAt: now,
+            joinedAt: now,
+            isConnected: true,
+            ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60),
+          },
+          ConditionExpression: 'attribute_not_exists(SK)',
+        }));
+      } catch (error) {
+        // Lost the seat to a join at the same moment — perhaps this attendee's
+        // own second tab. Look again: it may now be ours to reconnect to.
+        if (error && error.name === 'ConditionalCheckFailedException') continue;
+        throw error;
+      }
+      await db.send(new PutCommand({
+        TableName: TABLE,
+        Item: {
+          PK: `GAME#${gameId}`,
+          SK: `PLAYER#${name}#SCORE`,
+          PlayerName: name,
+          score: 0,
+          afterRound: '000',
+          createdAt: now,
+          updatedAt: now,
+          ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60),
+        },
+      }));
+      console.log(`🎟️ An attendee of EVENT#${meta.EventRef} joined game ${gameId}`);
+      await notifyHostOfPlayerJoin(gameId, {
+        playerId: name, playerName: name, totalScore: 0, joinedAt: now, isReconnection: false,
+      });
+      return reply(200, {
+        success: true, message: 'Successfully joined game', playerId: name, playerName: name,
+        totalScore: 0, isReconnection: false, attendee: true,
+      });
+    }
+  }
+  return reply(409, {
+    error: 'Name already in use',
+    code: 'NAME_TAKEN',
+    message: 'Too many people here share your name. Ask the host for help.',
+  });
+}
+
 exports.handler = async (event) => {
   try {
     const { gameId } = event.pathParameters || {};
@@ -123,6 +245,10 @@ exports.handler = async (event) => {
     const clientId = typeof body.clientId === 'string' && body.clientId.trim()
       ? body.clientId.trim()
       : null;
+
+    // An event's attendee, by token and not by name (events M4).
+    const attendeeToken = typeof body.attendeeToken === 'string' ? body.attendeeToken.trim() : '';
+    if (gameId && attendeeToken) return await joinAsAttendee(gameId, attendeeToken, clientId);
 
     if (!gameId || !playerName) {
       return {

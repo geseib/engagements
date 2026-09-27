@@ -5,7 +5,7 @@ import { requestNextQuestion } from './utils/nextQuestion';
 import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
-import { queueEnqueue, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
+import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -14,6 +14,7 @@ import HostReportsDialog from './components/HostReportsDialog';
 import { parseUpgradeRequired } from './utils/upgradeRequired';
 import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
+import PollBoard from './components/stage/PollBoard';
 import QuestionCard from './components/QuestionCard';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
@@ -22,6 +23,8 @@ import SessionHistoryPanel from './components/SessionHistoryPanel';
 import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
+import SurveyResultsPanel from './components/SurveyResultsPanel';
+import SurveyWalkthrough from './components/stage/SurveyWalkthrough';
 import AISummaryStatus from './components/AISummaryStatus';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
@@ -34,6 +37,7 @@ import Pager from './components/stage/Pager';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
+import useSessionPanelKey from './components/stage/useSessionPanelKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
@@ -48,7 +52,9 @@ import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
 import { qrOverlayClassName } from './utils/qrOverlayClassName';
-import { shortcutsSuppressed, scoreboardKeysLive, qrOverlayInstructions } from './utils/hostOverlays';
+import {
+  shortcutsSuppressed, scoreboardKeysLive, sessionPanelKeyLive, qrOverlayInstructions,
+} from './utils/hostOverlays';
 import {
   resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
 } from './config/instructions';
@@ -58,12 +64,14 @@ import {
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
+import goalRules from '../../lambda-functions/websocket/session-goal';
 import { fetchComments, featureComment } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
+  resultsRoundOf, SURVEY_ROUND,
 } from './config/hostControls';
 import { stageAnswersKey, stageAnswersReady, askFetchStillCurrent } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
@@ -82,6 +90,8 @@ import {
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
+import { getEvent, runEvent } from './utils/eventsApi';
+import { navigateTo } from './auth/navigate';
 
 const API_BASE = window.API_BASE;
 
@@ -116,6 +126,42 @@ function GameHostPage() {
   
   // 🎯 GAME ID MANAGEMENT: Use URL as single source of truth
   const [gameId, setGameId] = useState('');
+  /*
+    AN EVENT'S ITEM (events M3). The event's code when this session is one
+    item of an event's agenda: from `?event=` (the wall, components/event/
+    EventStage.jsx, opens an item's stage that way) or from the session's own
+    host-state (`eventRef`), so a session reopened from history still knows.
+    It changes three things and no more: the dock gains an Agenda door; the
+    lobby's QR and code are the EVENT's (attendees join the day once, never an
+    item); and "Back to Menu" goes back to the agenda instead.
+  */
+  const [eventCode, setEventCode] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('event') || '';
+    return /^\d{4}$/.test(fromUrl) ? fromUrl : '';
+  });
+  const [eventBusy, setEventBusy] = useState(false);
+  /*
+    THIS SESSION'S AGENDA ITEM, as the event holds it: `planned` while the
+    host is only previewing it (its session made but not opened — run.js
+    `prepare`), `live`, `paused` or `done`. Read from GET /events/{code},
+    again whenever the event's frames say something moved.
+  */
+  const [eventItem, setEventItem] = useState(null);
+  const [eventRefresh, setEventRefresh] = useState(0);
+  useEffect(() => {
+    if (!eventCode || !gameId) {
+      setEventItem(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getEvent(eventCode)
+      .then((view) => {
+        if (cancelled) return;
+        setEventItem((view.items || []).find((i) => String(i.gameId || '') === String(gameId)) || null);
+      })
+      .catch(() => { /* the item's own stage still works; only its event door waits */ });
+    return () => { cancelled = true; };
+  }, [eventCode, gameId, eventRefresh]);
   /*
     Bumped by every switchToGame(), including one that re-opens the game
     already in `gameId`. It exists ONLY to re-fire the restore effect in that
@@ -165,6 +211,13 @@ function GameHostPage() {
      upgraded in place by the `wavelengthAnalysisReady` frame when the
      clustering worker finishes, cleared with the rest of the round state. */
   const [wavelengthAnalysis, setWavelengthAnalysis] = useState(null);
+  /*
+    A TYPED POLL'S TALLY (components/stage/PollBoard.jsx): the survey's
+    aggregate over this round's answers, live from the host's answers door on
+    every `playerAnswered` and final from the round's close. Keyed by round so
+    a board never shows the last round's bars under this round's question.
+  */
+  const [pollTally, setPollTally] = useState(null);
   const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
   
   // Debug wrapper for setGameState
@@ -360,6 +413,46 @@ function GameHostPage() {
   // sessions that are not the one currently loaded.
   const [reportTarget, setReportTarget] = useState(null);
   const [lessonNumber, setLessonNumber] = useState(0);
+
+  /*
+    THE SURVEY'S RESULTS PANEL — Phase 3, 2026-09-26 feature sweep. Same
+    shape as the report's own state just above: `showSurveyResults` gates the
+    early return alone (never `&& surveyResultsData`, for the report's own
+    reason — GET /survey-results is fetched fresh on every open, and the
+    condition must not fall through to the stage while that is in flight).
+  */
+  const [showSurveyResults, setShowSurveyResults] = useState(false);
+  const [surveyResultsData, setSurveyResultsData] = useState(null);
+  const [surveyResultsStatus, setSurveyResultsStatus] = useState('idle');
+  const [surveyResultsError, setSurveyResultsError] = useState(null);
+  /**
+   * WHICH SESSION THE PANEL ABOVE IS SHOWING — { gameId, title } — fix round
+   * 2. Not `gameId`: the panel opens for any closed survey from the Sessions
+   * list, so Retry must name the session it fetched rather than the stage's.
+   */
+  const [surveyResultsTarget, setSurveyResultsTarget] = useState(null);
+
+  /*
+    THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep, "walk the room
+    through survey results, one question at a time, full size." One flag,
+    reusing the THREE states just above (`surveyResultsData/Status/Error`)
+    and `surveyResultsTarget`: the brief's own words are "the same
+    surveyResultsTarget / fetched payload as the cut sheet, with no new
+    route," so there is no separate data/target pair to keep in step with
+    these. Checked BEFORE `showSurveyResults` in the render below, on
+    purpose: pressing "Walk through" from an already-open cut sheet leaves
+    `showSurveyResults` true underneath, so leaving the walk-through
+    (`onLeave` clears only this flag) falls straight back through to the cut
+    sheet still showing the same data — "leaving returns to where the host
+    came from," for free, with no third state recording which surface asked
+    for it.
+  */
+  const [showSurveyWalkthrough, setShowSurveyWalkthrough] = useState(false);
+  // Fix round 1, M2 — see loadSurveyResults's own header for the full
+  // argument: a fresh object identity per fetch, so a response that lands
+  // after a NEWER call has already started is recognised as stale and
+  // discarded rather than overwriting what the host is now looking at.
+  const surveyResultsRequestRef = useRef(null);
 
   /**
    * THE ROUNDS PLAYED SO FAR — for the Rounds tab and the dialog behind it.
@@ -675,6 +768,9 @@ function GameHostPage() {
   // Whether the live session carries a Call & Answer briefing. Shown as
   // "Briefing on" beside the voice and the approach — never its text.
   const [sessionBriefed, setSessionBriefed] = useState(false);
+  // The live session's goal (events M1b, session-goal.js): how many questions
+  // the host plans to ask, or null. The host's alone — the rail never shows it.
+  const [sessionTarget, setSessionTarget] = useState(null);
 
   // Question Set Management
   const [questionSets, setQuestionSets] = useState([]);
@@ -820,10 +916,10 @@ function GameHostPage() {
    * its own two-second poll of get-game-state, which reads the same record.
    */
   const publishStageBeat = (beat) => {
-    const round = phaseOfGameState(gameState) === 'RESULTS'
-      ? parseInt(String(gameState).split('#')[1], 10)
-      : null;
-    if (!gameId || !round) return;
+    // The round on screen — a closed survey's is 0 (resultsRoundOf).
+    const padded = resultsRoundOf(gameState);
+    if (!gameId || padded === null) return;
+    const round = parseInt(padded, 10);
     // authFetch: /stage-beat carries the Cognito authorizer, like /close-round.
     authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
       method: 'POST',
@@ -852,10 +948,8 @@ function GameHostPage() {
    * stage must not say "feedback" while the phones say "preparing".
    */
   const requestFeedbackRound = async () => {
-    const round = phaseOfGameState(gameState) === 'RESULTS'
-      ? parseInt(String(gameState).split('#')[1], 10)
-      : null;
-    if (!gameId || !round) return;
+    // Any round's results, or a closed survey's (round 000).
+    if (!gameId || resultsRoundOf(gameState) === null) return;
 
     try {
       const built = await authFetch(`${API_BASE}games/${gameId}/report`, {
@@ -885,9 +979,7 @@ function GameHostPage() {
     every comment lands after the report was built.
   */
   const loadRoundComments = async () => {
-    const round = phaseOfGameState(gameState) === 'RESULTS'
-      ? String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0')
-      : null;
+    const round = resultsRoundOf(gameState);
     if (!gameId || !round) return;
     const result = await fetchComments({ apiBase: API_BASE, gameId, questionNumber: round });
     // Only on success — a failed read must not wipe what the room can see.
@@ -918,25 +1010,29 @@ function GameHostPage() {
   };
 
   /*
-    A RELOAD RECOVERS THE COUNT, NOT JUST THE STAGE.
+    RESET ON ROUND CHANGE, RELOAD ON ENTERING RESULTS — FOR ANY BEAT.
 
-    `resultsBeat` restoring to 'feedback' on reload (`serverStageBeatRef`,
-    above) only fixed which BEAT the host sees — `roundComments` is separate
-    state, and nothing kept it in sync with a reload that lands mid-round.
-    Before this, the only two callers of `loadRoundComments` were
-    `requestFeedbackRound` (this device just opened the round) and the
-    `commentPosted` socket handler (somebody just posted) — neither fires on
-    a reload, so a host who reloaded mid-round came back with
-    `roundComments = []` and the projector showed no count until the next
-    comment happened to arrive.
+    Fix round 1, item 4: `roundComments` used to sit exactly as
+    `loadRoundComments` last left it — nothing ever reset it when the round
+    changed. Before comments.js's 26 Sep 2026 ruling that was mostly harmless,
+    because the only way a round GOT any comments was the host explicitly
+    requesting feedback, which itself calls `loadRoundComments()` directly. It
+    stopped being harmless once a comment could land on ANY beat of RESULTS,
+    with no host action at all (a player's own "Feedback" button): a comment
+    posted for round 3 stayed in `roundComments` straight through round 4's
+    ASK and VOTE and into round 4's RESULTS, where the widened meter/arrivals
+    (see the `meter` block below) showed round 3's stale count and quotes as
+    though they belonged to round 4.
 
-    Keyed on `resultsBeat` alone, and gated on the exact value rather than any
-    change into it: `loadRoundComments` reads the live `gameState` itself when
-    it actually runs, so this effect only has to know WHEN to call it, and
-    that is exactly when the beat READS 'feedback' — covering a live open
-    (requestFeedbackRound also calls it directly, so this is a harmless
-    duplicate there) and, the case that was missing, a reload that restores
-    straight onto it.
+    Keyed on `gameState` itself, not `resultsBeat`: entering ANY beat of
+    RESULTS reloads THIS round's real comments — `loadRoundComments` reads the
+    current round off `gameState` when it actually runs, so it is always
+    correctly scoped — and leaving RESULTS for any reason clears the list
+    immediately rather than leaving the outgoing round's rows on screen while
+    the next one plays out. This also covers everything the earlier, narrower
+    effect existed for: a reload landing back on an already-open feedback
+    round, or on an ordinary RESULTS a player has already commented on — both
+    are simply "entering RESULTS" from here.
 
     `loadRoundCommentsRef.current`, not `loadRoundComments` directly: the ref
     is kept current every render (just above), so this avoids the
@@ -945,8 +1041,14 @@ function GameHostPage() {
     effect re-run — and refetch — on every render.
   */
   useEffect(() => {
-    if (resultsBeat === 'feedback') loadRoundCommentsRef.current();
-  }, [resultsBeat]);
+    // Any RESULTS phase — and a closed survey, whose results are round 000.
+    if (resultsRoundOf(gameState) !== null) {
+      loadRoundCommentsRef.current();
+    } else {
+      setRoundComments([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState]);
 
   // Host Remote drives the same actions the host toolbar does. The listener below
   // is registered once, so it must not close over a single render's handlers —
@@ -1004,10 +1106,12 @@ function GameHostPage() {
     return () => window.removeEventListener('message', handleRemoteCommand);
   }, []);
   
-  // Check game status helper function
+  // Check game status helper function. `started` is on the public session
+  // brief for every caller, so this stays a plain fetch with no role: the
+  // public route ignores `?role=host` since 2026-09-26 (get-game.js).
   const checkGameStatus = async (gameId) => {
     try {
-      const response = await fetch(`${API_BASE}games/${gameId}?role=host`);
+      const response = await fetch(`${API_BASE}games/${gameId}`);
       if (response.ok) {
         const gameData = await response.json();
         return {
@@ -1134,11 +1238,18 @@ function GameHostPage() {
     gamePromptId: setGamePromptId,
     promptSwitchStatus: setPromptSwitchStatus,
     sessionBriefed: setSessionBriefed,
+    sessionTarget: setSessionTarget,
     aiSummaries: setAiSummaries,
     currentAIInsights: setCurrentAIInsights,
     loadingAIInsights: setLoadingAIInsights,
     showReport: setShowReport,
     reportData: setReportData,
+    showSurveyResults: setShowSurveyResults,
+    surveyResultsData: setSurveyResultsData,
+    surveyResultsStatus: setSurveyResultsStatus,
+    surveyResultsError: setSurveyResultsError,
+    surveyResultsTarget: setSurveyResultsTarget,
+    showSurveyWalkthrough: setShowSurveyWalkthrough,
     eventTitle: setEventTitle,
     gameCreatedAt: setGameCreatedAt,
     lessonExpanded: setLessonExpanded,
@@ -1439,9 +1550,12 @@ function GameHostPage() {
       // The prompt echo (?debug=true) is served only on the host's route,
       // which carries the Cognito authorizer; the public route refuses it
       // (get-ai-summary.js). The plain read stays public, as the phones make it.
+      // The round is named rather than left to the server's CurrentQuestionId:
+      // a closed survey has none (its read is 000), and a past round's
+      // regenerated summary is not the current one.
       const response = gameDebugMode
-        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true`)
-        : await fetch(`${API_BASE}games/${gameId}/ai-summary`);
+        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true&questionId=${encodeURIComponent(questionId)}`)
+        : await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(questionId)}`);
 
       if (response.ok) {
         const summaryData = await response.json();
@@ -1641,7 +1755,8 @@ function GameHostPage() {
   // (generation runs async) and the completed summary arrives via the
   // aiSummaryReady WebSocket event, which renders it. We only kick it off here.
   const handleRegenerateAISummary = async () => {
-    const currentQuestionNum = gameState.match(/#(\d+)/)?.[1];
+    // A closed survey's read is round 000; its state carries no digits.
+    const currentQuestionNum = resultsRoundOf(gameState) || gameState.match(/#(\d+)/)?.[1];
     if (!currentQuestionNum) {
       console.log('⚠️ No current question number found for regeneration');
       return;
@@ -1699,7 +1814,12 @@ Focus on actionable business strategy insights.`;
 
   // Load AI insights when in results state and we have answers
   useEffect(() => {
-    if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && answers.length > 0) {
+    // Trivia and polls get the Workie's word even when nobody answered (the
+    // owner, 27 Sep 2026; get-ai-summary.js's `answerlessOk`) — and a typed
+    // poll's RESULTS carries no answer rows on the stage at all (PollBoard
+    // draws the tally), so the answer count cannot be its trigger.
+    const summaryWithoutAnswers = currentGameType === 'trivia' || currentGameType === 'poll';
+    if (gameState.startsWith('RESULTS#') && currentQuestionIndex >= 0 && (answers.length > 0 || summaryWithoutAnswers)) {
       const questionId = String(currentQuestionIndex + 1).padStart(3, '0');
       console.log(`🤖 Starting AI insights load for question ${questionId} with ${answers.length} answers`);
       setLoadingAIInsights(true);
@@ -1735,7 +1855,27 @@ Focus on actionable business strategy insights.`;
       
       // REMOVED: AI insights polling - WebSocket handles notifications
     }
-  }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket]);
+  }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket, currentGameType]);
+
+  // A CLOSED SURVEY'S READ (27 Sep 2026: the Workie comments on a survey's
+  // results as it does on a round's). Started the moment the survey closes,
+  // at round 000, so it is written by the time the host presses What We
+  // Heard — the same fetch-else-generate a round's RESULTS runs above.
+  useEffect(() => {
+    if (gameState !== 'SURVEY#CLOSED' || !gameId || !useWebSocket) return;
+    setLoadingAIInsights(true);
+    setCurrentAIInsights(null);
+    setAiSummaryFailure(null);
+    aiQuestionRef.current = SURVEY_ROUND;
+    fetchAISummary(SURVEY_ROUND).then((existing) => {
+      if (applyAISummary(existing)) {
+        setLoadingAIInsights(false);
+        return;
+      }
+      startAISummaryGeneration(SURVEY_ROUND, 0);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, gameId, useWebSocket]);
 
   // When the room finishes answering, close the expanded-question overlay so
   // the host is looking at the stage again. The celebratory full-screen alert
@@ -1755,6 +1895,9 @@ Focus on actionable business strategy insights.`;
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdFromUrl = urlParams.get('gameId');
     const eventTitleFromUrl = urlParams.get('eventTitle');
+    // AN EVENT'S ITEM (27 Sep 2026): its stage opens before its session has —
+    // the host previewing it. Nobody can join until the host takes it live.
+    const eventItemStage = /^\d{4}$/.test(urlParams.get('event') || '');
     
     if (gameIdFromUrl) {
       console.log(`🔗 HOST: Found game ID in URL: ${gameIdFromUrl}`);
@@ -1762,7 +1905,7 @@ Focus on actionable business strategy insights.`;
       // Check if this game exists and is started before proceeding
       checkGameStatus(gameIdFromUrl).then(gameStatus => {
         if (gameStatus.exists) {
-          if (gameStatus.started) {
+          if (gameStatus.started || eventItemStage) {
             // Game exists and is started - go to game screen
             console.log(`✅ HOST: Game ${gameIdFromUrl} exists and is started - proceeding to game screen`);
             setGameId(gameIdFromUrl);
@@ -2150,8 +2293,12 @@ Focus on actionable business strategy insights.`;
         setRegeneratingRounds((prev) => prev.filter((n) => n !== done));
         loadRounds();
       }
-      // Fetch the AI summary from API
-      if (data.questionId) {
+      // Fetch the AI summary from API — onto the stage only when it is the
+      // round the stage is waiting on. The read names its round now
+      // (fetchAISummary), so a past round regenerated from the Rounds tab,
+      // which arrives on this same frame, would otherwise replace the live one.
+      const onStage = String(aiQuestionRef.current || '').padStart(3, '0');
+      if (data.questionId && String(data.questionId).padStart(3, '0') === onStage) {
         console.log(`🔌 Fetching AI summary for question ${data.questionId}`);
         fetchAISummary(data.questionId).then(summary => {
           if (applyAISummary(summary)) {
@@ -2195,6 +2342,18 @@ Focus on actionable business strategy insights.`;
       // a blind auto-retry of a failing generation helps nobody.
       setAiSummaryFailure(classifyAISummaryFailure({ phase: 'generation' }));
     });
+
+    /*
+      THE EVENT MOVED ON (events M3). Another item went live, this one paused,
+      or the day ended — from this screen or another. The host stays where
+      they are (looking is always the host's choice, 27 Sep 2026); the item's
+      state is read again, so the dock offers "Bring everyone back" once this
+      item is no longer the room's.
+    */
+    const eventMoved = () => setEventRefresh((n) => n + 1);
+    webSocketClient.onMessage('eventItemPaused', eventMoved);
+    webSocketClient.onMessage('eventItemStarted', eventMoved);
+    webSocketClient.onMessage('eventEnded', eventMoved);
 
     webSocketClient.onMessage('gameEnded', (data) => {
       console.log('🔌 Game ended notification:', data);
@@ -2283,6 +2442,9 @@ Focus on actionable business strategy insights.`;
       // that outlived its session and fired with a stale closure. Found by the
       // registered/removed symmetry test in __tests__/hostControls.test.js.
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('eventItemPaused');
+      webSocketClient.offMessage('eventItemStarted');
+      webSocketClient.offMessage('eventEnded');
       webSocketClient.offMessage('surveyProgress');
       webSocketClient.offMessage('surveyClosingSoon');
       webSocketClient.offMessage('surveyClosed');
@@ -2378,8 +2540,12 @@ Focus on actionable business strategy insights.`;
         return false; // Return false to indicate no restoration occurred
       }
       
-      // Use new game state API with host data
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      // The host's door onto the game state: the public round plus the
+      // running order, the category counts and who has answered or voted.
+      // authFetch, because it carries the Cognito authorizer; the public
+      // /state stopped returning the host's half on 2026-09-26
+      // (get-game-state.js).
+      const stateRes = await authFetch(`${API_BASE}games/${gameId}/host-state`);
       if (superseded()) return false;
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
@@ -2476,6 +2642,17 @@ Focus on actionable business strategy insights.`;
         // that case, since none of those events are RESULTS transitions.
         setAuthorsRevealed(!!gameStateData.authorsRevealed);
         console.log(`🔍 HOST: Questions array length: ${questions.length}`);
+
+        // The goal rides at host-state's TOP LEVEL (get-game-state.js), not
+        // inside gameMetadata — so this reads it here, unconditionally, rather
+        // than inside the `if (gameStateData.gameMetadata)` block below. A
+        // response that ever omitted gameMetadata but still carried a session
+        // would otherwise leave the previous game's goal on screen.
+        setSessionTarget(Number.isInteger(gameStateData.target) ? gameStateData.target : null);
+        // An event's item keeps its Agenda door however it was opened.
+        if (typeof gameStateData.eventRef === 'string' && /^\d{4}$/.test(gameStateData.eventRef)) {
+          setEventCode(gameStateData.eventRef);
+        }
 
         // Restore basic game metadata
         //
@@ -2609,7 +2786,7 @@ Focus on actionable business strategy insights.`;
             // Get answers for voting display
             try {
               const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
-              const answersRes = await fetch(`${API_BASE}games/${gameId}/answers?role=host&questionId=${paddedQuestionNumber}`);
+              const answersRes = await authFetch(`${API_BASE}games/${gameId}/answers/host?questionId=${paddedQuestionNumber}`);
               
               if (answersRes.ok) {
                 const answersData = await answersRes.json();
@@ -2680,6 +2857,11 @@ Focus on actionable business strategy insights.`;
                     basePoints: answer.basePoints || 0,
                     submittedAt: answer.submittedAt
                   }));
+                } else if (resultsData.gameType === 'poll') {
+                  // A reload on a poll's RESULTS: the same final board.
+                  if (resultsData.poll) {
+                    setPollTally({ round: String(questionNumber).padStart(3, '0'), tally: resultsData.poll.tally });
+                  }
                 } else if (resultsData.gameType === 'wavelength') {
                   // This branch did not exist: a refresh mid-RESULTS fell
                   // through to the call-and-answer arm, found no voteTallies,
@@ -2746,8 +2928,12 @@ Focus on actionable business strategy insights.`;
           setVotes([]);
           setPlayersWhoVoted([]);
           setCurrentQuestionVotes([]);
-          setCurrentAIInsights(null);
-          setLoadingAIInsights(false);
+          // A closed survey has no round in play either, but its Workie read
+          // (round 000) is on screen and must survive a re-sync.
+          if (currentState !== 'SURVEY#CLOSED') {
+            setCurrentAIInsights(null);
+            setLoadingAIInsights(false);
+          }
         }
 
         // Fetch current players with scores
@@ -2778,10 +2964,15 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`📡 HOST: Fetching answers for question ${questionNumber}`);
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
-      const url = `${API_BASE}games/${gameId}/answers?role=host&questionId=${paddedQuestionNumber}`;
+      // The host's door (get-answers.js): every answer at any phase. The
+      // public route answers `?role=host` as it answers a phone.
+      const url = `${API_BASE}games/${gameId}/answers/host?questionId=${paddedQuestionNumber}`;
       console.log(`📡 HOST: API call: ${url}`);
       
-      const res = await fetch(url);
+      const res = await authFetch(url);
+      // A refusal (401 from an expired sign-in, 404 from the door) is not "no
+      // answers": keep what the stage already shows rather than blank it.
+      if (!res.ok) return;
       const json = await res.json();
       console.log(`📊 HOST: Raw answer response:`, json);
       
@@ -2795,6 +2986,7 @@ Focus on actionable business strategy insights.`;
 
       setAnswers(questionAnswers);
       setAnswersFor(stageAnswersKey(`ASK#${paddedQuestionNumber}`));
+      if (json.poll) setPollTally({ round: paddedQuestionNumber, tally: json.poll.tally });
 
       // Participation is derived from these rows ONLY when they carry names.
       // On a hidden round every row is redacted, so this used to write
@@ -2831,17 +3023,16 @@ Focus on actionable business strategy insights.`;
    * answered.
    *
    * IT EXPOSES NOTHING NEW. `answerProgress.answererIds` is the same field
-   * restoreGameState already reads on every resync, on the same public route,
-   * and get-answers.js:216 documents it as deliberately public: "who has not
-   * acted yet is a different fact from who wrote what."
+   * restoreGameState already reads on every resync, on the same route.
    *
-   * `includeHostData=true` because get-game-state only assembles
-   * `answerProgress` under that flag — without it this would read a payload
-   * with no participation in it at all and quietly do nothing.
+   * THE HOST'S DOOR, `/host-state`, with authFetch, because get-game-state
+   * assembles `answerProgress` there and only there. The public `/state`
+   * returns a payload with no participation in it at all, flag or no flag,
+   * and this would quietly do nothing.
    */
   const refreshAnswerersFromState = async (forGameId) => {
     try {
-      const res = await fetch(`${API_BASE}games/${forGameId}/state?includeHostData=true`);
+      const res = await authFetch(`${API_BASE}games/${forGameId}/host-state`);
       if (!res.ok) return;
       const stateData = await res.json();
       // The host may have switched games while this was in flight; the same
@@ -2910,10 +3101,14 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`📡 HOST: Fetching votes for question ${questionNumber}`);
       const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
-      const url = `${API_BASE}games/${gameId}/votes?role=host&questionNumber=${paddedQuestionNumber}`;
+      // The host's door (get-votes.js): every ballot with its voter. The
+      // public route answers `?role=host` with a count.
+      const url = `${API_BASE}games/${gameId}/votes/host?questionNumber=${paddedQuestionNumber}`;
       console.log(`📡 HOST: API call: ${url}`);
       
-      const res = await fetch(url);
+      const res = await authFetch(url);
+      // A refusal is not "no votes": keep the stage's list rather than blank it.
+      if (!res.ok) return;
       const json = await res.json();
       console.log(`📊 HOST: Raw votes response:`, json);
       
@@ -3105,7 +3300,10 @@ Focus on actionable business strategy insights.`;
       // If restoring from existing game, get the bitmask data
       if (restoreFromGame && gameId) {
         try {
-          const gameRes = await fetch(`${API_BASE}games/${gameId}?role=host`);
+          // The host's door, `/host-details` (get-game.js): the category
+          // masks are the host's read since 2026-09-26, and the public brief
+          // answers `?role=host` with the player's view.
+          const gameRes = await authFetch(`${API_BASE}games/${gameId}/host-details`);
           if (gameRes.ok) {
             const gameData = await gameRes.json();
             // The per-game anonymity flag (IMPORTANT 2): this is the one place
@@ -3213,8 +3411,8 @@ Focus on actionable business strategy insights.`;
     if (!gameId) return;
     
     try {
-      // Get category counts
-      const countsRes = await fetch(`${API_BASE}games/${gameId}/state?includeHostData=true`);
+      // Category counts and masks: the host's door onto the game state.
+      const countsRes = await authFetch(`${API_BASE}games/${gameId}/host-state`);
       if (countsRes.ok) {
         const stateData = await countsRes.json();
         
@@ -3517,6 +3715,13 @@ Focus on actionable business strategy insights.`;
     [runQueueOp],
   );
 
+  // "Ask next": the top of the running order, and nothing about the round on
+  // screen changes. `selectQuestion` below is "Ask now".
+  const handleQueueFirst = useCallback(
+    (key) => runQueueOp('first', key, (q) => queueFirst(q, key)),
+    [runQueueOp],
+  );
+
   /**
    * MOVING AN AUTO ROW MAKES THE WHOLE DISPLAYED PLAN MANUAL — the owner's own
    * semantics ("in a way all of them now are manually adjusted. that may not
@@ -3615,7 +3820,8 @@ Focus on actionable business strategy insights.`;
     loadUpNext();
   }, [gameId, loadQueue, loadUpNext]);
 
-  // Select a specific question to trigger as the next question
+  // "Ask now": put one named question on the room's screen straight away.
+  // "Ask next" is handleQueueFirst above — the top of the running order.
   const selectQuestion = async (selectedQuestion) => {
     try {
       console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
@@ -3625,11 +3831,13 @@ Focus on actionable business strategy insights.`;
       closeAllSidePanels();
 
       // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
+      // It names the reversible neighbour, because a host who pressed Ask now
+      // mid-round most often meant "after this one" — which is Ask next.
       if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
         const proceed = await showConfirmation(
-          'Skip to Selected Question?',
-          'Do you want to skip the current question and move to the selected question?',
-          'Skip to Question'
+          'Ask this question now?',
+          'This ends the round on screen and puts the selected question up straight away. To ask it after this round instead, use Ask next.',
+          'Ask now'
         );
         if (!proceed) return;
       }
@@ -4035,7 +4243,7 @@ Focus on actionable business strategy insights.`;
   const openingVoteRef = useRef(false);
   const handleFinishQuestion = async () => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
-    if (currentGameType === 'trivia' || currentGameType === 'wavelength') {
+    if (currentGameType === 'trivia' || currentGameType === 'wavelength' || currentGameType === 'poll') {
       // Warn if not all players have answered
       if (answeredCount < players.length) {
         const proceed = await showConfirmation(
@@ -4115,7 +4323,7 @@ Focus on actionable business strategy insights.`;
   const handleShowResults = async () => {
     // For trivia and wavelength games, no voting phase - skip vote check
     // For call-and-answer games, warn if not all players have voted
-    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && playersWhoVoted.length < players.length) {
+    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && currentGameType !== 'poll' && playersWhoVoted.length < players.length) {
       const proceed = await showConfirmation(
         'Show Results?',
         `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
@@ -4178,6 +4386,13 @@ Focus on actionable business strategy insights.`;
         console.log(`🧠 HOST: Formatted ${formattedAnswers.length} trivia answers:`, 
           formattedAnswers.map(a => `${a.player}: ${a.answer} (${a.isCorrect ? 'correct' : 'incorrect'}, ${a.points} pts)`));
         
+      } else if (resultsData.gameType === 'poll') {
+        // A typed poll: the board's final tally is the result (PollBoard).
+        // No rows to rank — nobody wrote a response to vote on.
+        if (resultsData.poll) {
+          setPollTally({ round: String(questionNumber).padStart(3, '0'), tally: resultsData.poll.tally });
+        }
+        formattedAnswers = [];
       } else if (resultsData.gameType === 'wavelength' || currentGameType === 'wavelength') {
         // Wavelength: the analysis (landed words, near-miss, denominator,
         // matching mode) is the result; the answers ride along for the meter.
@@ -4425,7 +4640,50 @@ Focus on actionable business strategy insights.`;
   */
   const [confirmLeave, setConfirmLeave] = useState(false);
 
+  /**
+   * BACK TO THE EVENT'S AGENDA — the HOST's screen only (the owner, 27 Sep
+   * 2026: switching between items "doesn't open it for the players"). Nothing
+   * pauses: the phones stay on whatever is live. The one write is
+   * bookkeeping — an item whose session has ENDED is marked done on the way
+   * out, since nothing in it is left to resume.
+   */
+  const goToAgenda = async () => {
+    if (!eventCode || eventBusy) return;
+    setEventBusy(true);
+    try {
+      if (gameState === 'ENDED' && eventItem && (eventItem.state === 'live' || eventItem.state === 'paused')) {
+        await runEvent(eventCode, 'end', eventItem.itemId);
+      }
+    } catch (error) {
+      // Bookkeeping only: the agenda can end it too. Go regardless.
+    }
+    navigateTo(`/host/event/${eventCode}`);
+  };
+
+  /**
+   * BRING EVERYONE HERE — this item goes live for the room (run.js start, or
+   * resume for a paused one): a previewed session opens, the phones switch to
+   * it, and the host stays right here with the stage restored as live.
+   */
+  const goLiveHere = async () => {
+    if (!eventCode || !eventItem || eventBusy) return;
+    setEventBusy(true);
+    try {
+      const view = await runEvent(eventCode, eventItem.state === 'paused' ? 'resume' : 'start', eventItem.itemId);
+      setEventItem((view.items || []).find((i) => String(i.gameId || '') === String(gameId)) || null);
+      await restoreGameState();
+    } catch (error) {
+      setSessionActionError((error && error.message) || 'Could not bring everyone here. Try again.');
+    } finally {
+      setEventBusy(false);
+    }
+  };
+
   const requestLeave = () => {
+    if (eventCode) {
+      goToAgenda();
+      return;
+    }
     const midSession = gameState !== 'CREATED' && gameState !== 'ENDED' && players.length > 0;
     if (midSession) {
       setConfirmLeave(true);
@@ -4685,6 +4943,7 @@ Focus on actionable business strategy insights.`;
       // The edited session may be the one on stage — keep the stage's own
       // title in step rather than showing the old name until the next load.
       if (targetId === gameId) setEventTitle(form.title);
+      if (targetId === gameId && 'target' in form) setSessionTarget(Number.isInteger(form.target) ? form.target : null);
       localStorage.setItem(`game_${targetId}_title`, form.title);
       // The history table reads the GAMES index row the backend just
       // mirrored onto; refetch so the list shows what actually landed.
@@ -4840,6 +5099,7 @@ Focus on actionable business strategy insights.`;
     setPersonaSwitchStatus('');
     setGamePromptId(form.promptId || '');
     setPromptSwitchStatus('');
+    setSessionTarget(Number.isInteger(form.target) ? form.target : null);
   };
 
   const updateGameTitle = async (gameId, title) => {
@@ -4877,6 +5137,80 @@ Focus on actionable business strategy insights.`;
     } catch (error) {
       console.error('Error fetching games list:', error);
       alert('Failed to load games list. Please try again.');
+    }
+  };
+
+  /**
+   * THE SURVEY RESULTS PANEL — GET /games/{id}/survey-results (Phase 3, the
+   * 2026-09-26 feature sweep). Mirrors generateReportForGame below: the shell
+   * shows its loading state first, since the route is a fetch with real
+   * latency, not a navigation.
+   *
+   * ONE FUNCTION, THREE CALLERS (fix round 1, M2, folding what Task 8 first
+   * shipped as two near-identical copies): the live session's CLOSED/ENDED
+   * "See the results" AND "Walk through" controls (runHostAction), and the
+   * Sessions list's "Results" row for any closed survey —
+   * SessionHistoryPanel's `onResults`, mirroring `onReport=
+   * {generateReportForGame}` beside it. `setShowReportsModal(false)` is a
+   * no-op from the live-session caller (the modal is already closed) and
+   * closes the history list from the other, exactly as generateReportForGame
+   * does for Report.
+   *
+   * `{ present }` decides which of the two survey-results SURFACES the fetch
+   * is for — the cut sheet (`showSurveyResults`, the default) or the
+   * full-stage presenter (`showSurveyWalkthrough`, Task 8). Both read the
+   * exact same three states below; only the flag that decides which
+   * component is on top differs, which is also why `showSurveyWalkthrough`'s
+   * own declaration explains that a `present` fetch clears `showSurveyResults`
+   * rather than leaving it — that is what makes leaving the presenter land
+   * back on the stage instead of the cut sheet.
+   *
+   * RECORDS ITS OWN ARGUMENTS AS THE TARGET (fix round 2) — never the page's
+   * `gameId`/`eventTitle`. Every caller already has the right session to hand
+   * it: runHostAction has the stage's own; the history row already carries
+   * the id and title of whichever survey the host clicked. Reading past
+   * `targetGameId` for the page's `gameId` here is exactly the bug this
+   * fixes — Retry (below) closes over THIS state, not the stage.
+   *
+   * THE STALE-RESPONSE GUARD (fix round 1, M2). Two fetches for the same or
+   * different sessions can be in flight at once — a slow first request, a
+   * host who clicks Retry before it lands, or (present) a host who opens the
+   * cut sheet and then Walk-through in quick succession. `surveyResultsRequestRef`
+   * holds a fresh object identity per call; a response is only committed to
+   * state when the ref STILL points at the identity this call minted, so a
+   * response that lands after a NEWER call has already started is discarded
+   * rather than overwriting what the host is now looking at with stale data
+   * (or, worse, an old error landing on top of a fresh "loading").
+   */
+  const loadSurveyResults = async (targetGameId, targetTitle = '', { present = false } = {}) => {
+    setShowReportsModal(false);
+    const requestRef = {};
+    surveyResultsRequestRef.current = requestRef;
+    setSurveyResultsTarget({ gameId: targetGameId, title: targetTitle });
+    setSurveyResultsData(null);
+    setSurveyResultsError(null);
+    setSurveyResultsStatus('loading');
+    if (present) {
+      setShowSurveyResults(false);
+      setShowSurveyWalkthrough(true);
+    } else {
+      setShowSurveyResults(true);
+    }
+    try {
+      const res = await authFetch(`${API_BASE}games/${targetGameId}/survey-results`);
+      const data = await res.json().catch(() => ({}));
+      // A newer call already owns the screen — this response is stale.
+      if (surveyResultsRequestRef.current !== requestRef) return;
+      if (!res.ok) {
+        throw new Error(data.error || `The survey results could not be loaded (${res.status}).`);
+      }
+      setSurveyResultsData(data);
+      setSurveyResultsStatus('ready');
+    } catch (error) {
+      if (surveyResultsRequestRef.current !== requestRef) return;
+      console.error('Error loading survey results:', error);
+      setSurveyResultsError(error.message || 'The survey results could not be loaded.');
+      setSurveyResultsStatus('error');
     }
   };
 
@@ -4982,6 +5316,19 @@ Focus on actionable business strategy insights.`;
         // from scratch, and a caveat the document never receives is a caveat
         // nobody reads.
         reportCompleteness: report.reportCompleteness,
+        // "About this session" and "Who was here" (Task 2): the event's own
+        // free text, and the question set's summary as a fallback source for
+        // "what people were asked to do". Same rebuilt-from-scratch reason as
+        // every field above — GameReport never sees a field left out here.
+        eventDetails: report.eventDetails || '',
+        questionSetData: report.questionSetData || null,
+        // Survey results (Task 4): null for every game type but survey, and
+        // for a survey not yet closed. Same rebuilt-from-scratch reason as
+        // every field above — GameReport never sees a field left out here.
+        surveyNames: report.surveyNames || null,
+        surveyResults: report.surveyResults || null,
+        // `playerPerformance` already carries `joinedAt` per player (Task 2);
+        // this is a straight passthrough, so the roster gets it for free.
         players: report.playerPerformance || [],
         questions: report.detailedQuestions || [],
         /*
@@ -5050,7 +5397,11 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const playUrl = `${window.location.protocol}//${window.location.host}/play?gameId=${gameId}`;
+  // An event's item is joined through the EVENT (events M4): its QR opens the
+  // attendee's page, which joins the day once and follows it into this item.
+  const playUrl = eventCode
+    ? `${window.location.protocol}//${window.location.host}/play?event=${eventCode}`
+    : `${window.location.protocol}//${window.location.host}/play?gameId=${gameId}`;
   // What the RAIL prints, which is a different job: the QR carries the whole
   // URL, and a room reading a bare address off a projector needs the shortest
   // thing that works. The player page takes the session code by hand.
@@ -5158,7 +5509,7 @@ Focus on actionable business strategy insights.`;
   useEffect(() => {
     if (!autoMode) return undefined;
     if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
-        || showReport || showReportsModal || editTarget) return undefined;
+        || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
       lessonExpanded, isLoadingData, qrMode,
@@ -5213,15 +5564,18 @@ Focus on actionable business strategy insights.`;
         return;
       }
       // The dock's own primary, through the dock's own runner — disabled means
-      // disabled for auto-mode too (e.g. RESULTS with zero answers).
+      // disabled for auto-mode too (e.g. RESULTS with zero answers). Ending a
+      // survey is the host's own act, like starting one: auto-mode pages its
+      // read-back and stops there.
       if (!hands.primary || hands.primary.disabled) return;
+      if (hands.primary.intent === HOST_INTENTS.END_SURVEY) return;
       hands.run(hands.primary);
     }, decision.delayMs);
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
-    showNewGameDialog, showReport, showReportsModal, editTarget,
+    showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open]);
 
@@ -5248,14 +5602,55 @@ Focus on actionable business strategy insights.`;
   });
   useScoreboardKeys({
     // ...and never over a surface that replaced the stage — there is no stage
-    // for the board to cover.
+    // for the board to cover. `confirmLeave` (fix round 1): "Leave this
+    // session?" is reachable with the session menu closed, and is a dialog
+    // exactly like the others in this list, not an overlay term
+    // `shortcutsSuppressed` already tracks.
     enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
-      && !showNewGameDialog && !showReport && !editTarget && Boolean(gameId),
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && !confirmLeave && Boolean(gameId),
     open: scoreboard.open,
     canOpen: scoreboardAvail.enabled,
     onOpen: () => publishScoreboard({ open: true }),
     onClose: () => publishScoreboard({ open: false }),
     onCycleStyle: () => publishScoreboard({ style: nextStyle(scoreboard.style) }),
+  });
+
+  /*
+    THE SESSION PANEL'S OPEN KEY — `\` — wired the same way the scoreboard's
+    just above: a page-level hook, ABOVE THE EARLY RETURNS for the same
+    hook-order reason, `enabled` built from hostOverlays.js the way
+    `scoreboardKeysOn` is. CLOSING stays SessionSetupPanel's own job (it is
+    mounted only while `setupPanelOpen`, and its listener already answers
+    both Esc and `\`) — `sessionPanelKeyLive`'s own `setupPanelOpen` term is
+    what keeps this hook's `enabled` false the moment that happens.
+
+    FIX ROUND 1: `enabled` going false is necessary but was not sufficient —
+    a real-browser race (reviewer repro, Chromium + React 18.3.1) let one `\`
+    close the panel and immediately reopen it, because this listener used to
+    live on `window` while the panel's closer is on `document`, and a
+    microtask checkpoint mid-dispatch could re-arm the `window` listener
+    before the SAME keystroke finished propagating to it. The fix — this
+    listener now on `document`, plus a `defaultPrevented` check — lives in
+    components/stage/useSessionPanelKey.js, whose header has the full
+    mechanism; `enabled` here is still what decides WHETHER it may run at
+    all, just not what makes one press exactly one change.
+  */
+  const sessionPanelKeyOn = sessionPanelKeyLive({
+    setupPanelOpen,
+    showConfirmModal, showExpandedQR, showReportsModal,
+    isLoadingData, qrMode,
+    spotlightOpen: spotlightIndex !== null,
+    pastRoundOpen: pastRoundIndex !== null,
+  });
+  useSessionPanelKey({
+    // ...and never over a surface that replaced the stage — the same list
+    // `useScoreboardKeys`'s own `enabled` carries above, `confirmLeave`
+    // included.
+    enabled: sessionPanelKeyOn && !showQuickstartMenu && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && !confirmLeave && Boolean(gameId),
+    onOpen: () => setSetupPanelOpen(true),
   });
 
   // Render the quickstart menu if it's being shown
@@ -5347,6 +5742,69 @@ Focus on actionable business strategy insights.`;
     );
   }
 
+  /*
+    THE STAGE PRESENTER — Task 8, 2026-09-26 feature sweep, "walk the room
+    through survey results, one question at a time, full size." CHECKED
+    BEFORE `showSurveyResults` BELOW, deliberately: pressing "Walk through"
+    from an already-open cut sheet leaves that flag true underneath, so this
+    branch winning here — and `onLeave` clearing only `showSurveyWalkthrough`
+    — is what sends the host back to the cut sheet once they leave, with no
+    extra state recording which surface asked for it. Opened directly from
+    the live stage's dock, `showSurveyResults` is false throughout
+    (`loadSurveyResults(..., { present: true })` sets it so), so leaving
+    falls through everything here and lands back on the stage itself.
+
+    Loading or a failed fetch reuses the cut sheet's OWN shell rather than
+    growing a second one: there is no stage to draw before the numbers land,
+    and `SurveyResultsPanel` already knows how to say so and offers Retry.
+    Only once `status` is 'ready' does the actual presenter mount.
+  */
+  if (showSurveyWalkthrough) {
+    if (surveyResultsStatus === 'ready' && surveyResultsData) {
+      return (
+        <SurveyWalkthrough
+          results={surveyResultsData}
+          title={surveyResultsTarget ? surveyResultsTarget.title : ''}
+          profile={profile}
+          gameId={surveyResultsTarget ? surveyResultsTarget.gameId : ''}
+          onLeave={() => setShowSurveyWalkthrough(false)}
+        />
+      );
+    }
+    return (
+      <SurveyResultsPanel
+        results={surveyResultsData}
+        status={surveyResultsStatus}
+        error={surveyResultsError}
+        title={surveyResultsTarget ? surveyResultsTarget.title : ''}
+        onClose={() => { setShowSurveyWalkthrough(false); setSurveyResultsStatus('idle'); }}
+        onRetry={surveyResultsTarget
+          ? () => loadSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title, { present: true })
+          : null}
+      />
+    );
+  }
+
+  // Same reasoning as `showReport` just above: gated on the flag alone, never
+  // `&& surveyResultsData`, so the window between "See the results" and the
+  // fetch landing shows the panel's own loading state rather than falling
+  // through to the stage.
+  if (showSurveyResults) {
+    return (
+      <SurveyResultsPanel
+        results={surveyResultsData}
+        status={surveyResultsStatus}
+        error={surveyResultsError}
+        title={surveyResultsTarget ? surveyResultsTarget.title : ''}
+        onClose={() => { setShowSurveyResults(false); setSurveyResultsStatus('idle'); }}
+        onRetry={surveyResultsTarget
+          ? () => loadSurveyResults(surveyResultsTarget.gameId, surveyResultsTarget.title)
+          : null}
+        onPresent={() => setShowSurveyWalkthrough(true)}
+      />
+    );
+  }
+
 
   /*
     THE EDIT DIALOG — the same <GameSetupDialog>, pointed at an existing
@@ -5416,6 +5874,7 @@ Focus on actionable business strategy insights.`;
               createdAt: session.createdAt,
             })}
             onReport={generateReportForGame}
+            onResults={loadSurveyResults}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
@@ -5534,7 +5993,20 @@ Focus on actionable business strategy insights.`;
     ? surveyRoomCounts({ progress: survey.progress, joined: players.length })
     : null;
 
-  const hostControls = hostControlsFor({
+  /*
+    THE GOAL (events M1b, session-goal.js): "Question 3 of 5" for the host's
+    SESSION panel and, on the goal's own round once its results are up, the
+    dock's line — "That's your 5. Keep going if there's time, or end the
+    session." Never the rail: the room sees the round, not the plan.
+  */
+  const goal = isSurvey
+    ? { progress: '', reached: false, line: '' }
+    : goalRules.goalProgress({ target: sessionTarget, round: lessonNumber, phase: hostPhase });
+
+  // This round's poll tally, or none: never the last round's bars.
+  const pollTallyNow = pollTally && pollTally.round === String(lessonNumber).padStart(3, '0') ? pollTally.tally : null;
+
+  const baseHostControls = hostControlsFor({
     gameType: currentGameType,
     phase: hostPhase,
     roundNoun: getHostRoundNoun(),
@@ -5544,9 +6016,53 @@ Focus on actionable business strategy insights.`;
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
     survey: surveyCounts,
+    goalLine: goal.line,
     notesPage,
     notesPages,
   });
+  /*
+    AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
+    Its rounds wait: running one would play to an empty room. The one thing
+    to do is bring everyone here, so that is the primary, and the status says
+    where the phones are.
+  */
+  const eventWaiting = Boolean(eventCode && eventItem && (eventItem.state === 'planned' || eventItem.state === 'paused'));
+  /*
+    AND NO SECOND WAY BACK. In an event, Back to Menu is the agenda
+    (requestLeave → goToAgenda), and the dock already has AGENDA — two doors
+    to one place, and the second one pushed SESSION off a 1024-wide dock
+    (measured in Chromium, 27 Sep 2026). Where leaving is the primary (a
+    finished survey), it says where it goes.
+  */
+  const eventLeave = (control) => (control && control.intent === HOST_INTENTS.LEAVE ? null : control);
+  const eventControls = eventCode
+    ? {
+      ...baseHostControls,
+      primary: baseHostControls.primary && baseHostControls.primary.intent === HOST_INTENTS.LEAVE
+        ? { ...baseHostControls.primary, label: 'Back to the agenda' }
+        : baseHostControls.primary,
+      secondary: eventLeave(baseHostControls.secondary),
+      tertiary: eventLeave(baseHostControls.tertiary),
+    }
+    : baseHostControls;
+  const hostControls = eventWaiting
+    ? {
+      ...baseHostControls,
+      primary: {
+        label: eventItem.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here',
+        intent: HOST_INTENTS.EVENT_GO_LIVE,
+        disabled: eventBusy,
+      },
+      secondary: null,
+      tertiary: null,
+      status: {
+        text: eventItem.state === 'paused'
+          ? 'Paused — the phones are waiting on the agenda'
+          : 'Preview — the phones are not here yet',
+        tone: 'info',
+      },
+    }
+    : eventControls;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
@@ -5679,6 +6195,9 @@ Focus on actionable business strategy insights.`;
       setQrMode(null);
     }
     switch (action.intent) {
+      case HOST_INTENTS.EVENT_GO_LIVE:
+        await goLiveHere();
+        return;
       case HOST_INTENTS.PAGE:
         // The dock's Next Page — the same shared beat-keyed index the ↑↓ keys
         // and the pips move, so the three routes cannot disagree.
@@ -5742,6 +6261,12 @@ Focus on actionable business strategy insights.`;
       case HOST_INTENTS.END_SURVEY:
         endSurveyNow();
         break;
+      case HOST_INTENTS.SURVEY_RESULTS:
+        loadSurveyResults(gameId, eventTitle);
+        break;
+      case HOST_INTENTS.SURVEY_PRESENT:
+        loadSurveyResults(gameId, eventTitle, { present: true });
+        break;
       case HOST_INTENTS.LEAVE:
         /*
           The same handler the settings panel's own control uses, deliberately.
@@ -5792,6 +6317,24 @@ Focus on actionable business strategy insights.`;
     COLLECTING: 'ask', CLOSED: 'done',
   };
 
+  /*
+    SCOPED TO THE ROUND ACTUALLY SHOWING — fix round 2, item 2. `roundComments`
+    is refreshed by `loadRoundComments` (fix round 1, item 4) and by the
+    `commentPosted`/`commentFeatured` socket handlers above, and none of those
+    writes is guaranteed to land in order: a fetch kicked off for round 3,
+    slow enough to resolve after the room has already moved into round 4's
+    RESULTS (whose OWN, faster fetch already applied), would otherwise
+    overwrite round 4's correct comments with round 3's stale ones. Every
+    comment row carries its own `questionNumber` (comments.js's `toWire()`),
+    so filtering by the round actually on screen right now, at render time, is
+    a cheap guard that holds regardless of which write landed last — no ref,
+    no discard-the-stale-response bookkeeping needed.
+  */
+  const currentResultsRound = resultsRoundOf(gameState);
+  const scopedRoundComments = currentResultsRound
+    ? roundComments.filter((c) => c.questionNumber === currentResultsRound)
+    : [];
+
   /**
    * The ONE progress count, and the only place it is stated.
    *
@@ -5821,7 +6364,21 @@ Focus on actionable business strategy insights.`;
     if (hostPhase === 'FEEDBACK') {
       // The comments so far — the same count the stage prints — with the
       // arrivals beneath it (meterArrivals, below).
-      return { heading: 'Comments', body: String(roundComments.length) };
+      return { heading: 'Comments', body: String(scopedRoundComments.length) };
+    }
+    /*
+      OWNER'S RULING (26 Sep 2026): a player's own "Feedback" button posts a
+      comment on any RESULTS phase, not only once the host opens the feedback
+      beat (comments.js's write gate). `roundComments` already refreshes
+      regardless of phase — the `commentPosted` socket handler above calls
+      `loadRoundCommentsRef.current()` unconditionally — so the only gap is
+      here: without this, a comment posted before the host ever requests
+      feedback has nowhere to show on the stage at all. Gated on there BEING
+      one, so a round with none still runs solo exactly as the block below
+      intends.
+    */
+    if ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0) {
+      return { heading: 'Comments', body: String(scopedRoundComments.length) };
     }
     /*
       A SURVEY (s-01-collecting): FINISHED of joined — the one fraction — and
@@ -5850,16 +6407,26 @@ Focus on actionable business strategy insights.`;
   })();
 
   /*
-    WHAT ARRIVES ON THE WALL in a FEEDBACK round — the round's comments, text
-    and anchor only, never the author (RoomMeter.jsx). Gated on the session
-    setting so a host who wants the old count-only wall keeps it. The
-    featured one is whichever the host pressed last.
+    WHAT ARRIVES ON THE WALL — the round's comments, text and anchor only,
+    never the author (RoomMeter.jsx). Gated on the session setting so a host
+    who wants the old count-only wall keeps it. The featured one is whichever
+    the host pressed last.
+
+    NOT `hostPhase === 'FEEDBACK'` ALONE, since 26 Sep 2026: a player's own
+    Feedback button posts a comment on any RESULTS phase, and those arrivals
+    have to reach the stage the same way a beat-triggered one does (see the
+    `meter` block above for the matching change and the reasoning). The extra
+    `roundComments.length > 0` on the RESULTS/FIELD_NOTES arm keeps a round
+    with no comments running solo, exactly as it did before this ruling.
   */
-  const featuredComment = hostPhase === 'FEEDBACK'
-    ? roundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
+  const featuredComment = (hostPhase === 'FEEDBACK'
+    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
+    ? scopedRoundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
     : null;
-  const meterArrivals = hostPhase === 'FEEDBACK' && wallComments !== false
-    ? { items: roundComments, onPick: handleFeatureComment, featuredId: featuredComment ? featuredComment.commentId : null }
+  const meterArrivals = (hostPhase === 'FEEDBACK'
+    || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
+    && wallComments !== false
+    ? { items: scopedRoundComments, onPick: handleFeatureComment, featuredId: featuredComment ? featuredComment.commentId : null }
     : null;
 
   /**
@@ -6162,6 +6729,8 @@ Focus on actionable business strategy insights.`;
   }) || surveyAllIn;
   const dockStatus = dockHint
     ? ''
+    : eventWaiting
+      ? hostControls.status.text
     : (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
       ? (everybodyIn
           ? 'Safe to move on'
@@ -6196,7 +6765,9 @@ Focus on actionable business strategy insights.`;
     Its fit key: rows arriving, counts moving and names landing all change the
     meter's height, which the fitter measures.
   */
-  const surveyStage = hostPhase === 'COLLECTING' || hostPhase === 'CLOSED';
+  // A closed survey stays a survey on its read-back and feedback beats.
+  const surveyStage = hostPhase === 'COLLECTING' || hostPhase === 'CLOSED'
+    || (isSurvey && (hostPhase === 'FIELD_NOTES' || hostPhase === 'FEEDBACK'));
   const surveyQuestionCount = (survey.progress && Array.isArray(survey.progress.perQuestion)
     && survey.progress.perQuestion.length) || roundOf || 0;
   const railContext = surveyStage
@@ -6270,11 +6841,11 @@ Focus on actionable business strategy insights.`;
             title={eventTitle || 'Engagements'}
             context={railContext}
             join={gameId
-              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED'
+              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED' || gameState === 'SURVEY#CLOSED'
                 ? { code: gameId, closed: true }
                 : {
                     url: joinDisplayUrl,
-                    code: gameId,
+                    code: eventCode || gameId,
                     onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : 'preview')),
                     onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' ? mode : null)),
                     onPin: () => setQrMode('pinned'),
@@ -6297,6 +6868,7 @@ Focus on actionable business strategy insights.`;
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
+            onAgenda={eventCode ? goToAgenda : undefined}
             complete={everybodyIn}
             /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
                `heading` / `body`, handed to the dock so that the fitter taking
@@ -6371,9 +6943,9 @@ Focus on actionable business strategy insights.`;
               }}
               keyHint={
                 hostPhase === 'FIELD_NOTES'
-                  ? '→ next page · ← back · at the end, → starts the next round'
+                  ? `→ next page · ← back · at the end, → ${isSurvey ? 'ends the session' : 'starts the next round'}`
                   : hostPhase === 'FEEDBACK'
-                    ? '← back to what we heard · → starts the next round'
+                    ? `← back to what we heard · → ${isSurvey ? 'ends the session' : 'starts the next round'}`
                     : ''
               }
             />
@@ -6386,7 +6958,9 @@ Focus on actionable business strategy insights.`;
            room's state AND the last counted round, so a round scored under an
            open board lands on it — including when the roster learns of the
            count after the phase frame did. Its keys are off under any
-           overlay (scoreboardKeysOn). */
+           overlay (scoreboardKeysOn); its own click-to-close button (Task 1,
+           2026-09-26) is not gated on that, and calls the same `onClose`
+           the S / Esc / Space keys use below. */
         overlay={scoreboard.open && scoreboardAvail.show ? (
           <Scoreboard
             gameId={gameId}
@@ -6396,6 +6970,7 @@ Focus on actionable business strategy insights.`;
             board={scoreboard}
             refreshKey={`${gameState}|${scoresAfterRound}`}
             keysEnabled={scoreboardKeysOn}
+            onClose={() => publishScoreboard({ open: false })}
           />
         ) : null}
       >
@@ -6443,8 +7018,8 @@ Focus on actionable business strategy insights.`;
                         says how to join. */}
                     <div className="joininfo">
                       <div className="url">{joinDisplayUrl}</div>
-                      <div className="lbl">Session code</div>
-                      <div className="code">{gameId}</div>
+                      <div className="lbl">{eventCode ? 'Event code' : 'Session code'}</div>
+                      <div className="code">{eventCode || gameId}</div>
                     </div>
                   </div>
                 )}
@@ -6471,7 +7046,7 @@ Focus on actionable business strategy insights.`;
                 names={surveyNames}
                 playUrl={playUrl}
                 joinUrl={joinDisplayUrl}
-                code={gameId}
+                code={eventCode || gameId}
               />
             )}
             {/* …then CLOSED, and a survey's ENDED: counts only (phase 3 draws
@@ -6498,6 +7073,12 @@ Focus on actionable business strategy insights.`;
                 instruction={getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
                 onExpand={expandQuestion}
               />
+            )}
+
+            {/* A TYPED POLL: its options on the wall the moment it is asked,
+                each bar filling in as the room answers (PollBoard). */}
+            {hostPhase === 'ASK' && currentGameType === 'poll' && currentQuestion?.poll && (
+              <PollBoard question={currentQuestion.poll} tally={pollTallyNow} live />
             )}
 
             {hostPhase === 'VOTE' && (
@@ -6627,7 +7208,13 @@ Focus on actionable business strategy insights.`;
                     JSON.stringify(answers) at a room. */}
                 {/* Blank until this round's results are the ones in hand, so
                     "No responses came in" is never said while they load. */}
-                {!stageResponsesReady ? null : currentGameType !== 'trivia' && answers.length === 0 ? (
+                {currentGameType === 'poll' ? (
+                  /* A typed poll: the same board as ASK, no longer moving. */
+                  <>
+                    {currentQuestion?.title && <p className="recap">{currentQuestion.title}</p>}
+                    {currentQuestion?.poll && <PollBoard question={currentQuestion.poll} tally={pollTallyNow} />}
+                  </>
+                ) : !stageResponsesReady ? null : currentGameType !== 'trivia' && answers.length === 0 ? (
                   <p className="qdetail">No responses came in for this one.</p>
                 ) : currentGameType === 'trivia' ? (
                   /* The same card as ASK, in its RESULTS treatment: the correct
@@ -6986,8 +7573,23 @@ Focus on actionable business strategy insights.`;
                 REVERSED by the owner on 2026-09-22 for the TEXT the host
                 chooses: the arrivals in the meter are unattributed, and the one
                 the host puts up carries its author, who was told on their phone
-                that their name would be shown with it (FeedbackWall.jsx). */}
-            {hostPhase === 'FEEDBACK' && (
+                that their name would be shown with it (FeedbackWall.jsx).
+
+                FIX ROUND 1, ITEM 5: featuring a comment on RESULTS or
+                FIELD_NOTES (possible since the meter/arrivals widened for
+                comments.js's 26 Sep 2026 ruling — see `featuredComment`
+                above) used to write `Featured: true` with nowhere for it to
+                land: this block only rendered on FEEDBACK, so the wall never
+                appeared, even though both reports print "Shown to the room"
+                for it. Ruling: render the SAME component, in this SAME
+                position, on RESULTS/FIELD_NOTES too — but only once there
+                actually is a featured comment. `FeedbackWall`'s un-featured
+                branch prints "What do you make of it? / Tap any part of the
+                round on your phone" — a feedback-round-specific invitation
+                that would be a non-sequitur mid-tally or mid-field-notes, so
+                it must never render there with nothing featured. */}
+            {(hostPhase === 'FEEDBACK'
+              || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && featuredComment)) && (
               // The wall is its own component: the question, one instruction line,
               // and the comment the host put up as a pull quote (FeedbackWall.jsx).
               // The count is the meter's; the arrivals are the meter's list.
@@ -7116,6 +7718,7 @@ Focus on actionable business strategy insights.`;
           upNextAdvisories={upNextAdvisories}
           upNextExcluded={upNextExcluded}
           onQueueQuestion={handleQueueQuestion}
+          onQueueFirst={handleQueueFirst}
           onQueueMove={handleQueueMove}
           onQueueRemove={handleQueueRemove}
           onAutoMove={handleAutoMove}
@@ -7124,6 +7727,7 @@ Focus on actionable business strategy insights.`;
           gameId={gameId}
           playUrl={playUrl}
           remoteUrl={remoteUrl}
+          goal={goal}
           joinLinkCopied={sidebarCopyMessage}
           onCopyJoinLink={() => copyUrlToClipboard(playUrl, 'sidebar')}
           onInvite={() => setInviteTarget({

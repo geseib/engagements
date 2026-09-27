@@ -1,0 +1,206 @@
+/* ===========================================================================
+   EventAttendeePage.css — the attendee's event screens (events M2–M4):
+   the agenda before, during and after the day, the switch beat, a talk, a
+   break and the paused screen.
+
+   DERIVED FROM docs/design/agenda-redesign/_src/agenda-phone.css, which is
+   the mockups' diff against the shipped player, re-cut under `.evp` exactly
+   as survey-phone.css was re-cut under `.plr`: `--L-*` → `--plr-t-*`,
+   `--muted` → `--plr-muted`, `--rule` → `--plr-rule`, `--tap` → `--plr-tap`,
+   `--gut` → `--plr-gut`. Every `.evp` sits inside PlayerShell's `.plr`, which
+   declares every `--plr-*` token read here, and the three ladders (phone,
+   768px tablet, 1200px laptop) arrive with them: nothing here restates a
+   size. No colour is new.
+
+   MEASURED (the player's stack: --bg #0F1A2E):
+     --text  #F4EDE4 on --bg              15.43:1  titles
+     --plr-muted #B6C2D4 on --bg           9.95:1  times, type lines, kickers
+     --plr-success-text #6FD0A4 on --bg    9.58:1  "Done"
+     --bg #0F1A2E on --primary #F6A94C     8.86:1  the "Now" badge
+     --primary #F6A94C on --bg             8.86:1  the beat's kicker, "Next"
+     --text / --plr-muted on the now row
+       (--plr-amber-tint over --bg)        13.1 / 8.5:1
+   ======================================================================== */
+
+.evp {
+  max-width: var(--plr-measure);
+}
+
+.evp .evp-when {
+  margin: 0 0 8px;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.evp .evp-desc {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: var(--plr-t-body);
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------- the agenda -- */
+.evp .evp-list {
+  list-style: none;
+  margin: 18px 0 6px;
+  padding: 0;
+}
+
+.evp .evp-it {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--plr-rule);
+}
+
+.evp .evp-it:last-child {
+  border-bottom: 0;
+}
+
+.evp .evp-at {
+  padding-top: 3px;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.evp .evp-body {
+  min-width: 0;
+}
+
+.evp .evp-tt {
+  display: block;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--plr-t-body);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.evp .evp-ty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-meta);
+  line-height: 1.35;
+}
+
+.evp .evp-ty svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.evp .evp-tl {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.evp .evp-st {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--plr-rule-strong);
+  border-radius: 6px;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.evp .evp-st--done {
+  border-color: var(--plr-good-edge);
+  color: var(--plr-success-text);
+}
+
+.evp .evp-st--now {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--bg);
+}
+
+.evp .evp-st--next,
+.evp .evp-st--paused {
+  border-color: var(--plr-amber-edge);
+  color: var(--primary);
+}
+
+.evp .evp-it--done .evp-tt,
+.evp .evp-it--brk .evp-tt {
+  color: var(--plr-muted);
+  font-weight: 600;
+}
+
+.evp .evp-it--now {
+  margin: 0 calc(var(--plr-gut) * -1);
+  padding-left: calc(var(--plr-gut) - 3px);
+  padding-right: var(--plr-gut);
+  border-left: 3px solid var(--primary);
+  border-bottom-color: transparent;
+  background: var(--plr-amber-tint);
+}
+
+.evp .evp-foot {
+  margin: 18px 0 0;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-meta);
+}
+
+/* ------------------------------------------------------- the switch beat --
+   The stage wipe's phone twin: a still screen for 1.2s that names the item,
+   then the item. It does not animate (the player's rule: no motion on the
+   phone surface), so reduced motion needs nothing of its own. */
+.evp.evp-beat .evp-kick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  color: var(--primary);
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.evp .evp-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-body);
+}
+
+.evp .evp-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* ----------------------------------------------------- a talk, a break -- */
+.evp .evp-next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 14px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--plr-rule);
+  color: var(--plr-muted);
+  font-size: var(--plr-t-body);
+}
+
+.evp .evp-next b {
+  color: var(--text);
+}

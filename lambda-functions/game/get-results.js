@@ -9,6 +9,7 @@ const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
 const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
+const { readPollQuestion, pollTally } = require('./poll-round');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -599,6 +600,11 @@ exports.handler = async (event) => {
       return await handleWavelengthResults(event, gameId, targetQuestionId);
     }
 
+    // A typed poll is counted, never voted on (poll-round.js).
+    if (gameType === 'poll' || gameType === 'polls') {
+      return await handlePollResults(event, gameId, targetQuestionId);
+    }
+
     // Extract scoring configuration with defaults
     const scoringConfig = gameMetadata.Item?.ScoringConfig || {
       firstPlacePoints: 3,
@@ -866,6 +872,65 @@ exports.handler = async (event) => {
 /**
  * Handle trivia results - show all answers with correctness and scoring
  */
+/**
+ * A TYPED POLL'S RESULTS (typed polls, 27 Sep 2026): the round's answers
+ * counted by the survey's aggregate (poll-round.js), no vote and no points.
+ * The stage has been drawing this same tally live since the round opened
+ * (get-answers.js), so RESULTS is the moment it stops moving, not a reveal.
+ *
+ * The RESULTS row keeps the COUNTS only, for the report and the round list —
+ * the open answers, write-ins and whys stay in the encrypted answer rows they
+ * came from, and the response carries them, content-hash ordered and nameless.
+ */
+async function handlePollResults(event, gameId, questionId) {
+  const paddedQuestionId = String(questionId).padStart(3, '0');
+  const read = await readPollQuestion(db, process.env.TABLE_NAME, gameId, paddedQuestionId);
+  const answersQuery = await db.send(new QueryCommand({
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': `QUESTION#${paddedQuestionId}#ANSWER#` },
+  }));
+  const answerOrgId = await sessionOrgId(gameId);
+  const answers = answerOrgId
+    ? await decryptItems(answerOrgId, 'answer', answersQuery.Items || [])
+    : (answersQuery.Items || []);
+  const tally = read ? pollTally(read.question, answers) : null;
+
+  if (tally) {
+    const { texts, ...counts } = tally;
+    await db.send(new PutCommand({
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        PK: `GAME#${gameId}`,
+        SK: `QUESTION#${paddedQuestionId}#RESULTS`,
+        GameId: gameId,
+        QuestionId: paddedQuestionId,
+        PollKind: read.question.kind,
+        PollCounts: counts,
+        TotalAnswers: answers.length,
+        CompletedAt: new Date().toISOString(),
+        ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days, like every RESULTS row
+      },
+    }));
+  }
+  // Counted (no points — a poll scores nobody), then the room is told: the
+  // same order as the other branches, so no phone reads RESULTS early.
+  await recordScoresCounted(event, gameId, paddedQuestionId);
+  await enterResultsState(event, gameId, paddedQuestionId);
+  console.log(`📊 Poll results for ${gameId} round ${paddedQuestionId}: ${answers.length} answer(s)${read ? `, ${read.question.kind}` : ', question not found'}`);
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      gameId,
+      questionId: paddedQuestionId,
+      gameType: 'poll',
+      totalAnswers: answers.length,
+      poll: read ? { question: read.question, title: read.title, tally } : null,
+    }),
+    headers: { 'Access-Control-Allow-Origin': '*' },
+  };
+}
+
 async function handleTriviaResults(event, gameId, questionId) {
   try {
     console.log(`🧠 Handling trivia results for game ${gameId}, question ${questionId}`);

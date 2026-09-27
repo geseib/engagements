@@ -317,6 +317,50 @@ function seedGame(gameId, lessonNumber = 3) {
     assert.strictEqual(unknownBeat.stageBeat, 'results',
       `an unknown beat travelled to the client as '${unknownBeat.stageBeat}'`));
 
+  // ---------- 6. a closed survey's beats live on round 000 ----------
+  console.log('\n6. a closed survey moves through the same beats, on round 000');
+
+  /*
+    A survey has no rounds and no LessonNumber: STATE is SURVEY#CLOSED. Its
+    Workie read-back and its feedback round (27 Sep 2026) ride the same beat
+    machinery at 000, and a reload or the phone remote has to read them back
+    — get-game-state used to read a beat only off LessonNumber's round.
+  */
+  store.clear();
+  sent = [];
+  put({ PK: 'GAME#3010', SK: 'METADATA', GameType: 'survey', Title: 'Offsite pulse' });
+  put({ PK: 'GAME#3010', SK: 'STATE', State: 'SURVEY#CLOSED' });
+  put({ PK: 'GAME#3010', SK: 'CONNECTION#player-1', ConnectionId: 'player-1', ConnectionType: 'PLAYER', PlayerName: 'Ada' });
+  const surveyBeat = await post('3010', { beat: 'feedback', questionNumber: 0 });
+  await check('round 0 is a round number the beat accepts (200)', () =>
+    assert.strictEqual(surveyBeat.statusCode, 200, `got ${surveyBeat.statusCode}: ${surveyBeat.body}`));
+  await check('it writes the beat onto ROUND#000', () =>
+    assert.strictEqual((roundOf('3010', '000') || {}).StageBeat, 'feedback'));
+  await check('and announces it for 000, so the phones ask for the survey\'s feedback round', () => {
+    assert.strictEqual(sent[0].message.questionNumber, '000');
+    assert.strictEqual(sent[0].message.beat, 'feedback');
+  });
+  const surveyState = JSON.parse((await getState({
+    requestContext: { http: { method: 'GET' } },
+    pathParameters: { gameId: '3010' },
+  })).body);
+  // rejects: a reload of a closed survey landing back on the tally while the
+  // room holds the feedback round on their phones.
+  await check('get-game-state reports a closed survey\'s beat off ROUND#000', () =>
+    assert.strictEqual(surveyState.stageBeat, 'feedback', `stageBeat was '${surveyState.stageBeat}'`));
+
+  store.clear();
+  put({ PK: 'GAME#3011', SK: 'METADATA', GameType: 'survey', Title: 'Offsite pulse' });
+  put({ PK: 'GAME#3011', SK: 'STATE', State: 'SURVEY#OPEN' });
+  put({ PK: 'GAME#3011', SK: 'ROUND#000', QuestionNumber: '000', StageBeat: 'feedback' });
+  const openSurvey = JSON.parse((await getState({
+    requestContext: { http: { method: 'GET' } },
+    pathParameters: { gameId: '3011' },
+  })).body);
+  // rejects: a stale 000 beat read while the survey is still collecting.
+  await check('an open survey reads no beat at all: the tally', () =>
+    assert.strictEqual(openSurvey.stageBeat, 'results'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

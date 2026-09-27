@@ -92,6 +92,17 @@ export const PLATFORM_MODE = '~platform';
    back to Circle rather than crashing, which is why designSystem.test.jsx
    asserts every entry resolves — a silent Circle is still a defect. */
 
+/*
+  ONE SENTENCE, READ IN TWO PLACES. AdminPage.jsx's NEW_SECTION_HEADS carries
+  its own copy for every section this file doesn't already give a title/theme
+  a nav entry can borrow (Members, Plan & usage, Data & privacy — see that
+  file's header comment) — Events needed one too, and a second literal string
+  is a second place to edit when the copy changes. Exported so AdminPage.jsx
+  reads this one rather than retyping it (Fix round 1 #7); consoleSections.test.js
+  and adminOneSection.test.jsx both match against this same string.
+*/
+export const EVENTS_SUBTITLE = 'One join code for a whole agenda: engagements and breaks, in the order you run them.';
+
 const SECTION = {
   questionsets: {
     id: 'questionsets',
@@ -107,6 +118,22 @@ const SECTION = {
     icon: 'GameController',
     title: 'Sessions',
     subtitle: 'What hosts have run. Data here expires: 90 days from creation.',
+    contentTheme: 'dark',
+  },
+  /*
+    EVENTS (docs/design/agenda-redesign 01, 01b; roadmap M1) — one code for a
+    whole agenda. Under Sessions, because every engagement in an event runs as
+    a session. Shown only while the tier has the feature switched on
+    (`eventsEnabled`, from GET /orgs `features.events`, roadmap D6). A space
+    not on the Team plan still gets the item, so the feature can be found: its
+    page explains the plan (01b) rather than hiding the door.
+  */
+  events: {
+    id: 'events',
+    label: 'Events',
+    icon: 'CalendarBlank',
+    title: 'Events',
+    subtitle: EVENTS_SUBTITLE,
     contentTheme: 'dark',
   },
   library: {
@@ -295,15 +322,20 @@ const group = (id, label, items) => ({ id, label, items });
  *                                  the first group on a team (mockup 01), and
  *                                  is ignored for personal and platform, which
  *                                  say "Your space" and "Engage".
+ * @param {boolean} [input.eventsEnabled] GET /orgs `features.events`: this
+ *                                  tier has Events switched on (roadmap D6)
  * @returns {Array<{id:string,label:string,items:Array<object>}>}
  */
 export function sectionsFor({
-  groups = [], orgRole = '', orgType = '', orgName = '', mode = '',
+  groups = [], orgRole = '', orgType = '', orgName = '', mode = '', eventsEnabled = false,
 } = {}) {
   const memberships = Array.isArray(groups) ? groups : [];
   const isStaff = memberships.includes(PLATFORM_GROUP);
   const type = String(orgType || '');
   const role = String(orgRole || '').toLowerCase();
+  /* Events sit right after Sessions in every org console, and nowhere while
+     the switch is off. Platform mode never gets them: it has no sessions. */
+  const events = eventsEnabled === true ? [SECTION.events] : [];
 
   /*
     PLATFORM MODE IS EXCLUSIVE AND IT IS ASKED FOR. See the header for the two
@@ -353,6 +385,7 @@ export function sectionsFor({
       group('space', 'Your space', [
         SECTION.questionsets,
         SECTION.games,
+        ...events,
         SECTION.library,
         SECTION.prompts,
       ]),
@@ -372,6 +405,7 @@ export function sectionsFor({
   const content = group('org', orgName || 'Your organisation', [
     SECTION.questionsets,
     SECTION.games,
+    ...events,
     SECTION.library,
     ...(isTeamAdmin ? [SECTION.prompts] : []),
   ]);

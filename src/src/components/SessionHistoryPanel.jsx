@@ -71,11 +71,48 @@ import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameType
  * Edit exists exactly while Start does: PUT /games/{id} refuses any session
  * whose STATE is not CREATED, so offering Edit on a started row would be a
  * button whose only outcome is a 400.
+ *
+ * A CLOSED SURVEY GETS REPORT ALONGSIDE RESULTS — I-2, 2026-09-26 final
+ * review, correcting Task 3 fix round 1. That round had `results` REPLACE
+ * `report` in the row on the premise that "a survey has no session report to
+ * open at all" (create-report.js read rounds, and a survey has none). Task 4
+ * made that premise false: create-report.js now reuses survey-host.js's
+ * `surveyResultsPayload` directly, so a closed survey's saved report is a
+ * real document carrying the event details, the roster and every survey
+ * chart — the same "every open answer" content `results` shows live, just as
+ * a document a host can come back for later. Swapping it out hid Task 4's
+ * deliverable from the Sessions list entirely: the only way back to it was
+ * Continue → Settings → Rounds tab.
+ *
+ * So both are true for a closed survey now, alongside `continue` — three
+ * verb buttons where every other row has two. `.shist__acts`'s grid is only
+ * ever `grid-template-columns: repeat(2, ...)` (`.shist__acts` in the
+ * stylesheet); it is not capped at two ROWS, so a third verb button simply
+ * wraps the row to a third line instead of overflowing. That is the least
+ * disruptive placement available: dropping `continue` would remove this
+ * row's only path back to the live stage (Results and Report each open a
+ * narrower view — a modal and a document — neither replaces it), and
+ * dropping either `results` or `report` would hide one of the two
+ * independent things Task 3 and Task 4 each built. `session.surveyClosed`
+ * (get-games-list.js, read off the same STATE batch as roundsPlayed: true
+ * for SURVEY#CLOSED and ENDED, false otherwise, including "never opened" and
+ * "still collecting") is the ONLY thing this reads. A survey still
+ * collecting, or one that never opened, falls through to the ordinary rule
+ * unchanged, the same as any other session of its `started` state.
  */
 export function rowActions(session) {
+  if (session.gameType === 'survey' && session.surveyClosed) {
+    return {
+      start: false, continue: true, report: true, edit: false, results: true,
+    };
+  }
   return session.started
-    ? { start: false, continue: true, report: true, edit: false }
-    : { start: true, continue: false, report: false, edit: true };
+    ? {
+      start: false, continue: true, report: true, edit: false, results: false,
+    }
+    : {
+      start: true, continue: false, report: false, edit: true, results: false,
+    };
 }
 
 /** Case-insensitive match over the fields a host would actually search by. */
@@ -106,6 +143,8 @@ export default function SessionHistoryPanel({
   onCopyPlayerUrl = () => {},
   onInvite = () => {},
   onReport = () => {},
+  /** A closed survey's "Results" button (Task 3 fix round 1) — (gameId, title). */
+  onResults = () => {},
   onOpen = () => {},
   onStart = () => {},
   onEdit = () => {},
@@ -287,12 +326,18 @@ export default function SessionHistoryPanel({
                   <td className="shist__when">{formatWhen(session.lastPlayedAt)}</td>
                   <td>
                     {/*
-                      A FIXED 2×2 GRID, deliberately: four buttons in a
+                      A FIXED TWO-COLUMN GRID, deliberately: four buttons in a
                       wrapping flex row broke at a different point per row and
                       read as misaligned twice over. The verbs (Report/Edit,
                       Start/Continue) take the top row because they are why
                       the screen exists; Link and Invite sit beneath them in
-                      every row. See .shist__acts in the stylesheet.
+                      every OTHER row. A closed survey's row is the one
+                      exception (I-2, 2026-09-26 final review): it carries
+                      three verbs — Report, Results and Continue — so the
+                      grid simply wraps to a third line before Link and
+                      Invite; see rowActions' own comment for why that is the
+                      least disruptive place to put the third button. See
+                      .shist__acts in the stylesheet.
                     */}
                     <div className="shist__acts">
                       {acts.report && (
@@ -303,6 +348,19 @@ export default function SessionHistoryPanel({
                           title={`Read the report for "${title}"`}
                         >
                           <Icon name="ChartBar" weight="bold" size={14} /> Report
+                        </button>
+                      )}
+                      {/* REPORT's slot, for a closed survey — never both on one
+                          row (rowActions). Reuses SurveyResultsPanel exactly;
+                          this button only names which session to fetch it for. */}
+                      {acts.results && (
+                        <button
+                          type="button"
+                          className="shist__btn shist__btn--sm"
+                          onClick={() => onResults(session.gameId, title)}
+                          title={`See the results for "${title}"`}
+                        >
+                          <Icon name="ChartBar" weight="bold" size={14} /> Results
                         </button>
                       )}
                       {acts.edit && (

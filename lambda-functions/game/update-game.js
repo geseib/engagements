@@ -25,6 +25,10 @@
  *   names               → Names            (survey only; see below)
  *   briefing            → Briefing         (Call & Answer only; null clears;
  *                                           encrypted; see briefing.js)
+ *   target              → Target           (the goal, events M1b; not a
+ *                                           survey; null clears; at most the
+ *                                           pinned version's size —
+ *                                           session-goal.js)
  *
  * NAMES LOCKS WHEN THE SURVEY OPENS. What a survey writes about people
  * (survey-names.js) is promised on every phone from the first question, so it
@@ -68,6 +72,7 @@ const { gamesIndexPk, callerMayDriveSession } = require('./tenant');
 const { encryptValue } = require('./tenant-crypto');
 const { NAMES } = require('./survey-names');
 const { normalizeBriefing, isCallAndAnswer } = require('./briefing');
+const { checkTarget, questionCountAt, goalApplies } = require('./session-goal');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -82,7 +87,7 @@ const reply = (statusCode, body) => ({
 const VISIBILITIES = ['public', 'private'];
 const EDITABLE_FIELDS = [
   'eventTitle', 'engagementInfo', 'aiContext', 'personaId', 'promptId', 'visibility', 'anonymousUntilReveal',
-  'categoryIds', 'names', 'briefing'
+  'categoryIds', 'names', 'briefing', 'target'
 ];
 
 /**
@@ -343,6 +348,38 @@ exports.handler = async (event) => {
       values[':names'] = mode;
       sets.push('#names = :names');
       applied.names = mode;
+    }
+
+    if ('target' in body) {
+      // THE GOAL (events M1b, session-goal.js). A plan, never a stop. null or
+      // '' REMOVE it; a value is checked against the size of the set at the
+      // version THIS session pinned — the version every round is served from —
+      // never the set's newest.
+      if (gameMeta.Item && !goalApplies(gameMeta.Item.GameType)) {
+        return reply(400, { error: 'A survey is answered at each person’s own pace, so it has no goal.' });
+      }
+      names['#target'] = 'Target';
+      if (body.target === null || body.target === '') {
+        removes.push('#target');
+        applied.target = null;
+      } else {
+        const full = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+        }));
+        let count = 0;
+        if (full.Item && full.Item.QuestionSetId) {
+          const resolved = await resolveSetPartition(
+            db, process.env.TABLE_NAME, gameSetRef(full.Item), full.Item.QuestionSetVersion
+          );
+          count = questionCountAt(resolved.metadata, resolved.version);
+        }
+        const checked = checkTarget(body.target, count);
+        if (checked.error) return reply(400, { error: checked.error });
+        values[':target'] = checked.value;
+        sets.push('#target = :target');
+        applied.target = checked.value;
+      }
     }
 
     /*

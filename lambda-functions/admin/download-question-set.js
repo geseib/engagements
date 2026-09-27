@@ -4,7 +4,7 @@ const { resolvePartitionFromMeta } = require('./shared/set-version');
 const { findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { ORG } = require('./shared/tenant');
 const { decryptItem, decryptItems } = require('./shared/tenant-crypto');
-const { SURVEY_CSV_COLUMNS, surveyCsvCells } = require('./shared/survey-kinds');
+const { SURVEY_CSV_COLUMNS, surveyCsvCells, pollFieldsOf } = require('./shared/survey-kinds');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -248,22 +248,39 @@ exports.handler = async (event) => {
             + '\n';
         });
       } else if (engagementType === 'poll') {
-        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple'
+        // A POLL SET DOWNLOADS AS THE CONTRACT CSV — the survey branch's
+        // columns, below — because a poll question is a survey question the
+        // host asks, of one of four kinds. Written in the old Options /
+        // AllowMultiple shape, a rating or a yes/no poll would come back from
+        // its own download as a question with no answers, with a 200.
+        //
+        // A row stored before polls had kinds is written as the kind it always
+        // meant (`pollFieldsOf`: two or more options a choice, otherwise an
+        // open answer), so the first re-import after this change types the
+        // set and every later one is byte-stable. LOWER-case `options` is what
+        // the importer writes; the capitalised read is the tolerant half —
+        // reading only `q.Options` once exported an empty column for every
+        // poll set in the product.
+        //
+        // Category stays the row's own: polls keep their categories, where a
+        // survey files everything under `Survey`. The browser's
+        // rowsToCsv(rows, 'poll') writes these bytes for the same stored rows
+        // (tests/question-set-roundtrip.js).
+        csvContent = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,'
+          + SURVEY_CSV_COLUMNS.join(',')
           + optionalHeader
           + ',Tags'
           + '\n';
         questions.forEach((q, index) => {
-          // LOWER-case `options` is what the importer writes; the capitalised
-          // read is the tolerant half. Reading only `q.Options` exported an
-          // empty column for every poll set in the product.
-          const rawOptions = q.options ?? q.Options;
-          const options = Array.isArray(rawOptions) ? rawOptions.join('|') : (rawOptions || '');
-          const allowMultiple = q.AllowMultiple ?? q.allowMultiple ?? false;
-
+          const fields = pollFieldsOf({
+            ...q,
+            options: q.options ?? q.Options,
+            allowMultiple: q.allowMultiple ?? q.AllowMultiple,
+          });
           csvContent += `"${esc(q.Category || q.category)}",${numberOf(q, index)},`
             + `"${esc(q.Title || q.title)}","${esc(q.Detail || q.detail)}",`
             + `"${esc(q.School || q.school)}","${esc(q.CustomInstructions || q.customInstructions)}"`
-            + `,"${esc(options)}","${allowMultiple === true || allowMultiple === 'true'}"`
+            + `,${surveyCsvCells(fields).join(',')}`
             + optionalCells(q)
             + `,"${tagsOf(q)}"`
             + '\n';

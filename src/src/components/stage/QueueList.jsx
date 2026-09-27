@@ -35,6 +35,23 @@ import { questionKey } from '../../config/setupPanel';
  * when I press Next?" — so the answer is a word ("Next"), not a colour.
  * Hard rule: a flag must never rely on its colour alone.
  *
+ * ── ASK NEXT AND ASK NOW, ON EVERY ROW, AND ON BOTH HOST SURFACES ─────────
+ *
+ * The owner, testing on dev: *"when you click a question to 'ask next' on the
+ * remote it actually switches the game to that one. The host screen does the
+ * same thing ... 'ask next' in most people's mind means put it at the top of
+ * the queue, not run it now."* So there are two verbs and they never share a
+ * label: `onAskNext` puts the row at the head of this list (the `first` queue
+ * op — the round in flight is untouched), `onAskNow` puts it on the room's
+ * screen straight away. Both receive the CANONICAL key, whichever list the row
+ * came from, because the caller hands it to a queue op or to next-question and
+ * neither accepts the `QUESTION#` spelling.
+ *
+ * `variant="touch"` is the phone remote mounting this same list, so the host's
+ * phone and the host's screen show one running order drawn by one component.
+ * It changes geometry only (44px targets, titles that wrap, the actions on a
+ * line of their own); every row, flag and label is the laptop's.
+ *
  * ── A QUEUED QUESTION WHOSE ROW WE CANNOT FIND ─────────────────────────────
  *
  * `missing` comes back true when the queued key names a question the caller
@@ -70,6 +87,10 @@ export default function QueueList({
     a veto with no undo is a trap, not a control.
   */
   excludedRows = [],
+  /* Null = that control is not drawn, the same deal as `onAutoMove` below. The
+     phone remote passes `onMove={null}`: four reorder targets at 44px do not
+     fit beside a title in a 390px column, and the stage is where the order is
+     arranged. */
   onMove = () => {},
   onRemove = () => {},
   /*
@@ -87,6 +108,23 @@ export default function QueueList({
   */
   onDisable = null,
   onRestore = null,
+  /*
+    THE TWO ASKS. Null = not drawn, so a caller that cannot perform one never
+    shows a button for it. `onAskNext(key, { title })` is the `first` queue op;
+    `onAskNow(key, { title })` interrupts the room — the caller owns the guard
+    for a round with answers still coming in, because only the caller knows the
+    phase (the stage confirms in a dialog, the phone arms the button).
+  */
+  onAskNext = null,
+  onAskNow = null,
+  /* The row whose Ask now is ARMED on the phone — its first tap mid-round
+     turned it into "Tap again to ask now". Null on the stage, which confirms
+     in a dialog instead. */
+  askNowArmedKey = null,
+  /* Every ask button held while the caller is already moving the session
+     (the phone's cooldown) — a double tap must not ask two questions. */
+  askBusy = false,
+  variant = 'panel',
 }) {
   const rows = queueRows(queue, { questions });
   const { count, full } = queueSummary(queue);
@@ -137,8 +175,62 @@ export default function QueueList({
   */
   const autoRows = upNext.filter((row) => row && row.source === 'auto');
 
+  /*
+    WHICH ROW "ASK NEXT" WOULD NOT MOVE — the one the next end-of-round serves
+    already: the flagged queued row, or with nothing servable queued, the first
+    automatic pick. Its Ask next is held rather than hidden, for the same
+    buttons-move-under-the-finger reason the edge arrows are, and its Next flag
+    (or its place at the top of the automatic order) already says why.
+  */
+  const servesNext = nextKey
+    || (autoRows[0] ? questionKey(String(autoRows[0].questionId)) : null);
+  const hasAsks = Boolean(onAskNext || onAskNow);
+  const armedKey = askNowArmedKey ? questionKey(String(askNowArmedKey)) : null;
+
+  /*
+    The pair, drawn identically on a queued row and an automatic one so the two
+    lists read as one running order. Ask next comes FIRST and Ask now second:
+    the reversible, round-preserving verb is the one the eye meets first, and
+    the one that interrupts the room is the one further along.
+  */
+  const askButtons = (key, label, pending = false) => {
+    const armed = key === armedKey;
+    const nowLabel = armed ? 'Tap again to ask now' : 'Ask now';
+    return (
+      <>
+        {onAskNext && (
+          <button
+            type="button"
+            className="setup-ask setup-ask--next"
+            disabled={askBusy || pending || key === servesNext}
+            onClick={() => onAskNext(key, { title: label })}
+            title="Put it at the top of the running order. The round on screen carries on; this is asked when you end it."
+            aria-label={`Ask next: ${label}`}
+          >
+            Ask next
+          </button>
+        )}
+        {onAskNow && (
+          <button
+            type="button"
+            className={`setup-ask setup-ask--now ${armed ? 'is-armed' : ''}`}
+            disabled={askBusy}
+            onClick={() => onAskNow(key, { title: label })}
+            title="Put it on the room's screen straight away. The round on screen ends."
+            aria-label={`${nowLabel}: ${label}`}
+          >
+            {nowLabel}
+          </button>
+        )}
+      </>
+    );
+  };
+
   return (
-    <section className="setup-q" aria-labelledby="setup-q-head">
+    <section
+      className={`setup-q ${variant === 'touch' ? 'setup-q--touch' : ''}`}
+      aria-labelledby="setup-q-head"
+    >
       <div className="setup-q__head">
         <h3 className="setup-q__title" id="setup-q-head">Running order</h3>
         {/*
@@ -161,8 +253,8 @@ export default function QueueList({
 
       {count === 0 ? (
         <p className="setup-q__empty" data-testid="queue-empty">
-          <b>Queue</b> adds a question to the running order — it waits until you end the
-          current round. <b>Ask next</b> puts it on screen straight away.
+          <b>Ask next</b> puts a question at the top of the running order — it waits until
+          you end the current round. <b>Ask now</b> puts it on screen straight away.
         </p>
       ) : (
         <ol className="setup-q__list" data-testid="queue-list">
@@ -245,24 +337,29 @@ export default function QueueList({
                     predicate is `queueRows`', which is `queueMove`'s clamp —
                     not a second opinion about where the edges are.
                   */}
-                  <button
-                    type="button"
-                    className="setup-q__btn"
-                    disabled={!row.canMoveEarlier || pending}
-                    onClick={() => onMove(row.key, 'earlier')}
-                    aria-label={`Move ${row.title || row.key} earlier`}
-                  >
-                    <Icon name="ArrowUp" weight="bold" size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="setup-q__btn"
-                    disabled={!row.canMoveLater || pending}
-                    onClick={() => onMove(row.key, 'later')}
-                    aria-label={`Move ${row.title || row.key} later`}
-                  >
-                    <Icon name="ArrowDown" weight="bold" size={14} />
-                  </button>
+                  {hasAsks && askButtons(row.key, row.missing ? row.key : (row.title || row.key), pending)}
+                  {onMove && (
+                    <>
+                      <button
+                        type="button"
+                        className="setup-q__btn"
+                        disabled={!row.canMoveEarlier || pending}
+                        onClick={() => onMove(row.key, 'earlier')}
+                        aria-label={`Move ${row.title || row.key} earlier`}
+                      >
+                        <Icon name="ArrowUp" weight="bold" size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="setup-q__btn"
+                        disabled={!row.canMoveLater || pending}
+                        onClick={() => onMove(row.key, 'later')}
+                        aria-label={`Move ${row.title || row.key} later`}
+                      >
+                        <Icon name="ArrowDown" weight="bold" size={14} />
+                      </button>
+                    </>
+                  )}
                   {onDisable && (
                     <button
                       type="button"
@@ -275,16 +372,18 @@ export default function QueueList({
                       <Icon name="EyeSlash" weight="bold" size={14} />
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="setup-q__btn"
-                    disabled={pending}
-                    onClick={() => onRemove(row.key)}
-                    title="Take it out of the queue. It goes back to the automatic order, wherever the walk puts it."
-                    aria-label={`Move ${row.title || row.key} out of the queue`}
-                  >
-                    <Icon name="X" weight="bold" size={14} />
-                  </button>
+                  {onRemove && (
+                    <button
+                      type="button"
+                      className="setup-q__btn"
+                      disabled={pending}
+                      onClick={() => onRemove(row.key)}
+                      title="Take it out of the queue. It goes back to the automatic order, wherever the walk puts it."
+                      aria-label={`Move ${row.title || row.key} out of the queue`}
+                    >
+                      <Icon name="X" weight="bold" size={14} />
+                    </button>
+                  )}
                 </span>
               </li>
             );
@@ -338,10 +437,11 @@ export default function QueueList({
               const canEarlier = autoIndex > 0 || count > 0;
               const canLater = autoIndex < autoRows.length - 1;
               const label = row.title || row.questionId;
+              const acts = Boolean(onAutoMove || hasAsks);
               return (
                 <li
                   key={row.questionId}
-                  className={`setup-q__row setup-q__row--auto ${onAutoMove ? 'setup-q__row--acts' : ''}`}
+                  className={`setup-q__row setup-q__row--auto ${acts ? 'setup-q__row--acts' : ''}`}
                   data-testid="queue-auto-row"
                 >
                   <span className="setup-q__pos" aria-hidden="true">{row.round}</span>
@@ -352,54 +452,65 @@ export default function QueueList({
                       {row.categoryName && <span className="setup-q__cat">{row.categoryName}</span>}
                     </span>
                   </span>
-                  {onAutoMove && (
+                  {acts && (
                     <span className="setup-q__acts">
-                      {/* Disabled at the edges, never removed — the same rule
-                          the queued rows follow, for the same
-                          buttons-move-under-the-finger reason. */}
-                      <button
-                        type="button"
-                        className="setup-q__btn"
-                        disabled={!canEarlier}
-                        onClick={() => onAutoMove(row.questionId, 'earlier')}
-                        title="Moving this makes the whole listed order manual — every Auto row above becomes a queued row you can edit."
-                        aria-label={`Move ${label} earlier`}
-                      >
-                        <Icon name="ArrowUp" weight="bold" size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="setup-q__btn"
-                        disabled={!canLater}
-                        onClick={() => onAutoMove(row.questionId, 'later')}
-                        title="Moving this makes the whole listed order manual — every Auto row shown becomes a queued row you can edit."
-                        aria-label={`Move ${label} later`}
-                      >
-                        <Icon name="ArrowDown" weight="bold" size={14} />
-                      </button>
-                      {onDisable && (
-                        <button
-                          type="button"
-                          className="setup-q__btn setup-q__btn--drop"
-                          onClick={() => onDisable(row.questionId, { queued: false })}
-                          title="Don't ask this question at all this session. It moves to the Disabled list below, where you can bring it back."
-                          aria-label={`Disable ${label} for this session`}
-                        >
-                          <Icon name="EyeSlash" weight="bold" size={14} />
-                        </button>
+                      {hasAsks && askButtons(questionKey(String(row.questionId)), label)}
+                      {onAutoMove && (
+                        <>
+                          {/* Disabled at the edges, never removed — the same rule
+                              the queued rows follow, for the same
+                              buttons-move-under-the-finger reason. */}
+                          <button
+                            type="button"
+                            className="setup-q__btn"
+                            disabled={!canEarlier}
+                            onClick={() => onAutoMove(row.questionId, 'earlier')}
+                            title="Moving this makes the whole listed order manual — every Auto row above becomes a queued row you can edit."
+                            aria-label={`Move ${label} earlier`}
+                          >
+                            <Icon name="ArrowUp" weight="bold" size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="setup-q__btn"
+                            disabled={!canLater}
+                            onClick={() => onAutoMove(row.questionId, 'later')}
+                            title="Moving this makes the whole listed order manual — every Auto row shown becomes a queued row you can edit."
+                            aria-label={`Move ${label} later`}
+                          >
+                            <Icon name="ArrowDown" weight="bold" size={14} />
+                          </button>
+                          {onDisable && (
+                            <button
+                              type="button"
+                              className="setup-q__btn setup-q__btn--drop"
+                              onClick={() => onDisable(row.questionId, { queued: false })}
+                              title="Don't ask this question at all this session. It moves to the Disabled list below, where you can bring it back."
+                              aria-label={`Disable ${label} for this session`}
+                            >
+                              <Icon name="EyeSlash" weight="bold" size={14} />
+                            </button>
+                          )}
+                          {/* The fourth slot is an INVISIBLE SPACER. An auto row
+                              is not in the queue, so there is nothing to move it
+                              back out of — the slot exists only so the buttons
+                              align with the queued rows ("the up down buttons dont
+                              align ... they should"). It was a greyed-out X once,
+                              and the owner read that as a broken remove button;
+                              a control that can never work is not drawn. */}
+                          <span
+                            className="setup-q__btn setup-q__btn--slot"
+                            data-testid="queue-auto-slot"
+                            aria-hidden="true"
+                          />
+                        </>
                       )}
-                      {/* The fourth slot is an INVISIBLE SPACER. An auto row
-                          is not in the queue, so there is nothing to move it
-                          back out of — the slot exists only so the buttons
-                          align with the queued rows ("the up down buttons dont
-                          align ... they should"). It was a greyed-out X once,
-                          and the owner read that as a broken remove button;
-                          a control that can never work is not drawn. */}
-                      <span
-                        className="setup-q__btn setup-q__btn--slot"
-                        data-testid="queue-auto-slot"
-                        aria-hidden="true"
-                      />
+                      {/* The same spacer, for a caller that draws only the
+                          queued rows' ✕ (the phone): without it this row's asks
+                          would be one slot wider than the queued rows' above. */}
+                      {hasAsks && !onAutoMove && onRemove && (
+                        <span className="setup-q__btn setup-q__btn--slot" aria-hidden="true" />
+                      )}
                     </span>
                   )}
                 </li>

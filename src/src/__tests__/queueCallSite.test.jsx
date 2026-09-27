@@ -77,17 +77,78 @@ describe('the queue on the questions tab', () => {
     expect(queue.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test('every browser row offers Queue AND Ask next', () => {
-    // rejects: replacing `Ask next` with `Queue`. They are different actions —
-    // one interrupts the room, one does not — and the owner asked for the
-    // second WITHOUT losing the first.
+  test('every browser row offers Queue, Ask next AND Ask now, least disruptive first', () => {
+    // rejects: one button doing two jobs. The owner: "'ask next' in most
+    // people's mind means put it at the top of the queue, not run it now" —
+    // so the interrupt is `Ask now`, and `Ask next` is a queue op.
     renderPanel();
     openQuestions();
 
     for (const row of screen.getAllByTestId('browser-row')) {
-      expect(within(row).getByRole('button', { name: /^queue$/i })).toBeInTheDocument();
-      expect(within(row).getByRole('button', { name: /ask next/i })).toBeInTheDocument();
+      expect(within(row).getAllByRole('button').map((b) => b.textContent))
+        .toEqual(['Queue', 'Ask next', 'Ask now']);
     }
+  });
+
+  test('Ask next puts the question at the top of the queue and does NOT ask it', () => {
+    // rejects: the reported bug — "when you click a question to 'ask next' ...
+    // it actually switches the game to that one."
+    const onQueueFirst = jest.fn();
+    const onSelectQuestion = jest.fn();
+    renderPanel({ onQueueFirst, onSelectQuestion });
+    openQuestions();
+
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^ask next$/i }));
+    expect(onQueueFirst).toHaveBeenCalledWith('q-1');
+    expect(onSelectQuestion).not.toHaveBeenCalled();
+  });
+
+  test('Ask now asks the question, and does not touch the queue', () => {
+    const onQueueFirst = jest.fn();
+    const onQueueQuestion = jest.fn();
+    const onSelectQuestion = jest.fn();
+    renderPanel({ onQueueFirst, onQueueQuestion, onSelectQuestion });
+    openQuestions();
+
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^ask now$/i }));
+    expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
+    expect(onQueueFirst).not.toHaveBeenCalled();
+    expect(onQueueQuestion).not.toHaveBeenCalled();
+  });
+
+  test('Ask next is held on the question already at the top', () => {
+    renderPanel({ questionQueue: ['q-1', 'q-2'] });
+    openQuestions();
+    expect(within(browserRow('pricing power')).getByRole('button', { name: /^ask next$/i })).toBeDisabled();
+    expect(within(browserRow('competitor')).getByRole('button', { name: /^ask next$/i })).toBeEnabled();
+  });
+
+  test('an asked question can only be asked again now — the drain drops asked entries', () => {
+    // rejects: a Queue or Ask next on an asked question, which next-question.js
+    // would silently drop at the end of the round.
+    renderPanel({ usedQuestionIds: ['q-1'] });
+    openQuestions();
+    const row = browserRow('pricing power');
+    expect(within(row).getByRole('button', { name: /^queue$/i })).toBeDisabled();
+    expect(within(row).getByRole('button', { name: /^ask next$/i })).toBeDisabled();
+    expect(within(row).getByRole('button', { name: /^ask again now$/i })).toBeEnabled();
+  });
+
+  test('the running order\'s rows ask next and ask now too, through the same two props', () => {
+    // The queue rows raise keys; Ask now finds the loaded question for the key,
+    // so the page has ONE ask-now path, not one per list.
+    const onQueueFirst = jest.fn();
+    const onSelectQuestion = jest.fn();
+    renderPanel({ questionQueue: ['q-1', 'q-2'], onQueueFirst, onSelectQuestion });
+    openQuestions();
+    const rows = screen.getAllByTestId('queue-row');
+
+    fireEvent.click(within(rows[1]).getByRole('button', { name: /^ask next/i }));
+    expect(onQueueFirst).toHaveBeenCalledWith('q-2', expect.anything());
+    expect(onSelectQuestion).not.toHaveBeenCalled();
+
+    fireEvent.click(within(rows[1]).getByRole('button', { name: /^ask now/i }));
+    expect(onSelectQuestion).toHaveBeenCalledWith(questions[1]);
   });
 
   test('Queue hands back the whole question, not just its id', () => {
@@ -150,7 +211,7 @@ describe('the queue on the questions tab', () => {
     expect(within(browserRow('competitor')).getByRole('button', { name: /^queue$/i })).toBeEnabled();
   });
 
-  test('Ask next stays reachable on a queued row', () => {
+  test('Ask now stays reachable on a queued row', () => {
     // rejects: disabling the interrupt once a question is queued. A host who
     // queued something and then decided to ask it now must not have to unqueue
     // it first — that is two presses to undo their own good intention.
@@ -158,7 +219,7 @@ describe('the queue on the questions tab', () => {
     renderPanel({ questionQueue: ['q-1'], onSelectQuestion });
     openQuestions();
 
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /ask next/i }));
+    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^ask now$/i }));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
   });
 
@@ -194,13 +255,26 @@ const host = stripComments(
 );
 
 describe('the page wires the queue up', () => {
-  test('all five queue props reach the panel', () => {
+  test('all six queue props reach the panel', () => {
     // rejects: the feature shipping as dead code. Every prop here defaults to a
     // no-op in the panel, so a forgotten one renders an identical screen whose
     // buttons do nothing — and every panel test above still passes.
-    for (const prop of ['questionQueue', 'queueBusyKeys', 'onQueueQuestion', 'onQueueMove', 'onQueueRemove']) {
+    for (const prop of ['questionQueue', 'queueBusyKeys', 'onQueueQuestion', 'onQueueFirst', 'onQueueMove', 'onQueueRemove']) {
       expect(host).toMatch(new RegExp(`${prop}=\\{`));
     }
+  });
+
+  test('Ask next is the `first` queue op, run through the optimistic runner', () => {
+    // rejects: Ask next wired to selectQuestion — the reported bug — or to a
+    // bespoke fetch that skips the rollback and the reconcile runQueueOp does.
+    expect(host).toMatch(/onQueueFirst=\{handleQueueFirst\}/);
+    expect(host).toMatch(/const handleQueueFirst = useCallback\(\s*\(key\) => runQueueOp\('first', key, \(q\) => queueFirst\(q, key\)\)/);
+    expect(host).toMatch(/onSelectQuestion=\{selectQuestion\}/);
+  });
+
+  test('Ask now mid-round confirms, and points at Ask next', () => {
+    // The stage's guard for jumping rounds, with the reversible neighbour named.
+    expect(host).toMatch(/showConfirmation\(\s*'Ask this question now\?'[\s\S]{0,200}use Ask next/);
   });
 
   test('an op that the local rules refuse is never sent', () => {

@@ -1,16 +1,19 @@
 const { createGame } = require('./schema-compliant-manager');
+const { reserveCode, CodeSpaceExhausted } = require('./code-reservation');
 const { callerOrgId } = require('./tenant');
 const { findSetMetadata } = require('./set-version');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 
-/** Read-only, for the scope search below. The write path has its own client. */
+/** Read-only: the scope search below and the code draw's partition checks.
+ *  The write path (the manager) has its own client. */
 const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const { readAllowance } = require('./usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./pricing');
 const { recordSessionCreated } = require('./platform-metrics');
 const { planLimitResolve } = require('./plan-limit');
 const { normalizeBriefing, isCallAndAnswer } = require('./briefing');
+const { checkTarget, questionCountAt, goalApplies } = require('./session-goal');
 
 /**
  * WHERE THE PLAYER LINK POINTS, and why it was pointing at a dead host.
@@ -91,7 +94,7 @@ exports.handler = async (event) => {
   // and silently discarded that way. If you add a field to the create payload,
   // it needs THREE edits — here, the createGame() argument below, and the
   // METADATA item in schema-compliant-manager.js.
-  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names, briefing } = JSON.parse(event.body || '{}');
+  const { eventTitle, engagementInfo, aiContext, gameType, questionSetId, questionSetVersion, randomizeQuestions, anonymousUntilReveal, selectedCategories, hostName, visibility, accessCode, personaId, promptId, questionSetScope, names, briefing, target } = JSON.parse(event.body || '{}');
   // A survey is read in the order it was written: nothing shuffles it,
   // whatever the payload says (IMPLEMENTATION-phase-2.md, METADATA).
   const isSurvey = gameType === 'survey';
@@ -179,6 +182,47 @@ exports.handler = async (event) => {
   const setScope = await resolveSetScope(event, questionSetId, questionSetScope);
 
   /*
+    THE GOAL (events M1b, session-goal.js): how many questions the host plans
+    to ask — a plan, never a stop. Checked here, before a code is drawn,
+    against the set's size at the version this session will pin: the explicit
+    `questionSetVersion` when one is sent, else the set's active version, which
+    is what createGame() pins. A survey has no rounds and so no goal. A refused
+    goal writes nothing.
+  */
+  let sessionTarget = null;
+  if (target !== undefined && target !== null && target !== '') {
+    if (!goalApplies(gameType || 'call-and-answer')) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'A survey is answered at each person’s own pace, so it has no goal.' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+    let count = 0;
+    if (questionSetId) {
+      try {
+        const found = await findSetMetadata(docClient, process.env.TABLE_NAME, event, questionSetId, setScope || 'platform');
+        if (found) {
+          const pinned = questionSetVersion !== undefined && questionSetVersion !== null
+            ? questionSetVersion : found.item.activeVersion;
+          count = questionCountAt(found.item, pinned);
+        }
+      } catch (err) {
+        console.warn(`⚠️ create: could not read set "${questionSetId}" to check the goal (${err.message}); bounding it by the ceiling alone`);
+      }
+    }
+    const checked = checkTarget(target, count);
+    if (checked.error) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: checked.error }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+    sessionTarget = checked.value;
+  }
+
+  /*
     THE ONE GATE IN THE WHOLE SESSION LIFECYCLE, AND IT IS HERE ON PURPOSE.
 
     A personal organisation includes five sessions a month and then must
@@ -222,90 +266,80 @@ exports.handler = async (event) => {
   }
 
   /*
-    DRAW UNTIL THE ID IS ACTUALLY FREE (issue #26). The comment here used to
-    read "Generate a unique 4-digit game ID" above a bare Math.random with no
-    uniqueness anywhere — 9,000 values, and every session the table retains
-    raises the odds that a new draw lands on a LIVING one and overwrites it
-    row by row. The manager's first write (the GAMES index row) now carries
-    attribute_not_exists, so a collision fails before anything is damaged and
-    this loop simply draws again.
-
-    Eight attempts, then an honest 503: eight straight collisions means the
-    id space is effectively full, and creating by luck at that point would be
-    the same bug with better odds.
+    DRAW UNTIL THE CODE IS ACTUALLY FREE (issue #26), in the one loop sessions
+    and events share (code-reservation.js). A candidate is skipped while its
+    GAME# or EVENT# partition still holds any row — a lapsed session's 30-day
+    rows, an event's agenda — and `createGame` is the claim: its FIRST write is
+    the conditional GAMES put, so a collision throws before anything is touched
+    and the loop draws again. Eight draws, then an honest 503: eight straight
+    collisions means the space is effectively full.
   */
-  const MAX_ID_ATTEMPTS = 8;
   let gameId = null;
-  let lastError = null;
-
-  for (let attempt = 0; attempt < MAX_ID_ATTEMPTS && !gameId; attempt += 1) {
-    const candidate = Math.floor(1000 + Math.random() * 9000).toString();
-    console.log(`🎮 Creating game ${candidate} with title: ${eventTitle}, questionSetId: ${questionSetId}, randomize: ${randomizeQuestions}, visibility: ${visibility || 'public'}`);
-    try {
-      await createGame(candidate, {
-      title: eventTitle || 'Engagement Session',
-      engagementType: gameType || 'call-and-answer',
-      questionSetId: questionSetId,
-      // Optional explicit version pin. Omitted by the normal create flow, in
-      // which case createGame() resolves the set's activeVersion and pins THAT
-      // — the game keeps reading the questions it started on even after the set
-      // is replaced. Supplying it lets a host deliberately run an older version.
-      questionSetVersion: questionSetVersion,
-      // WHICH partition that set id lives in — platform, this org's, or public.
-      // The id alone stopped naming one partition when sets became per-org, so
-      // the game pins the pair (tenant.js header).
-      questionSetScope: setScope,
+  try {
+    gameId = await reserveCode(docClient, {
+      kind: 'session',
       orgId,
-      selectedCategories: selectedCategories || [],
-      hostPreferences: {
-        randomizeQuestions: isSurvey ? false : randomizeQuestions !== false, // Default to true if not specified
-        // Default ON, per the owner: a host who never touches setup still gets
-        // an anonymous round. Only an explicit false opts out.
-        anonymousUntilReveal: anonymousUntilReveal !== false
+      claim: async (candidate) => {
+        console.log(`🎮 Creating game ${candidate} with title: ${eventTitle}, questionSetId: ${questionSetId}, randomize: ${randomizeQuestions}, visibility: ${visibility || 'public'}`);
+        await createGame(candidate, {
+          title: eventTitle || 'Engagement Session',
+          engagementType: gameType || 'call-and-answer',
+          questionSetId: questionSetId,
+          // Optional explicit version pin. Omitted by the normal create flow, in
+          // which case createGame() resolves the set's activeVersion and pins THAT
+          // — the game keeps reading the questions it started on even after the set
+          // is replaced. Supplying it lets a host deliberately run an older version.
+          questionSetVersion: questionSetVersion,
+          // WHICH partition that set id lives in — platform, this org's, or public.
+          // The id alone stopped naming one partition when sets became per-org, so
+          // the game pins the pair (tenant.js header).
+          questionSetScope: setScope,
+          orgId,
+          selectedCategories: selectedCategories || [],
+          hostPreferences: {
+            randomizeQuestions: isSurvey ? false : randomizeQuestions !== false, // Default to true if not specified
+            // Default ON, per the owner: a host who never touches setup still gets
+            // an anonymous round. Only an explicit false opts out.
+            anonymousUntilReveal: anonymousUntilReveal !== false
+          },
+          aiContext: aiContext,
+          // The host's voice pick. Empty means "adapt to the session" — the
+          // designed default — not "fall back to the legacy template".
+          personaId: (personaId || '').trim(),
+          // The host's summary-approach pick. Empty means "what the set says, else
+          // the format's standard" — get-ai-summary.js:sessionPromptId.
+          promptId: (promptId || '').trim(),
+          // WHAT A SURVEY WRITES ABOUT PEOPLE — anonymous / finished / named.
+          // Survey only; the manager falls back to the set's namesDefault, then
+          // to anonymous, and stores it on METADATA.Names (survey-names.js).
+          ...(isSurvey ? { names } : {}),
+          // Call & Answer only, and already checked above. Absent means unbriefed.
+          ...(sessionBriefing ? { briefing: sessionBriefing } : {}),
+          // The goal, already checked above. Absent means no goal.
+          ...(sessionTarget ? { target: sessionTarget } : {}),
+          details: engagementInfo || '',
+          hostName: hostName || 'Host',
+          visibility: visibility || 'public',
+          accessCode: accessCode || null,
+          debugMode: false
+        });
       },
-      aiContext: aiContext,
-      // The host's voice pick. Empty means "adapt to the session" — the
-      // designed default — not "fall back to the legacy template".
-      personaId: (personaId || '').trim(),
-      // The host's summary-approach pick. Empty means "what the set says, else
-      // the format's standard" — get-ai-summary.js:sessionPromptId.
-      promptId: (promptId || '').trim(),
-      // WHAT A SURVEY WRITES ABOUT PEOPLE — anonymous / finished / named.
-      // Survey only; the manager falls back to the set's namesDefault, then
-      // to anonymous, and stores it on METADATA.Names (survey-names.js).
-      ...(isSurvey ? { names } : {}),
-      // Call & Answer only, and already checked above. Absent means unbriefed.
-      ...(sessionBriefing ? { briefing: sessionBriefing } : {}),
-      details: engagementInfo || '',
-      hostName: hostName || 'Host',
-      visibility: visibility || 'public',
-      accessCode: accessCode || null,
-      debugMode: false
-      });
-      gameId = candidate;
-    } catch (error) {
-      if (error && error.name === 'ConditionalCheckFailedException') {
-        console.warn(`⚠️ Game id ${candidate} is already taken — drawing again (attempt ${attempt + 1}/${MAX_ID_ATTEMPTS})`);
-        lastError = error;
-        continue;
-      }
-      // Any other failure is the old 500, answered HERE: the loop's throw has
-      // nothing above it to land in, and an unhandled throw turns the friendly
-      // error into a raw invocation failure.
-      console.error(`❌ Create game error for ${candidate}:`, error);
+    });
+  } catch (error) {
+    if (error instanceof CodeSpaceExhausted) {
+      console.error('❌ Could not allocate a free game id after', error.attempts, 'attempts');
       return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Failed to create game', details: error.message }),
+        statusCode: 503,
+        body: JSON.stringify({ error: 'Could not allocate a session code — too many sessions are live. Try again, or delete old sessions.' }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
-  }
-
-  if (!gameId) {
-    console.error('❌ Could not allocate a free game id after', MAX_ID_ATTEMPTS, 'attempts', lastError);
+    // Any other failure is the old 500, answered HERE: an unhandled throw turns
+    // the friendly error into a raw invocation failure.
+    console.error('❌ Create game error:', error);
     return {
-      statusCode: 503,
-      body: JSON.stringify({ error: 'Could not allocate a session code — too many sessions are live. Try again, or delete old sessions.' }),
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Failed to create game', details: error.message }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
   }

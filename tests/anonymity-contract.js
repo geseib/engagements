@@ -242,6 +242,17 @@ await check('a legacy call-and-answer game with no HostPreferences is hidden', (
 await check('an absent GameType still defaults to the voting behaviour', () =>
   assert.strictEqual(isHidden(bare, {}), true));
 
+// A typed poll (27 Sep 2026) has no vote, but its answers are opinions the
+// room was told are nameless. rejects: the skip-set deciding for a poll, which
+// sent every poll answer with its author into the report and the feedback
+// round — whatever the preference says, since setup sends false for a poll.
+await check('a poll is always hidden: nameless, whatever the preference, with nothing to reveal it', () => {
+  assert.strictEqual(isHidden({ GameType: 'poll', HostPreferences: { anonymousUntilReveal: true } }, {}), true);
+  assert.strictEqual(isHidden({ GameType: 'poll', HostPreferences: { anonymousUntilReveal: false } }, {}), true);
+  assert.strictEqual(isHidden({ GameType: 'poll' }, { AuthorsRevealed: true }), true);
+  assert.strictEqual(isHidden({ GameType: 'polls' }, undefined), true);
+});
+
 // Legacy spellings are stored in this table. `quiz` is trivia; a row written
 // under the old spelling must not be redacted either.
 await check('the legacy spelling "quiz" is treated as trivia', () =>
@@ -256,9 +267,11 @@ const { GAME_TYPE_IDS, ALIASES, normalizeGameType } =
   require(path.join(REPO, 'lambda-functions/game/game-types.js'));
 
 await check('the inlined skip-set agrees with game-types.js for every spelling', () => {
-  const SKIPS_VOTE = new Set(['trivia', 'wavelength']);
+  const SKIPS_VOTE = new Set(['trivia', 'wavelength', 'poll']);
+  const NAMELESS = new Set(['poll']);
   for (const spelling of [...GAME_TYPE_IDS, ...Object.keys(ALIASES)]) {
-    const expectedHidden = !SKIPS_VOTE.has(normalizeGameType(spelling));
+    const type = normalizeGameType(spelling);
+    const expectedHidden = NAMELESS.has(type) || !SKIPS_VOTE.has(type);
     assert.strictEqual(
       isHidden({ GameType: spelling, HostPreferences: { anonymousUntilReveal: true } }, {}),
       expectedHidden,

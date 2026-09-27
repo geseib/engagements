@@ -125,7 +125,9 @@ const get = (gameId, qs) => handler({
 });
 
 /** A session on round 3, results shown, feedback round open. */
-function seedGame(gameId, { lessonNumber = 3, beat = 'feedback', revealed = true } = {}) {
+function seedGame(gameId, {
+  lessonNumber = 3, beat = 'feedback', revealed = true, clientId = undefined,
+} = {}) {
   store.clear();
   sent = [];
   const padded = String(lessonNumber).padStart(3, '0');
@@ -137,6 +139,14 @@ function seedGame(gameId, { lessonNumber = 3, beat = 'feedback', revealed = true
   });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
   put({ PK: `GAME#${gameId}`, SK: 'CONNECTION#p-1', ConnectionId: 'p-1', ConnectionType: 'PLAYER', PlayerName: 'Ada' });
+  // A joined player, matching aComment()'s default author — MEMBERSHIP (fix
+  // round 1, item 1): every test below that posts as 'Ada Lovelace' needs this
+  // row to exist, or comments.js's new PLAYER# check refuses it before the
+  // behaviour the test is actually about is ever reached.
+  put({
+    PK: `GAME#${gameId}`, SK: 'PLAYER#Ada Lovelace', PlayerName: 'Ada Lovelace',
+    ...(clientId ? { ClientId: clientId } : {}),
+  });
 }
 
 const aComment = (over = {}) => ({
@@ -221,32 +231,126 @@ const aComment = (over = {}) => ({
     assert.strictEqual(frame.playerName, undefined, 'the author was broadcast');
   });
 
-  // ---------- 2. the gate ----------
-  console.log('\n2. a comment can only be written into an open feedback round');
+  // ---------- 1b. membership (fix round 1, item 1) ----------
+  console.log('\n1b. only a name that actually joined this session may comment');
 
+  /*
+    Review of the RESULTS-beat loosening above found the gap this section
+    covers: with the beat gone, anyone holding the four-digit code could post
+    arbitrary text under an arbitrary name and have it reach the projector's
+    arrivals (RoomMeter) on every results screen. The owner's ruling: require
+    the commenter to be `PLAYER#<name>` in this game, and — where the codebase
+    already proves a claimed name belongs to the browser that claimed it
+    (join-game.js's `ClientId`, read the identical way
+    get-answers.js's `getOwnAnswer` reads it) — require that same proof.
+  */
+  seedGame('4013');
+  const notJoined = await post('4013', aComment({ playerName: 'A Stranger' }));
+  check('a name with no PLAYER# row in this game is refused', () => {
+    assert.strictEqual(notJoined.statusCode, 409, `got ${notJoined.statusCode}: ${notJoined.body}`);
+    assert.strictEqual(rows('4013', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4014');
+  const joined = await post('4014', aComment());
+  check('a name that IS a joined player (seedGame\'s default PLAYER# row) is accepted', () =>
+    assert.strictEqual(joined.statusCode, 201, `got ${joined.statusCode}: ${joined.body}`));
+
+  seedGame('4015', { clientId: 'real-browser-id' });
+  const noProof = await post('4015', aComment());
+  check('refused with no clientId at all, once the row has one to check against', () => {
+    assert.strictEqual(noProof.statusCode, 409, `got ${noProof.statusCode}: ${noProof.body}`);
+    assert.strictEqual(rows('4015', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4016', { clientId: 'real-browser-id' });
+  const wrongProof = await post('4016', aComment({ clientId: 'a-different-browser-id' }));
+  check('refused when the supplied clientId does not match the one the row was joined with', () => {
+    assert.strictEqual(wrongProof.statusCode, 409, `got ${wrongProof.statusCode}: ${wrongProof.body}`);
+    assert.strictEqual(rows('4016', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4017', { clientId: 'real-browser-id' });
+  const rightProof = await post('4017', aComment({ clientId: 'real-browser-id' }));
+  check('accepted when the supplied clientId matches', () =>
+    assert.strictEqual(rightProof.statusCode, 201, `got ${rightProof.statusCode}: ${rightProof.body}`));
+
+  seedGame('4018'); // PLAYER# row has no ClientId at all — joined before the field existed.
+  const legacyNoProof = await post('4018', aComment());
+  check('a row with no stamped ClientId proves nothing either way, so membership alone is enough', () =>
+    assert.strictEqual(legacyNoProof.statusCode, 201, `got ${legacyNoProof.statusCode}: ${legacyNoProof.body}`));
+
+  // ---------- 2. the gate ----------
+  console.log('\n2. a comment can be written on any beat of the round\'s RESULTS');
+
+  /*
+    THE OWNER'S RULING, 26 SEP 2026: a player's own "Feedback" button (the
+    ordinary RESULTS# screen, PlayerPage.jsx) posts a comment without the host
+    ever opening a feedback round. So a beat OTHER than 'feedback' is no
+    longer a refusal — the session being on THIS round's RESULTS is enough by
+    itself. The three checks below (field-notes, the tally, and feedback
+    itself) are the exhaustive set: BEATS is a closed three-value enum
+    (stage-beats.js), and all three must now accept a comment.
+  */
   seedGame('4002', { beat: 'field-notes' });
-  const notOpen = await post('4002', aComment());
-  check('refused when the host has not opened a feedback round', () => {
-    // Otherwise a phone left on the previous beat keeps writing into a round
-    // the room has finished with, and the comments appear in a report nobody
-    // was invited to comment on.
-    assert.strictEqual(notOpen.statusCode, 409, `got ${notOpen.statusCode}`);
-    assert.strictEqual(rows('4002', 'COMMENT#').length, 0);
+  const onFieldNotes = await post('4002', aComment());
+  check('accepted on field-notes — no feedback round was ever opened', () => {
+    assert.strictEqual(onFieldNotes.statusCode, 201, `got ${onFieldNotes.statusCode}: ${onFieldNotes.body}`);
+    assert.strictEqual(rows('4002', 'COMMENT#').length, 1);
+  });
+
+  seedGame('4002b', { beat: 'results' });
+  const onTally = await post('4002b', aComment());
+  check('accepted on the tally beat too — same round, same rule', () => {
+    assert.strictEqual(onTally.statusCode, 201, `got ${onTally.statusCode}: ${onTally.body}`);
+    assert.strictEqual(rows('4002b', 'COMMENT#').length, 1);
+  });
+
+  seedGame('4002c'); // seedGame's default beat is 'feedback'.
+  const onFeedbackBeat = await post('4002c', aComment());
+  check('the feedback-beat path still works — unchanged, not merely still passing', () => {
+    assert.strictEqual(onFeedbackBeat.statusCode, 201, `got ${onFeedbackBeat.statusCode}`);
+    assert.strictEqual(rows('4002c', 'COMMENT#').length, 1);
   });
 
   seedGame('4003', { lessonNumber: 4 });
   const wrongRound = await post('4003', aComment({ questionNumber: 3 }));
   check('refused when the session has moved on to another round', () => {
     // The stale-phone case. Round 3's composer is still on screen while the
-    // room is on round 4.
+    // room is on round 4. Still refused: this is fact (1) in the header, and
+    // the ruling above never touched it.
     assert.strictEqual(wrongRound.statusCode, 409, `got ${wrongRound.statusCode}`);
     assert.strictEqual(rows('4003', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4003a');
+  put({ PK: 'GAME#4003a', SK: 'STATE', State: 'ASK#003', LessonNumber: 3 });
+  const onAsk = await post('4003a', aComment());
+  check('refused while the session is on ASK', () => {
+    assert.strictEqual(onAsk.statusCode, 409, `got ${onAsk.statusCode}`);
+    assert.strictEqual(rows('4003a', 'COMMENT#').length, 0);
+  });
+
+  seedGame('4003b');
+  put({ PK: 'GAME#4003b', SK: 'STATE', State: 'VOTE#003', LessonNumber: 3 });
+  const onVote = await post('4003b', aComment());
+  check('refused while the session is on VOTE', () => {
+    assert.strictEqual(onVote.statusCode, 409, `got ${onVote.statusCode}`);
+    assert.strictEqual(rows('4003b', 'COMMENT#').length, 0);
   });
 
   seedGame('4004');
   const noGame = await post('9999', aComment());
   check('a session that does not exist is a 404, not a silent write', () =>
     assert.strictEqual(noGame.statusCode, 404, `got ${noGame.statusCode}`));
+
+  seedGame('4004b');
+  store.delete(key('GAME#4004b', 'ROUND#003'));
+  const noRoundRecord = await post('4004b', aComment());
+  check('refused when the round record itself does not exist — a defensive check, not the dropped beat requirement', () => {
+    assert.strictEqual(noRoundRecord.statusCode, 409, `got ${noRoundRecord.statusCode}`);
+    assert.strictEqual(rows('4004b', 'COMMENT#').length, 0);
+  });
 
   // ---------- 3. what the handler refuses ----------
   console.log('\n3. nothing malformed becomes a sort key or a row');
@@ -468,6 +572,114 @@ const aComment = (over = {}) => ({
     assert.strictEqual(noReport.statusCode, 409, `got ${noReport.statusCode}`);
     assert.match(JSON.parse(noReport.body).error, /report/i);
   });
+
+  // ---------- 8. a closed survey: its one pseudo-round, 000 ----------
+  console.log('\n8. a closed survey takes comments on 000, and never with a name');
+
+  /*
+    The owner, 27 Sep 2026: surveys get "the ability to provide feedback just
+    like we do for call and answer". A survey has no RESULTS#nnn — it is
+    SURVEY#OPEN, then SURVEY#CLOSED, then ENDED — so its Workie read and the
+    comments on it sit at 000, open exactly while the survey is CLOSED.
+    tests/survey-workie-read.js drives the same through the real close.
+  */
+  function seedSurvey(gameId, { state = 'SURVEY#CLOSED', beat = 'field-notes', prefs } = {}) {
+    store.clear();
+    sent = [];
+    put({
+      PK: `GAME#${gameId}`, SK: 'METADATA', GameType: 'survey', Title: 'Offsite pulse',
+      ...(prefs ? { HostPreferences: prefs } : {}),
+    });
+    put({ PK: `GAME#${gameId}`, SK: 'STATE', State: state });
+    put({ PK: `GAME#${gameId}`, SK: 'ROUND#000', QuestionNumber: '000', StageBeat: beat });
+    put({ PK: `GAME#${gameId}`, SK: 'PLAYER#Ada Lovelace', PlayerName: 'Ada Lovelace' });
+  }
+  const onTheRead = (over = {}) => aComment({
+    questionNumber: 0, anchorKind: 'summary', anchorRef: '', anchorLabel: 'AI summary',
+    anchorExcerpt: 'Prep matters.', text: 'Send the agenda too.', ...over,
+  });
+
+  seedSurvey('4020');
+  const surveyWrite = await post('4020', onTheRead());
+  check('a closed survey: a comment on 000 is written (201)', () =>
+    assert.strictEqual(surveyWrite.statusCode, 201, `got ${surveyWrite.statusCode}: ${surveyWrite.body}`));
+  check('...under COMMENT#000, the key create-report files as the survey\'s read', () =>
+    assert.ok(/^COMMENT#000#summary#/.test(rows('4020', 'COMMENT#')[0].SK), rows('4020', 'COMMENT#')[0].SK));
+
+  seedSurvey('4021');
+  const otherRound = await post('4021', onTheRead({ questionNumber: 3 }));
+  // rejects: a gate that opens any round number once a survey is closed.
+  check('a closed survey: any round but 000 is refused (409)', () =>
+    assert.strictEqual(otherRound.statusCode, 409, `got ${otherRound.statusCode}`));
+
+  for (const state of ['SURVEY#OPEN', 'ENDED']) {
+    seedSurvey('4022', { state });
+    // eslint-disable-next-line no-await-in-loop
+    const refused = await post('4022', onTheRead());
+    // rejects: comments while the room is still answering, or after the end.
+    check(`a survey in ${state}: a comment on 000 is refused (409)`, () =>
+      assert.strictEqual(refused.statusCode, 409, `got ${refused.statusCode}`));
+  }
+
+  seedGame('4023');
+  put({ PK: 'GAME#4023', SK: 'STATE', State: 'SURVEY#CLOSED' });
+  const notASurvey = await post('4023', onTheRead());
+  // rejects: keying the 000 door on the state string alone.
+  check('a round session is not a survey, whatever its state says: 000 is refused (409)', () =>
+    assert.strictEqual(notASurvey.statusCode, 409, `got ${notASurvey.statusCode}`));
+
+  // The host's saved preference says names are shown; a survey says otherwise.
+  seedSurvey('4024', { prefs: { anonymousUntilReveal: false } });
+  await post('4024', onTheRead());
+  const surveyRead = JSON.parse((await get('4024', { questionNumber: '000' })).body);
+  check('read back, a survey comment carries no name — even with names switched on for rounds', () => {
+    assert.strictEqual(surveyRead.comments.length, 1);
+    const c = surveyRead.comments[0];
+    assert.strictEqual(c.text, 'Send the agenda too.');
+    assert.ok(!('playerName' in c) && !('name' in c), `a name survived: ${JSON.stringify(c)}`);
+  });
+
+  seedSurvey('4025', { beat: 'feedback' });
+  put({
+    PK: 'GAME#4025', SK: 'REPORT', gameId: '4025', gameTitle: 'Offsite pulse',
+    detailedQuestions: [{
+      questionNumber: '000', questionData: { title: 'Question 000' }, answers: [],
+      aiSummary: { markdownResponse: '## What the Room Said\n\n- **Prep**: send slides early.' }, comments: [],
+    }],
+    surveyResults: {
+      n: 2, finished: 2,
+      questions: [
+        { qid: 'c001#001', n: 1, kind: 'rating', scale: '1-5', title: 'How useful was today?', result: { kind: 'rating', n: 2, counts: [0, 0, 1, 0, 1], mean: 4 }, texts: [] },
+        { qid: 'c001#002', n: 2, kind: 'text', title: 'What would you change?', result: { kind: 'text', n: 1, answerIds: ['c001#002:0'] }, texts: [{ id: 'c001#002:0', text: 'Slides a day ahead' }] },
+      ],
+    },
+  });
+  await post('4025', onTheRead());
+  const surveyRound = JSON.parse((await feedbackRound('4025')).body);
+  check('the survey\'s feedback round is round 000, titled with the survey', () => {
+    assert.strictEqual(surveyRound.questionNumber, '000');
+    assert.strictEqual(surveyRound.round.title, 'Offsite pulse');
+    assert.strictEqual(surveyRound.round.questionData.title, 'Offsite pulse');
+  });
+  // rejects: a round RoundReport cannot draw — it reads `answers[].answer`.
+  check('...one row per question, in the words the Workie was given', () => {
+    assert.strictEqual(surveyRound.round.answers.length, 2);
+    assert.ok(surveyRound.round.answers[0].answer.startsWith('1. How useful was today? (a rating)'),
+      surveyRound.round.answers[0].answer);
+    assert.ok(surveyRound.round.answers[1].answer.includes('"Slides a day ahead"'), surveyRound.round.answers[1].answer);
+    assert.strictEqual(surveyRound.round.answers[1].answerText, surveyRound.round.answers[1].answer);
+  });
+  check('...with the Workie\'s read from the 000 slice, and the comments, nameless', () => {
+    assert.ok(surveyRound.round.aiSummary.markdownResponse.includes('send slides early'));
+    assert.strictEqual(surveyRound.round.comments.length, 1);
+    assert.ok(!('playerName' in surveyRound.round.comments[0]), 'a name survived');
+  });
+
+  seedSurvey('4026', { beat: 'field-notes' });
+  put({ PK: 'GAME#4026', SK: 'REPORT', gameId: '4026', detailedQuestions: [], surveyResults: { n: 0, questions: [] } });
+  const surveyNotOpen = await feedbackRound('4026');
+  check('a closed survey on What We Heard has no feedback round open (409)', () =>
+    assert.strictEqual(surveyNotOpen.statusCode, 409, `got ${surveyNotOpen.statusCode}`));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

@@ -8,7 +8,8 @@
  * every button was a no-op with no feedback. See HostRemote.jsx for the history.)
  *
  * All of the decision-making lives here, as pure functions over the
- * `GET /games/{id}/state?includeHostData=true` payload, because the two things
+ * `GET /games/{id}/host-state` payload (the host's door onto the game state;
+ * until 2026-09-26 the public `/state?includeHostData=true`), because the two things
  * that make a remote dangerous are both decisions, not rendering:
  *
  *   1. offering the WRONG advance for the phase — "Start Voting" on a trivia
@@ -23,6 +24,7 @@
 import { gameTypeMeta, normalizeGameType } from './gameTypes';
 import { rosterRows } from './setupPanel';
 import { normaliseScoreboard, scoreboardAvailability } from './scoreboard';
+import goalRules from '../../../lambda-functions/websocket/session-goal';
 
 /**
  * The beats from which the only way on is the next round.
@@ -459,12 +461,19 @@ export function filterRemoteRows(rows = [], search = '') {
 }
 
 /**
- * "Ask this next" — the same two-action dance `GameHostPage.selectQuestion`
- * does, and for its reason: `next-question.js:473` refuses to advance out of
- * ASK#, so choosing a question mid-round has to say `skip_to_specific` or the
- * tap returns 200 and nothing moves.
+ * "Ask now" — the same two-action dance `GameHostPage.selectQuestion` does,
+ * and for its reason: `next-question.js:473` refuses to advance out of ASK#,
+ * so choosing a question mid-round has to say `skip_to_specific` or the tap
+ * returns 200 and nothing moves.
+ *
+ * THIS WAS `askNextRequest`, behind a button reading "Ask this next", and that
+ * name is the bug the owner reported: *"when you click a question to 'ask
+ * next' on the remote it actually switches the game to that one ... 'ask next'
+ * in most people's mind means put it at the top of the queue, not run it
+ * now."* It is renamed for what it does. "Ask next" is now the `first` queue
+ * op (utils/questionQueueClient.js `postQueueOp`), which touches no round.
  */
-export function askNextRequest({ gameId, questionId, state } = {}) {
+export function askNowRequest({ gameId, questionId, state } = {}) {
   if (!gameId || !questionId) return null;
   const { phase } = parseGamePhase(state);
   const mid = phase === 'ASK' || phase === 'VOTE';
@@ -472,6 +481,22 @@ export function askNextRequest({ gameId, questionId, state } = {}) {
     path: `games/${gameId}/next-question`,
     body: { questionId, action: mid ? 'skip_to_specific' : 'select_specific' },
   };
+}
+
+/**
+ * Does "Ask now" need the second tap?
+ *
+ * Exactly while a round is OPEN — ASK or VOTE — because that is when it ends
+ * the round on screen and discards whoever is still answering or voting; the
+ * stage asks the same question in a dialog at the same two phases
+ * (`GameHostPage.selectQuestion`). Unlike the primary advance it arms even when
+ * everyone is in: jumping from a finished ASK skips that round's vote and
+ * results, which is a loss the room would notice. On RESULTS or in the lobby
+ * nothing is lost, and a button that fights the host there reads as broken.
+ */
+export function askNowNeedsConfirm(state) {
+  const { phase } = parseGamePhase(state);
+  return phase === 'ASK' || phase === 'VOTE';
 }
 
 /* ---------------------------------------------------------------- progress */
@@ -815,6 +840,26 @@ export function phaseSummary(stateResponse) {
   }
 }
 
+/**
+ * THE GOAL, ON THE HOST'S PHONE (events M1b, session-goal.js). The same words
+ * the stage's dock and SESSION panel say, from the same rule: "Question 3 of
+ * 5" under the headline, and on the goal's own round, once its results are
+ * up, "That's your 5. Keep going if there's time, or end the session." Never
+ * a stop: the primary button is exactly what it would have been.
+ *
+ * The goal rides at host-state's TOP level (`target`), because the host door's
+ * gameMetadata is held equal to the public round's. A survey has none.
+ *
+ * @returns {{progress: string, reached: boolean, line: string}}
+ */
+export function remoteGoal(stateResponse) {
+  const payload = stateResponse && typeof stateResponse === 'object' ? stateResponse : {};
+  const gameType = payload.gameType || payload.gameMetadata?.gameType;
+  if (!goalRules.goalApplies(gameType)) return { progress: '', reached: false, line: '' };
+  const { phase, round } = parseGamePhase(payload.state);
+  return goalRules.goalProgress({ target: payload.target, round, phase });
+}
+
 /* ------------------------------------------------- what went wrong, in words */
 
 /**
@@ -906,14 +951,19 @@ export function questionSetFailure({ status } = {}) {
  * @param {{status?: number, payload?: object, live?: boolean}} arg
  * @returns {string}
  */
-export function sessionActionMessage({ status, payload = {}, live = false } = {}) {
+export function sessionActionMessage({ status, payload = {}, live = false, email = '' } = {}) {
   const said = String(payload.message || payload.error || '').trim();
 
   if (status === 401 || status === 403) {
     return 'Your sign-in has expired. Sign in again on this device, then reopen the session.';
   }
   if (status === 404 && live && /^game not found$/i.test(said)) {
-    return 'The session is running, but it would not take the change. This device is probably '
+    // Names the signed-in account, same as the up-front check
+    // (`accessDeniedMessage` below) — a host who was removed from the team
+    // mid-session, or who never noticed the up-front banner, gets the same
+    // fact either way: which account is in the way.
+    const who = email ? `You're signed in as ${email}. ` : '';
+    return `${who}The session is running, but it would not take the change. This device is probably `
       + 'acting as a different team from the one that owns the session — switch team under '
       + 'Session, then try again.';
   }
@@ -921,6 +971,47 @@ export function sessionActionMessage({ status, payload = {}, live = false } = {}
   return NO_STATUS(status)
     ? 'No connection. Check signal and try again.'
     : `That did not go through (${status}).`;
+}
+
+/* --------------------------------------------------------------- host access */
+
+/**
+ * WHAT THE PHONE SAYS BEFORE OFFERING A SINGLE CONTROL, when the signed-in
+ * account cannot drive this session at all.
+ *
+ * `HostRemote.jsx` calls the authenticated `GET /games/{id}/host-details`
+ * (Cognito + `callerMayDriveSession`, bug-sweep Task 1) the moment it opens a
+ * session, and asks nothing else — no state, no roster, no questions, no
+ * answers — until that call comes back 200. This is the copy for the two ways
+ * it can fail:
+ *
+ *   'account'  the door refused this account the same 404
+ *              `callerMayDriveSession` answers everywhere: not a member of the
+ *              session's team, or a different identity than the one that
+ *              created a personal session. The owner's ruling on the wording
+ *              names BOTH remedies, because the phone cannot tell which one
+ *              applies — `get-game.js` answers the identical 404 for either
+ *              reason on purpose, so a session that does not exist is not an
+ *              oracle for one that does.
+ *   'expired'  no valid token reached the door at all (401/403, or none sent).
+ *   'error'    the door did not give a clean answer (a status this surface
+ *              cannot explain, or the request never landed) — never asserted
+ *              as either of the above, which would be a claim the response
+ *              does not support.
+ *
+ * `email` is the signed-in account's own address, read from `useOptionalAuth()`
+ * — omitted (not guessed) when the app has not resolved one yet.
+ */
+export function accessDeniedMessage({ reason, email = '' } = {}) {
+  if (reason === 'expired') {
+    return 'Your sign-in has run out. Sign in again.';
+  }
+  if (reason === 'error') {
+    return 'Could not confirm this device can run the session. Check signal and try again.';
+  }
+  const who = email ? `You're signed in as ${email}. ` : '';
+  return `${who}That account can't run this session. Sign in with an account on the team that `
+    + 'runs it — or, for a personal session, with the account that created it.';
 }
 
 /* -------------------------------------------------------------- scoreboard */

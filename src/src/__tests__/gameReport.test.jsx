@@ -28,7 +28,7 @@
 import React from 'react';
 import fs from 'fs';
 import path from 'path';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import GameReport, { ReportDocument } from '../components/GameReport';
 
 const src = (...p) => path.join(__dirname, '..', ...p);
@@ -106,7 +106,7 @@ describe('the document renders everything the inline version did', () => {
   // dropped line would look like nothing at all until a client asked where
   // their scores went.
   test('title block, rounds, responses and standings are all on the page', () => {
-    render(<ReportDocument reportData={reportData} />);
+    const { container } = render(<ReportDocument reportData={reportData} />);
     expect(screen.getByText('Northwind Q3 Offsite')).toBeInTheDocument();
     expect(screen.getByText('ENG-77')).toBeInTheDocument();
     expect(screen.getByText('What do we protect?')).toBeInTheDocument();
@@ -118,7 +118,10 @@ describe('the document renders everything the inline version did', () => {
     expect(screen.getByText('Which constraint is real?')).toBeInTheDocument();
     expect(screen.getByText('Name an owner.')).toBeInTheDocument();
     expect(screen.getByText('Final Scores')).toBeInTheDocument();
-    expect(screen.getByText('Devi')).toBeInTheDocument();
+    // Devi now also names a roster row (Task 2's "Who was here"), so this is
+    // scoped to Final Scores specifically rather than screen.getByText.
+    expect(within(container.querySelector('.report-final-scores')).getByText('Devi'))
+      .toBeInTheDocument();
   });
 
   // rejects: reading the round noun off question 1 only, and rejects losing
@@ -647,5 +650,434 @@ describe('the caveat can actually be read', () => {
   test('the print sheet restates the caveat instead of hiding it', () => {
     expect(printBlock).toMatch(/\.report-caveat\b/);
     expect(printBlock).toMatch(/\.report-caveat[\s\S]*?break-inside:\s*avoid/);
+  });
+});
+
+/**
+ * "ABOUT THIS SESSION" AND "WHO WAS HERE" — the report's new front matter.
+ *
+ * The owner: "for session report it would be nice to have it start with
+ * event info if given, attendee list. what they are being asked to do in
+ * the session." Two blocks under the title, before the caveat and the
+ * rounds: the event's own free text plus what people were asked to do, and
+ * a plain roster of who joined, in join order. Final Scores keeps ranking;
+ * the roster never repeats a score, and a round run with hidden authors is
+ * untouched by it — the roster says who JOINED, never who answered what.
+ */
+describe('About this session and Who was here', () => {
+  const withFrontMatter = {
+    ...reportData,
+    eventDetails: 'A quarterly check-in for the whole team.',
+    questionSetData: { description: 'Ten questions about the Q3 roadmap.' },
+    players: [
+      { playerName: 'Devi', totalScore: 25, joinedAt: '2026-09-20T10:02:00.000Z' },
+      { playerName: 'Amara', totalScore: 40, joinedAt: '2026-09-20T10:00:00.000Z' },
+    ],
+  };
+
+  test('both blocks render when the session has details and a roster', () => {
+    const { container } = render(<ReportDocument reportData={withFrontMatter} />);
+    expect(screen.getByText('About this session')).toBeInTheDocument();
+    expect(screen.getByText('A quarterly check-in for the whole team.')).toBeInTheDocument();
+    expect(screen.getByText('What people were asked to do')).toBeInTheDocument();
+    expect(screen.getByText('Ten questions about the Q3 roadmap.')).toBeInTheDocument();
+    expect(screen.getByText('Who was here')).toBeInTheDocument();
+    // Amara also names the round's answer author below, so this is scoped to
+    // the roster rather than screen.getByText, which would find both.
+    const roster = container.querySelector('.report-roster');
+    expect(roster.textContent).toContain('Amara');
+    expect(roster.textContent).toContain('Devi');
+  });
+
+  // rejects: reusing the Final Scores ordering (highest score first), which
+  // would make the roster a second, differently-labelled leaderboard rather
+  // than a plain account of who showed up.
+  test('the roster lists names in join order, not score order', () => {
+    const { container } = render(<ReportDocument reportData={withFrontMatter} />);
+    const names = [...container.querySelectorAll('.report-roster-item')].map((n) => n.textContent);
+    // Amara joined first even though Devi scored higher and would sort first
+    // by score, and 'Amara' would not sort first alphabetically either.
+    expect(names).toEqual(['Amara', 'Devi']);
+  });
+
+  // rejects: the roster quietly growing a score column of its own — the
+  // brief is explicit that Final Scores alone owns ranking.
+  test('the roster carries no score — Final Scores keeps ranking', () => {
+    const { container } = render(<ReportDocument reportData={withFrontMatter} />);
+    const roster = container.querySelector('.report-roster');
+    expect(roster.textContent).not.toMatch(/\d/);
+  });
+
+  test('About this session is omitted when there is nothing to say', () => {
+    const bare = { ...reportData, eventDetails: '', questionSetData: null };
+    const { container } = render(<ReportDocument reportData={bare} />);
+    expect(container.querySelector('.report-about')).toBeNull();
+  });
+
+  test('Who was here is omitted when nobody joined', () => {
+    const { container } = render(
+      <ReportDocument reportData={{ ...withFrontMatter, players: [] }} />,
+    );
+    expect(container.querySelector('.report-roster')).toBeNull();
+  });
+
+  // rejects: a report built before either field existed throwing on the new
+  // rendering path — `reportData` (this file's shared fixture) carries
+  // neither `eventDetails` nor `questionSetData`.
+  test('an older report with neither field at all still renders, with neither block', () => {
+    const { container } = render(<ReportDocument reportData={reportData} />);
+    expect(container.querySelector('.report-about')).toBeNull();
+  });
+
+  // rejects: "what people were asked to do" depending on eventDetails being
+  // present too — the question set's own description is a second,
+  // independent source for it.
+  test("a report with only the question set's description still shows what people were asked to do", () => {
+    const setOnly = {
+      ...reportData,
+      eventDetails: '',
+      questionSetData: { description: 'A retro on the launch.' },
+    };
+    render(<ReportDocument reportData={setOnly} />);
+    expect(screen.getByText('What people were asked to do')).toBeInTheDocument();
+    expect(screen.getByText('A retro on the launch.')).toBeInTheDocument();
+  });
+
+  // rejects: the report ever printing the same sentence twice. Fix round 1 —
+  // a controller ruling reversed the earlier call to let "What people were
+  // asked to do" repeat the session's Details verbatim when the set has no
+  // description of its own: with only one field behind both labels in that
+  // case, the honest thing is to omit the second label rather than echo the
+  // first paragraph under a different heading.
+  test('with no set description, "what people were asked to do" is omitted — the Details text appears exactly once', () => {
+    const detailsOnly = { ...reportData, eventDetails: 'Standup for the whole team.', questionSetData: null };
+    const { container } = render(<ReportDocument reportData={detailsOnly} />);
+    const about = container.querySelector('.report-about');
+    expect(about.textContent).not.toContain('What people were asked to do');
+    const matches = [...container.querySelectorAll('p')].filter((p) => p.textContent === 'Standup for the whole team.');
+    expect(matches.length).toBe(1);
+  });
+
+  // rejects: the new roster leaking who answered what in a round the host
+  // ran with hidden authors — "who was here" and "who said what" are
+  // different facts, and only the second one is redacted.
+  test('a hidden-author round still shows no attribution, even though the roster names the same player', () => {
+    const hiddenRound = {
+      ...withFrontMatter,
+      questions: [{
+        questionNumber: 1,
+        questionData: { title: 'Anonymous feedback', category: 'Retro' },
+        answers: [{
+          rank: 1, rankDisplay: '1st', answerText: 'Ship it.',
+          // No playerName at all — the shape create-report.js writes for a
+          // round whose authors are still hidden.
+          totalScore: 10, voteBreakdown: '',
+        }],
+      }],
+    };
+    const { container } = render(<ReportDocument reportData={hiddenRound} />);
+    // The roster names her (Final Scores also names her — scoped to the
+    // roster specifically, since both surfaces legitimately show the name).
+    expect(container.querySelector('.report-roster').textContent).toContain('Amara');
+    const author = container.querySelector('.answer-author');
+    expect(author).not.toBeNull();
+    expect(author.textContent).toBe('');
+  });
+
+  // rejects: dropping `.report-keep` from these two blocks, the same class
+  // the caveat above relies on for the saved PDF's page-break avoidance
+  // (GameReport.jsx's `pagebreak.avoid` list, and the print sheet's own
+  // `break-inside: avoid`).
+  test('the front-matter blocks carry .report-keep, like the caveat', () => {
+    const { container } = render(<ReportDocument reportData={withFrontMatter} />);
+    for (const sel of ['.report-about', '.report-roster']) {
+      const node = container.querySelector(sel);
+      expect(node).not.toBeNull();
+      expect(node.classList.contains('report-keep')).toBe(true);
+    }
+  });
+
+  test('the print sheet keeps both blocks whole across a page break', () => {
+    expect(printBlock).toMatch(/\.report-about[\s\S]*?break-inside:\s*avoid/);
+    expect(printBlock).toMatch(/\.report-roster[\s\S]*?break-inside:\s*avoid/);
+  });
+});
+
+/**
+ * SURVEY RESULTS IN THE REPORT — Task 4 of the 2026-09-26 feature sweep.
+ *
+ * The owner: "this should also be what the report shows, not who filled in
+ * the survey." `reportData.surveyResults` is the same shape
+ * `GET /games/{id}/survey-results` returns (survey-host.js
+ * `surveyResultsPayload`, create-report.js's own reuse of it) — one entry
+ * per question, in survey order — and is rendered here with Task 3's
+ * KindResult family, unchanged, right after Task 2's front matter and in
+ * place of Rounds/Final Scores (a survey has neither: no QUESTION# rows and
+ * no scoring).
+ */
+const surveyReportData = {
+  gameId: 'SVY-42',
+  eventTitle: 'Q3 Pulse Check',
+  gameType: 'survey',
+  roundNoun: null,
+  players: [
+    { playerName: 'Amara', totalScore: 0, joinedAt: '2026-09-20T10:00:00.000Z' },
+    { playerName: 'Devi', totalScore: 0, joinedAt: '2026-09-20T10:02:00.000Z' },
+  ],
+  questions: [],
+  surveyNames: 'finished',
+  surveyResults: {
+    gameId: 'SVY-42',
+    n: 2,
+    finished: 2,
+    names: 'finished',
+    openedAt: '2026-09-20T10:00:00.000Z',
+    closedAt: '2026-09-20T10:30:00.000Z',
+    questions: [
+      {
+        qid: 'c001#001', n: 1, kind: 'rating', title: 'How useful was today?', required: true,
+        scale: '1-5',
+        result: { kind: 'rating', scale: '1-5', n: 2, counts: [0, 0, 0, 1, 1], mean: 4.5, topTwo: 100 },
+        texts: [],
+      },
+      {
+        // 5 open answers, deliberately past TextResult's console `previewCount
+        // = 3` default — this is the fixture I-1 (2026-09-26 final review)
+        // needed: the old 2-text fixture could not tell "shows a preview" from
+        // "shows everything" apart.
+        qid: 'c001#002', n: 2, kind: 'text', title: 'What would you change?', required: false,
+        result: { kind: 'text', n: 5 },
+        texts: [
+          { id: 'c001#002:0', text: 'More time for questions' },
+          { id: 'c001#002:1', text: 'Nothing, it was great' },
+          { id: 'c001#002:2', text: 'A shorter opening' },
+          { id: 'c001#002:3', text: 'Smaller breakout groups' },
+          { id: 'c001#002:4', text: 'More snacks next time' },
+        ],
+      },
+    ],
+  },
+};
+
+describe('Survey results in the report', () => {
+  test('renders every question with Task 3\'s KindResult cards, after the front matter', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    expect(screen.getByText('Survey results')).toBeInTheDocument();
+    expect(screen.getByText('How useful was today?')).toBeInTheDocument();
+    expect(screen.getByText('What would you change?')).toBeInTheDocument();
+    expect(screen.getByText('More time for questions')).toBeInTheDocument();
+    expect(screen.getByText('Nothing, it was great')).toBeInTheDocument();
+    // KindResult's own card, mounted unchanged (svr-card), not redrawn.
+    expect(container.querySelectorAll('.svr-card')).toHaveLength(2);
+  });
+
+  // I-1 (2026-09-26 final review): the owner's ruling is that "the console,
+  // the saved report and the share link show every chart and every open
+  // answer, even under 5 answers." TextResult's console `previewCount = 3`
+  // must not leak into the report — every one of the 5 seeded answers has to
+  // render, not just the first three.
+  test('every open answer renders in the report, not just the first three', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    const items = [...container.querySelectorAll('.svr-textlist li')].map((li) => li.textContent);
+    expect(items).toEqual([
+      'More time for questions',
+      'Nothing, it was great',
+      'A shorter opening',
+      'Smaller breakout groups',
+      'More snacks next time',
+    ]);
+  });
+
+  // rejects: a text card offering a console-only "Read all N" link on a
+  // document that has nowhere for it to go — TextResult.jsx only draws the
+  // link when `onOpenAnswers` is passed, and the report must never pass it.
+  test('a text card has no "Read all" link — this is a document, not the console', () => {
+    render(<ReportDocument reportData={surveyReportData} />);
+    expect(screen.queryByText(/Read all/)).toBeNull();
+  });
+
+  // rejects: dropping the class the print sheet and the html2pdf avoid-list
+  // both key off — the same contract every other indivisible unit follows.
+  test('each survey card carries .report-keep', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    const cards = [...container.querySelectorAll('.report-survey-card')];
+    expect(cards.length).toBe(2);
+    for (const c of cards) expect(c.classList.contains('report-keep')).toBe(true);
+  });
+
+  test('the print sheet keeps a survey card whole across a page break', () => {
+    expect(printBlock).toMatch(/\.report-survey-card[\s\S]*?break-inside:\s*avoid/);
+  });
+
+  // rejects: a survey inheriting Rounds/Final Scores, which would either
+  // render nothing useful (no QUESTION# rows) or, worse, print a Final
+  // Scores leaderboard of every joined player at a meaningless zero score —
+  // the mockup (docs/design/survey-redesign/34-report.html) has neither.
+  test('Final Scores is not rendered for a survey', () => {
+    render(<ReportDocument reportData={surveyReportData} />);
+    expect(screen.queryByText('Final Scores')).toBeNull();
+  });
+
+  test('the header states the question count off surveyResults, not the empty rounds array', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    const meta = [...container.querySelectorAll('.report-meta-item')].map((n) => n.textContent);
+    expect(meta[2]).toBe('Questions2');
+  });
+
+  /*
+   * THE WORKIE'S READ OF A CLOSED SURVEY, AND THE ROOM'S COMMENTS ON IT
+   * (27 Sep 2026). Both live at round 000; create-report.js files that as the
+   * one `detailedQuestions` entry a survey has, and the report prints it
+   * first, as 34-report.html puts "Workie's read" above the questions.
+   */
+  const surveyRead = {
+    questionNumber: '000',
+    questionData: { title: 'Question 000' },
+    answers: [],
+    aiSummary: { markdownResponse: '## What the Room Said\n\n- **Useful**: both rated it 4 or 5.' },
+    comments: [{
+      commentId: 'c-1', anchorKind: 'summary', anchorLabel: 'AI summary', anchorExcerpt: 'Useful',
+      text: 'Agreed — and send the agenda too.', featured: false,
+    }],
+  };
+
+  test('a closed survey\'s read prints as "What we heard", ahead of the results', () => {
+    const { container } = render(<ReportDocument reportData={{ ...surveyReportData, questions: [surveyRead] }} />);
+    const read = container.querySelector('.report-survey-read');
+    expect(read).not.toBeNull();
+    expect(read.textContent).toMatch(/What we heard/);
+    expect(read.textContent).toMatch(/both rated it 4 or 5/);
+    // rejects: the read printed after the charts, or not at all.
+    const results = container.querySelector('.report-survey-results');
+    // eslint-disable-next-line no-bitwise
+    expect(read.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('...with the room\'s comments on it, each unattributed', () => {
+    const { container } = render(<ReportDocument reportData={{ ...surveyReportData, questions: [surveyRead] }} />);
+    const comment = container.querySelector('.report-survey-read .report-comment');
+    expect(comment.textContent).toMatch(/Agreed — and send the agenda too\./);
+    expect(comment.querySelector('.comment-author').textContent).toBe('Comment 1');
+  });
+
+  test('a survey with no read yet prints no empty section for it', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    expect(container.querySelector('.report-survey-read')).toBeNull();
+    // Nor does a round type grow one.
+    expect(screen.queryByText('What we heard')).toBeNull();
+  });
+
+  // rejects: a report requested before the survey has closed crashing, or
+  // silently rendering half a page — the front matter must still be a
+  // complete document on its own.
+  test('a survey with no surveyResults yet renders the front matter and nothing more, without throwing', () => {
+    const notClosed = { ...surveyReportData, surveyResults: null };
+    const { container } = render(<ReportDocument reportData={notClosed} />);
+    expect(container.querySelector('.report-doc')).not.toBeNull();
+    expect(screen.queryByText('Survey results')).toBeNull();
+    expect(screen.queryByText('Final Scores')).toBeNull();
+  });
+
+  /*
+   * NO ROSTER BESIDE ANONYMOUS ANSWERS (the brief's explicit ruling). Task
+   * 2's "Who was here" says who JOINED — unrelated to a survey's Names
+   * setting — but with no minimum group size (the owner's ruling) a small
+   * room's roster sitting next to its own anonymous open answers invites
+   * guessing who wrote what. Finished and Named surveys keep the roster,
+   * same as every other game type: Named's own promise is about the
+   * ANSWERS, never about attendance.
+   */
+  describe('no roster on an Anonymous survey', () => {
+    test('Anonymous: "Who was here" is omitted even though players joined', () => {
+      const anon = {
+        ...surveyReportData,
+        surveyNames: 'anonymous',
+        surveyResults: { ...surveyReportData.surveyResults, names: 'anonymous' },
+      };
+      const { container } = render(<ReportDocument reportData={anon} />);
+      expect(screen.queryByText('Who was here')).toBeNull();
+      expect(container.querySelector('.report-roster')).toBeNull();
+    });
+
+    test('Finished: the roster still shows who joined', () => {
+      const { container } = render(<ReportDocument reportData={surveyReportData} />);
+      expect(screen.getByText('Who was here')).toBeInTheDocument();
+      const roster = container.querySelector('.report-roster');
+      expect(roster.textContent).toContain('Amara');
+      expect(roster.textContent).toContain('Devi');
+    });
+
+    test('Named: the roster still shows who joined', () => {
+      const named = {
+        ...surveyReportData,
+        surveyNames: 'named',
+        surveyResults: { ...surveyReportData.surveyResults, names: 'named' },
+      };
+      const { container } = render(<ReportDocument reportData={named} />);
+      expect(screen.getByText('Who was here')).toBeInTheDocument();
+    });
+
+    // A report requested before a close exists still has a Names mode —
+    // `surveyNames` reads off METADATA, not the (still-null) frozen results.
+    test('Anonymous decided before the survey has closed still hides the roster', () => {
+      const notClosedAnon = { ...surveyReportData, surveyNames: 'anonymous', surveyResults: null };
+      const { container } = render(<ReportDocument reportData={notClosedAnon} />);
+      expect(container.querySelector('.report-roster')).toBeNull();
+    });
+  });
+
+  /*
+   * PRIVACY: no respondent name anywhere in the rendered text, for every
+   * Names mode. The data itself cannot carry one — survey-host.js's
+   * `surveyResultsPayload` never opens a SURVEY#RESP#/SURVEY#DONE# row
+   * (tests/survey-report-results.js §3 pins the JSON side of this) — this
+   * pins the RENDERED side: even a `texts[]` entry carrying a stray `name`
+   * field (which nothing in the product ever sends) is not read by
+   * TextResult, which only ever prints `.text`.
+   */
+  describe('privacy: no respondent name in the rendered text', () => {
+    const SECRET_NAME = 'Bartholomew Okonkwo-Fitzgerald';
+    for (const names of ['anonymous', 'finished', 'named']) {
+      test(`${names}: the rendered survey section never shows a respondent's name`, () => {
+        const withRogueName = {
+          ...surveyReportData,
+          surveyNames: names,
+          surveyResults: {
+            ...surveyReportData.surveyResults,
+            names,
+            questions: surveyReportData.surveyResults.questions.map((q) => (
+              q.kind === 'text'
+                ? { ...q, texts: q.texts.map((t) => ({ ...t, name: SECRET_NAME, playerName: SECRET_NAME })) }
+                : q
+            )),
+          },
+        };
+        const { container } = render(<ReportDocument reportData={withRogueName} />);
+        expect(container.textContent).not.toContain(SECRET_NAME);
+      });
+    }
+  });
+});
+
+/**
+ * THE REBUILD CARRIES THE NEW FIELDS.
+ *
+ * GameHostPage rebuilds `reportData` from scratch on every report open —
+ * its own comment says anything not forwarded there is invisible to
+ * GameReport no matter what create-report.js sent back. Same pattern as the
+ * existing `totalComments`/`reportCompleteness` regressions above.
+ */
+describe('GameHostPage forwards the new front-matter fields', () => {
+  test('eventDetails and questionSetData reach the rebuilt reportData', () => {
+    expect(host).toMatch(/eventDetails:\s*report\.eventDetails/);
+    expect(host).toMatch(/questionSetData:\s*report\.questionSetData/);
+  });
+
+  // rejects: a report open for any survey session forever showing yesterday's
+  // survey — the same "anything not forwarded here is invisible" rule Task 2
+  // already pins above, now for Task 4's two new fields.
+  test('surveyNames and surveyResults reach the rebuilt reportData', () => {
+    expect(host).toMatch(/surveyNames:\s*report\.surveyNames/);
+    expect(host).toMatch(/surveyResults:\s*report\.surveyResults/);
   });
 });

@@ -2,10 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './RemoteSessionPanel.css';
 import Icon from './Icon';
 import RemoteQuestionBrowser from './RemoteQuestionBrowser';
+import QueueList from './stage/QueueList';
 import WorkieContextHint from './WorkieContextHint';
 import { remotePanelTabs, rosterListing } from '../config/hostRemote';
 import { roundsFrom, roundSubtitle, hasSummary } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
+import { normaliseQueue } from '../config/questionQueue';
+import { questionKey } from '../config/setupPanel';
+import { fetchUpNext } from '../utils/questionQueueClient';
 import { authFetch } from '../auth/authFetch';
 
 /**
@@ -66,13 +70,73 @@ export default function RemoteSessionPanel({
   gameType = '',
   round = null,
   unaskedCount = null,
+  /* `/host-state`'s `questionQueue` block ({ queue, version }) — the running
+     order as the last two-second poll saw it. */
+  questionQueue = null,
   busy = false,
-  onAsk = () => {},
+  /* The two asks, both (row) with `row.id` and `row.title`. `onAskNow` arms
+     itself mid-round in HostRemote; `askNowArmedKey` is which row it armed. */
+  askNowArmedKey = null,
+  onAskNext = () => {},
+  onAskNow = () => {},
+  onUnqueue = () => {},
 }) {
   const [tab, setTab] = useState(initialTab);
   const [rounds, setRounds] = useState([]);
   const [roundsLoading, setRoundsLoading] = useState(false);
   const [openRound, setOpenRound] = useState(null);
+  const [plan, setPlan] = useState({ upNext: [], blocked: [], advisories: [] });
+  const [browsedQuestions, setBrowsedQuestions] = useState([]);
+
+  const queue = useMemo(() => normaliseQueue(questionQueue?.queue), [questionQueue]);
+  const queueVersion = questionQueue?.version ?? null;
+
+  /**
+   * WHAT IS COMING UP, AS THE STAGE SHOWS IT. The owner: *"It would be nice if
+   * it reuses the interface that we see in the host screen with seeing the
+   * order of coming up questions."* So this reads the same `GET /up-next`, at
+   * the same count, as GameHostPage.loadUpNext, and the list below is the same
+   * QueueList component the stage panel renders.
+   *
+   * Only while the Questions tab is open, and again whenever the round, the
+   * phase or the queue's version moves — the plan is a function of all three,
+   * and the state poll this phone already runs is what notices them change.
+   * Never on a timer of its own: a list nobody has open costs nothing.
+   */
+  useEffect(() => {
+    if (tab !== 'questions' || !gameId) return undefined;
+    let cancelled = false;
+    (async () => {
+      const result = await fetchUpNext({ apiBase: apiBase(), gameId });
+      // A failed read keeps the last plan — the queued half is drawn from the
+      // state poll regardless, so what is lost is only the automatic tail.
+      if (!cancelled && result.ok) {
+        setPlan({ upNext: result.upNext, blocked: result.blocked, advisories: result.advisories });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, gameId, round, state, queueVersion]);
+
+  /*
+    TITLES FOR THE QUEUED ROWS. QueueList names a queued key from the questions
+    it is handed, exactly as the stage names it from the set the stage browsed.
+    The set the browser below reads is the full answer; the plan's own titles
+    fill in until it has loaded, so a queued row does not flash "Not in this
+    set" for the length of one fetch. A `not-in-set` block is deliberately NOT
+    used as a source — that row's warning is the truth.
+  */
+  const queueQuestions = useMemo(() => {
+    const fromPlan = [
+      ...plan.upNext.map((r) => ({ id: r.questionId, title: r.title, category: r.categoryName })),
+      ...plan.blocked.filter((b) => b.reason !== 'not-in-set')
+        .map((b) => ({ id: b.key, title: b.title, category: b.categoryName })),
+      ...plan.advisories.map((a) => ({ id: a.key, title: a.title, category: a.categoryName })),
+    ].filter((q) => q.id && q.title);
+    return [...browsedQuestions, ...fromPlan];
+  }, [plan, browsedQuestions]);
+
+  /* QueueList raises a key and a title; HostRemote's asks take a row. */
+  const asRow = (key, { title = '' } = {}) => ({ id: questionKey(String(key)), title });
 
   const listing = useMemo(() => rosterListing(roster, state), [roster, state]);
 
@@ -282,6 +346,30 @@ export default function RemoteSessionPanel({
           id="hrs-panel-questions"
           aria-labelledby="hrs-tab-questions"
         >
+          {/* THE RUNNING ORDER FIRST, then the set that fills it — the stage
+              panel's reading order, for the stage panel's reason: what is
+              already coming up is the question a host opens this tab with.
+              The stage's own component, in its touch geometry; no arrows (the
+              stage is where an order is arranged) but the ✕, which is the undo
+              for a stray Ask next. */}
+          <QueueList
+            variant="touch"
+            queue={queue}
+            questions={queueQuestions}
+            upNext={plan.upNext}
+            blocked={plan.blocked}
+            advisories={plan.advisories}
+            onMove={null}
+            onRemove={onUnqueue}
+            /* Held, not hidden, while the phone is already moving the session:
+               every queued row is "in flight" for the length of the cooldown. */
+            busyKeys={busy ? queue : []}
+            askBusy={busy}
+            askNowArmedKey={askNowArmedKey}
+            onAskNext={(key, meta) => onAskNext(asRow(key, meta))}
+            onAskNow={(key, meta) => onAskNow(asRow(key, meta))}
+          />
+
           {/* THE BROWSER THAT ALREADY EXISTED, not a second question list. It
               used to own the whole viewport — its own bar, its own dock — which
               is why it is the tab whose chrome had to move rather than the tab
@@ -294,7 +382,11 @@ export default function RemoteSessionPanel({
             gameType={gameType}
             unaskedCount={unaskedCount}
             busy={busy}
-            onAsk={onAsk}
+            queue={queue}
+            askNowArmedKey={askNowArmedKey}
+            onQuestions={setBrowsedQuestions}
+            onAskNext={onAskNext}
+            onAskNow={onAskNow}
           />
         </section>
       )}

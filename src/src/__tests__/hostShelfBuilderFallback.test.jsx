@@ -29,6 +29,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
 import { authFetch } from '../auth/authFetch';
 import { surveyItemsToCsv } from '../utils/surveyDraft';
+import { pollItemsToCsv } from '../utils/pollDraft';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 
@@ -244,8 +245,12 @@ const BUILDERS = [
       roundKind: 'produce',
       roundKindBrief: '',
     },
-    header: 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Options,AllowMultiple,Tags',
-    firstRow: '"Team","1","LUNCH","Where do we eat?","General","","Tacos|Pho","true","food"',
+    // A poll question is typed: the survey contract's columns, its own category.
+    header: 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Kind,Required,Options,AllowMultiple,'
+      + 'MaxPicks,AllowOther,Shuffle,Scale,LowLabel,HighLabel,YesLabel,NoLabel,Unsure,FollowUpWhen,FollowUpPrompt,'
+      + 'RankTop,TextLength,MaxLength,Placeholder,Themes,Tags',
+    firstRow: '"Team",1,"LUNCH","Where do we eat?","General","","choice","false","Tacos|Pho","true","","false","false",'
+      + '"","","","","","false","","","","","","","false","food"',
     expectBody: {
       customTitle: 'Team Poll', customDescription: 'Choices', customInstructions: 'Vote',
       aiContextInstructions: 'Tally', engagementType: 'poll', roundKind: 'produce', isAIGenerated: true,
@@ -312,6 +317,10 @@ describe.each(BUILDERS)('the $kind builder hands over questions, not a set', (b)
     if (b.kind === 'survey') {
       // The survey branch of the one CSV contract, not a writer of the shelf's own.
       expect(body.fileContent).toBe(surveyItemsToCsv(b.payload.questions));
+    } else if (b.kind === 'poll') {
+      // The poll writer the console uses too (utils/pollDraft.js), not one of the shelf's own.
+      expect(body.fileContent).toBe(pollItemsToCsv(b.payload.questions));
+      expect(body.fileContent.split('\n')).toEqual([b.header, b.firstRow, '']);
     } else {
       expect(body.fileContent.split('\n')).toEqual([b.header, b.firstRow]);
     }

@@ -18,7 +18,8 @@ import {
   remoteQuestionRow,
   questionForCard,
   filterRemoteRows,
-  askNextRequest,
+  askNowRequest,
+  askNowNeedsConfirm,
 } from '../config/hostRemote';
 
 // Delegates to the same router `serve()` installs on global.fetch.
@@ -70,7 +71,12 @@ const CATEGORIES = [
  * reply here settles in a microtask, which is not how a network behaves — see
  * the late-reply test below for what that hid.
  */
-function serve({ state = 'ASK#003', live = true, questions = [TRIVIA], stateDelayMs = 0 } = {}) {
+function serve({
+  state = 'ASK#003', live = true, questions = [TRIVIA], stateDelayMs = 0,
+  // The running order: `/host-state`'s `questionQueue` block and `GET /up-next`,
+  // in the shapes get-game-state.js and up-next.js answer with.
+  queue = [], upNext = null,
+} = {}) {
   const posts = [];
   const later = (reply) => (stateDelayMs
     ? new Promise((resolve) => { setTimeout(() => resolve(reply), stateDelayMs); })
@@ -82,7 +88,13 @@ function serve({ state = 'ASK#003', live = true, questions = [TRIVIA], stateDela
       posts.push({ url: href, body: JSON.parse(init.body || '{}') });
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ state }) });
     }
-    if (href.includes('/state')) {
+    // The access gate (Task 6): asked before anything else about the session.
+    // This file is about the question browser and categories downstream of
+    // it, so it always answers 200.
+    if (href.includes('/host-details')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    }
+    if (href.includes('/host-state')) {
       return later({
         ok: true,
         json: async () => ({
@@ -92,6 +104,7 @@ function serve({ state = 'ASK#003', live = true, questions = [TRIVIA], stateDela
           currentQuestion: 3,
           gameType: 'trivia',
           gameMetadata: { title: 'Offsite', gameType: 'trivia', questionSetId: 'pricing' },
+          questionQueue: { queue, version: queue.length },
           ...(live ? {
             categoryCounts: { '1-8': [12, 0], '9-16': [], '17-24': [], totalRemaining: 31 },
             categoryState: {
@@ -103,6 +116,12 @@ function serve({ state = 'ASK#003', live = true, questions = [TRIVIA], stateDela
     }
     if (href.includes('/players')) {
       return Promise.resolve({ ok: true, json: async () => ({ players: [], stats: { totalPlayers: 0 } }) });
+    }
+    if (href.includes('/up-next') && upNext) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ upNext, blocked: [], advisories: [], excluded: [] }),
+      });
     }
     if (href.includes('/categories')) {
       return Promise.resolve({ ok: true, json: async () => ({ categories: CATEGORIES }) });
@@ -264,25 +283,36 @@ describe('asking a chosen question', () => {
   // refuses to advance out of ASK# without the skip variant AND ANSWERS 200,
   // so the tap would look like it worked and the round would not move.
   it('skips the round on screen when one is running', () => {
-    expect(askNextRequest({ gameId: '4821', questionId: '004', state: 'ASK#003' }).body)
+    expect(askNowRequest({ gameId: '4821', questionId: '004', state: 'ASK#003' }).body)
       .toEqual({ questionId: '004', action: 'skip_to_specific' });
-    expect(askNextRequest({ gameId: '4821', questionId: '004', state: 'VOTE#003' }).body.action)
+    expect(askNowRequest({ gameId: '4821', questionId: '004', state: 'VOTE#003' }).body.action)
       .toBe('skip_to_specific');
   });
 
   // Rejects: sending `skip_to_specific` everywhere, which bypasses the guard
   // that exists to stop a double-tap consuming two questions.
   it('selects normally from RESULTS and from a game that has not started', () => {
-    expect(askNextRequest({ gameId: '4821', questionId: '004', state: 'RESULTS#003' }).body.action)
+    expect(askNowRequest({ gameId: '4821', questionId: '004', state: 'RESULTS#003' }).body.action)
       .toBe('select_specific');
-    expect(askNextRequest({ gameId: '4821', questionId: '004', state: 'STARTED' }).body.action)
+    expect(askNowRequest({ gameId: '4821', questionId: '004', state: 'STARTED' }).body.action)
       .toBe('select_specific');
   });
 
   // Rejects: defaulting a missing id to something. Without an id the endpoint
   // would auto-select, i.e. ask a DIFFERENT question than the one tapped.
   it('refuses without a question id', () => {
-    expect(askNextRequest({ gameId: '4821', state: 'ASK#003' })).toBeNull();
+    expect(askNowRequest({ gameId: '4821', state: 'ASK#003' })).toBeNull();
+  });
+
+  // Rejects: an unguarded Ask now mid-round, which ends the round on screen on
+  // one stray tap — and a guard on RESULTS or in the lobby, where nothing is
+  // lost and a button that fights the host reads as broken.
+  it('asks for the second tap exactly while a round is open', () => {
+    expect(askNowNeedsConfirm('ASK#003')).toBe(true);
+    expect(askNowNeedsConfirm('VOTE#003')).toBe(true);
+    expect(askNowNeedsConfirm('RESULTS#003')).toBe(false);
+    expect(askNowNeedsConfirm('STARTED')).toBe(false);
+    expect(askNowNeedsConfirm(undefined)).toBe(false);
   });
 });
 
@@ -374,19 +404,114 @@ describe('the phone question browser', () => {
     expect(within(right).getByText(/correct/i)).toBeInTheDocument();
   });
 
-  // Rejects: pointing `Ask this next` at a bare next-question advance, which
-  // asks whatever the server picks instead of what the host tapped.
-  it('posts the tapped question id, with the mid-round skip', async () => {
+  // Rejects: pointing `Ask now` at a bare next-question advance, which asks
+  // whatever the server picks instead of what the host tapped — and an Ask now
+  // that fires on the first tap mid-round, ending the round on a stray thumb.
+  it('Ask now arms mid-round, then posts the tapped question id with the skip', async () => {
     const posts = serve({ state: 'ASK#003' });
     await connect();
     fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
     await screen.findByText(TRIVIA.title);
 
-    fireEvent.click(screen.getByRole('button', { name: /ask this next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));
+    const armed = await screen.findByRole('button', { name: /^tap again to ask now/i });
+    expect(posts).toHaveLength(0);
+
+    fireEvent.click(armed);
 
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].url).toBe('https://api.test/games/4821/next-question');
     expect(posts[0].body).toEqual({ questionId: '004', action: 'skip_to_specific' });
+  });
+
+  // Rejects: the reported bug. The owner: "when you click a question to 'ask
+  // next' on the remote it actually switches the game to that one ... 'ask
+  // next' in most people's mind means put it at the top of the queue, not run
+  // it now." Ask next is the `first` queue op and NOTHING ELSE — no
+  // next-question, mid-round or not.
+  it('Ask next puts the question at the top of the queue and does not advance', async () => {
+    const posts = serve({ state: 'ASK#003' });
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    await screen.findByText(TRIVIA.title);
+
+    fireEvent.click(screen.getByRole('button', { name: /^ask next/i }));
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].url).toBe('https://api.test/games/4821/queue');
+    expect(posts[0].body).toMatchObject({ op: 'first', questionKey: '004' });
+    expect(posts.some((p) => p.url.includes('next-question'))).toBe(false);
+    // and the host stays in the list, where the row moving is the answer
+    expect(screen.getByText(TRIVIA.title)).toBeInTheDocument();
+  });
+
+  // Rejects: a phone list that is not the stage's. The owner: "It would be
+  // nice if it reuses the interface that we see in the host screen with seeing
+  // the order of coming up questions." Same component (QueueList), same data
+  // (/host-state's queue, GET /up-next), same order, both actions per row.
+  it('shows the host\'s running order, in order, with both actions on every row', async () => {
+    const AUTO = { source: 'auto', questionId: 'QUESTION#007', title: 'Renewal signals', categoryName: 'Pricing Power', round: 5 };
+    serve({
+      state: 'RESULTS#003',
+      queue: ['004'],
+      upNext: [
+        { source: 'queued', questionId: 'QUESTION#004', title: TRIVIA.title, categoryName: TRIVIA.category, round: 4 },
+        AUTO,
+      ],
+    });
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+
+    const queued = await screen.findByTestId('queue-row');
+    const auto = await screen.findByTestId('queue-auto-row');
+    expect(queued).toHaveTextContent(TRIVIA.title);
+    expect(within(queued).getByTestId('queue-next-flag')).toBeInTheDocument();
+    expect(auto).toHaveTextContent('Renewal signals');
+    // queued first, then the automatic walk — the stage's reading order
+    // eslint-disable-next-line no-bitwise
+    expect(queued.compareDocumentPosition(auto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const row of [queued, auto]) {
+      expect(within(row).getByRole('button', { name: /^ask next/i })).toBeInTheDocument();
+      expect(within(row).getByRole('button', { name: /^ask now/i })).toBeInTheDocument();
+    }
+    // The head is already next, so its Ask next is held; the auto row's is live.
+    expect(within(queued).getByRole('button', { name: /^ask next/i })).toBeDisabled();
+    expect(within(auto).getByRole('button', { name: /^ask next/i })).toBeEnabled();
+  });
+
+  it('Ask next from the running order sends the bare key to the queue', async () => {
+    const posts = serve({
+      state: 'RESULTS#003',
+      upNext: [{ source: 'auto', questionId: 'QUESTION#007', title: 'Renewal signals', round: 4 },
+        { source: 'auto', questionId: 'QUESTION#008', title: 'Churn tells', round: 5 }],
+    });
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    const autos = await screen.findAllByTestId('queue-auto-row');
+
+    fireEvent.click(within(autos[1]).getByRole('button', { name: /^ask next/i }));
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].url).toBe('https://api.test/games/4821/queue');
+    expect(posts[0].body).toMatchObject({ op: 'first', questionKey: '008' });
+  });
+
+  // Out of a round nothing is lost, so Ask now is one tap — from the running
+  // order as from the set.
+  it('Ask now from the running order is one tap on RESULTS', async () => {
+    const posts = serve({
+      state: 'RESULTS#003',
+      upNext: [{ source: 'auto', questionId: 'QUESTION#007', title: 'Renewal signals', round: 4 }],
+    });
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    const auto = await screen.findByTestId('queue-auto-row');
+
+    fireEvent.click(within(auto).getByRole('button', { name: /^ask now/i }));
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].url).toBe('https://api.test/games/4821/next-question');
+    expect(posts[0].body).toEqual({ questionId: '007', action: 'select_specific' });
   });
 
   // Rejects: the preview reaching the phone without the session's game type.
@@ -419,7 +544,8 @@ describe('the phone question browser', () => {
     fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
     await screen.findByText(TRIVIA.title);
 
-    fireEvent.click(screen.getByRole('button', { name: /ask this next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^tap again to ask now/i }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /choose next question/i })).toBeInTheDocument());

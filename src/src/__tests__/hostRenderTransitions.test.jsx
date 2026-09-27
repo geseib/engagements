@@ -263,9 +263,9 @@ describe('Continue on an unstarted session', () => {
     global.fetch = jest.fn(async (url, options) => {
       const u = String(url);
       const method = options?.method || 'GET';
-      // checkGameStatus's read — must be checked before the bare /games match
-      // below, which would otherwise swallow it too.
-      if (u.includes(`games/${UNSTARTED}?role=host`)) {
+      // checkGameStatus's read, the public session brief with no role claim
+      // (the server ignores `?role=host` since 2026-09-26).
+      if (u.endsWith(`games/${UNSTARTED}`)) {
         return {
           ok: true, status: 200,
           json: async () => ({ gameId: UNSTARTED, started: false }),
@@ -353,7 +353,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           text: async () => '{}',
         };
       }
-      if (u.includes(`games/${LIVE}/state`)) {
+      if (u.includes(`games/${LIVE}/host-state`)) {
         return {
           ok: true, status: 200,
           json: async () => ({
@@ -367,7 +367,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           text: async () => '{}',
         };
       }
-      if (u.includes(`games/${LIVE}?role=host`)) {
+      if (u.endsWith(`games/${LIVE}`)) {
         return { ok: true, status: 200, json: async () => ({ gameId: LIVE, started: true }), text: async () => '{}' };
       }
       // THE BUG SCENARIO: the catalogue search finds nothing — a deactivated
@@ -435,7 +435,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           text: async () => '{}',
         };
       }
-      if (u.includes(`games/${LIVE}/state`)) {
+      if (u.includes(`games/${LIVE}/host-state`)) {
         return {
           ok: true, status: 200,
           json: async () => ({
@@ -449,7 +449,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           text: async () => '{}',
         };
       }
-      if (u.includes(`games/${LIVE}?role=host`)) {
+      if (u.endsWith(`games/${LIVE}`)) {
         return { ok: true, status: 200, json: async () => ({ gameId: LIVE, started: true }), text: async () => '{}' };
       }
       // THE BARE CATALOGUE ROUTE ONLY — `question-sets/{id}/categories` (fetchCategories)
@@ -530,7 +530,7 @@ describe('the stage takes a set instruction from the question, not only the cata
 
     global.fetch = jest.fn(async (url) => {
       const u = String(url);
-      if (u.includes(`games/${LOBBY_GAME}/state`)) {
+      if (u.includes(`games/${LOBBY_GAME}/host-state`)) {
         return {
           ok: true, status: 200,
           json: async () => ({
@@ -545,7 +545,7 @@ describe('the stage takes a set instruction from the question, not only the cata
           text: async () => '{}',
         };
       }
-      if (u.includes(`games/${LOBBY_GAME}?role=host`)) {
+      if (u.endsWith(`games/${LOBBY_GAME}`)) {
         return { ok: true, status: 200, json: async () => ({ gameId: LOBBY_GAME, started: true }), text: async () => '{}' };
       }
       // The bare catalogue route only — this IS reached on a lobby reload,

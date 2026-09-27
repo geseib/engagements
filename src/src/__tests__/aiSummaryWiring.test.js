@@ -99,20 +99,43 @@ describe("the host's door to the summary", () => {
 
   // rejects: the debug read going back to the public route, where it is now
   // refused and the stage would show no summary at all in debug mode.
+  // Both name the round (27 Sep 2026): a closed survey has no
+  // CurrentQuestionId for the server to fall back on — its read is 000.
   it('reads the debug prompt on the host route with authFetch, and the plain read stays public', () => {
     const body = functionBody('fetchAISummary');
     expect(body).not.toBeNull();
-    expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?debug=true`\)/);
-    expect(body).toMatch(/(?<![\w.])fetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary`\)/);
+    expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?debug=true&questionId=\$\{encodeURIComponent\(questionId\)\}`\)/);
+    expect(body).toMatch(/(?<![\w.])fetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\?questionId=\$\{encodeURIComponent\(questionId\)\}`\)/);
+  });
+
+  // rejects: a ready frame for ANOTHER round landing on the stage. Once the
+  // read names its round, a past round regenerated from the Rounds tab (same
+  // frame, its own questionId) would fetch that round's summary and put it
+  // over the live one — so the handler only reads for the round the stage is
+  // waiting on (aiQuestionRef), as the old CurrentQuestionId read did by
+  // accident.
+  it('the ready frame fetches onto the stage only for the round the stage awaits', () => {
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '');
+    const at = code.indexOf("onMessage('aiSummaryReady'");
+    const handler = code.slice(at, code.indexOf("onMessage('", at + 10));
+    const guard = handler.search(/String\(data\.questionId\)\.padStart\(3, '0'\) === onStage/);
+    expect(guard).toBeGreaterThan(-1);
+    expect(handler).toMatch(/const onStage = String\(aiQuestionRef\.current/);
+    expect(guard).toBeLessThan(handler.indexOf('fetchAISummary(data.questionId)'));
   });
 
   // rejects: any other route to the public URL with a host-only parameter on
-  // it — a new call site, or `debugParam` glued back onto the public path.
+  // it — a new call site, or `debugParam` glued back onto the public path. The
+  // round, alone, is the one parameter the public read takes.
   it('never puts a host-only parameter on the public route', () => {
     const code = source
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^[ \t]*\/\/.*$/gm, '');
-    const publicWithParams = code.match(/\/ai-summary(?!\/host)(\?|\$\{debugParam\})/g) || [];
+    const publicWithParams = code.match(
+      /\/ai-summary(?!\/host)(\?(?!questionId=\$\{encodeURIComponent\(questionId\)\}`)|\$\{debugParam\})/g,
+    ) || [];
     expect(publicWithParams).toEqual([]);
   });
 });

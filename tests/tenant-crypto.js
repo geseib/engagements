@@ -220,9 +220,11 @@ check('the session row and the report row agree about the same two strings', () 
 // to anyone, so encrypting it would break the comparison and protect nothing.
 check('AccessCode is deliberately NOT encrypted', () =>
   assert.ok(!C.ENCRYPTED_FIELDS.session.includes('AccessCode')));
+// `PollValue` since typed polls (27 Sep 2026): the same answer, structured for
+// the tally — a write-in or a "why" is the participant's words too.
 check('an answer row encrypts what the participant wrote', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.answer].sort(),
-    ['Answer', 'ProcessedWords'].sort()));
+    ['Answer', 'PollValue', 'ProcessedWords'].sort()));
 // THE DERIVED TALLY QUOTES THE ANSWERS BACK. Encrypting the answer row and
 // leaving this one alone protects nothing — the same sentence is one Query
 // away, in `answers[].answer` on the wavelength results row.
@@ -669,6 +671,64 @@ for (const bad of ['questions', 'Question', 'sets', '', null, undefined]) {
 }
 check('decryptItem refuses an unknown entity too', async () =>
   assert.rejects(() => C.decryptItem('org_nw', 'nope', {}), /unknown entity/));
+
+// ---------- 7b. An event and its agenda items (roadmap M1) ----------
+// The host writes an event's name and place, and each item's title and
+// description, for the room — org content, sealed as a session's title is.
+// Everything the builder and the public agenda arithmetic reads (when, how
+// long, what kind, which set) stays plaintext.
+console.log('\n7b. an event and its items');
+check('event seals exactly its title and place', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.event].sort(), ['Place', 'Title']));
+check('item seals exactly its title, description, leader and session options', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.item].sort(), ['Description', 'LedBy', 'Settings', 'Title']));
+check('the schedule, the counts and the set pointer stay plaintext', () => {
+  for (const f of ['StartsAt', 'TimeZone', 'Access', 'State', 'AttendeeReports', 'ItemCount', 'EngagementCount', 'BreakCount']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.event.includes(f), `event would encrypt ${f}`);
+  }
+  for (const f of ['Type', 'Order', 'Minutes', 'State', 'SetRef']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.item.includes(f), `item would encrypt ${f}`);
+  }
+});
+check('an agenda item round-trips, and its words are not in the stored row', async () => {
+  const org = await newOrg('org_event_fields');
+  const row = { PK: 'EVENT#5307', SK: 'ITEM#it_0a1b2c3d', Type: 'trivia', Order: 3, Minutes: 15,
+    Title: 'How well do you know our customers?', Description: 'Ten questions. Scored.', LedBy: 'Priya Raman',
+    Settings: { target: 5, aiContext: 'End with one question for the ops leads.' } };
+  const enc = await C.encryptItem(org, 'item', row);
+  assert.ok(C.isEnvelope(enc.Title) && C.isEnvelope(enc.Description) && C.isEnvelope(enc.LedBy) && C.isEnvelope(enc.Settings));
+  assert.strictEqual(enc.Minutes, 15);
+  assert.ok(!JSON.stringify(enc).includes('customers'));
+  assert.ok(!JSON.stringify(enc).includes('Priya'));
+  assert.ok(!JSON.stringify(enc).includes('ops leads'));
+  const back = await C.decryptItem(org, 'item', enc);
+  assert.strictEqual(back.Title, row.Title);
+  assert.strictEqual(back.Description, row.Description);
+  assert.strictEqual(back.LedBy, row.LedBy);
+  assert.deepStrictEqual(back.Settings, row.Settings);
+});
+
+// ---------- 7c. Somebody who joined an event (events M2) ----------
+// The name an attendee types is personal data, sealed as an item's `LedBy`
+// is. The hash, the time, the owner and the expiry are not content.
+console.log('\n7c. an attendee');
+check('attendee seals exactly the name typed', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.attendee], ['AttendeeName']));
+check('the token hash, the time, the organisation and the expiry stay plaintext', () => {
+  for (const f of ['TokenHash', 'JoinedAt', 'orgId', 'ttl']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.attendee.includes(f), `attendee would encrypt ${f}`);
+  }
+});
+check('an attendee row round-trips, and the name is not in the stored row', async () => {
+  const org = await newOrg('org_attendee_fields');
+  const row = { PK: 'EVENT#1124', SK: 'ATTENDEE#at_0123456789abcdef', AttendeeName: 'Priya Raman',
+    TokenHash: 'x'.repeat(43), JoinedAt: '2026-09-27T09:00:00.000Z', orgId: org, ttl: 1 };
+  const enc = await C.encryptItem(org, 'attendee', row);
+  assert.ok(C.isEnvelope(enc.AttendeeName));
+  assert.strictEqual(enc.TokenHash, row.TokenHash);
+  assert.ok(!JSON.stringify(enc).includes('Priya'));
+  assert.strictEqual((await C.decryptItem(org, 'attendee', enc)).AttendeeName, 'Priya Raman');
+});
 
 // ---------- 8. The three bundle copies are byte-identical ----------
 // CodeUri is per-directory and there are no layers, so this module is

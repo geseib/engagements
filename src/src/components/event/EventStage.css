@@ -1,0 +1,578 @@
+/* ===========================================================================
+   EventStage.css — the event's stage (events M3, reworked 27 Sep 2026): the
+   host's agenda BOARD, a talk's or a break's own screen, the join QR and the
+   end-of-event confirm.
+
+   ONE LADDER: THE STAGE'S. The board is on the room's screen as often as on
+   the host's laptop, so every size reads the profile ladder (--t-body,
+   --t-meta, --hair, declared on <body> by styles/stage.css), and Room, TV,
+   Call and Table each get their own literal numbers. Nothing here is under
+   the profile's floor, because --t-meta IS the floor.
+
+   IT NEVER SCROLLS. The board's rows are one line each (the title truncates,
+   and says itself in full on hover); EventStage.jsx's useBoardFit measures
+   one row against the board's height and lays the rows into as many columns
+   as the agenda needs (--ag-cols, --ag-rows). Past the widest the screen
+   allows, the board goes dense: tighter rows, the kind line dropped, the
+   title at the label size.
+
+   THE WALL SCREENS (a talk, a break) are docs/design/agenda-redesign/_src/
+   agenda-stage.css, carried over as a diff against the shipped stage: the
+   lobby's .joinblock / .qr / .joininfo reused, the stage's own .wipe for the
+   trigger. New classes are prefixed ag-.
+
+   MEASURED (the stage's --bg #0F1A2E; the board is not lifted):
+     --text on --bg                    15.43:1  titles
+     --muted #9BA8BE on --bg            7.50:1  times, kind lines
+     --success-text #6FD0A4 on --bg     9.58:1  "Done"
+     --primary #F6A94C on --bg          8.86:1  "Live", "Paused", Live now
+     --bg on --primary                  8.86:1  Go live, Resume
+     --danger-text #EF8C86 on --bg      7.10:1  END EVENT
+     a live row's tint (--ag-now-tint over --bg): --text 13.3, --muted 6.5
+   On a dialog (--surface #1B2942): --text 13.01, --muted 6.47, --danger-text
+   5.34.
+   ======================================================================== */
+
+.ag-stage-root {
+  --ag-rule: rgba(155, 168, 190, .22);
+  --ag-now-tint: rgba(246, 169, 76, .10);
+  --ag-scrim: rgba(6, 11, 22, .72);
+}
+
+/* ------------------------------------------------ loading and refusal --- */
+.ag-load {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: center;
+}
+
+.ag-load h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.ag-load a {
+  color: var(--primary);
+  font-size: 15px;
+}
+
+/* ------------------------------------------------------------ the board --
+   The host's agenda: fills .main, and its rows fill what is left under the
+   head. The grid clips rather than scrolls; useBoardFit makes sure there is
+   nothing to clip. */
+.ag-board {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(1vh + 4px);
+}
+
+.ag-board-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: .25em;
+  min-width: 0;
+}
+
+.ag-when {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.ag-live {
+  margin: 0;
+  font-size: var(--t-body);
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.ag-live b {
+  color: var(--primary);
+}
+
+.ag-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(var(--ag-cols, 1), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--ag-rows, 1), max-content);
+  align-content: start;
+  column-gap: calc(1.6vw + 12px);
+  row-gap: 0;
+}
+
+.ag-r {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0 calc(.8vw + 8px);
+  min-width: 0;
+  min-height: 48px;
+  padding: calc(.4vh + 2px) calc(.5vw + 6px);
+  border-bottom: var(--hair) solid var(--rule);
+}
+
+.ag-r-at {
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-r-main {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+}
+
+.ag-r-main svg {
+  flex: none;
+}
+
+/* Each truncating piece is ONE text node with min-width:0 — the skill's
+   text-overflow rule; the row's title attribute carries the whole of both. */
+.ag-r-tt {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-body);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ag-r-sub {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-meta);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ag-r-st {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.ag-r-st--live,
+.ag-r-st--paused {
+  color: var(--primary);
+}
+
+.ag-r-st--done {
+  color: var(--success-text);
+}
+
+.ag-r--live {
+  background: var(--ag-now-tint);
+  box-shadow: inset calc(var(--hair) * 3) 0 0 var(--primary);
+}
+
+.ag-r--done .ag-r-tt,
+.ag-r--brk .ag-r-tt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* The row's buttons: its own auto track, never pushed out of the row. */
+.ag-r-go {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .4em;
+}
+
+.ag-b {
+  font-family: inherit;
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1;
+  min-height: 44px;
+  padding: 0 .8em;
+  border-radius: 9px;
+  border: var(--hair) solid var(--rule);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ag-b--go {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--bg);
+}
+
+.ag-b:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.ag-grid[data-dense] .ag-r {
+  min-height: 44px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.ag-grid[data-dense] .ag-r-tt {
+  font-size: var(--t-meta);
+}
+
+.ag-grid[data-dense] .ag-r-sub {
+  display: none;
+}
+
+.ag-grid[data-dense] .ag-b {
+  min-height: 40px;
+  padding: 0 .6em;
+}
+
+/* NARROW: a dense column under MIN_DENSE_COLUMN_PX (a long day on a portrait
+   tablet, 343px at 768 wide). The buttons are what a column cannot give up,
+   so the kind icon goes and the gaps close, and the title keeps the rest —
+   "W…" is what it had before (measured in Chromium, 27 Sep 2026). */
+.ag-grid[data-narrow] .ag-r {
+  grid-template-columns: 2.9em minmax(0, 1fr) auto auto;
+  gap: 0 .45em;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.ag-grid[data-narrow] .ag-r-main svg {
+  display: none;
+}
+
+.ag-grid[data-narrow] .ag-r-go {
+  gap: .25em;
+}
+
+.ag-grid[data-narrow] .ag-b {
+  padding: 0 .5em;
+}
+
+/* END EVENT in the dock: the stage's own .dock-more, in the destructive
+   copy colour — the reversible neighbour (Pause, End item) is on the rows. */
+.ag-dock-end {
+  border-color: var(--danger-deep);
+  color: var(--danger-text);
+}
+
+/* A preview is not the room's (session-setup's Preview marks, reused): a
+   dashed chip, "not yet", without a fifth phase colour. */
+.chip.ag-preview {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.chip.ag-preview .dot {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+
+/* ------------------------------------------------ a talk, a break ------ */
+.ag-wall {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(.6vh + 2px);
+  border-left: var(--hair) solid var(--rule);
+  padding-left: calc(1.4vw + 10px);
+  width: clamp(360px, 34vw, 700px);
+  align-self: start;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.ag-wall h4 {
+  margin: 0 0 calc(.4vh + 2px);
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.ag-wl {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ag-wl li {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr) auto;
+  gap: .1em calc(.7vw + 8px);
+  align-items: baseline;
+  padding: calc(.6vh + 3px) calc(.6vw + 6px);
+  border-bottom: var(--hair) solid var(--rule);
+  min-width: 0;
+}
+
+.ag-wl li:last-child {
+  border-bottom: 0;
+}
+
+.ag-wl .at {
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-wl .tt {
+  font-size: var(--t-body);
+  font-weight: 700;
+  line-height: 1.18;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ag-wl .ty {
+  display: block;
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: .03em;
+  margin-top: .15em;
+}
+
+.ag-wl .st {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.ag-wl li.now {
+  background: var(--ag-now-tint);
+  border-left: calc(var(--hair) * 4) solid var(--primary);
+  border-radius: 0 10px 10px 0;
+  border-bottom-color: transparent;
+}
+
+.ag-wl li.more .tt {
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.ag-up {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.2vh + 4px);
+  min-width: 0;
+}
+
+.ag-up .ty {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.ag-up .ty svg {
+  width: 1.3em;
+  height: 1.3em;
+  flex: none;
+}
+
+.ag-up .q {
+  max-width: 22ch;
+  margin: 0;
+}
+
+.ag-up .qdetail {
+  max-width: 40ch;
+}
+
+.ag-up .joinblock {
+  margin-top: calc(1.2vh + 6px);
+}
+
+.ag-up .qr {
+  width: clamp(180px, 24vh, 300px);
+  height: clamp(180px, 24vh, 300px);
+}
+
+.ag-who {
+  margin: -.2em 0 0;
+  font-size: var(--t-secondary);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A break: the countdown at the hero tier, once. It stops at 0:00. */
+.ag-count {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--t-hero) * 1.6);
+  line-height: .95;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+/* The trigger: the wipe names the item AND says the phones have moved. */
+.wipe.ag-go small b {
+  color: var(--primary);
+}
+
+/* ------------------------------------------------ the join QR, the confirm -- */
+.ag-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--ag-scrim);
+}
+
+.ag-scrim > * {
+  margin: auto;
+}
+
+.ag-qrcard,
+.ag-confirm {
+  padding: 20px 24px;
+  border: 1px solid var(--ag-rule);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.ag-qrcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+}
+
+/* The QR at the size the room can scan, and never taller than the screen. */
+.ag-qrcard .ag-qr {
+  width: min(60vh, 520px);
+  height: min(60vh, 520px);
+}
+
+.ag-qr-url {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-secondary);
+}
+
+.ag-qr-code {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-hero);
+  line-height: 1;
+  letter-spacing: .06em;
+  color: var(--primary);
+}
+
+.ag-confirm {
+  width: min(460px, calc(100vw - 32px));
+  font-size: 15px;
+}
+
+.ag-confirm h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.ag-confirm p {
+  margin: 10px 0 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.ag-confirm-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ag-rule);
+}
+
+.ag-close,
+.ag-end {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ag-close {
+  border: 1px solid var(--ag-rule);
+  background: none;
+  color: var(--text);
+}
+
+.ag-end {
+  border: 1px solid var(--danger-deep);
+  background: none;
+  color: var(--danger-text);
+}
+
+.ag-end:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}

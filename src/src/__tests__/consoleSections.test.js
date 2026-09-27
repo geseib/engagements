@@ -240,3 +240,34 @@ describe('it is pure', () => {
     expect(ids(TEAM_ADMIN)).toContain('prompts');
   });
 });
+
+describe('Events (roadmap M1), behind the switch', () => {
+  // rejects: Events reaching test or prod before the owner asks (roadmap D6).
+  test('off by default: nobody has an Events section', () => {
+    for (const who of [TEAM_ADMIN, TEAM_MEMBER, PERSONAL]) expect(ids(who)).not.toContain('events');
+  });
+  test('on: a team admin and a team member get Events right after Sessions', () => {
+    for (const who of [TEAM_ADMIN, TEAM_MEMBER]) {
+      const list = ids({ ...who, eventsEnabled: true });
+      expect(list[list.indexOf('games') + 1]).toBe('events');
+    }
+  });
+  // rejects: hiding the door from a Personal space (01b explains the plan instead).
+  test('on: a personal space gets Events too, so the Team plan can be explained', () => {
+    const list = ids({ ...PERSONAL, eventsEnabled: true });
+    expect(list[list.indexOf('games') + 1]).toBe('events');
+  });
+  test('on: platform mode and an account with no org never get Events', () => {
+    expect(ids({ ...PLATFORM, eventsEnabled: true })).not.toContain('events');
+    expect(ids({ ...NO_ORG, eventsEnabled: true })).not.toContain('events');
+  });
+  test('a truthy value that is not true does not switch it on', () => {
+    expect(ids({ ...TEAM_ADMIN, eventsEnabled: 'on' })).not.toContain('events');
+  });
+  test('the section is dusk and says what an event is', () => {
+    const section = sectionById({ ...TEAM_ADMIN, eventsEnabled: true }, 'events');
+    expect(section.contentTheme).toBe('dark');
+    expect(section.icon).toBe('CalendarBlank');
+    expect(section.subtitle).toMatch(/One join code for a whole agenda/);
+  });
+});

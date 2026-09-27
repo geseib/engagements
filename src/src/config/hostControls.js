@@ -103,9 +103,37 @@ export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
  */
 const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', feedback: 'FEEDBACK' };
 
+/*
+  A CLOSED SURVEY HAS THE SAME BEATS (27 Sep 2026, the owner: the Workie
+  comments on a survey's results, and the room can give feedback "just like
+  we do for call and answer"). CLOSED is a survey's results showing, so the
+  beats map off it exactly as they map off RESULTS; every other phase keeps
+  ignoring a beat.
+*/
 export function hostPhaseForBeat(roundPhase, beat) {
-  if (roundPhase !== 'RESULTS') return roundPhase;
+  if (roundPhase !== 'RESULTS' && roundPhase !== 'CLOSED') return roundPhase;
   return PHASE_FOR_BEAT[beat] || roundPhase;
+}
+
+/**
+ * A SURVEY'S ONE ROUND NUMBER. A survey has no rounds, so its Workie read and
+ * the comments on it sit at a number no round can have — the server's
+ * get-ai-summary.js, comments.js and stage-beat.js all take 000 as a round.
+ */
+export const SURVEY_ROUND = '000';
+
+/**
+ * The round whose results are showing, padded the way the server keys it —
+ * '003' on RESULTS#003, SURVEY_ROUND on a closed survey — or null when no
+ * results are up. The one answer to "which round does a beat, a comment or a
+ * summary belong to right now", so the stage's four callers cannot disagree.
+ */
+export function resultsRoundOf(gameState) {
+  const state = String(gameState ?? '');
+  if (state === 'SURVEY#CLOSED') return SURVEY_ROUND;
+  if (!state.startsWith('RESULTS#')) return null;
+  const n = parseInt(state.split('#')[1], 10);
+  return Number.isFinite(n) ? String(n).padStart(3, '0') : null;
 }
 
 /**
@@ -128,18 +156,20 @@ export function stageBeatFromFrame(frame, gameState) {
   const beat = frame && typeof frame === 'object' ? frame.beat : null;
   if (!STAGE_BEATS.includes(beat)) return null;
 
-  // A beat is a beat OF RESULTS. Acting on one during ASK would put the stage
-  // into FIELD_NOTES, whose control is "Next Round" — an advance offered to the
-  // host while the room is still typing.
-  const onScreen = String(gameState ?? '').match(/^RESULTS#(\d+)$/);
-  if (!onScreen) return null;
+  // A beat is a beat OF RESULTS — or of a closed survey, whose round is 000.
+  // Acting on one during ASK would put the stage into FIELD_NOTES, whose
+  // control is "Next Round" — an advance offered to the host while the room
+  // is still typing.
+  const state = String(gameState ?? '');
+  const onScreen = /^RESULTS#\d+$/.test(state) || state === 'SURVEY#CLOSED' ? resultsRoundOf(state) : null;
+  if (onScreen === null) return null;
 
   // stage-beat.js pads to three digits before it writes the SK, and puts the
   // padded string on the wire. Compare as numbers, or '003' never equals 3 and
   // the stage ignores every frame it is sent.
   const announced = String(frame.questionNumber ?? '').trim();
   if (!/^\d+$/.test(announced)) return null;
-  if (parseInt(announced, 10) !== parseInt(onScreen[1], 10)) return null;
+  if (parseInt(announced, 10) !== parseInt(onScreen, 10)) return null;
 
   return beat;
 }
@@ -156,7 +186,13 @@ export function stageBeatFromFrame(frame, gameState) {
  * hides itself for a survey, whose own setting is Names), `podium.js`'s label,
  * and hostRemote.js's mirror of this list.
  */
-const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'survey']);
+/*
+ * `poll` joined with typed polls (27 Sep 2026): a poll question is a survey
+ * question asked live, counted on the wall as the room answers, so its round
+ * goes ASK → RESULTS like trivia's (docs/design/survey-redesign/PLAN.md,
+ * "Phase 6"). The backend refuses its vote too (websocket/start-vote.js).
+ */
+const TYPES_THAT_SKIP_VOTE = new Set(['trivia', 'wavelength', 'survey', 'poll']);
 
 /** Does the host code open a VOTE phase for this type? */
 export function hostRunsVotePhase(type) {
@@ -274,6 +310,19 @@ export const HOST_INTENTS = {
   CLOSE_SURVEY: 'close-survey', // SURVEY#OPEN → SURVEY#CLOSED; counts freeze
   WARN_SURVEY: 'warn-survey',   // tell every phone it closes in two minutes
   END_SURVEY: 'end-survey',     // SURVEY#CLOSED → ENDED
+  // Phase 3, 2026-09-26 feature sweep: GET /games/{id}/survey-results, once
+  // closed. Offered as CLOSED's and a survey's ENDED's secondary — the
+  // results are already frozen the instant CLOSE_SURVEY lands.
+  SURVEY_RESULTS: 'survey-results',
+  // Task 8, 2026-09-26 feature sweep: the same frozen results, one question
+  // at a time, full size — SurveyWalkthrough.jsx. Offered beside
+  // SURVEY_RESULTS, as CLOSED's and a survey's ENDED's tertiary.
+  SURVEY_PRESENT: 'survey-present',
+  // AN EVENT'S ITEM, NOT LIVE YET (events, 27 Sep 2026): the host is looking
+  // at it — a preview, or a paused item — and this brings everyone to it:
+  // POST /events/{code}/run start|resume, then the stage carries on here.
+  // GameHostPage swaps it in as the primary; hostControlsFor never offers it.
+  EVENT_GO_LIVE: 'event-go-live',
 };
 
 /**
@@ -353,6 +402,16 @@ export function canEndSession(gameType, gameState) {
   if (gameState === 'ENDED') return false;
   return !isLobbyState(gameState);
 }
+
+/** A survey's end — SURVEY#CLOSED → ENDED (survey-host.js), from any beat of CLOSED. */
+const endSurveyControl = () => ({
+  id: 'end-survey',
+  label: 'End the session',
+  icon: 'FlagCheckered',
+  intent: HOST_INTENTS.END_SURVEY,
+  disabled: false,
+  hint: '',
+});
 
 function primaryFor(phase, {
   runsVote, isSurvey, roundNoun, playerCount, answerCount, hasQuestionSet, notesPage, notesPages, survey,
@@ -441,6 +500,9 @@ function primaryFor(phase, {
       room waits. The way back to the read-back is the secondary.
     */
     case 'FEEDBACK':
+      // A survey has no next round to advance to — next-question refuses a
+      // survey — so its way on from the feedback round is the end.
+      if (isSurvey) return endSurveyControl();
       return {
         id: 'next',
         label: `Next ${roundNoun}`,
@@ -468,21 +530,35 @@ function primaryFor(phase, {
         disabled: false,
         hint: '',
       };
+    /*
+      WHAT WE HEARD, on a closed survey (27 Sep 2026). The owner asked for the
+      Workie to comment on a survey's results the way it does on a round's,
+      so CLOSED — the survey's results showing — leads to the same beat
+      RESULTS does. Ending moves on to the read-back's own primary, one step
+      later: the host who wants no read presses it twice.
+    */
     case 'CLOSED':
       return {
-        id: 'end-survey',
-        label: 'End the session',
-        icon: 'FlagCheckered',
-        intent: HOST_INTENTS.END_SURVEY,
+        id: 'field-notes',
+        label: 'What We Heard',
+        icon: 'Sparkle',
+        intent: HOST_INTENTS.FIELD_NOTES,
         disabled: false,
         hint: '',
       };
     case 'ENDED':
       /*
-        A survey has no session report to open — create-report.js reads
-        rounds, and a survey has none. Its results are phase 3's
-        (SURVEY#RESULTS), so the only honest act on the last screen is the way
-        out, which the round types carry as their secondary.
+        A closed survey DOES have a session report now — create-report.js
+        reuses survey-host.js's surveyResultsPayload (Task 4, 2026-09-26
+        feature sweep; I-2, the same sweep's final review), so the saved
+        document carries every chart and every open answer, not just phase
+        3's live SURVEY#RESULTS. That report is not opened from this live
+        dock's primary/secondary pair for ANY session type, survey or not —
+        it is reached from the Sessions list (SessionHistoryPanel's Report,
+        now offered alongside Results for a closed survey) or, for a live
+        session, from Settings → Rounds. So the honest primary on the last
+        screen stays the way out, exactly as before; only the reasoning here
+        was stale.
       */
       if (isSurvey) {
         return {
@@ -529,6 +605,8 @@ function primaryFor(phase, {
           hint: '',
         };
       }
+      // A closed survey's read-back: the last page's way on is the end.
+      if (isSurvey) return endSurveyControl();
       return {
         id: 'next',
         label: `Next ${roundNoun}`,
@@ -557,7 +635,7 @@ function surveyStatusLine(survey) {
 }
 
 function statusTextFor(phase, {
-  isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+  isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages, goalLine = '',
 }) {
   switch (phase) {
     case 'LOBBY':
@@ -583,7 +661,7 @@ function statusTextFor(phase, {
       // about to skip something the room has not read?"
       return Number(notesPages) > 1
         ? `Reading page ${Number(notesPage) + 1} of ${notesPages}`
-        : 'Discussion prompt on screen';
+        : (goalLine || 'Discussion prompt on screen');
     // `survey` is { finished, partway, notStarted } from the page's own
     // /progress read (hooks/useSurveyProgress.js: surveyRoomCounts). Until the
     // first read lands there is nothing to count, and the lobby's "Waiting for
@@ -596,9 +674,11 @@ function statusTextFor(phase, {
         : 'The survey is closed';
     case 'ENDED':
       return isSurvey ? 'The session is over' : 'All rounds played';
+    // The goal's own round, its results up (events M1b): the line that tells
+    // the host the plan is met. Next stays live — it is words, not a stop.
     case 'RESULTS':
     default:
-      return 'Results are on screen';
+      return goalLine || 'Results are on screen';
   }
 }
 
@@ -628,6 +708,9 @@ export function hostControlsFor({
   // A collecting survey's room, { finished, partway, notStarted }, or null
   // before the first /progress read. Only the survey phases read it.
   survey = null,
+  // The goal's notice (session-goal.js goalReachedLine), '' when there is
+  // nothing to say. It takes the status line on the goal round's results.
+  goalLine = '',
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const runsVote = hostRunsVotePhase(gameType);
@@ -657,6 +740,15 @@ export function hostControlsFor({
     menu."
   */
   let secondary = null;
+  // Task 8, 2026-09-26 feature sweep: "walk the room through survey results,
+  // one question at a time, full size" — beside `secondary` (SURVEY_RESULTS)
+  // below, on the same two phases, never anywhere else. A THIRD slot rather
+  // than a replacement, because both of CLOSED's and a survey's ENDED's two
+  // slots are already spoken for. The "another control is just another thing
+  // to aim at while a room watches" rule that keeps every mid-round phase to
+  // one button does not apply here: nothing is live on either phase — the
+  // same reasoning ENDED's own "Back to Menu" secondary already rests on.
+  let tertiary = null;
   if (resolvedPhase === 'COLLECTING') {
     /*
       THE TWO-MINUTE WARNING — s-01-collecting's second button. It moves
@@ -674,8 +766,22 @@ export function hostControlsFor({
       hint: '',
     };
   } else if (resolvedPhase === 'CLOSED' || (isSurvey && resolvedPhase === 'ENDED')) {
-    // CLOSED's one act is ending it; a survey's ENDED primary IS the way out.
-    secondary = null;
+    /*
+      SEE THE RESULTS — Phase 3 of the survey plan. The results are frozen
+      the instant CLOSE_SURVEY lands (survey-host.js `close()` calls
+      `freeze()` synchronously), so both phases where they are the only
+      other thing on screen — CLOSED (before End) and a survey's own ENDED
+      (after) — offer the same secondary. Never the primary: CLOSED's one
+      forward act is What We Heard (then the end), and ENDED's is leaving,
+      and a results screen the host can return from is not a step in that
+      sequence.
+    */
+    secondary = {
+      id: 'survey-results', label: 'See the results', icon: 'ChartBar', intent: HOST_INTENTS.SURVEY_RESULTS, disabled: false, hint: '',
+    };
+    tertiary = {
+      id: 'survey-present', label: 'Walk through', icon: 'Monitor', intent: HOST_INTENTS.SURVEY_PRESENT, disabled: false, hint: '',
+    };
   } else if (resolvedPhase === 'ASK') {
     secondary = { id: 'skip', label: `Skip ${noun}`, icon: 'SkipForward', intent: HOST_INTENTS.SKIP, disabled: false, hint: '' };
   } else if (resolvedPhase === 'FIELD_NOTES' && primary.intent === HOST_INTENTS.PAGE) {
@@ -688,7 +794,9 @@ export function hostControlsFor({
       vanishes the moment the last page is up (the primary becomes Next Round
       and one button suffices again).
     */
-    secondary = {
+    // A survey has no next round to skip to: its way past the rest of the
+    // read-back is the end, the same act the last page's primary is.
+    secondary = isSurvey ? endSurveyControl() : {
       id: 'skip-notes',
       label: `Skip to Next ${noun}`,
       icon: 'SkipForward',
@@ -756,13 +864,14 @@ export function hostControlsFor({
   }
 
   const text = statusTextFor(resolvedPhase, {
-    isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages,
+    isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages, goalLine,
   });
 
   return {
     phase: resolvedPhase,
     primary,
     secondary,
+    tertiary,
     status: { text, tone: statusTone(text) },
   };
 }

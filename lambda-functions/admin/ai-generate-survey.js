@@ -54,8 +54,11 @@ const { makeGenerationHandler } = require('./shared/generation-handler');
 const { tagGuidance } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const {
-  KINDS, SCALES, SURVEY_CATEGORY, normalizeKind, surveyFieldsFromItem, validateSurvey, itemFields, itemsToSurveyCsv,
+  KINDS, SURVEY_CATEGORY, normalizeKind, surveyFieldsFromItem, validateSurvey, itemFields, itemsToSurveyCsv,
 } = require('./shared/survey-kinds');
+// The kind fields' schema and repairs are shared with the poll generator and
+// the one-question drafter, which write typed questions too.
+const { kindFieldProperties, repairKindFields } = require('./shared/kind-generation');
 
 /** "How many" tops out at Thorough-and-then-some (mockup 02: Quick 5 / Standard 8 / Thorough 12, a field capped at 20). */
 const MAX_COUNT = 20;
@@ -135,24 +138,10 @@ function buildTool(config) {
               title: { type: 'string', description: `The question itself, ${MAX_TITLE} characters maximum. Ask one thing.` },
               detail: { type: 'string', description: 'Optional context shown under the question. Usually empty.' },
               required: { type: 'boolean', description: 'Must the respondent answer this question?' },
-              options: { type: 'array', items: { type: 'string' }, description: 'choice: 2-8 options. rank: 3-7 items to put in order. Empty for every other kind.' },
-              allowMultiple: { type: 'boolean', description: 'choice only: may the respondent pick several?' },
-              maxPicks: { type: 'integer', description: 'choice with allowMultiple only: the most they may pick (2 up to the number of options). Omit for no limit.' },
-              allowOther: { type: 'boolean', description: 'choice only: offer a write-in "Something else" box.' },
-              shuffle: { type: 'boolean', description: 'choice only: show the options in a random order (not for ordered scales).' },
-              scale: { type: 'string', enum: [...SCALES], description: 'rating only: 1-5, 1-10, 0-10 (only for a would-you-recommend question) or stars.' },
-              lowLabel: { type: 'string', description: 'rating only: the words under the low end.' },
-              highLabel: { type: 'string', description: 'rating only: the words under the high end.' },
-              yesLabel: { type: 'string', description: 'yesno only: replace "Yes" — leave empty to keep it.' },
-              noLabel: { type: 'string', description: 'yesno only: replace "No" — leave empty to keep it.' },
-              unsure: { type: 'boolean', description: 'yesno only: offer "Not sure".' },
-              followUpWhen: { type: 'string', enum: ['', 'yes', 'no', 'any'], description: 'yesno only: ask a "why?" after this answer; empty for none.' },
-              followUpPrompt: { type: 'string', description: 'yesno with followUpWhen only: the follow-up question.' },
-              rankTop: { type: 'integer', description: 'rank only: rank just the top N (fewer than the number of items). Omit to rank them all.' },
-              textLength: { type: 'string', enum: ['short', 'long'], description: 'text only: one line (short) or a paragraph (long).' },
-              maxLength: { type: 'integer', description: 'text only: the answer limit in characters, 20-2000. Omit for the default (280 short, 500 long).' },
-              placeholder: { type: 'string', description: 'text only: a short hint shown in the empty answer box.' },
-              themes: { type: 'boolean', description: 'text only: let Workie group the answers into themes when the survey closes. Usually true.' },
+              // Every kind's fields, whichever kinds were chosen — the kind
+              // enum above is what limits the model, and this schema has
+              // offered all of them since Phase 1.
+              ...kindFieldProperties(KINDS),
               tags: { type: 'array', items: { type: 'string' }, description: '3-6 lowercase kebab-case tags for filtering and search.' },
             },
             required: ['kind', 'title', 'required', 'tags'],
@@ -224,8 +213,6 @@ function buildPrompt({ config, count, alreadyUsedTitles, isFirstPass }) {
   return p;
 }
 
-const inRange = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
-
 /**
  * One raw tool item → a contract-shaped item, or null.
  *
@@ -257,26 +244,7 @@ function normalizeItem(raw, config) {
     required: src.required === true,
   });
 
-  // ── repairs ──
-  if (f.kind === 'rating' && !SCALES.includes(f.scale)) f.scale = '1-5';
-  if (f.kind === 'choice') {
-    f.options = f.options.slice(0, 8);
-    if (!f.allowMultiple || !inRange(f.maxPicks, 2, f.options.length)) f.maxPicks = null;
-  }
-  if (f.kind === 'rank') {
-    f.options = f.options.slice(0, 7);
-    if (!inRange(f.rankTop, 1, f.options.length - 1)) f.rankTop = null;
-  }
-  if (f.kind === 'yesno') {
-    if (!['', 'yes', 'no', 'any'].includes(f.followUpWhen) || !f.followUpPrompt) {
-      f.followUpWhen = '';
-      f.followUpPrompt = '';
-    }
-  }
-  if (f.kind === 'text') {
-    if (!['short', 'long'].includes(f.textLength)) f.textLength = 'long';
-    if (!inRange(f.maxLength, 20, 2000)) f.maxLength = f.textLength === 'short' ? 280 : 500;
-  }
+  repairKindFields(f, { maxOptions: 8, textLength: 'long' });
 
   if (validateSurvey(f).length > 0) return null;
 

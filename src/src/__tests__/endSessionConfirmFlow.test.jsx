@@ -54,7 +54,10 @@ function installFetch(overrides = {}) {
     const u = String(url);
     const method = options?.method || 'GET';
     for (const [pattern, body] of Object.entries(overrides)) {
-      if (u.includes(pattern)) {
+      // A trailing `$` anchors the pattern at the END of the URL, for the
+      // session brief `games/{id}`, which every other session URL contains.
+      const hit = pattern.endsWith('$') ? u.endsWith(pattern.slice(0, -1)) : u.includes(pattern);
+      if (hit) {
         return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
       }
     }
@@ -67,8 +70,11 @@ function installFetch(overrides = {}) {
 
 async function renderLiveGame() {
   installFetch({
-    [`games/${GAME}?role=host`]: { started: true },
-    [`games/${GAME}/state?includeHostData=true`]: {
+    // checkGameStatus: the public session brief, no role claim (the server
+    // ignores `?role=host` since 2026-09-26).
+    [`games/${GAME}$`]: { started: true },
+    // The host's door onto the game state, read with authFetch.
+    [`games/${GAME}/host-state`]: {
       state: 'ASK#001',
       currentQuestion: 1,
       gameMetadata: { gameType: 'trivia', title: 'Test Game' },

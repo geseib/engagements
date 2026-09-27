@@ -135,6 +135,44 @@ describe('the composer', () => {
     expect(screen.getByText('Your name will be shown with this comment.')).toBeInTheDocument();
   });
 
+  test('a closed survey\'s feedback round promises the opposite, because it is the opposite', () => {
+    /*
+      27 Sep 2026: a survey's comments carry no name anywhere — comments.js
+      strips it on every read, and the report leaves it off. So the composer
+      on a survey's round (PlayerPage passes namesShown={false}) must not say
+      the name is shown: a promise the product does not keep is worse than
+      none. rejects: the round types' disclosure left on a survey.
+    */
+    mount({ namesShown: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    expect(screen.getByText('Your name is not shown with this comment.')).toBeInTheDocument();
+    expect(screen.queryByText('Your name will be shown with this comment.')).toBeNull();
+  });
+
+  test('a survey\'s rows are its questions: titled by question, with no author beside them', () => {
+    /*
+      27 Sep 2026, seen in Chromium: a closed survey's round (comments.js
+      surveyFeedbackRound, kind 'survey') has one row per question — its result
+      in words — and RoundReport printed "Response 1" beside each under
+      "Responses", naming respondents who do not exist. rejects: the survey's
+      rows labelled as people's responses.
+    */
+    const survey = {
+      ...ROUND,
+      kind: 'survey',
+      answers: [
+        { answer: '1. How useful was today overall? (a rating) 2 answered.' },
+        { answer: '2. Which part helped most? (multiple choice) 2 answered.' },
+      ],
+    };
+    mount({ round: survey, namesShown: false });
+    expect(screen.getByRole('heading', { name: 'Results by question' })).toBeInTheDocument();
+    expect(screen.queryByText('Responses')).toBeNull();
+    expect(screen.queryByText(/^Response \d/)).toBeNull();
+    expect(screen.getByRole('button', { name: "Read question 2's result in full" })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comment on question 1' })).toBeInTheDocument();
+  });
+
   test('will not send an empty comment', () => {
     const { props } = mount();
     fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
@@ -205,6 +243,62 @@ describe('the composer', () => {
   });
 });
 
+describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
+  // PlayerPage.jsx needs to know whether the composer holds unsent text to
+  // decide whether it is safe to auto-close the player's own panel when the
+  // round moves on. This component still owns the draft text itself — the
+  // callback only reports true/false, never the prose.
+  test('reports false while the composer is closed', () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    expect(onDraftChange).toHaveBeenCalledWith(false);
+  });
+
+  test('reports true the moment something is typed', () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
+    expect(onDraftChange).toHaveBeenLastCalledWith(true);
+  });
+
+  test('reports false again once the draft is sent', async () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
+    await waitFor(() => expect(onDraftChange).toHaveBeenLastCalledWith(false));
+  });
+
+  test('reports false again once the draft is cancelled', () => {
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/ }));
+    expect(onDraftChange).toHaveBeenLastCalledWith(false);
+  });
+
+  test('whitespace-only text is not a draft', () => {
+    // Matches `send()`'s own rule (`text.trim()`) — a container must not be
+    // told there is something worth keeping when there is nothing to post.
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
+    expect(onDraftChange).toHaveBeenLastCalledWith(false);
+  });
+
+  test('the host-triggered caller, which passes no onDraftChange, is unaffected', () => {
+    // No prop at all — must not throw when the composer opens or types.
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    expect(() => fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } }))
+      .not.toThrow();
+  });
+});
+
 describe('what everyone has already said', () => {
   test('comments already on the round are shown', () => {
     // "the comments now can be seen in the resulting round of feedback".
@@ -226,5 +320,71 @@ describe('while the host is still preparing', () => {
     mount({ round: null });
     expect(screen.getByText(/preparing/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Comment on/ })).toBeNull();
+  });
+});
+
+describe('the empty-responses text and retry (fix round 2)', () => {
+  const EMPTY_ROUND = { ...ROUND, answers: [] };
+
+  test('defaults to the original honest statement', () => {
+    mount({ round: EMPTY_ROUND });
+    expect(screen.getByText('Nobody responded to this round.')).toBeInTheDocument();
+  });
+
+  test('a caller can say something else instead — loading, for instance', () => {
+    // PlayerPage.jsx's own panel is mid-fetch when it first opens: `answers`
+    // is `[]` before the round trip resolves, and "Nobody responded" would be
+    // a lie about a round nobody has checked yet.
+    mount({ round: EMPTY_ROUND, answersEmptyText: "Loading the round's responses…" });
+    expect(screen.getByText("Loading the round's responses…")).toBeInTheDocument();
+    expect(screen.queryByText('Nobody responded to this round.')).toBeNull();
+  });
+
+  test('a retry button appears only when onRetryAnswers is given, and calls it', () => {
+    const onRetryAnswers = jest.fn();
+    mount({
+      round: EMPTY_ROUND,
+      answersEmptyText: 'The responses could not be loaded.',
+      onRetryAnswers,
+    });
+    const retry = screen.getByRole('button', { name: /Try again/ });
+    fireEvent.click(retry);
+    expect(onRetryAnswers).toHaveBeenCalledTimes(1);
+  });
+
+  test('no retry button when onRetryAnswers is not given, even with custom text', () => {
+    mount({ round: EMPTY_ROUND, answersEmptyText: 'Nobody voted on this round.' });
+    expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull();
+  });
+
+  test('the responses themselves are unaffected — a non-empty round never shows this at all', () => {
+    mount({ answersEmptyText: 'should never appear' });
+    expect(screen.queryByText('should never appear')).toBeNull();
+  });
+});
+
+describe('disabling the commit without touching the draft (fix round 2, item 3)', () => {
+  test('Post comment is disabled when postDisabled is true, but the box stays editable', () => {
+    mount({ postDisabled: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Worth keeping.' } });
+    expect(screen.getByRole('button', { name: /Post comment/ })).toBeDisabled();
+    expect(screen.getByRole('textbox')).toHaveValue('Worth keeping.');
+    expect(screen.getByRole('textbox')).not.toBeDisabled();
+  });
+
+  test('says plainly why, and to copy it instead', () => {
+    mount({ postDisabled: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+    expect(screen.getByText(/moved on/i)).toBeInTheDocument();
+    expect(screen.getByText(/copy/i)).toBeInTheDocument();
+  });
+
+  test('by default (the host-triggered caller) Post comment is never disabled by this', () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+    expect(screen.getByRole('button', { name: /Post comment/ })).not.toBeDisabled();
   });
 });

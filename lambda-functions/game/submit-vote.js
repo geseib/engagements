@@ -55,6 +55,16 @@ exports.handler = async (event) => {
       };
     }
 
+    // AN EVENT'S ITEM, PAUSED (events M3): no vote lands until the host
+    // resumes. The round keeps its phase; the phone shows the paused screen.
+    if (gameState.Item.EventPaused) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ error: 'The host has paused this for a moment.', code: 'PAUSED' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Store vote in database following design doc schema
     const voteRecord = {
       PK: `GAME#${gameId}`,

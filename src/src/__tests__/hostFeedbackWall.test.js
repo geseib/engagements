@@ -19,7 +19,7 @@ describe('the meter on FEEDBACK', () => {
     const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
     expect(meter).toMatch(/hostPhase === 'FEEDBACK'/);
     expect(meter).toMatch(/heading: 'Comments'/);
-    expect(meter).toMatch(/roundComments\.length/);
+    expect(meter).toMatch(/scopedRoundComments\.length/);
     const el = SRC.slice(SRC.indexOf('<RoomMeter'), SRC.indexOf('/>', SRC.indexOf('<RoomMeter')));
     expect(el).toMatch(/arrivals=\{meterArrivals\}/);
   });
@@ -28,9 +28,70 @@ describe('the meter on FEEDBACK', () => {
     const def = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
     expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
     expect(def).toMatch(/wallComments !== false/);
-    expect(def).toMatch(/items:\s*roundComments/);
+    expect(def).toMatch(/items:\s*scopedRoundComments/);
     expect(def).toMatch(/onPick:\s*handleFeatureComment/);
     expect(def).toMatch(/featuredId/);
+  });
+});
+
+describe('scoped to the round actually showing (fix round 2, item 2)', () => {
+  // A fetch kicked off for round 3, slow enough to resolve after the room has
+  // already moved into round 4's RESULTS, must not overwrite round 4's
+  // correct comments with round 3's stale ones. Every comment row carries its
+  // own questionNumber (comments.js's toWire()), so the meter/arrivals read a
+  // FILTERED list rather than trusting roundComments state directly.
+  test('scopedRoundComments filters roundComments by the round currently on screen', () => {
+    const def = SRC.slice(SRC.indexOf('const scopedRoundComments'), SRC.indexOf(';', SRC.indexOf('const scopedRoundComments')));
+    expect(def).toMatch(/roundComments\.filter/);
+    expect(def).toMatch(/c\.questionNumber === currentResultsRound/);
+  });
+
+  test('currentResultsRound reads the round off gameState the same way loadRoundComments does', () => {
+    // One answer for both — config/hostControls.js's resultsRoundOf, padded
+    // as the comment rows carry it, and 000 for a closed survey (27 Sep 2026).
+    const def = SRC.slice(SRC.indexOf('const currentResultsRound'), SRC.indexOf(';', SRC.indexOf('const currentResultsRound')));
+    expect(def).toMatch(/resultsRoundOf\(gameState\)/);
+    const load = SRC.slice(SRC.indexOf('const loadRoundComments'), SRC.indexOf('\n  };', SRC.indexOf('const loadRoundComments')));
+    expect(load).toMatch(/resultsRoundOf\(gameState\)/);
+  });
+
+  test('nothing downstream reads the raw roundComments state directly any more', () => {
+    const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
+    expect(meter).not.toMatch(/[^d]roundComments\.length/);
+    const featured = SRC.slice(SRC.indexOf('const featuredComment'), SRC.indexOf('const meterArrivals'));
+    expect(featured).not.toMatch(/[^d]roundComments\.filter/);
+    const arrivals = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
+    expect(arrivals).not.toMatch(/items:\s*roundComments[^S]/);
+  });
+});
+
+describe('arrivals do not depend on the feedback beat (owner\'s ruling, 26 Sep 2026)', () => {
+  // "a comment made this way appears in the stage's arrivals (RoomMeter) the
+  // same as a beat-triggered one" — the player's own Feedback button
+  // (PlayerPage.jsx) posts a comment on any RESULTS phase, and comments.js's
+  // write gate no longer requires the feedback beat. The stage side has to
+  // match: a comment posted before the host ever opens feedback must still
+  // reach the meter and the wall.
+  test('the meter counts comments on the ordinary RESULTS and FIELD_NOTES phases too, once there is one', () => {
+    const meter = SRC.slice(SRC.indexOf('const meter = (() => {'), SRC.indexOf('const revealNames'));
+    expect(meter).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+    // Gated on there being one — a round with no comments still runs solo.
+    expect(meter).toMatch(/hostPhase === 'FIELD_NOTES'\)\s*&&\s*scopedRoundComments\.length > 0\)/);
+  });
+
+  test('the arrivals themselves are not gated to FEEDBACK alone', () => {
+    const def = SRC.slice(SRC.indexOf('const meterArrivals'), SRC.indexOf(';', SRC.indexOf('const meterArrivals')));
+    expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
+    expect(def).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+    expect(def).toMatch(/scopedRoundComments\.length > 0/);
+    // The session setting still governs whether they show at all.
+    expect(def).toMatch(/wallComments !== false/);
+  });
+
+  test('featuring a comment still works the same way outside the feedback beat', () => {
+    const def = SRC.slice(SRC.indexOf('const featuredComment'), SRC.indexOf(';', SRC.indexOf('const featuredComment')));
+    expect(def).toMatch(/hostPhase === 'FEEDBACK'/);
+    expect(def).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
   });
 });
 
@@ -55,7 +116,7 @@ describe('featuring', () => {
     `.lede` class are gone with it.
   */
   test('the FEEDBACK wall is FeedbackWall, handed the featured comment and the toggle', () => {
-    const from = SRC.indexOf("{hostPhase === 'FEEDBACK' && (");
+    const from = SRC.indexOf("{(hostPhase === 'FEEDBACK'");
     const stage = SRC.slice(from, SRC.indexOf("{hostPhase === 'ENDED'", from));
     expect(stage).toMatch(/<FeedbackWall/);
     expect(stage).toMatch(/featured=\{featuredComment\}/);
@@ -64,6 +125,22 @@ describe('featuring', () => {
     expect(stage).not.toMatch(/className="lede"/);
     expect(stage).not.toMatch(/className="kicker"/);
     expect(SRC).toMatch(/import FeedbackWall from '\.\/components\/stage\/FeedbackWall';/);
+  });
+
+  /*
+    Fix round 1, item 5: featuring a comment on RESULTS or FIELD_NOTES used to
+    write Featured: true with nowhere for it to land — this block only ever
+    rendered on the FEEDBACK phase, so the wall never appeared even though
+    both reports print "Shown to the room" for it.
+  */
+  test('the same wall also renders on RESULTS/FIELD_NOTES, but only once a comment is actually featured', () => {
+    const from = SRC.indexOf("{(hostPhase === 'FEEDBACK'");
+    const stage = SRC.slice(from, SRC.indexOf("{hostPhase === 'ENDED'", from));
+    expect(stage).toMatch(/hostPhase === 'RESULTS' \|\| hostPhase === 'FIELD_NOTES'/);
+    // Gated on featuredComment itself, not merely the phase — a round with
+    // nothing featured must not show the wall's un-featured invitation
+    // ("What do you make of it?") outside an actual feedback round.
+    expect(stage).toMatch(/hostPhase === 'FIELD_NOTES'\) && featuredComment\)/);
   });
 });
 

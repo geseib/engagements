@@ -231,11 +231,38 @@ function assertNothingPrivate(r) {
     assert.strictEqual(forged.status, 200, forged.raw);
     assertNothingPrivate(forged);
   });
+  // SINCE 2026-09-26 THE PUBLIC ROUTE IGNORES `role` ALTOGETHER
+  // (tests/get-game-host-state.js has the reason): the category masks this
+  // branch still carried are the same host masks the public /state stopped
+  // returning, so leaving them here would have left that lock with a way
+  // round it. Every host field is on the door (§4); the host page reads its
+  // category restore there, and `started` (checkGameStatus) off the player
+  // view, which has always carried it.
+  const HOST_ONLY_KEYS = ['questionSetId', 'questionSetScope', 'details', 'personaId', 'promptId',
+    'randomizeQuestions', 'usedQuestions', 'playedQuestions', 'categoryState'];
+  for (const gameId of [ORG_GAME, ORGLESS_GAME]) {
+    const asPlayer = await call(PUBLIC_ROUTE, gameId, { role: 'player' });
+    for (const query of [{ role: 'host' }, { role: 'HOST' }, { role: 'admin' }, null]) {
+      const r = await call(PUBLIC_ROUTE, gameId, query);
+      await check(`${gameId === ORG_GAME ? 'org' : 'orgless'} session, ${query ? `?role=${JSON.stringify(query.role)}` : 'no query'}: exactly the player's view`, () => {
+        assert.deepStrictEqual(r.body, asPlayer.body);
+        const extras = HOST_ONLY_KEYS.filter((k) => k in r.body);
+        assert.deepStrictEqual(extras, [], `the public reply carries ${extras.join(', ')}`);
+      });
+    }
+  }
+  // The masks are the door's alone, so the public brief, which every phone
+  // and the join field read, has no reason to fetch them.
+  // rejects: reading STATE#CATS on every public call and throwing it away.
+  for (const query of [{ role: 'host' }, { role: 'player' }, null]) {
+    const r = await call(PUBLIC_ROUTE, ORG_GAME, query);
+    await check(`the public brief, ${query ? `?role=${query.role}` : 'no query'}: no read of the category masks`, () =>
+      assert.ok(!r.read.includes('STATE#CATS'), `read ${r.read.join(', ')}`));
+  }
   const hostView = await call(PUBLIC_ROUTE, ORG_GAME, { role: 'host' });
-  await check('the public ?role=host still carries what the host page\'s public reads use', () => {
+  await check('and that view still carries what the host page\'s public read uses (started)', () => {
     assert.strictEqual(hostView.body.started, false);
     assert.strictEqual(hostView.body.anonymousUntilReveal, false);
-    assert.strictEqual(hostView.body.categoryState.hostMask1_8, 255);
   });
 
   say('\n4. the host door, for the owning team');
@@ -249,6 +276,8 @@ function assertNothingPrivate(r) {
     assert.strictEqual(own.body.briefing.source.name, BRIEF_FILE);
     assert.strictEqual(own.body.briefing.namesRemoved, 2);
   });
+  await check('the door does read the masks', () =>
+    assert.ok(own.read.includes('STATE#CATS'), `read ${own.read.join(', ')}`));
   await check('and everything else the edit dialog seeds from, in one read', () => {
     const b = own.body;
     assert.strictEqual(b.gameId, ORG_GAME);

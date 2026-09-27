@@ -524,9 +524,18 @@ function createTable() {
             return {};
           }
 
-          case 'delete':
-            store.delete(keyOf(input.Key.PK, input.Key.SK));
+          case 'delete': {
+            const k = keyOf(input.Key.PK, input.Key.SK);
+            if (input.ConditionExpression
+              && !evaluateCondition(
+                input.ConditionExpression, store.get(k),
+                input.ExpressionAttributeNames, input.ExpressionAttributeValues
+              )) {
+              throw conditionalFailure();
+            }
+            store.delete(k);
             return {};
+          }
 
           case 'query': {
             const pk = input.ExpressionAttributeValues[':pk'];
@@ -621,6 +630,31 @@ function createTable() {
             return { Responses: out };
           }
 
+          /*
+            BatchWrite, because the staff clear-all route (clear-all-games.js)
+            deletes through admin/shared/ddb-delete.js. Unconditional, as
+            DynamoDB's is: BatchWriteItem carries no ConditionExpression, which
+            is exactly why a handler that must spare a row has to READ it first
+            and leave its key out. Every request lands; nothing comes back
+            unprocessed.
+          */
+          case 'batchWrite': {
+            for (const requests of Object.values(input.RequestItems || {})) {
+              for (const request of requests) {
+                if (request.DeleteRequest) {
+                  const key = request.DeleteRequest.Key;
+                  store.delete(keyOf(key.PK, key.SK));
+                } else if (request.PutRequest) {
+                  assertFits(request.PutRequest.Item);
+                  store.set(keyOf(request.PutRequest.Item.PK, request.PutRequest.Item.SK), request.PutRequest.Item);
+                } else {
+                  throw new Error(`fake: unsupported BatchWrite request ${JSON.stringify(request)}`);
+                }
+              }
+            }
+            return { UnprocessedItems: {} };
+          }
+
           default:
             return {};
         }
@@ -640,6 +674,7 @@ class DeleteCommand { constructor(i) { this.input = i; this.type = 'delete'; } }
 class UpdateCommand { constructor(i) { this.input = i; this.type = 'update'; } }
 class BatchGetCommand { constructor(i) { this.input = i; this.type = 'batchGet'; } }
 class TransactWriteCommand { constructor(i) { this.input = i; this.type = 'transactWrite'; } }
+class BatchWriteCommand { constructor(i) { this.input = i; this.type = 'batchWrite'; } }
 
 /**
  * Install the AWS stubs so every handler under `lambda-functions/game/` sees
@@ -725,5 +760,5 @@ module.exports = {
   ITEM_LIMIT_BYTES,
   itemBytes,
   GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
-  BatchGetCommand, TransactWriteCommand,
+  BatchGetCommand, TransactWriteCommand, BatchWriteCommand,
 };

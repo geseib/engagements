@@ -408,14 +408,61 @@ describe('the sheet itself', () => {
     expect(px.filter((size) => size < 12)).toEqual([]);
   });
 
-  test('no track holding a pair of controls can widen a 390px phone', () => {
+  test('no track holding a row of controls can widen a 390px phone', () => {
     // `1fr` is sized to its content and refuses to shrink below the widest
-    // label, so "Ask this next" beside "Preview", or Previous and Next either
-    // side of "12 / 30", would push the card sideways.
+    // label, so "Tap again to ask now" beside "Preview", or Previous and Next
+    // either side of "12 / 30", would push the card sideways.
     expect(ruleBody(HRQ_CSS, '.hrq-actions'))
+      .toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+    expect(ruleBody(HRQ_CSS, '.hrq-asks'))
       .toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
     expect(ruleBody(HRQ_CSS, '.hrqp-step'))
       .toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*minmax\(0,\s*1fr\)/);
   });
 
+});
+
+/*
+  ASK NEXT AND ASK NOW. The owner: "'ask next' in most people's mind means put
+  it at the top of the queue, not run it now." Two verbs that must never read as
+  one button — so each has its own tone, and each tone is measured here on the
+  ground it really stands on: the button paints `--surface` over the remote's
+  own field.
+*/
+describe('the two asks on the phone', () => {
+  const ROOT_DEEP = hexIn(ROOT, '--danger-deep');
+  const ASK = [...REMOTE, groundOf(HRQ_CSS, '.hrq-next', DUSK)];
+
+  test('each paints its own ground, so the measurement below is the real stack', () => {
+    expect(groundOf(HRQ_CSS, '.hrq-next', DUSK)).toBe(S.surface);
+    expect(groundOf(HRQ_CSS, '.hrq-now', DUSK)).toBe(S.surface);
+  });
+
+  test('Ask next is --primary and clears AA', () => {
+    expect(colourOf('.hrq-next')).toBe('--primary');
+    expect(on(S.primary, ASK)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('Ask now is --danger-text — never --danger — and clears AA', () => {
+    expect(colourOf('.hrq-now')).toBe('--danger-text');
+    expect(on(S.dangerText, ASK)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('armed, Ask now fills --danger-deep and its words still clear AA', () => {
+    expect(ruleBody(HRQ_CSS, '.hrq-now.is-armed')).toMatch(/background:\s*var\(--danger-deep\)/);
+    expect(colourOf('.hrq-now.is-armed')).toBe('--text');
+    expect(ratio(parseHex(S.text), parseHex(ROOT_DEEP))).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the two tones are not one tone', () => {
+    // rejects: painting both asks alike, which is how Queue and the old Ask
+    // next read as the same button on the stage for their whole life.
+    expect(colourOf('.hrq-next')).not.toBe(colourOf('.hrq-now'));
+  });
+
+  test('"Up next" / "Queued #n" is on the 12px floor and clears AA on the card', () => {
+    expect(ruleBody(HRQ_CSS, '.hrq-queued')).toMatch(/font-size:\s*\.75rem/);
+    const CARD = [...REMOTE, groundOf(HRQ_CSS, '.hrq-card', DUSK)];
+    expect(on(hexIn(ROOT, colourOf('.hrq-queued')), CARD)).toBeGreaterThanOrEqual(AA);
+  });
 });
