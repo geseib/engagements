@@ -36,7 +36,7 @@ check('a whole number up to the set\'s size is the goal', () => {
   assert.deepStrictEqual(G.checkTarget(50, 50), { value: 50 });
   assert.deepStrictEqual(G.checkTarget('7', 50), { value: 7 });
 });
-for (const bad of [0, -1, 2.5, 'five', '5.5', true, [], {}, 1000]) {
+for (const bad of [0, -1, 2.5, 'five', '5.5', true, [], {}]) {
   check(`${JSON.stringify(bad)} is refused in plain words`, () =>
     assert.strictEqual(G.checkTarget(bad, 0).error, 'A goal is a whole number of questions, 1 or more.'));
 }
@@ -48,6 +48,14 @@ check('an unknown size bounds the goal by the ceiling alone', () => {
   assert.deepStrictEqual(G.checkTarget(999, 0), { value: 999 });
   assert.deepStrictEqual(G.checkTarget(12, undefined), { value: 12 });
 });
+// final review Minor 2: 1000 is a whole number — the likely typo is one zero
+// too many — so it must never fall into the whole-number sentence above.
+check('1000 is refused by its own ceiling sentence, not the whole-number one', () =>
+  assert.strictEqual(G.checkTarget(1000, 0).error, 'A goal can be at most 999 questions.'));
+check('the ceiling itself, 999, is fine when the size is unknown', () =>
+  assert.deepStrictEqual(G.checkTarget(999, 0), { value: 999 }));
+check('a known set size is checked before the ceiling, and speaks first', () =>
+  assert.strictEqual(G.checkTarget(2000, 50).error, 'This set has 50 questions, so the goal can be 50 at most.'));
 check('surrounding space is trimmed', () => assert.deepStrictEqual(G.checkTarget(' 5 ', 50), { value: 5 }));
 check('NaN is refused in plain words', () =>
   assert.strictEqual(G.checkTarget(NaN, 50).error, 'A goal is a whole number of questions, 1 or more.'));

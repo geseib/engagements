@@ -277,11 +277,25 @@ export default function GameSetupDialog({
   const chosenSet = allSets.find((s) => sameSetRef(s, newGameSetRef)) || null;
   /*
     THE GOAL is bounded by the chosen set's size — the version a create pins.
-    An edited session may pin an older version; update-game.js holds that
-    bound and says so if this one is wrong.
+    `chosenCount` is that set's CURRENT size, which a create is about to pin,
+    so it is the right bound there.
   */
   const chosenCount = chosenSet ? Number(chosenSet.totalQuestions) || 0 : 0;
-  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, chosenCount).error || '');
+  /*
+    AN EDIT IS DIFFERENT (final review Minor 1b, superseding the T4 park):
+    `chosenCount` here is the set's size RIGHT NOW, not necessarily the
+    version this session is pinned to. A set can shrink after a session is
+    created, and bounding Save by the live count can then refuse a save
+    `PUT /games/{id}` would accept — it checks the PINNED version through
+    `resolveSetPartition`, not this dialog's live read. So an edit checks only
+    the whole-number/ceiling rule (`goalBound` of 0 means "unknown size" to
+    `checkTarget`) and leaves the pinned-version bound to the server, whose
+    400 sentence reaches the host through `refusal` below. `chosenCount`
+    itself still reaches SessionOptions for its "of 47 questions" display —
+    only the GATE moves, via `boundBySize={!isEdit}`.
+  */
+  const goalBound = isEdit ? 0 : chosenCount;
+  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, goalBound).error || '');
   // A draft still being written would be lost by a Create pressed now, and a
   // goal the set cannot meet would only be refused by the server.
   const canCreate = Boolean(newGameSetId) && title.trim().length > 0
@@ -641,8 +655,23 @@ export default function GameSetupDialog({
           namesDefault={chosenSet ? chosenSet.namesDefault : ''}
           shuffleLocked={isEdit}
           questionCount={chosenCount}
+          boundBySize={!isEdit}
         />
       </div>
+
+      {/*
+        THE GOAL'S PROBLEM, REPEATED OUTSIDE THE FOLD (final review Minor 1a).
+        The Advanced fold is closed on open, so its own red help text — this
+        same sentence, from session-goal.js — is not what a host sees when
+        Create or Save just greyed out; a `title` tooltip is hover-only and
+        never reaches touch. This line is the visible, announced reason, and
+        the disabled button's `aria-describedby` points straight at it.
+      */}
+      {goalProblem && (
+        <p className="gsd-blocked-reason" role="alert" id="gsd-blocked-reason">
+          {goalProblem}
+        </p>
+      )}
 
       {/* A PLAN LIMIT is the shared notice (22-plan-limit-notice.html): what
           ran out, and what THIS person can do about it — the owner gets the
@@ -700,6 +729,7 @@ export default function GameSetupDialog({
             className="btn-primary"
             onClick={submit}
             disabled={!canCreate || busy}
+            aria-describedby={goalProblem ? 'gsd-blocked-reason' : undefined}
             title={isCallAndAnswer && briefingWorking ? 'Waiting for Workie to finish the briefing' : (goalProblem || undefined)}
           >
             {busy

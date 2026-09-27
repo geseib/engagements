@@ -367,7 +367,7 @@ export default function EventItemDialog({
               {unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
               {!unreadable && picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
               {!unreadable && !picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
-              {!unreadable && type === rules.PRESENTATION && 'A talk given from the presenter’s own screen. While it runs, every phone, laptop or tablet says “look up”.'}
+              {!unreadable && type === rules.PRESENTATION && 'A talk given from the presenter’s own screen.'}
               {!unreadable && type === rules.CUSTOM && 'Anything else on the day: networking, lunch with a speaker, an open discussion. It sits on the agenda, with nothing to answer.'}
               {!unreadable && editing && !isBreak && item.set && item.set.name && (item.set.pinnedMissing
                 ? `Pinned to ${item.set.name} · v${item.setRef.version}, which is no longer in the set.`

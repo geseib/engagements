@@ -6,10 +6,11 @@
  * and "enter the facilitator/speaker/presenter".
  *
  * rejects: a presentation offered a set picker or an upload; the PDF copy
- * promised now; a leader field on a break; an empty name sent on an add, or
- * held back on an edit (so it could never be cleared); a name longer than the
- * server takes sent at all; an engagement's title that does not say it names
- * the session.
+ * promised now; a "look up" behaviour nothing in M1b builds (final review
+ * Minor 3 — that is roadmap M3/M5); a leader field on a break; an empty name
+ * sent on an add, or held back on an edit (so it could never be cleared); a
+ * name longer than the server takes sent at all; an engagement's title that
+ * does not say it names the session.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -47,6 +48,10 @@ describe('a presentation (04, without the upload)', () => {
     expect(screen.getByRole('heading', { name: 'Add a presentation' })).toBeInTheDocument();
     expect(screen.queryByTestId('set-row')).toBeNull();
     expect(screen.getByText(/A PDF copy for attendees comes later\./)).toBeInTheDocument();
+    // final review Minor 3: nothing in M1b makes a phone, laptop or tablet say
+    // "look up" — that is roadmap M3/M5. The dialog must not promise it.
+    expect(screen.queryByText(/says\s+.look up.$/)).toBeNull();
+    expect(screen.queryByText(/look up/i)).toBeNull();
     fireEvent.change(screen.getByLabelText('Title on the agenda'), { target: { value: 'The FY27 plan' } });
     fireEvent.change(screen.getByLabelText(/^Presenter/), { target: { value: 'Marcus Oyelaran' } });
     fireEvent.change(screen.getByLabelText('Planned length'), { target: { value: '35' } });

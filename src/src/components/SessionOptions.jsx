@@ -151,8 +151,18 @@ export function SessionBriefing({ value = null, onChange, onWorkingChange }) {
  * @param {string}   setPromptId   the chosen set's own summary prompt, if any
  * @param {string}   namesDefault  the chosen survey set's own Names default
  * @param {boolean}  shuffleLocked an edit: the order was drawn at creation
- * @param {number}   questionCount the chosen set's size, which bounds the goal
- *                                 (0 = unknown: the server bounds it)
+ * @param {number}   questionCount the chosen set's size, shown beside the
+ *                                 field ("of 47 questions") whether or not it
+ *                                 also bounds the goal (0 = unknown: shown as
+ *                                 plain "questions")
+ * @param {boolean}  boundBySize   whether `questionCount` also GATES the goal
+ *                                 (final review Minor 1b). GameSetupDialog's
+ *                                 edit mode passes false: `questionCount` here
+ *                                 is the set's size RIGHT NOW, not necessarily
+ *                                 the pinned version a running session plays,
+ *                                 so it is honest to SHOW but wrong to ENFORCE
+ *                                 — PUT /games/{id} holds the real bound and
+ *                                 says so if this goal is really too big.
  */
 export default function SessionOptions({
   idPrefix = 'gsd',
@@ -164,6 +174,7 @@ export default function SessionOptions({
   namesDefault = '',
   shuffleLocked = false,
   questionCount = 0,
+  boundBySize = true,
 }) {
   const isSurvey = normalizeGameType(gameType) === 'survey';
   const anonymous = value.anonymousResponses !== false;
@@ -176,7 +187,7 @@ export default function SessionOptions({
   // THE GOAL (events M1b, session-goal.js): a whole number of questions, or
   // null for none. A survey has no rounds, so no goal.
   const target = value.target === undefined ? null : value.target;
-  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, questionCount).error || '');
+  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, boundBySize ? questionCount : 0).error || '');
 
   // NULL IS "NOT KNOWN", AND IT IS NOT THE SAME AS EMPTY — see the header.
   const [knownPromptIds, setKnownPromptIds] = useState(null);

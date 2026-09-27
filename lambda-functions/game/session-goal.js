@@ -44,12 +44,20 @@ function toCount(value) {
 function checkTarget(value, questionCount) {
   if (value === null || value === undefined || value === '') return { value: null };
   const n = typeof value === 'number' ? value : Number(String(value).trim());
-  if (!Number.isInteger(n) || n < 1 || n > TARGET_MAX) {
+  if (!Number.isInteger(n) || n < 1) {
     return { error: 'A goal is a whole number of questions, 1 or more.' };
   }
+  // THE SET-SIZE SENTENCE COMES BEFORE THE CEILING (final review Minor 2).
+  // 1000 is a whole number, and the likely typo is one zero too many — a host
+  // who meant 100 needs to hear about THIS set, not a ceiling that has
+  // nothing to do with what they typed. Checked only when the size is known;
+  // an unknown size (0) falls through to the ceiling below.
   const count = toCount(questionCount);
   if (count && n > count) {
     return { error: `This set has ${count} question${count === 1 ? '' : 's'}, so the goal can be ${count} at most.` };
+  }
+  if (n > TARGET_MAX) {
+    return { error: `A goal can be at most ${TARGET_MAX} questions.` };
   }
   return { value: n };
 }

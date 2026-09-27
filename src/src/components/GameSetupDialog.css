@@ -1115,3 +1115,17 @@
   font-size: 14px;
   line-height: 1.5;
 }
+
+/* WHY CREATE OR SAVE IS GREYED OUT, outside the closed Advanced fold (final
+   review Minor 1a) — the same shape as the refusal above, so a blocked button
+   and a failed submit read as the same kind of thing. */
+.gsd .gsd-blocked-reason {
+  margin: 0 26px 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger-text);
+  border-radius: 6px;
+  background: rgba(229, 100, 94, .10);
+  color: var(--gsd-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
