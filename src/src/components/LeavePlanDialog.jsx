@@ -40,7 +40,7 @@ import './LeavePlanDialog.css';
  */
 const leaveUrl = (orgId, suffix = '') => adminApiUrl(`orgs/${encodeURIComponent(orgId)}/plan/leave${suffix}`);
 const setWord = (n) => `${n} ${n === 1 ? 'set' : 'sets'}`;
-/** "Team plan" stays itself; "Standard" becomes "Standard plan". */
+/** "Standard plan" and "Organisation plan" stay themselves; a bare "Standard" becomes "Standard plan". */
 export const planLabel = (name) => {
   const n = String(name || '').trim() || 'paid';
   return /\bplan$/i.test(n) ? n : `${n} plan`;

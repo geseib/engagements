@@ -155,7 +155,10 @@ export default function BillingPanel({
   const requestLabel = `Request the ${upgrade.name}`;
   /* `parseUpgradeRequired` lifts kind to the top level; the raw 402 body keeps
      it under `limit`. Read both rather than making the call site convert. */
-  const refusedKind = (refusal && (refusal.kind || (refusal.limit && refusal.limit.kind))) || '';
+  const refusedKind = (refusal && (refusal.kind || (refusal.limit && refusal.limit.kind)))
+    // No refusal in hand: name the limit that is actually reached. Sets full
+    // and sessions not was read as "Your next session needs…".
+    || (state.mustUpgradeForSet && !state.mustUpgradeForSession ? 'sets' : '');
 
   /* ------------------------------------------------------------ the head -- */
 
@@ -166,7 +169,10 @@ export default function BillingPanel({
       Number.isFinite(Number(period.daysLeft)) ? `${Number(period.daysLeft)} days left` : '',
     ].filter(Boolean).join(' · ')
     : [isTeam ? 'A team' : 'Your own space',
-      isTeam ? 'free until Engage approves the Organisation plan' : 'free',
+      // Only while a request is actually with Engage — a team that has left
+      // the Organisation plan is simply on Free.
+      isTeam && planRequest && planRequest.status === 'requested'
+        ? 'free until Engage approves the Organisation plan' : 'free',
       period.label].filter(Boolean).join(' · ');
 
   /* ------------------------------------------ the sentence about the limit --
@@ -221,7 +227,11 @@ export default function BillingPanel({
       {/* The request's state, above the meters — mockup 14. Shown for a free
           org with any request on record; a metered org sees only an approval
           (the others would be history it has already acted on). */}
-      {planRequest && (!metered || planRequest.status === 'approved') && (
+      {/* An APPROVED request is only news while the plan it granted is the
+          plan: after leaving it (LeavePlanDialog), the newest row on record is
+          still that approval, and "You are on the Organisation plan" over a
+          free screen was the reverse of true (seen in Chromium, 27 Sep 2026). */}
+      {planRequest && (metered ? planRequest.status === 'approved' : planRequest.status !== 'approved') && (
         <PlanRequestStrip
           request={planRequest}
           onWithdraw={onWithdrawRequest}
@@ -243,7 +253,7 @@ export default function BillingPanel({
             <p className="bill-note">
               {metered
                 ? 'Updated as sessions run. Nothing here is a forecast.'
-                : (isTeam ? 'Free until the Organisation plan is approved. These are its limits.' : 'A space of your own is free. These are its limits.')}
+                : (isTeam ? 'This team is on the free plan. These are its limits.' : 'A space of your own is free. These are its limits.')}
             </p>
           </div>
           <div className="bill-panel-body">

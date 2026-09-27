@@ -255,12 +255,42 @@ describe('a team not yet approved: Free, and the Organisation plan offered', () 
       <BillingPanel planId="free" orgType="team" usage={{ sessionsRun: 5, setsCurrent: 2, setsPeak: 2 }}
         period={{ label: 'August 2026', resetsOn: '1 September' }} onRequestPlan={onRequestPlan} />,
     );
-    expect(container.querySelector('.bill-sub').textContent).toContain('free until Engage approves the Organisation plan');
+    // No request waiting (it left the plan, or withdrew): simply free.
+    expect(container.querySelector('.bill-sub').textContent).toContain('A team · free');
+    expect(container.querySelector('.bill-sub').textContent).not.toContain('until Engage approves');
     expect(screen.getByText('What the Organisation plan adds')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('bill-request-plan'));
     expect(onRequestPlan).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('bill-request-plan')).toHaveTextContent('Request the Organisation plan');
     expect(container.textContent).not.toContain('Standard plan');
+  });
+
+  // rejects: "You are on the Organisation plan" over a free screen — the
+  // newest request row is still the approval after the team has left.
+  test('after leaving, the old approval is not drawn as if it still held', () => {
+    render(
+      <BillingPanel planId="free" orgType="team" usage={{ sessionsRun: 0, setsCurrent: 5, setsPeak: 5 }}
+        period={{ label: 'September 2026' }} planRequest={{ status: 'approved', toPlan: 'team', decidedAt: '2026-09-27T10:00:00Z' }} />,
+    );
+    expect(screen.queryByTestId('preq-strip')).toBeNull();
+  });
+
+  // rejects: naming sessions when it is the sets that are full.
+  test('sets full and sessions not: the box names the next SET', () => {
+    const { container } = render(
+      <BillingPanel planId="free" orgType="team" usage={{ sessionsRun: 0, setsCurrent: 5, setsPeak: 5 }} period={{ label: 'September 2026' }} />,
+    );
+    const box = container.querySelector('.bill-notebox--warn');
+    expect(box.textContent).toContain('The next set you store needs the Organisation plan');
+    expect(box.textContent).not.toContain('Your next session');
+  });
+
+  test('while its request is with Engage, it says so', () => {
+    const { container } = render(
+      <BillingPanel planId="free" orgType="team" usage={{ sessionsRun: 1, setsCurrent: 1, setsPeak: 1 }}
+        period={{ label: 'August 2026' }} planRequest={{ status: 'requested', toPlan: 'team', kind: 'new-organisation', requestedAt: '2026-09-27T10:00:00Z' }} />,
+    );
+    expect(container.querySelector('.bill-sub').textContent).toContain('free until Engage approves the Organisation plan');
   });
 });
 
