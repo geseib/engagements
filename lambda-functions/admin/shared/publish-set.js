@@ -20,6 +20,9 @@ const {
 const { writeReview, publishedKey, STATUS } = require('./set-review');
 const { contentHash } = require('./publishable');
 const { collectPartitionKeys, batchDeleteKeys } = require('./ddb-delete');
+// Only the NAMES of the organisation's own hold attributes — see where
+// `publicMeta` is built. public-hold.js requires nothing from this file.
+const { PRIVATE_META } = require('./public-hold');
 
 /** Letters and digits of the org id, then the set id: two orgs' `teamretro` stay apart, un-renamed. */
 const publicSetIdFor = (orgId, setId) => `${String(orgId).replace(/[^a-zA-Z0-9]/g, '')}-${setId}`;
@@ -97,7 +100,11 @@ async function publishSnapshot(db, tableName, snapshot, {
     versions.push({ version: publicVersion, createdAt: now, questionCount });
   }
 
-  const { share, promptId, ...meta } = snapshot.meta || {}; // eslint-disable-line no-unused-vars
+  const { share, promptId, ...rest } = snapshot.meta || {}; // eslint-disable-line no-unused-vars
+  // A set held for the library (public-hold.js) carries who held it and when
+  // on its own metadata row, and a check taken after the hold snapshots that
+  // row whole. Neither is the library's business, so neither is copied.
+  const meta = Object.fromEntries(Object.entries(rest).filter(([k]) => !PRIVATE_META.includes(k)));
   const publicMeta = {
     ...meta,
     scope: tenant.PUBLIC,

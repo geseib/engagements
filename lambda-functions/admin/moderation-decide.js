@@ -16,8 +16,9 @@
  *
  * The REVIEW move is a conditional Put on the row's current status
  * (transitionReview), so two reviewers cannot both decide: the loser is told
- * who did. The org's content rows are never read or written here — approve
- * publishes what was judged, not what the org has since edited.
+ * who did. The org's content rows are never read here — approve publishes
+ * what was judged, not what the org has since edited. (The one write: a set
+ * HELD for the library is deleted once its copy is live — see below.)
  *
  * The snapshot's OWN `source` is what publishSnapshot trusts to derive the
  * public set id (setRef(snapshot.source) -> publicSetIdFor(orgId, setId)) —
@@ -109,6 +110,17 @@
  * already leaves markers behind, and a marker is a fact about where a publish
  * went, not a claim that the content is still there.
  *
+ * ── AND A SET HELD FOR THE LIBRARY (shared/public-hold.js) ──────────────────
+ *
+ * A set an organisation marked "Make public" while leaving a plan is waiting
+ * HERE when its check escalated. Every approve path — ordinary, resumed,
+ * orphaned — settles it once the public copy is live (`settleHeldSet`
+ * 'published': the private set is deleted); every reject path releases it
+ * with the reviewer's note (`'declined'`), so it counts against the free
+ * allowance again and the person is told why. Both run BEFORE the queue row is
+ * deleted, so R9 holds for them too: a settle that throws leaves the row, and
+ * the same decision sent again resumes and settles.
+ *
  * dismiss / take down / keep-with-a-notice are answers to REPORTED rows and
  * arrive with reports (Stage 3). The two keyless shapes —
  * `PUBLIC#<publicSetId>` for a listing and `PLATFORM#<setId>` for Engage's own
@@ -126,6 +138,7 @@ const { writeShareStamp } = require('./shared/share-stamp');
 const { appendReviewEvent, readReviewLog } = require('./shared/review-log');
 const { readSnapshot, deleteSnapshot } = require('./shared/snapshot-store');
 const { setMetadataKey, toVersion } = require('./shared/set-version');
+const { settleHeldSet } = require('./shared/public-hold');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
@@ -466,10 +479,12 @@ exports.handler = async (event) => {
           version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash,
         });
         await appendReviewEvent(db, TABLE(), ref, 'published', { version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, by: reviewer });
+        await settleHeldSet(db, TABLE(), ref, { outcome: 'published', version });
         await deleteQueueRow(db, TABLE(), sk);
         return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion, orphaned: true });
       }
       await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, orphaned: true });
+      await settleHeldSet(db, TABLE(), ref, { outcome: 'declined', version, reason: 'declined', note });
       if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
       await deleteQueueRow(db, TABLE(), sk);
       return json(200, { decision, orphaned: true });
@@ -502,6 +517,7 @@ exports.handler = async (event) => {
       // `published` is NOT guarded — it is repeated, deliberately, every time
       // a resume completes something; `resumed: true` marks it as a repeat.
       await appendReviewEvent(db, TABLE(), ref, 'published', { version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, by: reviewer, resumed: true });
+      await settleHeldSet(db, TABLE(), ref, { outcome: 'published', version });
       await deleteQueueRow(db, TABLE(), sk);
       return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion, resumed: true });
     }
@@ -514,6 +530,7 @@ exports.handler = async (event) => {
         await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer: review.reviewer || reviewer, note: resumedNote });
       }
       await writeShareStamp(db, TABLE(), ref, { version, status: 'flagged', note: resumedNote, contentHash: review.contentHash });
+      await settleHeldSet(db, TABLE(), ref, { outcome: 'declined', version, reason: 'declined', note: resumedNote });
       if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
       await deleteQueueRow(db, TABLE(), sk);
       return json(200, { decision, resumed: true });
@@ -545,6 +562,7 @@ exports.handler = async (event) => {
         version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash || review.contentHash,
       });
       await appendReviewEvent(db, TABLE(), ref, 'published', { version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, by: reviewer });
+      await settleHeldSet(db, TABLE(), ref, { outcome: 'published', version });
       await deleteQueueRow(db, TABLE(), sk);
       return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion });
     }
@@ -557,6 +575,7 @@ exports.handler = async (event) => {
     // Ruling R11: logged HERE, right after the transition, same as approve.
     await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note });
     await writeShareStamp(db, TABLE(), ref, { version, status: 'flagged', note, contentHash: review.contentHash });
+    await settleHeldSet(db, TABLE(), ref, { outcome: 'declined', version, reason: 'declined', note });
     if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
     await deleteQueueRow(db, TABLE(), sk);
     return json(200, { decision });

@@ -20,6 +20,11 @@ const state = {
   guardrailReplies: [], sentGuardrail: [],
   haikuReplies: [], sentHaiku: [],
   dispatched: [], lambdaShouldFail: false,
+  // OPTIONAL: `async (input) => response` for a suite that needs a Lambda
+  // invoke ANSWERED (a RequestResponse re-entry — orgs/leave-plan.js starting
+  // the check through its HTTP entry point). Null keeps the default: record
+  // the dispatch in `dispatched` and answer {}.
+  invokeRouter: null,
   passed: 0, failed: 0,
 };
 const rowKey = (pk, sk) => `${pk}|${sk}`;
@@ -30,6 +35,7 @@ class UpdateCommand extends Cmd { constructor(i) { super('update', i); } }
 class DeleteCommand extends Cmd { constructor(i) { super('delete', i); } }
 class QueryCommand extends Cmd { constructor(i) { super('query', i); } }
 class BatchWriteCommand extends Cmd { constructor(i) { super('batchWrite', i); } }
+class TransactWriteCommand extends Cmd { constructor(i) { super('transactWrite', i); } }
 
 const conditionFailed = () => Object.assign(new Error('The conditional request failed'), { name: 'ConditionalCheckFailedException' });
 const resolveName = (token, names) => (names && names[token]) || token;
@@ -126,6 +132,30 @@ const docClient = {
         if (inp.ConditionExpression && !evalCondition(inp.ConditionExpression, state.ddb.get(k), inp.ExpressionAttributeNames, inp.ExpressionAttributeValues)) throw conditionFailed();
         state.ddb.delete(k); return {};
       }
+      case 'transactWrite': {
+        // PHASE 1 — every condition against the state BEFORE the transaction,
+        // as DynamoDB does it; nothing is written yet. PHASE 2 — all or nothing.
+        const items = inp.TransactItems || [];
+        for (const it of items) {
+          const op = it.Put || it.Update || it.Delete || it.ConditionCheck;
+          const k = it.Put ? rowKey(op.Item.PK, op.Item.SK) : rowKey(op.Key.PK, op.Key.SK);
+          if (op.ConditionExpression && !evalCondition(op.ConditionExpression, state.ddb.get(k), op.ExpressionAttributeNames, op.ExpressionAttributeValues)) {
+            throw Object.assign(new Error('Transaction cancelled'), { name: 'TransactionCanceledException' });
+          }
+        }
+        for (const it of items) {
+          if (it.Put) state.ddb.set(rowKey(it.Put.Item.PK, it.Put.Item.SK), JSON.parse(JSON.stringify(it.Put.Item)));
+          else if (it.Delete) state.ddb.delete(rowKey(it.Delete.Key.PK, it.Delete.Key.SK));
+          else if (it.Update) {
+            const k = rowKey(it.Update.Key.PK, it.Update.Key.SK);
+            const existing = state.ddb.get(k);
+            const item = existing ? JSON.parse(JSON.stringify(existing)) : { ...it.Update.Key };
+            applyUpdate(item, it.Update);
+            state.ddb.set(k, item);
+          }
+        }
+        return {};
+      }
       case 'batchWrite': {
         for (const reqs of Object.values(inp.RequestItems || {})) {
           for (const r of reqs) {
@@ -144,6 +174,10 @@ const docClient = {
         const prefix = v[':sk'] || '';
         const items = [...state.ddb.values()]
           .filter((i) => i.PK === pk && String(i.SK).startsWith(String(prefix)))
+          // A FilterExpression is honoured, not ignored: a fake that drops one
+          // would let `countSets` count a held set and every test of the free
+          // allowance pass whether or not the filter existed.
+          .filter((i) => !inp.FilterExpression || evalCondition(inp.FilterExpression, i, inp.ExpressionAttributeNames, v))
           .sort((a, b) => (a.SK < b.SK ? -1 : a.SK > b.SK ? 1 : 0))
           .map((i) => JSON.parse(JSON.stringify(i)));
         if (inp.ScanIndexForward === false) items.reverse();
@@ -196,6 +230,7 @@ class InvokeCommand extends Cmd { constructor(i) { super('invoke', i); } }
 class LambdaClient {
   async send(cmd) {
     if (state.lambdaShouldFail) throw new Error('AccessDeniedException');
+    if (state.invokeRouter) return state.invokeRouter(cmd.input);
     state.dispatched.push({
       FunctionName: cmd.input.FunctionName, InvocationType: cmd.input.InvocationType,
       payload: JSON.parse(Buffer.from(cmd.input.Payload).toString('utf8')),
@@ -258,7 +293,7 @@ function install() {
     ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
     ['@aws-sdk/lib-dynamodb', {
       DynamoDBDocumentClient: { from: () => docClient },
-      GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchWriteCommand,
+      GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchWriteCommand, TransactWriteCommand,
     }],
     ['@aws-sdk/client-kms', kms.exports],
     ['@aws-sdk/client-s3', { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand }],
@@ -276,7 +311,7 @@ function reset() {
   state.ddb.clear(); state.s3.clear();
   state.guardrailReplies = []; state.sentGuardrail = [];
   state.haikuReplies = []; state.sentHaiku = [];
-  state.dispatched = []; state.lambdaShouldFail = false;
+  state.dispatched = []; state.lambdaShouldFail = false; state.invokeRouter = null;
   cryptoStub.forgetAllOrgs();
   cryptoStub.installTestKeyLoader();
 }

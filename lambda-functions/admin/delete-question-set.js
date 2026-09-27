@@ -1,16 +1,11 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
-const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
-const { knownVersions, setPartition, toVersion } = require('./shared/set-version');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
-const { setMetadataKey } = require('./shared/set-version');
-
-// How far past the highest recorded version to sweep for orphans. A replace
-// that died between writing `SET#<id>#v<n>` and flipping activeVersion leaves an
-// unreferenced partition that appears in no versions[] entry; without this the
-// set's index row would be deleted while those rows lived on forever, invisible.
-// Each extra probe is one Query that returns nothing.
-const ORPHAN_SWEEP_AHEAD = 5;
+// The sweep itself — every version partition, the orphans past the highest,
+// and the index row LAST — lives in shared/set-delete.js, because a set held
+// for the public library is removed by the same sweep once the library accepts
+// it (shared/public-hold.js). One ordering, two callers.
+const { deleteSetRows } = require('./shared/set-delete');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -87,60 +82,14 @@ exports.handler = async (event) => {
 
     const setName = metaRes.Item.name || metaRes.Item.Name;
 
-    // 1. Enumerate EVERY content partition this set owns. Since versioning, one
-    //    set spans the legacy `SET#<id>` partition plus one `SET#<id>#v<n>` per
-    //    version, so deleting only the legacy one would strand every version.
-    //
-    //    Versions are swept by number rather than only from versions[], so a
-    //    partition orphaned by a replace that failed before the activeVersion
-    //    flip is collected too — it is in no versions[] entry and nothing else
-    //    would ever find it.
-    //
-    //    Paginated: a Query caps out at 1 MB, and the largest live set is 160
-    //    questions.
-    const highestVersion = Math.max(
-      0,
-      toVersion(metaRes.Item.activeVersion) || 0,
-      ...knownVersions(metaRes.Item)
-    );
-
-    //    Every partition is built from the REF, so an org's content partitions
-    //    are the ones swept — a bare setId here would sweep the platform
-    //    library's `SET#<id>` instead and delete somebody else's questions.
-    const partitions = [setPartition(found.ref, null)];
-    for (let v = 1; v <= highestVersion + ORPHAN_SWEEP_AHEAD; v++) {
-      partitions.push(setPartition(found.ref, v));
-    }
-
-    const keys = [];
-    let pages = 0;
-    for (const partition of partitions) {
-      const res = await collectPartitionKeys(db, tableName, partition);
-      pages += res.pages;
-      if (res.keys.length) {
-        console.log(`  ${partition}: ${res.keys.length} row(s)`);
-        keys.push(...res.keys);
-      }
-    }
-    console.log(`Found ${keys.length} content row(s) for set ${setId} across ${partitions.length} partition(s), ${pages} query page(s)`);
-
-    // 2. Delete the content, in chunks of 25, retrying UnprocessedItems.
-    //    Throws if anything is still undeleted after the retry budget.
-    const deletedContent = keys.length ? await batchDeleteKeys(db, tableName, keys) : 0;
-
-    if (deletedContent !== keys.length) {
-      // Defensive: batchDeleteKeys throws rather than under-delete, so this
-      // should be unreachable. Never remove the index row on a mismatch.
-      throw new Error(`Deleted ${deletedContent} of ${keys.length} content rows`);
-    }
-
-    // 3. Only now is it safe to drop the index row.
-    await db.send(new DeleteCommand({
-      TableName: tableName,
-      Key: setMetadataKey(found.ref)
-    }));
-
-    const itemsDeleted = deletedContent + 1;
+    // Every content partition this set owns — the legacy `SET#<id>` one plus
+    // one `SET#<id>#v<n>` per version, swept by number so a partition orphaned
+    // by a replace that failed before the activeVersion flip is collected too —
+    // then, only once all of that is gone, the index row. Paginated, chunked in
+    // 25s, retried, and it throws rather than under-delete. See
+    // shared/set-delete.js; `found.ref` is the row that was actually read, so an
+    // org's partitions are the ones swept and never the platform library's.
+    const { itemsDeleted } = await deleteSetRows(db, tableName, found.ref, metaRes.Item);
     console.log(`🗑️ Deleted question set "${setName}": ${itemsDeleted} items removed`);
 
     return {

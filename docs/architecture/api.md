@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-167 routes across 9 groups. 142 carry the Cognito authorizer; 25 are public.
+170 routes across 9 groups. 145 carry the Cognito authorizer; 25 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -124,7 +124,10 @@ on `requestContext.routeKey`.
 | GET | `/orgs/{orgId}/invoices/{period}` | **Cognito** | `lambda-functions/admin/get-usage.js` |
 | DELETE | `/orgs/{orgId}/members/{sub}` | **Cognito** | `lambda-functions/admin/orgs/remove-member.js` |
 | DELETE | `/orgs/{orgId}/plan-requests/{reqId}` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
+| GET | `/orgs/{orgId}/plan/leave` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
+| POST | `/orgs/{orgId}/plan/leave` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
 | PUT | `/orgs/{orgId}/members/{sub}/role` | **Cognito** | `lambda-functions/admin/orgs/change-member-role.js` |
+| POST | `/orgs/{orgId}/plan/leave/hold` | **Cognito** | `lambda-functions/admin/orgs/plan-requests.js` |
 
 ## /question-sets
 

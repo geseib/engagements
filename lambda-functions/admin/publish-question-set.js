@@ -52,15 +52,11 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const {
-  setMetadataKey, resolvePartitionFromMeta, toVersion, queryPartition, setRef,
-} = require('./shared/set-version');
+const { setMetadataKey, setRef } = require('./shared/set-version');
 const tenant = require('./shared/tenant');
-const { decryptItem } = require('./shared/tenant-crypto');
-const { readReview, mayPublish, STATUS } = require('./shared/set-review');
-const { resolveSetTopic, setTopicRefusal, UNFILED } = require('./shared/set-topics');
-const { buildSnapshot, contentHash } = require('./shared/publishable');
-const { publicSetIdFor, platformPromptExists, publishSnapshot, unpublishSet } = require('./shared/publish-set');
+const { publicSetIdFor, unpublishSet } = require('./shared/publish-set');
+const { publishLiveVersion } = require('./shared/publish-live');
+const { settleHeldSet } = require('./shared/public-hold');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { appendReviewEvent } = require('./shared/review-log');
 
@@ -105,108 +101,36 @@ async function share(event, source, pubRef, orgId, setId) {
   const meta = metaRes.Item;
   if (!meta) return fail(404, 'That set is not one of yours.');
 
-  const resolved = resolvePartitionFromMeta(source, meta, toVersion(body.version));
-  const version = resolved.version;
-
-  // THE GATE. Read from the version's own row — see shared/set-review.js for
-  // why it is a row and not a field on `versions[]`.
-  const review = await readReview(db, TABLE(), source, version);
-  if (!mayPublish(review)) {
-    return json(409, {
-      error: review.status === STATUS.ESCALATED
-        ? 'This version is with a person at Engage. You will hear back either way.'
-        : 'This version has not passed the content check yet.',
-      status: review.status,
-      findings: review.findings || [],
-    });
-  }
-
-  const { items: rows } = await queryPartition(db, TABLE(), resolved.pk);
-  if (!rows.some((r) => String(r.SK || '').startsWith('QUESTION#'))) return fail(409, 'That version has no questions to share.');
-
-  const plainMeta = await decryptItem(orgId, 'set', meta);
-
   /*
-   * THE SHELF GATE. The owner's sentence was *"req at least 1 pretty broad for
-   * public ones"*, and this is the "public ones": the library everybody
-   * browses, where a topic filter is worth having only if what is on the
-   * shelves is filed.
-   *
-   * A SET MAY GO ON LIVING UNFILED, AND MANY DO — the ~40 that predate the
-   * shelf list, play and are edited untouched, which is the retro-refusal the
-   * design rules out. Sharing is the one journey where that stops being
-   * somebody's own business: an unfiled set in the public library is a row no
-   * filter can place, in front of people who did not make it.
-   *
-   * 409 rather than 400, like the two gates above and the one below: the
-   * request is well formed, the SET is not ready. And it is read from
-   * `plainMeta` rather than `meta` even though `ENCRYPTED_FIELDS.set` does not
-   * name `topic` — a second reader deciding for itself which fields are sealed
-   * is the drift edit-question-set.js warns about, and it presents as a field
-   * silently read in the wrong form with every test still green.
+   * THE GATES AND THE PUBLISH — review PASSED, questions present, FILED on a
+   * shelf, content unchanged since it was judged [R25] — then the snapshot,
+   * the share stamp and the log. All of it lives in shared/publish-live.js,
+   * moved there unchanged and in the same order, because "Make public" on a set
+   * held while leaving a plan (orgs/leave-plan.js) publishes through exactly
+   * the same gates. Each refusal is the 409 this route has always answered.
    *
    * Placed after the ownership read above, so a stranger aiming at another
-   * organisation's set still gets the 404 and learns nothing from this.
+   * organisation's set still gets the 404 and learns nothing from the gates.
    */
-  if (resolveSetTopic(plainMeta.topic) === UNFILED) {
-    return fail(409, setTopicRefusal(plainMeta.topic));
-  }
-
-  const questions = [];
-  const categories = [];
-  for (const row of rows) {
-    const sk = String(row.SK || '');
-    if (sk.startsWith('QUESTION#')) questions.push(await decryptItem(orgId, 'question', row)); // eslint-disable-line no-await-in-loop
-    else if (sk.startsWith('CATEGORY#')) categories.push(row);
-  }
-  const snapshot = buildSnapshot({ source, version, meta: plainMeta, categories, questions });
-  snapshot.contentHash = contentHash(snapshot);
+  const result = await publishLiveVersion(db, TABLE(), { source, meta, version: body.version, resume: false });
+  if (result.status !== 201) return json(result.status, result.body);
 
   /*
-   * THE RE-SHARE GATE [R25]. `mayPublish` above only asks whether this version
-   * was ever judged PASSED — it says nothing about whether the judged content
-   * is what this call is about to publish. The version's question rows are
-   * immutable, but the set-level prose (name, description, custom/AI-context
-   * instructions, round brief) is edited in place with no new version
-   * (edit-question-set.js), and that prose IS part of what the guardrail
-   * judged (publishable.js's SET_FIELDS). So: submit v2 -> passes -> publish
-   * -> edit the description -> unpublish -> `POST /publish {version:2}` would
-   * otherwise republish the new, unjudged prose under the old verdict.
-   *
-   * [R2] recorded the hash rather than gating on it, on the premise that
-   * publish always reads from the S3 snapshot. This path does not (that read
-   * is Stage 2) — it rebuilds from the live org partition, which is exactly
-   * what makes the edit-after-check window real. An older `passed` review
-   * with no recorded hash (every row from before [R2] shipped) carries no
-   * hash to compare and is unaffected.
+   * A SET SOMEBODY HELD FOR THE LIBRARY (shared/public-hold.js) leaves its
+   * organisation once a copy of it is live — whichever door the copy went out
+   * of, this one included. After the publish, never before it: the promise was
+   * "not deleted until accepted", and a delete that ran first and a publish that
+   * then failed would break it. A settle that fails is logged and the share
+   * still stands: the set simply stays held, and "Make public" again finishes it.
    */
-  if (review.contentHash && review.contentHash !== snapshot.contentHash) {
-    return json(409, {
-      error: 'This set has changed since it was checked. Submit it for review again.',
-      status: review.status,
-    });
+  let privateCopyRemoved = false;
+  try {
+    const settled = await settleHeldSet(db, TABLE(), source, { outcome: 'published', version: result.version });
+    privateCopyRemoved = settled.action === 'deleted';
+  } catch (error) {
+    console.error(`⚠️ ${orgId}/${setId} is public, but its hold could not be settled:`, error);
   }
-
-  const promptDropped = Boolean(plainMeta.promptId) && !(await platformPromptExists(db, TABLE(), plainMeta.promptId));
-  const orgRow = (await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: tenant.orgPk(orgId), SK: 'METADATA' } }))).Item;
-  const published = await publishSnapshot(db, TABLE(), snapshot, {
-    review, sourceOrgName: (orgRow && orgRow.name) || '', promptDropped,
-  });
-  await writeShareStamp(db, TABLE(), source, {
-    version, status: 'published', publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash,
-  });
-  await appendReviewEvent(db, TABLE(), source, 'published', {
-    version, publicSetId: published.publicSetId, publicVersion: published.publicVersion, contentHash: snapshot.contentHash, promptDropped,
-  });
-
-  console.log(`🌍 published ${orgId}/${setId} v${version} as public ${published.publicSetId} v${published.publicVersion}`);
-  return json(201, {
-    publicSetId: published.publicSetId,
-    publicVersion: published.publicVersion,
-    sourceVersion: version,
-    rowsPublished: published.rowsPublished,
-    promptDropped,
-  });
+  return json(201, { ...result.body, ...(privateCopyRemoved ? { privateCopyRemoved: true } : {}) });
 }
 
 /**

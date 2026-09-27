@@ -1361,9 +1361,28 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # Leaving a plan: "Make public" on a set whose version has not passed
+          # the content check yet sends it there (orgs/leave-plan.js).
+          CHECK_FUNCTION_NAME: !Sub '${StackName}-check-question-set'
       Policies:
-        # NO kms:Decrypt: a request carries a plan name, a code and a note the
-        # customer wrote for Engage to read — none of it tenant content.
+        # A plan REQUEST carries a plan name, a code and a note the customer
+        # wrote for Engage to read — none of it tenant content. LEAVING a plan
+        # (orgs/leave-plan.js, same function) is different: it lists the
+        # organisation's sets by name, and "Make public" publishes one from the
+        # org's own rows, which decrypts on the way out exactly as
+        # PublishQuestionSetFunction does. Decrypt only — it never mints a key.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+            # "Make public" on a version the content check has not passed yet
+            # re-enters the check route by its ordinary HTTP entry point
+            # (RequestResponse — its answer decides what the dialog says), the
+            # pattern shared/house-check.js set. The one function, by name.
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -1404,6 +1423,32 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /platform/plan-requests/{orgId}/{reqId}/decide
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # Leaving a paid plan, self-serve (orgs/leave-plan.js): the preview,
+        # the leave itself, and "Make public" on a set on the way out.
+        LeavePlanPreview:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan/leave
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        LeavePlan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan/leave
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        LeavePlanHold:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/plan/leave/hold
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
