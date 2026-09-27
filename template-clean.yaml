@@ -518,6 +518,10 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # THE ATTENDEE'S FUNCTION: the three public routes an attendee's page calls
+  # (events M2). get-agenda.js hands the two attendee routes to
+  # events/attendees.js — two events on this function, not a new one: the
+  # stack is near CloudFormation's 500-resource limit.
   EventAgendaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -533,14 +537,33 @@ Resources:
             Method: get
             # PUBLIC: an attendee has no account. The handler shows an open
             # event's agenda and nothing an agenda does not need.
+        JoinEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/attendees
+            Method: post
+            # PUBLIC: joining is typing a name. The handler answers with the
+            # caller's own token and name, and nothing about anybody else.
+        GetEventAttendee:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/me
+            Method: get
+            # PUBLIC: the attendee token in Authorization is the identity.
+            # Not a Cognito token, so no authorizer may sit on this route.
       Policies:
-        # Opens the event's and its items' words for the public agenda.
+        # Opens the event's and its items' words for the public agenda, and
+        # seals and opens an attendee's name.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action: [ kms:Decrypt ]
               Resource: !GetAtt TenantKey.Arn
-        - DynamoDBReadPolicy:
+        # Crud, not Read, since events M2: a join writes the attendee row and
+        # adds one to the event's count.
+        - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Tags:
         Environment: !Ref Environment

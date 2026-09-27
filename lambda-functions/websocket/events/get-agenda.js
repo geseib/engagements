@@ -18,22 +18,30 @@
  *
  * Open events only. An invite-only event's agenda is shown only after a
  * passcode (PLAN Phase 3), which does not exist yet, so one answers 404 like
- * a code that names nothing.
+ * a code that names nothing. So does every event while EVENTS_ENABLED is off
+ * (events M2: a switched-off tier answers as for an unknown code).
+ *
+ * THE ATTENDEE'S FUNCTION (events M2). This function also serves
+ * POST /events/{code}/attendees and GET /events/{code}/me, in attendees.js:
+ * the three public routes an attendee's page calls, on one function, because
+ * the stack is near CloudFormation's 500-resource limit.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const rules = require('./agenda-rules');
-const { json, notFound, trace } = require('./event-http');
+const { json, notFound, trace, methodOf, eventsEnabled } = require('./event-http');
 const S = require('./event-store');
+const { joinEvent, whoAmI } = require('./attendees');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
 /** The states in which an attendee may follow an item into its session. */
 const LINKED_STATES = Object.freeze(['live', 'paused', 'done']);
 
-exports.handler = async (request) => {
+async function readAgenda(request) {
   trace('get-agenda', request);
   const code = String((request.pathParameters || {}).code || '');
+  if (!eventsEnabled()) return notFound();
   try {
     const meta = await S.readMeta(db, TABLE(), code);
     if (!meta || !meta.orgId || (meta.Access || 'open') !== 'open') return notFound();
@@ -72,4 +80,20 @@ exports.handler = async (request) => {
     console.error('❌ get-agenda failed:', error && error.message);
     return json(500, { error: 'Could not load the agenda. Try again.' });
   }
+}
+
+/** Which of the function's three routes this is, by method and the path's last segment. */
+function routeOf(request) {
+  const path = String(((request && request.requestContext && request.requestContext.http) || {}).path || '');
+  const method = methodOf(request);
+  if (method === 'POST' && /\/attendees\/?$/.test(path)) return 'join';
+  if (method === 'GET' && /\/me\/?$/.test(path)) return 'me';
+  return 'agenda';
+}
+
+exports.handler = async (request) => {
+  const route = routeOf(request);
+  if (route === 'join') return joinEvent(db, TABLE(), request);
+  if (route === 'me') return whoAmI(db, TABLE(), request);
+  return readAgenda(request);
 };

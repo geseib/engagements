@@ -706,6 +706,28 @@ check('an agenda item round-trips, and its words are not in the stored row', asy
   assert.deepStrictEqual(back.Settings, row.Settings);
 });
 
+// ---------- 7c. Somebody who joined an event (events M2) ----------
+// The name an attendee types is personal data, sealed as an item's `LedBy`
+// is. The hash, the time, the owner and the expiry are not content.
+console.log('\n7c. an attendee');
+check('attendee seals exactly the name typed', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.attendee], ['AttendeeName']));
+check('the token hash, the time, the organisation and the expiry stay plaintext', () => {
+  for (const f of ['TokenHash', 'JoinedAt', 'orgId', 'ttl']) {
+    assert.ok(!C.ENCRYPTED_FIELDS.attendee.includes(f), `attendee would encrypt ${f}`);
+  }
+});
+check('an attendee row round-trips, and the name is not in the stored row', async () => {
+  const org = await newOrg('org_attendee_fields');
+  const row = { PK: 'EVENT#1124', SK: 'ATTENDEE#at_0123456789abcdef', AttendeeName: 'Priya Raman',
+    TokenHash: 'x'.repeat(43), JoinedAt: '2026-09-27T09:00:00.000Z', orgId: org, ttl: 1 };
+  const enc = await C.encryptItem(org, 'attendee', row);
+  assert.ok(C.isEnvelope(enc.AttendeeName));
+  assert.strictEqual(enc.TokenHash, row.TokenHash);
+  assert.ok(!JSON.stringify(enc).includes('Priya'));
+  assert.strictEqual((await C.decryptItem(org, 'attendee', enc)).AttendeeName, 'Priya Raman');
+});
+
 // ---------- 8. The three bundle copies are byte-identical ----------
 // CodeUri is per-directory and there are no layers, so this module is
 // triplicated exactly as tenant.js and set-version.js are. A drift here means
