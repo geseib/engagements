@@ -321,9 +321,11 @@ const ORG_B = 'org_2222222222222222222222';
   const AUG = '2026-08';
   const SEP_1 = new Date('2026-09-01T00:05:00Z');
 
-  // A Team org that ran 20 sessions in August with a code and a credit.
+  // An org on the $5 plan that ran 20 sessions in August with a code and a
+  // credit. The $5 terms are Standard's since 27 Sep 2026 (the Team plan became
+  // the pay-per-use Organisation plan), so the worked $8.75 is pinned there.
   reset(); seedOrg(ORG, 'Northwind', [OWNER]); seedOrg(OTHER, 'Globex', [OUTSIDER]);
-  store.get(key(`ORG#${ORG}`, 'METADATA')).plan = 'team';
+  store.get(key(`ORG#${ORG}`, 'METADATA')).plan = 'standard';
   store.set(key(`ORG#${ORG}`, `USAGE#${AUG}`), { PK: `ORG#${ORG}`, SK: `USAGE#${AUG}`, sessionsRun: 20, setsPeak: 2, setsCurrent: 2 });
   for (let i = 0; i < 20; i += 1) store.set(key(`ORG#${ORG}`, `LEDGER#${AUG}#SESSION#g${i}`), { PK: `ORG#${ORG}`, SK: `LEDGER#${AUG}#SESSION#g${i}` });
   await grant({ kind: 'OFFER', percentOff: 30, months: 3, validFrom: AUG, note: 'welcome' });
