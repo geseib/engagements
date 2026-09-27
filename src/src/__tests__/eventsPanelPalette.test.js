@@ -133,12 +133,40 @@ describe('the contract', () => {
     selectors.forEach((sel) => sel.split(',').forEach((s) => expect(s.trim()).toMatch(/^\.evts(\b|-|\.|\s|:)/)));
     expect(stripped(GLOBAL_CSS)).not.toMatch(/\.evts\b/);
   });
-  test('no hex outside the token block, and --danger never carries text', () => {
+  // Widened as eventBuilderPalette.test.js was (final review M6): a raw
+  // rgba(...) is a colour too, and .evts-modal's shadow carried one.
+  test('no hex or raw rgba(...) outside the token block, and --danger never carries text', () => {
     const css = stripped(MY_CSS);
     const start = css.indexOf('.evts {');
     const outside = css.slice(0, start) + css.slice(css.indexOf('}', start));
     expect(outside).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(outside).not.toMatch(/rgba\(/i);
+    expect(css).toMatch(/\.evts-modal\s*\{[^}]*box-shadow:\s*var\(--evts-shadow-modal\)/);
     expect(css.split('\n').filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l))).toEqual([]);
+  });
+  // rejects: a size off the ladder — .evts-mono sat at 14px (final review
+  // M6). Every size outside the token block is a ladder token; the one
+  // exception is the close button's × glyph, which is an icon drawn as a
+  // character at the console's close-button size, named as its own token and
+  // used by .evts-x alone.
+  test('every font size outside the token block is a ladder token (or the close glyph\'s, on .evts-x only)', () => {
+    const css = stripped(MY_CSS);
+    const start = css.indexOf('.evts {');
+    const block = css.slice(start, css.indexOf('}', start));
+    const outside = css.slice(0, start) + css.slice(css.indexOf('}', start));
+    const LADDER = { floor: 12, label: 13, body: 15, head: 19, numeral: 30 };
+    for (const [step, px] of Object.entries(LADDER)) expect(block).toMatch(new RegExp(`--evts-t-${step}:\\s*${px}px`));
+    const declared = [...block.matchAll(/--evts-t-([a-z]+):\s*(\d+)px/g)].map((m) => [m[1], Number(m[2])]);
+    declared.forEach(([step, px]) => expect(LADDER[step]).toBe(px));
+    expect(outside).not.toMatch(/font-size:\s*\d|font:[^;]*\b\d+(\.\d+)?px/);
+    const sizes = [...outside.matchAll(/font(?:-size)?:\s*([^;]+);/g)].map((m) => m[1]);
+    expect(sizes.length).toBeGreaterThan(10);
+    for (const value of sizes) {
+      const token = (value.match(/var\((--evts-[a-z-]+)\)/) || [])[1];
+      expect([token, value]).toEqual([expect.stringMatching(/^--evts-(t-(floor|label|body|head|numeral)|glyph-x)$/), value]);
+    }
+    const glyphUsers = [...outside.matchAll(/([^{}]+)\{[^}]*var\(--evts-glyph-x\)/g)].map((m) => m[1].trim());
+    expect(glyphUsers).toEqual(['.evts-x']);
   });
   test('every custom property used is declared somewhere', () => {
     const declared = new Set();

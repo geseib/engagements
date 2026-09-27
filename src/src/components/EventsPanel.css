@@ -42,6 +42,11 @@
   --evts-tint-note: rgba(155, 168, 190, .06);
   --evts-tint-danger: rgba(229, 100, 94, .09);
   --evts-scrim: rgba(6, 11, 22, .72);
+  --evts-shadow-modal: 0 24px 64px rgba(0, 0, 0, .5);
+  /* The close button's × is an icon drawn as a character, at the console's
+     close-button size (.evb-x, .qsets and the others). It is not text, so it
+     is not on the ladder; it is named here so no other rule borrows it. */
+  --evts-glyph-x: 22px;
 
   color: var(--text);
   font: 400 var(--evts-t-body)/1.45 var(--font-ui);
@@ -130,7 +135,11 @@
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 .evts-when { font-size: var(--evts-t-label); color: var(--muted); }
-.evts-mono { font-family: var(--evts-font-mono); font-size: 14px; }
+/* The code column. On the ladder at label, as the console's other code
+   columns are (DiscountCodes .dcode-code, InvoicePanel .inv-code, ArchivePanel
+   .arch-mono); the mockup's 14px mono sits between two steps, and a mono face
+   reads larger than the UI face at one size (final review M6). */
+.evts-mono { font-family: var(--evts-font-mono); font-size: var(--evts-t-label); }
 .evts-chip {
   display: inline-flex; align-items: center; gap: 5px; font-size: var(--evts-t-floor); font-weight: 600;
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--evts-rule-strong); color: var(--muted); line-height: 1.5;
@@ -158,7 +167,7 @@
 }
 .evts-modal {
   margin: auto; width: min(760px, 100%); background: var(--surface); border: 1px solid var(--evts-rule-strong);
-  border-radius: 12px; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); color: var(--text); overflow-wrap: anywhere;
+  border-radius: 12px; box-shadow: var(--evts-shadow-modal); color: var(--text); overflow-wrap: anywhere;
 }
 .evts-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
 .evts-modal-head h2 { margin: 0; font: 800 var(--evts-t-head)/1.2 var(--font-display); }
@@ -166,7 +175,7 @@
 .evts-grow { flex: 1 1 auto; min-width: 0; }
 .evts-x {
   flex: none; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent;
-  color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer;
+  color: var(--muted); font-size: var(--evts-glyph-x); line-height: 1; cursor: pointer;
 }
 .evts-x:hover { color: var(--text); background: var(--evts-row-hover); }
 .evts-modal-body { padding: 0 18px 4px; }
