@@ -71,6 +71,7 @@ import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTyp
 import {
   hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
+  resultsRoundOf, SURVEY_ROUND,
 } from './config/hostControls';
 import { stageAnswersKey, stageAnswersReady, askFetchStillCurrent } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
@@ -915,10 +916,10 @@ function GameHostPage() {
    * its own two-second poll of get-game-state, which reads the same record.
    */
   const publishStageBeat = (beat) => {
-    const round = phaseOfGameState(gameState) === 'RESULTS'
-      ? parseInt(String(gameState).split('#')[1], 10)
-      : null;
-    if (!gameId || !round) return;
+    // The round on screen — a closed survey's is 0 (resultsRoundOf).
+    const padded = resultsRoundOf(gameState);
+    if (!gameId || padded === null) return;
+    const round = parseInt(padded, 10);
     // authFetch: /stage-beat carries the Cognito authorizer, like /close-round.
     authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
       method: 'POST',
@@ -947,10 +948,8 @@ function GameHostPage() {
    * stage must not say "feedback" while the phones say "preparing".
    */
   const requestFeedbackRound = async () => {
-    const round = phaseOfGameState(gameState) === 'RESULTS'
-      ? parseInt(String(gameState).split('#')[1], 10)
-      : null;
-    if (!gameId || !round) return;
+    // Any round's results, or a closed survey's (round 000).
+    if (!gameId || resultsRoundOf(gameState) === null) return;
 
     try {
       const built = await authFetch(`${API_BASE}games/${gameId}/report`, {
@@ -980,9 +979,7 @@ function GameHostPage() {
     every comment lands after the report was built.
   */
   const loadRoundComments = async () => {
-    const round = phaseOfGameState(gameState) === 'RESULTS'
-      ? String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0')
-      : null;
+    const round = resultsRoundOf(gameState);
     if (!gameId || !round) return;
     const result = await fetchComments({ apiBase: API_BASE, gameId, questionNumber: round });
     // Only on success — a failed read must not wipe what the room can see.
@@ -1044,7 +1041,8 @@ function GameHostPage() {
     effect re-run — and refetch — on every render.
   */
   useEffect(() => {
-    if (phaseOfGameState(gameState) === 'RESULTS') {
+    // Any RESULTS phase — and a closed survey, whose results are round 000.
+    if (resultsRoundOf(gameState) !== null) {
       loadRoundCommentsRef.current();
     } else {
       setRoundComments([]);
@@ -1552,9 +1550,12 @@ function GameHostPage() {
       // The prompt echo (?debug=true) is served only on the host's route,
       // which carries the Cognito authorizer; the public route refuses it
       // (get-ai-summary.js). The plain read stays public, as the phones make it.
+      // The round is named rather than left to the server's CurrentQuestionId:
+      // a closed survey has none (its read is 000), and a past round's
+      // regenerated summary is not the current one.
       const response = gameDebugMode
-        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true`)
-        : await fetch(`${API_BASE}games/${gameId}/ai-summary`);
+        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true&questionId=${encodeURIComponent(questionId)}`)
+        : await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(questionId)}`);
 
       if (response.ok) {
         const summaryData = await response.json();
@@ -1754,7 +1755,8 @@ function GameHostPage() {
   // (generation runs async) and the completed summary arrives via the
   // aiSummaryReady WebSocket event, which renders it. We only kick it off here.
   const handleRegenerateAISummary = async () => {
-    const currentQuestionNum = gameState.match(/#(\d+)/)?.[1];
+    // A closed survey's read is round 000; its state carries no digits.
+    const currentQuestionNum = resultsRoundOf(gameState) || gameState.match(/#(\d+)/)?.[1];
     if (!currentQuestionNum) {
       console.log('⚠️ No current question number found for regeneration');
       return;
@@ -1854,6 +1856,26 @@ Focus on actionable business strategy insights.`;
       // REMOVED: AI insights polling - WebSocket handles notifications
     }
   }, [gameState, currentQuestionIndex, answers.length, gameId, gameDebugMode, useWebSocket, currentGameType]);
+
+  // A CLOSED SURVEY'S READ (27 Sep 2026: the Workie comments on a survey's
+  // results as it does on a round's). Started the moment the survey closes,
+  // at round 000, so it is written by the time the host presses What We
+  // Heard — the same fetch-else-generate a round's RESULTS runs above.
+  useEffect(() => {
+    if (gameState !== 'SURVEY#CLOSED' || !gameId || !useWebSocket) return;
+    setLoadingAIInsights(true);
+    setCurrentAIInsights(null);
+    setAiSummaryFailure(null);
+    aiQuestionRef.current = SURVEY_ROUND;
+    fetchAISummary(SURVEY_ROUND).then((existing) => {
+      if (applyAISummary(existing)) {
+        setLoadingAIInsights(false);
+        return;
+      }
+      startAISummaryGeneration(SURVEY_ROUND, 0);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, gameId, useWebSocket]);
 
   // When the room finishes answering, close the expanded-question overlay so
   // the host is looking at the stage again. The celebratory full-screen alert
@@ -2271,8 +2293,12 @@ Focus on actionable business strategy insights.`;
         setRegeneratingRounds((prev) => prev.filter((n) => n !== done));
         loadRounds();
       }
-      // Fetch the AI summary from API
-      if (data.questionId) {
+      // Fetch the AI summary from API — onto the stage only when it is the
+      // round the stage is waiting on. The read names its round now
+      // (fetchAISummary), so a past round regenerated from the Rounds tab,
+      // which arrives on this same frame, would otherwise replace the live one.
+      const onStage = String(aiQuestionRef.current || '').padStart(3, '0');
+      if (data.questionId && String(data.questionId).padStart(3, '0') === onStage) {
         console.log(`🔌 Fetching AI summary for question ${data.questionId}`);
         fetchAISummary(data.questionId).then(summary => {
           if (applyAISummary(summary)) {
@@ -2902,8 +2928,12 @@ Focus on actionable business strategy insights.`;
           setVotes([]);
           setPlayersWhoVoted([]);
           setCurrentQuestionVotes([]);
-          setCurrentAIInsights(null);
-          setLoadingAIInsights(false);
+          // A closed survey has no round in play either, but its Workie read
+          // (round 000) is on screen and must survive a re-sync.
+          if (currentState !== 'SURVEY#CLOSED') {
+            setCurrentAIInsights(null);
+            setLoadingAIInsights(false);
+          }
         }
 
         // Fetch current players with scores
@@ -5524,8 +5554,11 @@ Focus on actionable business strategy insights.`;
         return;
       }
       // The dock's own primary, through the dock's own runner — disabled means
-      // disabled for auto-mode too (e.g. RESULTS with zero answers).
+      // disabled for auto-mode too (e.g. RESULTS with zero answers). Ending a
+      // survey is the host's own act, like starting one: auto-mode pages its
+      // read-back and stops there.
       if (!hands.primary || hands.primary.disabled) return;
+      if (hands.primary.intent === HOST_INTENTS.END_SURVEY) return;
       hands.run(hands.primary);
     }, decision.delayMs);
     return () => clearTimeout(timer);
@@ -6287,9 +6320,7 @@ Focus on actionable business strategy insights.`;
     a cheap guard that holds regardless of which write landed last — no ref,
     no discard-the-stale-response bookkeeping needed.
   */
-  const currentResultsRound = phaseOfGameState(gameState) === 'RESULTS'
-    ? String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0')
-    : null;
+  const currentResultsRound = resultsRoundOf(gameState);
   const scopedRoundComments = currentResultsRound
     ? roundComments.filter((c) => c.questionNumber === currentResultsRound)
     : [];
@@ -6724,7 +6755,9 @@ Focus on actionable business strategy insights.`;
     Its fit key: rows arriving, counts moving and names landing all change the
     meter's height, which the fitter measures.
   */
-  const surveyStage = hostPhase === 'COLLECTING' || hostPhase === 'CLOSED';
+  // A closed survey stays a survey on its read-back and feedback beats.
+  const surveyStage = hostPhase === 'COLLECTING' || hostPhase === 'CLOSED'
+    || (isSurvey && (hostPhase === 'FIELD_NOTES' || hostPhase === 'FEEDBACK'));
   const surveyQuestionCount = (survey.progress && Array.isArray(survey.progress.perQuestion)
     && survey.progress.perQuestion.length) || roundOf || 0;
   const railContext = surveyStage
@@ -6798,7 +6831,7 @@ Focus on actionable business strategy insights.`;
             title={eventTitle || 'Engagements'}
             context={railContext}
             join={gameId
-              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED'
+              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED' || gameState === 'SURVEY#CLOSED'
                 ? { code: gameId, closed: true }
                 : {
                     url: joinDisplayUrl,
@@ -6900,9 +6933,9 @@ Focus on actionable business strategy insights.`;
               }}
               keyHint={
                 hostPhase === 'FIELD_NOTES'
-                  ? '→ next page · ← back · at the end, → starts the next round'
+                  ? `→ next page · ← back · at the end, → ${isSurvey ? 'ends the session' : 'starts the next round'}`
                   : hostPhase === 'FEEDBACK'
-                    ? '← back to what we heard · → starts the next round'
+                    ? `← back to what we heard · → ${isSurvey ? 'ends the session' : 'starts the next round'}`
                     : ''
               }
             />

@@ -90,6 +90,13 @@
  * which is why it tracks poll everywhere except `pollOptions` — assigned only
  * inside `gameType === 'polls' || 'poll'` (:1863).
  *
+ * SINCE 27 SEP 2026 A CLOSED SURVEY IS SUMMARISED, and not the way the
+ * paragraph above guessed: get-ai-summary.js reads its frozen results, reads
+ * no ANSWER or VOTE row at all, and hands them over as `{surveyResults}` —
+ * the one variable that carries a survey's answers. The survey tags on the
+ * answer, vote and score variables predate that path and are not yet
+ * re-derived against it.
+ *
  * `alwaysEmpty` is the one flag that overrides `gameTypes`: it marks a variable
  * that is hardcoded to '' on every path, deliberately. Two of them exist. They
  * stay advertised so an author hunting for participation figures finds out WHY
@@ -465,6 +472,18 @@ const TEMPLATE_VARIABLES = [
     category: 'Answers',
     gameTypes: ['trivia', 'poll'],
     example: 'Alice: A (Incorrect), Bob: B (Correct), Charlie: C (Incorrect)',
+  },
+  {
+    // A CLOSED SURVEY, whole (27 Sep 2026). Assigned from survey-digest.js
+    // only when get-ai-summary.js reads a survey's frozen results, and '' on
+    // every round of every other type — so survey is its only tag. It is the
+    // survey's answers: every question's result, counts copied from the
+    // aggregate, and a sample of the words people wrote. Never a name.
+    name: 'surveyResults',
+    description: 'Every question of a closed survey and its result — how many answered, the counts, the words people wrote. No names.',
+    category: 'Answers',
+    gameTypes: ['survey'],
+    example: '1. How useful was today? (a rating) 38 answered on a 1-5 scale. Average 4.03. …',
   },
   {
     // :2083 is `gameType === 'trivia' ? correctCount : 0` — an explicit zero

@@ -135,6 +135,20 @@ describe('the composer', () => {
     expect(screen.getByText('Your name will be shown with this comment.')).toBeInTheDocument();
   });
 
+  test('a closed survey\'s feedback round promises the opposite, because it is the opposite', () => {
+    /*
+      27 Sep 2026: a survey's comments carry no name anywhere — comments.js
+      strips it on every read, and the report leaves it off. So the composer
+      on a survey's round (PlayerPage passes namesShown={false}) must not say
+      the name is shown: a promise the product does not keep is worse than
+      none. rejects: the round types' disclosure left on a survey.
+    */
+    mount({ namesShown: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    expect(screen.getByText('Your name is not shown with this comment.')).toBeInTheDocument();
+    expect(screen.queryByText('Your name will be shown with this comment.')).toBeNull();
+  });
+
   test('will not send an empty comment', () => {
     const { props } = mount();
     fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));

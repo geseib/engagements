@@ -183,11 +183,16 @@ exports.handler = async (event) => {
      * surfaces come to disagree.
      */
     let stageFocus = { focus: 'none', index: null };
-    if (currentQuestionNumber) {
+    // A CLOSED SURVEY has no LessonNumber but does have beats: its Workie
+    // read-back and its feedback round sit on ROUND#000 (stage-beat.js takes
+    // 0 like any round), and a reload or the phone remote has to see them.
+    const beatRoundNumber = currentQuestionNumber
+      || (currentState === 'SURVEY#CLOSED' ? '000' : null);
+    if (beatRoundNumber) {
       try {
         const roundRecord = await db.send(new GetCommand({
           TableName: process.env.TABLE_NAME,
-          Key: { PK: `GAME#${gameId}`, SK: `ROUND#${currentQuestionNumber}` }
+          Key: { PK: `GAME#${gameId}`, SK: `ROUND#${beatRoundNumber}` }
         }));
         authorsRevealed = !!(roundRecord.Item && roundRecord.Item.AuthorsRevealed);
         /*
@@ -227,7 +232,7 @@ exports.handler = async (event) => {
           stageFocus = { focus: 'answer', index: roundRecord.Item.StageFocusIndex };
         }
       } catch (error) {
-        console.error(`❌ Error fetching round record for question ${currentQuestionNumber}:`, error);
+        console.error(`❌ Error fetching round record for question ${beatRoundNumber}:`, error);
         // Fall back to false — undecided is the safe (hidden) state.
       }
     }

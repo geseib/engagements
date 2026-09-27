@@ -180,9 +180,12 @@ exports.handler = async (event) => {
         ':sk': 'COMMENT#'
       }
     }));
-    /** True when THIS round's authors must stay off the report. */
+    /** True when THIS round's authors must stay off the report. A survey's
+     *  one pseudo-round (000, its Workie read and the room's comments on it)
+     *  never carries a name — comments.js holds the same rule on the wire. */
     const roundIsHidden = (paddedQuestionNumber) =>
-      isHidden(gameMetadata.Item, roundsByNumber.get(paddedQuestionNumber));
+      gameMetadata.Item.GameType === 'survey'
+      || isHidden(gameMetadata.Item, roundsByNumber.get(paddedQuestionNumber));
 
     // Process the data with proper filtering
     const players = playersQuery.Items || [];

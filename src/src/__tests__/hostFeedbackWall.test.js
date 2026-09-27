@@ -47,9 +47,12 @@ describe('scoped to the round actually showing (fix round 2, item 2)', () => {
   });
 
   test('currentResultsRound reads the round off gameState the same way loadRoundComments does', () => {
+    // One answer for both — config/hostControls.js's resultsRoundOf, padded
+    // as the comment rows carry it, and 000 for a closed survey (27 Sep 2026).
     const def = SRC.slice(SRC.indexOf('const currentResultsRound'), SRC.indexOf(';', SRC.indexOf('const currentResultsRound')));
-    expect(def).toMatch(/phaseOfGameState\(gameState\) === 'RESULTS'/);
-    expect(def).toMatch(/padStart\(3, '0'\)/);
+    expect(def).toMatch(/resultsRoundOf\(gameState\)/);
+    const load = SRC.slice(SRC.indexOf('const loadRoundComments'), SRC.indexOf('\n  };', SRC.indexOf('const loadRoundComments')));
+    expect(load).toMatch(/resultsRoundOf\(gameState\)/);
   });
 
   test('nothing downstream reads the raw roundComments state directly any more', () => {

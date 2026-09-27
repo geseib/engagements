@@ -125,6 +125,9 @@ const ANSWER_TOKENS = [
   'responsesText', 'triviaResponses', 'uniqueAnswers',
   'voteTally', 'votingBreakdown',
   'playerResponses', 'playerAnswers', 'wavelengthWords',
+  // The whole result of a closed survey (27 Sep 2026): its answers arrive here and
+  // nowhere else, so a survey prompt naming it has received them.
+  'surveyResults',
 ];
 
 /**
@@ -176,7 +179,8 @@ function assertReceivesResponses(texts) {
     + `variables that carry what participants said appear anywhere in it (${ANSWER_TOKENS
       .slice(0, 3).map((t) => `{${t}}`).join(', ')}, …). It would run, cost a Bedrock call, and `
     + 'show the room a reply addressed to whoever wrote the prompt. Add {responsesText} where '
-    + 'the responses should appear — {triviaResponses} for trivia, {uniqueAnswers} for a poll.'
+    + 'the responses should appear — {triviaResponses} for trivia, {uniqueAnswers} for a poll, '
+    + '{surveyResults} for a survey.'
   );
 }
 
@@ -221,7 +225,8 @@ const AUTHORING_RULES = Object.freeze([
     id: 'receives-the-responses',
     gate: 'assertReceivesResponses',
     text: 'An analysis prompt must actually receive what the room said: name {responsesText} '
-      + '({triviaResponses} for trivia, {uniqueAnswers} for a poll) somewhere, or the prompt '
+      + '({triviaResponses} for trivia, {uniqueAnswers} for a poll, {surveyResults} for a survey) '
+      + 'somewhere, or the prompt '
       + 'runs, costs a model call, and replies to whoever wrote it instead of to the room.',
   }),
   Object.freeze({

@@ -296,6 +296,55 @@ const report = async (gameId) => JSON.parse((await createReport({ pathParameters
     });
   }
 
+  /* ------------------------------------------------------------------ §7 -- */
+  say('\n§7 the Workie\'s read of the survey, and the room\'s comments on it, are round 000');
+  {
+    // The owner, 27 Sep 2026: surveys get the Workie's read and a feedback
+    // round. Both live at 000 (get-ai-summary.js, comments.js); the report
+    // files them as one entry beside the results, and nothing else.
+    const g = await openSurvey({});
+    await answer(g, newRespondent(), '001', 4);
+    const closed = await hostCall('close', g);
+    assert.strictEqual(closed.statusCode, 200, closed.body);
+    // A host whose saved preference shows names on rounds: a survey's comments
+    // still carry none.
+    const meta = table.get(`GAME#${g}`, 'METADATA');
+    table.put({ ...meta, HostPreferences: { ...(meta.HostPreferences || {}), anonymousUntilReveal: false } });
+    table.put(await C.encryptItem(ACME, 'aiSummary', {
+      PK: `GAME#${g}`, SK: 'QUESTION#000#AISummary', QuestionId: '000',
+      SummaryText: 'The room found the day useful.', MarkdownResponse: '## What the Room Said\n\n- **Useful**: 4 of 5.',
+      DiscussionQuestions: [], NextSteps: [], GeneratedAt: '2026-09-27T10:00:00.000Z',
+    }));
+    table.put(await C.encryptItem(ACME, 'comment', {
+      PK: `GAME#${g}`, SK: 'COMMENT#000#summary#_#000000000000001-aa', GameId: g, QuestionNumber: '000',
+      AnchorKind: 'summary', AnchorRef: '', AnchorLabel: 'AI summary', AnchorExcerpt: 'Useful',
+      Text: 'Agreed, and send the agenda too.', playerName: SECRET_NAME, name: SECRET_NAME,
+      SubmittedAt: '2026-09-27T10:05:00.000Z',
+    }));
+    const out = await createReport({ pathParameters: { gameId: g } });
+    const rep = JSON.parse(out.body).report;
+    const read = (rep.detailedQuestions || []).find((q) => q.questionNumber === '000');
+
+    // rejects: the survey's read dropped from the report, or filed as a round.
+    await check('detailedQuestions carries exactly one entry, 000', () => {
+      assert.strictEqual(rep.detailedQuestions.length, 1, JSON.stringify(rep.detailedQuestions.map((q) => q.questionNumber)));
+      assert.ok(read, 'no 000 entry');
+    });
+    await check('...with the Workie\'s read on it', () =>
+      assert.strictEqual(read.aiSummary.markdownResponse, '## What the Room Said\n\n- **Useful**: 4 of 5.'));
+    // rejects: a survey comment printed with its author in the host's report.
+    await check('...and the comment, with no name', () => {
+      assert.strictEqual(read.comments.length, 1);
+      assert.strictEqual(read.comments[0].text, 'Agreed, and send the agenda too.');
+      assert.ok(!('playerName' in read.comments[0]), JSON.stringify(read.comments[0]));
+      assert.ok(!out.body.includes(SECRET_NAME), 'the report body carries the commenter\'s name');
+    });
+    // rejects: report-merge reading 000's empty `answers` as responses that
+    // expired, and heading every survey report "Incomplete record".
+    await check('an entry with no responses of its own does not mark the report incomplete', () =>
+      assert.strictEqual(rep.reportCompleteness.complete, true, JSON.stringify(rep.reportCompleteness)));
+  }
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

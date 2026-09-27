@@ -183,6 +183,26 @@ const {
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { isHidden, redactAnswers } = require('./anonymity');
 const { callerMayDriveSession } = require('./tenant');
+const { SURVEY_CLOSED } = require('./survey-names');
+const { describeSurveyQuestion } = require('./survey-digest');
+
+/**
+ * A CLOSED SURVEY'S FEEDBACK ROUND (27 Sep 2026: the owner asked for "the
+ * ability to provide feedback just like we do for call and answer").
+ *
+ * A survey has no rounds, so its Workie read-back and the room's comments on
+ * it sit at a pseudo-round no real round can have: 000. Its comments are
+ * open for exactly as long as the survey is CLOSED — the survey's own
+ * "results are showing" — the same window a round's RESULTS#nnn is.
+ *
+ * AND THEY NEVER CARRY A NAME, whatever the session's Names setting or the
+ * host's saved anonymity preference. A survey's promise to the room is about
+ * what it writes about people; the composer on the phone says the name is
+ * not shown (FeedbackRoundPanel), and this is what makes that true.
+ */
+const SURVEY_ROUND = '000';
+const isSurveySession = (meta) => Boolean(meta && meta.GameType === 'survey');
+const commentsHidden = (meta, round) => isSurveySession(meta) || isHidden(meta, round);
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -407,7 +427,11 @@ async function writeComment(gameId, body) {
     check, and nothing here treats it any differently from a comment posted
     while the round is on its tally or its AI read-back.
   */
-  if (String(state.State) !== `RESULTS#${padded}`) {
+  // A closed survey is its own results showing: comments land on 000 while it
+  // is CLOSED, and on nothing else (see SURVEY_ROUND above).
+  const surveyOpenForComments = isSurveySession(meta)
+    && padded === SURVEY_ROUND && String(state.State) === SURVEY_CLOSED;
+  if (String(state.State) !== `RESULTS#${padded}` && !surveyOpenForComments) {
     return respond(409, {
       error: 'this round is no longer open for comments',
       currentState: state.State,
@@ -566,7 +590,7 @@ async function readComments(gameId, query) {
   for (const [padded, list] of byRound) {
     if (!roundCache.has(padded)) roundCache.set(padded, await roundRecord(gameId, padded));
     const wire = list.map(toWire);
-    out.push(...(isHidden(meta, roundCache.get(padded)) ? redactAnswers(wire) : wire));
+    out.push(...(commentsHidden(meta, roundCache.get(padded)) ? redactAnswers(wire) : wire));
   }
 
   // Sort AFTER regrouping: the per-round grouping above loses the query's own
@@ -577,6 +601,43 @@ async function readComments(gameId, query) {
 }
 
 // ──────────────────────────────────────────────── GET /feedback-round ──────
+
+/**
+ * A CLOSED SURVEY, AS THE ROUND THE ROOM COMMENTS ON.
+ *
+ * Built from the stored report the host has just made (`surveyResults`, the
+ * frozen results create-report.js reads with survey-host.js's own reader) and
+ * the 000 slice's `aiSummary` — the Workie's read. One row per question, in the
+ * survey's order, each the same words the Workie was given about it
+ * (survey-digest.js), so a comment on "response 3" is a comment on question
+ * 3's result. No row carries a name: the results never held one.
+ *
+ * In the shape RoundReport.jsx reads — `title`, `detail`, `answers[].answer` —
+ * with the report's own spellings (`questionData`, `answerText`) alongside, so
+ * a reader written against either finds it.
+ */
+function surveyFeedbackRound(report) {
+  const results = report && report.surveyResults;
+  if (!results || !Array.isArray(results.questions)) return null;
+  const read = (report.detailedQuestions || []).find((q) => String(q.questionNumber) === SURVEY_ROUND);
+  const title = report.gameTitle || 'The survey';
+  const count = results.questions.length;
+  const detail = `${Number(results.n) || 0} answered · ${count} question${count === 1 ? '' : 's'}`;
+  const answers = results.questions.map((q, i) => {
+    const text = describeSurveyQuestion(q, i);
+    return { answerIndex: i, answer: text, answerText: text };
+  });
+  return {
+    questionNumber: SURVEY_ROUND,
+    number: SURVEY_ROUND,
+    ordinal: 0,
+    title,
+    detail,
+    questionData: { title, detail, category: 'Survey' },
+    answers,
+    aiSummary: (read && read.aiSummary) || null,
+  };
+}
 
 /**
  * THE ONE ROUND A PARTICIPANT IS BEING ASKED TO COMMENT ON.
@@ -625,10 +686,11 @@ async function readFeedbackRound(gameId) {
   if (!meta || !state) return respond(404, { error: 'Game not found' });
 
   const onScreen = String(state.State || '').match(/^RESULTS#(\d+)$/);
-  if (!onScreen) {
+  const surveyClosed = isSurveySession(meta) && state.State === SURVEY_CLOSED;
+  if (!onScreen && !surveyClosed) {
     return respond(409, { error: 'the host has not opened a feedback round' });
   }
-  const padded = onScreen[1];
+  const padded = onScreen ? onScreen[1] : SURVEY_ROUND;
 
   const round = await roundRecord(gameId, padded);
   if (!round || round.StageBeat !== 'feedback') {
@@ -646,8 +708,9 @@ async function readFeedbackRound(gameId) {
   const orgId = orgOf(meta);
   const report = orgId ? await decryptItem(orgId, 'report', stored.Item) : stored.Item;
 
-  const slice = (report.detailedQuestions || [])
-    .find((q) => String(q.questionNumber) === padded);
+  const slice = surveyClosed
+    ? surveyFeedbackRound(report)
+    : (report.detailedQuestions || []).find((q) => String(q.questionNumber) === padded);
   if (!slice) {
     return respond(409, { error: 'the round report is not ready yet' });
   }
@@ -744,7 +807,12 @@ async function featureComment(event, gameId, commentId, body) {
 
   const orgId = orgOf(meta);
   const plain = orgId ? await decryptItem(orgId, 'comment', updated.Attributes || row) : (updated.Attributes || row);
-  return respond(200, { status: 'OK', gameId, questionNumber: padded, comment: toWire(plain) });
+  const wire = toWire(plain);
+  return respond(200, {
+    status: 'OK', gameId, questionNumber: padded,
+    // Not even to the host: a survey's comments carry no name anywhere.
+    comment: isSurveySession(meta) ? redactAnswers([wire])[0] : wire,
+  });
 }
 
 // ───────────────────────────────────────────────────────── handler ─────────

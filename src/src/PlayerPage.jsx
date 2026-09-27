@@ -1577,7 +1577,8 @@ function PlayerPage({ event = null } = {}) {
   */
   useEffect(() => {
     if (!joined || !gameId) return;
-    if (!String(gameState || '').startsWith('RESULTS#')) return;
+    // A closed survey's feedback round is round 000 (comments.js).
+    if (!String(gameState || '').startsWith('RESULTS#') && gameState !== 'SURVEY#CLOSED') return;
     loadFeedbackRound();
     // `gameState` is in the deps so entering RESULTS re-asks; the endpoint is a
     // cheap read and answers 409 for the two beats that are not feedback.
@@ -2993,6 +2994,27 @@ function PlayerPage({ event = null } = {}) {
      after every hook in this component and after the join screens — so the
      hook order never depends on the game type, and BEFORE the ENDED branch,
      because a survey's ended screen shows no score. */
+  /* A CLOSED SURVEY'S FEEDBACK ROUND (27 Sep 2026, the owner: "the ability to
+     provide feedback just like we do for call and answer"). The host opens it
+     on round 000 and GET /feedback-round confirms it; until then the survey's
+     own closed screen stands. Ahead of SurveyRunner for the reason the
+     RESULTS# feedback arm is ahead of the ordinary results one: the state
+     alone cannot tell the two apart. A survey's comment carries no name, and
+     the composer says so. */
+  if (gameType === 'survey' && gameState === 'SURVEY#CLOSED' && feedbackRound) {
+    return (
+      <PlayerShell phase="quiet" volume="act" ctx="Feedback" who={playerName} online={wsConnected} banner={offlineBanner}>
+        <FeedbackRoundPanel
+          round={feedbackRound}
+          questionNumber={feedbackNumber}
+          comments={feedbackComments}
+          onSubmit={submitComment}
+          namesShown={false}
+        />
+      </PlayerShell>
+    );
+  }
+
   if (gameType === 'survey') {
     return (
       <SurveyRunner
