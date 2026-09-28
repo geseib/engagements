@@ -253,3 +253,10 @@
   .mk-rise > span, .mk-hero-sub, .mk-hero-foot, .mk-hero-stage, .mk-hero-copy { animation: none; }
   .mk-tally-track i { transition: none; width: var(--w); }
 }
+
+/* Full narrated walkthrough: plays only on request. */
+.mk-walkthrough video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--mk-bg); border-radius: 12px; }
+.mk-walkthrough video:focus-visible { outline: 3px solid var(--mk-amber); outline-offset: 4px; }
+.mk-walkthrough .mk-muted { margin-top: 16px; }
+
+.mk-walkthrough { margin: 48px 0 64px; }

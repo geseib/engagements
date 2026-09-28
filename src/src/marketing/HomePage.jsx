@@ -146,6 +146,21 @@ export default function HomePage() {
               <h2 className="mk-title">{modes.title}</h2>
               <p className="mk-lead">{modes.lead}</p>
             </div>
+            <div id="walkthrough" className="mk-walkthrough">
+              <div>
+                <div className="mk-section-head">
+                  <h3 className="mk-title">From the first join to the final score.</h3>
+                  <p className="mk-lead">Follow an 80s trivia game with eight fictional teammates. See the host, a phone and a laptop, then save the report as a PDF.</p>
+                </div>
+                <video controls playsInline preload="none" poster="/assets/marketing/engage-trivia-poster.jpg" aria-label="80s trivia walkthrough with narration and captions">
+                  <source src="/assets/marketing/engage-trivia.mp4" type="video/mp4" />
+                  <track kind="captions" src="/assets/marketing/engage-trivia.vtt" srcLang="en" label="English" />
+                  <a href="/assets/marketing/engage-trivia.mp4">Watch the trivia walkthrough</a>
+                </video>
+                <p className="mk-muted"><a href="/assets/marketing/engage-trivia-transcript.html">Read the walkthrough transcript</a></p>
+              </div>
+            </div>
+
             {modes.items.map((mode) => (
               <div key={mode.id} className={`mk-mode${mode.flip ? ' mk-mode--flip' : ''}`}>
                 <div className="mk-mode-copy">
