@@ -58,6 +58,24 @@ the pages?" A presentation item may carry one PDF.
 - **Not done**: decks are not encrypted per organisation, and they are deleted when an event is
   deleted but not when it expires by TTL. There is no test against real S3; the local stack stubs it.
 
+### Full screen, and presenting the slides (28 Sep 2026)
+
+The owner: "hitting 'f' takes the browser to full screen mode for the host", and "we need to be able
+to present the slides in presos full screen as well".
+
+- **F** toggles full screen on the host's screens only: GameHostPage (the main screen and a session's
+  stage), EventStage and HostEventAgenda. It is `hooks/useFullscreenKey.js` over `utils/fullscreen.js`
+  (with the `webkit` fallbacks). F is ignored while typing, with Ctrl/Cmd/Alt, when held down, and
+  inside the session panel. No phone page binds it. The host help lists it.
+- **Presenting**: on an event's stage with a talk's slides up, F (or "Full screen" beside the slide)
+  makes the slide frame itself the full-screen element. The slide is redrawn at screen size on
+  black. Space, Shift+Space, the arrows, PageUp/PageDown and a click turn it, and nothing takes the
+  dock's step. "Slide N of M" and the pointer show for 2.5s after a turn or a mouse move. F steps back
+  one level (to the full-screen page if that came first), and Esc leaves full screen.
+- **Limit**: full screen ends on every page load, and `navigateTo` sets `location.href`. So going
+  from the event's stage to a session's stage (or back) leaves full screen, and the host presses F
+  again. Within one session, and within the event's stage, it holds.
+
 ## New teams need approval
 
 `create-org.js` files an Organisation-plan request (`kind: 'new-organisation'`) for every team it makes;
@@ -94,6 +112,10 @@ Engage's queue), approved through the platform route, seven sets, delete one, ma
 After the slides merge: backend 269/269, frontend 412 suites / 9836 tests, and two more drives — a
 host building an agenda from the host screens (5), and a presentation's PDF uploaded, turned with
 →/PageDown/←, kept across a reload and followed on a phone (4).
+Full screen: frontend 413 suites / 9870 tests, and a drive with real key and mouse input (7): F on the
+main screen, the agenda (typing F stays in the field) and the board; a talk presented at 1280×720 on
+black, turned by Space, →, a click, ← and Shift+Space without the talk going live; F back to the page;
+Esc out.
 
 ## Still open
 
