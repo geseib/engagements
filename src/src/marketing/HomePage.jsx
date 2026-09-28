@@ -161,6 +161,21 @@ export default function HomePage() {
               </div>
             </div>
 
+            <div id="call-answer-walkthrough" className="mk-walkthrough">
+              <div>
+                <div className="mk-section-head">
+                  <h3 className="mk-title">Give every idea room to be heard.</h3>
+                  <p className="mk-lead">Join five fictional teammates as they shape a new platform. Write answers, vote, question the findings and keep the discussion in a report. Laptops or tablets work best for the longer replies.</p>
+                </div>
+                <video controls playsInline preload="none" poster="/assets/marketing/engage-call-answer-poster.jpg" aria-label="Call and Answer walkthrough with narration and captions">
+                  <source src="/assets/marketing/engage-call-answer.mp4" type="video/mp4" />
+                  <track kind="captions" src="/assets/marketing/engage-call-answer.vtt" srcLang="en" label="English" />
+                  <a href="/assets/marketing/engage-call-answer.mp4">Watch the Call and Answer walkthrough</a>
+                </video>
+                <p className="mk-muted"><a href="/assets/marketing/engage-call-answer-transcript.html">Read the Call and Answer transcript</a></p>
+              </div>
+            </div>
+
             {modes.items.map((mode) => (
               <div key={mode.id} className={`mk-mode${mode.flip ? ' mk-mode--flip' : ''}`}>
                 <div className="mk-mode-copy">
