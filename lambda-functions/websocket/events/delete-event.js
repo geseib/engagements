@@ -61,6 +61,7 @@ const { json, notFound, trace, eventsEnabled } = require('./event-http');
 const S = require('./event-store');
 const { deleteAttendees } = require('./attendee-store');
 const { discardChildSession } = require('./child-session');
+const { removeObject } = require('./deck-store');
 
 const PLANNED = 'planned';
 const TRANSACTION_LIMIT = 100;
@@ -148,6 +149,9 @@ async function deleteEvent(db, tableName, request) {
     // event: nobody could ever join them, and each holds a code.
     for (const row of items) {
       if (row.GameId) await discardChildSession(db, tableName, String(row.GameId), meta.orgId);
+      // A presentation's slides go with it (deck-store.js): nothing else
+      // points at them. Best effort, after the rows, like the sessions.
+      if (row.Deck && row.Deck.key) await removeObject(row.Deck.key);
     }
     let attendees = 0;
     try {

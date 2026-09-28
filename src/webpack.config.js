@@ -8,6 +8,17 @@ const dotenv = require('dotenv');
 // Load environment variables from .env file
 const envFile = dotenv.config().parsed || {};
 
+/*
+  PDF.JS'S WORKER — a presentation's slides (src/utils/pdfDeck.js). Copied,
+  not bundled: the worker is pdf.js's own prebuilt file and gains nothing from
+  a second pass. Renamed `.mjs` → `.js` so the deploy's `aws s3 sync` types it
+  as JavaScript (a module worker refuses anything else), and versioned so a
+  new pdf.js is never paired with an old worker. Its path reaches the app as
+  process.env.PDF_WORKER_SRC. Same origin as the app: no CDN.
+*/
+const PDFJS_VERSION = require('pdfjs-dist/package.json').version;
+const PDF_WORKER = `pdf.worker.${PDFJS_VERSION}.min.js`;
+
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
 
@@ -48,7 +59,8 @@ module.exports = (env, argv) => {
       new webpack.DefinePlugin({
         'process.env': JSON.stringify({
           ...envFile,
-          NODE_ENV: argv.mode || 'development'
+          NODE_ENV: argv.mode || 'development',
+          PDF_WORKER_SRC: `/${PDF_WORKER}`,
         })
       }),
       new HtmlWebpackPlugin({
@@ -63,6 +75,11 @@ module.exports = (env, argv) => {
             globOptions: {
               ignore: ['**/index.html'], // Don't copy index.html since HtmlWebpackPlugin handles it
             },
+          },
+          {
+            from: path.resolve(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs'),
+            to: PDF_WORKER,
+            toType: 'file',
           },
         ],
       }),

@@ -5,6 +5,7 @@
  *   GET  events/{code}/agenda            the agenda: every item, its state,
  *                                        and the live item's session code
  *   GET  events/{code}/agenda?view=now   what is live now, and `rev` — polled
+ *   GET  events/{code}/agenda?view=deck&item=…   a started talk's slides
  *   POST events/{code}/attendees         a name → the attendee's token
  *   GET  events/{code}/me                the token → the attendee's own name
  *
@@ -43,6 +44,17 @@ export const getAgenda = (code) => call(`events/${enc(code)}/agenda`);
 export async function getNow(code) {
   const body = await call(`events/${enc(code)}/agenda?view=now`);
   return body.now || null;
+}
+
+/**
+ * `{ id, url, pages, page, expiresIn }` — a started talk's slides, a signed
+ * read of the PDF, for a phone whose attendee asked to see them here
+ * (events M5 on 27 Sep 2026). 404 (`no_slides`) before the host starts the
+ * talk, or for an item with none.
+ */
+export async function getDeck(code, itemId) {
+  const body = await call(`events/${enc(code)}/agenda?view=deck&item=${enc(itemId)}`);
+  return body.deck || null;
 }
 
 /** `{ token, attendee: { name, joinedAt } }`. */

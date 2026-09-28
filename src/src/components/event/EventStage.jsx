@@ -3,13 +3,15 @@ import { QRCodeSVG } from 'qrcode.react';
 import Stage from '../stage/Stage';
 import Modal from '../Modal';
 import Icon from '../Icon';
-import { getEvent, runEvent } from '../../utils/eventsApi';
+import { getEvent, runEvent, readDeck, turnPage } from '../../utils/eventsApi';
 import { navigateTo } from '../../auth/navigate';
 import { loadProfile } from '../../config/displayProfile';
 import {
   TYPE_ICONS, typeLabel, typeLine, positionOf, wallClock, nextAfter, firstPlanned,
   isEngagement, isBreak, rules,
 } from './eventDisplay';
+import SlideCanvas from './SlideCanvas';
+import useSlides from './useSlides';
 import './EventStage.css';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
@@ -41,6 +43,17 @@ const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
  *
  * Every action answers with the server's view of the event, so two host
  * screens converge, and a start that lost a race says so.
+ *
+ * A TALK'S SLIDES (the owner, 27 Sep 2026: "can the presentation show pdf
+ * presentation with arrow key forward/backward through the pages?"). A
+ * presentation with a PDF shows its current slide as large as the stage
+ * allows (SlideCanvas: letterboxed, never scrolled), with the talk, "Slide 3
+ * of 12" and ‹ › beside it — below it on a portrait screen. ← and → turn the
+ * page, and so do PageUp and PageDown, which is what a presenter's clicker
+ * sends; SPACE stays the dock's step, and → no longer is while slides are up.
+ * Each turn shows at once and is kept on the item a moment later (run.js
+ * `page`), so a reload lands on the same slide and phones following the talk
+ * can show it; a turn another host screen made is picked up by the poll.
  */
 const POLL_MS = 10000;
 const WIPE_MS = 1400;
@@ -49,6 +62,15 @@ const WALL_ROWS = 7;
 const MIN_COLUMN_PX = 520;
 /** Under this a dense column drops the kind icon and closes its gaps (`data-narrow`). */
 const MIN_DENSE_COLUMN_PX = 440;
+/** A burst of page turns is kept once, when it settles. */
+const PAGE_SAVE_MS = 350;
+/** After a turn here, a poll's older page is not believed for this long. */
+const PAGE_QUIET_MS = 4000;
+/**
+ * The keys that turn a slide: the arrows, and PageUp/PageDown — a clicker's.
+ * NOT Space, which takes the dock's step on every stage.
+ */
+const SLIDE_KEYS = Object.freeze({ ArrowRight: 1, PageDown: 1, ArrowLeft: -1, PageUp: -1 });
 
 const playUrl = (code) => `${window.location.origin}/play?event=${code}`;
 const joinDisplayUrl = () => `${window.location.host}/play`;
@@ -226,8 +248,13 @@ export default function EventStage({ code }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [boardGrid, setBoardGrid] = useState(null);
+  const [slide, setSlide] = useState({ key: '', page: 1 });
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  const slideSave = useRef({ timer: null, pending: false, server: {} });
+  useEffect(() => () => {
+    mounted.current = false;
+    clearTimeout(slideSave.current.timer);
+  }, []);
 
   const event = (view && view.event) || null;
   /* THE PLANNED TIMES. GET /events/{code} sends the agenda without them; the
@@ -245,6 +272,62 @@ export default function EventStage({ code }) {
   const liveItem = event ? items.find((i) => i.itemId === event.liveItemId) || null : null;
   const focused = focus === 'agenda' ? null : items.find((i) => i.itemId === focus) || null;
   useBoardFit(boardGrid, items.length);
+
+  // ── A talk's slides ──────────────────────────────────────────────────────
+  const deckItem = focused && focused.type === rules.PRESENTATION && focused.deck && focused.deck.pages ? focused : null;
+  const deckKey = deckItem ? `${deckItem.itemId}:${deckItem.deck.id || ''}` : '';
+  const pages = deckItem ? deckItem.deck.pages : 0;
+  const slides = useSlides(() => readDeck(code, deckItem.itemId).then((r) => r.deck), deckKey || null);
+  const page = deckItem && slide.key === deckKey ? slide.page : rules.clampPage(deckItem && deckItem.deckPage, pages);
+
+  /*
+    WHERE THE SLIDES ARE: the item's own page when a deck is first shown (so a
+    reload lands on it), and afterwards another screen's turn when a poll
+    brings one. Not while this screen has a turn of its own to keep, nor just
+    after — a poll that left before that turn was kept can come back after it
+    with the page before, and must not turn the slide back. Such a poll is
+    passed over without being believed, so a real turn elsewhere is still
+    picked up by the next one. Runs on every poll (`items`).
+  */
+  const serverPage = deckItem ? rules.clampPage(deckItem.deckPage, pages) : 0;
+  useEffect(() => {
+    if (!deckKey) return;
+    const kept = slideSave.current;
+    const known = kept.server[deckKey];
+    if (known === undefined) {
+      kept.server[deckKey] = serverPage;
+      setSlide({ key: deckKey, page: serverPage });
+      return;
+    }
+    if (known === serverPage || kept.pending || Date.now() - (kept.turnedAt || 0) < PAGE_QUIET_MS) return;
+    kept.server[deckKey] = serverPage;
+    setSlide({ key: deckKey, page: serverPage });
+  }, [deckKey, serverPage, items]);
+
+  /** Turn by `delta` slides; shown now, kept on the item once the turns settle. */
+  const turn = useCallback((delta) => {
+    if (!deckItem) return;
+    const next = rules.clampPage(page + delta, pages);
+    if (next === page) return;
+    setSlide({ key: deckKey, page: next });
+    const kept = slideSave.current;
+    kept.pending = true;
+    kept.turnedAt = Date.now();
+    clearTimeout(kept.timer);
+    const { itemId } = deckItem;
+    kept.timer = setTimeout(async () => {
+      try {
+        await turnPage(code, itemId, next);
+        kept.server[deckKey] = next;
+        if (mounted.current) setRefusal('');
+      } catch (error) {
+        if (mounted.current) setRefusal((error && error.message) || 'The slide was not kept. Turn again to retry.');
+      } finally {
+        kept.pending = false;
+        kept.turnedAt = Date.now();
+      }
+    }, PAGE_SAVE_MS);
+  }, [code, deckItem, deckKey, page, pages]);
 
   /** The host's own view, kept in the address so a reload lands on it. */
   const setFocus = useCallback((next) => {
@@ -377,19 +460,27 @@ export default function EventStage({ code }) {
   }, [event, focused, items, next, act, goLive, endThenGoLive, setFocus, code]);
 
   // SPACE (and the clicker's arrow) takes the dock's step, as on every stage.
+  // With slides up, the arrows and PageUp/PageDown turn the slide instead —
+  // from a focused ‹ › too, since a clicker's key lands wherever focus is.
   useEffect(() => {
     const onKey = (e) => {
-      if (confirmEndEvent || qrOpen || busy || !plan) return;
+      if (confirmEndEvent || qrOpen) return;
       const tag = (e.target && e.target.tagName) || '';
+      if (deckItem && SLIDE_KEYS[e.key] && !/INPUT|TEXTAREA|SELECT/.test(tag)) {
+        e.preventDefault();
+        turn(SLIDE_KEYS[e.key]);
+        return;
+      }
+      if (busy || !plan) return;
       if (/INPUT|TEXTAREA|SELECT|BUTTON/.test(tag)) return;
-      if (e.key === ' ' || e.key === 'ArrowRight') {
+      if (e.key === ' ' || (e.key === 'ArrowRight' && !deckItem)) {
         e.preventDefault();
         plan.run();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [plan, confirmEndEvent, qrOpen, busy]);
+  }, [plan, confirmEndEvent, qrOpen, busy, deckItem, turn]);
 
   if (loadError) {
     return (
@@ -441,7 +532,59 @@ export default function EventStage({ code }) {
   let main;
   let meter = null;
   let status;
-  if (focused) {
+  if (deckItem) {
+    const pos = positionOf(items, deckItem.itemId);
+    const where = rules.slideLabel(page, pages);
+    status = deckItem.state === 'live' ? joined : 'Preview — the phones are not here yet';
+    main = (
+      <div className="ag-deck" data-testid="slides">
+        <div className="ag-deck-frame">
+          {slides.doc ? (
+            <SlideCanvas
+              className="ag-deck-slide"
+              doc={slides.doc}
+              page={Math.min(page, slides.doc.numPages || page)}
+              label={`${deckItem.title}, ${where}`}
+              onError={() => setRefusal('That slide could not be drawn. Turn to another, or come back to this one.')}
+            />
+          ) : (
+            <p className="ag-deck-note" role="status">
+              {slides.error || 'Opening the slides…'}
+              {slides.error && (
+                <button type="button" className="ag-b" onClick={slides.retry}>Try again</button>
+              )}
+            </p>
+          )}
+        </div>
+        <aside className="ag-deck-side">
+          <div className="ag-deck-about">
+            <p className="ag-deck-ty">
+              <TypeIcon type={rules.PRESENTATION} />
+              {`${typeLabel(rules.PRESENTATION)}${pos ? ` · ${pos.n} of ${pos.of}` : ''}`}
+            </p>
+            <h2 className="ag-deck-title" title={deckItem.title}>{deckItem.title}</h2>
+            {deckItem.ledBy && <p className="ag-deck-who">{deckItem.ledBy}</p>}
+          </div>
+          <div className="ag-deck-nav" role="group" aria-label="Slides">
+            <p className="ag-deck-at" aria-live="polite">{where}</p>
+            <div className="ag-deck-turns">
+              <button type="button" className="ag-deck-turn" onClick={() => turn(-1)} disabled={page <= 1} aria-label="Previous slide">
+                <Icon name="CaretLeft" weight="bold" size={26} color="currentColor" />
+              </button>
+              <button type="button" className="ag-deck-turn" onClick={() => turn(1)} disabled={page >= pages} aria-label="Next slide">
+                <Icon name="CaretRight" weight="bold" size={26} color="currentColor" />
+              </button>
+            </div>
+            <p className="ag-deck-keys" aria-hidden="true">
+              <span className="ag-deck-kbd">←</span>
+              <span className="ag-deck-kbd">→</span>
+              to turn
+            </p>
+          </div>
+        </aside>
+      </div>
+    );
+  } else if (focused) {
     const pos = positionOf(items, focused.itemId);
     const live = focused.state === 'live';
     const coming = items.filter((i) => (i.state || 'planned') !== 'done' && i.itemId !== focused.itemId);
@@ -549,7 +692,7 @@ export default function EventStage({ code }) {
         rail={railEl}
         dock={dockEl}
         meter={meter}
-        fitKey={`${focus}|${event.liveItemId}|${event.state}|${items.length}`}
+        fitKey={`${focus}|${event.liveItemId}|${event.state}|${items.length}|${deckKey}`}
         overlay={wipe ? (
           <div className="wipe ag-go" role="status">
             {wipe.title}
@@ -557,7 +700,7 @@ export default function EventStage({ code }) {
           </div>
         ) : null}
       >
-        {focused ? (
+        {focused && !deckItem ? (
           <div className="content">
             <div className="fitbox center">{main}</div>
           </div>

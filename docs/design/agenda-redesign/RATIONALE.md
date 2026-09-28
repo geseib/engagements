@@ -129,6 +129,15 @@ reasoning behind each is in §a–§c below. `index.html` shows the same list.
    - **Outside presenters are no longer a question.** The first draft's
      question about a presenter from outside the org driving the slides
      falls away: nobody drives anything in Engage.
+   - **REVISED 27 Sep 2026 for the stage.** *"can the presentation show pdf
+     presentation with arrow key forward/backward through the pages?"* A
+     presentation may carry one PDF (50 MB), and the event's stage draws it a
+     page at a time: ← →, a clicker's PageUp/PageDown, and on-screen ‹ ›. The
+     page is kept on the item; phones following the talk say which slide is
+     up and show it on a tap. Stored in the media bucket under private
+     `decks/` keys read by presigned URL, not sealed per org as decision 5
+     drew (a sealed deck opens only through a Lambda, whose response stops
+     near 6 MB). `lambda-functions/websocket/events/deck-store.js`.
 9. **Rehearsal — DECIDED.** *"yes. not sure what all that includes, but for
    now make it simple."*
    - **One button on the event:** "Rehearse on the stage" (02). It replaces

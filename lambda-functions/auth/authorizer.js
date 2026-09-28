@@ -459,10 +459,13 @@ function requiredGroupsForRoute(method, path) {
   // `events/{code}/run` (events M3) is the host running the day: start,
   // pause, resume, end.
   //
+  // `events/{code}/deck` and `events/{code}/items/{itemId}/deck` (27 Sep
+  // 2026) sign a presentation's PDF up and read it back for the stage.
+  //
   // NOT here: GET /events/{code}/agenda, POST /events/{code}/attendees,
   // GET /events/{code}/me and GET /join/{code}. They carry no authorizer at
   // all — an attendee has no account.
-  const EVENT_HOST_ROUTE = /^events(\/[^/]+(\/(items(\/[^/]+)?|run))?)?$/;
+  const EVENT_HOST_ROUTE = /^events(\/[^/]+(\/(items(\/[^/]+(\/deck)?)?|run|deck))?)?$/;
   if (EVENT_HOST_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }

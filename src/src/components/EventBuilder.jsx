@@ -45,7 +45,7 @@ import './EventBuilder.css';
  *     aria-disabled item does nothing.
  *   - Each row's source line leads with who leads it (02 draws a talk's
  *     "Marcus Oyelaran · …"), and an engagement with a goal says "5 of 50
- *     questions". "Use vN" that had to turn a narrowed category list back to
+ *     questions"; a presentation with slides says "12 slides". "Use vN" that had to turn a narrowed category list back to
  *     every category says so.
  *   - An item whose words the server could not decrypt (`decryptFailed`)
  *     says "This item could not be read", keeps its place, time and length,
@@ -117,7 +117,8 @@ function sourceLine(item, until) {
   if (item.type === rules.BREAK) return { text: `Back at ${until} · not counted, not billed`, bad: false };
   // Who leads it comes first, as 02 draws a talk's line (events M1b).
   const lead = (text, bad = false) => ({ text: [item.ledBy, text].filter(Boolean).join(' · '), bad });
-  if (!item.set) return lead('');
+  // A presentation with slides says how many (27 Sep 2026): "Dana · 12 slides".
+  if (!item.set) return lead(item.deck && item.deck.pages ? rules.slidesLabel(item.deck.pages) : '');
   if (item.set.missing) return lead('This question set is no longer available', true);
   const version = item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : '';
   // The pinned version was deleted from the set (final review M1). Its count
@@ -500,7 +501,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                 })}
                 <hr className="evb-menu-rule" />
                 <h6 className="evb-menu-h">Talks</h6>
-                {countedKind(rules.PRESENTATION, 'A talk from the presenter’s own screen. A PDF copy for attendees comes later.')}
+                {countedKind(rules.PRESENTATION, 'A talk. Add its slides as a PDF and the stage shows them.')}
                 <hr className="evb-menu-rule" />
                 <h6 className="evb-menu-h">Just on the agenda</h6>
                 {countedKind(rules.CUSTOM, 'Anything else on the day: networking, lunch with a speaker, an open discussion.')}

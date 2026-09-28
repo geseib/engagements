@@ -680,13 +680,15 @@ check('decryptItem refuses an unknown entity too', async () =>
 console.log('\n7b. an event and its items');
 check('event seals exactly its title and place', () =>
   assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.event].sort(), ['Place', 'Title']));
-check('item seals exactly its title, description, leader and session options', () =>
-  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.item].sort(), ['Description', 'LedBy', 'Settings', 'Title']));
+// A presentation's slides (27 Sep 2026): the file's name is the host's
+// words, sealed; where it is stored, its size and the page shown are not.
+check('item seals exactly its title, description, leader, session options and slides\' file name', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.item].sort(), ['DeckName', 'Description', 'LedBy', 'Settings', 'Title']));
 check('the schedule, the counts and the set pointer stay plaintext', () => {
   for (const f of ['StartsAt', 'TimeZone', 'Access', 'State', 'AttendeeReports', 'ItemCount', 'EngagementCount', 'BreakCount']) {
     assert.ok(!C.ENCRYPTED_FIELDS.event.includes(f), `event would encrypt ${f}`);
   }
-  for (const f of ['Type', 'Order', 'Minutes', 'State', 'SetRef']) {
+  for (const f of ['Type', 'Order', 'Minutes', 'State', 'SetRef', 'Deck', 'DeckPage']) {
     assert.ok(!C.ENCRYPTED_FIELDS.item.includes(f), `item would encrypt ${f}`);
   }
 });

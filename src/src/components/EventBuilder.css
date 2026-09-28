@@ -159,6 +159,20 @@
   border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0; background: var(--evb-tint-danger);
 }
 .evb-confirm p { margin: 0; flex: 1 1 260px; min-width: 0; font-size: var(--evb-t-label); color: var(--text); }
+/* A presentation's slides (27 Sep 2026): one PDF, on one 36px line — the
+   file, its pages and size, then Replace and Remove PDF, pushed right by the
+   group's own margin-left: auto (hard rule 9), wrapping rather than overflowing. The
+   file name is one text node that truncates, with its title saying all of it
+   (hard rules 7 and 8). The well is --bg inside the --surface dialog, as the
+   inputs are, so its colours are the inputs' own. */
+.evb-deck {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-height: 36px; min-width: 0;
+  padding: 6px 10px; border: 1px dashed var(--evb-rule-strong); border-radius: 8px; background: var(--bg); color: var(--text);
+}
+.evb-deck > svg { flex: none; color: var(--primary); }
+.evb-deck-name { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+.evb-deck-meta { font-size: var(--evb-t-label); color: var(--muted); white-space: nowrap; }
+.evb-deck-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 
 /* ======================================================= the agenda place ==
    Everything below is the builder itself (EventBuilder.jsx). */

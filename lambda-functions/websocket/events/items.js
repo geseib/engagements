@@ -6,11 +6,14 @@
  *   PUT    /events/{code}/items            reorder: { order: [itemId, …] }
  *   PUT    /events/{code}/items/{itemId}   edit: title, description, minutes,
  *                                          who leads it, and "Use vN" for an
- *                                          engagement
+ *                                          engagement; a presentation's slides
+ *   POST   /events/{code}/deck             sign one upload of a PDF (slides)
+ *   GET    /events/{code}/items/{itemId}/deck   a presentation's slides, to
+ *                                          show on the stage (a signed read)
  *
  * THE KINDS (events M1b): five engagements (survey included), a presentation
- * (a placeholder until roadmap M5's PDF copy), an activity (`custom`) and a
- * break. Every kind but a break may name who leads it — `ledBy`, stored as
+ * (with its slides as one PDF, if the host adds them — deck-store.js), an
+ * activity (`custom`) and a break. Every kind but a break may name who leads it — `ledBy`, stored as
  * `LedBy` and sealed with the item's words. An engagement also carries its
  * session options — the create dialog's own, checked by item-settings.js and
  * sealed whole as `Settings` — which roadmap M3 feeds into the item's
@@ -83,6 +86,7 @@ const { checkItemSettings } = require('./item-settings');
 const { questionCountAt } = require('../session-goal');
 const { runEvent } = require('./run');
 const { discardChildSession } = require('./child-session');
+const D = require('./deck-store');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -281,6 +285,17 @@ async function addItem(request, meta, code) {
     return json(400, { error: 'Only an engagement has session options.' });
   }
 
+  // A PRESENTATION'S SLIDES (deck-store.js): an upload this event signed,
+  // proven a PDF and attached before the row is written — and let go again
+  // if the row then loses a race, so no deck outlives a refused add.
+  let deck = null;
+  if (body.deck !== undefined && body.deck !== null) {
+    if (!rules.hasDeck(type)) return json(400, { error: 'Only a presentation has slides.' });
+    const attached = await D.attachDeck(body.deck, { orgId: meta.orgId, code });
+    if (attached.error) return json(400, { error: attached.error });
+    deck = attached.value;
+  }
+
   const rows = await S.readItems(db, TABLE(), code);
   const position = clampPosition(body.position, rows.length);
   const now = new Date().toISOString();
@@ -299,6 +314,9 @@ async function addItem(request, meta, code) {
     ...(setRef ? { SetRef: setRef } : {}),
     // Sealed whole with the item's words (tenant-crypto `item`).
     ...(settings ? { Settings: settings } : {}),
+    // The slides: where they are, their size and pages, the page the stage
+    // is on; the file's name is sealed with the words.
+    ...(deck ? { Deck: deck.Deck, DeckName: deck.DeckName, DeckPage: 1 } : {}),
     CreatedAt: now,
     UpdatedAt: now,
     ttl: meta.ttl,
@@ -317,6 +335,7 @@ async function addItem(request, meta, code) {
   try {
     await db.send(new TransactWriteCommand({ TransactItems: tx }));
   } catch (error) {
+    if (deck) await D.removeObject(deck.Deck.key);
     if (!S.isCancelled(error)) throw error;
     // Lost a race. If it was the cap, say the cap's sentence — that is what
     // the other host's add has just made true. Otherwise it was the ttl
@@ -361,6 +380,8 @@ async function removeItem(meta, code, itemId) {
   }
   // A previewed item's unopened session goes with it (run.js `prepare`).
   if (row.GameId) await discardChildSession(db, TABLE(), String(row.GameId), meta.orgId);
+  // And a presentation's slides: nothing else points at them.
+  if (row.Deck && row.Deck.key) await D.removeObject(row.Deck.key);
   return json(200, { removed: itemId });
 }
 
@@ -447,6 +468,28 @@ async function editItem(request, meta, code, itemId) {
     }
   }
 
+  /*
+    A PRESENTATION'S SLIDES (deck-store.js). `deck: null` takes them off;
+    `deck: { key, name, pages }` puts a new upload on, in place of any before.
+    Checked LAST, after every other refusal this edit can meet, because
+    attaching copies the file into place: a refused edit must not leave a
+    deck behind. The old file goes once the row no longer points at it; the
+    new one goes again if the write loses its race.
+  */
+  if (has('deck') && body.deck !== null && !rules.hasDeck(row.Type)) {
+    return json(400, { error: 'Only a presentation has slides.' });
+  }
+  let deckChange;
+  if (has('deck') && rules.hasDeck(row.Type)) {
+    if (body.deck === null) {
+      if (row.Deck) deckChange = null;
+    } else {
+      const attached = await D.attachDeck(body.deck, { orgId: meta.orgId, code });
+      if (attached.error) return json(400, { error: attached.error });
+      deckChange = attached.value;
+    }
+  }
+
   const now = new Date().toISOString();
   const words = {
     Title: fields.value.title,
@@ -454,7 +497,9 @@ async function editItem(request, meta, code, itemId) {
     ...(leads ? { LedBy: leader.value } : {}),
   };
   const sealed = await encryptItem(meta.orgId, 'item', {
-    ...words, ...(settings !== undefined ? { Settings: settings } : {}),
+    ...words,
+    ...(settings !== undefined ? { Settings: settings } : {}),
+    ...(deckChange ? { DeckName: deckChange.DeckName } : {}),
   });
   const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
   const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
@@ -500,28 +545,40 @@ async function editItem(request, meta, code, itemId) {
     names['#sx'] = 'Settings';
     values[':sx'] = sealed.Settings;
   }
+  const removes = prepared ? ['GameId', 'PreparedAt'] : [];
+  if (deckChange) {
+    expression += ', #dk = :dk, #dn = :dn, #dp = :dp';
+    Object.assign(names, { '#dk': 'Deck', '#dn': 'DeckName', '#dp': 'DeckPage' });
+    Object.assign(values, { ':dk': deckChange.Deck, ':dn': sealed.DeckName, ':dp': 1 });
+  } else if (deckChange === null) {
+    removes.push('Deck', 'DeckName', 'DeckPage');
+  }
   try {
     await db.send(new UpdateCommand({
       TableName: TABLE(),
       Key: { PK: row.PK, SK: row.SK },
-      UpdateExpression: prepared ? `${expression} REMOVE GameId, PreparedAt` : expression,
+      UpdateExpression: removes.length ? `${expression} REMOVE ${removes.join(', ')}` : expression,
       ConditionExpression: conditions.join(' AND '),
       ExpressionAttributeNames: names,
       ExpressionAttributeValues: values,
     }));
   } catch (error) {
+    if (deckChange) await D.removeObject(deckChange.Deck.key);
     if (error && error.name === 'ConditionalCheckFailedException') {
       return json(409, { error: S.AGENDA_CHANGED, code: 'agenda_changed' });
     }
     throw error;
   }
   if (prepared) await discardChildSession(db, TABLE(), prepared, meta.orgId);
+  if (deckChange !== undefined && row.Deck && row.Deck.key) await D.removeObject(row.Deck.key);
   // Projected from the DECRYPTED row, so nothing sealed reaches the response.
   return json(200, {
     item: S.projectItem({
       ...current, ...words, Minutes: fields.value.minutes,
       ...(setRef ? { SetRef: setRef } : {}),
       ...(settings !== undefined ? { Settings: settings } : {}),
+      ...(deckChange ? { Deck: deckChange.Deck, DeckName: deckChange.DeckName, DeckPage: 1 } : {}),
+      ...(deckChange === null ? { Deck: undefined, DeckName: undefined, DeckPage: undefined } : {}),
     }),
     ...(categoriesReset ? { categoriesReset: true } : {}),
   });
@@ -577,6 +634,58 @@ async function reorderItems(request, meta, code) {
   return json(200, { order });
 }
 
+// ── The slides' own two routes (deck-store.js) ─────────────────────────────
+/**
+ * POST /events/{code}/deck — ONE SIGNED UPLOAD of a PDF for this event's
+ * slides: `{ name, size, type }` in, `{ upload: { key, url, contentType,
+ * expiresIn, maxBytes } }` out. The browser PUTs the file to `url` itself
+ * (with that exact Content-Type), then names `key` in the item's `deck` on
+ * add or edit, which is where the file is proven a PDF and kept. An upload
+ * nobody attaches is gone within a day. Past the same door as every route
+ * here: another organisation's event is the unknown code's 404.
+ */
+async function signDeckUpload(request, meta, code) {
+  const body = readBody(request);
+  if (!body) return json(400, { error: 'The request body is not valid JSON.' });
+  if (!process.env.MEDIA_BUCKET) return json(500, { error: 'Slides cannot be stored in this environment.' });
+  const file = rules.checkDeckFile(body);
+  if (file.error) return json(400, { error: file.error });
+  const upload = await D.presignUpload(meta.orgId, code);
+  return json(200, { upload: { ...upload, name: file.value.name } });
+}
+
+/**
+ * GET /events/{code}/items/{itemId}/deck — A PRESENTATION'S SLIDES FOR THE
+ * STAGE: a signed read of the PDF, its page count, and the page the stage was
+ * on (the host's, whatever the item's state — previewing is looking).
+ */
+async function readDeck(meta, code, itemId) {
+  const row = await readItem(code, itemId);
+  if (!row) return itemGone();
+  const key = row.Deck && row.Deck.key;
+  if (!rules.hasDeck(row.Type) || !D.isDeckKeyFor(key, meta.orgId, code)) {
+    return json(404, { error: 'This item has no slides.', code: 'no_slides' });
+  }
+  const pages = Number(row.Deck.pages) || 0;
+  return json(200, {
+    deck: {
+      id: D.deckIdOf(key),
+      url: await D.presignRead(key),
+      expiresIn: D.READ_TTL_SECONDS,
+      pages,
+      bytes: Number(row.Deck.bytes) || 0,
+      page: rules.clampPage(row.DeckPage, pages),
+    },
+  });
+}
+
+/** The path's last segment is `deck`. */
+function isDeckPath(request) {
+  const http = (request && request.requestContext && request.requestContext.http) || {};
+  const path = String(http.path || request.rawPath || '');
+  return /\/deck\/?$/.test(path) || String(request.routeKey || '').endsWith('/deck');
+}
+
 /** POST /events/{code}/run — by the path's last segment, as get-agenda.js tells its routes apart. */
 function isRunPath(request) {
   const http = (request && request.requestContext && request.requestContext.http) || {};
@@ -596,6 +705,11 @@ exports.handler = async (request) => {
     // POST /events/{code}/run (events M3): running the day rides on this
     // function rather than a new one — run.js.
     if (method === 'POST' && isRunPath(request)) return await runEvent(db, TABLE(), request, meta, code);
+    if (isDeckPath(request)) {
+      if (method === 'POST' && itemId === null) return await signDeckUpload(request, meta, code);
+      if (method === 'GET' && itemId !== null) return await readDeck(meta, code, itemId);
+      return json(404, { error: 'Endpoint not found' });
+    }
     if (method === 'POST' && itemId === null) return await addItem(request, meta, code);
     if (method === 'DELETE' && itemId !== null) return await removeItem(meta, code, itemId);
     if (method === 'PUT' && itemId === null) return await reorderItems(request, meta, code);

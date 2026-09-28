@@ -1,12 +1,14 @@
 /**
  * PRESENTATIONS, ACTIVITIES AND WHO LEADS AN ITEM — components/EventItemDialog.jsx
- * (04-add-presentation.html without its upload; events M1b Task 10).
+ * (04-add-presentation.html; events M1b Task 10, and its slides since 27 Sep
+ * 2026 — presentationSlidesDialog.test.jsx drives the upload).
  *
  * The owner: presentations "could be just placeholders", "a custom choice",
  * and "enter the facilitator/speaker/presenter".
  *
- * rejects: a presentation offered a set picker or an upload; the PDF copy
- * promised now; a "look up" behaviour nothing in M1b builds (final review
+ * rejects: a presentation offered a set picker, or not offered its slides; a
+ * PDF copy still promised for later; a "look up" behaviour the dialog cannot
+ * keep (final review
  * Minor 3 — that is roadmap M3/M5); a leader field on a break; an empty name
  * sent on an add, or held back on an edit (so it could never be cleared); a
  * name longer than the server takes sent at all; an engagement's title that
@@ -41,13 +43,16 @@ beforeEach(() => {
   api.updateItem.mockResolvedValue({ item: {} });
 });
 
-describe('a presentation (04, without the upload)', () => {
-  it('is titled, led by its presenter, timed and described, and says the PDF copy comes later', async () => {
+describe('a presentation (04)', () => {
+  it('is titled, led by its presenter, timed and described, and offers its slides as one PDF', async () => {
     const p = base();
     render(<EventItemDialog {...p} />);
     expect(screen.getByRole('heading', { name: 'Add a presentation' })).toBeInTheDocument();
     expect(screen.queryByTestId('set-row')).toBeNull();
-    expect(screen.getByText(/A PDF copy for attendees comes later\./)).toBeInTheDocument();
+    // 27 Sep 2026: the PDF is no longer "later" — it is the slides, optional.
+    expect(screen.queryByText(/comes later/)).toBeNull();
+    expect(screen.getByRole('button', { name: /Choose a PDF/ })).toBeInTheDocument();
+    expect(screen.getByText(/PowerPoint, Keynote and Google Slides all save as PDF/)).toBeInTheDocument();
     // final review Minor 3: nothing in M1b makes a phone, laptop or tablet say
     // "look up" — that is roadmap M3/M5. The dialog must not promise it.
     expect(screen.queryByText(/says\s+.look up.$/)).toBeNull();

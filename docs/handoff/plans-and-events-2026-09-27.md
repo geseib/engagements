@@ -39,6 +39,25 @@ name that plan. All money is simulated.
   ledger `LEDGER#<period>#EVENT#<code>`, counter `eventsRun`). Its sessions are covered by it
   (`session-count.js` writes no SESSION row for an `EventRef`). A preview never bills.
 
+### A presentation's slides (merged from the slides worker)
+
+The owner asked: "can the presentation show pdf presentation with arrow key forward/backward through
+the pages?" A presentation item may carry one PDF.
+
+- **Upload**: the item dialog reads the page count in the browser (pdf.js, `pdfjs-dist` legacy build,
+  its worker bundled into `dist/`), asks `POST /events/{code}/deck` for a signed PUT under
+  `staging/decks/<org>/<code>/`, and sends the file straight to the media bucket. Saving the item
+  checks the staged file's first bytes and copies it to `decks/` (`events/deck-store.js`).
+  Staged files expire after a day (lifecycle rule `ExpireStagedDecks`).
+- **Stage**: `GET /events/{code}/items/{itemId}/deck` signs a read; `SlideCanvas.jsx` draws one page.
+  ←/→, PageUp/PageDown, and a clicker turn it; the page is saved on the item (`run` action `page`), so a
+  reload lands on it and phones follow it.
+- **Phones** show "Slide N of M" and download the slides only when someone taps "Show the slides here".
+- **Bucket**: its public read is narrowed to `sets/*`. Every media writer already keys under
+  `sets/<setId>/`, and decks are read only through signed URLs.
+- **Not done**: decks are not encrypted per organisation, and they are deleted when an event is
+  deleted but not when it expires by TTL. There is no test against real S3; the local stack stubs it.
+
 ## New teams need approval
 
 `create-org.js` files an Organisation-plan request (`kind: 'new-organisation'`) for every team it makes;
@@ -72,6 +91,9 @@ Backend 268/268, frontend 407 suites / 9750 tests, lint 0 errors / 10 warnings, 
 Chromium on the local stack: the event day (14), a typed poll with a feedback round (7), a survey in an
 event (9), and leaving the Organisation plan (4) — a team created through `POST /orgs` (its request in
 Engage's queue), approved through the platform route, seven sets, delete one, make one public, leave.
+After the slides merge: backend 269/269, frontend 412 suites / 9836 tests, and two more drives — a
+host building an agenda from the host screens (5), and a presentation's PDF uploaded, turned with
+→/PageDown/←, kept across a reload and followed on a phone (4).
 
 ## Still open
 
