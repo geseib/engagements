@@ -4,6 +4,7 @@ import EventBuilder from '../EventBuilder';
 import { authFetch } from '../../auth/authFetch';
 import { adminApiUrl } from '../../utils/adminApi';
 import { navigateTo } from '../../auth/navigate';
+import useFullscreenKey from '../../hooks/useFullscreenKey';
 import './HostEventAgenda.css';
 
 /**
@@ -27,6 +28,7 @@ import './HostEventAgenda.css';
 export default function HostEventAgenda({ code }) {
   const [sets, setSets] = useState([]);
   const [title, setTitle] = useState('');
+  useFullscreenKey();
 
   useEffect(() => {
     let cancelled = false;

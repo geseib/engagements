@@ -116,6 +116,7 @@ const quickStart = {
             { keys: 'S', text: 'Show or hide the scoreboard — Trivia and Call & Answer, once a round is scored.' },
             { keys: 'V', text: 'With the scoreboard up, change its look: departure board, Olympic board, tote board.' },
             { keys: '\\', text: 'Open and close the session panel.' },
+            { keys: 'F', text: 'Full screen, and back again. Esc also leaves. On an event, with a talk\'s slides up, F presents the slides alone.' },
             { keys: 'Esc', text: 'Close whatever is open.' },
           ],
         },

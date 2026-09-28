@@ -12,6 +12,8 @@ import {
 } from './eventDisplay';
 import SlideCanvas from './SlideCanvas';
 import useSlides from './useSlides';
+import useFullscreenKey, { useFullscreenElement } from '../../hooks/useFullscreenKey';
+import { canFullscreen, toggleFullscreen } from '../../utils/fullscreen';
 import './EventStage.css';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
@@ -54,6 +56,19 @@ const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
  * Each turn shows at once and is kept on the item a moment later (run.js
  * `page`), so a reload lands on the same slide and phones following the talk
  * can show it; a turn another host screen made is picked up by the poll.
+ *
+ * FULL SCREEN (the owner, 28 Sep 2026: "hitting 'f' takes the browser to full
+ * screen mode for the host", and "we need to be able to present the slides in
+ * presos full screen as well"). F makes the stage full screen — the board, a
+ * break, the rail and the dock, as the room sees them. With a talk's slides
+ * up, F (or "Full screen" beside the slide) PRESENTS: the slide alone takes
+ * the screen, letterboxed on black, and the rail and dock are gone. There the
+ * arrows, PageUp/PageDown and Space all turn the slide (Shift+Space goes
+ * back), and so does a click; nothing takes the dock's step, so a presenter
+ * cannot walk the room out of the talk by accident. "Slide 3 of 12" shows for
+ * a moment after each turn and then goes, with the pointer. F steps back to
+ * the stage (still full screen, if it was), and Esc leaves full screen. The
+ * browser holds the state (utils/fullscreen.js); this page only reads it.
  */
 const POLL_MS = 10000;
 const WIPE_MS = 1400;
@@ -66,9 +81,12 @@ const MIN_DENSE_COLUMN_PX = 440;
 const PAGE_SAVE_MS = 350;
 /** After a turn here, a poll's older page is not believed for this long. */
 const PAGE_QUIET_MS = 4000;
+/** Presenting, "Slide 3 of 12" and the pointer stay this long after a turn or a move. */
+const CUE_MS = 2500;
 /**
  * The keys that turn a slide: the arrows, and PageUp/PageDown — a clicker's.
- * NOT Space, which takes the dock's step on every stage.
+ * NOT Space, which takes the dock's step on every stage — except while the
+ * slides are presented full screen, where there is no dock to step.
  */
 const SLIDE_KEYS = Object.freeze({ ArrowRight: 1, PageDown: 1, ArrowLeft: -1, PageUp: -1 });
 
@@ -329,6 +347,32 @@ export default function EventStage({ code }) {
     }, PAGE_SAVE_MS);
   }, [code, deckItem, deckKey, page, pages]);
 
+  // ── Presenting: the slide, and nothing else, full screen ─────────────────
+  // The frame is what goes full screen, so the rail, the dock and the side
+  // column are simply not in it. F asks for the frame while slides are up and
+  // for the whole page otherwise (useFullscreenKey's `target`).
+  const deckFrame = useRef(null);
+  const fullEl = useFullscreenElement();
+  const presenting = Boolean(deckItem) && fullEl !== null && fullEl === deckFrame.current;
+  const [fullscreenOk] = useState(() => canFullscreen());
+  useFullscreenKey({ enabled: !confirmEndEvent && !qrOpen, target: () => deckFrame.current });
+  const [cue, setCue] = useState(false);
+  const cueTimer = useRef(null);
+  const wake = useCallback(() => {
+    setCue(true);
+    clearTimeout(cueTimer.current);
+    cueTimer.current = setTimeout(() => { if (mounted.current) setCue(false); }, CUE_MS);
+  }, []);
+  useEffect(() => {
+    if (!presenting) return undefined;
+    // Keys land on the slide, not on the "Full screen" button left focused
+    // behind it — Enter there would press it again.
+    const frame = deckFrame.current;
+    if (frame && typeof frame.focus === 'function') frame.focus({ preventScroll: true });
+    return () => { clearTimeout(cueTimer.current); setCue(false); };
+  }, [presenting]);
+  useEffect(() => { if (presenting) wake(); }, [presenting, page, wake]);
+
   /** The host's own view, kept in the address so a reload lands on it. */
   const setFocus = useCallback((next) => {
     setFocusState(next);
@@ -466,6 +510,11 @@ export default function EventStage({ code }) {
     const onKey = (e) => {
       if (confirmEndEvent || qrOpen) return;
       const tag = (e.target && e.target.tagName) || '';
+      if (presenting && e.key === ' ') {
+        e.preventDefault();
+        turn(e.shiftKey ? -1 : 1);
+        return;
+      }
       if (deckItem && SLIDE_KEYS[e.key] && !/INPUT|TEXTAREA|SELECT/.test(tag)) {
         e.preventDefault();
         turn(SLIDE_KEYS[e.key]);
@@ -480,7 +529,7 @@ export default function EventStage({ code }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [plan, confirmEndEvent, qrOpen, busy, deckItem, turn]);
+  }, [plan, confirmEndEvent, qrOpen, busy, deckItem, turn, presenting]);
 
   if (loadError) {
     return (
@@ -538,7 +587,15 @@ export default function EventStage({ code }) {
     status = deckItem.state === 'live' ? joined : 'Preview — the phones are not here yet';
     main = (
       <div className="ag-deck" data-testid="slides">
-        <div className="ag-deck-frame">
+        <div
+          className="ag-deck-frame"
+          ref={deckFrame}
+          tabIndex={-1}
+          data-presenting={presenting ? '' : undefined}
+          data-cue={presenting && cue ? '' : undefined}
+          onMouseMove={presenting ? wake : undefined}
+          onClick={presenting ? (e) => { if (!e.target.closest('button')) turn(1); } : undefined}
+        >
           {slides.doc ? (
             <SlideCanvas
               className="ag-deck-slide"
@@ -553,6 +610,12 @@ export default function EventStage({ code }) {
               {slides.error && (
                 <button type="button" className="ag-b" onClick={slides.retry}>Try again</button>
               )}
+            </p>
+          )}
+          {presenting && (
+            <p className="ag-deck-cue" data-testid="present-cue">
+              <span className="ag-deck-cue-at">{where}</span>
+              <span>{refusal || 'F or Esc to leave full screen'}</span>
             </p>
           )}
         </div>
@@ -580,6 +643,18 @@ export default function EventStage({ code }) {
               <span className="ag-deck-kbd">→</span>
               to turn
             </p>
+            {fullscreenOk && (
+              <button
+                type="button"
+                className="ag-deck-present"
+                onClick={() => toggleFullscreen(deckFrame.current)}
+                aria-label="Present the slides full screen"
+              >
+                <Icon name="CornersOut" weight="bold" size={22} color="currentColor" />
+                Full screen
+                <span className="ag-deck-kbd" aria-hidden="true">F</span>
+              </button>
+            )}
           </div>
         </aside>
       </div>

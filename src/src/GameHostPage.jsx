@@ -38,6 +38,7 @@ import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
 import useSessionPanelKey from './components/stage/useSessionPanelKey';
+import useFullscreenKey from './hooks/useFullscreenKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
@@ -5663,6 +5664,11 @@ Focus on actionable business strategy insights.`;
       && !editTarget && !confirmLeave && Boolean(gameId),
     onOpen: () => setSetupPanelOpen(true),
   });
+
+  // F: the host's screen full screen, and back (hooks/useFullscreenKey.js).
+  // On every surface this page draws — the main screen, the stage, a report —
+  // because it only asks the browser, and Esc always leaves.
+  useFullscreenKey();
 
   // Render the quickstart menu if it's being shown
   if (showQuickstartMenu) {

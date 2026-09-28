@@ -37,6 +37,9 @@
   --ag-rule: rgba(155, 168, 190, .22);
   --ag-now-tint: rgba(246, 169, 76, .10);
   --ag-scrim: rgba(6, 11, 22, .72);
+  /* A presented slide's letterbox: black, as every projector expects and as
+     the browser's own full-screen backdrop already is. */
+  --ag-present-ground: #000000;
 }
 
 /* ------------------------------------------------ loading and refusal --- */
@@ -632,6 +635,96 @@
   border-radius: 6px;
   padding: .05em .45em;
   font-weight: 700;
+}
+
+/* "Full screen" — presents the slides. As tall as ‹ ›, so a hand that finds
+   one finds the other. */
+.ag-deck-present {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: .5em;
+  min-height: 56px;
+  padding: 0 .8em;
+  border-radius: 10px;
+  border: var(--hair) solid var(--rule);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-meta);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ag-deck-present .ag-deck-kbd {
+  color: var(--muted);
+}
+
+.ag-deck-present:focus-visible,
+.ag-deck-turn:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* PRESENTING: the frame is the full-screen element (EventStage.jsx), so the
+   browser gives it the whole screen and this only says what it looks like —
+   the slide on black, no hairline round it, and no pointer once it has
+   settled. The frame takes focus by script only (tabindex -1), so it draws no
+   ring. */
+.ag-deck-frame:focus {
+  outline: none;
+}
+
+.ag-deck-frame[data-presenting] {
+  background: var(--ag-present-ground);
+  cursor: none;
+}
+
+.ag-deck-frame[data-presenting][data-cue] {
+  cursor: default;
+}
+
+.ag-deck-frame[data-presenting] .ag-deck-slide canvas {
+  box-shadow: none;
+}
+
+/* "Slide 3 of 12 · F or Esc to leave full screen" — for a moment after a
+   turn or a move, then gone; it never takes a click from the slide. */
+.ag-deck-cue {
+  position: absolute;
+  right: calc(1.2vw + 12px);
+  bottom: calc(1.2vh + 10px);
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  padding: .3em .8em;
+  border-radius: 8px;
+  background: var(--ag-present-ground);
+  font-size: var(--t-meta);
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+
+.ag-deck-frame[data-cue] .ag-deck-cue {
+  opacity: 1;
+}
+
+.ag-deck-cue-at {
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-deck-cue {
+    transition: none;
+  }
 }
 
 /* A PORTRAIT SCREEN: the width runs out before the height, so the talk and
