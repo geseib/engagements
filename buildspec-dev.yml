@@ -4,9 +4,22 @@ phases:
   install:
     runtime-versions:
       nodejs: 18
+      # SAM CLI needs Python 3.10+ (since 1.156.0), and `pip3 install
+      # aws-sam-cli` unpinned takes whatever the image's default Python can
+      # install. On 28 Sep 2026 that was a SAM CLI too old to know nodejs22.x,
+      # and every tier's `sam build` stopped with "'nodejs22.x' runtime is not
+      # supported". The Python is named here and the floor below makes pip
+      # fail HERE, loudly, rather than quietly install an old one.
+      python: 3.11
     commands:
       - echo "Installing SAM CLI..."
-      - pip3 install aws-sam-cli
+      - pip3 install --upgrade "aws-sam-cli>=1.156.0"
+      # The pip-installed sam first on PATH, ahead of any older one the image
+      # ships. Build phase 0.2 commands share this shell, so it holds for
+      # `sam build` and `sam deploy` below.
+      - export PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_path("scripts"))'):$PATH"
+      - echo "Using $(command -v sam)"
+      - sam --version
       - echo "Installing Node.js dependencies..."
       - cd src && npm ci && cd ..
 
