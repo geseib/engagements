@@ -29,6 +29,10 @@ import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
 import { calculatePlayerRankings } from '../config/podium';
 import { namesMode } from '../config/surveyNames';
 import KindResult from './survey/results/KindResult';
+import {
+  MAX_REPORT_BASE64, REPORT_PDF_PASSES, reportPdfOptions, saveRefusalMessage, tooLargeMessage,
+  unexpectedSaveMessage,
+} from '../config/reportPdf';
 import './GameReport.css';
 
 const API_BASE = window.API_BASE;
@@ -107,34 +111,24 @@ function GameReport({
       // document and nothing else.
       const element = document.querySelector('.report-doc');
 
-      const opt = {
-        margin: [0.5, 0.5, 0.5, 0.5],
-        filename: `${eventTitle.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          scrollX: 0,
-          scrollY: 0
-        },
-        jsPDF: {
-          unit: 'in',
-          format: 'letter',
-          orientation: 'portrait'
-        },
-        // html2canvas rasterises: it does not read the print stylesheet, so the
-        // break rules in GameReport.css cannot reach it. This is the one lever
-        // it does understand, and `.report-keep` is the same set of units the
-        // print sheet marks `break-inside: avoid`.
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['.report-keep'] }
-      };
-
-      // Generate PDF as blob
-      const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('dataurlstring');
-
-      // Extract base64 data
-      const base64Data = pdfBlob.split(',')[1];
+      // SIZED TO WHAT AWS CARRIES (config/reportPdf.js): the PDF rides in one
+      // request that Lambda refuses past 6 MB, so a long session's report was
+      // refused before save-report ever ran. Drawn at quality 0.8, and once
+      // more smaller if it is still too large; past that the host is told to
+      // print it instead, in words, not "Failed to save report".
+      const heightPx = element ? element.scrollHeight : 0;
+      let base64Data = '';
+      for (const pass of REPORT_PDF_PASSES) {
+        const pdfDataUrl = await html2pdf()
+          .set(reportPdfOptions({ title: eventTitle, heightPx, pass }))
+          .from(element)
+          .outputPdf('dataurlstring');
+        base64Data = String(pdfDataUrl).split(',')[1] || '';
+        if (base64Data.length <= MAX_REPORT_BASE64) break;
+      }
+      if (base64Data.length > MAX_REPORT_BASE64) {
+        throw Object.assign(new Error('report too large'), { hostMessage: tooLargeMessage(base64Data.length) });
+      }
 
       // Send to backend for S3 storage. authFetch, not fetch: the route carries
       // the Cognito authorizer, so a bare fetch is a 401.
@@ -152,7 +146,10 @@ function GameReport({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save report');
+        const refusal = await response.json().catch(() => ({}));
+        throw Object.assign(new Error(`save-report ${response.status}`), {
+          hostMessage: saveRefusalMessage(response.status, refusal),
+        });
       }
 
       const result = await response.json();
@@ -164,7 +161,7 @@ function GameReport({
 
     } catch (err) {
       console.error('Error saving report:', err);
-      alert('Failed to save report. Please try again.');
+      alert((err && err.hostMessage) || unexpectedSaveMessage(err));
     } finally {
       setIsSaving(false);
     }
