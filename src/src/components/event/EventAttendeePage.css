@@ -204,3 +204,61 @@
 .evp .evp-next b {
   color: var(--text);
 }
+
+/* A talk's slides (27 Sep 2026): "Slide 3 of 12" in the kicker's amber,
+   and — on a tap — the slide itself, drawn to the column's width inside a
+   16:10 box (SlideCanvas letterboxes whatever shape the deck is). The box is
+   the field's own --bg with a rule round it; the slide paints its own page.
+   No colour is new: --primary on --bg is the beat's kicker, 8.86:1. */
+.evp .evp-deck {
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.evp .evp-deck-at {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--primary);
+  font-size: var(--plr-t-body);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.evp .evp-deck-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--plr-rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.evp .evp-deck-slide {
+  position: absolute;
+  inset: 0;
+}
+
+.evp .evp-deck-slide canvas {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.evp .evp-deck-note {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--plr-muted);
+  font-size: var(--plr-t-body);
+}

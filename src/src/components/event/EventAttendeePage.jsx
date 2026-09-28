@@ -3,6 +3,8 @@ import PlayerPage from '../../PlayerPage';
 import { PlayerShell } from '../PlayerShell';
 import Icon from '../Icon';
 import { EventBarContext } from './eventBar';
+import SlideCanvas from './SlideCanvas';
+import useSlides from './useSlides';
 import * as api from '../../utils/attendeeApi';
 import {
   TYPE_ICONS, typeLabel, typeLine, positionOf, wallClock, nextAfter, firstPlanned, stateWord,
@@ -35,6 +37,13 @@ import './EventAttendeePage.css';
  * NOTHING IS LOST BY LOOKING AWAY (D3). "Agenda" hides the live item rather
  * than leaving it: the session stays mounted, socket and answer included, and
  * "Back to live" shows it again exactly as it was.
+ *
+ * A TALK WITH SLIDES (27 Sep 2026). The talk screen says which slide the
+ * stage is on — "Slide 3 of 12", from the `now` view it already polls — and
+ * offers "Show the slides here": only on a tap, because a deck can be 50 MB
+ * and a room of phones on one venue network should not all fetch it unasked.
+ * Shown, the phone draws the same slide as the stage and follows each turn
+ * (within a poll, a few seconds).
  */
 const POLL_MS = 4000;
 const FULL_READ_MS = 60000;
@@ -57,6 +66,8 @@ export default function EventAttendeePage({ code }) {
   const [followed, setFollowed] = useState(null);
   const [beat, setBeat] = useState(null);
   const [online, setOnline] = useState(true);
+  // The live talk's slide, from the `now` view: `{ itemId, page, pages }`.
+  const [slideNow, setSlideNow] = useState(null);
   const lastLiveRef = useRef(undefined);
   const revRef = useRef('');
   const fullAtRef = useRef(0);
@@ -175,6 +186,10 @@ export default function EventAttendeePage({ code }) {
         const now = await api.getNow(code);
         if (stopped) return;
         setOnline(true);
+        const shown = now && now.live && now.live.slides
+          ? { itemId: now.live.itemId, page: now.live.slides.page, pages: now.live.slides.pages } : null;
+        setSlideNow((prev) => ((prev && shown && prev.itemId === shown.itemId && prev.page === shown.page
+          && prev.pages === shown.pages) || (!prev && !shown) ? prev : shown));
         if (now && (now.rev !== revRef.current || Date.now() - fullAtRef.current > FULL_READ_MS)) {
           const fresh = await readAgenda();
           if (fresh) applyLive(fresh.event.liveItemId);
@@ -488,6 +503,14 @@ export default function EventAttendeePage({ code }) {
             <b>Look up</b> — this page switches by itself when there is something to answer.
           </p>
           {current.description && <p className="evp-desc">{current.description}</p>}
+          {talk && (
+            <TalkSlides
+              key={current.itemId}
+              code={code}
+              item={current}
+              now={slideNow && slideNow.itemId === current.itemId ? slideNow : null}
+            />
+          )}
           {nextLine}
         </div>
         </PlayerShell>
@@ -558,5 +581,46 @@ export default function EventAttendeePage({ code }) {
         )}
       </div>
     </PlayerShell>
+  );
+}
+
+/**
+ * A TALK'S SLIDES ON THE PHONE: which slide the stage is on, and — only when
+ * the attendee asks — that slide itself, drawn to the phone's width
+ * (SlideCanvas, letterboxed) and following each turn the stage makes. The
+ * slides are read once, through the public agenda's signed read, which
+ * answers only for a talk the host has started.
+ */
+function TalkSlides({ code, item, now }) {
+  const pages = (now && now.pages) || Number(item.slides) || 0;
+  const [shown, setShown] = useState(false);
+  const deck = useSlides(() => api.getDeck(code, item.itemId), shown && pages ? item.itemId : null);
+  if (!pages) return null;
+  const page = rules.clampPage(now ? now.page : 1, pages);
+  const where = now ? rules.slideLabel(page, pages) : rules.slidesLabel(pages);
+  return (
+    <div className="evp-deck" data-testid="talk-slides">
+      <p className="evp-deck-at" aria-live="polite">
+        <Icon name="FilePdf" weight="bold" size={16} color="currentColor" />
+        {where}
+      </p>
+      {shown && (
+        <div className="evp-deck-frame">
+          {deck.doc ? (
+            <SlideCanvas
+              className="evp-deck-slide"
+              doc={deck.doc}
+              page={Math.min(page, deck.doc.numPages || page)}
+              label={`${item.title}, ${rules.slideLabel(page, pages)}`}
+            />
+          ) : (
+            <p className="evp-deck-note" role="status">{deck.error || 'Opening the slides…'}</p>
+          )}
+        </div>
+      )}
+      <button type="button" className="plr-linkish" onClick={() => setShown((was) => !was)} aria-expanded={shown}>
+        {shown ? 'Hide the slides' : 'Show the slides here'}
+      </button>
+    </div>
   );
 }

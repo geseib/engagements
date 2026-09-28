@@ -430,6 +430,10 @@ Resources:
       FunctionName: !Sub '${StackName}-update-event'
       CodeUri: lambda-functions/websocket/
       Handler: events/update-event.handler
+      Environment:
+        Variables:
+          # A deleted event's presentation slides go with it (delete-event.js).
+          MEDIA_BUCKET: !Ref MediaBucket
       Events:
         UpdateEvent:
           Type: HttpApi
@@ -462,6 +466,12 @@ Resources:
               Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # DELETE ONLY, AND ONLY ATTACHED SLIDES: a deleted event's decks
+        # (events/deck-store.js). It never reads or writes a deck.
+        - Statement:
+            - Effect: Allow
+              Action: ['s3:DeleteObject']
+              Resource: !Sub '${MediaBucket.Arn}/decks/*'
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -472,6 +482,11 @@ Resources:
       FunctionName: !Sub '${StackName}-event-items'
       CodeUri: lambda-functions/websocket/
       Handler: events/items.handler
+      Environment:
+        Variables:
+          # A presentation's slides (events/deck-store.js) live in the
+          # question-set media bucket, under staging/decks/ and decks/.
+          MEDIA_BUCKET: !Ref MediaBucket
       Events:
         AddEventItem:
           Type: HttpApi
@@ -517,6 +532,25 @@ Resources:
             Method: post
             Auth:
               Authorizer: CognitoAuthorizer
+        # A PRESENTATION'S SLIDES (27 Sep 2026, events/deck-store.js): sign
+        # one PDF upload, and read one back for the stage. Two routes on this
+        # function, not a function of their own, for the resource limit.
+        SignEventDeckUpload:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/deck
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ReadEventDeck:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /events/{code}/items/{itemId}/deck
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
       Policies:
         # Seals and opens item titles and descriptions; since events M3 also
         # makes an item's session (its title and details sealed the same way).
@@ -534,6 +568,19 @@ Resources:
             Action:
               - execute-api:ManageConnections
             Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+        # A PRESENTATION'S SLIDES, AND NOTHING ELSE IN THE MEDIA BUCKET. The
+        # presigned PUT a browser uploads with, and the presigned GET the
+        # stage reads with, are the intersection of these grants and the
+        # signed request — so however this function is called it can sign
+        # nothing under sets/, and nothing outside the two deck prefixes. It
+        # reads a staged upload's first bytes, copies it to decks/, and
+        # deletes what nothing points at any more (events/deck-store.js).
+        - Statement:
+          - Effect: Allow
+            Action: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject']
+            Resource:
+              - !Sub '${MediaBucket.Arn}/staging/decks/*'
+              - !Sub '${MediaBucket.Arn}/decks/*'
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -548,6 +595,11 @@ Resources:
       FunctionName: !Sub '${StackName}-event-agenda'
       CodeUri: lambda-functions/websocket/
       Handler: events/get-agenda.handler
+      Environment:
+        Variables:
+          # GET /events/{code}/agenda?view=deck signs a read of a started
+          # talk's slides for a phone that asks (events/get-agenda.js).
+          MEDIA_BUCKET: !Ref MediaBucket
       Events:
         GetEventAgenda:
           Type: HttpApi
@@ -596,6 +648,13 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:DeleteItem
               Resource: !GetAtt GameTable.Arn
+        # READ ONLY, AND ONLY ATTACHED SLIDES. A PUBLIC function: the one
+        # presigned GET it signs is for a talk the host has started, and it
+        # can sign nothing else — no staged upload, no question artwork.
+        - Statement:
+            - Effect: Allow
+              Action: ['s3:GetObject']
+              Resource: !Sub '${MediaBucket.Arn}/decks/*'
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -5702,12 +5761,25 @@ Resources:
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 3
+          # A presentation's PDF lands under staging/decks/ and is copied to
+          # decks/ when an item is saved with it (events/deck-store.js). One
+          # the host chose and then never saved is gone the next day.
+          - Id: ExpireStagedDecks
+            Status: Enabled
+            Prefix: staging/decks/
+            ExpirationInDays: 1
       Tags:
         - Key: Environment
           Value: !Ref Environment
         - Key: StackName
           Value: !Ref StackName
 
+  # PUBLIC READ IS FOR QUESTION ARTWORK, `sets/*`, AND NOTHING ELSE. It said
+  # `/*` while sets/ was the only prefix any role could write; since
+  # presentations keep their slides here too (events/deck-store.js), a deck is
+  # read only through a presigned GET minted after a door, and must not be
+  # public by being in the bucket. Every object written before this change is
+  # under sets/, so nothing that was public stops being public.
   MediaBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -5718,7 +5790,7 @@ Resources:
             Effect: Allow
             Principal: '*'
             Action: 's3:GetObject'
-            Resource: !Sub '${MediaBucket.Arn}/*'
+            Resource: !Sub '${MediaBucket.Arn}/sets/*'
 
   AIPromptsBucket:
     Type: AWS::S3::Bucket

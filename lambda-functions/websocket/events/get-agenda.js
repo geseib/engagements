@@ -21,6 +21,14 @@
  * a code that names nothing. So does every event while EVENTS_ENABLED is off
  * (events M2: a switched-off tier answers as for an unknown code).
  *
+ * A PRESENTATION'S SLIDES (27 Sep 2026, deck-store.js). The agenda says how
+ * many a presentation has (`slides`); `view=now` says which one the stage is
+ * on while the talk is live; and `view=deck&item=<itemId>` hands a phone a
+ * signed read of the PDF — only once the host has started that talk (live,
+ * paused or done, the states in which an item's session is linked too:
+ * decision 11, "nothing is active beforehand"). Never the storage key in the
+ * agenda, and never a deck of another event: the key must be this event's.
+ *
  * THE ATTENDEE'S FUNCTION (events M2). This function also serves
  * POST /events/{code}/attendees and GET /events/{code}/me, in attendees.js:
  * the three public routes an attendee's page calls, on one function, because
@@ -33,6 +41,7 @@ const rules = require('./agenda-rules');
 const { json, notFound, trace, methodOf, eventsEnabled } = require('./event-http');
 const S = require('./event-store');
 const { joinEvent, whoAmI } = require('./attendees');
+const D = require('./deck-store');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -53,6 +62,9 @@ const revOf = (meta) => crypto.createHash('sha256')
 /** A live break's planned return, the only time an agenda row carries besides its plan. */
 const endsAtOf = (row) => ((row.State === 'live' && row.EndsAt) ? { endsAt: row.EndsAt } : {});
 
+/** A presentation's page count, when it has slides; nothing otherwise. */
+const pagesOf = (row) => (rules.hasDeck(row.Type) && row.Deck ? Number(row.Deck.pages) || 0 : 0);
+
 /**
  * GET /events/{code}/agenda?view=now — WHAT IS LIVE, AND NOTHING ELSE (events
  * M3/M4). The phone polls this every few seconds between items, so it is two
@@ -70,17 +82,45 @@ async function readNow(meta, code) {
     const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: meta.PK, SK: S.itemSk(liveItemId) } }));
     const row = res && res.Item;
     if (row) {
+      const pages = pagesOf(row);
       live = {
         itemId: liveItemId,
         type: row.Type || '',
         state: row.State || 'planned',
         ...(row.GameId ? { gameId: String(row.GameId) } : {}),
         ...endsAtOf(row),
+        // The slide the stage is on, for a phone following the talk.
+        ...(pages ? { slides: { page: rules.clampPage(row.DeckPage, pages), pages } } : {}),
       };
     }
   }
   return json(200, {
     now: { code, state: meta.State || 'SCHEDULED', liveItemId, live, rev: revOf(meta) },
+  });
+}
+
+/**
+ * GET /events/{code}/agenda?view=deck&item=<itemId> — A TALK'S SLIDES, FOR A
+ * PHONE THAT ASKED TO SEE THEM: a signed read of the PDF, once the host has
+ * started the talk. A talk that has not started, an item with no slides and
+ * an unknown item are one 404, as the rest of this route answers.
+ */
+async function readDeck(meta, code, itemId) {
+  const none = () => json(404, { error: 'These slides are not open.', code: 'no_slides' });
+  if (!S.isItemId(itemId)) return none();
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: meta.PK, SK: S.itemSk(itemId) } }));
+  const row = res && res.Item;
+  if (!row || !pagesOf(row) || !LINKED_STATES.includes(row.State || 'planned')) return none();
+  if (!D.isDeckKeyFor(row.Deck.key, meta.orgId, code)) return none();
+  const pages = pagesOf(row);
+  return json(200, {
+    deck: {
+      id: D.deckIdOf(row.Deck.key),
+      url: await D.presignRead(row.Deck.key),
+      expiresIn: D.READ_TTL_SECONDS,
+      pages,
+      page: rules.clampPage(row.DeckPage, pages),
+    },
   });
 }
 
@@ -93,6 +133,7 @@ async function readAgenda(request) {
     if (!meta || !meta.orgId || (meta.Access || 'open') !== 'open') return notFound();
     const query = request.queryStringParameters || {};
     if (query.view === 'now') return await readNow(meta, code);
+    if (query.view === 'deck') return await readDeck(meta, code, String(query.item || ''));
     const event = await S.decryptEvent(meta.orgId, meta);
     const rows = [];
     for (const row of await S.readItems(db, TABLE(), code)) rows.push(await S.openItemRow(meta.orgId, row, 'get-agenda'));
@@ -125,6 +166,7 @@ async function readAgenda(request) {
           ...(row.decryptFailed ? { decryptFailed: true } : {}),
           ...(LINKED_STATES.includes(state) && row.GameId ? { gameId: String(row.GameId) } : {}),
           ...endsAtOf(row),
+          ...(pagesOf(row) ? { slides: pagesOf(row) } : {}),
         };
       }),
     });

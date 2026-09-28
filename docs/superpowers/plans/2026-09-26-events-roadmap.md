@@ -275,6 +275,13 @@ Ships:
 
 ### M5: presentations
 
+> **Changed 27 Sep 2026 by the owner** (*"can the presentation show pdf
+> presentation with arrow key forward/backward through the pages?"*): the
+> stage now shows the slides, a page at a time, and phones can follow them —
+> see RATIONALE decision 8's revision. The upload rides the question-set
+> media bucket's presigned pattern (`events/deck-store.js`) rather than the
+> sealed reports-bucket route below. What follows is the plan as first drawn.
+
 Ships:
 - A presentation item (04): title, presenter, length and description, plus an
   optional PDF copy.
