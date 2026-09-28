@@ -458,6 +458,214 @@
   letter-spacing: .01em;
 }
 
+/* ------------------------------------------------ a talk's slides ------
+   A presentation with a PDF (27 Sep 2026): the slide as large as the stage
+   allows, and beside it the talk, "Slide 3 of 12" and ‹ ›. It NEVER SCROLLS:
+   the frame is a grid track with min-height 0 and overflow hidden, and the
+   slide inside it is drawn to the frame's measured box, letterboxed
+   (SlideCanvas.jsx) — the canvas is absolutely placed, so what it draws can
+   never grow what is measured. A landscape slide on a landscape screen runs
+   out of height first, so the spare width takes the side column; on a
+   portrait screen the width runs out first, and the column becomes a strip
+   under the slide. Sizes are the profile ladder's, as everywhere on the stage.
+   Colours are the board's own: --text and --muted on the field, measured
+   above; the letterbox is the field itself. */
+.ag-deck {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(240px, 22vw, 440px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: calc(1.6vw + 12px);
+}
+
+.ag-deck-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ag-deck-slide {
+  position: absolute;
+  inset: 0;
+}
+
+.ag-deck-slide canvas {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0 0 var(--hair) var(--rule);
+}
+
+.ag-deck-note {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1em;
+  font-size: var(--t-body);
+  color: var(--muted);
+  text-align: center;
+}
+
+.ag-deck-side {
+  min-width: 0;
+  max-height: 100%;
+  overflow: hidden;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: calc(2vh + 8px);
+  border-left: var(--hair) solid var(--rule);
+  padding-left: calc(1.4vw + 10px);
+}
+
+.ag-deck-about {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(.8vh + 4px);
+}
+
+.ag-deck-ty {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-meta);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.ag-deck-ty svg {
+  width: 1.3em;
+  height: 1.3em;
+  flex: none;
+}
+
+/* Three lines at most; the heading's title attribute says the rest. */
+.ag-deck-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--t-secondary);
+  line-height: 1.1;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.ag-deck-who {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ag-deck-nav {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(.8vh + 4px);
+}
+
+.ag-deck-at {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-deck-turns {
+  display: flex;
+  gap: .6em;
+}
+
+.ag-deck-turn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 .4em;
+  border-radius: 10px;
+  border: var(--hair) solid var(--rule);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ag-deck-turn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.ag-deck-keys {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: .4em;
+  font-size: var(--t-meta);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ag-deck-kbd {
+  border: var(--hair) solid var(--rule);
+  border-radius: 6px;
+  padding: .05em .45em;
+  font-weight: 700;
+}
+
+/* A PORTRAIT SCREEN: the width runs out before the height, so the talk and
+   the controls go under the slide, on one strip, and the slide takes the
+   whole width. */
+@media (orientation: portrait) {
+  .ag-deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .ag-deck-side {
+    flex-direction: row;
+    align-items: center;
+    align-self: stretch;
+    border-left: 0;
+    border-top: var(--hair) solid var(--rule);
+    padding: calc(1vh + 6px) 0 0;
+  }
+
+  .ag-deck-about {
+    flex: 1 1 auto;
+  }
+
+  .ag-deck-title {
+    -webkit-line-clamp: 2;
+  }
+
+  .ag-deck-nav {
+    flex: none;
+    align-items: flex-end;
+  }
+}
+
 /* The trigger: the wipe names the item AND says the phones have moved. */
 .wipe.ag-go small b {
   color: var(--primary);

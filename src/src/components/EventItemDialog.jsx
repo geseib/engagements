@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import { NAMES_DEFAULT, namesMode } from '../config/surveyNames';
-import { addItem, updateItem, removeItem } from '../utils/eventsApi';
+import {
+  addItem, updateItem, removeItem, signDeckUpload, putDeckFile,
+} from '../utils/eventsApi';
+import { countPages } from '../utils/pdfDeck';
 import { listPersonas, listSetCategories } from '../utils/sessionSetupApi';
 import './EventBuilder.css';
 
@@ -18,10 +21,9 @@ import './EventBuilder.css';
  *   mode 'add', type 'break'        the same fields without a set; 03 draws no
  *                                   break dialog, so this is 03's form minus
  *                                   its picker
- *   mode 'add', a presentation      04-add-presentation's form without its
- *                                   upload (roadmap M5): title, presenter,
- *                                   length, description, and one line saying
- *                                   the PDF copy for attendees comes later
+ *   mode 'add', a presentation      04-add-presentation's form: title,
+ *                                   presenter, length, description, and its
+ *                                   slides as one PDF (below)
  *   mode 'add', an activity         the same form, led by "Led by" — the
  *                                   owner's "custom choice" (events M1b)
  *   mode 'edit'                     title, length, description; the set is
@@ -49,6 +51,17 @@ import './EventBuilder.css';
  * name was typed; an edit always sends it, so it can be cleared. An
  * engagement's "Title on the agenda" is also what its session is called when
  * roadmap M3 starts it, and the field says so.
+ *
+ * A PRESENTATION'S SLIDES (the owner, 27 Sep 2026: "can the presentation show
+ * pdf presentation with arrow key forward/backward through the pages?"). One
+ * optional PDF, up to 50 MB. Choosing it checks it here (agenda-rules
+ * checkDeckFile), counts its pages with pdf.js — a file pdf.js cannot open is
+ * refused before a byte moves — and uploads it at once, straight to storage
+ * through a signed URL, with its progress; Save then names the upload
+ * (`deck: { key, name, pages }`) and the server proves it a PDF. An item that
+ * has slides offers Replace and Remove PDF; neither lands until Save, so
+ * Close without saving leaves the slides as they were. While a file is
+ * uploading, Save waits.
  *
  * EVERY SESSION OPTION (events M1b; owner: "all of the options that you get
  * when setting up each engagement"). Once an engagement's set is chosen, the
@@ -122,6 +135,19 @@ export default function EventItemDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+
+  /* THE SLIDES (a presentation only). `deckChange` is undefined while the
+     host has not touched them, null once they chose Remove PDF, and the new
+     upload once one has landed; `deckWork` is a file being read or sent. */
+  const slidesField = rules.hasDeck(type) && !unreadable;
+  const [deckChange, setDeckChange] = useState(undefined);
+  const [deckWork, setDeckWork] = useState(null);
+  const [deckError, setDeckError] = useState('');
+  const fileRef = useRef(null);
+  const live = useRef(true);
+  useEffect(() => () => { live.current = false; }, []);
+  const deckBefore = editing && item.deck && item.deck.pages ? item.deck : null;
+  const deckShown = deckChange === undefined ? deckBefore : deckChange;
 
   /* THE SESSION OPTIONS (events M1b). `options` holds SessionOptions' keys;
      the categories and the briefing are held beside it, as the create dialog
@@ -222,7 +248,8 @@ export default function EventItemDialog({
 
   const dirty = title !== baseline.title || minutes !== baseline.minutes || description !== baseline.description
     || ledBy !== baseline.ledBy || after !== baseline.after || setKey !== baseline.setKey
-    || (engagement && JSON.stringify(settingsNow()) !== settingsBaseline) || briefingWorking;
+    || (engagement && JSON.stringify(settingsNow()) !== settingsBaseline) || briefingWorking
+    || deckChange !== undefined || Boolean(deckWork);
 
   const requestClose = () => {
     if (busy) return;
@@ -236,6 +263,41 @@ export default function EventItemDialog({
      choice kept (03's last note), now reading the reloaded `items`. */
   const refused = (err) => {
     if (onRefused && err && (err.status === 404 || err.status === 409)) onRefused(err);
+  };
+
+  /* A PDF chosen: checked, counted, uploaded — in that order, and each refusal
+     said in the field's own words before anything is sent. */
+  const takeFile = async (file) => {
+    if (!file) return;
+    const checked = rules.checkDeckFile(file);
+    if (checked.error) {
+      setDeckError(checked.error);
+      return;
+    }
+    const { name } = checked.value;
+    setDeckError('');
+    setDeckWork({ name, reading: true, progress: 0 });
+    try {
+      let pages;
+      try {
+        pages = await countPages(file);
+      } catch (_) {
+        throw new Error(`“${name}” could not be opened as a PDF. Save it as a PDF again, then choose it.`);
+      }
+      if (!live.current) return;
+      const fields = rules.checkDeckFields({ key: 'pending', name, pages });
+      if (fields.error) throw new Error(fields.error);
+      setDeckWork({ name, reading: false, progress: 0 });
+      const { upload } = await signDeckUpload(code, file);
+      await putDeckFile(upload, file, (progress) => {
+        if (live.current) setDeckWork({ name, reading: false, progress });
+      });
+      if (live.current) setDeckChange({ key: upload.key, name, pages, bytes: file.size });
+    } catch (err) {
+      if (live.current) setDeckError((err && err.message) || 'The PDF did not upload. Try again.');
+    } finally {
+      if (live.current) setDeckWork(null);
+    }
   };
 
   const choose = (s) => {
@@ -277,6 +339,11 @@ export default function EventItemDialog({
       return;
     }
     const settings = engagement ? { settings: settingsNow() } : {};
+    // The slides, only when they changed: a new upload by its key, or null to
+    // take them off. An add never sends null.
+    const slides = deckChange === undefined || (!editing && !deckChange) ? {} : {
+      deck: deckChange ? { key: deckChange.key, name: deckChange.name, pages: deckChange.pages } : null,
+    };
     let position = null;
     if (!editing && after !== AT_END) {
       const anchor = after === AT_START ? -1 : items.findIndex((it) => it.itemId === after);
@@ -293,7 +360,7 @@ export default function EventItemDialog({
     try {
       if (editing) {
         await updateItem(code, item.itemId, {
-          ...checked.value, ...(leads ? { ledBy: leader.value } : {}), ...settings,
+          ...checked.value, ...(leads ? { ledBy: leader.value } : {}), ...settings, ...slides,
         });
       } else {
         await addItem(code, {
@@ -311,6 +378,7 @@ export default function EventItemDialog({
             },
           } : {}),
           ...settings,
+          ...slides,
         });
       }
       onSaved();
@@ -367,7 +435,7 @@ export default function EventItemDialog({
               {unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
               {!unreadable && picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
               {!unreadable && !picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
-              {!unreadable && type === rules.PRESENTATION && 'A talk given from the presenter’s own screen.'}
+              {!unreadable && type === rules.PRESENTATION && 'A talk. Add its slides as a PDF and the stage shows them, a slide at a time.'}
               {!unreadable && type === rules.CUSTOM && 'Anything else on the day: networking, lunch with a speaker, an open discussion. It sits on the agenda, with nothing to answer.'}
               {!unreadable && editing && !isBreak && item.set && item.set.name && (item.set.pinnedMissing
                 ? `Pinned to ${item.set.name} · v${item.setRef.version}, which is no longer in the set.`
@@ -511,13 +579,74 @@ export default function EventItemDialog({
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
+            {slidesField && (
+              <div className="evb-field evb-span4" data-testid="item-slides">
+                <span className="evb-label" id="evb-deck-label">
+                  Slides <span className="evb-dim">· optional, one PDF</span>
+                </span>
+                <div className="evb-deck" role="group" aria-labelledby="evb-deck-label">
+                  {deckWork ? (
+                    <>
+                      <Icon name="FilePdf" weight="bold" size={18} color="currentColor" />
+                      <span className="evb-deck-name" title={deckWork.name}>{deckWork.name}</span>
+                      <span className="evb-deck-meta" role="status">
+                        {deckWork.reading ? 'Reading the PDF…' : `Uploading… ${Math.round(deckWork.progress * 100)}%`}
+                      </span>
+                    </>
+                  ) : deckShown ? (
+                    <>
+                      <Icon name="FilePdf" weight="bold" size={18} color="currentColor" />
+                      <span className="evb-deck-name" title={deckShown.name}>{deckShown.name || 'Slides'}</span>
+                      <span className="evb-deck-meta">
+                        {rules.slidesLabel(deckShown.pages)}
+                        {deckShown.bytes ? ` · ${rules.formatBytes(deckShown.bytes)}` : ''}
+                        {deckChange ? ' · not saved yet' : ''}
+                      </span>
+                      <span className="evb-deck-acts">
+                        <button type="button" className="evb-btn evb-btn--sm" onClick={() => fileRef.current && fileRef.current.click()} disabled={busy}>
+                          Replace
+                        </button>
+                        <button type="button" className="evb-btn evb-btn--sm" onClick={() => { setDeckError(''); setDeckChange(deckBefore ? null : undefined); }} disabled={busy}>
+                          Remove PDF
+                        </button>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="evb-btn" onClick={() => fileRef.current && fileRef.current.click()} disabled={busy}>
+                        <Icon name="FilePdf" weight="bold" size={15} color="currentColor" /> Choose a PDF
+                      </button>
+                      <span className="evb-deck-meta">
+                        {deckChange === null ? 'The slides come off when you save.' : `Up to ${rules.formatBytes(rules.DECK_MAX_BYTES)}.`}
+                      </span>
+                    </>
+                  )}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    hidden
+                    data-testid="deck-file"
+                    aria-label="Choose a PDF of the slides"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      e.target.value = '';
+                      takeFile(file);
+                    }}
+                  />
+                </div>
+                <span className="evb-hint">
+                  PowerPoint, Keynote and Google Slides all save as PDF. On the stage, ← and → (or a clicker) turn the slides.
+                </span>
+                {deckError && <p className="evb-error" role="alert">{deckError}</p>}
+              </div>
+            )}
           </div>
           <p className="evb-hint">
             {leads
               ? 'The title, the description and the name are what the room sees, and every phone, laptop or tablet that joins.'
               : 'The title and description are what the room sees, and every phone, laptop or tablet that joins.'}
             {picking && ' The set’s own name stays in the console.'}
-            {type === rules.PRESENTATION && ' A PDF copy for attendees comes later.'}
           </p>
           {showOptions && (
             /* THE CREATE DIALOG'S OWN OPTIONS, never a copy
@@ -589,8 +718,9 @@ export default function EventItemDialog({
                 <button
                   type="submit"
                   className="evb-btn evb-btn--primary"
-                  disabled={busy || briefingWorking}
-                  title={briefingWorking ? 'Waiting for Workie to finish the briefing' : undefined}
+                  disabled={busy || briefingWorking || Boolean(deckWork)}
+                  title={briefingWorking ? 'Waiting for Workie to finish the briefing'
+                    : deckWork ? 'Waiting for the PDF to finish uploading' : undefined}
                 >
                   {busy ? 'Saving…' : (editing ? 'Save' : 'Add to agenda')}
                 </button>

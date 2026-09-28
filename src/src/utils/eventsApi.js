@@ -85,3 +85,49 @@ export const reorderItems = (code, order) =>
  */
 export const runEvent = (code, action, itemId) =>
   call(`events/${enc(code)}/run`, { method: 'POST', body: itemId ? { action, itemId } : { action } });
+
+// ── A presentation's slides (27 Sep 2026; events/deck-store.js) ────────────
+/**
+ * `{ upload: { key, url, contentType, expiresIn, maxBytes, name } }` — one
+ * signed PUT for a PDF the host chose. The file then goes straight to storage
+ * (`putDeckFile`), and `key` rides on the item's `deck` when it is saved.
+ */
+export const signDeckUpload = (code, file) => call(`events/${enc(code)}/deck`, {
+  method: 'POST',
+  body: { name: file.name, size: file.size, type: file.type || '' },
+});
+
+/**
+ * The file itself, PUT to the signed URL — not through authFetch: the URL is
+ * the credential, and a bearer token must never travel to storage. An
+ * XMLHttpRequest rather than fetch, for its upload progress (`onProgress`,
+ * 0 to 1): a 50 MB deck on a venue's network takes long enough to need one.
+ */
+export function putDeckFile(upload, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', upload.url);
+    xhr.setRequestHeader('Content-Type', upload.contentType || 'application/pdf');
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total) onProgress(e.loaded / e.total); };
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new EventsApiError('The PDF did not upload. Try again.', xhr.status));
+    };
+    xhr.onerror = () => reject(new EventsApiError('The PDF did not upload. Check the connection and try again.', 0));
+    xhr.send(file);
+  });
+}
+
+/** `{ deck: { id, url, pages, page, bytes, expiresIn } }` — a signed read of the slides, for the stage. */
+export const readDeck = (code, itemId) => call(`events/${enc(code)}/items/${enc(itemId)}/deck`);
+
+/**
+ * `{ itemId, page }` — the slide the stage is on, kept on the item so a
+ * reload lands on it and phones following the talk can show it.
+ */
+export const turnPage = (code, itemId, page) => call(`events/${enc(code)}/run`, {
+  method: 'POST',
+  body: { action: 'page', itemId, page },
+});
