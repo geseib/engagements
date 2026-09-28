@@ -4,16 +4,29 @@ phases:
   install:
     runtime-versions:
       nodejs: 18
-      # SAM CLI needs Python 3.10+ (since 1.156.0), and `pip3 install
-      # aws-sam-cli` unpinned takes whatever the image's default Python can
-      # install. On 28 Sep 2026 that was a SAM CLI too old to know nodejs22.x,
-      # and every tier's `sam build` stopped with "'nodejs22.x' runtime is not
-      # supported". The Python is named here and the floor below makes pip
-      # fail HERE, loudly, rather than quietly install an old one.
+      # Named, so an image update cannot change the Python under pip. It was
+      # not the cause on 28 Sep 2026: the failed build and the good builds
+      # either side of it all ran Python 3.11.15. See the pin below.
       python: 3.11
     commands:
+      # ── THE SAM CLI IS PINNED, NOT FLOORED ───────────────────────────
+      # This line read `pip3 install aws-sam-cli` until 2026-09-28, when the
+      # dev and test builds that started at 10:43 UTC both stopped at `sam
+      # build` with "'nodejs22.x' runtime is not supported" (dev execution
+      # f19530ef, source 727359bc). pip could not resolve aws-sam-cli's
+      # boto3-stubs[...] extras and, instead of stopping, backtracked
+      # aws-sam-cli from 1.166.2 down to 1.93.0, which predates nodejs22.x.
+      # The builds either side ran the same Python and botocore and installed
+      # 1.166.2 cleanly, so the resolver failure did not last. The silent
+      # downgrade was the damage.
+      #
+      # An exact pin turns that failure into a resolver error here, and also
+      # keeps out a release nobody has run through this pipeline, which a
+      # floor (`>=`) lets in. Every function in template-clean.yaml runs
+      # nodejs22.x, so any new version must support it; 1.166.2 is the last
+      # one proven here. Move buildspec-dev, -test and -prod together.
       - echo "Installing SAM CLI..."
-      - pip3 install --upgrade "aws-sam-cli>=1.156.0"
+      - pip3 install 'aws-sam-cli==1.166.2'
       # The pip-installed sam first on PATH, ahead of any older one the image
       # ships. Build phase 0.2 commands share this shell, so it holds for
       # `sam build` and `sam deploy` below.
