@@ -409,6 +409,44 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * THE SIGN-IN, READ AGAIN FROM COGNITO — for the pending screen (the owner,
+   * 29 Sep 2026: once an admin approves the account "it [is] less obvious that
+   * they need to sign out and back in … could this screen give a notice when
+   * the approval is done if you are on it?").
+   *
+   * Groups ride in the ID token (`cognito:groups`), and a token is only as new
+   * as the moment it was issued, which is why approval never showed until the
+   * person signed out and in. A refresh-token exchange issues a new ID token
+   * carrying the groups as they are NOW, and stores it where the next page load
+   * reads it. So this resolves to the fresh user without touching
+   * `currentUser`: the pending screen decides what to say, and "Start hosting"
+   * is an ordinary page load that finds the new token — no sign out, no sign in.
+   *
+   * Resolves null when nobody is signed in; rejects when the exchange fails
+   * (offline, or a refresh token that has itself expired).
+   */
+  const refreshSession = () => new Promise((resolve, reject) => {
+    const cognitoUser = getUserPool().getCurrentUser();
+    if (!cognitoUser) {
+      resolve(null);
+      return;
+    }
+    cognitoUser.getSession((err, session) => {
+      if (err || !session) {
+        reject(err || new Error('No session'));
+        return;
+      }
+      cognitoUser.refreshSession(session.getRefreshToken(), (refreshErr) => {
+        if (refreshErr) {
+          reject(refreshErr);
+          return;
+        }
+        getCurrentUser().then(resolve, reject);
+      });
+    });
+  });
+
   // Check if user has specific role
   const hasRole = (role) => {
     return currentUser?.role === role;
@@ -492,6 +530,7 @@ export const AuthProvider = ({ children }) => {
     forgotPassword,
     confirmPassword,
     getCurrentUser,
+    refreshSession,
     hasRole,
     hasGroup,
     isAdmin,

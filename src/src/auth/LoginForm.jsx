@@ -25,7 +25,7 @@ import './auth.css';
  * `initialError` carries a message in from the URL, which is how OAuthCallback
  * reports a failure it could not handle itself.
  */
-const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
+const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation }) => {
   const [form, setForm] = useState({ email: '', password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -57,8 +57,16 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError }) => {
     try {
       const user = await signIn(form.email, form.password);
       if (onSuccess) onSuccess(user);
-    } catch (_) {
-      /* surfaced through AuthContext's `error` */
+    } catch (err) {
+      // AN ACCOUNT WHOSE CODE WAS NEVER ENTERED (the owner, 29 Sep 2026: leave
+      // the code screen after signing up and "i cant [enter the code] … i need
+      // to reset the password again"). Cognito says UserNotConfirmed only to
+      // the right password, so this is the account's owner: take them to the
+      // code, not to a sentence telling them to find one with nowhere to type
+      // it. Anything else is surfaced through AuthContext's `error`.
+      if (err && err.code === 'UserNotConfirmedException' && onNeedsConfirmation) {
+        onNeedsConfirmation({ email: form.email.trim(), password: form.password });
+      }
     } finally {
       setIsSubmitting(false);
     }

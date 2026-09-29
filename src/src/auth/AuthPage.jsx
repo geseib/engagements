@@ -66,7 +66,7 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
   const [currentMode, setCurrentMode] = useState(initialMode);
   const [registrationData, setRegistrationData] = useState(null);
   const [urlError] = useState(errorParam);
-  const { currentUser, loading, newPasswordRequired } = useAuth();
+  const { currentUser, loading, newPasswordRequired, signIn, setError } = useAuth();
 
   // Clear the error parameter once it has been handed to the form.
   useEffect(() => {
@@ -97,8 +97,33 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
     else if (data.nextStep === 'pending') setCurrentMode('pending');
   };
 
-  const handleVerificationSuccess = (data) => {
-    setRegistrationData(data);
+  // Signed in with the right password to an account whose code was never
+  // entered: the code step, for that address. Nothing about the earlier visit
+  // needs to have survived — the code is in their email, and "Send another
+  // code" is on that screen if it has gone missing or run out.
+  const handleNeedsConfirmation = ({ email, password }) => {
+    if (setError) setError(null);
+    setRegistrationData({ email, name: '', password, fromSignIn: true });
+    setCurrentMode('verify');
+  };
+
+  // Confirmed. With the password still in hand (typed moments ago, here or on
+  // the register form), sign straight in, so the waiting screen has a sign-in
+  // to check approval with — or, if an admin was quick, the app opens. The
+  // password is dropped either way.
+  const handleVerificationSuccess = async (data) => {
+    const password = registrationData && registrationData.password;
+    setRegistrationData({ email: data.email, name: data.name });
+    if (password && signIn) {
+      try {
+        const user = await signIn(data.email, password);
+        handleLoginSuccess(user);
+        return;
+      } catch (_) {
+        // Confirmed, but not signed in: the waiting screen offers the sign-in.
+        if (setError) setError(null);
+      }
+    }
     setCurrentMode('pending');
   };
 
@@ -150,6 +175,7 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
         <LoginForm
           onToggleMode={handleToggleMode}
           onSuccess={handleLoginSuccess}
+          onNeedsConfirmation={handleNeedsConfirmation}
           initialError={urlError}
         />
       )}
@@ -162,6 +188,7 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
         <VerificationForm
           email={registrationData.email}
           name={registrationData.name}
+          fromSignIn={Boolean(registrationData.fromSignIn)}
           onToggleMode={handleToggleMode}
           onSuccess={handleVerificationSuccess}
         />

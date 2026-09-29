@@ -142,7 +142,10 @@ const RegisterForm = ({ onToggleMode, onSuccess }) => {
     try {
       await signUp(form.email, form.password, form.name);
       if (onSuccess) {
-        onSuccess({ email: form.email, name: form.name, nextStep: 'verify' });
+        // The password rides along in memory only, so that confirming the code
+        // can sign the person straight in (AuthPage.handleVerificationSuccess)
+        // rather than leave them on a waiting screen that cannot check.
+        onSuccess({ email: form.email, name: form.name, password: form.password, nextStep: 'verify' });
       }
     } catch (_) {
       /* surfaced through AuthContext's `error` */

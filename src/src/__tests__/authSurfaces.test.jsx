@@ -77,14 +77,14 @@ describe('promises nothing keeps', () => {
     expect(document.body.textContent).not.toMatch(/\bhours\b/i);
   });
 
-  // `refreshSession` does not exist anywhere in this codebase, so a Check again
-  // button would throw on click. Rejects adding the button back without the
-  // function -- and the second half rejects deleting the honest instruction
-  // that replaced it.
-  it('the pending screen offers no Check again button, and says what to do instead', () => {
+  // `refreshSession` exists now (AuthContext) and the screen checks approval
+  // by itself (authApproval.test.jsx), so "Sign out and back in to check" is
+  // gone. Where it CANNOT check -- this mock has no refreshSession, as nobody
+  // signed in has none -- it offers no Check button that would do nothing.
+  it('the pending screen offers no Check button it cannot back, and never asks for a sign out and back in', () => {
     render(<PendingApproval email="dana@example.com" name="Dana Whitfield" onSignOut={jest.fn()} />);
-    expect(screen.queryByRole('button', { name: /check again/i })).toBeNull();
-    expect(screen.getByText(/sign out and back in to check/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /check (now|again)/i })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/sign out and back in to check/i);
   });
 });
 

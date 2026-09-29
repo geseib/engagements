@@ -31,7 +31,7 @@ const maskEmail = (address) => {
   return `${local.substring(0, 2)}${'*'.repeat(local.length - 2)}@${domain}`;
 };
 
-const VerificationForm = ({ email, name, onToggleMode, onSuccess }) => {
+const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = false }) => {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -91,13 +91,17 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess }) => {
   return (
     <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
       <div>
-        <h1>Check your email</h1>
+        {/* From sign-in, this is someone who came back later (LoginForm's
+            UserNotConfirmed): the code went out when they created the account,
+            and may since have gone missing or run out — hence the resend
+            below, and the words saying so. */}
+        <h1>{fromSignIn ? 'Confirm your email to finish' : 'Check your email'}</h1>
         <p className="au-muted" style={{ marginTop: '12px' }}>
-          We sent a 6&#8209;digit code to{' '}
+          {fromSignIn ? 'When you created the account we sent a 6\u2011digit code to ' : 'We sent a 6\u2011digit code to '}
           <strong className="au-wrapany" style={{ color: 'var(--text)' }}>
             {maskEmail(email)}
           </strong>
-          .
+          {fromSignIn ? '. Enter it here, or send a new one below if it has expired or gone missing.' : '.'}
         </p>
       </div>
 

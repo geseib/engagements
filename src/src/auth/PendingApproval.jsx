@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { navigateTo } from './navigate';
-import { ClockIcon } from './AuthChrome';
+import { CheckIcon, ClockIcon } from './AuthChrome';
 import './auth.css';
 
 /**
@@ -31,24 +31,78 @@ import './auth.css';
  * them (their details as a single copyable line, which needs no backend and
  * converts a passive wait into one action); and the facts.
  *
- * THERE IS NO "CHECK AGAIN" BUTTON, AND THAT IS THE HONEST ANSWER. Group
- * membership is read from the cached ID token's `cognito:groups` and nothing
- * forces a refresh, so an admin can approve someone and the UI will not notice
- * until the token rolls. `13-pending.html` draws a Check again button on the
- * assumption that `refreshSession()` exists; it does not exist anywhere in this
- * codebase, and a button wired to a missing function throws on click. The
- * mockup's own §8.1 names this: "if that is not wired, the honest label is
- * 'Sign out and back in to check'." So that is what this says. Wiring a real
- * refresh is a change to AuthContext's session handling and is worth doing --
- * it is reported, not silently faked.
+ * THE SCREEN NOTICES THE APPROVAL ITSELF (the owner, 29 Sep 2026: "it [is]
+ * less obvious that they need to sign out and back in only once they have been
+ * approved … 1/ move this message to the top 2/ could this screen give a notice
+ * when the approval is done if you are on it?"). Group membership rides in the
+ * ID token, so an approval used to show only after signing out and in. It now
+ * checks: AuthContext `refreshSession` exchanges the refresh token for a new ID
+ * token, whose groups are the account's groups NOW — every CHECK_MS while the
+ * tab is in view, when the person comes back to the tab, and on "Check now".
+ * The line that says so is at the TOP, under the headline, where the question
+ * "am I in yet?" is asked; when the answer turns yes, that same place says
+ * "You are approved" with one button into the app, and no sign out.
+ *
+ * Nobody signed in (`/auth?status=pending` reached straight off the URL) has no
+ * token to refresh, so there it says to sign in instead of pretending to check.
  */
 
 const CODE_LENGTH = 4;
+/** How often the screen asks Cognito whether the account has been approved. */
+export const CHECK_MS = 30000;
+
+const isApproved = (user) => {
+  const groups = (user && user.groups) || [];
+  return groups.includes('hosts') || groups.includes('admins');
+};
+
+const timeOf = (date) => date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 const PendingApproval = ({ email, name, onSignOut }) => {
-  const { currentUser, signOut } = useAuth();
+  const { currentUser, signOut, refreshSession } = useAuth();
   const [code, setCode] = useState('');
   const [copied, setCopied] = useState(false);
+  // 'idle' | 'checking' | 'approved' | 'failed' — and when it last asked.
+  const [check, setCheck] = useState({ state: 'idle', at: null });
+  const canCheck = Boolean(currentUser) && typeof refreshSession === 'function';
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  const checkNow = useCallback(async () => {
+    if (!canCheck) return;
+    setCheck((prev) => (prev.state === 'approved' ? prev : { ...prev, state: 'checking' }));
+    try {
+      const fresh = await refreshSession();
+      if (!alive.current) return;
+      setCheck({ state: isApproved(fresh) ? 'approved' : 'idle', at: new Date() });
+    } catch (_) {
+      if (alive.current) setCheck({ state: 'failed', at: new Date() });
+    }
+  }, [canCheck, refreshSession]);
+
+  // Every CHECK_MS while the tab is in view, and straight away when the person
+  // comes back to it — the moment they are most likely to be wondering.
+  const approved = check.state === 'approved';
+  useEffect(() => {
+    if (!canCheck || approved) return undefined;
+    const visible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
+    const timer = setInterval(() => { if (visible()) checkNow(); }, CHECK_MS);
+    const onBack = () => { if (visible()) checkNow(); };
+    document.addEventListener('visibilitychange', onBack);
+    window.addEventListener('focus', onBack);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onBack);
+      window.removeEventListener('focus', onBack);
+    };
+  }, [canCheck, approved, checkNow]);
+
+  // Into the app: an ordinary page load, which reads the token just refreshed.
+  // From /auth itself there is nothing behind the screen, so it goes home.
+  const startHosting = () => {
+    const path = window.location.pathname || '/';
+    navigateTo(path.startsWith('/auth') ? '/' : `${path}${window.location.search || ''}`);
+  };
 
   const userName = name || currentUser?.attributes?.name || '';
   const userEmail = email || currentUser?.attributes?.email || '';
@@ -87,17 +141,76 @@ const PendingApproval = ({ email, name, onSignOut }) => {
 
   return (
     <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
-      <span className="au-pill is-attn">
-        <ClockIcon /> Not approved yet
-      </span>
+      {approved ? (
+        <span className="au-pill is-good">
+          <CheckIcon /> Approved
+        </span>
+      ) : (
+        <span className="au-pill is-attn">
+          <ClockIcon /> Not approved yet
+        </span>
+      )}
 
       <div>
-        <h1>Your account exists. It cannot host yet.</h1>
-        <p className="au-muted" style={{ marginTop: '12px' }}>
-          Someone with admin rights at your organisation has to approve it first. We cannot
-          do that from here and we cannot tell you when they will.
-        </p>
+        <h1>{approved ? 'You can host now.' : 'Your account exists. It cannot host yet.'}</h1>
+        {!approved && (
+          <p className="au-muted" style={{ marginTop: '12px' }}>
+            Someone with admin rights at your organisation has to approve it first. We cannot
+            do that from here and we cannot tell you when they will.
+          </p>
+        )}
       </div>
+
+      {/* 0 — "am I in yet?", answered where it is asked. */}
+      {approved ? (
+        <div className="au-notice is-good" role="status" data-testid="approval-status">
+          <CheckIcon />
+          <div className="au-notice-body au-stack au-s12">
+            <div>
+              <h3>Your account has been approved.</h3>
+              <p>No need to sign out — your sign-in already knows.</p>
+            </div>
+            <button type="button" className="au-btn au-btn-primary" onClick={startHosting}>
+              Start hosting
+            </button>
+          </div>
+        </div>
+      ) : canCheck ? (
+        <div className="au-notice" role="status" data-testid="approval-status">
+          <ClockIcon />
+          <div className="au-notice-body au-stack au-s12">
+            <div>
+              <h3>This page will tell you the moment you are approved.</h3>
+              <p>
+                {check.state === 'failed'
+                  ? `We could not check at ${timeOf(check.at)} — we will try again shortly.`
+                  : `It checks every ${CHECK_MS / 1000} seconds while it is open${check.at ? `; last checked at ${timeOf(check.at)}` : ''}. No need to sign out and back in.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="au-btn au-btn-ghost au-sm"
+              onClick={checkNow}
+              disabled={check.state === 'checking'}
+            >
+              {check.state === 'checking' ? 'Checking…' : 'Check now'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="au-notice" role="status" data-testid="approval-status">
+          <ClockIcon />
+          <div className="au-notice-body au-stack au-s12">
+            <div>
+              <h3>Sign in to see whether you have been approved.</h3>
+              <p>Once you are signed in, this page checks by itself.</p>
+            </div>
+            <button type="button" className="au-btn au-btn-ghost au-sm" onClick={handleSignOut}>
+              Sign in
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 1 — the one thing they can do now. */}
       <div className="au-card au-stack au-s20">
@@ -187,13 +300,8 @@ const PendingApproval = ({ email, name, onSignOut }) => {
             </>
           )}
           <dt>Status</dt>
-          <dd>Pending</dd>
+          <dd>{approved ? 'Approved' : 'Pending'}</dd>
         </dl>
-
-        <p className="au-meta" style={{ marginTop: '6px' }}>
-          Approval is read from your sign-in, so it will not appear here on its own. Sign out
-          and back in to check.
-        </p>
 
         <div className="au-row" style={{ marginTop: '6px' }}>
           <button type="button" className="au-btn au-btn-ghost au-sm" onClick={handleSignOut}>
