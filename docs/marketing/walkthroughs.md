@@ -1,6 +1,6 @@
 # Demo walkthroughs
 
-The home page contains four narrated, captioned demonstrations. All use fictional teams and real screens from the development site.
+The home page contains five narrated, captioned demonstrations. All use fictional teams and real screens from the development site.
 
 | Video | Length | Home-page anchor | Standalone player |
 | --- | --- | --- | --- |
@@ -8,6 +8,7 @@ The home page contains four narrated, captioned demonstrations. All use fictiona
 | Call & Answer: Project Beacon | 2:45 | `/home#call-answer-walkthrough` | `/assets/marketing/call-answer.html` |
 | School of Hard Books | 2:20 | `/home#hard-books-walkthrough` | `/assets/marketing/hard-books.html` |
 | Quarterly meeting survey | 2:20 | `/home#quarterly-survey-walkthrough` | `/assets/marketing/quarterly-survey.html` |
+| Event agenda | 2:23 | `/home#event-agenda-walkthrough` | `/assets/marketing/event-agenda.html` |
 
 Each video has an MP4, poster, English WebVTT file and HTML transcript in `src/public/assets/marketing`. The MP4 contains visible captions. The separate caption track supports accessible playback. Players use native controls, inline playback and no autoplay; the home page defers video loading until needed.
 
@@ -31,4 +32,4 @@ Project Beacon uses five teammates (manager, product lead, two engineers and arc
 
 The Hard Books demo uses architecture, culinary and design lessons, with five answers and five votes in each round, a follow-up comment and a three-round report. The survey demo shows five question types, five completed responses, result charts and written feedback. Both reports were saved for one year and downloaded. Their editable projects are `videos/engage-hard-books` and `videos/engage-quarterly-survey`.
 
-The event-agenda film is in preparation; it is not published until the welcome presentation capture is complete.
+The event-agenda film follows event 9630 through its welcome, trivia, Direction Builder, break and new-ideas discussion. All host and participant screens are actual captures. The welcome presentation uses labeled prepared PDF slides outside app UI; this first cut does not show a PDF upload or live slide navigation. The editable project is `videos/engage-event-agenda`.

@@ -202,6 +202,19 @@ export default function HomePage() {
               <p className="mk-muted"><a href="/assets/marketing/engage-quarterly-survey-transcript.html">Read the Quarterly meeting survey transcript</a></p>
             </div>
 
+            <div id="event-agenda-walkthrough" className="mk-walkthrough">
+              <div className="mk-section-head">
+                <h3 className="mk-title">One code for the whole day.</h3>
+                <p className="mk-lead">Follow Northstar Studio’s fictional kickoff from the welcome and warm-up to working discussions and a break. See the host choose what goes live while participants stay in the same event.</p>
+              </div>
+              <video controls playsInline preload="none" poster="/assets/marketing/engage-event-agenda-poster.jpg" aria-label="Event agenda walkthrough with narration and captions">
+                <source src="/assets/marketing/engage-event-agenda.mp4" type="video/mp4" />
+                <track kind="captions" src="/assets/marketing/engage-event-agenda.vtt" srcLang="en" label="English" />
+                <a href="/assets/marketing/engage-event-agenda.mp4">Watch the event agenda walkthrough</a>
+              </video>
+              <p className="mk-muted"><a href="/assets/marketing/engage-event-agenda-transcript.html">Read the event agenda transcript</a></p>
+            </div>
+
             {modes.items.map((mode) => (
               <div key={mode.id} className={`mk-mode${mode.flip ? ' mk-mode--flip' : ''}`}>
                 <div className="mk-mode-copy">
