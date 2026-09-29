@@ -116,7 +116,11 @@ export default function AuthChrome({ back, children }) {
     <div className="au-page" data-theme="dark">
       <header className="au-pad">
         <div className="au-top">
-          <a className="au-brand" href="/">
+          {/* `/home`, not `/`: for anyone signed in — an account waiting on
+              approval included — `/` is the app, which put them straight back
+              on this screen (the owner, 29 Sep 2026). `/home` is always the
+              marketing home, as every other brand mark in the product links. */}
+          <a className="au-brand" href="/home">
             <BrandMark size={24} />
             Engagements {env && <span className="au-env">{env}</span>}
           </a>

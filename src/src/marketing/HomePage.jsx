@@ -161,6 +161,60 @@ export default function HomePage() {
               </div>
             </div>
 
+            <div id="call-answer-walkthrough" className="mk-walkthrough">
+              <div>
+                <div className="mk-section-head">
+                  <h3 className="mk-title">Give every idea room to be heard.</h3>
+                  <p className="mk-lead">Join five fictional teammates as they shape a new platform. Write answers, vote, question the findings and keep the discussion in a report. Laptops or tablets work best for the longer replies.</p>
+                </div>
+                <video controls playsInline preload="none" poster="/assets/marketing/engage-call-answer-poster.jpg" aria-label="Call and Answer walkthrough with narration and captions">
+                  <source src="/assets/marketing/engage-call-answer.mp4" type="video/mp4" />
+                  <track kind="captions" src="/assets/marketing/engage-call-answer.vtt" srcLang="en" label="English" />
+                  <a href="/assets/marketing/engage-call-answer.mp4">Watch the Call and Answer walkthrough</a>
+                </video>
+                <p className="mk-muted"><a href="/assets/marketing/engage-call-answer-transcript.html">Read the Call and Answer transcript</a></p>
+              </div>
+            </div>
+
+            <div id="hard-books-walkthrough" className="mk-walkthrough">
+              <div className="mk-section-head">
+                <h3 className="mk-title">Look at the challenge through a different lens.</h3>
+                <p className="mk-lead">Borrow lessons from architecture, cooking and design. Watch five fictional teammates apply them to Project Beacon, vote on ideas and keep every round in one report.</p>
+              </div>
+              <video controls playsInline preload="none" poster="/assets/marketing/engage-hard-books-poster.jpg" aria-label="School of Hard Books walkthrough with narration and captions">
+                <source src="/assets/marketing/engage-hard-books.mp4" type="video/mp4" />
+                <track kind="captions" src="/assets/marketing/engage-hard-books.vtt" srcLang="en" label="English" />
+                <a href="/assets/marketing/engage-hard-books.mp4">Watch the School of Hard Books walkthrough</a>
+              </video>
+              <p className="mk-muted"><a href="/assets/marketing/engage-hard-books-transcript.html">Read the School of Hard Books transcript</a></p>
+            </div>
+
+            <div id="quarterly-survey-walkthrough" className="mk-walkthrough">
+              <div className="mk-section-head">
+                <h3 className="mk-title">Make the next meeting better.</h3>
+                <p className="mk-lead">Follow a five-question survey after Northstar Studio’s quarterly meeting. See how ratings, rankings and written feedback become clear results and a saved report.</p>
+              </div>
+              <video controls playsInline preload="none" poster="/assets/marketing/engage-quarterly-survey-poster.jpg" aria-label="Quarterly meeting survey walkthrough with narration and captions">
+                <source src="/assets/marketing/engage-quarterly-survey.mp4" type="video/mp4" />
+                <track kind="captions" src="/assets/marketing/engage-quarterly-survey.vtt" srcLang="en" label="English" />
+                <a href="/assets/marketing/engage-quarterly-survey.mp4">Watch the Quarterly meeting survey walkthrough</a>
+              </video>
+              <p className="mk-muted"><a href="/assets/marketing/engage-quarterly-survey-transcript.html">Read the Quarterly meeting survey transcript</a></p>
+            </div>
+
+            <div id="event-agenda-walkthrough" className="mk-walkthrough">
+              <div className="mk-section-head">
+                <h3 className="mk-title">One code for the whole day.</h3>
+                <p className="mk-lead">Follow Northstar Studio’s fictional kickoff from the welcome and warm-up to working discussions and a break. See the host choose what goes live while participants stay in the same event.</p>
+              </div>
+              <video controls playsInline preload="none" poster="/assets/marketing/engage-event-agenda-poster.jpg" aria-label="Event agenda walkthrough with narration and captions">
+                <source src="/assets/marketing/engage-event-agenda.mp4" type="video/mp4" />
+                <track kind="captions" src="/assets/marketing/engage-event-agenda.vtt" srcLang="en" label="English" />
+                <a href="/assets/marketing/engage-event-agenda.mp4">Watch the event agenda walkthrough</a>
+              </video>
+              <p className="mk-muted"><a href="/assets/marketing/engage-event-agenda-transcript.html">Read the event agenda transcript</a></p>
+            </div>
+
             {modes.items.map((mode) => (
               <div key={mode.id} className={`mk-mode${mode.flip ? ' mk-mode--flip' : ''}`}>
                 <div className="mk-mode-copy">

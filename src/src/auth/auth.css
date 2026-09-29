@@ -1206,6 +1206,8 @@
   color: var(--au-muted);
 }
 .au-pill.is-attn { border-color: var(--primary); color: var(--primary); }
+/* Approved (PendingApproval.jsx): the notice's own green, 9.30:1 on --bg. */
+.au-pill.is-good { border-color: var(--success); color: var(--au-success-text); }
 
 /* -------------------------------------------------- password checklist ---- */
 /* Live from the first keystroke, not an error after submitting. There is no
