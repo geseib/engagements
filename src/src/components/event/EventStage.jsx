@@ -14,6 +14,9 @@ import SlideCanvas from './SlideCanvas';
 import useSlides from './useSlides';
 import useFullscreenKey, { useFullscreenElement } from '../../hooks/useFullscreenKey';
 import { canFullscreen, toggleFullscreen } from '../../utils/fullscreen';
+import {
+  sessionStagePath, readOrderParam, dropParam, offersRunningOrder, ORDER_PARAM, QUESTIONS_PANEL,
+} from '../../config/runningOrder';
 import './EventStage.css';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
@@ -99,7 +102,7 @@ const SLIDE_KEYS = Object.freeze({ ArrowRight: 1, PageDown: 1, ArrowLeft: -1, Pa
 
 const playUrl = (code) => `${window.location.origin}/play?event=${code}`;
 const joinDisplayUrl = () => `${window.location.host}/play`;
-const sessionStage = (gameId, code) => `/host?gameId=${encodeURIComponent(gameId)}&event=${encodeURIComponent(code)}`;
+const sessionStage = (gameId, code, opts) => sessionStagePath(gameId, code, opts);
 
 function TypeIcon({ type, size = 22 }) {
   return <Icon name={TYPE_ICONS[type] || 'Circle'} weight="bold" size={size} color="currentColor" />;
@@ -441,21 +444,43 @@ export default function EventStage({ code }) {
     }
   }, [code, load]);
 
-  /** OPEN: the host's screen only. The phones stay where the event is. */
-  const openItem = useCallback(async (item) => {
+  /** OPEN: the host's screen only. The phones stay where the event is.
+      `panel` lands the item's stage on a Session panel tab (config/
+      runningOrder.js) — "Set the running order" is Open plus that. */
+  const openItem = useCallback(async (item, { panel = '' } = {}) => {
     if (!item) return;
     if (!isEngagement(item.type)) {
       setFocus(item.itemId);
       return;
     }
     if (item.gameId) {
-      navigateTo(sessionStage(item.gameId, code));
+      navigateTo(sessionStage(item.gameId, code, { panel }));
       return;
     }
     const fresh = await act('prepare', item);
     const ready = fresh && fresh.gameId;
-    if (ready) navigateTo(sessionStage(fresh.gameId, code));
+    if (ready) navigateTo(sessionStage(fresh.gameId, code, { panel }));
   }, [act, code, setFocus]);
+
+  /*
+    "SET THE RUNNING ORDER" FROM THE BUILDER (QA drive finding #4). The
+    builder's door for an item with no session yet is this board with
+    ?order=<itemId>: once the agenda is here, the item is opened exactly as
+    its Open would — prepared first when it has no session — and its stage
+    lands on the Session panel's Questions tab. Read once; the parameter
+    leaves the address, so a reload is the board and not a second trip. An
+    item that is not there, has no running order or has finished leaves the
+    host on the board, which is where the explanation would be.
+  */
+  const orderWanted = useRef(readOrderParam(window.location.search));
+  useEffect(() => {
+    if (!orderWanted.current || !view) return;
+    const itemId = orderWanted.current;
+    orderWanted.current = '';
+    dropParam(ORDER_PARAM);
+    const item = items.find((i) => i.itemId === itemId);
+    if (offersRunningOrder(item, event)) openItem(item, { panel: QUESTIONS_PANEL });
+  }, [view, items, event, openItem]);
 
   /** GO LIVE: the host's screen, and everyone's, to this item. */
   const goLive = useCallback(async (item) => {

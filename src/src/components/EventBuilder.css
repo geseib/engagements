@@ -57,6 +57,7 @@
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
   border-radius: 6px; border: 1px solid var(--evb-rule-strong); background: transparent;
   color: var(--text); font: 600 var(--evb-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+  text-decoration: none; /* an <a> wears it too: "Run the event", "Order" */
 }
 .evb-btn:hover:not(:disabled) { background: var(--evb-row-hover); border-color: var(--muted); }
 .evb-btn:disabled { opacity: .42; cursor: not-allowed; }
@@ -92,6 +93,11 @@
    category chips (whose names styles.css gives `flex: 1`) that shrank every
    chip to one letter wide. */
 .evb-sopts { margin-top: 16px; overflow-wrap: normal; }
+/* THE RUNNING ORDER'S DOOR in the item dialog (QA finding #4): a label, the
+   sentence, and the link, left-aligned under the session options. */
+.evb-order { margin-top: 16px; }
+.evb-order .evb-hint { margin: 0; }
+.evb-order .evb-btn { align-self: flex-start; }
 .evb-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
 .evb-modal-head h2 { margin: 0; font: 800 var(--evb-t-head)/1.2 var(--font-display); }
 .evb-modal-head p { margin: 4px 0 0; font-size: var(--evb-t-label); color: var(--muted); }
@@ -221,7 +227,8 @@
 .evb-col-at { width: 66px; }
 .evb-col-type { width: 158px; }
 .evb-col-len { width: 74px; }
-.evb-col-acts { width: 196px; }
+/* 220: "Order" (the running order, QA finding #4) joined ↑ ↓ Edit. A row that also has "Use vN" wraps to a second line (flex-wrap, rule 9). */
+.evb-col-acts { width: 220px; }
 .evb-grip { color: var(--muted); text-align: center; cursor: grab; }
 .evb-no { text-align: right; font-weight: 700; font-size: var(--evb-t-label); color: var(--muted); }
 .evb-at { font-weight: 700; }

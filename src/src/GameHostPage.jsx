@@ -93,6 +93,9 @@ import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 import { getEvent, runEvent } from './utils/eventsApi';
 import { navigateTo } from './auth/navigate';
+import {
+  hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
+} from './config/runningOrder';
 
 const API_BASE = window.API_BASE;
 
@@ -303,6 +306,29 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  /*
+    WHERE THE PANEL LANDS when something asked for a place in it rather than
+    the host pressing SESSION: 'running-order' opens it on Questions with the
+    running order in view (QA drive finding #4). Cleared whenever the panel
+    closes, so SESSION afterwards opens it as it always has.
+  */
+  const [setupPanelLanding, setSetupPanelLanding] = useState(null);
+  useEffect(() => {
+    if (!setupPanelOpen) setSetupPanelLanding(null);
+  }, [setupPanelOpen]);
+  /** "Set the running order": the panel, on Questions, at the running order. */
+  const openRunningOrder = useCallback(() => {
+    setSetupPanelLanding('running-order');
+    setSetupPanelOpen(true);
+  }, []);
+  /*
+    ?panel=questions — the deep link the event's agenda uses
+    (config/runningOrder.js). Read once at load; anything else, or nothing,
+    leaves the page exactly as it was. Acted on once the session's stage is
+    up (below, after the welcome screen's state), then taken out of the
+    address so a reload is the plain stage.
+  */
+  const panelLinkRef = useRef(readPanelParam(window.location.search));
   /*
     THE SCOREBOARD (docs/superpowers/specs/2026-09-25-scoreboard-design.md):
     a session fact on the server's STATE row — { open, style, openedAt, page }
@@ -702,6 +728,13 @@ function GameHostPage() {
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
   const [continueGameId, setContinueGameId] = useState('');
+  useEffect(() => {
+    if (!panelLinkRef.current || !gameId || showWelcomeScreen) return;
+    const panel = panelLinkRef.current;
+    panelLinkRef.current = '';
+    dropParam(PANEL_PARAM);
+    if (panel === QUESTIONS_PANEL) openRunningOrder();
+  }, [gameId, showWelcomeScreen, openRunningOrder]);
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
@@ -6045,6 +6078,14 @@ Focus on actionable business strategy insights.`;
   */
   const eventWaiting = Boolean(eventCode && eventItem && (eventItem.state === 'planned' || eventItem.state === 'paused'));
   /*
+    A PREVIEW'S DOOR TO ITS RUNNING ORDER (QA drive finding #4). While an
+    item is only being previewed — nobody has joined, the phones are on the
+    agenda — its lobby says where the order is chosen, and opens it. Not on
+    a paused item, whose lobby the room may be looking at.
+  */
+  const previewRunningOrder = Boolean(eventCode && eventItem && eventItem.state === 'planned'
+    && hasRunningOrder(eventItem.type));
+  /*
     AND NO SECOND WAY BACK. In an event, Back to Menu is the agenda
     (requestLeave → goToAgenda), and the dock already has AGENDA — two doors
     to one place, and the second one pushed SESSION off a 1024-wide dock
@@ -7040,6 +7081,15 @@ Focus on actionable business strategy insights.`;
                     </div>
                   </div>
                 )}
+                {/* HOST CHROME (data-drop 1), and only in a preview: the
+                    room is not here yet. The order is chosen in SESSION →
+                    Questions; this opens it there, at the running order. */}
+                {previewRunningOrder && (
+                  <div className="fn-controls preview-order" data-drop="1" data-testid="preview-running-order">
+                    <button type="button" onClick={openRunningOrder}>{RUNNING_ORDER_LABEL}</button>
+                    <span>Choose which questions come first, before anyone joins.</span>
+                  </div>
+                )}
                 {/* NO ANONYMITY LINE IN THE LOBBY. The owner, 2026-09-23: "leave
                     the comment 'Answers are anonymous. Nobody sees who wrote
                     what — the host included — unless the host turns names on.'
@@ -7695,6 +7745,8 @@ Focus on actionable business strategy insights.`;
           dock is a no-overlay zone (audit A6). */}
       {setupPanelOpen && (
         <SessionSetupPanel
+          initialTab={setupPanelLanding === 'running-order' ? 'questions' : 'players'}
+          focusRunningOrder={setupPanelLanding === 'running-order'}
           rounds={rounds}
           historyLoading={historyLoading}
           onOpenRound={setPastRoundIndex}

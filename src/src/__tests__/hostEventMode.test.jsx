@@ -11,7 +11,7 @@
  * lobby advertising the item's own code instead of the event's.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
@@ -142,4 +142,59 @@ test('a live item\'s lobby has one way back, AGENDA — not Back to Menu beside 
   expect(await screen.findByRole('button', { name: /Back to the event's agenda/ }, { timeout: 5000 })).toBeInTheDocument();
   await waitFor(() => expect(events.getEvent).toHaveBeenCalled());
   expect(screen.queryByRole('button', { name: /Back to Menu/ })).toBeNull();
+});
+
+/*
+  "SET THE RUNNING ORDER" (QA drive 2026-09-29, finding #4). rejects: a
+  preview lobby with no way to the running order; that way on a paused item;
+  ?panel=questions that does not open the Session panel on Questions, or
+  that opens it that way again after it is closed; the panel opening at all
+  without the parameter.
+*/
+test('a preview lobby offers "Set the running order", which opens SESSION on Questions', async () => {
+  installFetch('CREATED');
+  events.getEvent.mockResolvedValue(viewWith(ITEM));
+  await mountItemStage();
+
+  const door = await screen.findByTestId('preview-running-order', {}, { timeout: 5000 });
+  expect(screen.queryByRole('dialog', { name: 'Session setup' })).toBeNull();
+  fireEvent.click(within(door).getByRole('button', { name: 'Set the running order' }));
+  const panel = await screen.findByRole('dialog', { name: 'Session setup' });
+  expect(within(panel).getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(panel).getByText('Running order')).toBeInTheDocument();
+});
+
+test('no running-order door on a paused item\'s lobby', async () => {
+  installFetch('CREATED');
+  events.getEvent.mockResolvedValue(viewWith({ ...ITEM, state: 'paused' }));
+  await mountItemStage();
+  await screen.findByRole('button', { name: 'Bring everyone back' }, { timeout: 5000 });
+  expect(screen.queryByTestId('preview-running-order')).toBeNull();
+});
+
+test('?panel=questions lands on the Session panel\'s Questions tab, once', async () => {
+  installFetch('CREATED');
+  events.getEvent.mockResolvedValue(viewWith(ITEM));
+  window.history.pushState({}, '', `/host?gameId=${GAME}&event=${CODE}&panel=questions`);
+  render(<GameHostPage />);
+
+  const panel = await screen.findByRole('dialog', { name: 'Session setup' }, { timeout: 5000 });
+  expect(within(panel).getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
+  expect(window.location.search).not.toMatch(/panel=/);
+  expect(window.location.search).toMatch(`gameId=${GAME}`);
+
+  // Closed and opened again with SESSION, it is the ordinary panel.
+  fireEvent.click(within(panel).getByRole('button', { name: 'Close setup' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Session setup' })).toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: /session panel/i }));
+  const again = await screen.findByRole('dialog', { name: 'Session setup' });
+  expect(within(again).getByRole('tab', { name: 'Players' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('without ?panel= the stage opens with the Session panel shut', async () => {
+  installFetch('CREATED');
+  events.getEvent.mockResolvedValue(viewWith(ITEM));
+  await mountItemStage();
+  await screen.findByRole('button', { name: 'Bring everyone here' }, { timeout: 5000 });
+  expect(screen.queryByRole('dialog', { name: 'Session setup' })).toBeNull();
 });
