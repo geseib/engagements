@@ -652,7 +652,16 @@ async function editItem(request, meta, code, itemId) {
     throw error;
   }
   if (rebuild) await discardChildSession(db, TABLE(), prepared, meta.orgId);
-  if (retitle) await renamePrepared(row, prepared, fields.value.title, meta.orgId);
+  // After the write has landed, so a failure here is logged, never returned:
+  // the edit is saved, and a 500 would tell the host it was not. The cost of
+  // a failed rename is a preview that still shows the old title.
+  if (retitle) {
+    try {
+      await renamePrepared(row, prepared, fields.value.title, meta.orgId);
+    } catch (e) {
+      console.warn('rename: the prepared session keeps its old title', e && e.message);
+    }
+  }
   if (deckChange !== undefined && row.Deck && row.Deck.key) await D.removeObject(row.Deck.key);
   // Projected from the DECRYPTED row, so nothing sealed reaches the response.
   return json(200, {

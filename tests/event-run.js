@@ -634,6 +634,17 @@ async function makeEvent() {
       const next = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
       assert.notStrictEqual(next, again);
     });
+    await check('a failed rename of the preview never fails the edit that already saved', async () => {
+      const kept = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      const fault = table.inject(
+        (c) => c.type === 'update' && c.input && c.input.Key && c.input.Key.PK === `GAME#${kept}` && c.input.Key.SK === 'METADATA',
+        () => Object.assign(new Error('Throughput exceeded'), { name: 'ProvisionedThroughputExceededException' }),
+      );
+      const edit = await editItem({ title: 'Space night, renamed under load' });
+      assert.strictEqual(fault.thrown, 1, 'the fault never fired');
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, kept);
+    });
     await check('a new title on a preview whose session has vanished clears the stale pointer', async () => {
       const gid = itemRow(p, fresh.ids.trivia).GameId;
       table.store.delete(table.keyOf(`GAME#${gid}`, 'METADATA'));
