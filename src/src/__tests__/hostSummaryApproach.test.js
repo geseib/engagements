@@ -24,10 +24,16 @@ const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
 
-test('the results stage carries an approach select beside the voice one', () => {
-  expect(src).toMatch(/id="game-prompt"/);
-  expect(src).toMatch(/Approach \(next \$\{getHostRoundNoun\(\)\.toLowerCase\(\)\}\)/);
-  expect(src).toMatch(/id="game-persona"/);
+// The two selects moved off the room-facing stage into the Session panel's
+// Workie section (QA drive 2026-09-29, #21) — workieHostOptions.test.jsx
+// renders them; here only that the page still hands both handlers over.
+test('the approach select sits beside the voice one, fed by the page\'s handlers', () => {
+  const settings = fs.readFileSync(path.join(__dirname, '..', 'components', 'stage', 'WorkieSettings.jsx'), 'utf8');
+  expect(settings).toMatch(/id="game-prompt"/);
+  expect(settings).toMatch(/`Approach \(next \$\{noun\}\)`/);
+  expect(settings).toMatch(/id="game-persona"/);
+  expect(src).toMatch(/onPrompt: handleChangeGamePrompt/);
+  expect(src).toMatch(/onPersona: handleChangeGamePersona/);
 });
 
 /** The handler's own body, cut at the next handler so nothing beside it counts. */
@@ -67,10 +73,12 @@ test('a resumed session restores the pick from the game record', () => {
   name and never the text. Restored from get-game-state's boolean on a reload,
   and reset with the rest of the game (config/gameSession.js).
 */
-test('the stage says "Briefing on" when the session is briefed, and restores it on reload', () => {
+// Said in the Session panel's Workie section now, not on the stage (#21).
+test('the host is told "Briefing on" when the session is briefed, and it is restored on reload', () => {
   expect(src).toMatch(/setSessionBriefed\(gameStateData\.gameMetadata\.briefed === true\)/);
-  const at = src.indexOf('id="game-prompt"');
-  const controls = src.slice(at, at + 2000);
-  expect(controls).toMatch(/\{sessionBriefed && \(/);
-  expect(controls).toMatch(/Briefing on/);
+  expect(src).toMatch(/briefed: sessionBriefed/);
+  const settings = fs.readFileSync(path.join(__dirname, '..', 'components', 'stage', 'WorkieSettings.jsx'), 'utf8');
+  const at = settings.indexOf('{briefed && (');
+  expect(at).toBeGreaterThan(-1);
+  expect(settings.slice(at, at + 400)).toMatch(/Briefing on/);
 });

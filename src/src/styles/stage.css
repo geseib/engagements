@@ -1158,9 +1158,12 @@ body, .stage-ladder-table{
 .notes .lead strong,.notes .lead em{color:inherit}
 .notes .notes-md ul,.notes .notes-md ol{margin:0 0 .4em;padding-left:1.2em}
 
-/* Host controls that happen to sit inside a room-facing state. They are chrome
-   (data-drop), they stay at the label tier, and they never compete with the
-   content for size. Their permanent home is the Console — spec §5.4, plan 3. */
+/* Host-only controls that sit inside a room-facing state: chrome (data-drop),
+   label tier, never competing with the content for size. What We Heard's
+   Voice/Approach/Briefing/Redo row used to be the main user; it moved to the
+   Session panel's Settings tab (components/stage/WorkieSettings.jsx) after the
+   2026-09-29 QA drive found host-only controls projected to the room (#21).
+   The preview lobby's "Set the running order" (#4) still uses the class. */
 .fn-controls{display:flex;align-items:center;flex-wrap:wrap;gap:.6em;
   font-size:var(--t-meta);color:var(--muted)}
 .fn-controls select,.fn-controls button{font:inherit;font-size:var(--t-meta);

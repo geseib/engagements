@@ -800,7 +800,7 @@ function GameHostPage() {
   const [gamePromptId, setGamePromptId] = useState('');
   const [promptSwitchStatus, setPromptSwitchStatus] = useState('');
   // Whether the live session carries a Call & Answer briefing. Shown as
-  // "Briefing on" beside the voice and the approach — never its text.
+  // "Briefing on" in the Session panel's Workie section (WorkieSettings) — never its text.
   const [sessionBriefed, setSessionBriefed] = useState(false);
   // The live session's goal (events M1b, session-goal.js): how many questions
   // the host plans to ask, or null. The host's alone — the rail never shows it.
@@ -1628,6 +1628,10 @@ function GameHostPage() {
       discussionTopics: summary.discussionQuestions || [],
       nextSteps: summary.nextSteps || [],
       markdownResponse: summary.markdownResponse || null,
+      // The template, not Workie's read (get-ai-summary.js buildFallback) —
+      // AISummaryStatus says so instead of presenting it as the read.
+      fallback: summary.fallback === true,
+      fallbackReason: summary.fallbackReason || null,
       prompt: gameDebugMode ? summary.debugPrompt : undefined,
       debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
     });
@@ -7519,83 +7523,24 @@ Focus on actionable business strategy insights.`;
                   failure={aiSummaryFailure}
                   retrying={aiRetrying}
                   onRetry={handleRetryAISummary}
+                  onRedo={handleRegenerateAISummary}
                   profile={profile}
                   page={stagePageIndex}
                   onPage={setStagePageIndex}
                   enabled={!anyOverlayOpen}
                 />
 
-                {/* Host controls, so they are chrome and they are droppable —
-                    but with NO data-drop-note. The note is the room-facing
-                    announcement ("… — in the session report"), and a host
-                    control that the fitter hid is not something the room lost;
-                    saying so would print a sentence about a picker nobody in
-                    the room can see. Notes belong on content.
-                    Two different things, deliberately adjacent: the picker
-                    changes the voice from the NEXT round on, Redo rewrites the
-                    one on screen. */}
-                <div className="fn-controls" data-drop="1">
-                  <label className="ai-persona-switch-label" htmlFor="game-persona">
-                    {`Voice (next ${getHostRoundNoun().toLowerCase()})`}
-                  </label>
-                  <select
-                    id="game-persona"
-                    className="ai-persona-select"
-                    value={gamePersonaId}
-                    onChange={(e) => handleChangeGamePersona(e.target.value)}
-                    title="Changes Workie's voice from the next question onwards"
-                  >
-                    <option value="">Adapt to the session</option>
-                    {gamePersonas.map((persona) => (
-                      <option key={persona.personaId} value={persona.personaId}>
-                        {persona.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="regenerate-ai-btn"
-                    onClick={handleRegenerateAISummary}
-                    title="Redo: rewrite the summary on screen now, in the current voice"
-                    disabled={loadingAIInsights}
-                  >
-                    Redo
-                  </button>
-                  {personaSwitchStatus && (
-                    <span className="ai-persona-switch-status">{personaSwitchStatus}</span>
-                  )}
-                  {/* The approach: the prompt template, where the voice is only
-                      the register. Same next-round rule, same Redo. */}
-                  <label className="ai-persona-switch-label" htmlFor="game-prompt">
-                    {`Approach (next ${getHostRoundNoun().toLowerCase()})`}
-                  </label>
-                  <select
-                    id="game-prompt"
-                    className="ai-persona-select"
-                    value={gamePromptId}
-                    onChange={(e) => handleChangeGamePrompt(e.target.value)}
-                    title="Changes how Workie sums up each round from the next question onwards"
-                  >
-                    <option value="">What the set says</option>
-                    {gamePrompts.map((prompt) => (
-                      <option key={prompt.promptId} value={prompt.promptId}>
-                        {prompt.name}
-                      </option>
-                    ))}
-                  </select>
-                  {promptSwitchStatus && (
-                    <span className="ai-persona-switch-status">{promptSwitchStatus}</span>
-                  )}
-                  {/* THAT Workie has the host's briefing — never the file
-                      name or the text (session-setup-redesign page 30). */}
-                  {sessionBriefed && (
-                    <span
-                      className="ai-persona-switch-status"
-                      title="Workie has the host's briefing for this session, and uses it where the answers touch it"
-                    >
-                      Briefing on
-                    </span>
-                  )}
-                </div>
+                {/* NO HOST CONTROLS ON THIS BEAT. The Voice and Approach
+                    selects, "Briefing on" and Redo were drawn here, on the
+                    room-facing stage, as `.fn-controls` — and the stage is a
+                    shared surface in every display profile (QA drive
+                    2026-09-29, #21). They live in the Session panel's Settings
+                    tab now (components/stage/WorkieSettings.jsx), passed as
+                    `workie` below. The one Redo left on the stage is the
+                    fallback state's, inside AISummaryStatus: when Workie's read
+                    did not run, saying so and offering the retry is the honest
+                    thing to put in front of the room, as the failure state
+                    already does. */}
 
                 {gameDebugMode && currentAIInsights
                   && (currentAIInsights.debugPrompt || currentAIInsights.prompt) && (
@@ -7862,6 +7807,22 @@ Focus on actionable business strategy insights.`;
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.
           isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
+          /* WORKIE'S HOST OPTIONS, off the stage (QA drive #21). Redo only
+             while a read is on screen: anywhere else it rewrites nothing. */
+          workie={{
+            roundNoun: getHostRoundNoun(),
+            personaId: gamePersonaId,
+            personas: gamePersonas,
+            onPersona: handleChangeGamePersona,
+            personaStatus: personaSwitchStatus,
+            promptId: gamePromptId,
+            prompts: gamePrompts,
+            onPrompt: handleChangeGamePrompt,
+            promptStatus: promptSwitchStatus,
+            briefed: sessionBriefed,
+            onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
+            redoBusy: loadingAIInsights,
+          }}
         />
       )}
 

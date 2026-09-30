@@ -14,6 +14,8 @@ import { queuePosition } from '../../config/questionQueue';
 import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
 import { canEndSession } from '../../config/hostControls';
 import QueueList from './QueueList';
+import WorkieSettings from './WorkieSettings';
+import { nextRoundPickersApply } from '../../config/workieOptions';
 import HelpButton from '../HelpButton';
 import BrandMark from '../BrandMark';
 
@@ -240,6 +242,11 @@ export default function SessionSetupPanel({
      anything for anyone who opened it the usual way. */
   initialTab = 'players',
   focusRunningOrder = false,
+  /* WORKIE'S HOST OPTIONS (QA drive #21): the voice, the approach, the
+     briefing note and Redo, moved here off the room-facing What We Heard
+     beat. The page's state and handlers, passed through to WorkieSettings;
+     null draws nothing. */
+  workie = null,
 }) {
   const [tab, setTab] = useState(
     () => (setupPanelTabs().some((t) => t.id === initialTab) ? initialTab : 'players'),
@@ -1104,6 +1111,17 @@ export default function SessionSetupPanel({
                 they say and what they are about, never who wrote them. Press one to
                 put it up for everyone with its author. Off, the wall shows only the count.
               </p>
+
+              {workie && (
+                <WorkieSettings
+                  {...workie}
+                  showNextRound={nextRoundPickersApply({
+                    gameType,
+                    gameState,
+                    remaining: catRows.length ? remaining : null,
+                  })}
+                />
+              )}
 
               {/* PACE, between Names and Display: it changes what the room
                   experiences, not what a colleague can be identified by, so it
