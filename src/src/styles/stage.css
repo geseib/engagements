@@ -1059,14 +1059,62 @@ body, .stage-ladder-table{
    the profile ladder, so all four profiles drew an identical button; the dock
    button and the rail chip are the two chrome elements that read the profile
    DIRECTLY and are never re-scaled by the fitter, which makes them the honest
-   answer to "did changing the profile change anything". Positioning and size
-   only; the component is untouched. */
+   answer to "did changing the profile change anything". The component is
+   untouched; everything below is the dock's own paint. */
 .dock .host-action-bar__primary,
-.dock .host-action-bar__secondary{
+.dock .host-action-bar__secondary,
+.dock .host-action-bar__tertiary{
+  display:inline-flex;align-items:center;gap:.5em;
   font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-secondary) * .84));
   padding:calc(1.2vh + 8px) calc(1.6vw + 18px);
-  border-radius:calc(var(--radius) * .85);white-space:nowrap}
+  border-radius:calc(var(--radius) * .85);white-space:nowrap;
+  opacity:1;transform:none;box-shadow:none}
+
+/* WHICH BUTTON LEADS — the primary, always, and a disabled one says so.
+   QA drive 2026-09-29, finding #6 (shots/combo-trivia.png,
+   d2-hl-ca-what-we-heard.png): with no answers in, "Skip Question" was the
+   emphasised button — a white fill, an amber outline, amber type — while the
+   DISABLED "Show Results" was a solid blue that read as live. Neither colour
+   was ever a decision. The buttons carry the global `.btn-primary` /
+   `.btn-secondary` classes, and those are painted by whichever bare rule wins
+   the bundle order: styles.css's white `.btn-secondary` (a PAPER button, on
+   the dusk stage), and the Bootstrap blue that components/IssueReportForm.css
+   and FileUploadPrompt.css declare on a bare `.btn-primary` — the same leak
+   QuestionSetEditor.css already restates around. So the dock states every
+   state itself, at a specificity the leaks cannot reach: the bare base rules
+   are (0,1,0), `.btn-primary:disabled` (0,2,0), `.btn-primary:hover:not
+   (:disabled)` (0,3,0); the rules here are (0,2,0) / (0,3,0) / (0,4,0).
+
+   The vocabulary is the mockup's own `.btn` / `.btn.ghost` / `.btn[disabled]`
+   above, not a new one:
+     primary    the amber fill with #14203A ink — the ONE filled button.
+     disabled   the 18% grey wash with --muted type and a not-allowed cursor —
+                no solid fill, nothing that reads as pressable. The native
+                `disabled` attribute stays, so it is still announced as such.
+     secondary  a ghost in --muted on the --rule hairline, exactly the dock's
+     tertiary   other quiet buttons (.dock-more: AGENDA, SESSION). Clearly a
+                button, never louder than the primary: no fill, no amber.
+   Measured in __tests__/dockButtonsPalette.test.js, on the dusk field and
+   the projector-lifted one. */
+.dock .host-action-bar__primary{
+  background:var(--primary);color:#14203A;
+  border:var(--hair) solid var(--primary);cursor:pointer}
+.dock .host-action-bar__primary:hover:not(:disabled){
+  background:var(--primary);color:#14203A;filter:brightness(1.06);
+  transform:none;box-shadow:none}
+.dock .host-action-bar__primary:disabled{
+  background:rgba(155,168,190,.18);color:var(--muted);
+  border:var(--hair) solid transparent;cursor:not-allowed;
+  opacity:1;filter:none;transform:none;box-shadow:none}
+.dock .host-action-bar__secondary,
+.dock .host-action-bar__tertiary{
+  background:transparent;color:var(--muted);
+  border:var(--hair) solid var(--rule);cursor:pointer}
+.dock .host-action-bar__secondary:hover,
+.dock .host-action-bar__tertiary:hover{
+  background:transparent;color:var(--text);border-color:var(--muted);
+  transform:none;box-shadow:none}
 
 /* Field Notes rendered from markdown: MarkdownRenderer emits its own headings
    and lists, so the measure and the body size are set on the container. */
