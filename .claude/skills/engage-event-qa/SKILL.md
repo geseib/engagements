@@ -24,7 +24,7 @@ finished drive produces, and it lists the traps below as they were hit.
 | `AWS_*` keys are proxy placeholders (InvalidClientTokenId) | Do not plan on the AWS CLI. Everything below goes through the app. |
 | The CloudFront site may be blocked by the network policy | Ask the owner to allow it. Failing that: `cd src && npm ci && npm run build`, serve `src/dist` with an SPA fallback, and point at the dev API (CORS is `*`). |
 | Chromium rejects the proxy's TLS | The NSS store `~/.pki/nssdb` can be empty despite the README. Add the `CCR … CA` / `sandbox-egress …` certs from `/root/.ccr/ca-bundle.crt` with `certutil -A -t "C,,"`. Never use `--ignore-certificate-errors*`. |
-| **Chromium's WebSocket to the WS API returns HTTP 400** (Node's `ws` through the same proxy works) | Unsolved in-container; a local relay was refused by sandbox policy. **Check this first** (`scripts/ws-probe.js`). If it fails, anything a player *sends* (C&A, trivia, wavelength answers, votes) will not arrive; surveys (HTTP) still work. Either run the drive from a machine with normal networking, or run degraded (reload after each host step) and mark the gap in every report. |
+| **Chromium's WebSocket to the WS API returns HTTP 400** (Node's `ws` through the same proxy works) | Check first with `scripts/ws-probe.js`. If it fails, **only the answer step is affected**: `PlayerPage` sends `ANSWER#<n>` over the socket, while votes (`POST games/{id}/votes`), survey answers and everything the host does are HTTP. Send each player's answer from Node with `scripts/answer-bot.js`, under the player's own name, and do everything else in the browsers, reloading pages after each host step. This is how the 2026-09-30 Day 2 run played Call & Answer, trivia and wavelength in full. A local WebSocket relay for the browser was refused by sandbox policy; don't retry it. Real-time behaviour still can't be observed this way. |
 | No password for any account | Self-register a QA host (below). Never ask for a password in chat. |
 
 **QA host, no passwords in chat:**
@@ -131,3 +131,4 @@ All scripts take `QA_DIR` (a scratch directory) and `ENGAGE_BASE` (default
 | `scripts/ws-probe.js` | Checks whether browser WebSockets work here, before you build a whole drive on them. |
 | `scripts/survey-player.js` | Answers any survey, whatever its question types. Paste it into the driver. |
 | `scripts/combine.js` | Stitches screenshots side by side. |
+| `scripts/answer-bot.js` | `send(gameId, playerName, '001', answer, 'text'\|'trivia'\|'wavelength')`: sends one answer exactly as `PlayerPage` does. Trivia answers are the letters `A`–`D`; wavelength answers are the words comma-joined. Load it into the driver with `G.require`. |

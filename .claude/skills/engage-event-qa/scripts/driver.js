@@ -9,7 +9,7 @@ fs.mkdirSync(S + '/shots', { recursive: true });
 let n = 100; const shot = async (p, name) => { const f = `${S}/shots/${++n}-${name}.png`; await p.screenshot({ path: f }); return f; };
 const text = async (p, len = 1500) => (await p.innerText('body')).slice(0, len);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const G = { pages: {}, ctxs: {}, log: [] };
+const G = { pages: {}, ctxs: {}, log: [], require };
 (async () => {
   G.b = await chromium.launch();
   const hook = (p, name) => { p.on('console', (m) => { if (m.type() === 'error') G.log.push(`[${name}] ${m.text().slice(0, 200)}`); }); p.on('pageerror', (e) => G.log.push(`[${name}] PAGEERROR ${e.message.slice(0, 200)}`)); };

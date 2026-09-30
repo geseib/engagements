@@ -23,8 +23,8 @@ Scope: the mechanics, interaction and presentation of the tools. The question se
 | Attendee join-once, agenda, talk + slides, reload recovery | ✅ driven |
 | Trivia running order set ahead of time, then honoured live | ✅ verified |
 | Survey: 10 players answer every question type, close, results, walkthrough, What We Heard | ✅ played for real |
-| C&A answers/votes/results, trivia scoring, wavelength results, Workie's read *with the briefing* | ❌ **not played**: see below |
-| Real-time push (phones auto-switching, live counts, instant pause) | ❌ **not observed**: see below |
+| C&A answers/votes/results, trivia scoring, wavelength results, Workie's read *with the briefing* | ✅ **played on Day 2** (30 Sep): see [Day 2](#day-2-30-sep-the-parts-day-1-could-not-play) |
+| Real-time push (phones auto-switching, live counts, instant pause) | ❌ **still not observed**: browser WebSockets remain blocked from the container |
 
 **Why the gap.** From the container, Chromium's WebSocket handshake to the dev WS API (`h8ipndmk4d…/dev`) returns **HTTP 400**. Node's `ws` library connects through the same proxy with the same headers, so this is the container's egress, not the app. A local relay that would have bridged it was refused by the sandbox's policy, so it was not used. Every page was instead **reloaded after each host step**. Surveys submit over HTTP and were played for real. Everything else a player *sends* goes over the socket and could not arrive.
 
@@ -53,6 +53,30 @@ Two real bugs came out of this degraded mode (items 1 and 2 below). In a room, a
 | 17 | Low | player | **The event was set to "Reports: Full"**, but the phone's end screen offers no report or standings. (Standings are listed as not built.) | — |
 | 18 | Low | host | **Survey stage contrast:** "FINISHED 5 / 5" is dim green on navy, and the dock status wraps to 3 lines. A closed item shows "Session 1873", a second code beside the event's. | `hl-survey-host-5done` |
 | 19 | Low | host | **Sign-up then approval:** the account's registration password stopped working after it was approved (it had been reset during approval). Recovered with Forgotten it?. Worth checking the approval path doesn't reset or require a password. | — |
+| 20 | Med | host | **Call & Answer results list the answers out of rank order.** Rows are ordered by vote count, but ranks come from points. When two answers tie on votes, the "4th" row sits above "3rd". Reproduced in both rooms on Day 2: 1st, 2nd, 4th, 3rd, 5th in Harbor, and 1st, 2nd, 5th, 3rd, 3rd in Brightline. | `shots/combo-d2-ca-results.png` |
+| 21 | Med | host | **Host-only controls appear on the room screen.** On What We Heard, the Voice and Approach menus, "Briefing on" and "Redo" are all drawn on the shared display. "Briefing on" is also a pale button that doesn't match the dark stage. | `shots/d2-hl-ca-what-we-heard.png` |
+| 22 | Low | host | **The goal notice is easy to miss.** "That's your 2. Keep going…" does fire on the goal round's results, but as small grey text in the dock's corner. | `shots/combo-d2-ca-results.png` |
+| 23 | Low | host | **Trivia results don't mark the correct answer on the stage.** The phone says "why D is on the main screen", but the stage shows only percentage bars at that step. The only way forward from results is What We Heard, with no direct Next Question. | `shots/combo-d2-trivia.png` |
+| 24 | Low | player | **Wavelength results on the phone read "No words recorded · +0"** after a reload, because `GET answers?role=player` returns only a count. Partly a side effect of this run (answers were sent from Node, so the page had no local copy); the +0 score is not confirmed either way. | `shots/d2-hl-wave-results.png` |
+| 25 | Low | host | **Ending an item from the board has no confirmation.** It takes effect at once. Ending the event does ask first. | — |
+
+## Day 2 (30 Sep): the parts Day 1 could not play
+
+The browsers still can't open a WebSocket from the container. But only the **answer** step goes over the socket; votes are plain HTTP (`POST games/{id}/votes`). So each player's answer was sent from a small Node client with the page's exact message, `ANSWER#<n>`, under the player's own name. Everything else was done in the real browsers: joining, the ballot, voting, reading results. The host drove the real stage.
+
+- **New events** (same organisations, same item settings): Harbor Light Impact Planning Day 2, **7861**; Brightline Reinvention Offsite Day 2, **7467**. Each ran Call & Answer, trivia and wavelength.
+- **Call & Answer, fully played in both rooms.**
+  - All 5 answers arrived ("ANSWERED 5 / 5 ✓ ALL"), all 10 players voted in the browser ("VOTED 5 / 5"), and results and What We Heard rendered.
+  - Harbor's read used the uploaded `.txt` briefing: it cites "repeat engagement fell from 54% to 41%".
+  - Brightline played 2 rounds, and the goal round's results showed "That's your 2. Keep going if there's time, or end the session."
+- **Trivia.**
+  - Harbor asked the three queued questions in order (compact disc, ALF, Care Bears).
+  - Speed-weighted scores and standings added up correctly (Maya 14 → 27 → 41).
+  - The phone shows "D. Correct · +14 · 1st Place of 5".
+- **Wavelength.** 29 words and 14 distinct came in, and the host's cloud shows data, model and training on all 5 lists (see finding 24 for the phone side).
+- **Ending items one by one from the board** gives "3 OF 3 DONE". Finding 2 is about what the defaults and the dock lead a host to do; this is the path that works.
+
+New findings from Day 2 are rows 20–25 in the table above.
 
 ## What worked well (keep)
 
@@ -72,4 +96,4 @@ Two real bugs came out of this degraded mode (items 1 and 2 below). In a room, a
 2. Decide the rule for #2: moving on should mark an item done unless the host explicitly pauses. Make "0 OF 5 DONE" impossible after a full run-through.
 3. Put the goal on the stage header ("Round 1 · goal 2 of 5"), and fire the notice when the goal is passed by any route.
 4. Link "Set the running order" from the agenda item and from the preview lobby.
-5. Re-run this drive from a machine where browser WebSockets work, to cover the ❌ rows. `.claude/skills/engage-event-qa/SKILL.md` is the procedure.
+5. Re-run this drive from a machine where browser WebSockets work, to observe the real-time behaviour (the one ❌ row left). `.claude/skills/engage-event-qa/SKILL.md` is the procedure.
