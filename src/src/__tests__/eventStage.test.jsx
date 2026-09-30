@@ -8,8 +8,10 @@
  * live engagement on arrival that pulls the host off the agenda; a talk's or
  * a break's screen with no way back to the agenda, or no "Bring everyone
  * here" while it is not live; a break with no countdown or no +5 min; a row
- * missing the actions that fit its state; ending the event without a
- * confirmation that says what it does; a refusal swallowed instead of said;
+ * missing the actions that fit its state; ending the event, or an item from
+ * its row, without a confirmation that says what it does; a dock that offers
+ * to Resume an earlier item, or the first unplayed row rather than what
+ * follows the item live last; a refusal swallowed instead of said;
  * a board that takes more or fewer columns than its height needs, or goes
  * dense while the width still holds full rows; a "Coming up" list that keeps
  * a row its column cannot hold.
@@ -165,7 +167,114 @@ test('a paused item offers Resume and End, and a refusal is said', async () => {
   const row = rowOf(await screen.findByText('How well do you know our customers?').then((el) => el.textContent));
   expect(within(row).getByRole('button', { name: /^Resume/ })).toBeInTheDocument();
   fireEvent.click(within(row).getByRole('button', { name: /^End/ }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'End it' }));
   await waitFor(() => expect(document.querySelector('.dock .status')).toHaveTextContent('The survey is still collecting.'));
+});
+
+// rejects (QA drive 29 Sep 2026, finding #25): End on a row taking effect at
+// once, one stray tap from ending an item for the whole room.
+test('End on a row asks first, in the page; Keep it changes nothing, End it ends the item', async () => {
+  const live = { ...DAY[3], state: 'live', gameId: '6120' };
+  api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: live.itemId }, [...DAY.slice(0, 3), live]));
+  api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: '' }, [...DAY.slice(0, 3), { ...live, state: 'done' }]));
+  const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => true);
+  try {
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Live now');
+    const row = rowOf('What slows us down?');
+
+    fireEvent.click(within(row).getByRole('button', { name: /^End/ }));
+    let dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('End What slows us down?');
+    expect(dialog).toHaveTextContent(/cannot be taken live again/);
+    expect(api.runEvent).not.toHaveBeenCalled();
+    // SPACE does not take the dock's step behind the dialog.
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(api.runEvent).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(api.runEvent).not.toHaveBeenCalled();
+
+    fireEvent.click(within(rowOf('What slows us down?')).getByRole('button', { name: /^End/ }));
+    dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'End it' }));
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'end', live.itemId));
+    expect(api.runEvent).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.confirm).not.toHaveBeenCalled();
+  } finally {
+    confirmSpy.mockRestore();
+  }
+});
+
+// rejects (QA drive 29 Sep 2026, finding #2): the dock suggesting "Resume
+// <the opening talk>" after every item had run, and the first unplayed row
+// of the day rather than what follows the item the room saw last.
+describe('the dock walks the day forward', () => {
+  test('the next planned item after the one live last — not a paused one, not an earlier skipped one', async () => {
+    const items = [
+      { ...DAY[0], state: 'planned' },
+      { ...DAY[1], state: 'paused', startedAt: '2026-10-09T09:01:00Z', liveAt: '2026-10-09T09:01:00Z' },
+      { ...DAY[2], state: 'done', startedAt: '2026-10-09T09:05:00Z', liveAt: '2026-10-09T09:05:00Z' },
+      { ...DAY[3], state: 'planned' },
+    ];
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, items));
+    api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: DAY[3].itemId }, items));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Between items');
+    expect(screen.getByRole('button', { name: 'Go live: Call & Answer' })).toBeInTheDocument();
+    expect(within(document.querySelector('.dock')).queryByRole('button', { name: /Resume/ })).toBeNull();
+  });
+
+  test('a resume counts as the most recent: what follows IT comes next', async () => {
+    const items = [
+      { ...DAY[0], state: 'done', startedAt: '2026-10-09T09:00:00Z', liveAt: '2026-10-09T09:30:00Z' },
+      { ...DAY[1], state: 'planned' },
+      { ...DAY[2], state: 'done', startedAt: '2026-10-09T09:10:00Z', liveAt: '2026-10-09T09:10:00Z' },
+      { ...DAY[3], state: 'planned' },
+    ];
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, items));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Between items');
+    expect(screen.getByRole('button', { name: 'Go live: FY26 in review' })).toBeInTheDocument();
+  });
+
+  test('while an item is live, the step is the item after it', async () => {
+    const live = { ...DAY[1], state: 'live', startedAt: '2026-10-09T09:05:00Z' };
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: live.itemId }, [DAY[0], live, DAY[2], DAY[3]]));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Live now');
+    expect(screen.getByRole('button', { name: 'Go live: the break' })).toBeInTheDocument();
+  });
+
+  test('nothing left planned: End the event — never Resume on an earlier paused item', async () => {
+    const items = [
+      { ...DAY[0], state: 'paused', startedAt: '2026-10-09T09:00:00Z' },
+      { ...DAY[1], state: 'done', startedAt: '2026-10-09T09:05:00Z' },
+      { ...DAY[2], state: 'done', startedAt: '2026-10-09T09:10:00Z' },
+      { ...DAY[3], state: 'done', startedAt: '2026-10-09T09:20:00Z' },
+    ];
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, items));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Between items');
+    expect(within(document.querySelector('.dock')).queryByRole('button', { name: /Resume/ })).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'End the event' })[0]);
+    expect(await screen.findByRole('dialog')).toHaveTextContent(/nobody new can join/);
+  });
+
+  test('a live talk\'s "Go live: <next>" is one start: the server ends the talk in the same step', async () => {
+    const talk = { ...DAY[1], state: 'live' };
+    window.history.pushState({}, '', `/host/event/${CODE}?focus=${talk.itemId}`);
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: talk.itemId }, [{ ...DAY[0], state: 'done' }, talk, DAY[2], DAY[3]]));
+    const brk = { ...DAY[2], state: 'live', endsAt: new Date(Date.now() + 15 * 60000).toISOString() };
+    api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: brk.itemId }, [{ ...DAY[0], state: 'done' }, { ...talk, state: 'done' }, brk, DAY[3]]));
+    render(<EventStage code={CODE} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Go live: the break' }));
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', DAY[2].itemId));
+    expect(api.runEvent).toHaveBeenCalledTimes(1);
+    expect(api.runEvent).not.toHaveBeenCalledWith(CODE, 'end', expect.anything());
+  });
 });
 
 test('the join QR opens large for latecomers, and closes', async () => {
