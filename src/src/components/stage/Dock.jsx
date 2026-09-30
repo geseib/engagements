@@ -144,8 +144,9 @@ export default function Dock({
       */}
       {/*
         AN EVENT'S ITEM (events M3, roadmap D5): the way back to the event's
-        agenda, beside SESSION and shaped like it. Part-way through, the item
-        pauses; once it has ended, it ends. Only where there is an event.
+        agenda, beside SESSION and shaped like it. It only navigates: the item
+        keeps running (Pause and End are on the board's rows, and going live on
+        another item finishes this one). Only where there is an event.
       */}
       {onAgenda && (
         <button
@@ -153,7 +154,7 @@ export default function Dock({
           className="dock-more"
           onClick={onAgenda}
           aria-label="Back to the event's agenda"
-          title="Back to the event's agenda — the item pauses, and resumes where it left off"
+          title="Back to the event's agenda — the phones stay where they are"
         >
           <span className="dock-more-lbl">AGENDA</span>
         </button>
