@@ -22,7 +22,10 @@
  *   §4 before the close there is nothing to read: 409 NOT_CLOSED, the room is
  *      told, nothing is written; and a survey has no summary but 000
  *   §5 with no survey default seeded, the data-driven fallback states the
- *      survey's own respondent count — never lessons-learned's empty read
+ *      survey's own respondent count — never lessons-learned's empty read —
+ *      and it is MARKED: Fallback/FallbackReason on the row, fallback and
+ *      fallbackReason on the host's GET, for both doors (no prompt, and a
+ *      model error); Workie's own read carries no flag
  *   §6 a comment lands on 000 only while the survey is CLOSED: not while it is
  *      open, not on any other round, not once it has ended — and it never
  *      comes back with a name
@@ -383,8 +386,52 @@ const feedbackRound = (gameId) => comments({
     });
     await check('the data-driven read says how many answered the survey', () =>
       assert.ok(/^2 responses were submitted/.test(plain.SummaryText), plain.SummaryText));
+    // rejects: the template stored exactly as a real read, which is what put
+    // "…a range of perspectives" on a closed survey's What We Heard with
+    // nothing telling the host Workie had not run (QA drive #5).
+    await check('the stored row is marked as the template, with the reason: no-prompt', () => {
+      assert.strictEqual(plain.Fallback, true, JSON.stringify(Object.keys(plain)));
+      assert.strictEqual(plain.FallbackReason, 'no-prompt');
+    });
+    // rejects: the flag stored but dropped on the cached read — the host's
+    // screen reads the summary back through GET, not from the worker.
+    const cached = await aiSummary({
+      requestContext: hostCtx(ACME), pathParameters: { gameId: g },
+      queryStringParameters: { questionId: '000' },
+    });
+    await check('...and the host\'s GET says so: fallback true, reason no-prompt', () => {
+      assert.strictEqual(cached.statusCode, 200, cached.body);
+      const body = bodyOf(cached);
+      assert.strictEqual(body.fromCache, true);
+      assert.strictEqual(body.fallback, true);
+      assert.strictEqual(body.fallbackReason, 'no-prompt');
+    });
+
+    // The prompt resolves but the model throws: the other door to the template.
     seedSurveyDefault();
+    bedrockReply = null;
+    bedrockCalls.length = 0;
+    await worker(g);
+    const errored = kmsStubs.plainRow(ACME, summaryRow(g));
+    // rejects: a Bedrock failure swallowed into a template that reads as Workie.
+    await check('a model error: the template is stored marked fallback, reason model-error', () => {
+      assert.ok(bedrockCalls.length >= 1, 'the model was never tried');
+      assert.strictEqual(errored.Fallback, true);
+      assert.strictEqual(errored.FallbackReason, 'model-error');
+    });
+
+    bedrockReply = REPLY;
     await worker(g); // put the model's read back for the sections below
+    const real = kmsStubs.plainRow(ACME, summaryRow(g));
+    // rejects: a flag that sticks once set, or one stamped on every row.
+    await check('Workie\'s own read carries no fallback flag', () =>
+      assert.ok(!('Fallback' in real) && !('FallbackReason' in real), JSON.stringify(Object.keys(real))));
+    const fresh = await aiSummary({
+      requestContext: hostCtx(ACME), pathParameters: { gameId: g },
+      queryStringParameters: { questionId: '000' },
+    });
+    await check('...and its GET reads fallback false', () =>
+      assert.strictEqual(bodyOf(fresh).fallback, false, fresh.body));
   }
 
   /* ------------------------------------------------------------------ §6 -- */

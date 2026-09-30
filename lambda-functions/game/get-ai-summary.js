@@ -947,6 +947,11 @@ exports.handler = async (event) => {
           personaSource: existingSummary.Item.PersonaSource || null,
           // null for a row written before ContextUsed existed, or by the fallback.
           contextUsed: existingSummary.Item.ContextUsed || null,
+          // A row written by the template says so (buildFallback). A row
+          // written before the flag existed reads false — it cannot be told
+          // apart after the fact.
+          fallback: existingSummary.Item.Fallback === true,
+          fallbackReason: existingSummary.Item.Fallback === true ? (existingSummary.Item.FallbackReason || null) : null,
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
@@ -1706,6 +1711,9 @@ exports.handler = async (event) => {
       // Which angle this round was read from (round-angles.js). Plaintext, like
       // PersonaSource: a word from a fixed list, never the room's content.
       ...(summaryData.angle ? { Angle: summaryData.angle } : {}),
+      // The template, not Workie's read (buildFallback). Plaintext flags like
+      // Angle: a boolean and a word from FALLBACK_REASONS, never content.
+      ...(summaryData.fallback ? { Fallback: true, FallbackReason: summaryData.fallbackReason || null } : {}),
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
@@ -1751,6 +1759,8 @@ exports.handler = async (event) => {
       personaName: summaryData.personaName || null,
       personaSource: summaryData.personaSource || null,
       contextUsed: summaryData.contextUsed || null,
+      fallback: summaryData.fallback === true,
+      fallbackReason: summaryData.fallback ? (summaryData.fallbackReason || null) : null,
       generatedAt: now,
       fromCache: false
     };
@@ -1811,6 +1821,21 @@ exports.handler = async (event) => {
  * public by the time this renders — but a host may press Next Round without
  * ever revealing, and the promise made to the room has to survive that.
  */
+/**
+ * Why a stored summary is the template rather than Workie's read. Words, not
+ * error text: the reason is returned to the host and drawn on their screen.
+ *
+ *   no-prompt   — no usable summary prompt resolved for this game type. For a
+ *                 survey this is the unseeded default: houseFallbackPrompt()
+ *                 deliberately names none, so until admin/populate-defaults
+ *                 has written the survey default on a tier, every closed
+ *                 survey lands here.
+ *   model-error — the prompt resolved but the Bedrock call threw (after the
+ *                 one throttle retry).
+ */
+const FALLBACK_REASONS = Object.freeze({ NO_PROMPT: 'no-prompt', MODEL_ERROR: 'model-error' });
+exports.FALLBACK_REASONS = FALLBACK_REASONS;
+
 function buildFallbackSummary({ totalParticipants, votesCast, top, gameType, question, hidden }) {
   const isTrivia = gameType === 'trivia';
   const qText = typeof question === 'string' ? question
@@ -2054,7 +2079,18 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Data-driven fallback summary — reflects answer count, votes cast, and the
   // top-supported response. Used whenever the prompt template OR the model is
   // unavailable, so Workie never renders a blank summary.
-  const buildFallback = () => {
+  //
+  // IT SAYS SO. `fallback: true` and a `fallbackReason` ride out on the result,
+  // onto the stored row (Fallback/FallbackReason, plaintext flags — never
+  // content) and back to the host on both the fresh and the cached read. Before
+  // this the template was stored and served exactly as a real read, and a
+  // closed survey's "What We Heard" showed "5 responses were submitted… a range
+  // of perspectives" with nothing telling the host Workie had not run (QA drive
+  // 2026-09-29, finding #5). The reason is a word from FALLBACK_REASONS, never
+  // an error message: it reaches the host's screen.
+  const buildFallback = (reason) => {
+    console.warn(`⚠️ WORKIE FALLBACK (${reason}): template summary stored for ${gameType || 'unknown'} ` +
+      `${gameId || ''}:${paddedQuestionNumber || questionId || ''} — Workie's read did not run`);
     const votesCast = (results && results.totalVotes) || 0;
     const top = topAnswers[0];
     const summaryText = buildFallbackSummary({ totalParticipants, votesCast, top, gameType, question, hidden });
@@ -2075,7 +2111,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       `## ${eventTitle || 'Question'} — Summary\n\n${summaryText}\n\n` +
       `### Discussion topics\n${discussionQuestions.map(d => `- ${d}`).join('\n')}\n\n` +
       `### Next steps\n${nextSteps.map(s => `- ${s}`).join('\n')}`;
-    return { summary: summaryText, summaryText, discussionQuestions, nextSteps, fullResponse: summaryText, markdownResponse, model: 'fallback' };
+    return { summary: summaryText, summaryText, discussionQuestions, nextSteps, fullResponse: summaryText, markdownResponse, model: 'fallback', fallback: true, fallbackReason: reason };
   };
 
   // Fetch the prompt template, recovering to the set's own prompt and then
@@ -2087,7 +2123,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
 
   if (!resolved) {
     console.warn('⚠️ Prompt template unavailable — returning data-driven fallback summary');
-    return buildFallback();
+    if (normalizeGameType(gameType) === 'survey') {
+      console.warn('⚠️ SURVEY: no survey default prompt is seeded on this tier — '
+        + 'POST /admin/populate-defaults writes it (default-ai-prompts.json survey.general)');
+    }
+    return buildFallback(FALLBACK_REASONS.NO_PROMPT);
   }
 
   const promptData = resolved.promptData;
@@ -3330,7 +3370,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
 
     // Data-driven fallback — never chain a second slow model, never return blank.
     console.log(`🚨 BEDROCK FINAL FALLBACK: data-driven summary for ${totalParticipants} participants`);
-    const fallbackResult = { ...buildFallback(), ...personaAttribution(persona) };
+    const fallbackResult = { ...buildFallback(FALLBACK_REASONS.MODEL_ERROR), ...personaAttribution(persona) };
     if (debugMode) fallbackResult.debugInfo = debugInfo;
     return fallbackResult;
   }

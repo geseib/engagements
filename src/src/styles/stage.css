@@ -1110,14 +1110,11 @@ body, .stage-ladder-table{
 .notes .lead strong,.notes .lead em{color:inherit}
 .notes .notes-md ul,.notes .notes-md ol{margin:0 0 .4em;padding-left:1.2em}
 
-/* Host controls that happen to sit inside a room-facing state. They are chrome
-   (data-drop), they stay at the label tier, and they never compete with the
-   content for size. Their permanent home is the Console — spec §5.4, plan 3. */
-.fn-controls{display:flex;align-items:center;flex-wrap:wrap;gap:.6em;
-  font-size:var(--t-meta);color:var(--muted)}
-.fn-controls select,.fn-controls button{font:inherit;font-size:var(--t-meta);
-  color:var(--text);background:transparent;
-  border:var(--hair) solid var(--rule);border-radius:8px;padding:.3em .6em;cursor:pointer}
+/* `.fn-controls` — the Voice/Approach/Briefing/Redo row that sat inside the
+   room-facing What We Heard beat — is gone. Its permanent home was always the
+   Console (spec §5.4, plan 3); it moved to the Session panel's Settings tab
+   (components/stage/WorkieSettings.jsx) after the 2026-09-29 QA drive found
+   host-only controls projected to the room (#21). */
 
 /* THE ANONYMITY CONTROLS USED TO BE SIZED HERE, and the rule that put them
    here is worth keeping even though the elements are gone: anything inside
