@@ -146,7 +146,22 @@
   box-sizing: border-box;
 }
 
-/* --- TABLET. ~18in, ~132 CSS ppi. Floor 15px. --- */
+/* --- TABLET. ~18in, ~132 CSS ppi. Floor 15px. ---
+
+   ONE CENTRED COLUMN, AND THE COLUMN IS THE MEASURE (QA drive 29 Sep 2026,
+   finding #7). This profile used to cap the column at 620px AND cap every block
+   inside it at 40ch — which, measured in each block's own font, is ~485px at
+   body. The blocks sat flush left in a column they did not fill, so an 820px
+   portrait tablet read as a narrow strip down the left with a third of the
+   screen empty beside it. (The report's "~11px text" was the report's own
+   stitched screenshot, which scaled the 1180px-tall tablet to 700px; the
+   ladder below was always 19px body, measured in a browser at 820x1180.)
+
+   Now the gutter centres a 680px column and the measure IS that column: 680px
+   of 19px body is ~65 characters a line, inside the 45-75 a reader is
+   comfortable with, so there is nothing left for a ch cap to protect. The
+   laptop keeps its 46ch: at 21px in a 660px column the two come out within a
+   few characters of each other, and that profile was not the one reported. */
 @media (min-width: 768px) {
   .plr {
     --plr-t-hero: 2.5rem;         /* 40px */
@@ -155,8 +170,8 @@
     --plr-t-body: 1.1875rem;      /* 19px */
     --plr-t-meta: 0.9375rem;      /* 15px */
     --plr-pad: 28px;
-    --plr-measure: 40ch;
-    --plr-gut: clamp(28px, calc((100% - 620px) / 2), 30%);
+    --plr-measure: 100%;
+    --plr-gut: clamp(28px, calc((100% - 680px) / 2), 30%);
   }
 }
 
@@ -964,6 +979,38 @@
 .plr-quick { margin: 0; }
 
 .plr-words-form { margin: 0; }
+
+/* TEN WORDS, TWO COLUMNS, ON ANYTHING WIDER THAN A PHONE (QA drive 29 Sep
+   2026, finding #8). Ten full-width fields at the laptop ladder are ~117px
+   each — 26px type in a 56px-minimum box, a 21px label, 20px apart — and a
+   1280x800 laptop, after the bar, the question, the task, the aim and the
+   dock, had room for two of them: the form read as two blanks and a scroll.
+
+   A word is short (the field caps it at 50 characters), so half a 660px
+   column is still ~320px of box, and two columns halve the height. The rhythm
+   tightens with it: the gap is the grid's, not each field's 20px margin, and
+   the label sits 4px over its box. Row-major, so Word 1 | Word 2 on the first
+   row, and document order — Tab order — is unchanged: nothing is re-ordered,
+   only wrapped. Inputs stay at --plr-t-secondary (the iOS zoom floor).
+
+   A PHONE KEEPS ONE COLUMN: a 150px box is too narrow for a phrase, and
+   scrolling to read the form is fine there because the dock that submits it
+   is outside the thing that scrolls. */
+@media (min-width: 768px) {
+  .plr-words-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+  }
+
+  .plr-words-form .plr-field { margin: 0; }
+
+  .plr-words-form .plr-lab { margin-bottom: 4px; }
+
+  /* 10px, not 14px, top and bottom: the box lands on its 56px minimum at the
+     laptop's 26px type instead of 63px over it. Still a 56px target. */
+  .plr-words-form .plr-inp { padding-top: 10px; padding-bottom: 10px; }
+}
 
 .plr-vpos { margin: 0 0 14px; }
 

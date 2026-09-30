@@ -718,6 +718,121 @@ describe('the spotlight is dressed by this surface, not by the monolith', () => 
 });
 
 /* ==========================================================================
+   7c. THE TABLET USES ITS WIDTH, AND WAVELENGTH FITS A LAPTOP
+   ==========================================================================
+   QA drive 29 Sep 2026, findings #7 and #8. Measured in Chromium at 820x1180,
+   1280x800, 390x844 and 360x740 against the dumped markup of the real
+   components; what is pinned here is the CSS that produced those numbers, read
+   as text. No geometry — jsdom has none. */
+
+/** Every `@media <at> { … }` body in the sheet, braces balanced. */
+function mediaBodies(css, at) {
+  const out = [];
+  let i = css.indexOf(at);
+  while (i >= 0) {
+    const open = css.indexOf('{', i);
+    let depth = 1; let j = open + 1;
+    while (depth && j < css.length) {
+      if (css[j] === '{') depth += 1;
+      else if (css[j] === '}') depth -= 1;
+      j += 1;
+    }
+    out.push(css.slice(open + 1, j - 1));
+    i = css.indexOf(at, j);
+  }
+  return out;
+}
+/** A rule's body inside a media block (block() only sees top-level rules). */
+function ruleIn(body, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = body.match(new RegExp(`(^|[{}])\\s*${escaped}\\s*\\{([^}]*)\\}`));
+  return m ? m[2] : null;
+}
+
+describe('the tablet profile: one centred column that is also the measure', () => {
+  const TABLET = mediaBodies(CSS, '@media (min-width: 768px)');
+  const LAPTOP = mediaBodies(CSS, '@media (min-width: 1200px)');
+  const tabletRoot = TABLET.map((b) => ruleIn(b, '.plr')).find(Boolean);
+  const laptopRoot = LAPTOP.map((b) => ruleIn(b, '.plr')).find(Boolean);
+
+  test('the gutter centres a column of 640-720px — wide enough to use an 820px tablet', () => {
+    // rejects: the 620px column the report found as "a narrow top-left strip".
+    const m = tabletRoot.match(/--plr-gut:\s*clamp\(\s*\d+px\s*,\s*calc\(\(100% - (\d+)px\) \/ 2\)/);
+    expect(m).not.toBeNull();
+    const column = Number(m[1]);
+    expect(column).toBeGreaterThanOrEqual(640);
+    expect(column).toBeLessThanOrEqual(720);
+  });
+
+  test('blocks fill the column: the tablet measure is the column, not a ch cap inside it', () => {
+    // rejects: `--plr-measure: 40ch` on the tablet. Measured in each block's own
+    // font that is ~485px at 19px body, flush left in the column, which is how
+    // the agenda, the question and the task sat in the left two thirds of an
+    // 820px screen.
+    expect(tabletRoot).toMatch(/--plr-measure:\s*100%/);
+    // The laptop was not the reported profile and keeps its own measure.
+    expect(laptopRoot).toMatch(/--plr-measure:\s*46ch/);
+    // The phone's measure is untouched.
+    expect(block(CSS, '.plr')).toMatch(/--plr-measure:\s*32ch/);
+  });
+
+  test('the attendee\'s agenda rides that measure rather than a width of its own', () => {
+    // EventAttendeePage.css must not re-cap `.evp` in ch or px: it reads the
+    // shell's measure, so the tablet change reaches the agenda too.
+    const EVP = stripped(read('components', 'event', 'EventAttendeePage.css'));
+    expect(block(EVP, '.evp')).toMatch(/max-width:\s*var\(--plr-measure\)/);
+    expect(EVP).not.toMatch(/max-width:\s*\d+(ch|px)/);
+  });
+
+  test('tablet body text is comfortably readable: 16px or more on every reading rung', () => {
+    // The report's "~11px" was its stitched screenshot scaling a 1180px-tall
+    // tablet to 700px. The real ladder is pinned rung by rung in §6; this is the
+    // floor the finding asked for, stated as a floor.
+    for (const rung of ['hero', 'primary', 'secondary', 'body']) {
+      const m = tabletRoot.match(new RegExp(`--plr-t-${rung}:\\s*([\\d.]+)rem`));
+      expect(Number(m[1]) * 16).toBeGreaterThanOrEqual(16);
+    }
+  });
+});
+
+describe('wavelength: ten words in two columns wider than a phone', () => {
+  const WIDE = mediaBodies(CSS, '@media (min-width: 768px)').find((b) => /\.plr-words-form\s*\{/.test(b));
+
+  test('from 768px the form is a two-column grid, so four words clear the fold at 1280x800', () => {
+    // rejects: ten full-width fields at ~117px each — two above the fold on a
+    // laptop, which is what the drive found.
+    expect(WIDE).toBeDefined();
+    const form = ruleIn(WIDE, '.plr-words-form');
+    expect(form).toMatch(/display:\s*grid/);
+    expect(form).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    // The rhythm is the grid gap, not each field's 20px margin on top of it.
+    expect(ruleIn(WIDE, '.plr-words-form .plr-field')).toMatch(/margin:\s*0/);
+  });
+
+  test('the tighter box is still a full target and still at the input rung', () => {
+    // Padding comes in; the 56px minimum and the 19px+ input type do not.
+    expect(block(CSS, '.plr-inp')).toMatch(/min-height:\s*56px/);
+    expect(block(CSS, '.plr-inp')).toMatch(/font-size:\s*var\(--plr-t-secondary\)/);
+    const inp = ruleIn(WIDE, '.plr-words-form .plr-inp') || '';
+    expect(inp).not.toMatch(/font-size|min-height|height:/);
+  });
+
+  test('a phone keeps one column', () => {
+    expect(block(CSS, '.plr-words-form')).not.toMatch(/grid/);
+  });
+
+  test('the labels, the ids and the sticky Submit survive the re-layout', () => {
+    // The grid wraps; it does not re-order, rename or move anything. The
+    // submit lives in the dock, outside the scrolling stage.
+    expect(PLR_JSX).toMatch(/id=\{`plr-word-\$\{index\}`\}/);
+    expect(PLR_JSX).toMatch(/htmlFor=\{`plr-word-\$\{index\}`\}/);
+    expect(PLR_JSX).toMatch(/Word \{index \+ 1\}/);
+    expect(PLR_JSX).toMatch(/Submit Words \(\{wordCount\}\/10\)/);
+    expect(PLR_JSX).toMatch(/wavelengthWords\.map/);
+  });
+});
+
+/* ==========================================================================
    8. THE RULES THIS DESIGN SAYS IT MUST NEVER BREAK
    ========================================================================== */
 
