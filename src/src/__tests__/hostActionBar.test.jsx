@@ -124,6 +124,42 @@ describe('HostActionBar', () => {
     expect(screen.getByRole('button', { name: /start first question/i })).toBeDisabled();
   });
 
+  // QA drive 2026-09-29, finding #6: with no answers in, the dock's paint made
+  // Skip look like THE button and the disabled primary look live. The paint
+  // is stage.css's (__tests__/dockButtonsPalette.test.js); this pins that the
+  // restyle changed nothing a host can DO — the primary is really disabled
+  // and deaf to the keys, and one press on Skip is one skip.
+  it.each([
+    // Four values in every row: a three-value row makes jest hand the test
+    // its `done` callback as the fourth argument.
+    ['trivia', /show results/i, /skip question/i, 'Question'],
+    ['call-and-answer', /start voting/i, /skip question/i, 'Question'],
+    ['trivia', /show results/i, /skip round/i, 'Round'],
+  ])('%s with no answers in: primary disabled, one press of Skip skips once', (gameType, primaryName, skipName, roundNoun) => {
+    const onAction = jest.fn();
+    render(
+      <HostActionBar
+        controls={controlsFor({ gameType, answeredCount: 0, answerCount: 0, roundNoun })}
+        onAction={onAction}
+      />
+    );
+
+    const primaryButton = screen.getByRole('button', { name: primaryName });
+    expect(primaryButton).toBeDisabled();
+    expect(primaryButton).toHaveClass('host-action-bar__primary');
+    fireEvent.keyDown(window, { key: ' ' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.click(primaryButton);
+    expect(onAction).not.toHaveBeenCalled();
+
+    const skip = screen.getByRole('button', { name: skipName });
+    expect(skip).toHaveClass('host-action-bar__secondary');
+    expect(skip).not.toHaveClass('host-action-bar__primary');
+    fireEvent.click(skip);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction.mock.calls[0][0].intent).toBe(HOST_INTENTS.SKIP);
+  });
+
   it('honours shortcutsEnabled=false while an overlay is open', () => {
     const onAction = jest.fn();
     render(<HostActionBar controls={controlsFor()} onAction={onAction} shortcutsEnabled={false} />);
