@@ -117,16 +117,26 @@ export const placeLabel = (n) => {
  * This is the same shared-tie arithmetic as calculatePlayerRankings, applied
  * to answers: equal points share a place, and a genuine three-way tie is
  * three 1sts — the display refusing to invent a winner the vote did not pick.
+ *
+ * RETURNS THE ROWS IN PLACE ORDER, not the order they came in. It used to
+ * label the rows and hand them back in the server's order, and the stage drew
+ * them in that order — which read as vote count, so on a vote tie the "4th"
+ * row (+3, 2 votes) sat above the "3rd" (+4, 2 votes), reproduced in both
+ * rooms of the 2026-09-29 QA drive (finding #20). The labels and the order now
+ * come from ONE sort, so they cannot disagree: points desc, then votes desc,
+ * then the incoming order. Unplaced rows (no points, the quiet dot) sink to
+ * the bottom, where zero points already puts them.
  */
 export const assignPlacements = (answers) => {
-  const order = [...answers].sort((a, b) => (b.points || 0) - (a.points || 0));
-  const placeOf = new Map();
+  // Array.prototype.sort is stable, so equal points AND equal votes keep the
+  // order the server sent them in — the same order on every render.
+  const order = [...answers].sort((a, b) =>
+    ((b.points || 0) - (a.points || 0)) || ((b.votes || 0) - (a.votes || 0)));
   let currentRank = 1;
-  order.forEach((row, i) => {
+  return order.map((row, i) => {
     if (i > 0 && (row.points || 0) !== (order[i - 1].points || 0)) currentRank = i + 1;
-    placeOf.set(row, currentRank);
+    return { ...row, placement: (row.points || 0) > 0 ? currentRank : 0 };
   });
-  return answers.map((row) => ({ ...row, placement: (row.points || 0) > 0 ? placeOf.get(row) : 0 }));
 };
 
 /**

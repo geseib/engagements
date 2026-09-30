@@ -25,6 +25,12 @@ import CompletionFlag from './CompletionFlag';
  * host-facing hint like "Waiting on 3 more" is a private instruction, not
  * something to project). Neither renders an empty element when absent.
  *
+ * `notice` marks the status as the session goal's notice ("That's your 2.
+ * Keep going if there's time, or end the session." — config/goalStage.js).
+ * It is drawn as an amber chip, `.status.notice`, rather than the grey status
+ * line it used to share, which the 2026-09-29 QA drive missed on a projector
+ * (finding #22). Still words only: nothing about it blocks the primary.
+ *
  * `kbd` is the key that also fires the primary — "SPACE" in every mockup dock,
  * on every state. It has to be rendered HERE and not left to HostActionBar,
  * which hides its own `__kbd` under `.big-screen-mode`, the mode the dock
@@ -95,13 +101,21 @@ function useCrowded(ref, deps) {
 }
 
 export default function Dock({
-  status, hint, kbd, onSetup, onAgenda, complete = false, progress = null, children,
+  status, hint, kbd, onSetup, onAgenda, complete = false, notice = false, progress = null, children,
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, progress, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, notice, progress, children]);
   return (
     <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined}>
-      {status && <span className={`status${complete ? ' go' : ''}`} aria-live="polite">{status}</span>}
+      {status && (
+        <span
+          className={`status${complete ? ' go' : ''}${notice ? ' notice' : ''}`}
+          aria-live="polite"
+          data-goal-notice={notice ? '' : undefined}
+        >
+          {status}
+        </span>
+      )}
       {progress && (progress.heading || progress.body) && (
         <span
           className={`dock-progress${progress.complete ? ' done' : ''}`}
