@@ -36,6 +36,10 @@ the owner has not answered them, and each is a small change if overruled (see be
   byte-identical copy of `session-start.js`). Starting while another item is live pauses that one
   (a break ends instead) in the same transaction. Two screens starting at once: one wins, the other
   gets a 409, and the loser's session is discarded along with its code.
+  **Superseded 30 Sep 2026** (QA drive finding #2, `docs/superpowers/plans/2026-09-30-qa-drive-fixes.md`
+  workstream B): going live on another item now ENDS the live one (done, its session ended with
+  `endSession`); only an open survey pauses. The board's dock suggests the next planned item after
+  the one live last, then End the event, never Resume; End on a board row asks first.
 - Pause sets `STATE.EventPaused`. While it is set, answers, votes, survey answers and comments are
   refused. The round's phase is untouched, so resume returns to exactly where it was.
 - End ends the session with the same `endSession` the host's own End uses (a copy in the websocket

@@ -182,6 +182,9 @@ function projectItem(row) {
   // it started and ended, and — for a live break — when the room is back.
   if (r.GameId) out.gameId = String(r.GameId);
   if (r.StartedAt) out.startedAt = r.StartedAt;
+  // When it last went live, a first start or a resume (run.js start): the
+  // board suggests what follows the most recent one (EventStage `plan`).
+  if (r.LiveAt) out.liveAt = r.LiveAt;
   if (r.EndedAt) out.endedAt = r.EndedAt;
   if (r.EndsAt) out.endsAt = r.EndsAt;
   // An engagement's session options (events M1b), decrypted. Never an
