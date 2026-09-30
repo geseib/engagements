@@ -73,6 +73,20 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
             once said "Lesson 3" while RESULTS said "Question 3". */}
         {context.round != null && <b>{`${context.noun || 'Round'} ${context.round}`}</b>}
         {context.of != null && <span>{`of ${context.of}`}</span>}
+        {/* THE SESSION'S GOAL (config/goalStage.js; QA drive finding #3):
+            "Round 1 of 5 · Goal 2". Amber once met or passed, by any route —
+            the one place a skip past the goal round is seen at once. */}
+        {context.goal && context.round != null && (
+          <>
+            <i>·</i>
+            <span
+              className={`rail-goal${context.goal.state === 'ahead' ? '' : ' met'}`}
+              data-goal-state={context.goal.state}
+            >
+              {context.goal.text}
+            </span>
+          </>
+        )}
         {/* A survey has no round to count: "Survey / 8 questions" (s-01). */}
         {context.detail && context.round == null && (
           <>

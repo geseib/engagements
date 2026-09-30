@@ -66,6 +66,7 @@ import {
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
 import goalRules from '../../lambda-functions/websocket/session-goal';
+import { goalOnStage } from './config/goalStage';
 import { fetchComments, featureComment } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
@@ -6049,13 +6050,19 @@ Focus on actionable business strategy insights.`;
 
   /*
     THE GOAL (events M1b, session-goal.js): "Question 3 of 5" for the host's
-    SESSION panel and, on the goal's own round once its results are up, the
-    dock's line — "That's your 5. Keep going if there's time, or end the
-    session." Never the rail: the room sees the round, not the plan.
+    SESSION panel. On the stage (config/goalStage.js, QA drive #3 and #22):
+    the rail's "Goal 2" beside the round, amber once reached or passed by any
+    route, and the dock's notice chip on the goal round's results — "That's
+    your 5. Keep going if there's time, or end the session." — and on the
+    first round past it. M1b kept the goal off the rail ("the room sees the
+    round, not the plan"); the drive found it invisible there, so it moved.
   */
   const goal = isSurvey
     ? { progress: '', reached: false, line: '' }
     : goalRules.goalProgress({ target: sessionTarget, round: lessonNumber, phase: hostPhase });
+  const stageGoal = goalOnStage({
+    target: sessionTarget, round: lessonNumber, phase: hostPhase, gameType: currentGameType,
+  });
 
   // This round's poll tally, or none: never the last round's bars.
   const pollTallyNow = pollTally && pollTally.round === String(lessonNumber).padStart(3, '0') ? pollTally.tally : null;
@@ -6070,7 +6077,7 @@ Focus on actionable business strategy insights.`;
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
     survey: surveyCounts,
-    goalLine: goal.line,
+    goalLine: stageGoal.notice,
     notesPage,
     notesPages,
   });
@@ -6844,6 +6851,7 @@ Focus on actionable business strategy insights.`;
       noun: getHostRoundNoun(),
       round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
       of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
+      goal: stageGoal.rail || undefined,
     };
   const surveyFitKey = isSurvey && survey.progress
     ? `${surveyQuestionCount}:${survey.progress.finished}:${survey.people ? survey.people.length : -1}`
@@ -6927,6 +6935,7 @@ Focus on actionable business strategy insights.`;
         dock={(
           <Dock
             status={dockStatus}
+            notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}

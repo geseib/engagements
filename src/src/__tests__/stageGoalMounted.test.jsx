@@ -142,6 +142,12 @@ describe('the goal, mounted (events M1b, Task 5 fix round 1)', () => {
 
     const status = await dockStatusContains(GOAL_LINE);
     expect(status).not.toBeNull();
+    // QA drive #22: a chip, not the grey status line.
+    expect(status.classList.contains('notice')).toBe(true);
+    // QA drive #3: the header carries it too.
+    const railGoal = document.querySelector('.rail .rail-goal');
+    expect(railGoal).not.toBeNull();
+    expect(railGoal.textContent).toBe('Goal 5 reached');
 
     const primary = document.querySelector('.dock .host-action-bar__primary');
     expect(primary).not.toBeNull();
@@ -172,5 +178,10 @@ describe('the goal, mounted (events M1b, Task 5 fix round 1)', () => {
     expect(status).not.toBeNull();
     expect(status.textContent).not.toContain(GOAL_LINE);
     expect(status.textContent).not.toContain('Keep going');
+    // Past the goal — however it got here — the header says so at once.
+    const railGoal = document.querySelector('.rail .rail-goal');
+    expect(railGoal).not.toBeNull();
+    expect(railGoal.textContent).toBe('Past goal 5');
+    expect(railGoal.getAttribute('data-goal-state')).toBe('passed');
   });
 });

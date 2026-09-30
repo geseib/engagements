@@ -189,6 +189,13 @@ body, .stage-ladder-table{
   letter-spacing:.09em;text-transform:uppercase}
 .rail-ctx b{color:var(--text);font-weight:700}
 .rail-ctx i{opacity:.35;font-style:normal}
+/* THE SESSION'S GOAL, beside the round (config/goalStage.js, QA drive #3):
+   "ROUND 1 OF 5 · GOAL 2". Plain until met; then the .chip idiom in amber —
+   "GOAL 2 REACHED", "PAST GOAL 2" — so a skip past the goal round shows at
+   once. The rail-ctx never drops (flex:none); the title is what gives. */
+.rail-ctx .rail-goal{color:var(--text);font-weight:700}
+.rail-ctx .rail-goal.met{color:var(--primary);font-weight:800;
+  border:var(--hair) solid currentColor;border-radius:999px;padding:.08em .6em}
 /* Optional round timer. OFF by default and armed from the setup panel — see
    the ruling in spec section 5.1. It is a real countdown the host set, not the
    answer-progress ring dressed as a clock that this redesign removed. */
@@ -557,6 +564,17 @@ body, .stage-ladder-table{
 @keyframes cue{0%,100%{opacity:1}50%{opacity:.45}}
 .dock .status.go{animation:cue 1.5s ease-in-out 3}
 @media (prefers-reduced-motion:reduce){.dock .status.go{animation:none}}
+/* THE GOAL'S NOTICE (Dock.jsx `notice`, QA drive #22). It shared the grey
+   status line above and was missed from across a room: "That's your 2. Keep
+   going if there's time, or end the session." Now an amber chip at body size,
+   pulsed three times like .go and then still. Words only — it blocks nothing.
+   Amber #F6A94C over its own 10% tint on the dusk dock is well past AA. */
+.dock .status.notice{color:var(--primary);font-weight:800;
+  font-size:max(var(--floor),var(--t-body));max-width:46ch;
+  border:var(--hair) solid currentColor;border-radius:calc(var(--radius) * .6);
+  padding:.4em .85em;background:rgba(246,169,76,.10);
+  animation:cue 1.5s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.dock .status.notice{animation:none}}
 .dock .spacer{margin-left:auto}
 .btn{display:inline-flex;align-items:center;gap:.5em;
   font-family:var(--font-display);font-weight:800;
