@@ -12,6 +12,9 @@ import {
 import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
+import {
+  roundOf, pendingVerdict, savePendingAnswer, loadPendingAnswer, clearPendingAnswer,
+} from './utils/pendingAnswer';
 import './components/PlayerSurface.css';
 
 import FeedbackRoundPanel from './components/FeedbackRoundPanel';
@@ -356,6 +359,23 @@ function PlayerPage({ event = null } = {}) {
   // handle left once the author fields are redacted (see ownAnswerIndex).
   const [mySubmittedAnswer, setMySubmittedAnswer] = useState('');
   const [hasAnswered, setHasAnswered] = useState(false);
+  /*
+    AN ANSWER SUBMITTED WHILE THE SOCKET WAS DOWN, not yet delivered (QA drive
+    2026-09-29, finding #1). `{ gameId, playerName, round, messageType, answer,
+    answerType }` or null. While it is set the page says "Not sent yet" — never
+    "Submitted" — and the flush effect below sends it once the socket is back,
+    but only into the round it was written for (utils/pendingAnswer.js).
+    Mirrored in sessionStorage so a reload keeps it.
+  */
+  const [pendingAnswer, setPendingAnswer] = useState(null);
+  const pendingAnswerRef = useRef(null);
+  useEffect(() => { pendingAnswerRef.current = pendingAnswer; }, [pendingAnswer]);
+  const flushingPendingRef = useRef(false);
+  // Bumped to re-run the flush after a round check that learned nothing.
+  const [pendingRetry, setPendingRetry] = useState(0);
+  // A pending answer the room moved on from before it could be sent. Said out
+  // loud rather than dropped silently — silence is the bug being fixed.
+  const [missedAnswer, setMissedAnswer] = useState(false);
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
   /*
     NULL UNTIL THE SERVER SAYS. This defaulted to 'call-and-answer', which is a
@@ -1102,6 +1122,91 @@ function PlayerPage({ event = null } = {}) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, playerName, joined, useWebSocket]);
+
+  // A reload while an answer was waiting to send: bring it back.
+  useEffect(() => {
+    if (!joined || !gameId || !playerName) return;
+    if (pendingAnswerRef.current) return;
+    const restored = loadPendingAnswer(gameId, playerName);
+    if (restored) {
+      console.log(`⏳ PLAYER: Restored an unsent answer for round ${restored.round}`);
+      setPendingAnswer(restored);
+    }
+  }, [joined, gameId, playerName]);
+
+  /*
+    SEND THE HELD ANSWER, ONCE, INTO ITS OWN ROUND.
+
+    Runs whenever the socket comes up, the phase moves, or the server's answer
+    flag lands. Three outcomes, from utils/pendingAnswer.js `pendingVerdict`:
+
+      - The page already knows the room moved on (a later round, VOTE, RESULTS,
+        END): drop it and tell the player. Never resend into a closed round.
+      - The server says this player has answered this round: the answer got
+        there after all (the send that "failed" can race a reconnect). Drop the
+        copy and show the receipt.
+      - Otherwise, once connected, ask the server for the phase FRESH before
+        sending. The local `gameState` can be minutes old after a reconnect —
+        the ASK#→VOTE# that fired while offline is only caught by the resync
+        running alongside this — and an answer sent on that stale belief would
+        arrive in a round the host has closed.
+  */
+  useEffect(() => {
+    const pending = pendingAnswer;
+    if (!pending) return;
+
+    const drop = (missed) => {
+      setPendingAnswer(null);
+      clearPendingAnswer(pending.gameId, pending.playerName);
+      if (missed) setMissedAnswer(true);
+    };
+
+    if (pendingVerdict(pending, gameState) === 'drop') {
+      console.warn(`⏳ PLAYER: Dropping unsent answer for round ${pending.round} — room is at ${gameState}`);
+      drop(true);
+      return;
+    }
+    if (hasAnswered && roundOf(gameState) === pending.round) {
+      setMySubmittedAnswer(pending.receipt ?? pending.answer);
+      drop(false);
+      return;
+    }
+    if (!wsConnected || flushingPendingRef.current) return;
+
+    const retryLater = () => setTimeout(() => setPendingRetry((n) => n + 1), 3000);
+    flushingPendingRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}games/${pending.gameId}/state`);
+        if (!res.ok) { retryLater(); return; }    // learned nothing — try again shortly
+        const { state } = await res.json();
+        if (pendingAnswerRef.current !== pending) return;   // edited or sent meanwhile
+        const verdict = pendingVerdict(pending, state);
+        if (verdict === 'drop') {
+          console.warn(`⏳ PLAYER: Dropping unsent answer for round ${pending.round} — server is at ${state}`);
+          drop(true);
+          return;
+        }
+        if (verdict !== 'send') return;
+        const sent = webSocketClient.sendCleanMessage(pending.messageType, {
+          answer: pending.answer,
+          answerType: pending.answerType,
+        });
+        if (sent) {
+          console.log(`✅ PLAYER: Held answer for round ${pending.round} sent on reconnect`);
+          markAnswerSent(pending.receipt ?? pending.answer);
+        }
+        // Not sent: the socket dropped again between the check and the send.
+        // Its next open flips `wsConnected` and brings us back here.
+      } catch (error) {
+        console.warn('⏳ PLAYER: Could not check the round before sending:', error.message);
+        retryLater();
+      } finally {
+        flushingPendingRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAnswer, wsConnected, gameState, hasAnswered, pendingRetry]);
 
   // Note: Removed auto-save localStorage functionality - now using server-side partial votes
 
@@ -2076,6 +2181,36 @@ function PlayerPage({ event = null } = {}) {
     enterSession(gameId, trimmed, result.data);
   };
 
+  /** The answer reached the socket: show the receipt and clear the draft. */
+  const markAnswerSent = (receipt) => {
+    setHasAnswered(true);
+    setMySubmittedAnswer(receipt);
+    setAnswerInput('');
+    setPollValue(null);
+    setSelectedTriviaAnswer('');
+    setWavelengthWords(Array(10).fill(''));
+    setPendingAnswer(null);
+    clearPendingAnswer(gameId, playerName);
+  };
+
+  /** Take a held answer back into the form so it can be changed before it goes. */
+  const handleEditPendingAnswer = () => {
+    const pending = pendingAnswerRef.current;
+    if (!pending) return;
+    if (gameType === 'trivia') {
+      setSelectedTriviaAnswer(pending.answer);
+    } else if (gameType === 'wavelength') {
+      const words = String(pending.answer).split(',').slice(0, 10);
+      setWavelengthWords([...words, ...Array(10 - words.length).fill('')]);
+    } else if (pending.answerType === 'poll') {
+      setPollValue(pending.answer);
+    } else {
+      setAnswerInput(pending.answer);
+    }
+    setPendingAnswer(null);
+    clearPendingAnswer(gameId, playerName);
+  };
+
   const handleSubmitAnswer = async (e, triviaAnswer = null) => {
     if (e) e.preventDefault();
     
@@ -2120,21 +2255,30 @@ function PlayerPage({ event = null } = {}) {
       console.log(`🎯 PLAYER: DEBUG questionNumber extracted: ${questionNumber}, gameState: ${gameState}`);
       console.log(`🎯 PLAYER: DEBUG answer: ${answer}, answerType: ${gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : 'text'}`);
       
-      // Send answer via WebSocket
       const typedPoll = gameType === 'poll' && Boolean(currentQuestion?.poll);
-      webSocketClient.sendCleanMessage(messageType, {
-        answer: answer,
-        answerType: gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : typedPoll ? 'poll' : 'text'
-      });
-      
-      setHasAnswered(true);
+      const answerType = gameType === 'trivia' ? 'trivia' : gameType === 'wavelength' ? 'wavelength' : typedPoll ? 'poll' : 'text';
       // The receipt is words ("4 out of 5", "Approve"), never the raw value.
-      setMySubmittedAnswer(typedPoll ? pollSummary(currentQuestion.poll, answer) : answer);
-      setAnswerInput('');
-      setPollValue(null);
-      setSelectedTriviaAnswer('');
-      setWavelengthWords(Array(10).fill(''));
-      
+      const receipt = typedPoll ? pollSummary(currentQuestion.poll, answer) : answer;
+
+      // Send answer via WebSocket. `false` means NOTHING LEFT THIS PHONE — the
+      // socket was down. That used to be ignored and the page said
+      // "Submitted" over an answer the server never saw (QA 2026-09-29 #1).
+      const sent = webSocketClient.sendCleanMessage(messageType, { answer, answerType });
+
+      if (!sent) {
+        // Keep it, say so, and let the flush effect send it on reconnect. The
+        // round comes from the live state first: it is what the flush compares
+        // against, and `questionNumber` can be an id rather than a round.
+        const round = roundOf(gameState) ?? parseInt(questionNumber, 10);
+        const pending = { gameId, playerName, round, messageType, answer, answerType, receipt };
+        savePendingAnswer(pending);
+        setPendingAnswer(pending);
+        setMissedAnswer(false);
+        console.warn(`⏳ PLAYER: Answer not sent (socket down) — held for round ${round}`);
+        return;
+      }
+
+      markAnswerSent(receipt);
       console.log(`✅ PLAYER: Answer submitted successfully`);
     } catch (e) {
       console.error('handleSubmitAnswer error', e);
@@ -2966,6 +3110,23 @@ function PlayerPage({ event = null } = {}) {
     </div>
   ) : null;
 
+  /* The room closed the round before a held answer could be sent. Said once,
+     dismissible, in the same amber as the offline banner: nothing was
+     destroyed on this phone, but the answer did not count and the player
+     should hear that from the page rather than find out from the results. */
+  const missedBanner = missedAnswer ? (
+    <div className="plr-banner" role="status">
+      <Icon name="WifiSlash" weight="bold" size={16} />
+      <div>
+        <b>Your last answer did not reach the room.</b> The round closed while this phone
+        was offline, so it was not sent.{' '}
+        <button type="button" className="plr-more" onClick={() => setMissedAnswer(false)}>
+          OK
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   /* --------------------------------------------------------- TYPE UNKNOWN --
      Joined, but /state has not said what kind of session this is. Every screen
      below is one type's; showing any of them now is a guess, and the old guess
@@ -3266,7 +3427,54 @@ function PlayerPage({ event = null } = {}) {
       </div>
     ) : null;
 
-    if (!hasAnswered) {
+    if (!hasAnswered && pendingAnswer) {
+      /* HELD, NOT SUBMITTED (QA 2026-09-29 #1). The socket was down when the
+         player pressed Submit, so nothing has left this phone. The receipt
+         below must not be shown for it — "locked for the round" over an answer
+         the server never saw is how answers were lost. It says what is true:
+         kept here, sent when the connection is back, and still changeable. */
+      volume = 'rest';
+      phase = 'ask';
+      const heldLetter = gameType === 'trivia' ? pendingAnswer.answer : null;
+      const heldOption = heldLetter ? currentQuestion[`option${heldLetter}`] : null;
+      const heldWords = gameType === 'wavelength'
+        ? String(pendingAnswer.answer).split(',').map((w) => w.trim()).filter(Boolean)
+        : null;
+
+      body = (
+        <>
+          <p className="plr-lab">Not sent yet</p>
+          <h1 className="plr-h1 plr-h1--primary">Waiting for the connection.</h1>
+
+          {heldWords ? (
+            <div className="plr-chips">
+              {heldWords.map((word, i) => (
+                <span key={i} className="plr-chip">{word}</span>
+              ))}
+            </div>
+          ) : (
+            <div className="plr-card">
+              <p className="plr-lab">What you will send</p>
+              <p className="plr-quote">
+                {heldLetter
+                  ? `${heldLetter}. ${heldOption || ''}`.trim()
+                  : String(pendingAnswer.receipt ?? pendingAnswer.answer)}
+              </p>
+            </div>
+          )}
+
+          <p className="plr-help" role="status">
+            Not sent yet — it will send when you're back online. It is kept on this
+            phone, so a reload does not lose it.
+          </p>
+        </>
+      );
+      dock = (
+        <button type="button" className="plr-btn plr-btn--ghost" onClick={handleEditPendingAnswer}>
+          Change my answer
+        </button>
+      );
+    } else if (!hasAnswered) {
       volume = 'act';
       phase = 'ask';
 
@@ -4105,7 +4313,7 @@ function PlayerPage({ event = null } = {}) {
       category={barCategory}
       who={playerName}
       online={wsConnected}
-      banner={offlineBanner}
+      banner={offlineBanner || missedBanner}
       centre={centre}
       dock={dock}
       /* Reading one response in full.

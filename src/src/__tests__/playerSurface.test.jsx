@@ -29,7 +29,7 @@ jest.mock('../WebSocketClient', () => ({
     disconnect: jest.fn(),
     ensureConnected: jest.fn(),
     isConnected: () => false,
-    sendCleanMessage: jest.fn(),
+    sendCleanMessage: jest.fn(() => true),
     onConnectionStatusChange: jest.fn(),
     onReconnected: jest.fn(),
     onMessage: jest.fn(),

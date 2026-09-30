@@ -18,7 +18,7 @@ jest.mock('../WebSocketClient', () => ({
     connect: jest.fn(),
     disconnect: jest.fn(),
     ensureConnected: jest.fn(),
-    sendCleanMessage: jest.fn(),
+    sendCleanMessage: jest.fn(() => true),
     onConnectionStatusChange: jest.fn(),
     onReconnected: jest.fn(),
     onMessage: jest.fn(),
@@ -95,4 +95,23 @@ test('a binary poll reads in its own labels and sends {v}', async () => {
   await act(async () => { fireEvent.click(submit()); });
   expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: { v: 'yes' }, answerType: 'poll' });
   await waitFor(() => expect(screen.getByText('Approve')).toBeInTheDocument());
+});
+
+// QA 2026-09-29 #1: a poll answer sent while the socket is down is held, shown
+// in words rather than as its raw value, and can be taken back to change.
+test('a poll answer that could not be sent is held in words, never shown as in', async () => {
+  sessionStorage.clear();
+  installServer({ kind: 'choice', options: ['Monday', 'Wednesday', 'Friday'], allowMultiple: false, allowOther: false, shuffle: false, required: false });
+  await joinAndReachQuestion();
+  ws.sendCleanMessage.mockReturnValueOnce(false);
+  fireEvent.click(screen.getByRole('radio', { name: /Friday/ }));
+  await act(async () => { fireEvent.click(submit()); });
+
+  expect(screen.queryByText('Answer In!')).not.toBeInTheDocument();
+  expect(screen.getByText(/^Not sent yet$/)).toBeInTheDocument();
+  expect(screen.getByText('Friday')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /Change my answer/i }));
+  expect(screen.getByRole('radio', { name: /Friday/ })).toBeChecked();
+  expect(submit()).not.toBeDisabled();
 });
