@@ -232,8 +232,18 @@ export default function SessionSetupPanel({
      or null. The Questions tab says "Question 3 of 5" — the host's, not
      the room's, which is why it is here and not on the rail. */
   goal = null,
+  /* WHERE IT OPENS (QA drive 2026-09-29, finding #4). Players, as it always
+     has — unless the page was asked for the running order ("Set the running
+     order" from the event's agenda or the preview lobby; ?panel=questions,
+     config/runningOrder.js). Then it opens on Questions and brings the
+     running order into view, past the category switches, without moving
+     anything for anyone who opened it the usual way. */
+  initialTab = 'players',
+  focusRunningOrder = false,
 }) {
-  const [tab, setTab] = useState('players');
+  const [tab, setTab] = useState(
+    () => (setupPanelTabs().some((t) => t.id === initialTab) ? initialTab : 'players'),
+  );
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [unaskedOnly, setUnaskedOnly] = useState(false);
@@ -294,6 +304,21 @@ export default function SessionSetupPanel({
       firstEl.focus();
     }
   };
+
+  /*
+    THE RUNNING ORDER, IN VIEW. Scrolled to its top inside the panel's own
+    scrolling body; again if the category switches above it arrive late and
+    push it down. Only on the landing that asked for it — a host who opened
+    SESSION and chose Questions starts at the top as before.
+  */
+  const orderCats = categories.length;
+  useEffect(() => {
+    if (!focusRunningOrder || tab !== 'questions') return;
+    const order = panelRef.current && panelRef.current.querySelector('.setup-q');
+    if (order && typeof order.scrollIntoView === 'function') {
+      order.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+  }, [focusRunningOrder, tab, orderCats]);
 
   const roster = rosterRows({ players, gameState, playersWhoAnswered, playersWhoVoted });
   const sbButton = scoreboardButton({ board: scoreboard, availability: scoreboardAvailability });

@@ -4,6 +4,7 @@ import EventDetailsDialog from './EventDetailsDialog';
 import EventItemDialog from './EventItemDialog';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import { deleteEvent, getEvent, reorderItems, updateItem } from '../utils/eventsApi';
+import { offersRunningOrder, runningOrderHref, RUNNING_ORDER_LABEL } from '../config/runningOrder';
 import './EventBuilder.css';
 
 /**
@@ -63,6 +64,15 @@ import './EventBuilder.css';
  *     code) and that it cannot be undone. Done, it hands the place back to
  *     the list (`onDeleted`); refused, it says the server's sentence where
  *     the host acted and reloads the agenda.
+ *
+ *   - "Order" on a trivia, Call & Answer, poll or wavelength row (QA drive
+ *     2026-09-29, finding #4): SET THE RUNNING ORDER. The order a host
+ *     chooses ahead of time lives on the item's stage (Session → Questions),
+ *     and nothing here pointed at it. It opens that stage in its own tab,
+ *     the Session panel already on the running order; an item with no
+ *     session yet is prepared first, by the board's own Open
+ *     (config/runningOrder.js). Not on a survey (no running order), a
+ *     finished item, or in an ended event.
  *
  * NOT HERE YET, and why: the Invitations and Reports tabs (PLAN Phases 3 and
  * 5) — a tab strip with one tab is a control people learn to ignore — and
@@ -619,6 +629,19 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                         <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${shown} down`} disabled={index === rows.length - 1} onClick={() => move(index, index + 1)}>
                           <Icon name="ArrowDown" weight="bold" size={13} color="currentColor" />
                         </button>
+                        {!unreadable && offersRunningOrder(item, event) && (
+                          <a
+                            className="evb-btn evb-btn--sm"
+                            href={runningOrderHref(event.code, item)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`${RUNNING_ORDER_LABEL} for ${item.title}`}
+                            title={`${RUNNING_ORDER_LABEL}: choose which questions come first, on its stage (opens in a new tab)`}
+                            data-testid="agenda-running-order"
+                          >
+                            <Icon name="ListNumbers" weight="bold" size={13} color="currentColor" /> Order
+                          </a>
+                        )}
                         {unreadable ? (
                           <button
                             type="button"

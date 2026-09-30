@@ -1118,6 +1118,9 @@ body, .stage-ladder-table{
 .fn-controls select,.fn-controls button{font:inherit;font-size:var(--t-meta);
   color:var(--text);background:transparent;
   border:var(--hair) solid var(--rule);border-radius:8px;padding:.3em .6em;cursor:pointer}
+/* A preview lobby's "Set the running order" (QA drive finding #4): below the
+   join block, a beat of space from it. */
+.fn-controls.preview-order{margin-top:.8em}
 
 /* THE ANONYMITY CONTROLS USED TO BE SIZED HERE, and the rule that put them
    here is worth keeping even though the elements are gone: anything inside
