@@ -140,14 +140,15 @@ describe('the item dialog', () => {
     onClose: jest.fn(), onSaved: jest.fn(), onRemoved: jest.fn(), ...over,
   });
 
-  test('editing a trivia item links to its running order, and says saving afterwards clears it', () => {
+  test('editing a trivia item links to its running order, and says which changes clear it', () => {
     render(<EventItemDialog {...base()} />);
     const door = screen.getByTestId('item-running-order');
     const link = within(door).getByRole('link', { name: /Set the running order/ });
     expect(link).toHaveAttribute('href', '/host/event/5307?order=it_00000001');
     expect(link).toHaveAttribute('target', '_blank');
     expect(door).toHaveTextContent('Session → Questions');
-    expect(door).toHaveTextContent(/clears that order, so set it last/);
+    expect(door).toHaveTextContent(/question set or its session options afterwards starts its preview afresh and clears that order/);
+    expect(door).toHaveTextContent(/title, description and length can change any time/);
   });
 
   test('not on a survey, and an add says where the door will be', () => {

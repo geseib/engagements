@@ -599,19 +599,49 @@ async function makeEvent() {
       assert.strictEqual(framesTo(previewId, 'eventItemEnded').length, 1);
       assert.strictEqual(framesTo(previewId, 'eventItemPaused').length, 0);
     });
-    await check('editing a previewed item lets its session go, and the next preview is made from the edit', async () => {
-      const again = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+    // THE RUNNING ORDER SURVIVES A HARMLESS EDIT (30 Sep 2026). Every saved
+    // edit used to discard the prepared session, so a new description or a
+    // longer planned length threw away the order a host had queued in it.
+    const editItem = (body) => items(request({
+      method: 'PUT', path: `/events/${p}/items/${fresh.ids.trivia}`, pathParameters: { code: p, itemId: fresh.ids.trivia },
+      requestContext: host(), body,
+    }));
+    const TC = h.load('lambda-functions/websocket/tenant-crypto.js');
+    await check('editing a previewed item\'s title, description or length keeps its session, and the new title reaches it', async () => {
+      const kept = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      assert.ok(gameMeta(kept));
+      const edit = await editItem({ title: 'Space night, again', description: 'Now with moons', minutes: 25 });
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, kept, 'the preview was let go');
+      assert.ok(gameMeta(kept), 'the prepared session was discarded');
+      assert.strictEqual(await TC.decryptValue(NW, gameMeta(kept).Title), 'Space night, again');
+      const index = [...table.store.values()].find((r) => r.SK === `GAME#${kept}` && r.PK !== 'GAMES');
+      if (index) assert.strictEqual(await TC.decryptValue(NW, index.Title), 'Space night, again');
+      // Re-sending the options unchanged is not a change either.
+      const same = await editItem({ settings: { target: 5, randomizeQuestions: false } });
+      assert.strictEqual(same.statusCode, 200, same.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, kept);
+      assert.strictEqual(bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId, kept);
+    });
+    await check('changing a previewed item\'s session options lets its session go, and the next preview is made from the edit', async () => {
+      const again = itemRow(p, fresh.ids.trivia).GameId;
       assert.ok(gameMeta(again));
-      const edit = await items(request({
-        method: 'PUT', path: `/events/${p}/items/${fresh.ids.trivia}`, pathParameters: { code: p, itemId: fresh.ids.trivia },
-        requestContext: host(), body: { title: 'Space night, again', minutes: 15 },
-      }));
+      const edit = await editItem({ settings: { target: 3, randomizeQuestions: false } });
       assert.strictEqual(edit.statusCode, 200, edit.body);
       assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, undefined);
       assert.strictEqual(gameMeta(again), undefined, 'the old preview was not discarded');
       assert.ok(!table.get('GAMES', `GAME#${again}`), 'its code is still held');
       const next = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
       assert.notStrictEqual(next, again);
+    });
+    await check('a new title on a preview whose session has vanished clears the stale pointer', async () => {
+      const gid = itemRow(p, fresh.ids.trivia).GameId;
+      table.store.delete(table.keyOf(`GAME#${gid}`, 'METADATA'));
+      const edit = await editItem({ title: 'Space night, last call' });
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, undefined);
+      const next = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      assert.ok(gameMeta(next));
     });
     await check('removing a previewed item lets its session go', async () => {
       const gid = itemRow(p, fresh.ids.trivia).GameId;

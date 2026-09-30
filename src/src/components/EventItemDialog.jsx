@@ -708,7 +708,7 @@ export default function EventItemDialog({
               <span className="evb-label" id="evb-order-label">Running order</span>
               <p className="evb-hint" id="evb-order-hint">
                 Choose which questions come first, and in what order, on its stage: Session → Questions.
-                {' '}Saving a change here afterwards starts its preview afresh and clears that order, so set it last.
+                {' '}Changing the question set or its session options afterwards starts its preview afresh and clears that order. The title, description and length can change any time.
               </p>
               <a
                 className="evb-btn evb-btn--sm"
