@@ -77,7 +77,7 @@ Scope: the mechanics, interaction and presentation of the tools. The question se
   - The presentation stage.
 - **Could look better:**
   - **Phone agenda rows:** the "type · leader" line is squeezed beside the status pill and wraps to 3–4 lines (`combo-join.png`).
-  - **Tablet (820 wide):** the player UI sits in a narrow top-left block with small text and half the screen empty (`combo-join`, `combo-trivia`).
+  - **Tablet (820 wide):** the player UI sits in a narrow left-hand strip, with half the screen empty (`combo-join`, `combo-trivia`). The text looks small in the stitched screenshots only because they are scaled down; the real body text is 19px.
   - **Phone header truncation:** "QUESTI…" / "QU…" / "ROUN…" / "SUBJ…", with the event name cut to "HARBOR LIGHT IMPAC…".
   - **The Call & Answer prompt on a phone** is set at headline size, pushing the answer box below the fold (`combo-lost-answer.png`, right).
   - **The Offline banner** takes 3–4 lines at the top of every phone screen.
