@@ -224,6 +224,81 @@ const bodyOf = (put) => JSON.parse(put.Body);
     assert.strictEqual(b3.results.created, shippedCount, JSON.stringify(b3.results));
   });
 
+  /* ------------------------------------- one default per game type (2026-10-01) -- */
+
+  const defaultsWritten = (type) => ddbPuts.filter((i) => i.gameType === type && i.isDefault === true);
+  const TYPES = Object.keys(defaults);
+
+  await checkAsync('an empty tier gets exactly one default per game type', async () => {
+    await seed({ overwrite: true });
+    for (const type of TYPES) {
+      assert.strictEqual(defaultsWritten(type).length, 1, `${type}: ${defaultsWritten(type).map((i) => i.name)}`);
+    }
+  });
+
+  await checkAsync('a tier\'s own default under another name is kept; the shipped one is seeded as not default', async () => {
+    const curated = { promptId: 'curated-ca', name: 'Call & Answer — Advisor Read', gameType: 'call-and-answer',
+      promptType: 'analysis', isDefault: true, status: 'active', createdAt: '2026-08-20T01:40:00.000Z' };
+    const { body: b } = await seed({ existing: [curated], overwrite: true });
+    assert.strictEqual(defaultsWritten('call-and-answer').length, 0, 'a second call-and-answer default was written');
+    const shipped = defaults['call-and-answer']['lessons-learned'];
+    const row = ddbPuts.find((i) => i.name === shipped.name);
+    assert(row, 'the shipped prompt was not seeded at all');
+    assert.strictEqual(row.isDefault, false);
+    assert.strictEqual(bodyOf(s3Puts.find((o) => bodyOf(o).name === shipped.name)).isDefault, false, 'S3 still says default');
+    assert.deepStrictEqual(b.results.defaultsKept.filter((k) => k.gameType === 'call-and-answer'),
+      [{ gameType: 'call-and-answer', kept: curated.name, notDefault: shipped.name }]);
+    // Every other type had no default, so each still gets the JSON's.
+    for (const type of TYPES.filter((t) => t !== 'call-and-answer')) {
+      assert.strictEqual(defaultsWritten(type).length, 1, type);
+    }
+  });
+
+  await checkAsync('a row that IS the default stays default when overwritten, whatever the JSON says', async () => {
+    const art = defaults['call-and-answer']['art-titles'] || Object.values(defaults['call-and-answer']).find((x) => /Art/.test(x.name));
+    assert(art && art.isDefault !== true, 'fixture: expected a non-default shipped call-and-answer prompt');
+    await seed({
+      existing: [{ promptId: 'art-id', name: art.name, gameType: 'call-and-answer', isDefault: true, status: 'active', createdAt: '2026-08-01T00:00:00.000Z' }],
+      overwrite: true,
+    });
+    const written = defaultsWritten('call-and-answer');
+    assert.deepStrictEqual(written.map((i) => i.promptId), ['art-id'], 'the type lost its default or gained a second');
+  });
+
+  await checkAsync('overwriting keeps the row\'s createdAt, so the default tie-break does not move', async () => {
+    const target = defaults.trivia.general || Object.values(defaults.trivia).find((x) => x.isDefault);
+    await seed({
+      existing: [{ promptId: 'old-trivia', name: target.name, gameType: 'trivia', isDefault: false, status: 'active', createdAt: '2026-08-11T00:00:00.000Z' }],
+      overwrite: true,
+    });
+    const row = ddbPuts.find((i) => i.promptId === 'old-trivia');
+    assert.strictEqual(row.createdAt, '2026-08-11T00:00:00.000Z');
+    assert.strictEqual(bodyOf(s3Puts.find((o) => bodyOf(o).id === 'old-trivia')).createdAt, '2026-08-11T00:00:00.000Z');
+  });
+
+  await checkAsync('an archived default does not count: the shipped default takes the type', async () => {
+    await seed({
+      existing: [{ promptId: 'gone', name: 'Old Poll Default', gameType: 'poll', isDefault: true, status: 'archived' }],
+      overwrite: true,
+    });
+    assert.strictEqual(defaultsWritten('poll').length, 1);
+    assert.notStrictEqual(defaultsWritten('poll')[0].promptId, 'gone');
+  });
+
+  await checkAsync('pressing it again on a tier that already has two defaults demotes the newer, shipped one', async () => {
+    const shipped = defaults['call-and-answer']['lessons-learned'];
+    const curated = { promptId: 'curated-ca', name: 'Call & Answer — Advisor Read', gameType: 'call-and-answer',
+      isDefault: true, status: 'active', createdAt: '2026-08-20T01:40:00.000Z' };
+    const duplicate = { promptId: 'dup-ca', name: shipped.name, gameType: 'call-and-answer',
+      isDefault: true, status: 'active', createdAt: '2026-10-01T09:00:00.000Z' };
+    // The newer row first, as DynamoDB might return it.
+    const { body: b } = await seed({ existing: [duplicate, curated], overwrite: true });
+    const row = ddbPuts.find((i) => i.promptId === 'dup-ca');
+    assert.strictEqual(row.isDefault, false, 'the duplicate default survived a second press');
+    assert(!ddbPuts.some((i) => i.promptId === 'curated-ca'), 'the curated default was rewritten');
+    assert(b.results.defaultsKept.some((k) => k.kept === curated.name && k.notDefault === shipped.name));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);
